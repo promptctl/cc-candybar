@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-758",
-      "ref": "refs/pull/758/merge",
-      "sha": "e6efec28d69096fe2d41273853202b7f5e53d541",
-      "timestamp": "2026-11-15T20:48:43.980Z",
+      "version": "pr-759",
+      "ref": "refs/pull/759/merge",
+      "sha": "43e7cdb6e58588f0263679bcbde062e30914b87c",
+      "timestamp": "2026-11-15T21:36:44.033Z",
       "commits": [
         {
-          "sha": "e6efec28d69096fe2d41273853202b7f5e53d541",
+          "sha": "43e7cdb6e58588f0263679bcbde062e30914b87c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:47:34Z",
-          "message": "Merge e61398e19ac9700d001e0abefa78e7557b743207 into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+          "timestamp": "2026-11-15T14:35:47-07:00",
+          "message": "Merge 5c932c954564990c286ceadf00d54eb88e3d4b1d into 2079879f1a0e087b16769463d6326609fb6ed589\n"
         },
         {
-          "sha": "e61398e19ac9700d001e0abefa78e7557b743207",
+          "sha": "5c932c954564990c286ceadf00d54eb88e3d4b1d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T13:47:24-07:00",
-          "message": "fix(click): a broken link key is told on the bar, and the URL handler is answered at its click's outcome (candybar-host-renderer-x96a.35o)\n\nMedium review of #758. The host boots with its key or the reason it has none: every click is refused with it, and the renderer refuses its boot with it on the bar's ⚠. A version-2 url frame is answered when its click has run, never by the request deadline, so a slow click that lands is not told as failed. A lone surrogate in a link is drawn as U+FFFD instead of throwing. The status-line click's log line drops the mac, and the page's key is a Buffer.\n"
-        },
-        {
-          "sha": "5548e394f9d405c1536e9deb99943b119ac8ca5e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T13:33:19-07:00",
-          "message": "fix(click): an answer proves the question drew it, every client hears its click's outcome, and the daemon signs the doctor's probe (candybar-host-renderer-x96a.35o)\n\nHigh review of #758. The repository answer keeps a signature of its own, since a config can draw any link the bar then signs. The URL handler app is told each click's outcome as the CLI is, so a click no renderer took within the deadline, or one whose verb failed with no bar to hold it, is shown. A status-line range comes only from tmux's binding. The doctor opens a probe link the daemon signed with its own key. A link is signed in the form a URL parser keeps, each link once per signer, and a row is split into lines once.\n"
-        },
-        {
-          "sha": "ed73dc236e7783371d11432dc464690a3bdbf291",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T13:08:02-07:00",
-          "message": "feat(click): every link a renderer draws is signed, and the host verifies each click before any renderer sees it (candybar-host-renderer-x96a.35o)\n\nAny web page can open a cc-candybar:// link, so the host now honours only\none the bar drew. Every bar link carries a mac over the whole link, spelled\nafter its last '#', made where a run is drawn; measuring a strip signs\nnothing. The host verifies each click at the one place every delivery\npasses through, so a forged, edited or unsigned link reaches no renderer.\n\n- The host owns the link key and hands it to its renderer in the boot.\n- A click request carries the raw url; the host parses it after verifying.\n- A tmux range carries no mac; the link its frame drew there is verified.\n- The URL handler's frame version 2 waits for one answer and notifies on a\n  refusal, or when no renderer took the click. Version 1 is still accepted.\n- The doctor's probe link is signed by the CLI with the key file.\n- The repository answer's own mac is gone: the whole-link mac covers it.\n"
+          "timestamp": "2026-11-15T14:35:20-07:00",
+          "message": "fix(click): the host opens every link's signature before a renderer sees it, and tells the app its verdict at once (candybar-host-renderer-x96a.35o)\n\nEvery link the bar draws is signed once per draw, and the host opens the\nsignature before parsing: a forged, edited or unsigned link reaches no\nrenderer, and its sender is told why.\n\n- A v2 URL frame is answered with its verdict as soon as it is read, and the\n  click runs after it under the deadline: a slow click that lands is never\n  told as failed. The app shows \"Click refused\" with the host's reason, or\n  \"Click not delivered\". A v1 writer hangs up as before.\n- The link key is read where it is used: the host's signer is lazy and\n  retries, and each renderer start reads it afresh into its boot. A broken\n  key refuses the start on ⚠; removing the file recovers at the next start.\n- A doctor probe is the host's own arm of the click reading, so it arrives\n  whatever state the key is in. The renderer's probe verb is gone.\n- check, the demo, the bench and the doctor's config draw sign with a random\n  preview key, so they never create the key file.\n- The page's memfs volume takes its owner from the page's process, so a file\n  only its owner may open (the link key) opens.\n"
         }
       ]
     },

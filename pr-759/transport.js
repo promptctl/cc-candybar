@@ -3711,13 +3711,13 @@ function __disposeResources(env2) {
   }
   return next();
 }
-function __rewriteRelativeImportExtension(path42, preserveJsx) {
-  if (typeof path42 === "string" && /^\.\.?\//.test(path42)) {
-    return path42.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
+function __rewriteRelativeImportExtension(path43, preserveJsx) {
+  if (typeof path43 === "string" && /^\.\.?\//.test(path43)) {
+    return path43.replace(/\.(tsx)$|((?:\.d)?)((?:\.[^./]+?)?)\.([cm]?)ts$/i, function(m, tsx, d, ext, cm) {
       return tsx ? preserveJsx ? ".jsx" : ".js" : d && (!ext || !cm) ? m : d + ext + "." + cm.toLowerCase() + "js";
     });
   }
-  return path42;
+  return path43;
 }
 var extendStatics, __assign, __createBinding, __setModuleDefault, ownKeys, _SuppressedError, tslib_es6_default;
 var init_tslib_es6 = __esm({
@@ -3813,20 +3813,20 @@ var require_path_browserify = __commonJS({
   "node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js"(exports, module) {
     "use strict";
     init_globals();
-    function assertPath(path42) {
-      if (typeof path42 !== "string") {
-        throw new TypeError("Path must be a string. Received " + JSON.stringify(path42));
+    function assertPath(path43) {
+      if (typeof path43 !== "string") {
+        throw new TypeError("Path must be a string. Received " + JSON.stringify(path43));
       }
     }
-    function normalizeStringPosix(path42, allowAboveRoot) {
+    function normalizeStringPosix(path43, allowAboveRoot) {
       var res = "";
       var lastSegmentLength = 0;
       var lastSlash = -1;
       var dots = 0;
       var code;
-      for (var i = 0; i <= path42.length; ++i) {
-        if (i < path42.length)
-          code = path42.charCodeAt(i);
+      for (var i = 0; i <= path43.length; ++i) {
+        if (i < path43.length)
+          code = path43.charCodeAt(i);
         else if (code === 47)
           break;
         else
@@ -3866,9 +3866,9 @@ var require_path_browserify = __commonJS({
             }
           } else {
             if (res.length > 0)
-              res += "/" + path42.slice(lastSlash + 1, i);
+              res += "/" + path43.slice(lastSlash + 1, i);
             else
-              res = path42.slice(lastSlash + 1, i);
+              res = path43.slice(lastSlash + 1, i);
             lastSegmentLength = i - lastSlash - 1;
           }
           lastSlash = i;
@@ -3899,20 +3899,20 @@ var require_path_browserify = __commonJS({
         var resolvedAbsolute = false;
         var cwd2;
         for (var i = arguments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
-          var path42;
+          var path43;
           if (i >= 0)
-            path42 = arguments[i];
+            path43 = arguments[i];
           else {
             if (cwd2 === void 0)
               cwd2 = process_default.cwd();
-            path42 = cwd2;
+            path43 = cwd2;
           }
-          assertPath(path42);
-          if (path42.length === 0) {
+          assertPath(path43);
+          if (path43.length === 0) {
             continue;
           }
-          resolvedPath = path42 + "/" + resolvedPath;
-          resolvedAbsolute = path42.charCodeAt(0) === 47;
+          resolvedPath = path43 + "/" + resolvedPath;
+          resolvedAbsolute = path43.charCodeAt(0) === 47;
         }
         resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
         if (resolvedAbsolute) {
@@ -3926,20 +3926,20 @@ var require_path_browserify = __commonJS({
           return ".";
         }
       },
-      normalize: function normalize(path42) {
-        assertPath(path42);
-        if (path42.length === 0) return ".";
-        var isAbsolute3 = path42.charCodeAt(0) === 47;
-        var trailingSeparator = path42.charCodeAt(path42.length - 1) === 47;
-        path42 = normalizeStringPosix(path42, !isAbsolute3);
-        if (path42.length === 0 && !isAbsolute3) path42 = ".";
-        if (path42.length > 0 && trailingSeparator) path42 += "/";
-        if (isAbsolute3) return "/" + path42;
-        return path42;
+      normalize: function normalize(path43) {
+        assertPath(path43);
+        if (path43.length === 0) return ".";
+        var isAbsolute3 = path43.charCodeAt(0) === 47;
+        var trailingSeparator = path43.charCodeAt(path43.length - 1) === 47;
+        path43 = normalizeStringPosix(path43, !isAbsolute3);
+        if (path43.length === 0 && !isAbsolute3) path43 = ".";
+        if (path43.length > 0 && trailingSeparator) path43 += "/";
+        if (isAbsolute3) return "/" + path43;
+        return path43;
       },
-      isAbsolute: function isAbsolute3(path42) {
-        assertPath(path42);
-        return path42.length > 0 && path42.charCodeAt(0) === 47;
+      isAbsolute: function isAbsolute3(path43) {
+        assertPath(path43);
+        return path43.length > 0 && path43.charCodeAt(0) === 47;
       },
       join: function join4() {
         if (arguments.length === 0)
@@ -4025,18 +4025,18 @@ var require_path_browserify = __commonJS({
           return to.slice(toStart);
         }
       },
-      _makeLong: function _makeLong(path42) {
-        return path42;
+      _makeLong: function _makeLong(path43) {
+        return path43;
       },
-      dirname: function dirname2(path42) {
-        assertPath(path42);
-        if (path42.length === 0) return ".";
-        var code = path42.charCodeAt(0);
+      dirname: function dirname2(path43) {
+        assertPath(path43);
+        if (path43.length === 0) return ".";
+        var code = path43.charCodeAt(0);
         var hasRoot = code === 47;
         var end = -1;
         var matchedSlash = true;
-        for (var i = path42.length - 1; i >= 1; --i) {
-          code = path42.charCodeAt(i);
+        for (var i = path43.length - 1; i >= 1; --i) {
+          code = path43.charCodeAt(i);
           if (code === 47) {
             if (!matchedSlash) {
               end = i;
@@ -4048,21 +4048,21 @@ var require_path_browserify = __commonJS({
         }
         if (end === -1) return hasRoot ? "/" : ".";
         if (hasRoot && end === 1) return "//";
-        return path42.slice(0, end);
+        return path43.slice(0, end);
       },
-      basename: function basename(path42, ext) {
+      basename: function basename(path43, ext) {
         if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
-        assertPath(path42);
+        assertPath(path43);
         var start = 0;
         var end = -1;
         var matchedSlash = true;
         var i;
-        if (ext !== void 0 && ext.length > 0 && ext.length <= path42.length) {
-          if (ext.length === path42.length && ext === path42) return "";
+        if (ext !== void 0 && ext.length > 0 && ext.length <= path43.length) {
+          if (ext.length === path43.length && ext === path43) return "";
           var extIdx = ext.length - 1;
           var firstNonSlashEnd = -1;
-          for (i = path42.length - 1; i >= 0; --i) {
-            var code = path42.charCodeAt(i);
+          for (i = path43.length - 1; i >= 0; --i) {
+            var code = path43.charCodeAt(i);
             if (code === 47) {
               if (!matchedSlash) {
                 start = i + 1;
@@ -4086,11 +4086,11 @@ var require_path_browserify = __commonJS({
             }
           }
           if (start === end) end = firstNonSlashEnd;
-          else if (end === -1) end = path42.length;
-          return path42.slice(start, end);
+          else if (end === -1) end = path43.length;
+          return path43.slice(start, end);
         } else {
-          for (i = path42.length - 1; i >= 0; --i) {
-            if (path42.charCodeAt(i) === 47) {
+          for (i = path43.length - 1; i >= 0; --i) {
+            if (path43.charCodeAt(i) === 47) {
               if (!matchedSlash) {
                 start = i + 1;
                 break;
@@ -4101,18 +4101,18 @@ var require_path_browserify = __commonJS({
             }
           }
           if (end === -1) return "";
-          return path42.slice(start, end);
+          return path43.slice(start, end);
         }
       },
-      extname: function extname(path42) {
-        assertPath(path42);
+      extname: function extname(path43) {
+        assertPath(path43);
         var startDot = -1;
         var startPart = 0;
         var end = -1;
         var matchedSlash = true;
         var preDotState = 0;
-        for (var i = path42.length - 1; i >= 0; --i) {
-          var code = path42.charCodeAt(i);
+        for (var i = path43.length - 1; i >= 0; --i) {
+          var code = path43.charCodeAt(i);
           if (code === 47) {
             if (!matchedSlash) {
               startPart = i + 1;
@@ -4138,7 +4138,7 @@ var require_path_browserify = __commonJS({
         preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
           return "";
         }
-        return path42.slice(startDot, end);
+        return path43.slice(startDot, end);
       },
       format: function format(pathObject) {
         if (pathObject === null || typeof pathObject !== "object") {
@@ -4146,11 +4146,11 @@ var require_path_browserify = __commonJS({
         }
         return _format("/", pathObject);
       },
-      parse: function parse3(path42) {
-        assertPath(path42);
+      parse: function parse3(path43) {
+        assertPath(path43);
         var ret = { root: "", dir: "", base: "", ext: "", name: "" };
-        if (path42.length === 0) return ret;
-        var code = path42.charCodeAt(0);
+        if (path43.length === 0) return ret;
+        var code = path43.charCodeAt(0);
         var isAbsolute3 = code === 47;
         var start;
         if (isAbsolute3) {
@@ -4163,10 +4163,10 @@ var require_path_browserify = __commonJS({
         var startPart = 0;
         var end = -1;
         var matchedSlash = true;
-        var i = path42.length - 1;
+        var i = path43.length - 1;
         var preDotState = 0;
         for (; i >= start; --i) {
-          code = path42.charCodeAt(i);
+          code = path43.charCodeAt(i);
           if (code === 47) {
             if (!matchedSlash) {
               startPart = i + 1;
@@ -4189,20 +4189,20 @@ var require_path_browserify = __commonJS({
         preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
         preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
           if (end !== -1) {
-            if (startPart === 0 && isAbsolute3) ret.base = ret.name = path42.slice(1, end);
-            else ret.base = ret.name = path42.slice(startPart, end);
+            if (startPart === 0 && isAbsolute3) ret.base = ret.name = path43.slice(1, end);
+            else ret.base = ret.name = path43.slice(startPart, end);
           }
         } else {
           if (startPart === 0 && isAbsolute3) {
-            ret.name = path42.slice(1, startDot);
-            ret.base = path42.slice(1, end);
+            ret.name = path43.slice(1, startDot);
+            ret.base = path43.slice(1, end);
           } else {
-            ret.name = path42.slice(startPart, startDot);
-            ret.base = path42.slice(startPart, end);
+            ret.name = path43.slice(startPart, startDot);
+            ret.base = path43.slice(startPart, end);
           }
-          ret.ext = path42.slice(startDot, end);
+          ret.ext = path43.slice(startDot, end);
         }
-        if (startPart > 0) ret.dir = path42.slice(0, startPart - 1);
+        if (startPart > 0) ret.dir = path43.slice(0, startPart - 1);
         else if (isAbsolute3) ret.dir = "/";
         return ret;
       },
@@ -4461,11 +4461,11 @@ var require_path2 = __commonJS({
     exports.pathRelative = path_1.posix ? path_1.posix.relative : path_1.relative;
     exports.pathDirname = path_1.posix ? path_1.posix.dirname : path_1.dirname;
     exports.pathNormalize = path_1.posix ? path_1.posix.normalize : path_1.normalize;
-    var basename = (path42, separator) => {
-      if (path42[path42.length - 1] === separator)
-        path42 = path42.slice(0, -1);
-      const lastSlashIndex = path42.lastIndexOf(separator);
-      return lastSlashIndex === -1 ? path42 : path42.slice(lastSlashIndex + 1);
+    var basename = (path43, separator) => {
+      if (path43[path43.length - 1] === separator)
+        path43 = path43.slice(0, -1);
+      const lastSlashIndex = path43.lastIndexOf(separator);
+      return lastSlashIndex === -1 ? path43 : path43.slice(lastSlashIndex + 1);
     };
     exports.basename = basename;
   }
@@ -5934,9 +5934,9 @@ var require_json = __commonJS({
     var flattenJSON = (nestedJSON) => {
       const flatJSON = {};
       function flatten(pathPrefix, node) {
-        for (const path42 in node) {
-          const contentOrNode = node[path42];
-          const joinedPath = (0, fs_node_utils_1.pathJoin)(pathPrefix, path42);
+        for (const path43 in node) {
+          const contentOrNode = node[path43];
+          const joinedPath = (0, fs_node_utils_1.pathJoin)(pathPrefix, path43);
           if (typeof contentOrNode === "string" || contentOrNode instanceof buffer_1.Buffer) {
             flatJSON[joinedPath] = contentOrNode;
           } else if (typeof contentOrNode === "object" && contentOrNode !== null && !(contentOrNode instanceof buffer_1.Buffer) && Object.keys(contentOrNode).length > 0) {
@@ -6667,8 +6667,8 @@ var require_util2 = __commonJS({
       return fullPathSansSlash.split(fs_node_utils_1.pathSep);
     };
     exports.filenameToSteps = filenameToSteps;
-    function isFd(path42) {
-      return path42 >>> 0 === path42;
+    function isFd(path43) {
+      return path43 >>> 0 === path43;
     }
     function validateFd(fd) {
       if (typeof fd !== "number")
@@ -6689,19 +6689,19 @@ var require_util2 = __commonJS({
         return (0, buffer_1.bufferFrom)(String(data), encoding);
     }
     var NO_NULL_BYTES = "must be a string, Uint8Array, or URL without null bytes";
-    var checkNullByte = (path42, name, received) => {
-      if (path42.indexOf("\0") === -1)
+    var checkNullByte = (path43, name, received) => {
+      if (path43.indexOf("\0") === -1)
         return;
       throw (0, argErrors_1.invalidArgValue)(name, received, NO_NULL_BYTES);
     };
-    function nullCheck(path42, name = "path") {
-      if (path42 instanceof Uint8Array) {
-        for (let i = 0; i < path42.length; i++)
-          if (!path42[i])
-            throw (0, argErrors_1.invalidArgValue)(name, path42, NO_NULL_BYTES);
+    function nullCheck(path43, name = "path") {
+      if (path43 instanceof Uint8Array) {
+        for (let i = 0; i < path43.length; i++)
+          if (!path43[i])
+            throw (0, argErrors_1.invalidArgValue)(name, path43, NO_NULL_BYTES);
         return true;
       }
-      const str = "" + path42;
+      const str = "" + path43;
       checkNullByte(str, name, str);
       return true;
     }
@@ -6722,16 +6722,16 @@ var require_util2 = __commonJS({
       const filepath = decodeURIComponent(pathname);
       return exports.isWin ? filepath.replace(/^\/([a-zA-Z]:)/, "$1") : filepath;
     };
-    function pathToFilename(path42, name = "path") {
-      const received = path42;
-      if (path42 instanceof Uint8Array)
-        path42 = (0, buffer_1.bufferFrom)(path42);
-      if (typeof path42 !== "string" && !buffer_1.Buffer.isBuffer(path42)) {
-        if (!isURL(path42))
-          throw (0, argErrors_1.invalidArgType)(name, "of type string or an instance of Buffer or URL", path42);
-        path42 = getPathFromURL(path42);
+    function pathToFilename(path43, name = "path") {
+      const received = path43;
+      if (path43 instanceof Uint8Array)
+        path43 = (0, buffer_1.bufferFrom)(path43);
+      if (typeof path43 !== "string" && !buffer_1.Buffer.isBuffer(path43)) {
+        if (!isURL(path43))
+          throw (0, argErrors_1.invalidArgType)(name, "of type string or an instance of Buffer or URL", path43);
+        path43 = getPathFromURL(path43);
       }
-      const pathString = String(path42);
+      const pathString = String(path43);
       checkNullByte(pathString, name, received instanceof Uint8Array ? received : pathString);
       return pathString;
     }
@@ -6747,11 +6747,11 @@ var require_SystemError = __commonJS({
     exports.SystemError = void 0;
     var SystemError = class extends Error {
       constructor(code, prefix, info) {
-        const path42 = info.path;
+        const path43 = info.path;
         const dest = info.dest;
         let message = prefix + ": " + info.syscall + " returned " + info.code + " (" + info.message + ")";
-        if (path42 !== void 0)
-          message += " " + path42;
+        if (path43 !== void 0)
+          message += " " + path43;
         if (dest !== void 0)
           message += " => " + dest;
         super(message);
@@ -6759,8 +6759,8 @@ var require_SystemError = __commonJS({
         this.info = info;
         this.errno = info.errno;
         this.syscall = info.syscall;
-        if (path42 !== void 0)
-          this.path = path42;
+        if (path43 !== void 0)
+          this.path = path43;
         if (dest !== void 0)
           this.dest = dest;
       }
@@ -6811,38 +6811,38 @@ var require_errors2 = __commonJS({
       EOVERFLOW: [-75, "value too large for defined data type"],
       ENOTSUP: [-95, "operation not supported on socket"]
     };
-    var formatMessage = (code, uv, syscall2, path42, dest) => {
+    var formatMessage = (code, uv, syscall2, path43, dest) => {
       let message = code + ": " + (uv ? uv[1] : "unknown error") + ", " + syscall2;
-      if (path42)
-        message += " '" + path42 + "'";
+      if (path43)
+        message += " '" + path43 + "'";
       if (dest)
         message += " -> '" + dest + "'";
       return message;
     };
-    var createError = (code, syscall2 = "", path42 = "", dest = "", Constructor = Error) => {
+    var createError = (code, syscall2 = "", path43 = "", dest = "", Constructor = Error) => {
       const uv = UV[code];
-      const error = new Constructor(formatMessage(code, uv, syscall2, path42, dest));
+      const error = new Constructor(formatMessage(code, uv, syscall2, path43, dest));
       if (uv)
         error.errno = uv[0];
       error.code = code;
       error.syscall = syscall2;
-      if (path42)
-        error.path = path42;
+      if (path43)
+        error.path = path43;
       if (dest)
         error.dest = dest;
       return error;
     };
     exports.createError = createError;
-    var createStatError = (code, syscall2 = "", path42 = "", dest = "") => {
+    var createStatError = (code, syscall2 = "", path43 = "", dest = "") => {
       const uv = UV[code];
       return {
         errno: uv ? uv[0] : void 0,
         code,
         syscall: syscall2,
-        path: path42,
+        path: path43,
         dest,
-        message: formatMessage(code, uv, syscall2, path42, dest),
-        toError: () => (0, exports.createError)(code, syscall2, path42, dest)
+        message: formatMessage(code, uv, syscall2, path43, dest),
+        toError: () => (0, exports.createError)(code, syscall2, path43, dest)
       };
     };
     exports.createStatError = createStatError;
@@ -6858,10 +6858,10 @@ var require_errors2 = __commonJS({
       return error;
     };
     exports.createWatchError = createWatchError;
-    var createEisdirError = (syscall2, path42) => new SystemError_1.SystemError("ERR_FS_EISDIR", "Path is a directory", {
+    var createEisdirError = (syscall2, path43) => new SystemError_1.SystemError("ERR_FS_EISDIR", "Path is a directory", {
       code: "EISDIR",
       message: "is a directory",
-      path: path42,
+      path: path43,
       syscall: syscall2,
       errno: -UV.EISDIR[0]
     });
@@ -6913,13 +6913,13 @@ var require_Superblock = __commonJS({
     var FsEvent_1 = require_FsEvent();
     var { O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_TRUNC, O_DIRECTORY, O_NOFOLLOW } = fs_node_utils_1.constants;
     var MAX_SYMLINK_HOPS = 40;
-    var endsWithSep = (path42, win32) => {
-      let i = path42.length - 1;
+    var endsWithSep = (path43, win32) => {
+      let i = path43.length - 1;
       if (i < 1)
         return false;
-      let code = path42.charCodeAt(i);
+      let code = path43.charCodeAt(i);
       if (code === 46)
-        code = path42.charCodeAt(--i);
+        code = path43.charCodeAt(--i);
       return code === 47 || win32 && code === 92;
     };
     var Superblock = class _Superblock {
@@ -7418,7 +7418,7 @@ var require_Superblock = __commonJS({
           throw (0, errors_1.createError)("EBADF", funcName);
         return file;
       }
-      _toJSON(link = this.root, json2 = {}, path42, asBuffer) {
+      _toJSON(link = this.root, json2 = {}, path43, asBuffer) {
         let isEmpty = true;
         let children2 = link.children;
         if (link.getNode().isFile()) {
@@ -7437,16 +7437,16 @@ var require_Superblock = __commonJS({
           const node = child.getNode();
           if (node.isFile()) {
             let filename = child.getPath();
-            if (path42)
-              filename = (0, fs_node_utils_2.pathRelative)(path42, filename);
+            if (path43)
+              filename = (0, fs_node_utils_2.pathRelative)(path43, filename);
             json2[filename] = asBuffer ? node.getBuffer() : node.getString();
           } else if (node.isDirectory()) {
-            this._toJSON(child, json2, path42, asBuffer);
+            this._toJSON(child, json2, path43, asBuffer);
           }
         }
         let dirPath = link.getPath();
-        if (path42)
-          dirPath = (0, fs_node_utils_2.pathRelative)(path42, dirPath);
+        if (path43)
+          dirPath = (0, fs_node_utils_2.pathRelative)(path43, dirPath);
         if (dirPath && isEmpty) {
           json2[dirPath] = null;
         }
@@ -7457,8 +7457,8 @@ var require_Superblock = __commonJS({
         if (paths2) {
           if (!Array.isArray(paths2))
             paths2 = [paths2];
-          for (const path42 of paths2) {
-            const filename = (0, util_1.pathToFilename)(path42);
+          for (const path43 of paths2) {
+            const filename = (0, util_1.pathToFilename)(path43);
             const link = this.getResolvedLink(filename);
             if (!link)
               continue;
@@ -7557,8 +7557,8 @@ var require_Superblock = __commonJS({
         return file;
       }
       // O_CREAT with a trailing separator: Linux looks the parent up first and only then fails with EISDIR.
-      throwCreatDir(path42, filename, budget) {
-        const dir = this.walk((0, path_1.dirname)(path42), true, true, true, "open", budget);
+      throwCreatDir(path43, filename, budget) {
+        const dir = this.walk((0, path_1.dirname)(path43), true, true, true, "open", budget);
         if (!dir.ok)
           throw (0, errors_1.createError)(dir.err.code, "open", filename);
         const node = dir.value.getNode();
@@ -7580,11 +7580,11 @@ var require_Superblock = __commonJS({
           this.throwCreatDir(filename, filename, budget);
         const excl = (flagsNum & (O_CREAT | O_EXCL)) === (O_CREAT | O_EXCL);
         const follow = trailingSlash || resolveSymlinks && !(flagsNum & O_NOFOLLOW) && !excl;
-        let path42 = filename;
+        let path43 = filename;
         let link = null;
         for (; ; ) {
           const hops = budget.hops;
-          const result = this.walk(path42, false, true, true, "open", budget);
+          const result = this.walk(path43, false, true, true, "open", budget);
           if (!result.ok) {
             const code = result.err.code;
             if (code !== "ENOENT" || !(flagsNum & O_CREAT))
@@ -7599,10 +7599,10 @@ var require_Superblock = __commonJS({
             break;
           if (++budget.hops > MAX_SYMLINK_HOPS)
             throw (0, errors_1.createError)("ELOOP", "open", filename);
-          path42 = (0, path_1.isAbsolute)(node.symlink) ? node.symlink : (0, fs_node_utils_2.pathJoin)((0, path_1.dirname)(link.getPath()), node.symlink);
-          if (endsWithSep(path42, win32)) {
+          path43 = (0, path_1.isAbsolute)(node.symlink) ? node.symlink : (0, fs_node_utils_2.pathJoin)((0, path_1.dirname)(link.getPath()), node.symlink);
+          if (endsWithSep(path43, win32)) {
             if (flagsNum & O_CREAT)
-              this.throwCreatDir(path42, filename, budget);
+              this.throwCreatDir(path43, filename, budget);
             trailingSlash = true;
           }
         }
@@ -7616,7 +7616,7 @@ var require_Superblock = __commonJS({
             throw (0, errors_1.createError)("EISDIR", "open", filename);
           return this.openLink(link, flagsNum, false, filename);
         }
-        const dir = this.walk((0, path_1.dirname)(path42), true, true, true, "open", budget);
+        const dir = this.walk((0, path_1.dirname)(path43), true, true, true, "open", budget);
         if (!dir.ok)
           throw (0, errors_1.createError)(dir.err.code, "open", filename);
         const dirLink = dir.value;
@@ -7626,7 +7626,7 @@ var require_Superblock = __commonJS({
         if (!dirNode.canExecute() || !dirNode.canWrite())
           throw (0, errors_1.createError)("EACCES", "open", filename);
         modeNum ?? (modeNum = 438);
-        const steps2 = (0, util_1.filenameToSteps)(path42);
+        const steps2 = (0, util_1.filenameToSteps)(path43);
         link = this.createLink(dirLink, steps2[steps2.length - 1], false, modeNum);
         this.emit(new FsEvent_1.FsEvent(0, link.steps, link.getNode(), link));
         return this.openLink(link, flagsNum, false, filename);
@@ -7674,9 +7674,9 @@ var require_CoreWatcher = __commonJS({
     exports.CoreWatchEvent = CoreWatchEvent;
     var CoreWatcher = class {
       /** @throws ENOENT-style error when the watch target does not exist. */
-      constructor(core, path42, opts = {}) {
+      constructor(core, path43, opts = {}) {
         this.changes = new fanout_1.FanOut();
-        this.link = opts.follow ?? true ? core.getResolvedLinkOrThrow(path42, "watch") : core.getLinkOrThrow(path42, "watch");
+        this.link = opts.follow ?? true ? core.getResolvedLinkOrThrow(path43, "watch") : core.getLinkOrThrow(path43, "watch");
         this.node = this.link.getNode();
         this.recursive = !!opts.recursive;
         this.unsub = core.changes.listen((event) => this.onEvent(event));
@@ -8314,9 +8314,9 @@ var require_util3 = __commonJS({
     Object.defineProperty(exports, "createWatchError", { enumerable: true, get: function() {
       return fs_core_1.createWatchError;
     } });
-    function promisify(fs3, fn, getResult = (input) => input) {
+    function promisify(fs2, fn, getResult = (input) => input) {
       return (...args) => new Promise((resolve, reject2) => {
-        fs3[fn].bind(fs3)(...args, (error, result) => {
+        fs2[fn].bind(fs2)(...args, (error, result) => {
           if (error)
             return reject2(error);
           return resolve(getResult(result));
@@ -8579,13 +8579,13 @@ var require_glob = __commonJS({
       child(indexes, symlinks = /* @__PURE__ */ new Set(), realpaths = this.realpaths) {
         return new _Pattern(this.parts, this.globStrings, indexes, symlinks, realpaths);
       }
-      test(index, path42) {
+      test(index, path43) {
         const part = this.parts[index];
         if (part === GLOBSTAR)
           return true;
         if (typeof part === "string")
-          return part === path42;
-        return part !== void 0 && part.test(path42);
+          return part === path43;
+        return part !== void 0 && part.test(path43);
       }
       cacheKey(index) {
         const globStrings = this.globStrings;
@@ -8612,82 +8612,82 @@ var require_glob = __commonJS({
       return dirent;
     };
     var Cache = class {
-      constructor(fs3) {
-        this.fs = fs3;
+      constructor(fs2) {
+        this.fs = fs2;
         this.stats = /* @__PURE__ */ new Map();
         this.followStats = /* @__PURE__ */ new Map();
         this.realpaths = /* @__PURE__ */ new Map();
         this.readdirs = /* @__PURE__ */ new Map();
         this.seenKeys = /* @__PURE__ */ new Map();
       }
-      statSync(path42) {
-        const cached = this.stats.get(path42);
+      statSync(path43) {
+        const cached = this.stats.get(path43);
         if (cached !== void 0)
           return cached;
         let value = null;
         try {
-          value = direntOf(basename(path42), dirname2(path42), this.fs.lstatSync(path42).mode);
+          value = direntOf(basename(path43), dirname2(path43), this.fs.lstatSync(path43).mode);
         } catch (error) {
           rethrowUnlessFsError(error);
         }
-        this.stats.set(path42, value);
+        this.stats.set(path43, value);
         return value;
       }
-      followStatSync(path42) {
-        const cached = this.followStats.get(path42);
+      followStatSync(path43) {
+        const cached = this.followStats.get(path43);
         if (cached !== void 0)
           return cached;
         let value = null;
         try {
-          value = direntOf(basename(path42), dirname2(path42), this.fs.statSync(path42).mode);
+          value = direntOf(basename(path43), dirname2(path43), this.fs.statSync(path43).mode);
         } catch (error) {
           rethrowUnlessFsError(error);
         }
-        this.followStats.set(path42, value);
+        this.followStats.set(path43, value);
         return value;
       }
-      realpathSync(path42) {
-        const cached = this.realpaths.get(path42);
+      realpathSync(path43) {
+        const cached = this.realpaths.get(path43);
         if (cached !== void 0)
           return cached;
         let value = null;
         try {
-          value = String(this.fs.realpathSync(path42));
+          value = String(this.fs.realpathSync(path43));
         } catch (error) {
           rethrowUnlessFsError(error);
         }
-        this.realpaths.set(path42, value);
+        this.realpaths.set(path43, value);
         return value;
       }
-      readdirSync(path42) {
-        const cached = this.readdirs.get(path42);
+      readdirSync(path43) {
+        const cached = this.readdirs.get(path43);
         if (cached !== void 0)
           return cached;
         let value = [];
         try {
-          value = this.fs.readdirSync(path42, { withFileTypes: true });
+          value = this.fs.readdirSync(path43, { withFileTypes: true });
         } catch (error) {
           rethrowUnlessFsError(error);
         }
-        this.readdirs.set(path42, value);
+        this.readdirs.set(path43, value);
         return value;
       }
-      addToStatCache(path42, value) {
-        this.stats.set(path42, value);
+      addToStatCache(path43, value) {
+        this.stats.set(path43, value);
       }
-      add(path42, pattern2) {
-        let keys2 = this.seenKeys.get(path42);
+      add(path43, pattern2) {
+        let keys2 = this.seenKeys.get(path43);
         if (!keys2) {
           keys2 = /* @__PURE__ */ new Set();
-          this.seenKeys.set(path42, keys2);
+          this.seenKeys.set(path43, keys2);
         }
         const originalSize = keys2.size;
         for (const index of pattern2.indexes)
           keys2.add(pattern2.cacheKey(index));
         return keys2.size !== originalSize + pattern2.indexes.size;
       }
-      seen(path42, pattern2, index) {
-        return !!this.seenKeys.get(path42)?.has(pattern2.cacheKey(index));
+      seen(path43, pattern2, index) {
+        return !!this.seenKeys.get(path43)?.has(pattern2.cacheKey(index));
       }
     };
     var depthOf = (root, fullpath) => {
@@ -8702,8 +8702,8 @@ var require_glob = __commonJS({
     };
     var EMPTY_OPTIONS = {};
     var Glob = class {
-      constructor(fs3, pattern2, options = EMPTY_OPTIONS) {
-        this.fs = fs3;
+      constructor(fs2, pattern2, options = EMPTY_OPTIONS) {
+        this.fs = fs2;
         this.followSymlinks = false;
         this.isExcluded = () => false;
         this.results = /* @__PURE__ */ new Set();
@@ -8711,7 +8711,7 @@ var require_glob = __commonJS({
         this.subpatterns = /* @__PURE__ */ new Map();
         (0, validators_1.validateObject)(options, "options");
         const { exclude, cwd: cwd2, followSymlinks, withFileTypes, maxdepth } = options;
-        this.cache = new Cache(fs3);
+        this.cache = new Cache(fs2);
         this.root = toPathIfFileURL(cwd2) ?? ".";
         if (followSymlinks != null) {
           (0, validators_1.validateBoolean)(followSymlinks, "options.followSymlinks");
@@ -8751,76 +8751,76 @@ var require_glob = __commonJS({
           const item = queue.pop();
           for (let i = 0; i < item.patterns.length; i++)
             yield* this.walkPattern(item.path, item.patterns[i]);
-          this.subpatterns.forEach((patterns, path42) => queue.push({ path: path42, patterns }));
+          this.subpatterns.forEach((patterns, path43) => queue.push({ path: path43, patterns }));
           this.subpatterns.clear();
         }
       }
-      result(path42) {
+      result(path43) {
         if (!this.withFileTypes)
-          return path42;
-        const full = isAbsolute3(path42) ? path42 : join4(this.root, path42);
+          return path43;
+        const full = isAbsolute3(path43) ? path43 : join4(this.root, path43);
         const stat3 = this.cache.statSync(full);
         return direntOf(basename(full), dirname2(full), stat3 ? stat3.mode : 0);
       }
-      isDirectory(path42, stat3, pattern2) {
+      isDirectory(path43, stat3, pattern2) {
         if (stat3?.isDirectory())
           return true;
         if (!stat3?.isSymbolicLink())
           return false;
         if (this.followSymlinks)
-          return !!this.cache.followStatSync(path42)?.isDirectory();
+          return !!this.cache.followStatSync(path43)?.isDirectory();
         return pattern2.hasSeenSymlinks;
       }
-      nextRealpaths(path42, isDirectory, pattern2) {
+      nextRealpaths(path43, isDirectory, pattern2) {
         if (!this.followSymlinks || !isDirectory)
           return pattern2.realpaths;
-        const real = this.cache.realpathSync(path42);
+        const real = this.cache.realpathSync(path43);
         if (real === null)
           return pattern2.realpaths;
         const realpaths = new Set(pattern2.realpaths);
         realpaths.add(real);
         return realpaths;
       }
-      isCyclic(path42, isDirectory, pattern2) {
+      isCyclic(path43, isDirectory, pattern2) {
         if (!this.followSymlinks || !isDirectory)
           return false;
-        const real = this.cache.realpathSync(path42);
+        const real = this.cache.realpathSync(path43);
         return real !== null && pattern2.realpaths.has(real);
       }
-      addSubpattern(path42, pattern2) {
-        if (this.isExcluded(path42))
+      addSubpattern(path43, pattern2) {
+        if (this.isExcluded(path43))
           return;
-        const fullpath = resolve(this.root, path42);
+        const fullpath = resolve(this.root, path43);
         if (this.isExcluded(fullpath + "/") && this.cache.statSync(fullpath)?.isDirectory())
           return;
         const exclude = this.exclude;
         if (exclude) {
           if (this.withFileTypes) {
-            const stat3 = this.cache.statSync(path42);
+            const stat3 = this.cache.statSync(path43);
             if (stat3 !== null && exclude(stat3))
               return;
-          } else if (exclude(path42))
+          } else if (exclude(path43))
             return;
         }
-        const existing = this.subpatterns.get(path42);
+        const existing = this.subpatterns.get(path43);
         if (existing)
           existing.push(pattern2);
         else
-          this.subpatterns.set(path42, [pattern2]);
+          this.subpatterns.set(path43, [pattern2]);
       }
-      accept(path42) {
-        if (this.results.has(path42))
+      accept(path43) {
+        if (this.results.has(path43))
           return false;
-        if (this.isExcluded(resolve(this.root, path42)))
+        if (this.isExcluded(resolve(this.root, path43)))
           return false;
-        this.results.add(path42);
+        this.results.add(path43);
         return true;
       }
-      *walkPattern(path42, pattern2) {
-        if (this.cache.add(path42, pattern2))
+      *walkPattern(path43, pattern2) {
+        if (this.cache.add(path43, pattern2))
           return;
         const cache2 = this.cache;
-        const fullpath = resolve(this.root, path42);
+        const fullpath = resolve(this.root, path43);
         const stat3 = cache2.statSync(fullpath);
         const last2 = pattern2.last;
         const isDirectory = this.isDirectory(fullpath, stat3, pattern2);
@@ -8843,14 +8843,14 @@ var require_glob = __commonJS({
         if (isLast && typeof pattern2.at(-1) === "string") {
           const p2 = pattern2.at(-1);
           const leaf = cache2.statSync(join4(fullpath, p2));
-          const match = join4(path42, p2);
+          const match = join4(path43, p2);
           if (leaf && (p2 || isDirectory) && this.accept(match))
             yield this.result(match);
           if (pattern2.indexes.size === 1 && pattern2.indexes.has(last2))
             return;
-        } else if (isLast && pattern2.at(-1) === GLOBSTAR && (path42 !== "." || pattern2.at(0) === "." || !last2 && stat3)) {
-          if (this.accept(path42))
-            yield this.result(path42);
+        } else if (isLast && pattern2.at(-1) === GLOBSTAR && (path43 !== "." || pattern2.at(0) === "." || !last2 && stat3)) {
+          if (this.accept(path43))
+            yield this.result(path43);
         }
         if (!isDirectory || this.isCyclic(fullpath, isDirectory, pattern2))
           return;
@@ -8870,7 +8870,7 @@ var require_glob = __commonJS({
         for (let i = 0; i < children2.length; i++) {
           const entry = children2[i];
           const name = entry.name;
-          const entryPath = join4(path42, name);
+          const entryPath = join4(path43, name);
           const entryFullpath = join4(fullpath, name);
           cache2.addToStatCache(entryFullpath, entry);
           const entryIsDirectory = entry.isDirectory() || this.followSymlinks && entry.isSymbolicLink() && !!cache2.followStatSync(entryFullpath)?.isDirectory();
@@ -8906,19 +8906,19 @@ var require_glob = __commonJS({
               if (!this.followSymlinks && entry.isSymbolicLink())
                 nSymlinks.add(index);
               if (next === ".." && entryIsDirectory) {
-                const parent = join4(path42, "..");
+                const parent = join4(path43, "..");
                 if (nextIndex < last2) {
-                  if (!this.subpatterns.has(path42) && !cache2.seen(path42, pattern2, nextIndex + 1))
-                    this.subpatterns.set(path42, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
+                  if (!this.subpatterns.has(path43) && !cache2.seen(path43, pattern2, nextIndex + 1))
+                    this.subpatterns.set(path43, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
                   if (!this.subpatterns.has(parent) && !cache2.seen(parent, pattern2, nextIndex + 1))
                     this.subpatterns.set(parent, [pattern2.child(/* @__PURE__ */ new Set([nextIndex + 1]))]);
                 } else {
-                  if (!cache2.seen(path42, pattern2, nextIndex)) {
-                    cache2.add(path42, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
-                    if (this.accept(path42))
-                      yield this.result(path42);
+                  if (!cache2.seen(path43, pattern2, nextIndex)) {
+                    cache2.add(path43, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
+                    if (this.accept(path43))
+                      yield this.result(path43);
                   }
-                  if (!cache2.seen(path42, pattern2, nextIndex) || !cache2.seen(parent, pattern2, nextIndex)) {
+                  if (!cache2.seen(path43, pattern2, nextIndex) || !cache2.seen(parent, pattern2, nextIndex)) {
                     cache2.add(parent, pattern2.child(/* @__PURE__ */ new Set([nextIndex])));
                     if (this.accept(parent))
                       yield this.result(parent);
@@ -8950,17 +8950,17 @@ var require_glob = __commonJS({
         }
       }
     };
-    var globWalk = (fs3, pattern2, options) => new Glob(fs3, pattern2, options).walk();
+    var globWalk = (fs2, pattern2, options) => new Glob(fs2, pattern2, options).walk();
     exports.globWalk = globWalk;
-    var globSync = (fs3, pattern2, options) => {
+    var globSync = (fs2, pattern2, options) => {
       const results = [];
-      for (const match of (0, exports.globWalk)(fs3, pattern2, options))
+      for (const match of (0, exports.globWalk)(fs2, pattern2, options))
         results.push(match);
       return results;
     };
     exports.globSync = globSync;
-    async function* glob(fs3, pattern2, options) {
-      yield* (0, exports.globWalk)(fs3, pattern2, options);
+    async function* glob(fs2, pattern2, options) {
+      yield* (0, exports.globWalk)(fs2, pattern2, options);
     }
   }
 });
@@ -14804,12 +14804,12 @@ var require_FileHandle = __commonJS({
       throw error;
     };
     var FileHandle = class extends events_1.EventEmitter {
-      constructor(fs3, fd) {
+      constructor(fs2, fd) {
         super();
         this.refs = 1;
         this.closePromise = null;
         this.readableWebStreamLocked = false;
-        this.fs = fs3;
+        this.fs = fs2;
         this.fd = fd;
       }
       getAsyncId() {
@@ -15103,7 +15103,7 @@ var require_cp = __commonJS({
       ERR_FS_CP_UNKNOWN: "Cannot copy an unknown file type",
       ERR_FS_EISDIR: "Path is a directory"
     };
-    var cpSystemError = (code, message, path42, errno, uv) => new fs_core_1.SystemError(code, PREFIX2[code], { code: uv, message, path: path42, syscall: "cp", errno });
+    var cpSystemError = (code, message, path43, errno, uv) => new fs_core_1.SystemError(code, PREFIX2[code], { code: uv, message, path: path43, syscall: "cp", errno });
     var cpCodeError = (code, message) => (0, argErrors_1.withNativeCode)(new Error(message), code);
     var invalidFilterReturn = (value) => (0, argErrors_1.withCode)(new TypeError('Expected boolean to be returned from the "filter" function but got an instance of Promise.'), "ERR_INVALID_RETURN_VALUE");
     var asCopyfileError = (error, src, dest) => error && typeof error.code === "string" && typeof error.syscall === "string" ? (0, fs_core_1.createError)(error.code, "copyfile", src, dest) : error;
@@ -15199,8 +15199,8 @@ var require_cp = __commonJS({
       }
     };
     exports.copyFileCore = copyFileCore;
-    var toParts = (path42) => {
-      const raw = pathResolve(path42).split("/");
+    var toParts = (path43) => {
+      const raw = pathResolve(path43).split("/");
       const parts = [];
       for (let i = 0; i < raw.length; i++)
         if (raw[i])
@@ -15219,8 +15219,8 @@ var require_cp = __commonJS({
       return true;
     };
     var areIdentical = (srcStat, destStat) => srcStat.ino === destStat.ino && srcStat.dev === destStat.dev;
-    var statOf = (vol2, path42, dereference) => dereference ? vol2.statSync(path42) : vol2.lstatSync(path42);
-    var statOrNull = (vol2, path42, dereference) => dereference ? vol2.statSync(path42, { throwIfNoEntry: false }) : vol2.lstatSync(path42, { throwIfNoEntry: false });
+    var statOf = (vol2, path43, dereference) => dereference ? vol2.statSync(path43) : vol2.lstatSync(path43);
+    var statOrNull = (vol2, path43, dereference) => dereference ? vol2.statSync(path43, { throwIfNoEntry: false }) : vol2.lstatSync(path43, { throwIfNoEntry: false });
     var readEntries = (vol2, dir) => {
       try {
         return vol2.readdirSync(dir);
@@ -15229,8 +15229,8 @@ var require_cp = __commonJS({
         throw code ? (0, fs_core_1.createError)(code, "opendir", dir) : error;
       }
     };
-    var isDirectory = (vol2, path42) => {
-      const stats = vol2.statSync(path42, { throwIfNoEntry: false });
+    var isDirectory = (vol2, path43) => {
+      const stats = vol2.statSync(path43, { throwIfNoEntry: false });
       return !!stats && stats.isDirectory();
     };
     var setDestMode = (vol2, dest, srcMode) => {
@@ -15557,9 +15557,9 @@ var require_FsPromises = __commonJS({
       return error;
     };
     var FSWatchAsyncIterator = class {
-      constructor(fs3, path42, options = {}) {
-        this.fs = fs3;
-        this.path = path42;
+      constructor(fs2, path43, options = {}) {
+        this.fs = fs2;
+        this.path = path43;
         this.options = options;
         this.eventQueue = [];
         this.resolveQueue = [];
@@ -15668,8 +15668,8 @@ var require_FsPromises = __commonJS({
       }
     };
     var FsPromises = class {
-      constructor(fs3, FileHandle) {
-        this.fs = fs3;
+      constructor(fs2, FileHandle) {
+        this.fs = fs2;
         this.FileHandle = FileHandle;
         this.constants = fs_node_utils_1.constants;
         this.cp = (src, dest, options) => new Promise((resolve, reject2) => {
@@ -15705,11 +15705,11 @@ var require_FsPromises = __commonJS({
         this.readFile = (id2, options) => {
           return (0, util_1.promisify)(this.fs, "readFile")(id2 instanceof this.FileHandle ? id2.fd : id2, options);
         };
-        this.appendFile = (path42, data, options) => {
-          return (0, util_1.promisify)(this.fs, "appendFile")(path42 instanceof this.FileHandle ? path42.fd : path42, data, options);
+        this.appendFile = (path43, data, options) => {
+          return (0, util_1.promisify)(this.fs, "appendFile")(path43 instanceof this.FileHandle ? path43.fd : path43, data, options);
         };
-        this.open = (path42, flags = "r", mode) => {
-          return (0, util_1.promisify)(this.fs, "open", (fd) => new this.FileHandle(this.fs, fd))(path42, flags, mode);
+        this.open = (path43, flags = "r", mode) => {
+          return (0, util_1.promisify)(this.fs, "open", (fd) => new this.FileHandle(this.fs, fd))(path43, flags, mode);
         };
         this.writeFile = (id2, data, options) => {
           const dataPromise = (0, util_1.isReadableStream)(data) ? (0, util_1.streamToBuffer)(data) : Promise.resolve(data);
@@ -15807,7 +15807,7 @@ var require_lib5 = __commonJS({
     exports.toTreeSync = void 0;
     var tree_dump_1 = require_lib4();
     var fs_node_utils_1 = require_lib2();
-    var toTreeSync = (fs3, opts = {}) => {
+    var toTreeSync = (fs2, opts = {}) => {
       const separator = opts.separator || "/";
       let dir = opts.dir || separator;
       if (dir[dir.length - 1] !== separator)
@@ -15817,7 +15817,7 @@ var require_lib5 = __commonJS({
       const sort = opts.sort ?? true;
       let subtree = " (...)";
       if (depth > 0) {
-        const list2 = fs3.readdirSync(dir, { withFileTypes: true });
+        const list2 = fs2.readdirSync(dir, { withFileTypes: true });
         if (sort) {
           list2.sort((a, b) => {
             if (a.isDirectory() && b.isDirectory()) {
@@ -15833,9 +15833,9 @@ var require_lib5 = __commonJS({
         }
         subtree = (0, tree_dump_1.printTree)(tab, list2.map((entry) => (tab2) => {
           if (entry.isDirectory()) {
-            return (0, exports.toTreeSync)(fs3, { dir: dir + entry.name, depth: depth - 1, tab: tab2 });
+            return (0, exports.toTreeSync)(fs2, { dir: dir + entry.name, depth: depth - 1, tab: tab2 });
           } else if (entry.isSymbolicLink()) {
-            return "" + entry.name + " \u2192 " + fs3.readlinkSync(dir + entry.name);
+            return "" + entry.name + " \u2192 " + fs2.readlinkSync(dir + entry.name);
           } else {
             return "" + entry.name;
           }
@@ -16149,56 +16149,56 @@ var require_sync = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.fromSnapshotSync = exports.toSnapshotSync = void 0;
     var shared_1 = require_shared();
-    var toSnapshotSync = ({ fs: fs3, path: path42 = "/", separator = "/" }) => {
-      const stats = fs3.lstatSync(path42);
+    var toSnapshotSync = ({ fs: fs2, path: path43 = "/", separator = "/" }) => {
+      const stats = fs2.lstatSync(path43);
       if (stats.isDirectory()) {
-        const list2 = fs3.readdirSync(path42);
+        const list2 = fs2.readdirSync(path43);
         const entries = {};
-        const dir = path42.endsWith(separator) ? path42 : path42 + separator;
+        const dir = path43.endsWith(separator) ? path43 : path43 + separator;
         for (const child of list2) {
-          const childSnapshot = (0, exports.toSnapshotSync)({ fs: fs3, path: `${dir}${child}`, separator });
+          const childSnapshot = (0, exports.toSnapshotSync)({ fs: fs2, path: `${dir}${child}`, separator });
           if (childSnapshot)
             entries["" + child] = childSnapshot;
         }
         return [0, {}, entries];
       } else if (stats.isFile()) {
-        const buf = fs3.readFileSync(path42);
+        const buf = fs2.readFileSync(path43);
         const uint8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         return [1, {}, uint8];
       } else if (stats.isSymbolicLink()) {
         return [
           2,
           {
-            target: fs3.readlinkSync(path42).toString()
+            target: fs2.readlinkSync(path43).toString()
           }
         ];
       }
       return null;
     };
     exports.toSnapshotSync = toSnapshotSync;
-    var fromSnapshotSync = (snapshot, { fs: fs3, path: path42 = "/", separator = "/" }) => {
+    var fromSnapshotSync = (snapshot, { fs: fs2, path: path43 = "/", separator = "/" }) => {
       if (!snapshot)
         return;
       switch (snapshot[0]) {
         case 0: {
-          if (!path42.endsWith(separator))
-            path42 = path42 + separator;
+          if (!path43.endsWith(separator))
+            path43 = path43 + separator;
           const [, , entries] = snapshot;
-          fs3.mkdirSync(path42, { recursive: true });
+          fs2.mkdirSync(path43, { recursive: true });
           for (const [name, child] of Object.entries(entries)) {
             (0, shared_1.validateEntryName)(name);
-            (0, exports.fromSnapshotSync)(child, { fs: fs3, path: `${path42}${name}`, separator });
+            (0, exports.fromSnapshotSync)(child, { fs: fs2, path: `${path43}${name}`, separator });
           }
           break;
         }
         case 1: {
           const [, , data] = snapshot;
-          fs3.writeFileSync(path42, data);
+          fs2.writeFileSync(path43, data);
           break;
         }
         case 2: {
           const [, { target }] = snapshot;
-          fs3.symlinkSync(target, path42);
+          fs2.symlinkSync(target, path43);
           break;
         }
       }
@@ -17959,9 +17959,9 @@ var require_CborDecoder = __commonJS({
           this.skipAny();
         return this;
       }
-      find(path42) {
-        for (let i = 0; i < path42.length; i++) {
-          const segment = path42[i];
+      find(path43) {
+        for (let i = 0; i < path43.length; i++) {
+          const segment = path43[i];
           if (typeof segment === "string")
             this.findKey(segment);
           else
@@ -17982,56 +17982,56 @@ var require_async = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.fromSnapshot = exports.toSnapshot = void 0;
     var shared_1 = require_shared();
-    var toSnapshot = async ({ fs: fs3, path: path42 = "/", separator = "/" }) => {
-      const stats = await fs3.lstat(path42);
+    var toSnapshot = async ({ fs: fs2, path: path43 = "/", separator = "/" }) => {
+      const stats = await fs2.lstat(path43);
       if (stats.isDirectory()) {
-        const list2 = await fs3.readdir(path42);
+        const list2 = await fs2.readdir(path43);
         const entries = {};
-        const dir = path42.endsWith(separator) ? path42 : path42 + separator;
-        const snapshots = await Promise.all(list2.map((child) => (0, exports.toSnapshot)({ fs: fs3, path: `${dir}${child}`, separator })));
+        const dir = path43.endsWith(separator) ? path43 : path43 + separator;
+        const snapshots = await Promise.all(list2.map((child) => (0, exports.toSnapshot)({ fs: fs2, path: `${dir}${child}`, separator })));
         for (let i = 0; i < list2.length; i++) {
           if (snapshots[i])
             entries["" + list2[i]] = snapshots[i];
         }
         return [0, {}, entries];
       } else if (stats.isFile()) {
-        const buf = await fs3.readFile(path42);
+        const buf = await fs2.readFile(path43);
         const uint8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         return [1, {}, uint8];
       } else if (stats.isSymbolicLink()) {
         return [
           2,
           {
-            target: await fs3.readlink(path42, { encoding: "utf8" })
+            target: await fs2.readlink(path43, { encoding: "utf8" })
           }
         ];
       }
       return null;
     };
     exports.toSnapshot = toSnapshot;
-    var fromSnapshot = async (snapshot, { fs: fs3, path: path42 = "/", separator = "/" }) => {
+    var fromSnapshot = async (snapshot, { fs: fs2, path: path43 = "/", separator = "/" }) => {
       if (!snapshot)
         return;
       switch (snapshot[0]) {
         case 0: {
-          if (!path42.endsWith(separator))
-            path42 = path42 + separator;
+          if (!path43.endsWith(separator))
+            path43 = path43 + separator;
           const [, , entries] = snapshot;
-          await fs3.mkdir(path42, { recursive: true });
+          await fs2.mkdir(path43, { recursive: true });
           for (const [name, child] of Object.entries(entries)) {
             (0, shared_1.validateEntryName)(name);
-            await (0, exports.fromSnapshot)(child, { fs: fs3, path: `${path42}${name}`, separator });
+            await (0, exports.fromSnapshot)(child, { fs: fs2, path: `${path43}${name}`, separator });
           }
           break;
         }
         case 1: {
           const [, , data] = snapshot;
-          await fs3.writeFile(path42, data);
+          await fs2.writeFile(path43, data);
           break;
         }
         case 2: {
           const [, { target }] = snapshot;
-          await fs3.symlink(target, path42);
+          await fs2.symlink(target, path43);
           break;
         }
       }
@@ -19336,7 +19336,7 @@ var require_Dir = __commonJS({
        *
        * @param path The path the directory was opened with, kept verbatim as `dir.path`.
        */
-      constructor(handle, path42, options) {
+      constructor(handle, path43, options) {
         this.levels = [];
         this.closed = false;
         this.operationQueue = null;
@@ -19347,9 +19347,9 @@ var require_Dir = __commonJS({
         const opts = { bufferSize: 32, ...given2 };
         (0, validators_1.validateUint32)(opts.bufferSize, "options.bufferSize", true);
         this.options = opts;
-        this._path = path42;
-        const parentPath = typeof path42 === "string" ? path42 : path42.toString();
-        this.levels.push({ entries: handle.children[Symbol.iterator](), path: path42, parentPath });
+        this._path = path43;
+        const parentPath = typeof path43 === "string" ? path43 : path43.toString();
+        this.levels.push({ entries: handle.children[Symbol.iterator](), path: path43, parentPath });
       }
       readBase() {
         const levels = this.levels;
@@ -19376,10 +19376,10 @@ var require_Dir = __commonJS({
       }
       // TODO: Node opens the joined path, failing ENOENT on a `hex` or non-ASCII `latin1` name, we follow the link.
       descend(parent, name, link) {
-        const path42 = (0, fs_node_utils_1.pathJoin)(parent, name);
+        const path43 = (0, fs_node_utils_1.pathJoin)(parent, name);
         if (!link.getNode().canRead())
-          throw (0, util_1.createError)("EACCES", "opendir", path42);
-        this.levels.push({ entries: link.children[Symbol.iterator](), path: path42, parentPath: path42 });
+          throw (0, util_1.createError)("EACCES", "opendir", path43);
+        this.levels.push({ entries: link.children[Symbol.iterator](), path: path43, parentPath: path43 });
       }
       readPromise() {
         return new Promise((resolve, reject2) => {
@@ -19554,8 +19554,8 @@ var require_volume = __commonJS({
     var cp_1 = require_cp();
     var { O_SYMLINK, F_OK, R_OK, W_OK, X_OK } = fs_node_utils_1.constants;
     var kMinPoolSpace = 128;
-    function pathToSteps(path42) {
-      return (0, fs_core_1.filenameToSteps)((0, util_2.pathToFilename)(path42));
+    function pathToSteps(path43) {
+      return (0, fs_core_1.filenameToSteps)((0, util_2.pathToFilename)(path43));
     }
     function dataToStr(data, encoding = fs_node_utils_1.ENCODING_UTF8) {
       if (buffer_1.Buffer.isBuffer(data))
@@ -19588,7 +19588,7 @@ var require_volume = __commonJS({
       if (typeof gid !== "number")
         throw TypeError(fs_node_utils_2.ERRSTR.GID);
     }
-    var Volume = class {
+    var Volume2 = class {
       get promises() {
         if (this.promisesApi === null)
           throw new Error("Promise is not supported in this environment.");
@@ -19597,13 +19597,13 @@ var require_volume = __commonJS({
       constructor(_core = new fs_core_1.Superblock()) {
         this._core = _core;
         this.promisesApi = new FsPromises_1.FsPromises(this, FileHandle_1.FileHandle);
-        this.openSync = (path42, flags, mode = 438) => {
+        this.openSync = (path43, flags, mode = 438) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const fileName2 = (0, util_2.pathToFilename)(path42);
+          const fileName2 = (0, util_2.pathToFilename)(path43);
           const flagsNum = (0, util_2.flagsToNumber)(flags);
           return this._core.open(fileName2, flagsNum, modeNum, !(flagsNum & O_SYMLINK));
         };
-        this.open = (path42, flags, a, b) => {
+        this.open = (path43, flags, a, b) => {
           let mode = a;
           let callback = b;
           if (typeof a === "function") {
@@ -19612,7 +19612,7 @@ var require_volume = __commonJS({
           }
           mode = mode || 438;
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const fileName2 = (0, util_2.pathToFilename)(path42);
+          const fileName2 = (0, util_2.pathToFilename)(path43);
           const flagsNum = (0, util_2.flagsToNumber)(flags);
           this.wrapAsync(this._core.open, [fileName2, flagsNum, modeNum, !(flagsNum & O_SYMLINK)], callback);
         };
@@ -19769,23 +19769,23 @@ var require_volume = __commonJS({
           const newPathFilename = (0, util_2.pathToFilename)(newPath);
           this.wrapAsync(this._core.link, [existingPathFilename, newPathFilename], callback);
         };
-        this.unlinkSync = (path42) => {
-          const filename = (0, util_2.pathToFilename)(path42);
+        this.unlinkSync = (path43) => {
+          const filename = (0, util_2.pathToFilename)(path43);
           this._core.unlink(filename);
         };
-        this.unlink = (path42, callback) => {
-          const filename = (0, util_2.pathToFilename)(path42);
+        this.unlink = (path43, callback) => {
+          const filename = (0, util_2.pathToFilename)(path43);
           this.wrapAsync(this._core.unlink, [filename], callback);
         };
-        this.symlinkSync = (target, path42, type3) => {
+        this.symlinkSync = (target, path43, type3) => {
           const targetFilename = (0, util_2.pathToFilename)(target);
-          const pathFilename = (0, util_2.pathToFilename)(path42);
+          const pathFilename = (0, util_2.pathToFilename)(path43);
           this._core.symlink(targetFilename, pathFilename);
         };
-        this.symlink = (target, path42, a, b) => {
+        this.symlink = (target, path43, a, b) => {
           const callback = (0, util_2.validateCallback)(typeof a === "function" ? a : b);
           const targetFilename = (0, util_2.pathToFilename)(target);
-          const pathFilename = (0, util_2.pathToFilename)(path42);
+          const pathFilename = (0, util_2.pathToFilename)(path43);
           this.wrapAsync(this._core.symlink, [targetFilename, pathFilename], callback);
         };
         this._lstat = (filename, bigint = false, throwIfNoEntry = false) => {
@@ -19800,9 +19800,9 @@ var require_volume = __commonJS({
           }
           return Stats_1.default.build(link.getNode(), bigint);
         };
-        this.lstatSync = (path42, options) => {
+        this.lstatSync = (path43, options) => {
           const { throwIfNoEntry = true, bigint = false } = (0, options_1.getStatOptions)(options);
-          return this._lstat((0, util_2.pathToFilename)(path42), bigint, throwIfNoEntry);
+          return this._lstat((0, util_2.pathToFilename)(path43), bigint, throwIfNoEntry);
         };
         this.renameSync = (oldPath, newPath) => {
           const oldPathFilename = (0, util_2.pathToFilename)(oldPath);
@@ -19814,15 +19814,15 @@ var require_volume = __commonJS({
           const newPathFilename = (0, util_2.pathToFilename)(newPath);
           this.wrapAsync(this._core.rename, [oldPathFilename, newPathFilename], callback);
         };
-        this.existsSync = (path42) => {
+        this.existsSync = (path43) => {
           try {
-            return this._exists((0, util_2.pathToFilename)(path42)).ok;
+            return this._exists((0, util_2.pathToFilename)(path43)).ok;
           } catch (err) {
             return false;
           }
         };
-        this.exists = (path42, callback) => {
-          const filename = (0, util_2.pathToFilename)(path42);
+        this.exists = (path43, callback) => {
+          const filename = (0, util_2.pathToFilename)(path43);
           if (typeof callback !== "function")
             throw Error(fs_node_utils_2.ERRSTR.CB);
           Promise.resolve().then(() => {
@@ -19833,19 +19833,19 @@ var require_volume = __commonJS({
             }
           });
         };
-        this.accessSync = (path42, mode = F_OK) => {
-          const filename = (0, util_2.pathToFilename)(path42);
+        this.accessSync = (path43, mode = F_OK) => {
+          const filename = (0, util_2.pathToFilename)(path43);
           mode = mode | 0;
           this._access(filename, mode);
         };
-        this.access = (path42, a, b) => {
+        this.access = (path43, a, b) => {
           let mode = F_OK;
           let callback;
           if (typeof a !== "function")
             [mode, callback] = [a | 0, (0, util_2.validateCallback)(b)];
           else
             callback = a;
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           this.wrapAsync(this._access, [filename, mode], callback);
         };
         this.appendFileSync = (id2, data, options) => {
@@ -19904,14 +19904,14 @@ var require_volume = __commonJS({
             return dirent.name;
           });
         };
-        this.readdirSync = (path42, options) => {
+        this.readdirSync = (path43, options) => {
           const opts = (0, options_1.getReaddirOptions)(options);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           return this._readdir(filename, opts);
         };
-        this.readdir = (path42, a, b) => {
+        this.readdir = (path43, a, b) => {
           const [options, callback] = (0, options_1.getReaddirOptsAndCb)(a, b);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           this.wrapAsync(this._readdir, [filename, options], callback);
         };
         this._readlink = (filename, encoding) => {
@@ -19921,14 +19921,14 @@ var require_volume = __commonJS({
             throw (0, util_2.createError)("EINVAL", "readlink", filename);
           return (0, fs_node_utils_1.strToEncoding)(node.symlink, encoding);
         };
-        this.readlinkSync = (path42, options) => {
+        this.readlinkSync = (path43, options) => {
           const opts = (0, options_1.getDefaultOpts)(options);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           return this._readlink(filename, opts.encoding);
         };
-        this.readlink = (path42, a, b) => {
+        this.readlink = (path43, a, b) => {
           const [opts, callback] = (0, options_1.getDefaultOptsAndCb)(a, b);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           this.wrapAsync(this._readlink, [filename, opts.encoding], callback);
         };
         this._fsync = (fd) => {
@@ -19960,8 +19960,8 @@ var require_volume = __commonJS({
           const callback = (0, util_2.validateCallback)(typeof a === "number" ? b : a);
           this.wrapAsync(this._ftruncate, [fd, len2], callback);
         };
-        this._truncate = (path42, len2) => {
-          const fd = this.openSync(path42, "r+");
+        this._truncate = (path43, len2) => {
+          const fd = this.openSync(path43, "r+");
           try {
             this.ftruncateSync(fd, len2);
           } finally {
@@ -19992,31 +19992,31 @@ var require_volume = __commonJS({
         this._utimes = (filename, atime, mtime, followSymlinks = true) => {
           this._core.utimes(filename, atime, mtime, followSymlinks);
         };
-        this.utimesSync = (path42, atime, mtime) => {
-          this._utimes((0, util_2.pathToFilename)(path42), toUnixTimestamp(atime), toUnixTimestamp(mtime), true);
+        this.utimesSync = (path43, atime, mtime) => {
+          this._utimes((0, util_2.pathToFilename)(path43), toUnixTimestamp(atime), toUnixTimestamp(mtime), true);
         };
-        this.utimes = (path42, atime, mtime, callback) => {
-          this.wrapAsync(this._utimes, [(0, util_2.pathToFilename)(path42), toUnixTimestamp(atime), toUnixTimestamp(mtime), true], callback);
+        this.utimes = (path43, atime, mtime, callback) => {
+          this.wrapAsync(this._utimes, [(0, util_2.pathToFilename)(path43), toUnixTimestamp(atime), toUnixTimestamp(mtime), true], callback);
         };
-        this.lutimesSync = (path42, atime, mtime) => {
-          this._utimes((0, util_2.pathToFilename)(path42), toUnixTimestamp(atime), toUnixTimestamp(mtime), false);
+        this.lutimesSync = (path43, atime, mtime) => {
+          this._utimes((0, util_2.pathToFilename)(path43), toUnixTimestamp(atime), toUnixTimestamp(mtime), false);
         };
-        this.lutimes = (path42, atime, mtime, callback) => {
-          this.wrapAsync(this._utimes, [(0, util_2.pathToFilename)(path42), toUnixTimestamp(atime), toUnixTimestamp(mtime), false], callback);
+        this.lutimes = (path43, atime, mtime, callback) => {
+          this.wrapAsync(this._utimes, [(0, util_2.pathToFilename)(path43), toUnixTimestamp(atime), toUnixTimestamp(mtime), false], callback);
         };
-        this.mkdirSync = (path42, options) => {
+        this.mkdirSync = (path43, options) => {
           const opts = (0, options_1.getMkdirOptions)(options);
           const modeNum = (0, util_2.modeToNumber)(opts.mode, 511);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           if (opts.recursive)
             return this._core.mkdirp(filename, modeNum);
           this._core.mkdir(filename, modeNum);
         };
-        this.mkdir = (path42, a, b) => {
+        this.mkdir = (path43, a, b) => {
           const opts = (0, options_1.getMkdirOptions)(a);
           const callback = (0, util_2.validateCallback)(typeof a === "function" ? a : b);
           const modeNum = (0, util_2.modeToNumber)(opts.mode, 511);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           if (opts.recursive)
             this.wrapAsync(this._core.mkdirp, [filename, modeNum], callback);
           else
@@ -20056,21 +20056,21 @@ var require_volume = __commonJS({
             return;
           this.wrapAsync(this._mkdtemp, [prefix, encoding], callback);
         };
-        this.rmdirSync = (path42, options) => {
+        this.rmdirSync = (path43, options) => {
           const opts = (0, options_1.getRmdirOptions)(options);
-          this._core.rmdir((0, util_2.pathToFilename)(path42), opts.recursive);
+          this._core.rmdir((0, util_2.pathToFilename)(path43), opts.recursive);
         };
-        this.rmdir = (path42, a, b) => {
+        this.rmdir = (path43, a, b) => {
           const opts = (0, options_1.getRmdirOptions)(a);
           const callback = (0, util_2.validateCallback)(typeof a === "function" ? a : b);
-          this.wrapAsync(this._core.rmdir, [(0, util_2.pathToFilename)(path42), opts.recursive], callback);
+          this.wrapAsync(this._core.rmdir, [(0, util_2.pathToFilename)(path43), opts.recursive], callback);
         };
-        this.rmSync = (path42, options) => {
-          this._core.rm((0, util_2.pathToFilename)(path42), options?.force, options?.recursive);
+        this.rmSync = (path43, options) => {
+          this._core.rm((0, util_2.pathToFilename)(path43), options?.force, options?.recursive);
         };
-        this.rm = (path42, a, b) => {
+        this.rm = (path43, a, b) => {
           const [opts, callback] = (0, options_1.getRmOptsAndCb)(a, b);
-          this.wrapAsync(this._core.rm, [(0, util_2.pathToFilename)(path42), opts?.force, opts?.recursive], callback);
+          this.wrapAsync(this._core.rm, [(0, util_2.pathToFilename)(path43), opts?.force, opts?.recursive], callback);
         };
         this._fchmod = (fd, modeNum) => {
           this._core.fchmod(fd, modeNum);
@@ -20088,27 +20088,27 @@ var require_volume = __commonJS({
             this._core.lchmod(filename, modeNum);
           }
         };
-        this.chmodSync = (path42, mode) => {
+        this.chmodSync = (path43, mode) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           this._chmod(filename, modeNum, true);
         };
-        this.chmod = (path42, mode, callback) => {
+        this.chmod = (path43, mode, callback) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           this.wrapAsync(this._chmod, [filename, modeNum], callback);
         };
         this._lchmod = (filename, modeNum) => {
           this._core.lchmod(filename, modeNum);
         };
-        this.lchmodSync = (path42, mode) => {
+        this.lchmodSync = (path43, mode) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           this._lchmod(filename, modeNum);
         };
-        this.lchmod = (path42, mode, callback) => {
+        this.lchmod = (path43, mode, callback) => {
           const modeNum = (0, util_2.modeToNumber)(mode);
-          const filename = (0, util_2.pathToFilename)(path42);
+          const filename = (0, util_2.pathToFilename)(path43);
           this.wrapAsync(this._lchmod, [filename, modeNum], callback);
         };
         this._fchown = (fd, uid, gid) => {
@@ -20127,28 +20127,28 @@ var require_volume = __commonJS({
         this._chown = (filename, uid, gid) => {
           this._core.chown(filename, uid, gid);
         };
-        this.chownSync = (path42, uid, gid) => {
+        this.chownSync = (path43, uid, gid) => {
           validateUid(uid);
           validateGid(gid);
-          this._chown((0, util_2.pathToFilename)(path42), uid, gid);
+          this._chown((0, util_2.pathToFilename)(path43), uid, gid);
         };
-        this.chown = (path42, uid, gid, callback) => {
+        this.chown = (path43, uid, gid, callback) => {
           validateUid(uid);
           validateGid(gid);
-          this.wrapAsync(this._chown, [(0, util_2.pathToFilename)(path42), uid, gid], callback);
+          this.wrapAsync(this._chown, [(0, util_2.pathToFilename)(path43), uid, gid], callback);
         };
         this._lchown = (filename, uid, gid) => {
           this._core.lchown(filename, uid, gid);
         };
-        this.lchownSync = (path42, uid, gid) => {
+        this.lchownSync = (path43, uid, gid) => {
           validateUid(uid);
           validateGid(gid);
-          this._lchown((0, util_2.pathToFilename)(path42), uid, gid);
+          this._lchown((0, util_2.pathToFilename)(path43), uid, gid);
         };
-        this.lchown = (path42, uid, gid, callback) => {
+        this.lchown = (path43, uid, gid, callback) => {
           validateUid(uid);
           validateGid(gid);
-          this.wrapAsync(this._lchown, [(0, util_2.pathToFilename)(path42), uid, gid], callback);
+          this.wrapAsync(this._lchown, [(0, util_2.pathToFilename)(path43), uid, gid], callback);
         };
         this.statWatchers = {};
         this.cpSync = (src, dest, options) => {
@@ -20170,8 +20170,8 @@ var require_volume = __commonJS({
           const destFilename = (0, util_2.pathToFilename)(dest);
           (0, cp_1.cpAsync)(this, srcFilename, destFilename, opts_).then(() => callback(null, void 0), (error) => callback(error));
         };
-        this.openAsBlob = async (path42, options) => {
-          const filename = (0, util_2.pathToFilename)(path42);
+        this.openAsBlob = async (path43, options) => {
+          const filename = (0, util_2.pathToFilename)(path43);
           let link;
           try {
             link = this._core.getResolvedLinkOrThrow(filename, "open");
@@ -20201,7 +20201,7 @@ var require_volume = __commonJS({
           }).then((results) => cb(null, results), cb);
         };
         this.globSync = (pattern2, options) => (0, glob_1.globSync)(this, pattern2, options);
-        this._opendir = (filename, options, path42, errorPath) => {
+        this._opendir = (filename, options, path43, errorPath) => {
           const result = this._core.getResolvedLinkResult(filename, "opendir");
           if (!result.ok)
             throw (0, util_2.createError)(result.err.code, "opendir", errorPath);
@@ -20211,17 +20211,17 @@ var require_volume = __commonJS({
             throw (0, util_2.createError)("ENOTDIR", "opendir", errorPath);
           if (!node.canRead())
             throw (0, util_2.createError)("EACCES", "opendir", errorPath);
-          return new Dir_1.Dir(link, path42, options);
+          return new Dir_1.Dir(link, path43, options);
         };
-        this.opendirSync = (path42, options) => {
-          const filename = (0, util_2.pathToFilename)(path42);
+        this.opendirSync = (path43, options) => {
+          const filename = (0, util_2.pathToFilename)(path43);
           const opts = (0, options_1.getOpendirOptions)(options);
-          return this._opendir(filename, opts, path42 instanceof Uint8Array ? (0, buffer_1.bufferFrom)(path42) : filename, "");
+          return this._opendir(filename, opts, path43 instanceof Uint8Array ? (0, buffer_1.bufferFrom)(path43) : filename, "");
         };
-        this.opendir = (path42, a, b) => {
+        this.opendir = (path43, a, b) => {
           const [options, callback] = (0, options_1.getOpendirOptsAndCb)(a, b);
-          const filename = (0, util_2.pathToFilename)(path42);
-          const dirPath = path42 instanceof Uint8Array ? (0, buffer_1.bufferFrom)(path42) : filename;
+          const filename = (0, util_2.pathToFilename)(path43);
+          const dirPath = path43 instanceof Uint8Array ? (0, buffer_1.bufferFrom)(path43) : filename;
           this.wrapAsync(this._opendir, [filename, options, dirPath, filename], callback);
         };
         const self2 = this;
@@ -20251,12 +20251,12 @@ var require_volume = __commonJS({
           const realLink = this._core.getResolvedLinkOrThrow(filename, "realpath");
           return (0, fs_node_utils_1.strToEncoding)(realLink.getPath() || "/", encoding);
         };
-        const realpathImpl = (path42, a, b) => {
+        const realpathImpl = (path43, a, b) => {
           const [opts, callback] = (0, options_1.getRealpathOptsAndCb)(a, b);
-          const pathFilename = (0, util_2.pathToFilename)(path42);
+          const pathFilename = (0, util_2.pathToFilename)(path43);
           self2.wrapAsync(_realpath, [pathFilename, opts.encoding], callback);
         };
-        const realpathSyncImpl = (path42, options) => _realpath((0, util_2.pathToFilename)(path42), (0, options_1.getRealpathOptions)(options).encoding);
+        const realpathSyncImpl = (path43, options) => _realpath((0, util_2.pathToFilename)(path43), (0, options_1.getRealpathOptions)(options).encoding);
         this.realpath = realpathImpl;
         this.realpath.native = realpathImpl;
         this.realpathSync = realpathSyncImpl;
@@ -20331,9 +20331,9 @@ var require_volume = __commonJS({
         }
         return bytesWritten;
       }
-      lstat(path42, a, b) {
+      lstat(path43, a, b) {
         const [{ throwIfNoEntry = true, bigint = false }, callback] = (0, options_1.getStatOptsAndCb)(a, b);
-        this.wrapAsync(this._lstat, [(0, util_2.pathToFilename)(path42), bigint, throwIfNoEntry], callback);
+        this.wrapAsync(this._lstat, [(0, util_2.pathToFilename)(path43), bigint, throwIfNoEntry], callback);
       }
       _stat(filename, bigint = false, throwIfNoEntry = true) {
         const result = this._core.getResolvedLinkResult(filename, "stat");
@@ -20354,18 +20354,18 @@ var require_volume = __commonJS({
           throw result.err.toError();
         }
       }
-      statSync(path42, options) {
+      statSync(path43, options) {
         const { bigint = true, throwIfNoEntry = true } = (0, options_1.getStatOptions)(options);
-        const result = this._stat((0, util_2.pathToFilename)(path42), bigint, throwIfNoEntry);
+        const result = this._stat((0, util_2.pathToFilename)(path43), bigint, throwIfNoEntry);
         if (result.ok) {
           return result.value;
         } else {
           throw result.err.toError();
         }
       }
-      stat(path42, a, b) {
+      stat(path43, a, b) {
         const [{ bigint = false, throwIfNoEntry = true }, callback] = (0, options_1.getStatOptsAndCb)(a, b);
-        this.wrapAsync(this._statOrThrow, [(0, util_2.pathToFilename)(path42), bigint, throwIfNoEntry], callback);
+        this.wrapAsync(this._statOrThrow, [(0, util_2.pathToFilename)(path43), bigint, throwIfNoEntry], callback);
       }
       fstatBase(fd, bigint = false) {
         const file = this._core.getFileByFd(fd);
@@ -20400,8 +20400,8 @@ var require_volume = __commonJS({
           throw (0, util_2.createError)("EACCES", "access", filename);
         }
       }
-      watchFile(path42, a, b) {
-        const filename = (0, util_2.pathToFilename)(path42);
+      watchFile(path43, a, b) {
+        const filename = (0, util_2.pathToFilename)(path43);
         let options = a;
         let listener = b;
         if (typeof options === "function") {
@@ -20436,8 +20436,8 @@ var require_volume = __commonJS({
         watcher.addListener("change", listener);
         return watcher;
       }
-      unwatchFile(path42, listener) {
-        const filename = (0, util_2.pathToFilename)(path42);
+      unwatchFile(path43, listener) {
+        const filename = (0, util_2.pathToFilename)(path43);
         const watcher = this.statWatchers[filename];
         if (!watcher)
           return;
@@ -20451,14 +20451,14 @@ var require_volume = __commonJS({
           delete this.statWatchers[filename];
         }
       }
-      createReadStream(path42, options) {
-        return new this.ReadStream(path42, options);
+      createReadStream(path43, options) {
+        return new this.ReadStream(path43, options);
       }
-      createWriteStream(path42, options) {
-        return new this.WriteStream(path42, options);
+      createWriteStream(path43, options) {
+        return new this.WriteStream(path43, options);
       }
-      watch(path42, options, listener) {
-        const filename = (0, util_2.pathToFilename)(path42);
+      watch(path43, options, listener) {
+        const filename = (0, util_2.pathToFilename)(path43);
         let givenOptions = options;
         if (typeof options === "function") {
           listener = options;
@@ -20495,43 +20495,43 @@ var require_volume = __commonJS({
         this._core.getResolvedLinkOrThrow(filename, "statfs");
         return StatFs_1.default.build(this._core, bigint);
       }
-      statfsSync(path42, options) {
+      statfsSync(path43, options) {
         const { bigint = false } = (0, options_1.getStatfsOptions)(options);
-        return this._statfs((0, util_2.pathToFilename)(path42), bigint);
+        return this._statfs((0, util_2.pathToFilename)(path43), bigint);
       }
-      statfs(path42, a, b) {
+      statfs(path43, a, b) {
         const [{ bigint = false }, callback] = (0, options_1.getStatfsOptsAndCb)(a, b);
-        this.wrapAsync(this._statfs, [(0, util_2.pathToFilename)(path42), bigint], callback);
+        this.wrapAsync(this._statfs, [(0, util_2.pathToFilename)(path43), bigint], callback);
       }
       // ---------------------------------------------------------------- Tree View
       toTree(opts = { separator: path_1.sep }) {
         return (0, fs_print_1.toTreeSync)(this, opts);
       }
       // ---------------------------------------------------------------- Snapshots
-      toSnapshot(path42 = "/") {
-        return fsSnapshot.toSnapshotSync({ fs: this, path: path42 });
+      toSnapshot(path43 = "/") {
+        return fsSnapshot.toSnapshotSync({ fs: this, path: path43 });
       }
-      fromSnapshot(snapshot, path42 = "/") {
-        return fsSnapshot.fromSnapshotSync(snapshot, { fs: this, path: path42 });
+      fromSnapshot(snapshot, path43 = "/") {
+        return fsSnapshot.fromSnapshotSync(snapshot, { fs: this, path: path43 });
       }
-      toBinarySnapshot(path42 = "/") {
-        return fsSnapshot.toBinarySnapshotSync({ fs: this, path: path42 });
+      toBinarySnapshot(path43 = "/") {
+        return fsSnapshot.toBinarySnapshotSync({ fs: this, path: path43 });
       }
-      fromBinarySnapshot(binary, path42 = "/") {
-        return fsSnapshot.fromBinarySnapshotSync(binary, { fs: this, path: path42 });
+      fromBinarySnapshot(binary, path43 = "/") {
+        return fsSnapshot.fromBinarySnapshotSync(binary, { fs: this, path: path43 });
       }
-      toJsonSnapshot(path42 = "/") {
-        const uint8 = fsSnapshot.toJsonSnapshotSync({ fs: this, path: path42 });
+      toJsonSnapshot(path43 = "/") {
+        const uint8 = fsSnapshot.toJsonSnapshotSync({ fs: this, path: path43 });
         return buffer_1.Buffer.from(uint8).toString("utf8");
       }
-      fromJsonSnapshot(json2, path42 = "/") {
+      fromJsonSnapshot(json2, path43 = "/") {
         const uint8 = new Uint8Array(buffer_1.Buffer.from(json2, "utf8"));
-        return fsSnapshot.fromJsonSnapshotSync(uint8, { fs: this, path: path42 });
+        return fsSnapshot.fromJsonSnapshotSync(uint8, { fs: this, path: path43 });
       }
     };
-    exports.Volume = Volume;
-    Volume.fromJSON = (json2, cwd2, opts) => new Volume(fs_core_1.Superblock.fromJSON(json2, cwd2, opts));
-    Volume.fromNestedJSON = (json2, cwd2, opts) => new Volume(fs_core_1.Superblock.fromNestedJSON(json2, cwd2, opts));
+    exports.Volume = Volume2;
+    Volume2.fromJSON = (json2, cwd2, opts) => new Volume2(fs_core_1.Superblock.fromJSON(json2, cwd2, opts));
+    Volume2.fromNestedJSON = (json2, cwd2, opts) => new Volume2(fs_core_1.Superblock.fromNestedJSON(json2, cwd2, opts));
     function emitStop(self2) {
       self2.emit("stop");
     }
@@ -20609,8 +20609,8 @@ var require_volume = __commonJS({
           return null;
         }
       }
-      start(path42, persistent = true, interval = 5007, bigint = false) {
-        this.filename = (0, util_2.pathToFilename)(path42);
+      start(path43, persistent = true, interval = 5007, bigint = false) {
+        this.filename = (0, util_2.pathToFilename)(path43);
         this.setTimeout = persistent ? setTimeout.bind(typeof globalThis !== "undefined" ? globalThis : globalThis) : setTimeoutUnref_1.default;
         this.interval = interval;
         this.bigint = bigint;
@@ -20663,15 +20663,15 @@ var require_volume = __commonJS({
     }
     (0, util_1.inherits)(FsReadStream, stream_1.Readable);
     exports.ReadStream = FsReadStream;
-    function FsReadStream(vol2, path42, options) {
+    function FsReadStream(vol2, path43, options) {
       if (!(this instanceof FsReadStream))
-        return new FsReadStream(vol2, path42, options);
+        return new FsReadStream(vol2, path43, options);
       this._vol = vol2;
       options = Object.assign({}, (0, options_1.getOptions)(options, {}));
       if (options.highWaterMark === void 0)
         options.highWaterMark = 64 * 1024;
       stream_1.Readable.call(this, options);
-      this.path = (0, util_2.pathToFilename)(path42);
+      this.path = (0, util_2.pathToFilename)(path43);
       this._fileHandle = options.fd && typeof options.fd !== "number" ? options.fd : null;
       this.fd = options.fd === void 0 ? null : typeof options.fd !== "number" ? options.fd.fd : options.fd;
       this.flags = options.flags === void 0 ? "r" : options.flags;
@@ -20796,13 +20796,13 @@ var require_volume = __commonJS({
     }
     (0, util_1.inherits)(FsWriteStream, stream_1.Writable);
     exports.WriteStream = FsWriteStream;
-    function FsWriteStream(vol2, path42, options) {
+    function FsWriteStream(vol2, path43, options) {
       if (!(this instanceof FsWriteStream))
-        return new FsWriteStream(vol2, path42, options);
+        return new FsWriteStream(vol2, path43, options);
       this._vol = vol2;
       options = Object.assign({}, (0, options_1.getOptions)(options, {}));
       stream_1.Writable.call(this, options);
-      this.path = (0, util_2.pathToFilename)(path42);
+      this.path = (0, util_2.pathToFilename)(path43);
       this._fileHandle = options.fd && typeof options.fd !== "number" ? options.fd : null;
       this.fd = options.fd === void 0 ? null : typeof options.fd !== "number" ? options.fd.fd : options.fd;
       this.flags = options.flags === void 0 ? "w" : options.flags;
@@ -20979,8 +20979,8 @@ var require_volume = __commonJS({
         this._timer = void 0;
         return this;
       }
-      start(path42, persistent = true, recursive = false, encoding = fs_node_utils_1.ENCODING_UTF8, ignore) {
-        this._filename = (0, util_2.pathToFilename)(path42);
+      start(path43, persistent = true, recursive = false, encoding = fs_node_utils_1.ENCODING_UTF8, ignore) {
+        this._filename = (0, util_2.pathToFilename)(path43);
         this._steps = (0, fs_core_1.filenameToSteps)(this._filename);
         this._filenameEncoded = (0, fs_node_utils_1.strToEncoding)(this._filename);
         this._recursive = recursive;
@@ -21078,7 +21078,7 @@ var require_lib8 = __commonJS({
     init_globals();
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.memfs = exports.fs = exports.vol = exports.Volume = void 0;
-    exports.createFsFromVolume = createFsFromVolume;
+    exports.createFsFromVolume = createFsFromVolume2;
     var fs_node_1 = require_lib7();
     Object.defineProperty(exports, "Volume", { enumerable: true, get: function() {
       return fs_node_1.Volume;
@@ -21116,43 +21116,43 @@ var require_lib8 = __commonJS({
       FileReadStream: streamSlot(2),
       FileWriteStream: streamSlot(3)
     };
-    function createFsFromVolume(vol2) {
-      const fs3 = { F_OK, R_OK, W_OK, X_OK, constants: fs_node_utils_1.constants, Stats: fs_node_1.Stats, Dir: fs_node_1.Dir, Dirent: fs_node_1.Dirent };
+    function createFsFromVolume2(vol2) {
+      const fs2 = { F_OK, R_OK, W_OK, X_OK, constants: fs_node_utils_1.constants, Stats: fs_node_1.Stats, Dir: fs_node_1.Dir, Dirent: fs_node_1.Dirent };
       for (const method of fs_node_1.fsSynchronousApiList)
         if (typeof vol2[method] === "function")
-          fs3[method] = vol2[method].bind(vol2);
+          fs2[method] = vol2[method].bind(vol2);
       for (const method of fs_node_1.fsCallbackApiList)
         if (typeof vol2[method] === "function")
-          fs3[method] = vol2[method].bind(vol2);
-      fs3.StatWatcher = vol2.StatWatcher;
-      fs3.FSWatcher = vol2.FSWatcher;
-      fs3[kStreams] = [vol2.ReadStream, vol2.WriteStream, vol2.ReadStream, vol2.WriteStream];
-      Object.defineProperties(fs3, streamDescriptors);
-      fs3.promises = vol2.promises;
+          fs2[method] = vol2[method].bind(vol2);
+      fs2.StatWatcher = vol2.StatWatcher;
+      fs2.FSWatcher = vol2.FSWatcher;
+      fs2[kStreams] = [vol2.ReadStream, vol2.WriteStream, vol2.ReadStream, vol2.WriteStream];
+      Object.defineProperties(fs2, streamDescriptors);
+      fs2.promises = vol2.promises;
       if (typeof vol2.realpath === "function") {
-        fs3.realpath = vol2.realpath.bind(vol2);
+        fs2.realpath = vol2.realpath.bind(vol2);
         if (typeof vol2.realpath.native === "function") {
-          fs3.realpath.native = vol2.realpath.native.bind(vol2);
+          fs2.realpath.native = vol2.realpath.native.bind(vol2);
         }
       }
       if (typeof vol2.realpathSync === "function") {
-        fs3.realpathSync = vol2.realpathSync.bind(vol2);
+        fs2.realpathSync = vol2.realpathSync.bind(vol2);
         if (typeof vol2.realpathSync.native === "function") {
-          fs3.realpathSync.native = vol2.realpathSync.native.bind(vol2);
+          fs2.realpathSync.native = vol2.realpathSync.native.bind(vol2);
         }
       }
-      fs3._toUnixTimestamp = fs_node_1.toUnixTimestamp;
-      fs3.__vol = vol2;
-      return fs3;
+      fs2._toUnixTimestamp = fs_node_1.toUnixTimestamp;
+      fs2.__vol = vol2;
+      return fs2;
     }
-    exports.fs = createFsFromVolume(exports.vol);
+    exports.fs = createFsFromVolume2(exports.vol);
     var memfs = (json2 = {}, cwdOrOpts = "/") => {
       const opts = typeof cwdOrOpts === "string" ? { cwd: cwdOrOpts } : cwdOrOpts;
       const cwd2 = opts.cwd ?? (opts.process ? void 0 : "/");
       const process = opts.process ?? createProcess(cwd2 ?? "/");
       const vol2 = fs_node_1.Volume.fromNestedJSON(json2, cwd2, { process });
-      const fs3 = createFsFromVolume(vol2);
-      return { fs: fs3, vol: vol2 };
+      const fs2 = createFsFromVolume2(vol2);
+      return { fs: fs2, vol: vol2 };
     };
     exports.memfs = memfs;
     module.exports = { ...module.exports, ...exports.fs };
@@ -22769,6 +22769,8 @@ var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var VERB_TMUX_STATUS_CLICK = "tmux-status-click";
+var STATUS_LINE_CLICK_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
+var DOCTOR_PROBE_PREFIX = `${URL_SCHEME}://${VERB_DOCTOR_PROBE}/`;
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
@@ -22798,7 +22800,7 @@ var SAYS = {
   [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
   [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
   [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
-  [VERB_LOAD_CONFIG]: ([, path42]) => [`load config ${path42}`],
+  [VERB_LOAD_CONFIG]: ([, path43]) => [`load config ${path43}`],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key, by)}`],
   [VERB_SAVE]: () => ["save settings"],
@@ -22870,7 +22872,7 @@ function splitVerb(s) {
 }
 function parseHandlerUrl(rawUrl) {
   const prefix = `${URL_SCHEME}://`;
-  if (!isBarLink(rawUrl)) {
+  if (!rawUrl.startsWith(prefix)) {
     return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
   }
   const rest2 = rawUrl.slice(prefix.length);
@@ -22888,15 +22890,6 @@ function parseHandlerUrl(rawUrl) {
   } catch {
     return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
   }
-}
-var STATUS_CLICK_URL = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
-function parseClick(url, links2) {
-  if (url.startsWith(STATUS_CLICK_URL))
-    return { kind: "range", value: url.slice(STATUS_CLICK_URL.length) };
-  const verified = links2.verifyLink(url);
-  if (!verified.ok) return { kind: "refused", problem: verified.problem };
-  const link = parseHandlerUrl(verified.link);
-  return link.ok ? { kind: "link", verb: link.verb, value: link.value } : { kind: "refused", problem: link.problem };
 }
 var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
   VERB_SET_STATE,
@@ -22968,7 +22961,12 @@ init_globals();
 // site/shims/fs.ts
 init_globals();
 var import_memfs = __toESM(require_lib8(), 1);
-var fs_default = import_memfs.fs;
+init_process();
+var vol = import_memfs.Volume.fromNestedJSON({}, "/", {
+  process: { cwd: () => "/", platform: process_default.platform, env: process_default.env, getuid: process_default.getuid, getgid: process_default.getgid, emitWarning: process_default.emitWarning }
+});
+var fs = (0, import_memfs.createFsFromVolume)(vol);
+var fs_default = fs;
 var {
   existsSync,
   readFileSync,
@@ -23006,7 +23004,7 @@ var {
   ftruncateSync,
   fsyncSync,
   Stats
-} = import_memfs.fs;
+} = fs;
 
 // src/proc/launch.ts
 var import_node_string_decoder = __toESM(require_string_decoder(), 1);
@@ -24066,88 +24064,92 @@ function timingSafeEqual(a, b) {
   return a.every((byte, i) => byte === b[i]);
 }
 var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+var randomBytes = (n) => import_buffer3.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
 var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
 
 // src/click/link-signer.ts
 var LINK_KEY_BYTES = 32;
 var MAC_SPELLING = /^[0-9a-f]{64}$/;
-var LINK_MAC_MARK = "#";
 var LINK_MAC_BYTES = 16;
 var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
-var SIGNED_KEPT = 1024;
-function digest(key, signed) {
-  return createHmac("sha256", key).update(JSON.stringify(signed)).digest();
+var LINK_MAC_MARK = "#";
+function transitForm(link) {
+  return link.toWellFormed().replace(
+    /%(?![0-9A-Fa-f]{2})|[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu,
+    encodeURIComponent
+  );
 }
-var fieldsOf = (fields2) => [
-  fields2.sessionId,
-  fields2.action,
-  fields2.declaration,
-  fields2.evaluated
-];
-var linkMac = (key, link) => import_buffer.Buffer.from(
-  digest(key, link).subarray(0, LINK_MAC_BYTES).toString("base64").replace(/=+$/, "").replaceAll("+", "-").replaceAll("/", "_")
-);
-var OUTSIDE_TRANSIT = /[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu;
-var transitForm = (link) => link.toWellFormed().replace(OUTSIDE_TRANSIT, (c) => encodeURIComponent(c));
 function unprovenLink(signed) {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
-  return mark !== -1 && LINK_MAC_SPELLING.test(signed.slice(mark + 1)) ? signed.slice(0, mark) : signed;
+  return mark === -1 ? signed : signed.slice(0, mark);
 }
-function keylessSigner(reason) {
-  const problem = `no link is honoured, since the link key could not be had: ${reason}`;
-  const refuse4 = () => {
-    throw new Error(problem);
+function linkMac(key, link) {
+  return import_buffer.Buffer.from(
+    createHmac("sha256", key).update(link).digest().subarray(0, LINK_MAC_BYTES)
+  ).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+function signLinkWith(key, link) {
+  const sent = transitForm(link);
+  return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
+}
+function openLinkWith(key, signed) {
+  const mark = signed.lastIndexOf(LINK_MAC_MARK);
+  if (mark === -1)
+    return {
+      kind: "failed",
+      reason: "the link carries no signature: the bar did not draw it, or drew it before its links were signed"
+    };
+  const link = signed.slice(0, mark);
+  const mac = signed.slice(mark + LINK_MAC_MARK.length);
+  const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(import_buffer.Buffer.from(mac), import_buffer.Buffer.from(linkMac(key, link)));
+  return proven ? { kind: "ok", value: link } : {
+    kind: "failed",
+    reason: "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it"
   };
-  return {
-    sign: refuse4,
-    verify: () => false,
-    signLink: refuse4,
-    verifyLink: () => ({ ok: false, problem })
-  };
+}
+function digest(key, fields2) {
+  return createHmac("sha256", key).update(
+    JSON.stringify([
+      fields2.sessionId,
+      fields2.action,
+      fields2.declaration,
+      fields2.evaluated
+    ])
+  ).digest();
 }
 function linkSigner(key) {
   if (key.length !== LINK_KEY_BYTES) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
-  const signed = /* @__PURE__ */ new Map();
-  const signOnce = (link) => {
-    const form = transitForm(link);
-    return `${form}${LINK_MAC_MARK}${linkMac(key, form)}`;
-  };
   return {
-    sign: (fields2) => digest(key, fieldsOf(fields2)).toString("hex"),
+    sign: (fields2) => digest(key, fields2).toString("hex"),
     verify: (fields2, mac) => {
       if (!MAC_SPELLING.test(mac)) return false;
-      return timingSafeEqual(
-        import_buffer.Buffer.from(mac, "hex"),
-        digest(key, fieldsOf(fields2))
-      );
+      return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
     },
-    signLink: (link) => {
-      const known = signed.get(link);
-      if (known !== void 0) return known;
-      if (signed.size >= SIGNED_KEPT) signed.clear();
-      const fresh = signOnce(link);
-      signed.set(link, fresh);
-      return fresh;
-    },
-    verifyLink: (signed2) => {
-      const mark = signed2.lastIndexOf(LINK_MAC_MARK);
-      const mac = signed2.slice(mark + 1);
-      if (mark === -1 || !LINK_MAC_SPELLING.test(mac)) {
-        return {
-          ok: false,
-          problem: "the link carries no signature: it was not drawn by this bar, or was drawn before every link was signed"
-        };
-      }
-      const link = signed2.slice(0, mark);
-      return timingSafeEqual(import_buffer.Buffer.from(mac), linkMac(key, link)) ? { ok: true, link } : {
-        ok: false,
-        problem: "the link's signature does not match what it carries: it was not drawn by this bar, or has been changed since"
-      };
-    }
+    signLink: (link) => signLinkWith(key, link),
+    openLink: (signed) => openLinkWith(key, signed)
   };
+}
+function signingFrames(signer) {
+  const signed = /* @__PURE__ */ new Map();
+  const sign = (link) => {
+    let done2 = signed.get(link);
+    if (done2 === void 0) {
+      done2 = isBarLink(link) ? signer.signLink(link) : link;
+      signed.set(link, done2);
+    }
+    return done2;
+  };
+  return (frame2) => ({
+    ...frame2,
+    rows: frame2.rows.map((row2) => ({
+      ...row2,
+      runs: row2.runs.map(
+        (run3) => run3.link === void 0 ? run3 : { ...run3, link: sign(run3.link) }
+      )
+    }))
+  });
 }
 
 // src/click/read.ts
@@ -28812,8 +28814,7 @@ init_globals();
 
 // site/shims/fs-promises.ts
 init_globals();
-var import_memfs2 = __toESM(require_lib8(), 1);
-var p = import_memfs2.fs.promises;
+var p = fs.promises;
 var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
 
 // src/daemon/cache/watchers.ts
@@ -30579,12 +30580,13 @@ var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   ...EARLIER_URL_FRAME_VERSIONS,
   URL_FRAME_VERSION
 ]);
+var awaitsVerdict = (urlV) => typeof urlV === "number" && urlV >= 2;
 var MAX_FRAME_BYTES = 16 * 1024 * 1024;
 function sanitizeClient(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
   const { kind, bundle, source } = v;
-  const path42 = sanitizeAbsolutePath(bundle);
-  return CLIENT_KINDS.includes(kind) && path42 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path42, source } : void 0;
+  const path43 = sanitizeAbsolutePath(bundle);
+  return CLIENT_KINDS.includes(kind) && path43 !== void 0 && (source === null || typeof source === "string" && source !== "") ? { kind, bundle: path43, source } : void 0;
 }
 
 // src/render/frame.ts
@@ -42883,22 +42885,17 @@ function lookOf(style, depth) {
     ...attrs.length > 0 && { attrs }
   };
 }
-function runOf({ text: text4, style }, depth, link) {
+function runOf({ text: text4, style }, depth) {
   return {
     text: text4,
     ...style !== void 0 && depth !== null && lookOf(style, depth),
-    ...style?.link !== void 0 && { link: link(style.link) }
+    ...style?.link !== void 0 && { link: style.link }
   };
 }
-function writtenLines(segments) {
-  return Segment.splitLines(
-    segments.filter((s) => !s.isControl && s.text.length > 0)
-  );
-}
-function runLines(lines2, depth, links2) {
-  const link = (url) => isBarLink(url) ? links2.signLink(url) : url;
-  return lines2.map(
-    (line) => line.map((segment) => runOf(segment, depth, link))
+function runLines(segments, depth) {
+  const written2 = segments.filter((s) => !s.isControl && s.text.length > 0);
+  return Segment.splitLines(written2).map(
+    (line) => line.map((segment) => runOf(segment, depth))
   );
 }
 function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
@@ -42935,6 +42932,9 @@ function mergedRuns({ runs }) {
     else merged.push(run3);
   }
   return merged;
+}
+function plainOf2(runs) {
+  return runs.map((run3) => run3.text).join("");
 }
 
 // src/daemon/foundations/render-answers.ts
@@ -43296,22 +43296,22 @@ function validateHookData(raw) {
     unknownTopLevelFields: []
   };
   const obj = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  for (const [path42, expectedType] of REQUIRED_FIELDS) {
-    const value = resolvePath(obj, path42);
+  for (const [path43, expectedType] of REQUIRED_FIELDS) {
+    const value = resolvePath(obj, path43);
     if (value === void 0 || value === null) {
-      report2.missingRequired.push(path42);
+      report2.missingRequired.push(path43);
     } else {
       const got = kindOf(value);
       if (got !== expectedType) {
-        report2.typeMismatches.push({ path: path42, expected: expectedType, got });
+        report2.typeMismatches.push({ path: path43, expected: expectedType, got });
       }
     }
   }
-  for (const [path42, expectedType] of OPTIONAL_FIELDS) {
-    const value = resolvePath(obj, path42);
+  for (const [path43, expectedType] of OPTIONAL_FIELDS) {
+    const value = resolvePath(obj, path43);
     const got = value === void 0 ? expectedType : listKind(value);
     if (got !== expectedType) {
-      report2.typeMismatches.push({ path: path42, expected: expectedType, got });
+      report2.typeMismatches.push({ path: path43, expected: expectedType, got });
     }
   }
   for (const key of Object.keys(obj)) {
@@ -43469,11 +43469,11 @@ function parseRenderEncoding(raw) {
 function checkRenderRequest(req, stats, log, home) {
   const { report: report2 } = validateHookData(req.hookData);
   const wireProblems = [];
-  for (const path42 of report2.missingRequired) {
-    wireProblems.push(`missing required field '${path42}'`);
+  for (const path43 of report2.missingRequired) {
+    wireProblems.push(`missing required field '${path43}'`);
   }
-  for (const { path: path42, expected, got } of report2.typeMismatches) {
-    wireProblems.push(`field '${path42}' expected ${expected}, got ${got}`);
+  for (const { path: path43, expected, got } of report2.typeMismatches) {
+    wireProblems.push(`field '${path43}' expected ${expected}, got ${got}`);
   }
   const sessionId2 = parseSessionId(req.hookData?.session_id);
   if (!sessionId2.ok) {
@@ -43614,854 +43614,108 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
   }
 }
 
-// src/utils/transcript-fs.ts
+// src/daemon/click-reading.ts
 init_globals();
 
-// src/utils/limiter.ts
-init_globals();
-var Limiter = class {
-  slots;
-  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
-  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
-  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
-  // would be O(n²) on the render hot path). A dequeued node is immediately
-  // unreferenced, so a continuously-saturated queue retains only the waiters
-  // currently parked — no consumed-prefix accumulates, unlike a head-index
-  // array that only reclaims on full drain.
-  head = null;
-  tail = null;
-  constructor(max2) {
-    this.slots = max2;
-  }
-  async run(task) {
-    await this.acquire();
-    try {
-      return await task();
-    } finally {
-      this.release();
-    }
-  }
-  async acquire() {
-    if (this.slots > 0) {
-      this.slots--;
-      return;
-    }
-    await new Promise((wake) => {
-      const node = { wake, next: null };
-      if (this.tail) this.tail.next = node;
-      else this.head = node;
-      this.tail = node;
-    });
-  }
-  release() {
-    const node = this.head;
-    if (!node) {
-      this.slots++;
-      return;
-    }
-    this.head = node.next;
-    if (!this.head) this.tail = null;
-    node.wake();
-  }
-};
-
-// src/utils/transcript-fs.ts
-function statStamp(filePath2) {
-  if (!filePath2) return "";
-  try {
-    return stampOf(statSync(filePath2));
-  } catch {
-    return "";
-  }
-}
-function stampOf(st) {
-  return `${st.mtimeMs}:${st.size}`;
-}
-var TRANSCRIPT_FS_CONCURRENCY = 8;
-var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
-function gated(fn) {
-  return ((...args) => gate.run(() => fn(...args)));
-}
-var readdir2 = gated(readdir);
-var stat2 = gated(stat);
-var FOLD_WINDOW_BYTES = 512 * 1024;
-var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
-function transcriptReads() {
-  return { ...totals };
-}
-var windows = [];
-function giveBack(window2) {
-  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
-}
-async function readAppended(path42, prior, until2) {
-  return gate.run(async () => {
-    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
-    const read2 = await readWholeLines(path42, prior, until2, window2);
-    if (read2.kind !== "ok") {
-      giveBack(window2);
-      return read2;
-    }
-    let lent = window2;
-    return ok({
-      ...read2.value,
-      [Symbol.dispose]: () => {
-        if (lent !== void 0) giveBack(lent);
-        lent = void 0;
-      }
-    });
-  });
-}
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-async function readWholeLines(path42, prior, until2, window2) {
-  let fh = null;
-  try {
-    fh = await open(path42, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
-    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
-    const start = reset || prior === void 0 ? 0 : prior.offset;
-    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
-    let bytesRead = 0;
-    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
-    bytesRead += first2.length;
-    let lastNl = first2.lastIndexOf(10);
-    let reached = start + first2.length;
-    let shortRead = first2.length < Math.min(window2.length, end - start);
-    while (lastNl < 0 && reached < end && !shortRead) {
-      const next = await readInto(
-        fh,
-        window2.subarray(0, end - reached),
-        reached
-      );
-      bytesRead += next.length;
-      const nl = next.indexOf(10);
-      if (nl >= 0) lastNl = reached - start + nl;
-      shortRead = next.length < Math.min(window2.length, end - reached);
-      reached += next.length;
-    }
-    const bytes = lastNl + 1;
-    const longLine = bytes > window2.length ? bytes : 0;
-    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
-    bytesRead += longLine > 0 ? wholeLines.length : 0;
-    const complete = wholeLines.length === bytes;
-    totals.reads++;
-    totals.bytes += bytesRead;
-    totals.longLines += longLine > 0 ? 1 : 0;
-    totals.largestLine = Math.max(totals.largestLine, longLine);
-    return ok({
-      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
-      start,
-      // A long line was found by its newline alone, so lines after it may
-      // still be unread; otherwise the read saw everything up to its end.
-      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
-      size,
-      stamp: stamp2,
-      ino,
-      reset,
-      longLine
-    });
-  } catch (e) {
-    if (e.code === "ENOENT") return ABSENT;
-    return failed(
-      `readAppended ${path42}: ${e instanceof Error ? e.message : String(e)}`,
-      "read"
-    );
-  } finally {
-    await fh?.close().catch((e) => {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    });
-  }
-}
-async function readInto(fh, buf, position) {
-  let off = 0;
-  while (off < buf.length) {
-    const { bytesRead } = await fh.read(
-      buf,
-      off,
-      buf.length - off,
-      position + off
-    );
-    if (bytesRead === 0) break;
-    off += bytesRead;
-  }
-  return buf.subarray(0, off);
-}
-async function readTail(path42, maxBytes) {
-  return gate.run(async () => {
-    let fh = null;
-    try {
-      fh = await open(path42, "r");
-      const { size } = await fh.stat();
-      const start = Math.max(0, size - maxBytes);
-      return ok({
-        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
-      });
-    } catch (e) {
-      if (e.code === "ENOENT") return ABSENT;
-      return failed(
-        `readTail ${path42}: ${e instanceof Error ? e.message : String(e)}`,
-        "read"
-      );
-    } finally {
-      await fh?.close().catch((e) => {
-        debug(
-          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-        );
-      });
-    }
-  });
-}
-function readTailSync(path42, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path42, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file", "read");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
-
-// src/doctor/gather.ts
+// src/doctor/sightings.ts
 init_globals();
 
-// src/claude-settings-read.ts
+// src/doctor/checks.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
 
-// src/config/json5-edit.ts
+// src/tmux-hint.ts
 init_globals();
-var import_json5 = __toESM(require_dist(), 1);
-var Json5EditError = class extends Error {
-  constructor(reason, offset) {
-    super(`${reason} (at offset ${offset})`);
-    this.reason = reason;
-    this.offset = offset;
-    this.name = "Json5EditError";
-  }
-  reason;
-  offset;
+var TMUX_ENV = {
+  // `socket,server-pid,session-id` — the socket is the part before the first
+  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
+  socket: "TMUX",
+  pane: "TMUX_PANE",
+  // Claude Code's own switch: when this is truthy in ITS environment, it stops
+  // re-encoding the statusline at 256 colours inside tmux (verified against the
+  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
+  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
 };
-var IDENT_START = /[A-Za-z_$\p{L}]/u;
-var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
-var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
-var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
-var Scanner = class {
-  constructor(text4) {
-    this.text = text4;
-  }
-  text;
-  pos = 0;
-  peek() {
-    return this.text[this.pos] ?? "";
-  }
-  fail(message) {
-    throw new Json5EditError(message, this.pos);
-  }
-  skipTrivia() {
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") return;
-      if (WHITESPACE.test(c)) {
-        this.pos++;
-      } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
-      } else if (c === "/" && this.text[this.pos + 1] === "*") {
-        const close = this.text.indexOf("*/", this.pos + 2);
-        if (close === -1) this.fail("unterminated block comment");
-        this.pos = close + 2;
-      } else {
-        return;
-      }
-    }
-  }
-  expect(c) {
-    if (this.peek() !== c) this.fail(`expected "${c}"`);
-    this.pos++;
-  }
-  value() {
-    this.skipTrivia();
-    const c = this.peek();
-    if (c === "{") return this.object();
-    if (c === "[") return this.array();
-    if (c === '"' || c === "'") {
-      const span2 = this.stringSpan();
-      return { kind: "string", span: span2, value: this.decode(span2) };
-    }
-    if (c === "") this.fail("unexpected end of input");
-    const start = this.pos;
-    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
-      this.pos++;
-    }
-    if (this.pos === start) this.fail(`unexpected character "${c}"`);
-    const span = { start, end: this.pos };
-    const decoded = this.decode(span);
-    if (decoded === null) return { kind: "null", span };
-    if (typeof decoded === "boolean") {
-      return { kind: "boolean", span, value: decoded };
-    }
-    if (typeof decoded === "number") {
-      return { kind: "number", span, value: decoded };
-    }
-    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
-  }
-  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
-  decode(span) {
-    try {
-      return import_json5.default.parse(this.text.slice(span.start, span.end));
-    } catch (e) {
-      throw new Json5EditError(e.message, span.start);
-    }
-  }
-  stringSpan() {
-    const start = this.pos;
-    const quote2 = this.peek();
-    this.pos++;
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") this.fail("unterminated string");
-      if (c === "\\") {
-        const crlf = this.text.startsWith("\r\n", this.pos + 1);
-        this.pos += crlf ? 3 : 2;
-        continue;
-      }
-      this.pos++;
-      if (c === quote2) return { start, end: this.pos };
-      if (c === "\n") this.fail("unterminated string");
-    }
-  }
-  key() {
-    const c = this.peek();
-    if (c === '"' || c === "'") {
-      const span = this.stringSpan();
-      return { key: this.decode(span), span };
-    }
-    const start = this.pos;
-    if (!IDENT_START.test(c)) this.fail("expected an object key");
-    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
-      this.pos++;
-    }
-    return {
-      key: this.text.slice(start, this.pos),
-      span: { start, end: this.pos }
-    };
-  }
-  object() {
-    const start = this.pos;
-    this.expect("{");
-    const entries = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "}") break;
-      const { key, span: keySpan } = this.key();
-      if (entries.some((e) => e.key === key)) {
-        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
-      }
-      this.skipTrivia();
-      this.expect(":");
-      const value = this.value();
-      entries.push({
-        key,
-        keySpan,
-        value,
-        span: { start: keySpan.start, end: value.span.end }
-      });
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "}") this.fail('expected "," or "}"');
-    }
-    this.expect("}");
-    return { kind: "object", span: { start, end: this.pos }, entries };
-  }
-  array() {
-    const start = this.pos;
-    this.expect("[");
-    const elements = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "]") break;
-      elements.push(this.value());
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "]") this.fail('expected "," or "]"');
-    }
-    this.expect("]");
-    return { kind: "array", span: { start, end: this.pos }, elements };
+var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
+
+// src/config/lanes.ts
+init_globals();
+var RENDERERS = ["claude", "tmux"];
+var IN_TMUX = 'ne .tmux.pane ""';
+var LANES = {
+  band: {
+    switch: { setting: "experimentalBand", on: true, inTmux: false },
+    label: "\u{1F9EA} band (A)",
+    handsOff: true,
+    rows: null
+  },
+  statusline: {
+    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
+    label: "\u{1F9EA} statusline (B)",
+    handsOff: false,
+    rows: null
+  },
+  pane: {
+    switch: { setting: "experimentalPane", on: true, inTmux: false },
+    label: "\u{1F9EA} tmux pane (C)",
+    handsOff: true,
+    rows: null
+  },
+  tmuxStatus: {
+    switch: {
+      setting: "renderer",
+      on: "tmux",
+      inTmux: true
+    },
+    label: "tmux status line",
+    handsOff: true,
+    // tmux draws at most five status rows (`status` takes on, off, 2…5).
+    rows: 5
   }
 };
-function parseDocument(text4) {
-  const s = new Scanner(text4);
-  const root = s.value();
-  s.skipTrivia();
-  if (s.pos !== text4.length) s.fail("trailing content after the document");
-  return root;
-}
-function entryOf(node, key) {
-  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
-}
-function nodeAt(root, path42) {
-  let node = root;
-  for (const key of path42) {
-    node = node === void 0 ? void 0 : entryOf(node, key)?.value;
-  }
-  return node;
-}
-function textOf(text4, node) {
-  return text4.slice(node.span.start, node.span.end);
-}
-function movableTextOf(text4, node) {
-  const indent2 = indentOfLine(text4, node.span.start);
-  const literals = literalSpans(node);
-  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
-  let lineStart = node.span.start;
-  return textOf(text4, node).split("\n").map((line, i) => {
-    const at = lineStart;
-    lineStart += line.length + 1;
-    const own2 = i > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
-    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
-  }).join("\n");
-}
-function literalSpans(node) {
-  switch (node.kind) {
-    case "object":
-      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
-    case "array":
-      return node.elements.flatMap(literalSpans);
-    case "string":
-      return [node.span];
-    default:
-      return [];
-  }
-}
-var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-function keyText(key) {
-  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
-}
-var JSON5_DIALECT = {
-  key: keyText,
-  trailingComma: ",",
-  parse: (text4) => import_json5.default.parse(text4)
-};
-var JSON_DIALECT = {
-  key: (key) => JSON.stringify(key),
-  trailingComma: "",
-  parse: (text4) => JSON.parse(text4)
-};
-function json5Text(value) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
-    return `[
-${items.join("\n")}
-]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).filter(
-      ([, v]) => v !== void 0
-    );
-    if (entries.length === 0) return "{}";
-    const items = entries.map(
-      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
-    );
-    return `{
-${items.join("\n")}
-}`;
-  }
-  return JSON.stringify(value);
-}
-function eolOf(text4) {
-  return text4.includes("\r\n") ? "\r\n" : "\n";
-}
-function reindent(valueText, indent2, eol) {
-  return valueText.split("\n").join(`${eol}${indent2}`);
-}
-function entryText(path42, valueText, dialect) {
-  const [head, ...rest2] = path42;
-  const inner = rest2.length === 0 ? valueText : `{
-  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
-}`;
-  return `${dialect.key(head)}: ${inner}`;
-}
-function splice(text4, start, end, insert) {
-  return text4.slice(0, start) + insert + text4.slice(end);
-}
-function lineStartOf(text4, offset) {
-  return text4.lastIndexOf("\n", offset - 1) + 1;
-}
-function isBlank(s) {
-  return /^[ \t]*$/.test(s);
-}
-function indentOfLine(text4, offset) {
-  const ls = lineStartOf(text4, offset);
-  return /^[ \t]*/.exec(text4.slice(ls))[0];
-}
-function startsLine(text4, offset) {
-  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
-}
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
-function trailerAfter(text4, end) {
-  let i = end;
-  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
-  const commaEnd = text4[i] === "," ? i + 1 : -1;
-  if (commaEnd !== -1) i = commaEnd;
-  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
-  LINE_TRAILER.lastIndex = i;
-  const m = LINE_TRAILER.exec(text4);
-  if (m === null) return { commaEnd, line: null };
-  const next = i + m[0].length;
-  return { commaEnd, line: { at: next - m[1].length, next } };
-}
-function removeMember(text4, span) {
-  const { commaEnd, line } = trailerAfter(text4, span.end);
-  if (startsLine(text4, span.start) && line !== null) {
-    return splice(text4, lineStartOf(text4, span.start), line.next, "");
-  }
-  if (commaEnd !== -1) {
-    let end = commaEnd;
-    while (end < text4.length && text4[end] === " ") end++;
-    return splice(text4, span.start, end, "");
-  }
-  let start = span.start;
-  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
-    start--;
-  }
-  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
-  return splice(text4, span.start, span.end, "");
-}
-function insertLineAfter(text4, span, trailer, memberText, indent2) {
-  const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
-  const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text4);
-  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
-  return splice(withComma, at, at, line);
-}
-function appendMember(text4, container, memberText, dialect) {
-  const members = container.kind === "object" ? container.entries : container.elements;
-  const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text4, container.span.start);
-  if (last2 === void 0) {
-    const inner = baseIndent + "  ";
-    const eol = eolOf(text4);
-    return splice(
-      text4,
-      container.span.start + 1,
-      container.span.end - 1,
-      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
-    );
-  }
-  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
-  if (startsLine(text4, last2.span.start) && line !== null) {
-    const indent2 = text4.slice(
-      lineStartOf(text4, last2.span.start),
-      last2.span.start
-    );
-    return insertLineAfter(
-      text4,
-      last2.span,
-      { commaEnd, line },
-      memberText,
-      indent2
-    );
-  }
-  const at = commaEnd === -1 ? last2.span.end : commaEnd;
-  const sep2 = commaEnd === -1 ? ", " : " ";
-  const tail = commaEnd === -1 ? "" : ",";
-  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
-}
-function setValue(text4, path42, valueText, dialect) {
-  if (path42.length === 0) {
-    throw new Json5EditError("setValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) {
-    const eol = eolOf(text4);
-    return `{${eol}  ${reindent(entryText(path42, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
-  return setBelow(text4, parseDocument(text4), path42, valueText, dialect);
-}
-function setBelow(text4, start, path42, valueText, dialect) {
-  let node = start;
-  for (let i = 0; i < path42.length; i++) {
-    if (node.kind !== "object") {
-      throw new Json5EditError(
-        `cannot set ${path42.join(".")}: ${path42.slice(0, i).join(".") || "the document"} is not an object`,
-        node.span.start
-      );
-    }
-    const entry = entryOf(node, path42[i]);
-    if (entry === void 0) {
-      return appendMember(
-        text4,
-        node,
-        entryText(path42.slice(i), valueText, dialect),
-        dialect
-      );
-    }
-    if (i === path42.length - 1) {
-      const indent2 = indentOfLine(text4, entry.keySpan.start);
-      return splice(
-        text4,
-        entry.value.span.start,
-        entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text4))
-      );
-    }
-    node = entry.value;
-  }
-  throw new Json5EditError("unreachable: path exhausted", 0);
-}
-function deleteValue(text4, path42, keep2 = 0) {
-  if (path42.length === 0) {
-    throw new Json5EditError("deleteValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) return text4;
-  const parentPath = path42.slice(0, -1);
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf(parent, path42[path42.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text4;
-  const pruned = removeMember(text4, entry.span);
-  return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
-}
-var CHILD_KEYS = ["h", "v", "children"];
-function placementIdOf(node) {
-  if (node.kind === "string") return node.value;
-  if (node.kind !== "object") return void 0;
-  const seg2 = entryOf(node, "seg")?.value;
-  const kind = entryOf(node, "kind")?.value;
-  const name = entryOf(node, "name")?.value;
-  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
-  if (segName === void 0) return void 0;
-  const id2 = entryOf(node, "id")?.value;
-  return id2?.kind === "string" ? id2.value : segName;
-}
-function childArraysOf(node) {
-  if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf(node, k)?.value).filter(
-    (v) => v?.kind === "array"
+var LANE_NAMES = Object.keys(LANES);
+var TOGGLED_LANES = LANE_NAMES.filter(
+  (lane) => LANES[lane].switch.on === true
+);
+var MOVING_FPS = 30;
+var ANSWERING = { by: "request" };
+var DRAWING_VAR = "drawing";
+var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
+var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
+var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
+function perLane(value) {
+  return Object.fromEntries(
+    LANE_NAMES.map((lane) => [lane, value(lane)])
   );
 }
-function rowEntriesOf(node) {
-  const rows = entryOf(node, "rows")?.value;
-  return rows?.kind === "object" ? rows.entries : null;
+var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
+function parseLane(raw) {
+  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
 }
-function restagesFragment(node) {
-  if (node.kind !== "object") return true;
-  const rows = rowEntriesOf(node);
-  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
-}
-function* nodesIn(node, bareAt) {
-  yield { node, bareAt };
-  for (const array of childArraysOf(node)) {
-    for (const child of array.elements) yield* nodesIn(child, null);
-  }
-  for (const row2 of rowEntriesOf(node) ?? []) {
-    yield* nodesIn(
-      row2.value,
-      bareAt === null ? null : [...bareAt, "rows", row2.key]
-    );
-  }
-}
-function hasSegmentRef(root, id2) {
-  for (const { node } of nodesIn(root, null)) {
-    if (placementIdOf(node) === id2) return true;
-  }
-  return false;
-}
-function refAt(text4, rootPath, id2) {
-  const root = nodeAt(parseDocument(text4), rootPath);
-  if (root === void 0) return null;
-  for (const { node, bareAt } of nodesIn(root, rootPath)) {
-    if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text4, ref: node };
-    const wrapped = setValue(
-      text4,
-      bareAt,
-      `{ h: [${textOf(text4, node)}] }`,
-      JSON5_DIALECT
-    );
-    return refAt(wrapped, rootPath, id2);
-  }
-  return null;
-}
-function removeSegmentRef(text4, rootPath, target) {
-  const hit = refAt(text4, rootPath, target);
-  return hit === null ? null : removeMember(hit.text, hit.ref.span);
-}
-function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
-  const hit = refAt(text4, rootPath, anchor);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
-  const { commaEnd, line } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && line !== null) {
-    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
-    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
-      src,
-      ref.span.start,
-      ref.span.start,
-      `${newText},${eolOf(src)}${indent2}`
-    );
-  }
-  const refText = textOf(src, ref);
-  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
-  return splice(src, ref.span.start, ref.span.end, pair);
-}
-function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
-  const hit = refAt(text4, rootPath, id2);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const settings = `{ ${keyText(setting)}: ${valueText} }`;
-  if (ref.kind === "string") {
-    return splice(
-      src,
-      ref.span.start,
-      ref.span.end,
-      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
-    );
-  }
-  return entryOf(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+function feedsFact(feeds) {
+  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
+    const { subscribers, fps, shown } = feeds[lane];
+    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
+  }).join(",") || "-";
 }
 
-// src/claude-settings-read.ts
-function readSettingsFile(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
-      return null;
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
-  }
-}
-var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
-function readClaudeSettingsText(settingsPath) {
-  return readSettingsFile(settingsPath)?.text ?? "";
-}
-function readClaudeSettingsOutcome(settingsPath) {
-  const reason = (e) => e instanceof Error ? e.message : String(e);
-  let text4;
-  try {
-    text4 = readClaudeSettingsText(settingsPath);
-  } catch (e) {
-    return failed(reason(e), "read");
-  }
-  try {
-    return ok(parseSettings(settingsPath, text4));
-  } catch (e) {
-    return failed(reason(e), "parse");
-  }
-}
-function parseSettings(settingsPath, text4) {
-  let parsed2;
-  try {
-    if (/^\s*$/.test(text4)) return {};
-    parsed2 = JSON_DIALECT.parse(text4);
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed2)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed2;
-}
-function readSettingsChain(at) {
-  const dropIns = import_node_path14.default.join(at.managedDir, "managed-settings.d");
-  const located2 = [
-    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
-      scope: "managed",
-      path: import_node_path14.default.join(dropIns, name)
-    })),
-    {
-      scope: "managed",
-      path: import_node_path14.default.join(at.managedDir, "managed-settings.json")
-    },
-    {
-      scope: "project-local",
-      path: projectLocalSettingsFile(at.projectDir)
-    },
-    {
-      scope: "project",
-      path: import_node_path14.default.join(at.projectDir, ".claude", "settings.json")
-    },
-    { scope: "user", path: at.userFile }
-  ];
-  const read2 = located2.flatMap((l) => {
-    const file = readSettingsFile(l.path);
-    if (file === null) return [];
-    const settings = parseSettings(l.path, file.text);
-    const { env: env2 = {} } = settings;
-    if (!isJsonObject(env2)) {
-      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
-    }
-    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
-  });
-  const user = read2.find((r) => r.source.scope === "user");
-  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
-}
-function visibleJsonFiles(dir) {
-  try {
-    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
-  } catch (e) {
-    if (e.code === "ENOENT") return [];
-    throw cannotRead(dir, e);
-  }
-}
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
-
-// src/doctor/data-needs.ts
+// src/render/strip.ts
 init_globals();
 
-// src/config/dsl-types.ts
+// src/render/rich-theme.ts
+init_globals();
+var RENDER_THEME = new Theme({
+  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
+  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
+  // slot some terminal themes paint as that ground. The terminal's own text on
+  // its own ground is the one pair known to read there.
+  "strip.separator": "default",
+  "strip.rail": "default"
+});
+function resolvedStyle(style) {
+  return RENDER_THEME.resolve(style);
+}
+
+// src/render/effect.ts
 init_globals();
 
 // src/themes/policy.ts
@@ -44713,13 +43967,13 @@ var DISTRIBUTIONS = {
 };
 var DEFAULT_DISTRIBUTION = "van-der-corput";
 var placedBy = (name) => DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
-function entryOf2(step4, size) {
+function entryOf(step4, size) {
   if (step4 === void 0) return 0;
   const { place, quantize } = step4.distribution;
   return quantize(place(step4.index, step4.count), size);
 }
 function vocabularySelect(vocabulary, step4) {
-  const entry = vocabulary[entryOf2(step4, vocabulary.length)];
+  const entry = vocabulary[entryOf(step4, vocabulary.length)];
   if (entry === void 0)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
@@ -44730,7 +43984,7 @@ function rowAndCell(address) {
   const rows = at === -1 ? address : address.slice(0, at);
   return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
-var rowStart = (variation, row2) => entryOf2(row2, variation.hues.length);
+var rowStart = (variation, row2) => entryOf(row2, variation.hues.length);
 function decorEntryFor(palette, decor, address, drawnAt) {
   const { row: row2, cell: cell3 } = rowAndCell(address);
   if (cell3 === void 0) return dealtAt(palette, decor, row2, cell3, drawnAt);
@@ -45154,7 +44408,2371 @@ function parseSessionInt(raw, range) {
   return Number.isInteger(value) && String(value) === raw && value >= range.min && value <= range.max ? value : null;
 }
 
+// src/config/menu-timeout.ts
+init_globals();
+var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i) => ({ lit: i % 2 === 0, seconds }));
+var CLOSING_FLASH = [
+  ...flashes(3, 1),
+  ...flashes(3, 0.25)
+];
+var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
+  (sum2, { seconds }) => sum2 + seconds,
+  0
+);
+var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
+var MENU_TIMEOUT_DEFAULT = 120;
+var closesAt = (since, timeoutS) => since + timeoutS;
+var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
+
+// src/render/effect.ts
+var STILL3 = { kind: "still" };
+var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
+var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
+function isMoving(part) {
+  return part.name !== EFFECT_FLOOR;
+}
+function together(parts) {
+  return (drawn) => Animation.map(
+    Animation.all(
+      parts.map(
+        ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
+      )
+    ),
+    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
+  );
+}
+var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
+function fromGround(effect, ground) {
+  const terminal = new TerminalTheme(
+    ground,
+    ASSUMED_TERMINAL.foregroundColor,
+    ASSUMED_TERMINAL.ansiColors,
+    ASSUMED_TERMINAL.palette
+  );
+  return (drawn) => effect({ ...drawn, theme: terminal });
+}
+function paintedOn(effect, owners) {
+  return (row2) => confined(() => effect(row2), ...owners)(row2);
+}
+function noiseOffset(text4) {
+  let hash2 = 2166136261;
+  for (let i = 0; i < text4.length; i++) {
+    hash2 ^= text4.charCodeAt(i);
+    hash2 = Math.imul(hash2, 16777619) >>> 0;
+  }
+  return hash2 / 4294967296;
+}
+var NOISE_DEPTH = 4096;
+function closingFlash(fill, text4, begins) {
+  const lit = (look, { terminal }) => ({
+    ...look,
+    bg: terminal.bg ? look.bg : fill,
+    fg: terminal.fg ? look.fg : terminal.bg ? fill : text4
+  });
+  const dark = (colors) => colors;
+  const holds2 = CLOSING_FLASH.reduceRight(
+    (after, { lit: on2, seconds }) => Animation.sequence(Animation.constant(on2 ? lit : dark), seconds, after),
+    Animation.constant(dark)
+  );
+  const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
+  return () => idle;
+}
+var SessionEffects = class {
+  constructor(key) {
+    this.key = key;
+  }
+  key;
+  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
+  // changed to its current value: the effect's own t = 0 is a recorded fact,
+  // never inferred from when renders happened to arrive.
+  inForce = null;
+  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
+  // its last drawn frame left it — where the clock stood and the speed it ran
+  // at from there: the anchor every later reading is measured from, so a
+  // change of speed changes the clock's slope from the frame it lands in and
+  // never its reading, so no loop jumps phase. The host clock itself before
+  // the session's first frame.
+  anchor = Timeline.play(0);
+  // The same fact for each placement wearing its own effect, by placement id,
+  // kept for the placements the latest render drew: one that stopped being
+  // drawn starts its effect again at t = 0 when it is drawn again, as the
+  // effect comes into force for it again.
+  placements = /* @__PURE__ */ new Map();
+  // The effects made for the rows the latest render drew, by row and scope (the
+  // bar's, or one placement's), with the name each was made for. Each render
+  // starts an empty map and keeps only what it draws, so a row that stopped
+  // being drawn (a menu closed) takes its effects and their settled shares with
+  // it.
+  made = /* @__PURE__ */ new Map();
+  // The transitions in flight at the last frame drawn, by placement — what a
+  // placement's appearing and leaving go on from when the next frame is drawn
+  // from the same source as the view's record of it (`FrameRecord`) — or
+  // null: no frame drawn, or the last drawn with transitions off, which
+  // nothing compares against.
+  passages = null;
+  // [LAW:nothing-unseen] What the latest render wore, for the render's event.
+  frame = {
+    effect: EFFECT_FLOOR,
+    t: 0,
+    speed: 1,
+    made: 0,
+    reused: 0,
+    own: [],
+    basis: "off",
+    revision: 0,
+    fades: [],
+    leaves: []
+  };
+  // The latest render's effects: the bar's, at what t, how many of its rows'
+  // effects were made fresh rather than reused — one made every frame pays
+  // rich-js's share settling every frame — and each placement's own.
+  lastFrame() {
+    return this.frame;
+  }
+  // The effects this session holds: the ones its latest render drew, and the
+  // transitions still in flight.
+  get heldCount() {
+    const passing = this.passages?.size ?? 0;
+    return [...this.made.values()].reduce((n, row2) => n + row2.size, passing);
+  }
+  /**
+   * The session's animation clock read at the wall instant `at`, running at
+   * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
+   * the last drawn frame passed at the speed in force then; before the first
+   * frame the timeline is the host clock itself, so a session that has only
+   * ever run at 1x reads the wall instant at every frame. Reads only: the frame
+   * that draws keeps it as the anchor (`drawn`).
+   */
+  clockAt(at, speed2) {
+    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed2) };
+  }
+  /**
+   * The motion of each row of a render drawn at `clock` whose bar wears `name`,
+   * given the row's strip items. Records an effect coming into force — the
+   * bar's, or a placement's — when it differs from the last render's, so every
+   * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
+   * from off the row, wheel at the theme's own hues. Records every placement
+   * the render draws, fades in each one the last frame did not, and dissolves
+   * out each one the last frame drew and this one does not. All of it is kept
+   * once the frame is `drawn`.
+   */
+  motion(name, clock, given2, flash = null) {
+    const at = animationAt(clock);
+    const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
+    const inForce = this.inForce?.name === name ? this.inForce : { name, since: at };
+    const bar = {
+      scope: BAR_SCOPE,
+      name,
+      t: at - inForce.since
+    };
+    const knownPlacements = this.placements;
+    const placements = /* @__PURE__ */ new Map();
+    const known = this.made;
+    const made = /* @__PURE__ */ new Map();
+    const own2 = [];
+    const { last: last2 } = given2;
+    const inFlight = this.passages;
+    const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
+    const before = basis === "compared" ? (id2) => {
+      const record2 = last2.placements.get(id2);
+      return record2?.kind === "drew" ? {
+        drawing: record2.drawing,
+        passage: inFlight.get(id2) ?? null
+      } : void 0;
+    } : null;
+    const reachedIds = /* @__PURE__ */ new Set();
+    const passages = /* @__PURE__ */ new Map();
+    const fading = [];
+    const leaving = [];
+    const frame2 = {
+      effect: name,
+      t: bar.t,
+      speed: clock.timeline.rate,
+      made: 0,
+      reused: 0,
+      own: own2,
+      basis,
+      revision: given2.source.revision,
+      fades: fading,
+      leaves: leaving
+    };
+    const begin = (transition2, id2, { ground }) => {
+      const begun = EFFECT_CATALOGUE.transitions[transition2]({
+        z: noiseOffset(`${this.key}@${id2}`) * NOISE_DEPTH
+      });
+      return {
+        name: transition2,
+        since: at,
+        done: (t2) => begun.done(t2),
+        effect: fromGround(begun.effect, ground)
+      };
+    };
+    const over2 = ({ since, done: done2 }) => done2(at - since);
+    const shown = (id2, drawing2, last3) => ({
+      drawing: drawing2,
+      passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over2(last3.passage) ? last3.passage : null
+    });
+    const gone = (id2, last3) => {
+      if (last3 === void 0 || last3.drawing.opened || last3.drawing.own.length === 0)
+        return void 0;
+      if (last3.passage?.name === "dissolve")
+        return over2(last3.passage) ? void 0 : last3;
+      const held = { ...last3.drawing, own: last3.drawing.own.map(given2.hold) };
+      return { drawing: held, passage: begin("dissolve", id2, held) };
+    };
+    const reached = (id2, lines2) => {
+      if (reachedIds.has(id2))
+        throw new Error(`placement "${id2}" was reached twice in one frame`);
+      reachedIds.add(id2);
+      const last3 = before?.(id2);
+      const { drawing: drawing2, deeper } = given2.returned(id2, lines2);
+      const now2 = drawing2 === null ? gone(id2, last3) : shown(id2, drawing2, last3);
+      if (now2 === void 0) return lines2;
+      if (now2.passage !== null) {
+        passages.set(id2, now2.passage);
+        (now2.passage.name === "fade" ? fading : leaving).push({
+          placement: id2,
+          t: at - now2.passage.since
+        });
+      }
+      return drawing2 === null ? [...now2.drawing.own, ...deeper] : lines2;
+    };
+    const ownPart = (placement, name2) => {
+      const last3 = placements.get(placement) ?? knownPlacements.get(placement);
+      const since = last3?.name === name2 ? last3 : { name: name2, since: at };
+      const t2 = at - since.since;
+      if (!placements.has(placement)) {
+        placements.set(placement, since);
+        own2.push({ placement, effect: name2, t: t2 });
+      }
+      return { scope: placement, name: name2, t: t2 };
+    };
+    const effectOf = (rowKey, part) => {
+      const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
+      made.set(rowKey, row3);
+      const current2 = row3.get(part.scope);
+      if (current2 !== void 0) return current2.effect;
+      const last3 = known.get(rowKey)?.get(part.scope);
+      const reuse = last3?.name === part.name;
+      const z = noiseOffset(
+        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`
+      );
+      const effect = reuse ? last3.effect : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
+      frame2[reuse ? "reused" : "made"]++;
+      row3.set(part.scope, { name: part.name, effect });
+      return effect;
+    };
+    const byScope = (items) => {
+      const parts = /* @__PURE__ */ new Map();
+      for (const { owner, placement } of items) {
+        const part = placement.effect === FOLLOW_BAR ? bar : ownPart(placement.id, placement.effect);
+        const seen2 = parts.get(part.scope);
+        if (seen2 === void 0)
+          parts.set(part.scope, { ...part, owners: [owner] });
+        else seen2.owners.push(owner);
+      }
+      return [...parts.values()];
+    };
+    const passagesOf = (items) => {
+      const byPlacement = /* @__PURE__ */ new Map();
+      for (const { owner, placement } of items) {
+        const mine = byPlacement.get(placement.id);
+        if (mine === void 0) byPlacement.set(placement.id, [owner]);
+        else mine.push(owner);
+      }
+      return [...byPlacement].flatMap(([id2, owners]) => {
+        const passage = passages.get(id2) ?? null;
+        return passage === null ? [] : [
+          {
+            timeline: onSession(at - passage.since),
+            effect: confined(passage.effect, ...owners)
+          }
+        ];
+      });
+    };
+    const flashPart = flash === null ? [] : [
+      {
+        timeline: Timeline.play(flash.idleSince),
+        effect: closingFlash(
+          flash.fill,
+          flash.text,
+          flashBegins(flash.timeoutS)
+        )
+      }
+    ];
+    const flashing = (kind) => kind === "menu" ? flashPart : [];
+    const row2 = (rowName, kind, items) => {
+      const parts = items.some(
+        (i) => i.placement.effect !== FOLLOW_BAR
+      ) ? byScope(items) : [{ ...bar, owners: void 0 }];
+      const moving = parts.filter(isMoving);
+      const passing = passagesOf(items);
+      const flashed = flashing(kind);
+      if (moving.length === 0 && passing.length === 0 && flashed.length === 0)
+        return STILL3;
+      const rowKey = `${this.key}#${rowName}`;
+      return {
+        kind: "moving",
+        time: clock.wall,
+        wrap: (strip) => new Effected(
+          strip,
+          together([
+            ...moving.map((part) => {
+              const effect = effectOf(rowKey, part);
+              return {
+                timeline: onSession(part.t),
+                effect: part.owners === void 0 ? effect : paintedOn(effect, part.owners)
+              };
+            }),
+            ...passing,
+            // Last, so a lit hold is the flash's over whatever a fade
+            // veils: the menu is about to close.
+            ...flashed
+          ]),
+          { key: rowKey, theme: ASSUMED_TERMINAL }
+        )
+      };
+    };
+    return {
+      // [LAW:dataflow-not-control-flow] With transitions off nothing is
+      // compared or kept, so every placement draws exactly what it returned.
+      placed: basis === "off" ? (_id, lines2) => lines2 : reached,
+      row: row2,
+      drawn: () => {
+        this.anchor = clock.timeline;
+        this.inForce = inForce;
+        this.placements = placements;
+        this.made = made;
+        this.passages = basis === "off" ? null : passages;
+        this.frame = frame2;
+      }
+    };
+  }
+};
+var MAX_SESSIONS = 256;
+var EffectSessions = class {
+  constructor(maxSessions = MAX_SESSIONS) {
+    this.maxSessions = maxSessions;
+  }
+  maxSessions;
+  sessions = /* @__PURE__ */ new Map();
+  of(sessionId2) {
+    const known = this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
+    this.sessions.delete(sessionId2);
+    this.sessions.set(sessionId2, known);
+    for (const oldest of this.sessions.keys()) {
+      if (this.sessions.size <= this.maxSessions) break;
+      this.sessions.delete(oldest);
+    }
+    return known;
+  }
+  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
+  // effect made for a row keeps rich-js's settled shares, so their count is the
+  // size that grows.
+  getStats() {
+    let effects = 0;
+    for (const session of this.sessions.values()) effects += session.heldCount;
+    return { sessions: this.sessions.size, effects };
+  }
+};
+
+// src/render/strip.ts
+var UNBOUNDED_DRAW_WIDTH = 80;
+var ROW_HOST = {};
+function draw(renderable, options) {
+  const destination = resolveDestination(options.colorSystem);
+  const { time } = options;
+  let told = Infinity;
+  const segments = [
+    ...render(renderable, {
+      maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
+      isTerminal: false,
+      asciiOnly: false,
+      theme: RENDER_THEME,
+      colorSystem: destination.colorSystem,
+      ...time === void 0 ? {} : { frame: { time, host: ROW_HOST } },
+      // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
+      // as no style at all; a name the theme lacks is a broken config, so it
+      // throws here exactly as the cell splitter throws on it.
+      onStyleError: (error) => {
+        throw error;
+      },
+      onHold: ({ nextChange }) => {
+        told = Math.min(told, nextChange);
+      }
+    })
+  ];
+  return {
+    lines: runLines(segments, destination.colorSystem),
+    nextChange: Math.min(Segment.nextChange(segments), told)
+  };
+}
+var DEFAULT_TERMINAL_WIDTH = 120;
+var separatorJoiners = /* @__PURE__ */ new Map();
+function plainWith(separator) {
+  const known = separatorJoiners.get(separator);
+  if (known !== void 0) return known;
+  const withGlyph = (form) => {
+    const seam2 = form.seam.map(
+      (cell3) => "cap" in cell3 ? cell3 : { ...cell3, glyph: separator }
+    );
+    return { seam: seam2 };
+  };
+  const { seam, caps } = JOINERS2.plain;
+  const joiner = new CellJoiner(
+    {
+      glyph: withGlyph(seam.glyph),
+      ascii: seam.ascii
+    },
+    caps
+  );
+  separatorJoiners.set(separator, joiner);
+  return joiner;
+}
+function pickJoiner(endcaps, separator) {
+  return endcaps === "plain" && separator !== void 0 ? plainWith(separator) : JOINERS2[endcaps];
+}
+var geometryMemo = /* @__PURE__ */ new Map();
+function stripGeometry(options) {
+  const key = JSON.stringify([options.endcaps, options.separator ?? null]);
+  const known = geometryMemo.get(key);
+  if (known !== void 0) return known;
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const cell3 = (bgcolor) => new RichText("x", {
+    end: "",
+    overflow: "ignore",
+    style: new Style({ bgcolor })
+  });
+  const width = (cells) => {
+    const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+    return new RichText(plainOf2(lines2.flat())).cellLength;
+  };
+  const one = width([cell3("#101010")]);
+  const geometry = {
+    chrome: one - 1,
+    seam: width([cell3("#101010"), cell3("#202020")]) - one - 1
+  };
+  geometryMemo.set(key, geometry);
+  return geometry;
+}
+function stripChromeCols(options) {
+  return stripGeometry(options).chrome;
+}
+function stripSeamCols(options) {
+  return stripGeometry(options).seam;
+}
+var PRIVATE_USE = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
+function privateGlyphsIn(text4) {
+  return [...new Set(text4.match(PRIVATE_USE) ?? [])].join("");
+}
+function stripPrivateGlyphs(options) {
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
+  const cells = [cell3("#101010"), cell3("#202020")];
+  const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+  return privateGlyphsIn(plainOf2(lines2.flat()));
+}
+var WIDEST_GLYPH_COLS = 2;
+function lineWidth(options) {
+  return options.wrap ? options.width : Infinity;
+}
+function wrappedLines(plain, width) {
+  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
+  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf2);
+}
+function drawStripCells(cells, options, motion = STILL3) {
+  if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const flex = Number.isFinite(lineWidth(options));
+  const drawn = {
+    colorSystem: options.colorCompatibility,
+    ...flex ? { width: options.width } : {}
+  };
+  const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
+  const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
+  if (row2.lines.length === 0) {
+    throw new Error("drawStripCells: rich-js strip drew no line");
+  }
+  return row2;
+}
+function renderStripCells(cells, options) {
+  return encodeAnsi(
+    drawStripCells(cells, options).lines,
+    options.colorCompatibility
+  );
+}
+
+// src/daemon/foundations/memory-limit.ts
+init_globals();
+var BYTES_PER_MB = 1024 * 1024;
+var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
+function laterIdentity(a, b) {
+  return a > b;
+}
+var NEAR_LIMIT = 0.75;
+function approachingLimit(bytes, limit) {
+  return bytes > limit * NEAR_LIMIT;
+}
+function chargeWords(charge) {
+  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+}
+function measureOf(charge) {
+  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+}
+var BREACH_ARTIFACTS = {
+  memoryReport: { prefix: "memory-", suffix: ".txt" },
+  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
+  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
+};
+
+// src/doctor/terminal.ts
+init_globals();
+var TERMINALS = {
+  kitty: {
+    label: "kitty",
+    xtversion: "kitty",
+    program: null,
+    programVersion: true,
+    term: "xterm-kitty",
+    links: { since: "0.19.0" },
+    glyphs: { kind: "bundled", since: "0.36.0" }
+  },
+  wezterm: {
+    label: "WezTerm",
+    xtversion: "WezTerm",
+    program: "WezTerm",
+    programVersion: true,
+    term: "wezterm",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: "20230712" }
+  },
+  ghostty: {
+    label: "Ghostty",
+    xtversion: "ghostty",
+    program: "ghostty",
+    programVersion: true,
+    term: "xterm-ghostty",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: null }
+  },
+  iterm2: {
+    label: "iTerm2",
+    xtversion: "iTerm2",
+    program: "iTerm.app",
+    programVersion: true,
+    term: null,
+    links: { since: "3.1" },
+    glyphs: { kind: "configured" }
+  },
+  alacritty: {
+    label: "Alacritty",
+    xtversion: "alacritty",
+    program: null,
+    programVersion: true,
+    term: "alacritty",
+    links: { since: "0.11.0" },
+    glyphs: { kind: "configured" }
+  },
+  "apple-terminal": {
+    label: "Terminal",
+    xtversion: null,
+    program: "Apple_Terminal",
+    programVersion: true,
+    term: null,
+    links: null,
+    glyphs: { kind: "unread" }
+  },
+  vscode: {
+    label: "VS Code",
+    xtversion: null,
+    program: "vscode",
+    programVersion: false,
+    term: null,
+    links: { since: "1.72" },
+    glyphs: { kind: "unread" }
+  }
+};
+var row = (name) => TERMINALS[name];
+function isBundling(name) {
+  return row(name).glyphs.kind === "bundled";
+}
+function isConfigured(name) {
+  return row(name).glyphs.kind === "configured";
+}
+var terminalLabel = (name) => row(name).label;
+var ITERM_POWERLINE = [
+  { since: "3.5.0", from: 57504, to: 57507 },
+  { since: "3.5.0", from: 57520, to: 57554 },
+  { since: "3.5.0", from: 57556, to: 57556 },
+  { since: "3.5.6", from: 57558, to: 57559 }
+];
+function itermDrawsItself(version, glyph) {
+  const point = glyph.codePointAt(0);
+  return ITERM_POWERLINE.some(
+    ({ since, from, to }) => from <= point && point <= to && version !== null && releasedSince(version, since) === true
+  );
+}
+var NAMES = Object.keys(TERMINALS);
+function release2(version) {
+  const lead = /^\d+(?:\.\d+)*/.exec(version);
+  return lead === null ? null : lead[0].split(".").map(Number);
+}
+function releasedSince(version, since) {
+  const have = release2(version);
+  const need2 = release2(since);
+  if (have === null) return null;
+  for (let i = 0; i < Math.max(have.length, need2.length); i++) {
+    const a = have[i] ?? 0;
+    const b = need2[i] ?? 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
+function fromXtversion(termtype) {
+  for (const name of NAMES) {
+    const prefix = row(name).xtversion;
+    if (prefix !== null && termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
+      const rest2 = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
+      const version = /^[^\s)]+/.exec(rest2)?.[0] ?? null;
+      return { name, version };
+    }
+  }
+  return null;
+}
+function fromTerm(term) {
+  const name = NAMES.find((n) => row(n).term === term);
+  return name === void 0 ? null : { name, version: null };
+}
+function identifyInTmux(client) {
+  const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
+  if (terminal !== null) return { kind: "known", terminal };
+  const called = /^[^\s(]*/.exec(client.termtype)[0];
+  return called === "" ? { kind: "unnamed", term: client.termname } : { kind: "unknown", called };
+}
+function identifyFromEnv(env2) {
+  const program = env2.TERM_PROGRAM;
+  const byProgram = NAMES.find((n) => row(n).program === program);
+  const terminal = byProgram === void 0 ? fromTerm(env2.TERM) : {
+    name: byProgram,
+    version: row(byProgram).programVersion ? env2.TERM_PROGRAM_VERSION ?? null : null
+  };
+  if (terminal !== null) return { kind: "known", terminal };
+  return program === void 0 || program === "tmux" ? { kind: "unnamed", term: env2.TERM ?? "" } : { kind: "unknown", called: program };
+}
+function sightingOf(identified) {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || null;
+  }
+}
+function identifiedAs(identified) {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || "this terminal";
+  }
+}
+function linkSupport({ name, version }) {
+  const links2 = row(name).links;
+  if (links2 === null) return { kind: "none" };
+  if (links2.since === null) return { kind: "draws" };
+  if (version === null) return { kind: "unsaid", since: links2.since };
+  const drawn = releasedSince(version, links2.since);
+  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
+}
+var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
+
+// src/doctor/checks.ts
+function statusLineOf(sources) {
+  if (sources.kind === "failed") {
+    return { kind: "unread", reason: sources.reason };
+  }
+  const lines2 = sources.value.flatMap(
+    ({ scope, path: path43, settings }) => "statusLine" in settings ? [{ from: { scope, path: path43 }, line: settings.statusLine }] : []
+  );
+  const top = lines2[0];
+  if (top === void 0) {
+    return { kind: "absent", read: sources.value.map((s) => s.path) };
+  }
+  if (!isJsonObject(top.line)) {
+    return { kind: "not-an-object", value: top.line, from: top.from };
+  }
+  for (const { from, line } of lines2) {
+    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
+    if ("refreshInterval" in line) {
+      return { kind: "present", refreshInterval: line.refreshInterval, from };
+    }
+  }
+  return { kind: "present", refreshInterval: void 0, from: top.from };
+}
+function envVarOf(sources, name) {
+  if (sources.kind === "failed") return sources;
+  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
+  return {
+    kind: "ok",
+    value: top === void 0 ? { kind: "unset" } : {
+      kind: "set",
+      value: top.env[name],
+      from: { scope: top.scope, path: top.path }
+    }
+  };
+}
+var UNWRITTEN_SCOPES = [
+  "managed",
+  "project"
+];
+var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
+var ENV_FIX_FILE = {
+  managed: () => null,
+  "project-local": (path43) => ({ scope: "project-local", path: path43 }),
+  project: (_, at) => ({
+    scope: "project-local",
+    path: projectLocalSettingsFile(at.projectDir)
+  }),
+  user: (path43) => ({ scope: "user", path: path43 })
+};
+var GLYPH_MARKS = ["drawn", "boxes"];
+var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
+var whoseWidth = (of) => of.kind === "session" ? `session ${of.sessionId}'s statusline client` : "this command's terminal";
+function describeFix(fix) {
+  switch (fix.kind) {
+    case "claude-settings":
+      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
+    case "post-mortems-read":
+      return `${fix.kind} through=${fix.through}`;
+  }
+}
+function problemsVerdict(problems) {
+  const [reason, ...more] = problems;
+  return reason === void 0 ? { ok: true } : { ok: false, reason, more };
+}
+var TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
+function ofTmuxClient(tmux3, decide) {
+  switch (tmux3.kind) {
+    case "unreported":
+      return {
+        ok: false,
+        reason: "the client reported no tmux facts \u2014 re-run `cc-candybar install` to stage a current client"
+      };
+    case "outside":
+      return { ok: true };
+    case "inside":
+      if (tmux3.client.kind === "failed") {
+        return {
+          ok: false,
+          reason: `tmux could not be asked: ${tmux3.client.reason}`
+        };
+      }
+      return tmux3.client.value === null ? { ok: true } : decide(tmux3.client.value, tmux3.hint);
+  }
+}
+var tmuxTruecolor = {
+  name: "tmuxTruecolor",
+  label: "tmux truecolor",
+  takesMark: false,
+  probe: ({ tmux: tmux3, claudeSettings: { origin } }) => ofTmuxClient(tmux3, (client, hint) => {
+    if (!client.features.includes("RGB")) return { ok: true };
+    if (hint.truecolor !== null) return { ok: true };
+    const staged = envVarOf(origin.sources, TMUX_TRUECOLOR_VAR);
+    if (staged.kind === "failed") return { ok: false, reason: staged.reason };
+    const told = staged.value;
+    if (told.kind === "set" && typeof told.value === "string" && told.value !== "") {
+      return {
+        ok: false,
+        reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} \u2014 restart Claude Code to apply`
+      };
+    }
+    const reason = "Claude Code renders the bar in 256 colours inside tmux";
+    const fixInto = (file2) => ({
+      ok: false,
+      reason,
+      fix: {
+        kind: "claude-settings",
+        file: file2,
+        path: ["env", TMUX_TRUECOLOR_VAR],
+        value: "1"
+      }
+    });
+    if (told.kind === "unset") {
+      return fixInto({ scope: "user", path: origin.at.userFile });
+    }
+    const file = ENV_FIX_FILE[told.from.scope](told.from.path, origin.at);
+    return file === null ? {
+      ok: false,
+      reason: `${reason} \u2014 the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`
+    } : fixInto(file);
+  })
+};
+var utf82 = {
+  name: "utf8",
+  label: "UTF-8",
+  takesMark: false,
+  probe: ({ tmux: tmux3 }) => ofTmuxClient(
+    tmux3,
+    (client) => client.utf8 ? { ok: true } : {
+      ok: false,
+      reason: "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` \u2014 attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux"
+    }
+  )
+};
+var termWidth = {
+  name: "termWidth",
+  label: "terminal width",
+  takesMark: false,
+  probe: ({ width }) => width.kind === "failed" ? { ok: false, reason: width.reason } : width.value.columns !== null ? {
+    ok: true,
+    note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`
+  } : {
+    ok: false,
+    reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask \u2014 or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`
+  }
+};
+var UNUSED = {
+  variable: "is never read",
+  action: "is never clicked",
+  helper: "is never called",
+  segment: "is in no preset"
+};
+var NAMED_BY = {
+  argument: "command argument",
+  environment: `$${CONFIG_ENV}`,
+  pick: "load-config pick",
+  unknown: "source unknown"
+};
+function judgedConfig({ target, layers }) {
+  if (target.source !== "search") {
+    return `${target.path} (${NAMED_BY[target.source]})`;
+  }
+  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
+}
+function configProblems(config2) {
+  switch (config2.kind) {
+    case "failed": {
+      const problems = [
+        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
+        ...config2.warnings
+      ];
+      return problems.length === 0 ? ["the config failed to load"] : problems;
+    }
+    case "loaded":
+      return [
+        ...config2.warnings,
+        ...config2.unused.map(
+          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
+        )
+      ];
+  }
+}
+var config = {
+  name: "config",
+  label: "config",
+  takesMark: false,
+  probe: ({ config: config2 }) => {
+    const judged = judgedConfig(config2);
+    const verdict = problemsVerdict(configProblems(config2));
+    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
+  }
+};
+var REINSTALL = "re-run `cc-candybar install`";
+function handlerAppProblems(opener) {
+  if (opener.kind === "failed") {
+    return [
+      `Launch Services could not be asked which app opens cc-candybar:// \u2014 ${opener.reason}`
+    ];
+  }
+  if (opener.value === null) {
+    return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
+  }
+  const { app, forwarder } = opener.value;
+  return forwarder ? [] : [
+    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
+  ];
+}
+var urlHandler = {
+  name: "urlHandler",
+  label: "URL handler",
+  takesMark: false,
+  probe: ({ urlHandler: urlHandler2 }) => {
+    switch (urlHandler2.kind) {
+      case "unsupported":
+        return { ok: true };
+      case "unprobed":
+        return { ok: false, reason: urlHandler2.reason };
+      case "arrived":
+        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
+        return {
+          ok: false,
+          // What is known: a click request brought it, which is what the
+          // retired applet runs — and a hand-run `cc-candybar url-handle`,
+          // or the browser page. Which app Launch Services opens the scheme
+          // with is the opener's row to say (handlerAppProblems).
+          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
+        };
+      case "lost":
+        return problemsVerdict([
+          ...handlerAppProblems(urlHandler2.opener),
+          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+        ]);
+    }
+  }
+};
+var RECENT_CLIENT_S = 300;
+function clientStanding({ bundle, checkout }, client) {
+  return {
+    bundle: client.bundle.kind === "failed" ? { kind: "unresolved", reason: client.bundle.reason } : client.bundle.value === bundle ? { kind: "same" } : { kind: "other", path: client.bundle.value },
+    source: client.client !== "native" || checkout === null ? { kind: "uncompared" } : checkout.rustSource.kind === "failed" ? {
+      kind: "unreadable",
+      root: checkout.root,
+      reason: checkout.rustSource.reason
+    } : client.source === null ? { kind: "unstamped" } : client.source === checkout.rustSource.value ? { kind: "same" } : { kind: "other", root: checkout.root }
+  };
+}
+function remedy(daemon3, client) {
+  if (client === "frames")
+    return `run \`node ${daemon3.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
+  return daemon3.checkout === null ? REINSTALL : `run \`just install-rust\` and point the statusLine command at ${daemon3.checkout.root}/bin/cc-candybar-native`;
+}
+function installProblems(daemon3, nativeShipped, client) {
+  const { checkout } = daemon3;
+  if (client.kind === "unreported") {
+    return [
+      `the bar is drawn by a statusline client too old to say what it is \u2014 ${remedy(daemon3, "native")}`
+    ];
+  }
+  const { bundle, source } = clientStanding(daemon3, client);
+  switch (bundle.kind) {
+    case "unresolved":
+      return [
+        `the statusline client's bundle cannot be resolved: ${bundle.reason}`
+      ];
+    case "other":
+      return [
+        `the statusline client runs ${bundle.path}, not the daemon's ${daemon3.bundle} \u2014 ${remedy(daemon3, client.client)}`
+      ];
+    case "same":
+      break;
+  }
+  if (client.client === "node" && (nativeShipped || checkout !== null)) {
+    return [
+      `the bar is drawn by the Node fallback, which starts node on every render \u2014 ${remedy(daemon3, "native")}`
+    ];
+  }
+  switch (source.kind) {
+    case "uncompared":
+    case "same":
+      return [];
+    case "unreadable":
+      return [`${source.root}/rust-client could not be read: ${source.reason}`];
+    case "unstamped":
+      return [
+        "the native client carries no source stamp, so which source it was built from is unknown \u2014 run `just install-rust`"
+      ];
+    case "other":
+      return [
+        `the native client was built from other source than ${source.root}/rust-client holds \u2014 run \`just install-rust\``
+      ];
+  }
+}
+var noRenderOf = (sighted) => {
+  const lost = `restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions`;
+  return sighted.kind === "clicked" ? `this daemon holds no render of this bar (it ${lost})` : `this daemon holds no render of session ${sighted.sessionId}'s bar (its statusLine does not run cc-candybar \u2014 a \`claude -p\` session draws none \u2014 or the daemon ${lost}; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently)`;
+};
+var install = {
+  name: "install",
+  label: "install",
+  takesMark: false,
+  probe: ({ install: install2, sighted }) => {
+    if (install2.kind === "failed") {
+      return {
+        ok: false,
+        reason: `the daemon could not be asked which clients draw the bar: ${install2.reason}`
+      };
+    }
+    const { daemon: daemon3, nativeShipped, clients } = install2.value;
+    if (clients.length === 0) {
+      return {
+        ok: false,
+        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which client draws it is unknown \u2014 run the doctor again once the bar has redrawn` : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes \u2014 run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`
+      };
+    }
+    return problemsVerdict([
+      ...new Set(
+        clients.flatMap((c) => installProblems(daemon3, nativeShipped, c))
+      )
+    ]);
+  }
+};
+function unreadPostMortems({ postMortems }, read2) {
+  return postMortems.kind === "ok" && read2.kind === "ok" ? postMortems.value.filter(
+    (m) => read2.value.through === null || laterIdentity(m.identity, read2.value.through)
+  ) : [];
+}
+function otherDaemons(serving, processes) {
+  return serving.kind === "failed" ? processes : processes.filter((p2) => p2.pid !== serving.value.pid);
+}
+var daemon = {
+  name: "daemon",
+  label: "daemon",
+  takesMark: false,
+  probe: ({ daemon: { serving, processes, read: read2 } }) => {
+    const unreadable = processes.kind === "failed" ? [`the process table could not be read: ${processes.reason}`] : [];
+    const others = processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
+    if (serving.kind === "failed") {
+      const running = others.length > 0 ? ` \u2014 daemon ${others.map((p2) => p2.pid).join(", ")} running` : "";
+      return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
+    }
+    const { pid: pid2, memory, limit, postMortems } = serving.value;
+    const unread2 = unreadPostMortems(serving.value, read2);
+    const verdict = problemsVerdict([
+      ...unread2.map(
+        (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
+      ),
+      ...postMortems.kind === "failed" ? [
+        `the daemon's post-mortems could not be listed: ${postMortems.reason}`
+      ] : [],
+      // Which were read decides nothing only while none are listed.
+      ...read2.kind === "failed" && !(postMortems.kind === "ok" && postMortems.value.length === 0) ? [`which post-mortems were read could not be read: ${read2.reason}`] : [],
+      ...unreadable,
+      ...others.map(
+        (p2) => `daemon ${p2.pid} (started ${p2.started}, rss ${mb(p2.rss)} MB${p2.ppid === 1 ? "" : `, child of ${p2.ppid}`}) runs beside the one serving the bar (${pid2}) \u2014 \`kill ${p2.pid}\``
+      ),
+      // [LAW:no-silent-failure] RSS standing in for the platform's charge is
+      // the limit judging an estimate — or, with no gap yet read, what macOS
+      // has already reclaimed, the very misjudgment the charge exists to end —
+      // so it is a finding, near the limit or not.
+      ...memory.kind === "measured" && memory.charge.kind === "stand-in" ? [
+        `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${memory.charge.gap !== 0 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate` : "RSS, which counts pages macOS has reclaimed"}`
+      ] : [],
+      ...memory.kind === "measured" && approachingLimit(memory.charge.bytes, limit) ? [
+        `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
+      ] : []
+    ]);
+    if (verdict.ok && memory.kind === "unmeasured") {
+      return { ok: true, note: "the daemon has not measured its memory yet" };
+    }
+    const newest = unread2[0];
+    return verdict.ok || newest === void 0 ? verdict : {
+      ...verdict,
+      fix: { kind: "post-mortems-read", through: newest.identity }
+    };
+  }
+};
+var CLICK_TO_SEE = "click \u{1FA7A} doctor in the bar's settings menu: if it runs, links work";
+function drawsLinks(identified, clicked) {
+  const id2 = sightingOf(identified);
+  if (clicked.kind === "ok" && id2 !== null && clicked.value.includes(id2)) {
+    return { kind: "draws" };
+  }
+  return identified.kind === "known" ? linkSupport(identified.terminal) : { kind: "unknown" };
+}
+function linkProblems({ identified, tmuxClient }, clicked) {
+  const called = identifiedAs(identified);
+  const support = drawsLinks(identified, clicked);
+  const prove = sightingOf(identified) === null ? CLICK_TO_SEE : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
+  const terminal = (() => {
+    switch (support.kind) {
+      case "draws":
+        return [];
+      case "none":
+        return [
+          `${called} draws no links (OSC 8), so nothing on the bar can be clicked \u2014 run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`
+        ];
+      case "older":
+        return [
+          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) \u2014 update ${called}`
+        ];
+      case "unsaid":
+        return [
+          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is \u2014 ${prove}`
+        ];
+      case "unknown":
+        return [
+          `the doctor does not know whether ${called} draws links (OSC 8) \u2014 ${prove}`
+        ];
+    }
+  })();
+  const remembered = clicked.kind === "failed" && support.kind !== "draws" ? [
+    `the terminals a doctor click came back from could not be read: ${clicked.reason}`
+  ] : [];
+  const tmux3 = support.kind === "none" || tmuxClient === null || tmuxClient.features.includes("hyperlinks") ? [] : [
+    `tmux does not pass links through to ${called} \u2014 add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`
+  ];
+  return [...terminal, ...remembered, ...tmux3];
+}
+var links = {
+  name: "links",
+  label: "links",
+  takesMark: false,
+  probe: ({ sighted, terminal, clicked }) => {
+    if (sighted.kind === "clicked" && sighted.via === "link")
+      return { ok: true };
+    switch (terminal.kind) {
+      case "unreported":
+        return {
+          ok: false,
+          reason: "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
+        };
+      case "unasked":
+        return {
+          ok: false,
+          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`
+        };
+      case "seen":
+        return problemsVerdict(linkProblems(terminal, clicked));
+    }
+  }
+};
+var EFFECT_REFRESH_INTERVAL = 1;
+var refreshedFrames = (frames) => frames.filter((f) => f.role === "statusline");
+var effectRefresh = {
+  name: "effectRefresh",
+  label: "effect refresh",
+  takesMark: false,
+  probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
+    const verdicts = [origin, ...elsewhere].flatMap(
+      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? []
+    );
+    const [first2] = verdicts;
+    if (first2 === void 0) {
+      if (frames.kind === "failed") return { ok: false, reason: frames.reason };
+      return unknownMotion(
+        sighted.kind !== "recent" ? noRenderOf(sighted) : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`
+      );
+    }
+    const [lead, ...others] = verdicts.flatMap((v) => v.ok ? [] : [v]);
+    if (lead === void 0) return first2;
+    const more = [...new Set(others.map((f) => f.reason))].filter(
+      (r) => r !== lead.reason
+    );
+    return more.length === 0 ? lead : { ...lead, more };
+  }
+};
+var barsSeen = (bars) => {
+  const drawn = refreshedFrames(bars).map((f) => f.frame);
+  if (drawn.includes("moves")) {
+    return {
+      kind: "moving",
+      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
+    };
+  }
+  if (drawn.includes("can-move")) {
+    return {
+      kind: "moving",
+      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
+    };
+  }
+  if (drawn.includes("still")) return { kind: "still" };
+  if (drawn.includes("drawing")) {
+    return {
+      kind: "unknown",
+      unseen: "the bar's latest render has not finished"
+    };
+  }
+  if (drawn.length > 0) {
+    return { kind: "unknown", unseen: "the bar's recent renders failed" };
+  }
+  if (bars.length > 0) {
+    return {
+      kind: "unknown",
+      unseen: "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
+    };
+  }
+  return { kind: "none" };
+};
+var unknownMotion = (unseen) => ({
+  ok: false,
+  reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
+});
+function chainVerdict(sources, seen2) {
+  const statusLine = statusLineOf(sources);
+  if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
+    return {
+      ok: true,
+      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
+    };
+  }
+  switch (seen2.kind) {
+    case "none":
+      return null;
+    case "still":
+      return { ok: true };
+    case "unknown":
+      return unknownMotion(seen2.unseen);
+    case "moving":
+      break;
+  }
+  const { wearing } = seen2;
+  switch (statusLine.kind) {
+    case "unread":
+      return {
+        ok: false,
+        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`
+      };
+    case "absent":
+      return {
+        ok: false,
+        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) \u2014 the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`
+      };
+    case "not-an-object":
+      return {
+        ok: false,
+        // `cc-candybar install` writes the user file only, so only there
+        // does re-running it replace the line.
+        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object \u2014 ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`
+      };
+    case "present": {
+      const { from, refreshInterval: interval } = statusLine;
+      const why2 = interval === void 0 ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events" : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL ? `its statusLine redraws it only every ${interval} s` : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
+      return doctorWrites(from) ? {
+        ok: false,
+        reason: `${wearing}, but ${why2} (statusLine from ${from.path})`,
+        fix: {
+          kind: "claude-settings",
+          file: from,
+          path: ["statusLine", "refreshInterval"],
+          value: EFFECT_REFRESH_INTERVAL
+        }
+      } : {
+        ok: false,
+        reason: `${wearing}, but ${why2} \u2014 its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`
+      };
+    }
+  }
+}
+var codePoints = (glyphs) => [...glyphs].map((g) => `U+${g.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
+function terminalCalled(terminal) {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return "this terminal";
+    case "unknown":
+    case "unnamed":
+      return identifiedAs(terminal);
+    case "bundling":
+    case "unread":
+    case "configured":
+      return [terminalLabel(terminal.name), terminal.version].filter((part) => part !== null).join(" ");
+  }
+}
+function sightedIn(terminal) {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return null;
+    case "unknown":
+    case "unnamed":
+      return sightingOf(terminal);
+    case "bundling":
+    case "unread":
+      return terminalLabel(terminal.name);
+    case "configured": {
+      const label2 = terminalLabel(terminal.name);
+      return terminal.font.kind === "ok" ? `${label2} with ${terminal.font.value.font} (${terminal.font.value.from})` : `${label2}, its font unread: ${terminal.font.reason}`;
+    }
+  }
+}
+function glyphSighting(facts) {
+  const where = sightedIn(facts.terminal);
+  return where === null ? void 0 : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
+}
+var NERD_FONT_CHECK = "nerdFont";
+var nerdFont = {
+  name: NERD_FONT_CHECK,
+  label: "Nerd Font",
+  takesMark: true,
+  probe: ({ nerdFont: facts, marks }) => {
+    if (facts.kind === "none") return { ok: true };
+    const sighting = glyphSighting(facts);
+    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
+      ok: false,
+      reason,
+      more: [`the mark book could not be read: ${marks.reason}`]
+    } : { ok: false, reason, ...sighting !== void 0 && { sighting } };
+    const terminal = facts.terminal;
+    const called = terminalCalled(terminal);
+    const mark = sighting === void 0 || marks.kind === "failed" ? null : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null;
+    switch (mark) {
+      case "drawn":
+        return { ok: true };
+      case "boxes":
+        return failed3(
+          `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
+        );
+      case null:
+        break;
+    }
+    switch (terminal.kind) {
+      case "unreported":
+        return failed3(
+          "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
+        );
+      case "unasked":
+        return failed3(
+          `tmux could not be asked which terminal is attached: ${terminal.reason}`
+        );
+      case "unknown":
+      case "unnamed":
+      case "unread":
+        return failed3(`the doctor cannot read ${called}'s font`);
+      case "bundling": {
+        const since = TERMINALS[terminal.name].glyphs.since;
+        if (since === null) return { ok: true };
+        const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
+        if (shipped === true) return { ok: true };
+        const label2 = terminalLabel(terminal.name);
+        return failed3(
+          shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
+        );
+      }
+      case "configured": {
+        if (terminal.font.kind === "failed") {
+          return failed3(
+            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
+          );
+        }
+        const { font, from, lacks } = terminal.font.value;
+        if (lacks === null) {
+          return failed3(
+            `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
+          );
+        }
+        if (lacks.length === 0) return { ok: true };
+        return failed3(
+          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
+        );
+      }
+    }
+  }
+};
+function named(segments) {
+  return segments.join(", ");
+}
+function optOut(segments) {
+  return `or set missingData: "ignore" on ${named(segments)}`;
+}
+function pullRequestProblems(need2) {
+  if (need2.kind === "unneeded") return [];
+  const { segments, fact } = need2;
+  if (fact.kind === "failed") {
+    return [
+      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`
+    ];
+  }
+  if (fact.value === null) return [];
+  const { cli, host, status } = fact.value;
+  if (status === "ready") return [];
+  return status === "missing" ? [
+    `${named(segments)}: ${cli} is not installed, so no pull request is ever shown \u2014 install it, ${optOut(segments)}`
+  ] : [
+    `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) \u2014 run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`
+  ];
+}
+function rateLimitProblems(need2, sighted) {
+  if (need2.kind === "unneeded") return [];
+  const { segments, fact } = need2;
+  if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
+  if (fact.value.length === 0) {
+    return [
+      sighted.kind !== "recent" ? `${named(segments)}: ${noRenderOf(sighted)}, so whether Claude Code sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn` : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn`
+    ];
+  }
+  return fact.value.includes("missing") && !fact.value.includes("carried") ? [
+    `${named(segments)}: Claude Code sent no rate_limits \u2014 it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`
+  ] : [];
+}
+var segmentData = {
+  name: "segmentData",
+  label: "segment data",
+  takesMark: false,
+  probe: ({ data, sighted }) => problemsVerdict([
+    ...pullRequestProblems(data.pullRequests),
+    ...rateLimitProblems(data.rateLimits, sighted)
+  ])
+};
+function transcriptProblems({
+  path: path43,
+  answered,
+  read: read2
+}) {
+  switch (read2.kind) {
+    case "absent":
+      return answered ? [
+        `the transcript ${path43} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
+      ] : [];
+    case "failed":
+      return [`the transcript ${path43} cannot be read: ${read2.reason}`];
+    case "ok": {
+      const { lines: lines2, unparsed, whole } = read2.value;
+      return unparsed === 0 ? [] : [
+        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path43} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
+      ];
+    }
+  }
+}
+var sessionData = {
+  name: "sessionData",
+  label: "session data",
+  takesMark: false,
+  probe: ({ transcripts, sighted }) => {
+    if (transcripts.kind === "failed") {
+      return { ok: false, reason: transcripts.reason };
+    }
+    if (transcripts.value.length === 0) {
+      return {
+        ok: false,
+        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which transcript it reads is unknown \u2014 run the doctor again once the bar has redrawn` : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named \u2014 run the doctor again once the bar has redrawn`
+      };
+    }
+    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
+  }
+};
+var CHECKS = [
+  config,
+  install,
+  daemon,
+  urlHandler,
+  links,
+  tmuxTruecolor,
+  utf82,
+  termWidth,
+  effectRefresh,
+  nerdFont,
+  segmentData,
+  sessionData
+];
+var MARKED_CHECKS = CHECKS.filter(
+  (c) => c.takesMark
+);
+function runDoctor(facts) {
+  return CHECKS.map((check) => ({ check, verdict: check.probe(facts) }));
+}
+function checkByName(name) {
+  return CHECKS.find((c) => c.name === name);
+}
+
+// src/doctor/sightings.ts
+var inScope = (scope, sightings) => sightings.filter(
+  (s) => scope.kind === "recent" ? s.ago <= RECENT_CLIENT_S : s.sessionId === scope.sessionId
+);
+var barsOf = (scope, sightings) => inScope(scope, sightings).map(
+  ({ role, frame: frame2, projectDir, claudeConfigDir: claudeConfigDir2 }) => ({
+    role,
+    frame: frame2,
+    projectDir,
+    claudeConfigDir: claudeConfigDir2
+  })
+);
+var NONCE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
+function parseProbeNonce(value) {
+  return NONCE.test(value) ? value : null;
+}
+function clickArrived(arrival) {
+  switch (arrival.via) {
+    case "link":
+      return { kind: "arrived", delivery: arrival.delivery };
+    case "tmux-status":
+      return {
+        kind: "unprobed",
+        reason: "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler \u2014 run `cc-candybar doctor` to probe the handler"
+      };
+  }
+}
+function sessionWidth(sessionId2, said) {
+  const statusline = said.find((s) => s.role === "statusline");
+  return statusline === void 0 ? {
+    kind: "failed",
+    reason: `the daemon holds no statusline render of session ${sessionId2} \u2014 none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width \u2014 so no width a statusline client measured is known; run this again once the statusline has redrawn`
+  } : {
+    kind: "ok",
+    value: {
+      columns: statusline.termCols,
+      of: { kind: "session", sessionId: sessionId2 }
+    }
+  };
+}
+
+// src/daemon/click-reading.ts
+function parseClick(url, delivery, links2) {
+  if (url.startsWith(DOCTOR_PROBE_PREFIX)) {
+    const nonce = parseProbeNonce(url.slice(DOCTOR_PROBE_PREFIX.length));
+    return nonce === null ? { kind: "refused", problem: "the probe link carries no probe nonce" } : { kind: "probe", nonce, delivery };
+  }
+  if (url.startsWith(STATUS_LINE_CLICK_PREFIX)) {
+    return delivery.kind === "cli" ? {
+      kind: "status-line",
+      value: url.slice(STATUS_LINE_CLICK_PREFIX.length)
+    } : {
+      kind: "refused",
+      problem: "a status-line click comes only from tmux's own binding"
+    };
+  }
+  const opened = openClick(url, links2);
+  return opened.kind === "link" ? { ...opened, delivery } : opened;
+}
+function openClick(signed, links2) {
+  const opened = links2.openLink(signed);
+  if (opened.kind === "failed")
+    return { kind: "refused", problem: opened.reason };
+  const link = parseHandlerUrl(opened.value);
+  return link.ok ? { kind: "link", verb: link.verb, value: link.value, link: opened.value } : { kind: "refused", problem: link.problem };
+}
+
+// src/utils/transcript-fs.ts
+init_globals();
+
+// src/utils/limiter.ts
+init_globals();
+var Limiter = class {
+  slots;
+  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
+  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
+  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
+  // would be O(n²) on the render hot path). A dequeued node is immediately
+  // unreferenced, so a continuously-saturated queue retains only the waiters
+  // currently parked — no consumed-prefix accumulates, unlike a head-index
+  // array that only reclaims on full drain.
+  head = null;
+  tail = null;
+  constructor(max2) {
+    this.slots = max2;
+  }
+  async run(task) {
+    await this.acquire();
+    try {
+      return await task();
+    } finally {
+      this.release();
+    }
+  }
+  async acquire() {
+    if (this.slots > 0) {
+      this.slots--;
+      return;
+    }
+    await new Promise((wake) => {
+      const node = { wake, next: null };
+      if (this.tail) this.tail.next = node;
+      else this.head = node;
+      this.tail = node;
+    });
+  }
+  release() {
+    const node = this.head;
+    if (!node) {
+      this.slots++;
+      return;
+    }
+    this.head = node.next;
+    if (!this.head) this.tail = null;
+    node.wake();
+  }
+};
+
+// src/utils/transcript-fs.ts
+function statStamp(filePath2) {
+  if (!filePath2) return "";
+  try {
+    return stampOf(statSync(filePath2));
+  } catch {
+    return "";
+  }
+}
+function stampOf(st) {
+  return `${st.mtimeMs}:${st.size}`;
+}
+var TRANSCRIPT_FS_CONCURRENCY = 8;
+var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
+function gated(fn) {
+  return ((...args) => gate.run(() => fn(...args)));
+}
+var readdir2 = gated(readdir);
+var stat2 = gated(stat);
+var FOLD_WINDOW_BYTES = 512 * 1024;
+var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
+function transcriptReads() {
+  return { ...totals };
+}
+var windows = [];
+function giveBack(window2) {
+  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
+}
+async function readAppended(path43, prior, until2) {
+  return gate.run(async () => {
+    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
+    const read2 = await readWholeLines(path43, prior, until2, window2);
+    if (read2.kind !== "ok") {
+      giveBack(window2);
+      return read2;
+    }
+    let lent = window2;
+    return ok({
+      ...read2.value,
+      [Symbol.dispose]: () => {
+        if (lent !== void 0) giveBack(lent);
+        lent = void 0;
+      }
+    });
+  });
+}
+function decodeLines(read2, decode) {
+  var _stack = [];
+  try {
+    const lent = __using(_stack, read2);
+    return decode(lent.lines);
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+async function readWholeLines(path43, prior, until2, window2) {
+  let fh = null;
+  try {
+    fh = await open(path43, "r");
+    const st = await fh.stat();
+    const { size, ino } = st;
+    const stamp2 = stampOf(st);
+    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
+    const start = reset || prior === void 0 ? 0 : prior.offset;
+    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
+    let bytesRead = 0;
+    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
+    bytesRead += first2.length;
+    let lastNl = first2.lastIndexOf(10);
+    let reached = start + first2.length;
+    let shortRead = first2.length < Math.min(window2.length, end - start);
+    while (lastNl < 0 && reached < end && !shortRead) {
+      const next = await readInto(
+        fh,
+        window2.subarray(0, end - reached),
+        reached
+      );
+      bytesRead += next.length;
+      const nl = next.indexOf(10);
+      if (nl >= 0) lastNl = reached - start + nl;
+      shortRead = next.length < Math.min(window2.length, end - reached);
+      reached += next.length;
+    }
+    const bytes = lastNl + 1;
+    const longLine = bytes > window2.length ? bytes : 0;
+    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
+    bytesRead += longLine > 0 ? wholeLines.length : 0;
+    const complete = wholeLines.length === bytes;
+    totals.reads++;
+    totals.bytes += bytesRead;
+    totals.longLines += longLine > 0 ? 1 : 0;
+    totals.largestLine = Math.max(totals.largestLine, longLine);
+    return ok({
+      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
+      start,
+      // A long line was found by its newline alone, so lines after it may
+      // still be unread; otherwise the read saw everything up to its end.
+      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
+      size,
+      stamp: stamp2,
+      ino,
+      reset,
+      longLine
+    });
+  } catch (e) {
+    if (e.code === "ENOENT") return ABSENT;
+    return failed(
+      `readAppended ${path43}: ${e instanceof Error ? e.message : String(e)}`,
+      "read"
+    );
+  } finally {
+    await fh?.close().catch((e) => {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    });
+  }
+}
+async function readInto(fh, buf, position) {
+  let off = 0;
+  while (off < buf.length) {
+    const { bytesRead } = await fh.read(
+      buf,
+      off,
+      buf.length - off,
+      position + off
+    );
+    if (bytesRead === 0) break;
+    off += bytesRead;
+  }
+  return buf.subarray(0, off);
+}
+async function readTail(path43, maxBytes) {
+  return gate.run(async () => {
+    let fh = null;
+    try {
+      fh = await open(path43, "r");
+      const { size } = await fh.stat();
+      const start = Math.max(0, size - maxBytes);
+      return ok({
+        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
+        fromStart: start === 0
+      });
+    } catch (e) {
+      if (e.code === "ENOENT") return ABSENT;
+      return failed(
+        `readTail ${path43}: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
+      );
+    } finally {
+      await fh?.close().catch((e) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+        );
+      });
+    }
+  });
+}
+function readTailSync(path43, maxBytes) {
+  let fd;
+  try {
+    fd = openSync(path43, constants.O_RDONLY | constants.O_NONBLOCK);
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
+    return failed(e instanceof Error ? e.message : String(e), "read");
+  }
+  try {
+    const stat3 = fstatSync(fd, { bigint: true });
+    if (!stat3.isFile()) return failed("not a regular file", "read");
+    const size = Number(stat3.size);
+    const start = Math.max(0, size - maxBytes);
+    const buf = import_buffer.Buffer.alloc(size - start);
+    let off = 0;
+    while (off < buf.length) {
+      const n = readSync(fd, buf, off, buf.length - off, start + off);
+      if (n === 0) break;
+      off += n;
+    }
+    return ok({
+      buf: buf.subarray(0, off),
+      fromStart: start === 0,
+      file: `${stat3.dev}:${stat3.ino}`
+    });
+  } catch (e) {
+    return failed(e instanceof Error ? e.message : String(e), "read");
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (e) {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+  }
+}
+
+// src/doctor/gather.ts
+init_globals();
+
+// src/claude-settings-read.ts
+init_globals();
+var import_node_path14 = __toESM(require_path_browserify(), 1);
+
+// src/config/json5-edit.ts
+init_globals();
+var import_json5 = __toESM(require_dist(), 1);
+var Json5EditError = class extends Error {
+  constructor(reason, offset) {
+    super(`${reason} (at offset ${offset})`);
+    this.reason = reason;
+    this.offset = offset;
+    this.name = "Json5EditError";
+  }
+  reason;
+  offset;
+};
+var IDENT_START = /[A-Za-z_$\p{L}]/u;
+var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
+var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
+var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var Scanner = class {
+  constructor(text4) {
+    this.text = text4;
+  }
+  text;
+  pos = 0;
+  peek() {
+    return this.text[this.pos] ?? "";
+  }
+  fail(message) {
+    throw new Json5EditError(message, this.pos);
+  }
+  skipTrivia() {
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") return;
+      if (WHITESPACE.test(c)) {
+        this.pos++;
+      } else if (c === "/" && this.text[this.pos + 1] === "/") {
+        const nl = this.text.indexOf("\n", this.pos);
+        this.pos = nl === -1 ? this.text.length : nl;
+      } else if (c === "/" && this.text[this.pos + 1] === "*") {
+        const close = this.text.indexOf("*/", this.pos + 2);
+        if (close === -1) this.fail("unterminated block comment");
+        this.pos = close + 2;
+      } else {
+        return;
+      }
+    }
+  }
+  expect(c) {
+    if (this.peek() !== c) this.fail(`expected "${c}"`);
+    this.pos++;
+  }
+  value() {
+    this.skipTrivia();
+    const c = this.peek();
+    if (c === "{") return this.object();
+    if (c === "[") return this.array();
+    if (c === '"' || c === "'") {
+      const span2 = this.stringSpan();
+      return { kind: "string", span: span2, value: this.decode(span2) };
+    }
+    if (c === "") this.fail("unexpected end of input");
+    const start = this.pos;
+    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
+      this.pos++;
+    }
+    if (this.pos === start) this.fail(`unexpected character "${c}"`);
+    const span = { start, end: this.pos };
+    const decoded = this.decode(span);
+    if (decoded === null) return { kind: "null", span };
+    if (typeof decoded === "boolean") {
+      return { kind: "boolean", span, value: decoded };
+    }
+    if (typeof decoded === "number") {
+      return { kind: "number", span, value: decoded };
+    }
+    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
+  }
+  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
+  decode(span) {
+    try {
+      return import_json5.default.parse(this.text.slice(span.start, span.end));
+    } catch (e) {
+      throw new Json5EditError(e.message, span.start);
+    }
+  }
+  stringSpan() {
+    const start = this.pos;
+    const quote2 = this.peek();
+    this.pos++;
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") this.fail("unterminated string");
+      if (c === "\\") {
+        const crlf = this.text.startsWith("\r\n", this.pos + 1);
+        this.pos += crlf ? 3 : 2;
+        continue;
+      }
+      this.pos++;
+      if (c === quote2) return { start, end: this.pos };
+      if (c === "\n") this.fail("unterminated string");
+    }
+  }
+  key() {
+    const c = this.peek();
+    if (c === '"' || c === "'") {
+      const span = this.stringSpan();
+      return { key: this.decode(span), span };
+    }
+    const start = this.pos;
+    if (!IDENT_START.test(c)) this.fail("expected an object key");
+    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
+      this.pos++;
+    }
+    return {
+      key: this.text.slice(start, this.pos),
+      span: { start, end: this.pos }
+    };
+  }
+  object() {
+    const start = this.pos;
+    this.expect("{");
+    const entries = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "}") break;
+      const { key, span: keySpan } = this.key();
+      if (entries.some((e) => e.key === key)) {
+        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
+      }
+      this.skipTrivia();
+      this.expect(":");
+      const value = this.value();
+      entries.push({
+        key,
+        keySpan,
+        value,
+        span: { start: keySpan.start, end: value.span.end }
+      });
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "}") this.fail('expected "," or "}"');
+    }
+    this.expect("}");
+    return { kind: "object", span: { start, end: this.pos }, entries };
+  }
+  array() {
+    const start = this.pos;
+    this.expect("[");
+    const elements = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "]") break;
+      elements.push(this.value());
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "]") this.fail('expected "," or "]"');
+    }
+    this.expect("]");
+    return { kind: "array", span: { start, end: this.pos }, elements };
+  }
+};
+function parseDocument(text4) {
+  const s = new Scanner(text4);
+  const root = s.value();
+  s.skipTrivia();
+  if (s.pos !== text4.length) s.fail("trailing content after the document");
+  return root;
+}
+function entryOf2(node, key) {
+  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
+}
+function nodeAt(root, path43) {
+  let node = root;
+  for (const key of path43) {
+    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
+  }
+  return node;
+}
+function textOf(text4, node) {
+  return text4.slice(node.span.start, node.span.end);
+}
+function movableTextOf(text4, node) {
+  const indent2 = indentOfLine(text4, node.span.start);
+  const literals = literalSpans(node);
+  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
+  let lineStart = node.span.start;
+  return textOf(text4, node).split("\n").map((line, i) => {
+    const at = lineStart;
+    lineStart += line.length + 1;
+    const own2 = i > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
+    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
+  }).join("\n");
+}
+function literalSpans(node) {
+  switch (node.kind) {
+    case "object":
+      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
+    case "array":
+      return node.elements.flatMap(literalSpans);
+    case "string":
+      return [node.span];
+    default:
+      return [];
+  }
+}
+var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function keyText(key) {
+  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
+}
+var JSON5_DIALECT = {
+  key: keyText,
+  trailingComma: ",",
+  parse: (text4) => import_json5.default.parse(text4)
+};
+var JSON_DIALECT = {
+  key: (key) => JSON.stringify(key),
+  trailingComma: "",
+  parse: (text4) => JSON.parse(text4)
+};
+function json5Text(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
+    return `[
+${items.join("\n")}
+]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).filter(
+      ([, v]) => v !== void 0
+    );
+    if (entries.length === 0) return "{}";
+    const items = entries.map(
+      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
+    );
+    return `{
+${items.join("\n")}
+}`;
+  }
+  return JSON.stringify(value);
+}
+function eolOf(text4) {
+  return text4.includes("\r\n") ? "\r\n" : "\n";
+}
+function reindent(valueText, indent2, eol) {
+  return valueText.split("\n").join(`${eol}${indent2}`);
+}
+function entryText(path43, valueText, dialect) {
+  const [head, ...rest2] = path43;
+  const inner = rest2.length === 0 ? valueText : `{
+  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
+}`;
+  return `${dialect.key(head)}: ${inner}`;
+}
+function splice(text4, start, end, insert) {
+  return text4.slice(0, start) + insert + text4.slice(end);
+}
+function lineStartOf(text4, offset) {
+  return text4.lastIndexOf("\n", offset - 1) + 1;
+}
+function isBlank(s) {
+  return /^[ \t]*$/.test(s);
+}
+function indentOfLine(text4, offset) {
+  const ls = lineStartOf(text4, offset);
+  return /^[ \t]*/.exec(text4.slice(ls))[0];
+}
+function startsLine(text4, offset) {
+  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
+}
+var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+function trailerAfter(text4, end) {
+  let i = end;
+  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
+  const commaEnd = text4[i] === "," ? i + 1 : -1;
+  if (commaEnd !== -1) i = commaEnd;
+  while (i < text4.length && (text4[i] === " " || text4[i] === "	")) i++;
+  LINE_TRAILER.lastIndex = i;
+  const m = LINE_TRAILER.exec(text4);
+  if (m === null) return { commaEnd, line: null };
+  const next = i + m[0].length;
+  return { commaEnd, line: { at: next - m[1].length, next } };
+}
+function removeMember(text4, span) {
+  const { commaEnd, line } = trailerAfter(text4, span.end);
+  if (startsLine(text4, span.start) && line !== null) {
+    return splice(text4, lineStartOf(text4, span.start), line.next, "");
+  }
+  if (commaEnd !== -1) {
+    let end = commaEnd;
+    while (end < text4.length && text4[end] === " ") end++;
+    return splice(text4, span.start, end, "");
+  }
+  let start = span.start;
+  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
+    start--;
+  }
+  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
+  return splice(text4, span.start, span.end, "");
+}
+function insertLineAfter(text4, span, trailer, memberText, indent2) {
+  const hasComma = trailer.commaEnd !== -1;
+  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
+  const at = trailer.line.at + (hasComma ? 0 : 1);
+  const eol = eolOf(text4);
+  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
+  return splice(withComma, at, at, line);
+}
+function appendMember(text4, container, memberText, dialect) {
+  const members = container.kind === "object" ? container.entries : container.elements;
+  const last2 = members[members.length - 1];
+  const baseIndent = indentOfLine(text4, container.span.start);
+  if (last2 === void 0) {
+    const inner = baseIndent + "  ";
+    const eol = eolOf(text4);
+    return splice(
+      text4,
+      container.span.start + 1,
+      container.span.end - 1,
+      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
+    );
+  }
+  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
+  if (startsLine(text4, last2.span.start) && line !== null) {
+    const indent2 = text4.slice(
+      lineStartOf(text4, last2.span.start),
+      last2.span.start
+    );
+    return insertLineAfter(
+      text4,
+      last2.span,
+      { commaEnd, line },
+      memberText,
+      indent2
+    );
+  }
+  const at = commaEnd === -1 ? last2.span.end : commaEnd;
+  const sep2 = commaEnd === -1 ? ", " : " ";
+  const tail = commaEnd === -1 ? "" : ",";
+  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
+}
+function setValue(text4, path43, valueText, dialect) {
+  if (path43.length === 0) {
+    throw new Json5EditError("setValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) {
+    const eol = eolOf(text4);
+    return `{${eol}  ${reindent(entryText(path43, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
+  }
+  return setBelow(text4, parseDocument(text4), path43, valueText, dialect);
+}
+function setBelow(text4, start, path43, valueText, dialect) {
+  let node = start;
+  for (let i = 0; i < path43.length; i++) {
+    if (node.kind !== "object") {
+      throw new Json5EditError(
+        `cannot set ${path43.join(".")}: ${path43.slice(0, i).join(".") || "the document"} is not an object`,
+        node.span.start
+      );
+    }
+    const entry = entryOf2(node, path43[i]);
+    if (entry === void 0) {
+      return appendMember(
+        text4,
+        node,
+        entryText(path43.slice(i), valueText, dialect),
+        dialect
+      );
+    }
+    if (i === path43.length - 1) {
+      const indent2 = indentOfLine(text4, entry.keySpan.start);
+      return splice(
+        text4,
+        entry.value.span.start,
+        entry.value.span.end,
+        reindent(valueText, indent2, eolOf(text4))
+      );
+    }
+    node = entry.value;
+  }
+  throw new Json5EditError("unreachable: path exhausted", 0);
+}
+function deleteValue(text4, path43, keep2 = 0) {
+  if (path43.length === 0) {
+    throw new Json5EditError("deleteValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) return text4;
+  const parentPath = path43.slice(0, -1);
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  const entry = parent === void 0 ? void 0 : entryOf2(parent, path43[path43.length - 1]);
+  if (entry === void 0 || parent?.kind !== "object") return text4;
+  const pruned = removeMember(text4, entry.span);
+  return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
+}
+var CHILD_KEYS = ["h", "v", "children"];
+function placementIdOf(node) {
+  if (node.kind === "string") return node.value;
+  if (node.kind !== "object") return void 0;
+  const seg2 = entryOf2(node, "seg")?.value;
+  const kind = entryOf2(node, "kind")?.value;
+  const name = entryOf2(node, "name")?.value;
+  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
+  if (segName === void 0) return void 0;
+  const id2 = entryOf2(node, "id")?.value;
+  return id2?.kind === "string" ? id2.value : segName;
+}
+function childArraysOf(node) {
+  if (node.kind !== "object") return [];
+  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
+    (v) => v?.kind === "array"
+  );
+}
+function rowEntriesOf(node) {
+  const rows = entryOf2(node, "rows")?.value;
+  return rows?.kind === "object" ? rows.entries : null;
+}
+function restagesFragment(node) {
+  if (node.kind !== "object") return true;
+  const rows = rowEntriesOf(node);
+  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
+}
+function* nodesIn(node, bareAt) {
+  yield { node, bareAt };
+  for (const array of childArraysOf(node)) {
+    for (const child of array.elements) yield* nodesIn(child, null);
+  }
+  for (const row2 of rowEntriesOf(node) ?? []) {
+    yield* nodesIn(
+      row2.value,
+      bareAt === null ? null : [...bareAt, "rows", row2.key]
+    );
+  }
+}
+function hasSegmentRef(root, id2) {
+  for (const { node } of nodesIn(root, null)) {
+    if (placementIdOf(node) === id2) return true;
+  }
+  return false;
+}
+function refAt(text4, rootPath, id2) {
+  const root = nodeAt(parseDocument(text4), rootPath);
+  if (root === void 0) return null;
+  for (const { node, bareAt } of nodesIn(root, rootPath)) {
+    if (placementIdOf(node) !== id2) continue;
+    if (bareAt === null) return { text: text4, ref: node };
+    const wrapped = setValue(
+      text4,
+      bareAt,
+      `{ h: [${textOf(text4, node)}] }`,
+      JSON5_DIALECT
+    );
+    return refAt(wrapped, rootPath, id2);
+  }
+  return null;
+}
+function removeSegmentRef(text4, rootPath, target) {
+  const hit = refAt(text4, rootPath, target);
+  return hit === null ? null : removeMember(hit.text, hit.ref.span);
+}
+function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
+  const hit = refAt(text4, rootPath, anchor);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
+    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
+    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
+      src,
+      ref.span.start,
+      ref.span.start,
+      `${newText},${eolOf(src)}${indent2}`
+    );
+  }
+  const refText = textOf(src, ref);
+  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
+  return splice(src, ref.span.start, ref.span.end, pair);
+}
+function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
+  const hit = refAt(text4, rootPath, id2);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const settings = `{ ${keyText(setting)}: ${valueText} }`;
+  if (ref.kind === "string") {
+    return splice(
+      src,
+      ref.span.start,
+      ref.span.end,
+      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
+    );
+  }
+  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+}
+
+// src/claude-settings-read.ts
+function readSettingsFile(settingsPath) {
+  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read2.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
+    case "ok":
+      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
+  }
+}
+var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
+function readClaudeSettingsText(settingsPath) {
+  return readSettingsFile(settingsPath)?.text ?? "";
+}
+function readClaudeSettingsOutcome(settingsPath) {
+  const reason = (e) => e instanceof Error ? e.message : String(e);
+  let text4;
+  try {
+    text4 = readClaudeSettingsText(settingsPath);
+  } catch (e) {
+    return failed(reason(e), "read");
+  }
+  try {
+    return ok(parseSettings(settingsPath, text4));
+  } catch (e) {
+    return failed(reason(e), "parse");
+  }
+}
+function parseSettings(settingsPath, text4) {
+  let parsed2;
+  try {
+    if (/^\s*$/.test(text4)) return {};
+    parsed2 = JSON_DIALECT.parse(text4);
+  } catch (e) {
+    throw cannotRead(settingsPath, e);
+  }
+  if (!isJsonObject(parsed2)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return parsed2;
+}
+function readSettingsChain(at) {
+  const dropIns = import_node_path14.default.join(at.managedDir, "managed-settings.d");
+  const located2 = [
+    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
+      scope: "managed",
+      path: import_node_path14.default.join(dropIns, name)
+    })),
+    {
+      scope: "managed",
+      path: import_node_path14.default.join(at.managedDir, "managed-settings.json")
+    },
+    {
+      scope: "project-local",
+      path: projectLocalSettingsFile(at.projectDir)
+    },
+    {
+      scope: "project",
+      path: import_node_path14.default.join(at.projectDir, ".claude", "settings.json")
+    },
+    { scope: "user", path: at.userFile }
+  ];
+  const read2 = located2.flatMap((l) => {
+    const file = readSettingsFile(l.path);
+    if (file === null) return [];
+    const settings = parseSettings(l.path, file.text);
+    const { env: env2 = {} } = settings;
+    if (!isJsonObject(env2)) {
+      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
+    }
+    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
+  });
+  const user = read2.find((r) => r.source.scope === "user");
+  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
+}
+function visibleJsonFiles(dir) {
+  try {
+    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
+  } catch (e) {
+    if (e.code === "ENOENT") return [];
+    throw cannotRead(dir, e);
+  }
+}
+var messageOf = (e) => e instanceof Error ? e.message : String(e);
+
+// src/doctor/data-needs.ts
+init_globals();
+
 // src/config/dsl-types.ts
+init_globals();
 var DIRECTIONS = ["vertical", "horizontal"];
 var AXIS_OF = {
   vertical: "row",
@@ -45181,16 +46799,16 @@ function* walkNodes(node) {
   yield node;
   for (const child of childrenOf(node)) yield* walkNodes(child);
 }
-var childPath = (path42, i) => `${path42}.children[${i}]`;
-var bodyPath = (path42) => `${path42}.opens.body`;
-function* walkNodePaths(node, path42) {
-  yield [node, path42];
+var childPath = (path43, i) => `${path43}.children[${i}]`;
+var bodyPath = (path43) => `${path43}.opens.body`;
+function* walkNodePaths(node, path43) {
+  yield [node, path43];
   if (node.kind === "container") {
     for (const [i, child] of node.children.entries()) {
-      yield* walkNodePaths(child, childPath(path42, i));
+      yield* walkNodePaths(child, childPath(path43, i));
     }
   } else if (node.opens !== void 0) {
-    yield* walkNodePaths(node.opens.body, bodyPath(path42));
+    yield* walkNodePaths(node.opens.body, bodyPath(path43));
   }
 }
 function childrenOf(node) {
@@ -45843,13 +47461,13 @@ function* declarationsAt(config2) {
 function* declaredVariables(config2) {
   for (const [name, decl] of declarationsAt(config2)) yield [name, decl];
 }
-function variableRead(path42, names) {
-  const parts = path42.split(".");
+function variableRead(path43, names) {
+  const parts = path43.split(".");
   for (let n = parts.length; n > 0; n--) {
     const name = parts.slice(0, n).join(".");
     if (names.has(name)) return [name];
   }
-  const namespace = `${path42}.`;
+  const namespace = `${path43}.`;
   return [...names].filter((name) => name.startsWith(namespace));
 }
 function refResolves(ref, scope) {
@@ -45947,9 +47565,9 @@ function valueReads({ names, helpers, actions }) {
   });
   const ofTemplate = perTemplate(
     (template) => texts(template).flatMap(
-      (text4) => [...templateReads(text4, helpers).keys()].map((path42) => ({
-        path: path42,
-        reaches: variableRead(path42, names)
+      (text4) => [...templateReads(text4, helpers).keys()].map((path43) => ({
+        path: path43,
+        reaches: variableRead(path43, names)
       }))
     )
   );
@@ -46342,67 +47960,6 @@ function dataNeeds(config2, preset) {
 // src/config/effective-globals.ts
 init_globals();
 
-// src/config/lanes.ts
-init_globals();
-var RENDERERS = ["claude", "tmux"];
-var IN_TMUX = 'ne .tmux.pane ""';
-var LANES = {
-  band: {
-    switch: { setting: "experimentalBand", on: true, inTmux: false },
-    label: "\u{1F9EA} band (A)",
-    handsOff: true,
-    rows: null
-  },
-  statusline: {
-    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
-    label: "\u{1F9EA} statusline (B)",
-    handsOff: false,
-    rows: null
-  },
-  pane: {
-    switch: { setting: "experimentalPane", on: true, inTmux: false },
-    label: "\u{1F9EA} tmux pane (C)",
-    handsOff: true,
-    rows: null
-  },
-  tmuxStatus: {
-    switch: {
-      setting: "renderer",
-      on: "tmux",
-      inTmux: true
-    },
-    label: "tmux status line",
-    handsOff: true,
-    // tmux draws at most five status rows (`status` takes on, off, 2…5).
-    rows: 5
-  }
-};
-var LANE_NAMES = Object.keys(LANES);
-var TOGGLED_LANES = LANE_NAMES.filter(
-  (lane) => LANES[lane].switch.on === true
-);
-var MOVING_FPS = 30;
-var ANSWERING = { by: "request" };
-var DRAWING_VAR = "drawing";
-var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
-var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
-var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
-function perLane(value) {
-  return Object.fromEntries(
-    LANE_NAMES.map((lane) => [lane, value(lane)])
-  );
-}
-var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-function parseLane(raw) {
-  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
-}
-function feedsFact(feeds) {
-  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
-    const { subscribers, fps, shown } = feeds[lane];
-    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
-  }).join(",") || "-";
-}
-
 // src/config/loader/edit-mode.ts
 init_globals();
 
@@ -46502,9 +48059,9 @@ var MissingFieldError = class extends EvalError {
   name = "MissingFieldError";
   kind = "MissingFieldError";
   path;
-  constructor(path42, pos, ctx = {}) {
-    super(`field "${path42.join(".")}" not found on receiver`, pos, ctx);
-    this.path = path42;
+  constructor(path43, pos, ctx = {}) {
+    super(`field "${path43.join(".")}" not found on receiver`, pos, ctx);
+    this.path = path43;
   }
 };
 var FailError = class extends EvalError {
@@ -51220,7 +52777,7 @@ function elementPathLine(source, document, pathParts) {
   let indexed = false;
   for (const part of pathParts) {
     const element = node.kind === "array" && /^\d+$/.test(part);
-    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
+    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
     if (next === void 0) break;
     indexed ||= element;
     node = next;
@@ -51281,66 +52838,66 @@ init_globals();
 
 // src/config/loader/validate-core.ts
 init_globals();
-function requireString(ctx, path42, raw, field) {
+function requireString(ctx, path43, raw, field) {
   const v = raw[field];
   if (typeof v !== "string") {
     ctx.issues.push({
-      path: `${path42}.${field}`,
-      message: `${path42}.${field} must be a string, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), field])
+      path: `${path43}.${field}`,
+      message: `${path43}.${field} must be a string, got ${describeType2(v)}`,
+      line: findKeyLine(ctx.source, [...path43.split("."), field])
     });
     return null;
   }
   return v;
 }
-function optionalTypedDefault(ctx, path42, raw, type3) {
+function optionalTypedDefault(ctx, path43, raw, type3) {
   const v = raw.default;
   if (v === void 0) return void 0;
   const ok3 = type3 === "string" && typeof v === "string" || type3 === "number" && typeof v === "number" || type3 === "boolean" && typeof v === "boolean";
   if (!ok3) {
     ctx.issues.push({
-      path: `${path42}.default`,
+      path: `${path43}.default`,
       message: `default must be a ${type3}, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), "default"])
+      line: findKeyLine(ctx.source, [...path43.split("."), "default"])
     });
     return void 0;
   }
   return v;
 }
-function optionalStringField(ctx, path42, raw, field) {
+function optionalStringField(ctx, path43, raw, field) {
   const v = raw[field];
   if (v === void 0) return void 0;
   if (typeof v !== "string") {
     ctx.issues.push({
-      path: `${path42}.${field}`,
-      message: `${path42}.${field} must be a string, got ${describeType2(v)}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), field])
+      path: `${path43}.${field}`,
+      message: `${path43}.${field} must be a string, got ${describeType2(v)}`,
+      line: findKeyLine(ctx.source, [...path43.split("."), field])
     });
     return void 0;
   }
   return v;
 }
-function validatePaletteName(ctx, path42, raw) {
-  const v = optionalStringField(ctx, path42, raw, "palette");
+function validatePaletteName(ctx, path43, raw) {
+  const v = optionalStringField(ctx, path43, raw, "palette");
   if (v === void 0) return void 0;
   if (!ctx.allowedPalettes.has(v)) {
     ctx.issues.push({
-      path: `${path42}.palette`,
+      path: `${path43}.palette`,
       message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), "palette"])
+      line: findKeyLine(ctx.source, [...path43.split("."), "palette"])
     });
     return void 0;
   }
   return v;
 }
-function optionalEnum(ctx, path42, raw, field, allowed) {
+function optionalEnum(ctx, path43, raw, field, allowed) {
   const v = raw[field];
   if (v === void 0) return void 0;
   if (typeof v !== "string" || !allowed.includes(v)) {
     ctx.issues.push({
-      path: `${path42}.${field}`,
-      message: `${path42}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue2(v)}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), field])
+      path: `${path43}.${field}`,
+      message: `${path43}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue2(v)}`,
+      line: findKeyLine(ctx.source, [...path43.split("."), field])
     });
     return void 0;
   }
@@ -51359,71 +52916,71 @@ function describeValue2(v) {
   if (v === void 0) return "undefined";
   return String(v);
 }
-function record(ctx, schema, path42, raw) {
+function record(ctx, schema, path43, raw) {
   if (!isPlainObject3(raw)) {
     ctx.issues.push({
-      path: path42,
-      message: `${path42} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path42.split("."))
+      path: path43,
+      message: `${path43} must be an object, got ${describeType2(raw)}`,
+      line: findKeyLine(ctx.source, path43.split("."))
     });
     return null;
   }
   rejectUnknownKeys(
     ctx,
-    path42,
+    path43,
     raw,
     schema.noun,
     new Set(Object.keys(schema.fields)),
-    refuseRemoved(ctx, schema.removed ?? {}, path42, raw)
+    refuseRemoved(ctx, schema.removed ?? {}, path43, raw)
   );
-  return fields(ctx, schema.fields, path42, raw);
+  return fields(ctx, schema.fields, path43, raw);
 }
-function refuseRemoved(ctx, removed, path42, raw) {
+function refuseRemoved(ctx, removed, path43, raw) {
   const present = Object.entries(removed).filter(
     ([key]) => raw[key] !== void 0
   );
   for (const [key, pointer] of present) {
-    reject(ctx, `${path42}.${key}`, `${path42}.${key} was removed: ${pointer}`);
+    reject(ctx, `${path43}.${key}`, `${path43}.${key} was removed: ${pointer}`);
   }
-  return new Set(present.map(([key]) => `${path42}.${key}`));
+  return new Set(present.map(([key]) => `${path43}.${key}`));
 }
-function fields(ctx, fieldMap, path42, raw) {
+function fields(ctx, fieldMap, path43, raw) {
   const specs = fieldMap;
   const out = {};
   let ok3 = true;
   for (const [field, spec] of Object.entries(specs)) {
-    const value = spec.parse(ctx, path42, field, raw);
+    const value = spec.parse(ctx, path43, field, raw);
     if (value !== void 0) out[field] = value;
     else if (spec.required) ok3 = false;
   }
   return ok3 ? out : null;
 }
 var EMPTY_PATHS = /* @__PURE__ */ new Set();
-function rejectUnknownKeys(ctx, path42, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
+function rejectUnknownKeys(ctx, path43, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
   for (const key of Object.keys(raw)) {
-    if (!allowed.has(key) && !spokenFor.has(`${path42}.${key}`)) {
+    if (!allowed.has(key) && !spokenFor.has(`${path43}.${key}`)) {
       ctx.issues.push({
-        path: `${path42}.${key}`,
+        path: `${path43}.${key}`,
         message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), key])
+        line: findKeyLine(ctx.source, [...path43.split("."), key])
       });
     }
   }
 }
-function reject(ctx, path42, message) {
+function reject(ctx, path43, message) {
   ctx.issues.push({
-    path: path42,
+    path: path43,
     message,
-    line: findKeyLine(ctx.source, path42.split("."))
+    line: findKeyLine(ctx.source, path43.split("."))
   });
   return null;
 }
-function oneOfPresent(ctx, schema, path42, raw) {
+function oneOfPresent(ctx, schema, path43, raw) {
   if (!isPlainObject3(raw)) {
     ctx.issues.push({
-      path: path42,
+      path: path43,
       message: `${schema.noun} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path42.split("."))
+      line: findKeyLine(ctx.source, path43.split("."))
     });
     return null;
   }
@@ -51433,45 +52990,45 @@ function oneOfPresent(ctx, schema, path42, raw) {
   const unknown = Object.keys(raw).filter((k) => !(k in arms));
   for (const k of unknown) {
     ctx.issues.push({
-      path: `${path42}.${k}`,
+      path: `${path43}.${k}`,
       message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path42.split("."), k])
+      line: findKeyLine(ctx.source, [...path43.split("."), k])
     });
   }
   if (present.length === 0) {
     ctx.issues.push({
-      path: path42,
+      path: path43,
       message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, path42.split("."))
+      line: findKeyLine(ctx.source, path43.split("."))
     });
     return null;
   }
   if (present.length > 1) {
     ctx.issues.push({
-      path: path42,
+      path: path43,
       message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
-      line: findKeyLine(ctx.source, path42.split("."))
+      line: findKeyLine(ctx.source, path43.split("."))
     });
     return null;
   }
   const key = present[0];
-  return arms[key].parse(ctx, `${path42}.${key}`, raw[key]);
+  return arms[key].parse(ctx, `${path43}.${key}`, raw[key]);
 }
-function taggedUnion(ctx, schema, path42, raw) {
+function taggedUnion(ctx, schema, path43, raw) {
   if (!isPlainObject3(raw)) {
     ctx.issues.push({
-      path: path42,
-      message: `${path42} must be an object, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, path42.split("."))
+      path: path43,
+      message: `${path43} must be an object, got ${describeType2(raw)}`,
+      line: findKeyLine(ctx.source, path43.split("."))
     });
     return null;
   }
   const tagValue = raw[schema.tag];
   if (typeof tagValue !== "string") {
     ctx.issues.push({
-      path: `${path42}.${schema.tag}`,
-      message: `${path42}.${schema.tag} must be a string, got ${describeType2(tagValue)}`,
-      line: findKeyLine(ctx.source, path42.split("."))
+      path: `${path43}.${schema.tag}`,
+      message: `${path43}.${schema.tag} must be a string, got ${describeType2(tagValue)}`,
+      line: findKeyLine(ctx.source, path43.split("."))
     });
     return null;
   }
@@ -51479,19 +53036,19 @@ function taggedUnion(ctx, schema, path42, raw) {
   if (!Object.hasOwn(arms, tagValue)) {
     const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
     ctx.issues.push({
-      path: `${path42}.${schema.tag}`,
+      path: `${path43}.${schema.tag}`,
       message,
-      line: findKeyLine(ctx.source, [...path42.split("."), schema.tag])
+      line: findKeyLine(ctx.source, [...path43.split("."), schema.tag])
     });
     return null;
   }
   const arm2 = arms[tagValue];
   const before = ctx.issues.length;
-  const parsed2 = arm2.parse(ctx, path42, raw);
+  const parsed2 = arm2.parse(ctx, path43, raw);
   const spokenFor = new Set(ctx.issues.slice(before).map((i) => i.path));
   rejectUnknownKeys(
     ctx,
-    path42,
+    path43,
     raw,
     `${tagValue} ${schema.memberNoun} key`,
     arm2.keys,
@@ -51509,13 +53066,13 @@ function lazy(thunk) {
   return (...args) => thunk()(...args);
 }
 function refine(inner, ...checks) {
-  return (ctx, path42, raw) => {
-    const value = inner(ctx, path42, raw);
+  return (ctx, path43, raw) => {
+    const value = inner(ctx, path43, raw);
     if (value === null) return null;
     for (const check of checks) {
       if (check.ok(value)) continue;
       const { field, message } = check.issue(value);
-      const at = field === "" ? path42 : `${path42}.${field}`;
+      const at = field === "" ? path43 : `${path43}.${field}`;
       ctx.issues.push({
         path: at,
         message,
@@ -51530,19 +53087,19 @@ function optionalStringSpec() {
   return {
     required: false,
     json: { type: "string" },
-    parse: (ctx, path42, field, raw) => optionalStringField(ctx, path42, raw, field)
+    parse: (ctx, path43, field, raw) => optionalStringField(ctx, path43, raw, field)
   };
 }
 function optionalBooleanSpec() {
   return {
     required: false,
     json: { type: "boolean" },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (typeof v !== "boolean") {
         ctx.issues.push({
-          path: `${path42}.${field}`,
+          path: `${path43}.${field}`,
           message: `${field} must be a boolean, got ${describeType2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
@@ -51557,12 +53114,12 @@ function optionalIntSpec(bounds) {
   return {
     required: false,
     json: { type: "integer", minimum: min2, maximum: max2 },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (typeof v !== "number" || !Number.isInteger(v) || v < min2 || v > max2) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
+          path: `${path43}.${field}`,
           message: `${field} must be an integer between ${min2} and ${max2}, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
@@ -51577,14 +53134,14 @@ function optionalNumberSpec(bounds = {}) {
   return {
     required: false,
     json: { type: "number", ...min2 !== void 0 && { minimum: min2 } },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       const bad = typeof v !== "number" || !Number.isFinite(v) || min2 !== void 0 && v < min2;
       if (bad) {
         const shape = min2 !== void 0 ? `a finite number >= ${min2}` : "a finite number";
         ctx.issues.push({
-          path: `${path42}.${field}`,
+          path: `${path43}.${field}`,
           message: `${field} must be ${shape}, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, [field])
         });
@@ -51601,14 +53158,14 @@ function paletteSpec() {
     // from installed palettes, not a closed compile-time enum), so the schema
     // checks only `type: string` — the same shape/meaning split the loader keeps.
     json: { type: "string" },
-    parse: (ctx, path42, _field, raw) => validatePaletteName(ctx, path42, raw)
+    parse: (ctx, path43, _field, raw) => validatePaletteName(ctx, path43, raw)
   };
 }
 function requireStringSpec() {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path42, field, raw) => requireString(ctx, path42, raw, field) ?? void 0
+    parse: (ctx, path43, field, raw) => requireString(ctx, path43, raw, field) ?? void 0
   };
 }
 function optionalEnumSpec(allowed) {
@@ -51617,7 +53174,7 @@ function optionalEnumSpec(allowed) {
     // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
     // membership against it, `json` lists it as the schema `enum`.
     json: { enum: [...allowed] },
-    parse: (ctx, path42, field, raw) => optionalEnum(ctx, path42, raw, field, allowed)
+    parse: (ctx, path43, field, raw) => optionalEnum(ctx, path43, raw, field, allowed)
   };
 }
 function objectJson(fieldMap, opts = { closed: true }) {
@@ -51662,22 +53219,6 @@ function oneOfPresentJson(schema) {
     }))
   };
 }
-
-// src/config/menu-timeout.ts
-init_globals();
-var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i) => ({ lit: i % 2 === 0, seconds }));
-var CLOSING_FLASH = [
-  ...flashes(3, 1),
-  ...flashes(3, 0.25)
-];
-var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
-  (sum2, { seconds }) => sum2 + seconds,
-  0
-);
-var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
-var MENU_TIMEOUT_DEFAULT = 120;
-var closesAt = (since, timeoutS) => since + timeoutS;
-var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
 // src/config/globals-fields.ts
 var control = (label2, place, {
@@ -51754,16 +53295,16 @@ var text2 = (spec) => ({
 var colorCompatibilitySpec = {
   required: false,
   json: { enum: [...COLOR_COMPATIBILITIES] },
-  parse: (ctx, path42, field, raw) => {
+  parse: (ctx, path43, field, raw) => {
     if (raw[field] === "auto") {
       ctx.issues.push({
-        path: `${path42}.${field}`,
-        message: `${path42}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), field])
+        path: `${path43}.${field}`,
+        message: `${path43}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
+        line: findKeyLine(ctx.source, [...path43.split("."), field])
       });
       return void 0;
     }
-    return optionalEnum(ctx, path42, raw, field, COLOR_COMPATIBILITIES);
+    return optionalEnum(ctx, path43, raw, field, COLOR_COMPATIBILITIES);
   }
 };
 var paletteOrRuleSpec = {
@@ -51771,9 +53312,9 @@ var paletteOrRuleSpec = {
   // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
   // are resolved at load from installed palettes, and a rule is a string too.
   json: { type: "string" },
-  parse: (ctx, path42, field, raw) => {
-    const v = optionalStringField(ctx, path42, raw, field);
-    return isExpression(v) ? v : validatePaletteName(ctx, path42, raw);
+  parse: (ctx, path43, field, raw) => {
+    const v = optionalStringField(ctx, path43, raw, field);
+    return isExpression(v) ? v : validatePaletteName(ctx, path43, raw);
   }
 };
 var effectOrRuleSpec = {
@@ -51781,9 +53322,9 @@ var effectOrRuleSpec = {
   json: {
     anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }]
   },
-  parse: (ctx, path42, field, raw) => {
+  parse: (ctx, path43, field, raw) => {
     const v = raw[field];
-    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path42, raw, field, EFFECT_NAMES);
+    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path43, raw, field, EFFECT_NAMES);
   }
 };
 var MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
@@ -51798,14 +53339,14 @@ var menuGlyphSpec = {
     pattern: MENU_GLYPH.source,
     not: { pattern: CLOSE_GLYPH.source }
   },
-  parse: (ctx, path42, field, raw) => {
-    const v = optionalStringField(ctx, path42, raw, field);
+  parse: (ctx, path43, field, raw) => {
+    const v = optionalStringField(ctx, path43, raw, field);
     if (v === void 0 || MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v))
       return v;
     ctx.issues.push({
-      path: `${path42}.${field}`,
-      message: `${path42}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
-      line: findKeyLine(ctx.source, [...path42.split("."), field])
+      path: `${path43}.${field}`,
+      message: `${path43}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
+      line: findKeyLine(ctx.source, [...path43.split("."), field])
     });
     return void 0;
   }
@@ -52226,8 +53767,8 @@ var DRAW_PROJECTIONS = {
   drawing: "who the draw is for",
   diagnostics: "the errors and warnings the draw owes its reader"
 };
-function drawProjectionAt(path42) {
-  const root = path42.split(".", 1)[0];
+function drawProjectionAt(path43) {
+  const root = path43.split(".", 1)[0];
   return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
 }
 var SLOT_PATHS = Object.fromEntries(
@@ -52236,8 +53777,8 @@ var SLOT_PATHS = Object.fromEntries(
     CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
   ])
 );
-function slotAt(path42) {
-  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path42);
+function slotAt(path43) {
+  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path43);
 }
 
 // src/config/loader/reserved-namespace.ts
@@ -52534,705 +54075,6 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
     separator: staged.default_separator ?? globals.default_separator
   };
 }
-
-// src/doctor/terminal.ts
-init_globals();
-var TERMINALS = {
-  kitty: {
-    label: "kitty",
-    xtversion: "kitty",
-    program: null,
-    programVersion: true,
-    term: "xterm-kitty",
-    links: { since: "0.19.0" },
-    glyphs: { kind: "bundled", since: "0.36.0" }
-  },
-  wezterm: {
-    label: "WezTerm",
-    xtversion: "WezTerm",
-    program: "WezTerm",
-    programVersion: true,
-    term: "wezterm",
-    links: { since: null },
-    glyphs: { kind: "bundled", since: "20230712" }
-  },
-  ghostty: {
-    label: "Ghostty",
-    xtversion: "ghostty",
-    program: "ghostty",
-    programVersion: true,
-    term: "xterm-ghostty",
-    links: { since: null },
-    glyphs: { kind: "bundled", since: null }
-  },
-  iterm2: {
-    label: "iTerm2",
-    xtversion: "iTerm2",
-    program: "iTerm.app",
-    programVersion: true,
-    term: null,
-    links: { since: "3.1" },
-    glyphs: { kind: "configured" }
-  },
-  alacritty: {
-    label: "Alacritty",
-    xtversion: "alacritty",
-    program: null,
-    programVersion: true,
-    term: "alacritty",
-    links: { since: "0.11.0" },
-    glyphs: { kind: "configured" }
-  },
-  "apple-terminal": {
-    label: "Terminal",
-    xtversion: null,
-    program: "Apple_Terminal",
-    programVersion: true,
-    term: null,
-    links: null,
-    glyphs: { kind: "unread" }
-  },
-  vscode: {
-    label: "VS Code",
-    xtversion: null,
-    program: "vscode",
-    programVersion: false,
-    term: null,
-    links: { since: "1.72" },
-    glyphs: { kind: "unread" }
-  }
-};
-var row = (name) => TERMINALS[name];
-function isBundling(name) {
-  return row(name).glyphs.kind === "bundled";
-}
-function isConfigured(name) {
-  return row(name).glyphs.kind === "configured";
-}
-var terminalLabel = (name) => row(name).label;
-var ITERM_POWERLINE = [
-  { since: "3.5.0", from: 57504, to: 57507 },
-  { since: "3.5.0", from: 57520, to: 57554 },
-  { since: "3.5.0", from: 57556, to: 57556 },
-  { since: "3.5.6", from: 57558, to: 57559 }
-];
-function itermDrawsItself(version, glyph) {
-  const point = glyph.codePointAt(0);
-  return ITERM_POWERLINE.some(
-    ({ since, from, to }) => from <= point && point <= to && version !== null && releasedSince(version, since) === true
-  );
-}
-var NAMES = Object.keys(TERMINALS);
-function release2(version) {
-  const lead = /^\d+(?:\.\d+)*/.exec(version);
-  return lead === null ? null : lead[0].split(".").map(Number);
-}
-function releasedSince(version, since) {
-  const have = release2(version);
-  const need2 = release2(since);
-  if (have === null) return null;
-  for (let i = 0; i < Math.max(have.length, need2.length); i++) {
-    const a = have[i] ?? 0;
-    const b = need2[i] ?? 0;
-    if (a !== b) return a > b;
-  }
-  return true;
-}
-function fromXtversion(termtype) {
-  for (const name of NAMES) {
-    const prefix = row(name).xtversion;
-    if (prefix !== null && termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
-      const rest2 = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
-      const version = /^[^\s)]+/.exec(rest2)?.[0] ?? null;
-      return { name, version };
-    }
-  }
-  return null;
-}
-function fromTerm(term) {
-  const name = NAMES.find((n) => row(n).term === term);
-  return name === void 0 ? null : { name, version: null };
-}
-function identifyInTmux(client) {
-  const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
-  if (terminal !== null) return { kind: "known", terminal };
-  const called = /^[^\s(]*/.exec(client.termtype)[0];
-  return called === "" ? { kind: "unnamed", term: client.termname } : { kind: "unknown", called };
-}
-function identifyFromEnv(env2) {
-  const program = env2.TERM_PROGRAM;
-  const byProgram = NAMES.find((n) => row(n).program === program);
-  const terminal = byProgram === void 0 ? fromTerm(env2.TERM) : {
-    name: byProgram,
-    version: row(byProgram).programVersion ? env2.TERM_PROGRAM_VERSION ?? null : null
-  };
-  if (terminal !== null) return { kind: "known", terminal };
-  return program === void 0 || program === "tmux" ? { kind: "unnamed", term: env2.TERM ?? "" } : { kind: "unknown", called: program };
-}
-function sightingOf(identified) {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return identified.term || null;
-  }
-}
-function identifiedAs(identified) {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return identified.term || "this terminal";
-  }
-}
-function linkSupport({ name, version }) {
-  const links2 = row(name).links;
-  if (links2 === null) return { kind: "none" };
-  if (links2.since === null) return { kind: "draws" };
-  if (version === null) return { kind: "unsaid", since: links2.since };
-  const drawn = releasedSince(version, links2.since);
-  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
-}
-var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
-
-// src/render/strip.ts
-init_globals();
-
-// src/render/rich-theme.ts
-init_globals();
-var RENDER_THEME = new Theme({
-  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
-  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
-  // slot some terminal themes paint as that ground. The terminal's own text on
-  // its own ground is the one pair known to read there.
-  "strip.separator": "default",
-  "strip.rail": "default"
-});
-function resolvedStyle(style) {
-  return RENDER_THEME.resolve(style);
-}
-
-// src/render/effect.ts
-init_globals();
-var STILL3 = { kind: "still" };
-var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
-var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
-function isMoving(part) {
-  return part.name !== EFFECT_FLOOR;
-}
-function together(parts) {
-  return (drawn) => Animation.map(
-    Animation.all(
-      parts.map(
-        ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
-      )
-    ),
-    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
-  );
-}
-var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
-function fromGround(effect, ground) {
-  const terminal = new TerminalTheme(
-    ground,
-    ASSUMED_TERMINAL.foregroundColor,
-    ASSUMED_TERMINAL.ansiColors,
-    ASSUMED_TERMINAL.palette
-  );
-  return (drawn) => effect({ ...drawn, theme: terminal });
-}
-function paintedOn(effect, owners) {
-  return (row2) => confined(() => effect(row2), ...owners)(row2);
-}
-function noiseOffset(text4) {
-  let hash2 = 2166136261;
-  for (let i = 0; i < text4.length; i++) {
-    hash2 ^= text4.charCodeAt(i);
-    hash2 = Math.imul(hash2, 16777619) >>> 0;
-  }
-  return hash2 / 4294967296;
-}
-var NOISE_DEPTH = 4096;
-function closingFlash(fill, text4, begins) {
-  const lit = (look, { terminal }) => ({
-    ...look,
-    bg: terminal.bg ? look.bg : fill,
-    fg: terminal.fg ? look.fg : terminal.bg ? fill : text4
-  });
-  const dark = (colors) => colors;
-  const holds2 = CLOSING_FLASH.reduceRight(
-    (after, { lit: on2, seconds }) => Animation.sequence(Animation.constant(on2 ? lit : dark), seconds, after),
-    Animation.constant(dark)
-  );
-  const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
-  return () => idle;
-}
-var SessionEffects = class {
-  constructor(key) {
-    this.key = key;
-  }
-  key;
-  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
-  // changed to its current value: the effect's own t = 0 is a recorded fact,
-  // never inferred from when renders happened to arrive.
-  inForce = null;
-  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
-  // its last drawn frame left it — where the clock stood and the speed it ran
-  // at from there: the anchor every later reading is measured from, so a
-  // change of speed changes the clock's slope from the frame it lands in and
-  // never its reading, so no loop jumps phase. The host clock itself before
-  // the session's first frame.
-  anchor = Timeline.play(0);
-  // The same fact for each placement wearing its own effect, by placement id,
-  // kept for the placements the latest render drew: one that stopped being
-  // drawn starts its effect again at t = 0 when it is drawn again, as the
-  // effect comes into force for it again.
-  placements = /* @__PURE__ */ new Map();
-  // The effects made for the rows the latest render drew, by row and scope (the
-  // bar's, or one placement's), with the name each was made for. Each render
-  // starts an empty map and keeps only what it draws, so a row that stopped
-  // being drawn (a menu closed) takes its effects and their settled shares with
-  // it.
-  made = /* @__PURE__ */ new Map();
-  // The transitions in flight at the last frame drawn, by placement — what a
-  // placement's appearing and leaving go on from when the next frame is drawn
-  // from the same source as the view's record of it (`FrameRecord`) — or
-  // null: no frame drawn, or the last drawn with transitions off, which
-  // nothing compares against.
-  passages = null;
-  // [LAW:nothing-unseen] What the latest render wore, for the render's event.
-  frame = {
-    effect: EFFECT_FLOOR,
-    t: 0,
-    speed: 1,
-    made: 0,
-    reused: 0,
-    own: [],
-    basis: "off",
-    revision: 0,
-    fades: [],
-    leaves: []
-  };
-  // The latest render's effects: the bar's, at what t, how many of its rows'
-  // effects were made fresh rather than reused — one made every frame pays
-  // rich-js's share settling every frame — and each placement's own.
-  lastFrame() {
-    return this.frame;
-  }
-  // The effects this session holds: the ones its latest render drew, and the
-  // transitions still in flight.
-  get heldCount() {
-    const passing = this.passages?.size ?? 0;
-    return [...this.made.values()].reduce((n, row2) => n + row2.size, passing);
-  }
-  /**
-   * The session's animation clock read at the wall instant `at`, running at
-   * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
-   * the last drawn frame passed at the speed in force then; before the first
-   * frame the timeline is the host clock itself, so a session that has only
-   * ever run at 1x reads the wall instant at every frame. Reads only: the frame
-   * that draws keeps it as the anchor (`drawn`).
-   */
-  clockAt(at, speed2) {
-    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed2) };
-  }
-  /**
-   * The motion of each row of a render drawn at `clock` whose bar wears `name`,
-   * given the row's strip items. Records an effect coming into force — the
-   * bar's, or a placement's — when it differs from the last render's, so every
-   * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
-   * from off the row, wheel at the theme's own hues. Records every placement
-   * the render draws, fades in each one the last frame did not, and dissolves
-   * out each one the last frame drew and this one does not. All of it is kept
-   * once the frame is `drawn`.
-   */
-  motion(name, clock, given2, flash = null) {
-    const at = animationAt(clock);
-    const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
-    const inForce = this.inForce?.name === name ? this.inForce : { name, since: at };
-    const bar = {
-      scope: BAR_SCOPE,
-      name,
-      t: at - inForce.since
-    };
-    const knownPlacements = this.placements;
-    const placements = /* @__PURE__ */ new Map();
-    const known = this.made;
-    const made = /* @__PURE__ */ new Map();
-    const own2 = [];
-    const { last: last2 } = given2;
-    const inFlight = this.passages;
-    const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
-    const before = basis === "compared" ? (id2) => {
-      const record2 = last2.placements.get(id2);
-      return record2?.kind === "drew" ? {
-        drawing: record2.drawing,
-        passage: inFlight.get(id2) ?? null
-      } : void 0;
-    } : null;
-    const reachedIds = /* @__PURE__ */ new Set();
-    const passages = /* @__PURE__ */ new Map();
-    const fading = [];
-    const leaving = [];
-    const frame2 = {
-      effect: name,
-      t: bar.t,
-      speed: clock.timeline.rate,
-      made: 0,
-      reused: 0,
-      own: own2,
-      basis,
-      revision: given2.source.revision,
-      fades: fading,
-      leaves: leaving
-    };
-    const begin = (transition2, id2, { ground }) => {
-      const begun = EFFECT_CATALOGUE.transitions[transition2]({
-        z: noiseOffset(`${this.key}@${id2}`) * NOISE_DEPTH
-      });
-      return {
-        name: transition2,
-        since: at,
-        done: (t2) => begun.done(t2),
-        effect: fromGround(begun.effect, ground)
-      };
-    };
-    const over2 = ({ since, done: done2 }) => done2(at - since);
-    const shown = (id2, drawing2, last3) => ({
-      drawing: drawing2,
-      passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over2(last3.passage) ? last3.passage : null
-    });
-    const gone = (id2, last3) => {
-      if (last3 === void 0 || last3.drawing.opened || last3.drawing.own.length === 0)
-        return void 0;
-      if (last3.passage?.name === "dissolve")
-        return over2(last3.passage) ? void 0 : last3;
-      const held = { ...last3.drawing, own: last3.drawing.own.map(given2.hold) };
-      return { drawing: held, passage: begin("dissolve", id2, held) };
-    };
-    const reached = (id2, lines2) => {
-      if (reachedIds.has(id2))
-        throw new Error(`placement "${id2}" was reached twice in one frame`);
-      reachedIds.add(id2);
-      const last3 = before?.(id2);
-      const { drawing: drawing2, deeper } = given2.returned(id2, lines2);
-      const now2 = drawing2 === null ? gone(id2, last3) : shown(id2, drawing2, last3);
-      if (now2 === void 0) return lines2;
-      if (now2.passage !== null) {
-        passages.set(id2, now2.passage);
-        (now2.passage.name === "fade" ? fading : leaving).push({
-          placement: id2,
-          t: at - now2.passage.since
-        });
-      }
-      return drawing2 === null ? [...now2.drawing.own, ...deeper] : lines2;
-    };
-    const ownPart = (placement, name2) => {
-      const last3 = placements.get(placement) ?? knownPlacements.get(placement);
-      const since = last3?.name === name2 ? last3 : { name: name2, since: at };
-      const t2 = at - since.since;
-      if (!placements.has(placement)) {
-        placements.set(placement, since);
-        own2.push({ placement, effect: name2, t: t2 });
-      }
-      return { scope: placement, name: name2, t: t2 };
-    };
-    const effectOf = (rowKey, part) => {
-      const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
-      made.set(rowKey, row3);
-      const current2 = row3.get(part.scope);
-      if (current2 !== void 0) return current2.effect;
-      const last3 = known.get(rowKey)?.get(part.scope);
-      const reuse = last3?.name === part.name;
-      const z = noiseOffset(
-        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`
-      );
-      const effect = reuse ? last3.effect : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
-      frame2[reuse ? "reused" : "made"]++;
-      row3.set(part.scope, { name: part.name, effect });
-      return effect;
-    };
-    const byScope = (items) => {
-      const parts = /* @__PURE__ */ new Map();
-      for (const { owner, placement } of items) {
-        const part = placement.effect === FOLLOW_BAR ? bar : ownPart(placement.id, placement.effect);
-        const seen2 = parts.get(part.scope);
-        if (seen2 === void 0)
-          parts.set(part.scope, { ...part, owners: [owner] });
-        else seen2.owners.push(owner);
-      }
-      return [...parts.values()];
-    };
-    const passagesOf = (items) => {
-      const byPlacement = /* @__PURE__ */ new Map();
-      for (const { owner, placement } of items) {
-        const mine = byPlacement.get(placement.id);
-        if (mine === void 0) byPlacement.set(placement.id, [owner]);
-        else mine.push(owner);
-      }
-      return [...byPlacement].flatMap(([id2, owners]) => {
-        const passage = passages.get(id2) ?? null;
-        return passage === null ? [] : [
-          {
-            timeline: onSession(at - passage.since),
-            effect: confined(passage.effect, ...owners)
-          }
-        ];
-      });
-    };
-    const flashPart = flash === null ? [] : [
-      {
-        timeline: Timeline.play(flash.idleSince),
-        effect: closingFlash(
-          flash.fill,
-          flash.text,
-          flashBegins(flash.timeoutS)
-        )
-      }
-    ];
-    const flashing = (kind) => kind === "menu" ? flashPart : [];
-    const row2 = (rowName, kind, items) => {
-      const parts = items.some(
-        (i) => i.placement.effect !== FOLLOW_BAR
-      ) ? byScope(items) : [{ ...bar, owners: void 0 }];
-      const moving = parts.filter(isMoving);
-      const passing = passagesOf(items);
-      const flashed = flashing(kind);
-      if (moving.length === 0 && passing.length === 0 && flashed.length === 0)
-        return STILL3;
-      const rowKey = `${this.key}#${rowName}`;
-      return {
-        kind: "moving",
-        time: clock.wall,
-        wrap: (strip) => new Effected(
-          strip,
-          together([
-            ...moving.map((part) => {
-              const effect = effectOf(rowKey, part);
-              return {
-                timeline: onSession(part.t),
-                effect: part.owners === void 0 ? effect : paintedOn(effect, part.owners)
-              };
-            }),
-            ...passing,
-            // Last, so a lit hold is the flash's over whatever a fade
-            // veils: the menu is about to close.
-            ...flashed
-          ]),
-          { key: rowKey, theme: ASSUMED_TERMINAL }
-        )
-      };
-    };
-    return {
-      // [LAW:dataflow-not-control-flow] With transitions off nothing is
-      // compared or kept, so every placement draws exactly what it returned.
-      placed: basis === "off" ? (_id, lines2) => lines2 : reached,
-      row: row2,
-      drawn: () => {
-        this.anchor = clock.timeline;
-        this.inForce = inForce;
-        this.placements = placements;
-        this.made = made;
-        this.passages = basis === "off" ? null : passages;
-        this.frame = frame2;
-      }
-    };
-  }
-};
-var MAX_SESSIONS = 256;
-var EffectSessions = class {
-  constructor(maxSessions = MAX_SESSIONS) {
-    this.maxSessions = maxSessions;
-  }
-  maxSessions;
-  sessions = /* @__PURE__ */ new Map();
-  of(sessionId2) {
-    const known = this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, known);
-    for (const oldest of this.sessions.keys()) {
-      if (this.sessions.size <= this.maxSessions) break;
-      this.sessions.delete(oldest);
-    }
-    return known;
-  }
-  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
-  // effect made for a row keeps rich-js's settled shares, so their count is the
-  // size that grows.
-  getStats() {
-    let effects = 0;
-    for (const session of this.sessions.values()) effects += session.heldCount;
-    return { sessions: this.sessions.size, effects };
-  }
-};
-
-// src/render/strip.ts
-var UNBOUNDED_DRAW_WIDTH = 80;
-var ROW_HOST = {};
-function draw(renderable, options) {
-  const destination = resolveDestination(options.colorSystem);
-  const { time } = options;
-  let told = Infinity;
-  const segments = [
-    ...render(renderable, {
-      maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
-      isTerminal: false,
-      asciiOnly: false,
-      theme: RENDER_THEME,
-      colorSystem: destination.colorSystem,
-      ...time === void 0 ? {} : { frame: { time, host: ROW_HOST } },
-      // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
-      // as no style at all; a name the theme lacks is a broken config, so it
-      // throws here exactly as the cell splitter throws on it.
-      onStyleError: (error) => {
-        throw error;
-      },
-      onHold: ({ nextChange }) => {
-        told = Math.min(told, nextChange);
-      }
-    })
-  ];
-  return {
-    lines: writtenLines(segments),
-    depth: destination.colorSystem,
-    nextChange: Math.min(Segment.nextChange(segments), told)
-  };
-}
-var textLines = ({ lines: lines2 }) => lines2.map((line) => line.map((s) => s.text).join(""));
-var DEFAULT_TERMINAL_WIDTH = 120;
-var separatorJoiners = /* @__PURE__ */ new Map();
-function plainWith(separator) {
-  const known = separatorJoiners.get(separator);
-  if (known !== void 0) return known;
-  const withGlyph = (form) => {
-    const seam2 = form.seam.map(
-      (cell3) => "cap" in cell3 ? cell3 : { ...cell3, glyph: separator }
-    );
-    return { seam: seam2 };
-  };
-  const { seam, caps } = JOINERS2.plain;
-  const joiner = new CellJoiner(
-    {
-      glyph: withGlyph(seam.glyph),
-      ascii: seam.ascii
-    },
-    caps
-  );
-  separatorJoiners.set(separator, joiner);
-  return joiner;
-}
-function pickJoiner(endcaps, separator) {
-  return endcaps === "plain" && separator !== void 0 ? plainWith(separator) : JOINERS2[endcaps];
-}
-var geometryMemo = /* @__PURE__ */ new Map();
-function stripGeometry(options) {
-  const key = JSON.stringify([options.endcaps, options.separator ?? null]);
-  const known = geometryMemo.get(key);
-  if (known !== void 0) return known;
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const cell3 = (bgcolor) => new RichText("x", {
-    end: "",
-    overflow: "ignore",
-    style: new Style({ bgcolor })
-  });
-  const width = (cells) => {
-    const lines2 = textLines(
-      draw(new Strip(cells, joiner), { colorSystem: null })
-    );
-    return new RichText(lines2.join("")).cellLength;
-  };
-  const one = width([cell3("#101010")]);
-  const geometry = {
-    chrome: one - 1,
-    seam: width([cell3("#101010"), cell3("#202020")]) - one - 1
-  };
-  geometryMemo.set(key, geometry);
-  return geometry;
-}
-function stripChromeCols(options) {
-  return stripGeometry(options).chrome;
-}
-function stripSeamCols(options) {
-  return stripGeometry(options).seam;
-}
-var PRIVATE_USE = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
-function privateGlyphsIn(text4) {
-  return [...new Set(text4.match(PRIVATE_USE) ?? [])].join("");
-}
-function stripPrivateGlyphs(options) {
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
-  const cells = [cell3("#101010"), cell3("#202020")];
-  const lines2 = textLines(
-    draw(new Strip(cells, joiner), { colorSystem: null })
-  );
-  return privateGlyphsIn(lines2.join(""));
-}
-var WIDEST_GLYPH_COLS = 2;
-function lineWidth(options) {
-  return options.wrap ? options.width : Infinity;
-}
-function wrappedLines(plain, width) {
-  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
-  return textLines(draw(wrapping, { colorSystem: null, width }));
-}
-function drawStripCells(cells, options, links2, motion = STILL3) {
-  if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
-  const drawn = drawStrip(cells, options, motion);
-  return {
-    lines: runLines(drawn.lines, drawn.depth, links2),
-    nextChange: drawn.nextChange
-  };
-}
-function stripCellsText(cells, options) {
-  return cells.length === 0 ? [""] : textLines(drawStrip(cells, options, STILL3));
-}
-function drawStrip(cells, options, motion) {
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const flex = Number.isFinite(lineWidth(options));
-  const drawn = {
-    colorSystem: options.colorCompatibility,
-    ...flex ? { width: options.width } : {}
-  };
-  const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
-  const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
-  if (row2.lines.length === 0) {
-    throw new Error("drawStripCells: rich-js strip drew no line");
-  }
-  return row2;
-}
-function renderStripCells(cells, options, links2) {
-  return encodeAnsi(
-    drawStripCells(cells, options, links2).lines,
-    options.colorCompatibility
-  );
-}
-
-// src/daemon/foundations/memory-limit.ts
-init_globals();
-var BYTES_PER_MB = 1024 * 1024;
-var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
-function laterIdentity(a, b) {
-  return a > b;
-}
-var NEAR_LIMIT = 0.75;
-function approachingLimit(bytes, limit) {
-  return bytes > limit * NEAR_LIMIT;
-}
-function chargeWords(charge) {
-  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
-}
-function measureOf(charge) {
-  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
-}
-var BREACH_ARTIFACTS = {
-  memoryReport: { prefix: "memory-", suffix: ".txt" },
-  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
-  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
-};
 
 // src/doctor/busy.ts
 init_globals();
@@ -53556,13 +54398,8 @@ function subscription(req) {
   return { kind: "subscribe", sessionId: sessionId2.id, lane };
 }
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
-  if (inbound.kind === "url") {
-    return replied(
-      stay(
-        await urlClick(parts, inbound.frame, timedOut, accepted, clientLeft)
-      )
-    );
-  }
+  if (inbound.kind === "url")
+    return urlClick(parts, inbound.frame, timedOut, accepted, clientLeft);
   const req = inbound.req;
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
     return refuse2("BAD_REQUEST", "malformed request");
@@ -53666,7 +54503,6 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
-        handlerProbe: handlerProbes.offer(parts.links.signLink),
         clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest: sourceDigest2,
@@ -53867,60 +54703,69 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
 async function clickOutcome(parts, req, facts, click3) {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
-  if (typeof url !== "string") {
-    return badRequest(
-      `a click carries its link as a url string, got ${typeof url}`
-    );
-  }
-  return clickArrived(parts, url, { kind: "cli" }, facts, click3);
-}
-async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
-  return clickEvent(
+  if (typeof url !== "string")
+    return badRequest(`a click's url is a string, got ${typeof url}`);
+  return ranClick(
     parts,
-    accepted,
-    timedOut,
-    clientLeft,
-    async (facts, click3) => {
-      const { urlV, url } = frame2;
-      noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
-      if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
-        return badRequest(
-          `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
-        );
-      }
-      if (typeof url !== "string") {
-        return badRequest(`the URL handler's frame carries no url string`);
-      }
-      return clickArrived(
-        parts,
-        url,
-        { kind: "forwarder", urlV },
-        facts,
-        click3
-      );
-    }
+    parseClick(url, { kind: "cli" }, parts.linkSigner),
+    facts,
+    click3
   );
 }
-async function clickArrived(parts, url, delivery, facts, click3) {
-  const parsed2 = parseClick(url, parts.links);
-  switch (parsed2.kind) {
-    case "refused":
-      return badRequest(parsed2.problem);
-    case "range":
-      noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
-      if (delivery.kind !== "cli") {
-        return badRequest(
-          "a status-line range comes from tmux's click binding, never through the URL handler"
-        );
+function readUrlFrame(frame2, links2) {
+  const { urlV, url } = frame2;
+  if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
+    return {
+      kind: "refused",
+      problem: `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
+    };
+  if (typeof url !== "string")
+    return {
+      kind: "refused",
+      problem: "the URL handler's frame carries no url string"
+    };
+  return parseClick(url, { kind: "forwarder", urlV }, links2);
+}
+function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
+  const read2 = readUrlFrame(frame2, parts.linkSigner);
+  return {
+    kind: "url",
+    awaitsVerdict: awaitsVerdict(frame2.urlV),
+    verdict: read2.kind === "refused" ? clickReply(badRequest(read2.problem)) : { ok: true, output: "" },
+    landed: clickEvent(
+      parts,
+      accepted,
+      timedOut,
+      clientLeft,
+      async (facts, click3) => {
+        noteFacts(facts, { via: "forwarder", urlV: String(frame2.urlV) });
+        return ranClick(parts, read2, facts, click3);
       }
-      return clickRan(() => statusLineClick(parts, parsed2.value, facts, click3));
+    ).then(() => {
+    })
+  };
+}
+async function ranClick(parts, read2, facts, click3) {
+  switch (read2.kind) {
+    case "refused":
+      return badRequest(read2.problem);
+    case "probe":
+      noteFacts(facts, { verb: VERB_DOCTOR_PROBE });
+      parts.handlerProbes.arrive({
+        nonce: read2.nonce,
+        delivery: read2.delivery
+      });
+      return { kind: "ok" };
+    case "status-line":
+      noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
+      return statusLineClick(parts, read2.value, facts, click3);
     case "link":
       return clickRan(
         () => handleClick(
           parts,
-          parsed2.verb,
-          parsed2.value,
-          { via: "link", delivery },
+          read2.verb,
+          read2.value,
+          { via: "link", delivery: read2.delivery },
           facts,
           click3
         )
@@ -54000,24 +54845,18 @@ async function statusLineClick(parts, value, facts, click3) {
   if (link.kind === "refused") return badRequest(link.reason);
   noteFacts(facts, { link: unprovenLink(link.url) });
   if (isBarLink(link.url)) {
-    const parsed2 = parseClick(link.url, parts.links);
-    switch (parsed2.kind) {
-      case "refused":
-        return badRequest(parsed2.problem);
-      // [LAW:no-silent-failure] A link the bar draws never names a range;
-      // one that did would be a click that only ever clicks another.
-      case "range":
-        return badRequest("a status-line link names another status-line click");
-      case "link":
-        return handleClick(
-          parts,
-          parsed2.verb,
-          parsed2.value,
-          { via: "tmux-status" },
-          facts,
-          click3
-        );
-    }
+    const opened = openClick(link.url, parts.linkSigner);
+    if (opened.kind === "refused") return badRequest(opened.problem);
+    return clickRan(
+      () => handleClick(
+        parts,
+        opened.verb,
+        opened.value,
+        { via: "tmux-status" },
+        facts,
+        click3
+      )
+    );
   }
   await clickHandoff(
     parts.launcher,
@@ -54546,15 +55385,15 @@ function diagnosticSpan(text4, link) {
 }
 function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
-  const plainOf2 = (text4, severity) => {
+  const plainOf3 = (text4, severity) => {
     const made = plainMessage(text4, severity);
     for (const m of made) plain.add(m);
     return made;
   };
   const list2 = [
-    ...errors2.flatMap((e) => plainOf2(e, ERROR_SEVERITY)),
+    ...errors2.flatMap((e) => plainOf3(e, ERROR_SEVERITY)),
     ...notices,
-    ...warnings.flatMap((w) => plainOf2(w, WARNING_SEVERITY))
+    ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
   ].sort((a, b) => rankOf(a) - rankOf(b));
   const keys2 = copyKeys(list2);
   const minted = list2.map(
@@ -54632,11 +55471,11 @@ var MAX_VIEWER_ROWS = 20;
 function viewerRowCap(termRows, surfaceRows) {
   return Math.min(MAX_VIEWER_ROWS, termRows ?? MAX_VIEWER_ROWS, ...surfaceRows);
 }
-function viewerRows(list2, at, sessionId2, by, geometry, links2) {
+function viewerRows(list2, at, sessionId2, by, geometry) {
   const { index } = at;
   const shown = list2[index - 1];
   const opts = viewerOptions(geometry);
-  const body = channelRows(shown, opts, [], links2);
+  const body = channelRows(shown, opts, []);
   const colors = colorsOf(shown.severity);
   const style = new Style({ bgcolor: colors.bg, color: colors.fg });
   const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
@@ -54664,8 +55503,7 @@ function viewerRows(list2, at, sessionId2, by, geometry, links2) {
           copyLink(sessionId2, by, viewerKey(list2, index - 1, 0), index)
         )
       ],
-      opts,
-      links2
+      opts
     );
   };
   let headerRows = 1;
@@ -54684,14 +55522,13 @@ function viewerRows(list2, at, sessionId2, by, geometry, links2) {
       ...rows.slice(0, -1),
       ...drawnRows(
         [button(`\u2026 ${left + 1} more rows: \u29C9 copy has them all`, null)],
-        { ...opts, wrap: false },
-        links2
+        { ...opts, wrap: false }
       )
     ] : rows;
     return [...header, ...shownRows];
   }
 }
-function handoffRows(handoff, list2, sessionId2, geometry, links2) {
+function handoffRows(handoff, list2, sessionId2, geometry) {
   const { label: label2, fg, bg, open: open2 } = diagnosticsProjection(list2);
   const indicator = label2 === "" ? [] : [
     cell(
@@ -54701,7 +55538,7 @@ function handoffRows(handoff, list2, sessionId2, geometry, links2) {
       )
     )
   ];
-  return channelRows(handoff, viewerOptions(geometry), indicator, links2);
+  return channelRows(handoff, viewerOptions(geometry), indicator);
 }
 function viewerLink(sessionId2, key, says) {
   return effectsUrl(
@@ -54720,12 +55557,12 @@ function viewerOptions(geometry) {
   };
 }
 var cell = (word, style) => new RichText(`${word} `, { style, end: "", overflow: "ignore" });
-var drawnRows = (cells, opts, links2) => drawStripCells(cells, opts, links2).lines.map((runs) => ({
+var drawnRows = (cells, opts) => drawStripCells(cells, opts).lines.map((runs) => ({
   kind: "diagnostic",
   runs
 }));
 var ISSUE_INDENT = " ";
-function channelRows(message, opts, trailing, links2) {
+function channelRows(message, opts, trailing) {
   const colors = colorsOf(message.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const styled = (link) => link === null ? base : base.withLink(link);
@@ -54736,7 +55573,7 @@ function channelRows(message, opts, trailing, links2) {
       (span) => span.text.split(" ").flatMap((w) => chopCells(w, fold)).map((w) => cell(w, styled(span.link)))
     );
     const after = i === 0 ? trailing : [];
-    return drawnRows([prefix, ...cells, ...after], opts, links2);
+    return drawnRows([prefix, ...cells, ...after], opts);
   });
 }
 
@@ -55053,12 +55890,12 @@ function fragmentRejection(description, message) {
     // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
     // the key at the same moment the validator does.
     json: { not: {}, description: `not allowed here \u2014 ${description}` },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       if (raw[field] !== void 0) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: message(`${path42}.${field}`),
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
+          path: `${path43}.${field}`,
+          message: message(`${path43}.${field}`),
+          line: findKeyLine(ctx.source, [...path43.split("."), field])
         });
       }
       return void 0;
@@ -55081,17 +55918,17 @@ function nameOnlySpec(spec, subject, why2) {
   return {
     ...spec,
     json: { ...spec.json, not: { pattern: "\\{\\{" } },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && isExpression(v)) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${path42}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
+          path: `${path43}.${field}`,
+          message: `${path43}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path43.split("."), field])
         });
         return void 0;
       }
-      return spec.parse(ctx, path42, field, raw);
+      return spec.parse(ctx, path43, field, raw);
     }
   };
 }
@@ -55178,32 +56015,32 @@ function validateThemeDefaults(ctx, raw) {
   }
   const out = {};
   for (const [theme24, value] of Object.entries(raw)) {
-    const path42 = `themeDefaults.${theme24}`;
+    const path43 = `themeDefaults.${theme24}`;
     if (!ctx.allowedPalettes.has(theme24)) {
       ctx.issues.push({
-        path: path42,
-        message: `${path42}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        path: path43,
+        message: `${path43}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
         line: findKeyLine(ctx.source, ["themeDefaults", theme24])
       });
       continue;
     }
-    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path42, value);
+    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path43, value);
     if (parsed2 !== null) out[theme24] = parsed2;
   }
   return out;
 }
-function validateGlobals(ctx, path42, raw) {
+function validateGlobals(ctx, path43, raw) {
   if (raw === void 0) return {};
-  return record(ctx, GLOBALS_SCHEMA, path42, raw) ?? {};
+  return record(ctx, GLOBALS_SCHEMA, path43, raw) ?? {};
 }
-function validatePresetGlobals(ctx, path42, raw) {
-  return record(ctx, PRESET_GLOBALS_SCHEMA, path42, raw) ?? {};
+function validatePresetGlobals(ctx, path43, raw) {
+  return record(ctx, PRESET_GLOBALS_SCHEMA, path43, raw) ?? {};
 }
 function presetGlobalsJson() {
   return recordJson(PRESET_GLOBALS_SCHEMA);
 }
-function validateEditGlobals(ctx, path42, raw) {
-  return record(ctx, EDIT_GLOBALS_SCHEMA, path42, raw) ?? {};
+function validateEditGlobals(ctx, path43, raw) {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path43, raw) ?? {};
 }
 var GLOBALS_FIELD_NAMES = new Set(
   Object.keys(GLOBALS_FIELDS)
@@ -55466,8 +56303,8 @@ Configuration:
   A change applies to this session at once.
   Where each setting is in the menu: the globals field that sets it in a
   config file, then the control's label.
-${settingsByPlace().flatMap(({ path: path42, names }) => [
-  `    ${path42}`,
+${settingsByPlace().flatMap(({ path: path43, names }) => [
+  `    ${path43}`,
   ...names.map(
     (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
   )
@@ -55556,791 +56393,6 @@ init_globals();
 var QUIET_PCT = 60;
 var QUIET_MIN_CONTRAST = 3;
 var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
-
-// src/doctor/checks.ts
-init_globals();
-
-// src/tmux-hint.ts
-init_globals();
-var TMUX_ENV = {
-  // `socket,server-pid,session-id` — the socket is the part before the first
-  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
-  socket: "TMUX",
-  pane: "TMUX_PANE",
-  // Claude Code's own switch: when this is truthy in ITS environment, it stops
-  // re-encoding the statusline at 256 colours inside tmux (verified against the
-  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
-  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
-};
-var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
-
-// src/doctor/checks.ts
-function statusLineOf(sources) {
-  if (sources.kind === "failed") {
-    return { kind: "unread", reason: sources.reason };
-  }
-  const lines2 = sources.value.flatMap(
-    ({ scope, path: path42, settings }) => "statusLine" in settings ? [{ from: { scope, path: path42 }, line: settings.statusLine }] : []
-  );
-  const top = lines2[0];
-  if (top === void 0) {
-    return { kind: "absent", read: sources.value.map((s) => s.path) };
-  }
-  if (!isJsonObject(top.line)) {
-    return { kind: "not-an-object", value: top.line, from: top.from };
-  }
-  for (const { from, line } of lines2) {
-    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
-    if ("refreshInterval" in line) {
-      return { kind: "present", refreshInterval: line.refreshInterval, from };
-    }
-  }
-  return { kind: "present", refreshInterval: void 0, from: top.from };
-}
-function envVarOf(sources, name) {
-  if (sources.kind === "failed") return sources;
-  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
-  return {
-    kind: "ok",
-    value: top === void 0 ? { kind: "unset" } : {
-      kind: "set",
-      value: top.env[name],
-      from: { scope: top.scope, path: top.path }
-    }
-  };
-}
-var UNWRITTEN_SCOPES = [
-  "managed",
-  "project"
-];
-var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
-var ENV_FIX_FILE = {
-  managed: () => null,
-  "project-local": (path42) => ({ scope: "project-local", path: path42 }),
-  project: (_, at) => ({
-    scope: "project-local",
-    path: projectLocalSettingsFile(at.projectDir)
-  }),
-  user: (path42) => ({ scope: "user", path: path42 })
-};
-var GLYPH_MARKS = ["drawn", "boxes"];
-var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
-var whoseWidth = (of) => of.kind === "session" ? `session ${of.sessionId}'s statusline client` : "this command's terminal";
-function describeFix(fix) {
-  switch (fix.kind) {
-    case "claude-settings":
-      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
-    case "post-mortems-read":
-      return `${fix.kind} through=${fix.through}`;
-  }
-}
-function problemsVerdict(problems) {
-  const [reason, ...more] = problems;
-  return reason === void 0 ? { ok: true } : { ok: false, reason, more };
-}
-var TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
-function ofTmuxClient(tmux3, decide) {
-  switch (tmux3.kind) {
-    case "unreported":
-      return {
-        ok: false,
-        reason: "the client reported no tmux facts \u2014 re-run `cc-candybar install` to stage a current client"
-      };
-    case "outside":
-      return { ok: true };
-    case "inside":
-      if (tmux3.client.kind === "failed") {
-        return {
-          ok: false,
-          reason: `tmux could not be asked: ${tmux3.client.reason}`
-        };
-      }
-      return tmux3.client.value === null ? { ok: true } : decide(tmux3.client.value, tmux3.hint);
-  }
-}
-var tmuxTruecolor = {
-  name: "tmuxTruecolor",
-  label: "tmux truecolor",
-  takesMark: false,
-  probe: ({ tmux: tmux3, claudeSettings: { origin } }) => ofTmuxClient(tmux3, (client, hint) => {
-    if (!client.features.includes("RGB")) return { ok: true };
-    if (hint.truecolor !== null) return { ok: true };
-    const staged = envVarOf(origin.sources, TMUX_TRUECOLOR_VAR);
-    if (staged.kind === "failed") return { ok: false, reason: staged.reason };
-    const told = staged.value;
-    if (told.kind === "set" && typeof told.value === "string" && told.value !== "") {
-      return {
-        ok: false,
-        reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} \u2014 restart Claude Code to apply`
-      };
-    }
-    const reason = "Claude Code renders the bar in 256 colours inside tmux";
-    const fixInto = (file2) => ({
-      ok: false,
-      reason,
-      fix: {
-        kind: "claude-settings",
-        file: file2,
-        path: ["env", TMUX_TRUECOLOR_VAR],
-        value: "1"
-      }
-    });
-    if (told.kind === "unset") {
-      return fixInto({ scope: "user", path: origin.at.userFile });
-    }
-    const file = ENV_FIX_FILE[told.from.scope](told.from.path, origin.at);
-    return file === null ? {
-      ok: false,
-      reason: `${reason} \u2014 the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`
-    } : fixInto(file);
-  })
-};
-var utf82 = {
-  name: "utf8",
-  label: "UTF-8",
-  takesMark: false,
-  probe: ({ tmux: tmux3 }) => ofTmuxClient(
-    tmux3,
-    (client) => client.utf8 ? { ok: true } : {
-      ok: false,
-      reason: "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` \u2014 attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux"
-    }
-  )
-};
-var termWidth = {
-  name: "termWidth",
-  label: "terminal width",
-  takesMark: false,
-  probe: ({ width }) => width.kind === "failed" ? { ok: false, reason: width.reason } : width.value.columns !== null ? {
-    ok: true,
-    note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`
-  } : {
-    ok: false,
-    reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask \u2014 or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`
-  }
-};
-var UNUSED = {
-  variable: "is never read",
-  action: "is never clicked",
-  helper: "is never called",
-  segment: "is in no preset"
-};
-var NAMED_BY = {
-  argument: "command argument",
-  environment: `$${CONFIG_ENV}`,
-  pick: "load-config pick",
-  unknown: "source unknown"
-};
-function judgedConfig({ target, layers }) {
-  if (target.source !== "search") {
-    return `${target.path} (${NAMED_BY[target.source]})`;
-  }
-  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
-}
-function configProblems(config2) {
-  switch (config2.kind) {
-    case "failed": {
-      const problems = [
-        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
-        ...config2.warnings
-      ];
-      return problems.length === 0 ? ["the config failed to load"] : problems;
-    }
-    case "loaded":
-      return [
-        ...config2.warnings,
-        ...config2.unused.map(
-          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
-        )
-      ];
-  }
-}
-var config = {
-  name: "config",
-  label: "config",
-  takesMark: false,
-  probe: ({ config: config2 }) => {
-    const judged = judgedConfig(config2);
-    const verdict = problemsVerdict(configProblems(config2));
-    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
-  }
-};
-var REINSTALL = "re-run `cc-candybar install`";
-function handlerAppProblems(opener) {
-  if (opener.kind === "failed") {
-    return [
-      `Launch Services could not be asked which app opens cc-candybar:// \u2014 ${opener.reason}`
-    ];
-  }
-  if (opener.value === null) {
-    return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
-  }
-  const { app, forwarder } = opener.value;
-  return forwarder ? [] : [
-    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
-  ];
-}
-var urlHandler = {
-  name: "urlHandler",
-  label: "URL handler",
-  takesMark: false,
-  probe: ({ urlHandler: urlHandler2 }) => {
-    switch (urlHandler2.kind) {
-      case "unsupported":
-        return { ok: true };
-      case "unprobed":
-        return { ok: false, reason: urlHandler2.reason };
-      case "arrived":
-        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
-        return {
-          ok: false,
-          // What is known: a click request brought it, which is what the
-          // retired applet runs — and a hand-run `cc-candybar url-handle`,
-          // or the browser page. Which app Launch Services opens the scheme
-          // with is the opener's row to say (handlerAppProblems).
-          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
-        };
-      case "lost":
-        return problemsVerdict([
-          ...handlerAppProblems(urlHandler2.opener),
-          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
-        ]);
-    }
-  }
-};
-var RECENT_CLIENT_S = 300;
-function clientStanding({ bundle, checkout }, client) {
-  return {
-    bundle: client.bundle.kind === "failed" ? { kind: "unresolved", reason: client.bundle.reason } : client.bundle.value === bundle ? { kind: "same" } : { kind: "other", path: client.bundle.value },
-    source: client.client !== "native" || checkout === null ? { kind: "uncompared" } : checkout.rustSource.kind === "failed" ? {
-      kind: "unreadable",
-      root: checkout.root,
-      reason: checkout.rustSource.reason
-    } : client.source === null ? { kind: "unstamped" } : client.source === checkout.rustSource.value ? { kind: "same" } : { kind: "other", root: checkout.root }
-  };
-}
-function remedy(daemon3, client) {
-  if (client === "frames")
-    return `run \`node ${daemon3.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
-  return daemon3.checkout === null ? REINSTALL : `run \`just install-rust\` and point the statusLine command at ${daemon3.checkout.root}/bin/cc-candybar-native`;
-}
-function installProblems(daemon3, nativeShipped, client) {
-  const { checkout } = daemon3;
-  if (client.kind === "unreported") {
-    return [
-      `the bar is drawn by a statusline client too old to say what it is \u2014 ${remedy(daemon3, "native")}`
-    ];
-  }
-  const { bundle, source } = clientStanding(daemon3, client);
-  switch (bundle.kind) {
-    case "unresolved":
-      return [
-        `the statusline client's bundle cannot be resolved: ${bundle.reason}`
-      ];
-    case "other":
-      return [
-        `the statusline client runs ${bundle.path}, not the daemon's ${daemon3.bundle} \u2014 ${remedy(daemon3, client.client)}`
-      ];
-    case "same":
-      break;
-  }
-  if (client.client === "node" && (nativeShipped || checkout !== null)) {
-    return [
-      `the bar is drawn by the Node fallback, which starts node on every render \u2014 ${remedy(daemon3, "native")}`
-    ];
-  }
-  switch (source.kind) {
-    case "uncompared":
-    case "same":
-      return [];
-    case "unreadable":
-      return [`${source.root}/rust-client could not be read: ${source.reason}`];
-    case "unstamped":
-      return [
-        "the native client carries no source stamp, so which source it was built from is unknown \u2014 run `just install-rust`"
-      ];
-    case "other":
-      return [
-        `the native client was built from other source than ${source.root}/rust-client holds \u2014 run \`just install-rust\``
-      ];
-  }
-}
-var noRenderOf = (sighted) => {
-  const lost = `restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions`;
-  return sighted.kind === "clicked" ? `this daemon holds no render of this bar (it ${lost})` : `this daemon holds no render of session ${sighted.sessionId}'s bar (its statusLine does not run cc-candybar \u2014 a \`claude -p\` session draws none \u2014 or the daemon ${lost}; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently)`;
-};
-var install = {
-  name: "install",
-  label: "install",
-  takesMark: false,
-  probe: ({ install: install2, sighted }) => {
-    if (install2.kind === "failed") {
-      return {
-        ok: false,
-        reason: `the daemon could not be asked which clients draw the bar: ${install2.reason}`
-      };
-    }
-    const { daemon: daemon3, nativeShipped, clients } = install2.value;
-    if (clients.length === 0) {
-      return {
-        ok: false,
-        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which client draws it is unknown \u2014 run the doctor again once the bar has redrawn` : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes \u2014 run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`
-      };
-    }
-    return problemsVerdict([
-      ...new Set(
-        clients.flatMap((c) => installProblems(daemon3, nativeShipped, c))
-      )
-    ]);
-  }
-};
-function unreadPostMortems({ postMortems }, read2) {
-  return postMortems.kind === "ok" && read2.kind === "ok" ? postMortems.value.filter(
-    (m) => read2.value.through === null || laterIdentity(m.identity, read2.value.through)
-  ) : [];
-}
-function otherDaemons(serving, processes) {
-  return serving.kind === "failed" ? processes : processes.filter((p2) => p2.pid !== serving.value.pid);
-}
-var daemon = {
-  name: "daemon",
-  label: "daemon",
-  takesMark: false,
-  probe: ({ daemon: { serving, processes, read: read2 } }) => {
-    const unreadable = processes.kind === "failed" ? [`the process table could not be read: ${processes.reason}`] : [];
-    const others = processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
-    if (serving.kind === "failed") {
-      const running = others.length > 0 ? ` \u2014 daemon ${others.map((p2) => p2.pid).join(", ")} running` : "";
-      return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
-    }
-    const { pid: pid2, memory, limit, postMortems } = serving.value;
-    const unread2 = unreadPostMortems(serving.value, read2);
-    const verdict = problemsVerdict([
-      ...unread2.map(
-        (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
-      ),
-      ...postMortems.kind === "failed" ? [
-        `the daemon's post-mortems could not be listed: ${postMortems.reason}`
-      ] : [],
-      // Which were read decides nothing only while none are listed.
-      ...read2.kind === "failed" && !(postMortems.kind === "ok" && postMortems.value.length === 0) ? [`which post-mortems were read could not be read: ${read2.reason}`] : [],
-      ...unreadable,
-      ...others.map(
-        (p2) => `daemon ${p2.pid} (started ${p2.started}, rss ${mb(p2.rss)} MB${p2.ppid === 1 ? "" : `, child of ${p2.ppid}`}) runs beside the one serving the bar (${pid2}) \u2014 \`kill ${p2.pid}\``
-      ),
-      // [LAW:no-silent-failure] RSS standing in for the platform's charge is
-      // the limit judging an estimate — or, with no gap yet read, what macOS
-      // has already reclaimed, the very misjudgment the charge exists to end —
-      // so it is a finding, near the limit or not.
-      ...memory.kind === "measured" && memory.charge.kind === "stand-in" ? [
-        `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${memory.charge.gap !== 0 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate` : "RSS, which counts pages macOS has reclaimed"}`
-      ] : [],
-      ...memory.kind === "measured" && approachingLimit(memory.charge.bytes, limit) ? [
-        `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
-      ] : []
-    ]);
-    if (verdict.ok && memory.kind === "unmeasured") {
-      return { ok: true, note: "the daemon has not measured its memory yet" };
-    }
-    const newest = unread2[0];
-    return verdict.ok || newest === void 0 ? verdict : {
-      ...verdict,
-      fix: { kind: "post-mortems-read", through: newest.identity }
-    };
-  }
-};
-var CLICK_TO_SEE = "click \u{1FA7A} doctor in the bar's settings menu: if it runs, links work";
-function drawsLinks(identified, clicked) {
-  const id2 = sightingOf(identified);
-  if (clicked.kind === "ok" && id2 !== null && clicked.value.includes(id2)) {
-    return { kind: "draws" };
-  }
-  return identified.kind === "known" ? linkSupport(identified.terminal) : { kind: "unknown" };
-}
-function linkProblems({ identified, tmuxClient }, clicked) {
-  const called = identifiedAs(identified);
-  const support = drawsLinks(identified, clicked);
-  const prove = sightingOf(identified) === null ? CLICK_TO_SEE : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
-  const terminal = (() => {
-    switch (support.kind) {
-      case "draws":
-        return [];
-      case "none":
-        return [
-          `${called} draws no links (OSC 8), so nothing on the bar can be clicked \u2014 run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`
-        ];
-      case "older":
-        return [
-          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) \u2014 update ${called}`
-        ];
-      case "unsaid":
-        return [
-          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is \u2014 ${prove}`
-        ];
-      case "unknown":
-        return [
-          `the doctor does not know whether ${called} draws links (OSC 8) \u2014 ${prove}`
-        ];
-    }
-  })();
-  const remembered = clicked.kind === "failed" && support.kind !== "draws" ? [
-    `the terminals a doctor click came back from could not be read: ${clicked.reason}`
-  ] : [];
-  const tmux3 = support.kind === "none" || tmuxClient === null || tmuxClient.features.includes("hyperlinks") ? [] : [
-    `tmux does not pass links through to ${called} \u2014 add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`
-  ];
-  return [...terminal, ...remembered, ...tmux3];
-}
-var links = {
-  name: "links",
-  label: "links",
-  takesMark: false,
-  probe: ({ sighted, terminal, clicked }) => {
-    if (sighted.kind === "clicked" && sighted.via === "link")
-      return { ok: true };
-    switch (terminal.kind) {
-      case "unreported":
-        return {
-          ok: false,
-          reason: "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
-        };
-      case "unasked":
-        return {
-          ok: false,
-          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`
-        };
-      case "seen":
-        return problemsVerdict(linkProblems(terminal, clicked));
-    }
-  }
-};
-var EFFECT_REFRESH_INTERVAL = 1;
-var refreshedFrames = (frames) => frames.filter((f) => f.role === "statusline");
-var effectRefresh = {
-  name: "effectRefresh",
-  label: "effect refresh",
-  takesMark: false,
-  probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
-    const verdicts = [origin, ...elsewhere].flatMap(
-      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? []
-    );
-    const [first2] = verdicts;
-    if (first2 === void 0) {
-      if (frames.kind === "failed") return { ok: false, reason: frames.reason };
-      return unknownMotion(
-        sighted.kind !== "recent" ? noRenderOf(sighted) : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`
-      );
-    }
-    const [lead, ...others] = verdicts.flatMap((v) => v.ok ? [] : [v]);
-    if (lead === void 0) return first2;
-    const more = [...new Set(others.map((f) => f.reason))].filter(
-      (r) => r !== lead.reason
-    );
-    return more.length === 0 ? lead : { ...lead, more };
-  }
-};
-var barsSeen = (bars) => {
-  const drawn = refreshedFrames(bars).map((f) => f.frame);
-  if (drawn.includes("moves")) {
-    return {
-      kind: "moving",
-      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
-    };
-  }
-  if (drawn.includes("can-move")) {
-    return {
-      kind: "moving",
-      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
-    };
-  }
-  if (drawn.includes("still")) return { kind: "still" };
-  if (drawn.includes("drawing")) {
-    return {
-      kind: "unknown",
-      unseen: "the bar's latest render has not finished"
-    };
-  }
-  if (drawn.length > 0) {
-    return { kind: "unknown", unseen: "the bar's recent renders failed" };
-  }
-  if (bars.length > 0) {
-    return {
-      kind: "unknown",
-      unseen: "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
-    };
-  }
-  return { kind: "none" };
-};
-var unknownMotion = (unseen) => ({
-  ok: false,
-  reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
-});
-function chainVerdict(sources, seen2) {
-  const statusLine = statusLineOf(sources);
-  if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
-    return {
-      ok: true,
-      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
-    };
-  }
-  switch (seen2.kind) {
-    case "none":
-      return null;
-    case "still":
-      return { ok: true };
-    case "unknown":
-      return unknownMotion(seen2.unseen);
-    case "moving":
-      break;
-  }
-  const { wearing } = seen2;
-  switch (statusLine.kind) {
-    case "unread":
-      return {
-        ok: false,
-        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`
-      };
-    case "absent":
-      return {
-        ok: false,
-        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) \u2014 the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`
-      };
-    case "not-an-object":
-      return {
-        ok: false,
-        // `cc-candybar install` writes the user file only, so only there
-        // does re-running it replace the line.
-        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object \u2014 ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`
-      };
-    case "present": {
-      const { from, refreshInterval: interval } = statusLine;
-      const why2 = interval === void 0 ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events" : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL ? `its statusLine redraws it only every ${interval} s` : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
-      return doctorWrites(from) ? {
-        ok: false,
-        reason: `${wearing}, but ${why2} (statusLine from ${from.path})`,
-        fix: {
-          kind: "claude-settings",
-          file: from,
-          path: ["statusLine", "refreshInterval"],
-          value: EFFECT_REFRESH_INTERVAL
-        }
-      } : {
-        ok: false,
-        reason: `${wearing}, but ${why2} \u2014 its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`
-      };
-    }
-  }
-}
-var codePoints = (glyphs) => [...glyphs].map((g) => `U+${g.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
-function terminalCalled(terminal) {
-  switch (terminal.kind) {
-    case "unreported":
-    case "unasked":
-      return "this terminal";
-    case "unknown":
-    case "unnamed":
-      return identifiedAs(terminal);
-    case "bundling":
-    case "unread":
-    case "configured":
-      return [terminalLabel(terminal.name), terminal.version].filter((part) => part !== null).join(" ");
-  }
-}
-function sightedIn(terminal) {
-  switch (terminal.kind) {
-    case "unreported":
-    case "unasked":
-      return null;
-    case "unknown":
-    case "unnamed":
-      return sightingOf(terminal);
-    case "bundling":
-    case "unread":
-      return terminalLabel(terminal.name);
-    case "configured": {
-      const label2 = terminalLabel(terminal.name);
-      return terminal.font.kind === "ok" ? `${label2} with ${terminal.font.value.font} (${terminal.font.value.from})` : `${label2}, its font unread: ${terminal.font.reason}`;
-    }
-  }
-}
-function glyphSighting(facts) {
-  const where = sightedIn(facts.terminal);
-  return where === null ? void 0 : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
-}
-var NERD_FONT_CHECK = "nerdFont";
-var nerdFont = {
-  name: NERD_FONT_CHECK,
-  label: "Nerd Font",
-  takesMark: true,
-  probe: ({ nerdFont: facts, marks }) => {
-    if (facts.kind === "none") return { ok: true };
-    const sighting = glyphSighting(facts);
-    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
-      ok: false,
-      reason,
-      more: [`the mark book could not be read: ${marks.reason}`]
-    } : { ok: false, reason, ...sighting !== void 0 && { sighting } };
-    const terminal = facts.terminal;
-    const called = terminalCalled(terminal);
-    const mark = sighting === void 0 || marks.kind === "failed" ? null : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null;
-    switch (mark) {
-      case "drawn":
-        return { ok: true };
-      case "boxes":
-        return failed3(
-          `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
-        );
-      case null:
-        break;
-    }
-    switch (terminal.kind) {
-      case "unreported":
-        return failed3(
-          "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
-        );
-      case "unasked":
-        return failed3(
-          `tmux could not be asked which terminal is attached: ${terminal.reason}`
-        );
-      case "unknown":
-      case "unnamed":
-      case "unread":
-        return failed3(`the doctor cannot read ${called}'s font`);
-      case "bundling": {
-        const since = TERMINALS[terminal.name].glyphs.since;
-        if (since === null) return { ok: true };
-        const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
-        if (shipped === true) return { ok: true };
-        const label2 = terminalLabel(terminal.name);
-        return failed3(
-          shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
-        );
-      }
-      case "configured": {
-        if (terminal.font.kind === "failed") {
-          return failed3(
-            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
-          );
-        }
-        const { font, from, lacks } = terminal.font.value;
-        if (lacks === null) {
-          return failed3(
-            `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
-          );
-        }
-        if (lacks.length === 0) return { ok: true };
-        return failed3(
-          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
-        );
-      }
-    }
-  }
-};
-function named(segments) {
-  return segments.join(", ");
-}
-function optOut(segments) {
-  return `or set missingData: "ignore" on ${named(segments)}`;
-}
-function pullRequestProblems(need2) {
-  if (need2.kind === "unneeded") return [];
-  const { segments, fact } = need2;
-  if (fact.kind === "failed") {
-    return [
-      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`
-    ];
-  }
-  if (fact.value === null) return [];
-  const { cli, host, status } = fact.value;
-  if (status === "ready") return [];
-  return status === "missing" ? [
-    `${named(segments)}: ${cli} is not installed, so no pull request is ever shown \u2014 install it, ${optOut(segments)}`
-  ] : [
-    `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) \u2014 run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`
-  ];
-}
-function rateLimitProblems(need2, sighted) {
-  if (need2.kind === "unneeded") return [];
-  const { segments, fact } = need2;
-  if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
-  if (fact.value.length === 0) {
-    return [
-      sighted.kind !== "recent" ? `${named(segments)}: ${noRenderOf(sighted)}, so whether Claude Code sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn` : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn`
-    ];
-  }
-  return fact.value.includes("missing") && !fact.value.includes("carried") ? [
-    `${named(segments)}: Claude Code sent no rate_limits \u2014 it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`
-  ] : [];
-}
-var segmentData = {
-  name: "segmentData",
-  label: "segment data",
-  takesMark: false,
-  probe: ({ data, sighted }) => problemsVerdict([
-    ...pullRequestProblems(data.pullRequests),
-    ...rateLimitProblems(data.rateLimits, sighted)
-  ])
-};
-function transcriptProblems({
-  path: path42,
-  answered,
-  read: read2
-}) {
-  switch (read2.kind) {
-    case "absent":
-      return answered ? [
-        `the transcript ${path42} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
-      ] : [];
-    case "failed":
-      return [`the transcript ${path42} cannot be read: ${read2.reason}`];
-    case "ok": {
-      const { lines: lines2, unparsed, whole } = read2.value;
-      return unparsed === 0 ? [] : [
-        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path42} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
-      ];
-    }
-  }
-}
-var sessionData = {
-  name: "sessionData",
-  label: "session data",
-  takesMark: false,
-  probe: ({ transcripts, sighted }) => {
-    if (transcripts.kind === "failed") {
-      return { ok: false, reason: transcripts.reason };
-    }
-    if (transcripts.value.length === 0) {
-      return {
-        ok: false,
-        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which transcript it reads is unknown \u2014 run the doctor again once the bar has redrawn` : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named \u2014 run the doctor again once the bar has redrawn`
-      };
-    }
-    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
-  }
-};
-var CHECKS = [
-  config,
-  install,
-  daemon,
-  urlHandler,
-  links,
-  tmuxTruecolor,
-  utf82,
-  termWidth,
-  effectRefresh,
-  nerdFont,
-  segmentData,
-  sessionData
-];
-var MARKED_CHECKS = CHECKS.filter(
-  (c) => c.takesMark
-);
-function runDoctor(facts) {
-  return CHECKS.map((check) => ({ check, verdict: check.probe(facts) }));
-}
-function checkByName(name) {
-  return CHECKS.find((c) => c.name === name);
-}
 
 // src/doctor/report.ts
 init_globals();
@@ -58495,9 +58547,9 @@ function newUpdateFact() {
 
 // src/daemon/binary-watch.ts
 init_globals();
-function mtimeOf(path42, stat3) {
+function mtimeOf(path43, stat3) {
   try {
-    return ok(stat3(path42).mtimeMs);
+    return ok(stat3(path43).mtimeMs);
   } catch (e) {
     const code = e.code;
     return code === "ENOENT" || code === "ENOTDIR" ? ABSENT : failed(e.message, "read");
@@ -58509,7 +58561,7 @@ function sameStamp(a, b) {
 function makeBinaryWatch(opts) {
   const { targets, intervalMs, stat: stat3, held, exit: exit2, log, clock } = opts;
   const logHeld = changeLogger(log);
-  const boot = targets.map((path42) => ({ path: path42, stamp: mtimeOf(path42, stat3) }));
+  const boot = targets.map((path43) => ({ path: path43, stamp: mtimeOf(path43, stat3) }));
   const watched = boot.filter(({ stamp: stamp2 }) => stamp2.kind !== "failed");
   let stopSampling = null;
   let ended = false;
@@ -58519,14 +58571,14 @@ function makeBinaryWatch(opts) {
   };
   const sample = async () => {
     if (ended) return;
-    for (const { path: path42, stamp: stamp2 } of watched) {
-      const now2 = mtimeOf(path42, stat3);
+    for (const { path: path43, stamp: stamp2 } of watched) {
+      const now2 = mtimeOf(path43, stat3);
       if (now2.kind === "failed") {
-        log("warn", `binary stat failed (${path42}): ${now2.reason}`);
+        log("warn", `binary stat failed (${path43}): ${now2.reason}`);
         continue;
       }
       if (!sameStamp(stamp2, now2)) {
-        const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path42})`;
+        const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path43})`;
         const waiting = await held();
         if (ended) return;
         if (waiting) {
@@ -58548,11 +58600,11 @@ function makeBinaryWatch(opts) {
   });
   return {
     arm() {
-      for (const { path: path42, stamp: stamp2 } of boot) {
+      for (const { path: path43, stamp: stamp2 } of boot) {
         if (stamp2.kind === "failed") {
           log(
             "warn",
-            `binary stat failed at boot (${path42}): ${stamp2.reason}; not watched`
+            `binary stat failed at boot (${path43}): ${stamp2.reason}; not watched`
           );
         }
       }
@@ -58764,12 +58816,12 @@ function commandProbe(launcher, bin, args) {
     }
   };
 }
-function fileProbe(path42) {
+function fileProbe(path43) {
   return {
-    name: path42,
+    name: path43,
     read: async () => {
       try {
-        const text4 = fs_default.readFileSync(path42, "utf8");
+        const text4 = fs_default.readFileSync(path43, "utf8");
         return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
       } catch (e) {
         return { kind: "unavailable", reason: e.message };
@@ -60368,8 +60420,8 @@ function parseJsonlLines(text4) {
   }
   return entries;
 }
-function longLinesWith(longLines, path42, read2) {
-  return read2.longLine === 0 ? longLines : [...longLines, { path: path42, offset: read2.start, bytes: read2.longLine }];
+function longLinesWith(longLines, path43, read2) {
+  return read2.longLine === 0 ? longLines : [...longLines, { path: path43, offset: read2.start, bytes: read2.longLine }];
 }
 function longLineLog(longLines) {
   return longLines.map(
@@ -61012,8 +61064,8 @@ function mergeFolds(files) {
     days
   };
 }
-function under2(path42, roots) {
-  return path42 !== void 0 && roots.some((root) => path42.startsWith(root));
+function under2(path43, roots) {
+  return path43 !== void 0 && roots.some((root) => path43.startsWith(root));
 }
 function daySumsOver(slots, roots) {
   const sums = /* @__PURE__ */ new Map();
@@ -62955,22 +63007,22 @@ init_globals();
 
 // src/config/loader/cache.ts
 init_globals();
-function requireCache(ctx, path42, raw, kind) {
+function requireCache(ctx, path43, raw, kind) {
   if (raw.cache === void 0) {
     ctx.issues.push({
-      path: `${path42}.cache`,
+      path: `${path43}.cache`,
       message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
-      line: findKeyLine(ctx.source, path42.split("."))
+      line: findKeyLine(ctx.source, path43.split("."))
     });
     return null;
   }
-  return validateCache(ctx, `${path42}.cache`, raw.cache);
+  return validateCache(ctx, `${path43}.cache`, raw.cache);
 }
 function requireCacheSpec(kind) {
   return {
     required: true,
     json: cacheJson(),
-    parse: (ctx, path42, _field, raw) => requireCache(ctx, path42, raw, kind) ?? void 0
+    parse: (ctx, path43, _field, raw) => requireCache(ctx, path43, raw, kind) ?? void 0
   };
 }
 var CACHE_SCHEMA = {
@@ -62978,48 +63030,48 @@ var CACHE_SCHEMA = {
   arms: {
     ttl: {
       json: { type: "string" },
-      parse: (ctx, path42, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
+      parse: (ctx, path43, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
         ctx,
-        path42,
+        path43,
         `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue2(value)}`
       )
     },
     watch_file: {
       json: { type: "string" },
-      parse: (ctx, path42, value) => typeof value === "string" ? { watch_file: value } : reject(
+      parse: (ctx, path43, value) => typeof value === "string" ? { watch_file: value } : reject(
         ctx,
-        path42,
+        path43,
         `cache.watch_file must be a path string, got ${describeValue2(value)}`
       )
     },
     depends_on: {
       json: { type: "array", items: { type: "string" } },
-      parse: (ctx, path42, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
+      parse: (ctx, path43, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
         ctx,
-        path42,
+        path43,
         `cache.depends_on must be an array of variable-name strings, got ${describeValue2(value)}`
       )
     },
     key: {
       json: { type: "string" },
-      parse: (ctx, path42, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
+      parse: (ctx, path43, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
         ctx,
-        path42,
+        path43,
         `cache.key must be a non-empty template string, got ${describeValue2(value)}`
       )
     },
     never: {
       json: { const: true },
-      parse: (ctx, path42, value) => value === true ? { never: true } : reject(
+      parse: (ctx, path43, value) => value === true ? { never: true } : reject(
         ctx,
-        path42,
+        path43,
         `cache.never must be the literal boolean true, got ${describeValue2(value)}`
       )
     }
   }
 };
-function validateCache(ctx, path42, raw) {
-  return oneOfPresent(ctx, CACHE_SCHEMA, path42, raw);
+function validateCache(ctx, path43, raw) {
+  return oneOfPresent(ctx, CACHE_SCHEMA, path43, raw);
 }
 function cacheJson() {
   return oneOfPresentJson(CACHE_SCHEMA);
@@ -63156,13 +63208,13 @@ function literalValueSpec() {
   return {
     required: true,
     json: { type: ["string", "number", "boolean"] },
-    parse: (ctx, path42, _field, raw) => {
+    parse: (ctx, path43, _field, raw) => {
       const value = raw.value;
       if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
         ctx.issues.push({
-          path: `${path42}.value`,
+          path: `${path43}.value`,
           message: `literal value must be string|number|boolean, got ${describeType2(value)}`,
-          line: findKeyLine(ctx.source, path42.split("."))
+          line: findKeyLine(ctx.source, path43.split("."))
         });
         return void 0;
       }
@@ -63174,10 +63226,10 @@ function typedDefaultSpec() {
   return {
     required: false,
     json: { type: ["string", "number", "boolean"] },
-    parse: (ctx, path42, _field, raw) => {
+    parse: (ctx, path43, _field, raw) => {
       const t2 = raw.type;
       const expected = t2 === "number" || t2 === "boolean" || t2 === "string" ? t2 : "string";
-      return optionalTypedDefault(ctx, path42, raw, expected);
+      return optionalTypedDefault(ctx, path43, raw, expected);
     }
   };
 }
@@ -63186,25 +63238,25 @@ var PARSE_SCHEMA = {
   arms: {
     text: {
       json: { const: true },
-      parse: (ctx, path42, value) => value === true ? { text: true } : reject(
+      parse: (ctx, path43, value) => value === true ? { text: true } : reject(
         ctx,
-        path42,
+        path43,
         `parse.text must be the literal boolean true, got ${describeValue2(value)}`
       )
     },
     regex: {
       json: { type: "string" },
-      parse: (ctx, path42, value) => typeof value === "string" ? { regex: value } : reject(
+      parse: (ctx, path43, value) => typeof value === "string" ? { regex: value } : reject(
         ctx,
-        path42,
+        path43,
         `parse.regex must be a pattern string, got ${describeValue2(value)}`
       )
     },
     json: {
       json: { const: true },
-      parse: (ctx, path42, value) => value === true ? { json: true } : reject(
+      parse: (ctx, path43, value) => value === true ? { json: true } : reject(
         ctx,
-        path42,
+        path43,
         `parse.json must be the literal boolean true, got ${describeValue2(value)}`
       )
     }
@@ -63214,15 +63266,15 @@ function parseSpec() {
   return {
     required: false,
     json: oneOfPresentJson(PARSE_SCHEMA),
-    parse: (ctx, path42, _field, raw) => {
+    parse: (ctx, path43, _field, raw) => {
       if (raw.regex !== void 0) {
         ctx.issues.push({
-          path: `${path42}.regex`,
-          message: `${path42}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
-          line: findKeyLine(ctx.source, [...path42.split("."), "regex"])
+          path: `${path43}.regex`,
+          message: `${path43}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
+          line: findKeyLine(ctx.source, [...path43.split("."), "regex"])
         });
       }
-      return raw.parse === void 0 ? void 0 : oneOfPresent(ctx, PARSE_SCHEMA, `${path42}.parse`, raw.parse) ?? void 0;
+      return raw.parse === void 0 ? void 0 : oneOfPresent(ctx, PARSE_SCHEMA, `${path43}.parse`, raw.parse) ?? void 0;
     }
   };
 }
@@ -63233,15 +63285,15 @@ function sourceDefaultSpec() {
       type: ["string", "number", "boolean", "array", "object"],
       description: "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
     },
-    parse: (ctx, path42, _field, raw) => isPlainObject3(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path42, raw.default) : optionalStringField(ctx, path42, raw, "default")
+    parse: (ctx, path43, _field, raw) => isPlainObject3(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path43, raw.default) : optionalStringField(ctx, path43, raw, "default")
   };
 }
-function jsonDefault(ctx, path42, value) {
+function jsonDefault(ctx, path43, value) {
   if (value === void 0) return void 0;
   return isSourceDefault(value) ? value : reject(
     ctx,
-    `${path42}.default`,
-    `${path42}.default must be a JSON value (a json-parsed source's document), got ${describeValue2(value)}`
+    `${path43}.default`,
+    `${path43}.default must be a JSON value (a json-parsed source's document), got ${describeValue2(value)}`
   ) ?? void 0;
 }
 function isSourceDefault(value) {
@@ -63255,13 +63307,13 @@ function inputPathSpec() {
   const text4 = requireStringSpec();
   return {
     ...text4,
-    parse: (ctx, path42, field, raw) => {
-      const value = text4.parse(ctx, path42, field, raw);
+    parse: (ctx, path43, field, raw) => {
+      const value = text4.parse(ctx, path43, field, raw);
       const instead = value === void 0 ? void 0 : RETIRED_INPUT_PATHS.get(value);
       return instead === void 0 ? value : reject(
         ctx,
-        `${path42}.${field}`,
-        `${path42}.${field} "${value}" is no longer in the payload: ${instead}`
+        `${path43}.${field}`,
+        `${path43}.${field} "${value}" is no longer in the payload: ${instead}`
       ) ?? void 0;
     }
   };
@@ -63314,9 +63366,9 @@ var VARIABLE_TAG = "kind";
 function arm(kind, fieldMap, removed = {}) {
   return {
     ...armFacets(VARIABLE_TAG, kind, fieldMap),
-    parse: (ctx, path42, raw) => {
-      refuseRemoved(ctx, removed, path42, raw);
-      const body = fields(ctx, fieldMap, path42, raw);
+    parse: (ctx, path43, raw) => {
+      refuseRemoved(ctx, removed, path43, raw);
+      const body = fields(ctx, fieldMap, path43, raw);
       return body === null ? null : { kind, ...body };
     }
   };
@@ -63392,29 +63444,29 @@ var SETTING_DECL_JSON = {
 };
 var DECL_KEYS = ["label", "domain", "default"];
 var RANGE_KEYS = ["min", "max", "step", "atLeast"];
-function issue(ctx, path42, message) {
+function issue(ctx, path43, message) {
   ctx.issues.push({
-    path: path42,
+    path: path43,
     message,
-    line: findKeyLine(ctx.source, path42.split("."))
+    line: findKeyLine(ctx.source, path43.split("."))
   });
   return void 0;
 }
-function parseDomain(ctx, path42, raw) {
+function parseDomain(ctx, path43, raw) {
   if (raw === "bool") return "bool";
   if (Array.isArray(raw)) {
     const words2 = raw.filter((m) => typeof m === "string");
     if (raw.length === 0 || words2.length !== raw.length) {
       return issue(
         ctx,
-        path42,
+        path43,
         `a list domain must be a non-empty list of words, got ${JSON.stringify(raw)}`
       );
     }
     if (new Set(words2).size !== words2.length) {
       return issue(
         ctx,
-        path42,
+        path43,
         `a list domain names each word once, got ${JSON.stringify(raw)}`
       );
     }
@@ -63424,7 +63476,7 @@ function parseDomain(ctx, path42, raw) {
     if (unwritable2.length > 0) {
       return issue(
         ctx,
-        path42,
+        path43,
         `a list domain's words must be non-empty, slash-free, and newline-free \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
       );
     }
@@ -63443,29 +63495,29 @@ function parseDomain(ctx, path42, raw) {
     }
     return issue(
       ctx,
-      path42,
+      path43,
       `a range domain is { min, max, step?, atLeast? } with integers min \u2264 max, a whole step \u2265 1, and atLeast naming another range setting, got ${JSON.stringify(raw)}`
     );
   }
   return issue(
     ctx,
-    path42,
+    path43,
     `domain must be "bool", a list of words, or { min, max }, got ${describeValue2(raw)}`
   );
 }
-function parseSettingDecl(ctx, path42, raw) {
+function parseSettingDecl(ctx, path43, raw) {
   if (!isPlainObject3(raw)) {
     return issue(
       ctx,
-      path42,
-      `${path42} must be { label, domain, default }, got ${describeType2(raw)}`
+      path43,
+      `${path43} must be { label, domain, default }, got ${describeType2(raw)}`
     );
   }
   for (const key of Object.keys(raw)) {
     if (!DECL_KEYS.includes(key)) {
       issue(
         ctx,
-        `${path42}.${key}`,
+        `${path43}.${key}`,
         `Unknown setting key "${key}". Expected one of: ${DECL_KEYS.join(", ")}`
       );
     }
@@ -63475,17 +63527,17 @@ function parseSettingDecl(ctx, path42, raw) {
   if (!labelOk) {
     issue(
       ctx,
-      `${path42}.label`,
+      `${path43}.label`,
       `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue2(label2)}`
     );
   }
-  const domain = parseDomain(ctx, `${path42}.domain`, raw.domain);
+  const domain = parseDomain(ctx, `${path43}.domain`, raw.domain);
   if (!labelOk || domain === void 0) return void 0;
   const decl = { label: label2, domain, default: raw.default };
   if (!isSettingValue(raw.default) || !inSettingDomain(decl, raw.default)) {
     return issue(
       ctx,
-      `${path42}.default`,
+      `${path43}.default`,
       `default must be ${describeSettingDomain(decl)}, got ${describeValue2(raw.default)}`
     );
   }
@@ -63512,10 +63564,10 @@ function settingsDeclSpec() {
       },
       additionalProperties: SETTING_DECL_JSON
     },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      const at = `${path42}.${field}`;
+      const at = `${path43}.${field}`;
       if (!isPlainObject3(v)) {
         return issue(
           ctx,
@@ -63559,14 +63611,14 @@ function placementIdSpec() {
       minLength: 1,
       pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`
     },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (typeof v === "string" && v.length > 0 && !/[:/]/.test(v) && !isReservedName(v))
         return v;
       return issue(
         ctx,
-        `${path42}.${field}`,
+        `${path43}.${field}`,
         `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue2(v)}`
       );
     }
@@ -63580,10 +63632,10 @@ function placementSettingsSpec() {
       propertyNames: SETTING_NAME_JSON,
       additionalProperties: SETTING_VALUE_JSON
     },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      const at = `${path42}.${field}`;
+      const at = `${path43}.${field}`;
       if (!isPlainObject3(v)) {
         return issue(
           ctx,
@@ -63634,7 +63686,7 @@ function validateSegments(ctx, raw, inherited) {
   }
   return out;
 }
-function joinTemplateBody(ctx, path42, field, raw) {
+function joinTemplateBody(ctx, path43, field, raw) {
   const v = raw[field];
   if (typeof v === "string") return v;
   if (Array.isArray(v)) {
@@ -63647,17 +63699,17 @@ function joinTemplateBody(ctx, path42, field, raw) {
       }
       ok3 = false;
       ctx.issues.push({
-        path: `${path42}.${field}[${i}]`,
-        message: `${path42}.${field}[${i}] must be a string, got ${describeType2(el)}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), field])
+        path: `${path43}.${field}[${i}]`,
+        message: `${path43}.${field}[${i}] must be a string, got ${describeType2(el)}`,
+        line: findKeyLine(ctx.source, [...path43.split("."), field])
       });
     }
     return ok3 ? parts.join("") : void 0;
   }
   ctx.issues.push({
-    path: `${path42}.${field}`,
-    message: `${path42}.${field} must be a string or an array of strings, got ${describeType2(v)}`,
-    line: findKeyLine(ctx.source, [...path42.split("."), field])
+    path: `${path43}.${field}`,
+    message: `${path43}.${field} must be a string or an array of strings, got ${describeType2(v)}`,
+    line: findKeyLine(ctx.source, [...path43.split("."), field])
   });
   return void 0;
 }
@@ -63668,18 +63720,18 @@ function ownTemplateSpec() {
   return {
     required: true,
     json: TEMPLATE_BODY_JSON,
-    parse: (ctx, path42, field, raw) => raw[field] === void 0 ? reject(
+    parse: (ctx, path43, field, raw) => raw[field] === void 0 ? reject(
       ctx,
-      `${path42}.${field}`,
-      `${path42} declares no template \u2014 only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path42.slice("segments.".length))}`
-    ) ?? void 0 : joinTemplateBody(ctx, path42, field, raw)
+      `${path43}.${field}`,
+      `${path43} declares no template \u2014 only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path43.slice("segments.".length))}`
+    ) ?? void 0 : joinTemplateBody(ctx, path43, field, raw)
   };
 }
 function optionalTemplateBodySpec() {
   return {
     required: false,
     json: TEMPLATE_BODY_JSON,
-    parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : joinTemplateBody(ctx, path42, field, raw)
+    parse: (ctx, path43, field, raw) => raw[field] === void 0 ? void 0 : joinTemplateBody(ctx, path43, field, raw)
   };
 }
 function partialsSpec() {
@@ -63689,20 +63741,20 @@ function partialsSpec() {
       type: "object",
       additionalProperties: TEMPLATE_BODY_JSON
     },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (!isPlainObject3(v)) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${path42}.${field} must be an object, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
+          path: `${path43}.${field}`,
+          message: `${path43}.${field} must be an object, got ${describeType2(v)}`,
+          line: findKeyLine(ctx.source, [...path43.split("."), field])
         });
         return void 0;
       }
       const out = /* @__PURE__ */ Object.create(null);
       for (const name of Object.keys(v)) {
-        const body = joinTemplateBody(ctx, `${path42}.${field}`, name, v);
+        const body = joinTemplateBody(ctx, `${path43}.${field}`, name, v);
         if (body !== void 0) out[name] = body;
       }
       return out;
@@ -63719,16 +63771,16 @@ function widthSpec() {
         { type: "integer", minimum: 1 }
       ]
     },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (v === "auto") return "auto";
       if (v === "fill") return "fill";
       if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
       ctx.issues.push({
-        path: `${path42}.${field}`,
+        path: `${path43}.${field}`,
         message: `width must be "auto", "fill", or a positive integer, got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), field])
+        line: findKeyLine(ctx.source, [...path43.split("."), field])
       });
       return void 0;
     }
@@ -63740,10 +63792,10 @@ function varsSpec() {
     // [LAW:one-source-of-truth] The nested `vars` schema is the SAME name →
     // VariableDecl map the top-level `variables` block emits — one source.
     json: variablesMapJson(),
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      return validateVariables(ctx, `${path42}.${field}`, v);
+      return validateVariables(ctx, `${path43}.${field}`, v);
     }
   };
 }
@@ -63828,27 +63880,27 @@ function validateActions(ctx, raw, home) {
   }
   return out;
 }
-function issue2(ctx, path42, message) {
+function issue2(ctx, path43, message) {
   ctx.issues.push({
-    path: path42,
+    path: path43,
     message,
-    line: findKeyLine(ctx.source, path42.split("."))
+    line: findKeyLine(ctx.source, path43.split("."))
   });
 }
-function validateActionDecl(ctx, path42, raw, home) {
+function validateActionDecl(ctx, path43, raw, home) {
   if (!isPlainObject3(raw)) {
     issue2(
       ctx,
-      path42,
-      `${path42} must be an action object, got ${describeType2(raw)}`
+      path43,
+      `${path43} must be an action object, got ${describeType2(raw)}`
     );
     return null;
   }
   if ("persistWhen" in raw) {
     issue2(
       ctx,
-      path42,
-      `${path42}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
+      path43,
+      `${path43}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
     );
     return null;
   }
@@ -63856,20 +63908,20 @@ function validateActionDecl(ctx, path42, raw, home) {
   if (present.length !== 1) {
     issue2(
       ctx,
-      path42,
+      path43,
       `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${present.length > 1 ? ` (found: ${present.join(", ")})` : ""}`
     );
     return null;
   }
-  return actionArms(home)[present[0]](ctx, path42, raw);
+  return actionArms(home)[present[0]](ctx, path43, raw);
 }
 function actionHomeOf(filePath2) {
   if (filePath2 === "<default>") return { dir: null };
   return import_node_path28.default.isAbsolute(filePath2) ? { dir: import_node_path28.default.dirname(filePath2) } : { text: filePath2 };
 }
 var actionArms = (home) => ({
-  set: (ctx, path42, raw) => valueSourceAction(ctx, path42, raw, "set", SET_ARMS),
-  persist: (ctx, path42, raw) => valueSourceAction(ctx, path42, raw, "persist", PERSIST_ARMS),
+  set: (ctx, path43, raw) => valueSourceAction(ctx, path43, raw, "set", SET_ARMS),
+  persist: (ctx, path43, raw) => valueSourceAction(ctx, path43, raw, "persist", PERSIST_ARMS),
   copy: templateArm("copy"),
   open: templateArm("open"),
   reset: resetArm,
@@ -63886,31 +63938,31 @@ var actionArms = (home) => ({
   do: doArm
 });
 function templateArm(key) {
-  return (ctx, path42, raw) => {
+  return (ctx, path43, raw) => {
     for (const k of Object.keys(raw)) {
       if (k !== key)
         issue2(
           ctx,
-          `${path42}.${k}`,
+          `${path43}.${k}`,
           `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
         );
     }
-    const tmpl = requireString(ctx, path42, raw, key);
+    const tmpl = requireString(ctx, path43, raw, key);
     return tmpl === null ? null : { [key]: tmpl };
   };
 }
-function resetArm(ctx, path42, raw) {
+function resetArm(ctx, path43, raw) {
   for (const k of Object.keys(raw)) {
     if (k !== "reset")
       issue2(
         ctx,
-        `${path42}.${k}`,
+        `${path43}.${k}`,
         `Unknown key "${k}" on a reset action. Expected only: reset`
       );
   }
   const key = slashFreeString(
     ctx,
-    path42,
+    path43,
     "reset",
     raw,
     `reset key must be non-empty (the config globals field to clear)`,
@@ -63926,19 +63978,19 @@ var MARKER_SUBJECT = {
   save: "it saves the session's unsaved settings"
 };
 function markerArm(key) {
-  return (ctx, path42, raw) => {
+  return (ctx, path43, raw) => {
     for (const k of Object.keys(raw)) {
       if (k !== key)
         issue2(
           ctx,
-          `${path42}.${k}`,
+          `${path43}.${k}`,
           `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
         );
     }
     if (raw[key] !== true) {
       issue2(
         ctx,
-        `${path42}.${key}`,
+        `${path43}.${key}`,
         `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue2(raw[key])}`
       );
       return null;
@@ -63946,42 +63998,42 @@ function markerArm(key) {
     return { [key]: true };
   };
 }
-function presetArm(ctx, path42, raw) {
+function presetArm(ctx, path43, raw) {
   const verb = raw.preset;
   const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
   for (const k of Object.keys(raw)) {
     if (!allowed.includes(k))
       issue2(
         ctx,
-        `${path42}.${k}`,
+        `${path43}.${k}`,
         `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`
       );
   }
   if (verb !== "save" && verb !== "delete") {
     issue2(
       ctx,
-      `${path42}.preset`,
+      `${path43}.preset`,
       `preset must be "save" or "delete", got ${describeValue2(verb)}`
     );
     return null;
   }
   if (verb === "save") return { preset: "save" };
-  const name = requireString(ctx, path42, raw, "name");
+  const name = requireString(ctx, path43, raw, "name");
   return name === null ? null : { preset: "delete", name };
 }
-function themeDefaultArm(ctx, path42, raw) {
+function themeDefaultArm(ctx, path43, raw) {
   for (const k of Object.keys(raw)) {
     if (k !== "themeDefault")
       issue2(
         ctx,
-        `${path42}.${k}`,
+        `${path43}.${k}`,
         `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`
       );
   }
   if (raw.themeDefault !== "save") {
     issue2(
       ctx,
-      `${path42}.themeDefault`,
+      `${path43}.themeDefault`,
       `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue2(raw.themeDefault)}`
     );
     return null;
@@ -63993,7 +64045,7 @@ var DOCTOR_KEYS = {
   fix: ["doctor", "check"],
   mark: ["doctor", "check", "mark"]
 };
-function doctorArm(ctx, path42, raw) {
+function doctorArm(ctx, path43, raw) {
   const verb = raw.doctor;
   const known = typeof verb === "string" && Object.hasOwn(DOCTOR_KEYS, verb);
   const allowed = known ? DOCTOR_KEYS[verb] : [...new Set(Object.values(DOCTOR_KEYS).flat())];
@@ -64001,14 +64053,14 @@ function doctorArm(ctx, path42, raw) {
     if (!allowed.includes(k))
       issue2(
         ctx,
-        `${path42}.${k}`,
+        `${path43}.${k}`,
         `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`
       );
   }
   if (!known) {
     issue2(
       ctx,
-      `${path42}.doctor`,
+      `${path43}.doctor`,
       `doctor must be ${Object.keys(DOCTOR_KEYS).map((v) => `"${v}"`).join(", ")}, got ${describeValue2(verb)}`
     );
     return null;
@@ -64019,7 +64071,7 @@ function doctorArm(ctx, path42, raw) {
   if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
     issue2(
       ctx,
-      `${path42}.check`,
+      `${path43}.check`,
       `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue2(check)}`
     );
     return null;
@@ -64029,25 +64081,25 @@ function doctorArm(ctx, path42, raw) {
   if (!GLYPH_MARKS.includes(mark)) {
     issue2(
       ctx,
-      `${path42}.mark`,
+      `${path43}.mark`,
       `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue2(mark)}`
     );
     return null;
   }
   return { doctor: "mark", check, mark };
 }
-function slashArm(ctx, path42, raw) {
+function slashArm(ctx, path43, raw) {
   for (const k of Object.keys(raw)) {
     if (k !== "slash")
       issue2(
         ctx,
-        `${path42}.${k}`,
+        `${path43}.${k}`,
         `Unknown key "${k}" on a slash action. Expected only: slash`
       );
   }
   const parsed2 = parseSlashLine(raw.slash);
   if (parsed2.kind === "refused") {
-    issue2(ctx, `${path42}.slash`, parsed2.reason);
+    issue2(ctx, `${path43}.slash`, parsed2.reason);
     return null;
   }
   return { slash: parsed2.line };
@@ -64055,12 +64107,12 @@ function slashArm(ctx, path42, raw) {
 var RUN_KEYS = ["run", "env", "refreshes"];
 var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function runArm(home) {
-  return (ctx, path42, raw) => {
+  return (ctx, path43, raw) => {
     for (const k of Object.keys(raw)) {
       if (!RUN_KEYS.includes(k))
         issue2(
           ctx,
-          `${path42}.${k}`,
+          `${path43}.${k}`,
           `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`
         );
     }
@@ -64069,7 +64121,7 @@ function runArm(home) {
     if (!Array.isArray(run3) || run3.length === 0 || run3.some((item) => typeof item !== "string") || run3[0] === "") {
       issue2(
         ctx,
-        `${path42}.run`,
+        `${path43}.run`,
         `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue2(run3)}`
       );
     }
@@ -64079,7 +64131,7 @@ function runArm(home) {
     )) {
       issue2(
         ctx,
-        `${path42}.env`,
+        `${path43}.env`,
         `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue2(env2)}`
       );
     }
@@ -64087,14 +64139,14 @@ function runArm(home) {
     if (!Array.isArray(refreshes) || refreshes.some((name) => typeof name !== "string" || name === "")) {
       issue2(
         ctx,
-        `${path42}.refreshes`,
+        `${path43}.refreshes`,
         `refreshes must list the names of the sources the program writes, got ${describeValue2(refreshes)}`
       );
     }
     if (!("dir" in home)) {
       issue2(
         ctx,
-        `${path42}.run`,
+        `${path43}.run`,
         `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
       );
     }
@@ -64121,12 +64173,12 @@ var RUN_ARM_JSON = {
   required: ["run"],
   additionalProperties: false
 };
-function doArm(ctx, path42, raw) {
+function doArm(ctx, path43, raw) {
   for (const k of Object.keys(raw)) {
     if (k !== "do")
       issue2(
         ctx,
-        `${path42}.${k}`,
+        `${path43}.${k}`,
         `Unknown key "${k}" on a do action. Expected only: do`
       );
   }
@@ -64134,17 +64186,17 @@ function doArm(ctx, path42, raw) {
   if (!Array.isArray(members) || members.length < 2 || members.some((m) => typeof m !== "string" || m === "")) {
     issue2(
       ctx,
-      `${path42}.do`,
+      `${path43}.do`,
       `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue2(members)}`
     );
     return null;
   }
   return { do: members };
 }
-function slashFreeString(ctx, path42, field, raw, emptyMessage, slashMessage) {
-  const v = requireString(ctx, path42, raw, field);
+function slashFreeString(ctx, path43, field, raw, emptyMessage, slashMessage) {
+  const v = requireString(ctx, path43, raw, field);
   if (v === null) return null;
-  const at = `${path42}.${field}`;
+  const at = `${path43}.${field}`;
   if (v === "") {
     issue2(ctx, at, emptyMessage);
     return null;
@@ -64159,11 +64211,11 @@ var DISCRIMINATOR_NOUN = {
   set: "the SessionState key to write",
   persist: "the config globals field to write"
 };
-function validateDiscriminatorKey(ctx, path42, raw, discriminator) {
+function validateDiscriminatorKey(ctx, path43, raw, discriminator) {
   const noun = DISCRIMINATOR_NOUN[discriminator];
   const value = slashFreeString(
     ctx,
-    path42,
+    path43,
     discriminator,
     raw,
     `${discriminator} key must be non-empty (${noun})`,
@@ -64229,7 +64281,7 @@ function valueSourceArm(discriminator, fieldMap, checks = [], detectKeys) {
   const fullKeys = Object.keys(fieldMap);
   const detect = detectKeys ?? fullKeys;
   const keys2 = [discriminator];
-  const inner = (ctx, path42, raw) => fields(ctx, fieldMap, path42, raw);
+  const inner = (ctx, path43, raw) => fields(ctx, fieldMap, path43, raw);
   const source = objectJson(fieldMap);
   return {
     detect,
@@ -64297,13 +64349,13 @@ function VALUE_SOURCE_MESSAGE(discriminator) {
   const list2 = clauses.length === 1 ? last2 : `${clauses.slice(0, -1).join(", ")}, or ${last2}`;
   return `a ${discriminator} action declares exactly one value source: ${list2}`;
 }
-function valueSourceAction(ctx, path42, raw, discriminator, arms) {
-  const keys2 = validateDiscriminatorKey(ctx, path42, raw, discriminator);
+function valueSourceAction(ctx, path43, raw, discriminator, arms) {
+  const keys2 = validateDiscriminatorKey(ctx, path43, raw, discriminator);
   const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
   if (present.length !== 1) {
     issue2(
       ctx,
-      path42,
+      path43,
       `${VALUE_SOURCE_MESSAGE(discriminator)}${present.length > 1 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
     );
     return null;
@@ -64313,11 +64365,11 @@ function valueSourceAction(ctx, path42, raw, discriminator, arms) {
     if (!arm2.allowed.includes(k))
       issue2(
         ctx,
-        `${path42}.${k}`,
+        `${path43}.${k}`,
         `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm2.allowed.join(", ")}`
       );
   }
-  const payload = arm2.parse(ctx, path42, raw);
+  const payload = arm2.parse(ctx, path43, raw);
   return keys2 === null || payload === null ? null : { ...keys2, ...payload };
 }
 function setLiteralSpec(discriminator) {
@@ -64325,9 +64377,9 @@ function setLiteralSpec(discriminator) {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path42, field, raw) => slashFreeString(
+    parse: (ctx, path43, field, raw) => slashFreeString(
       ctx,
-      path42,
+      path43,
       field,
       raw,
       `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
@@ -64350,9 +64402,9 @@ function fromSpec(discriminator) {
         }
       ]
     },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const from = raw[field];
-      const at = `${path42}.${field}`;
+      const at = `${path43}.${field}`;
       if (typeof from === "string") {
         if (from === "") {
           issue2(ctx, at, `${field} must be a non-empty domain name`);
@@ -64416,9 +64468,9 @@ function cycleSpec(discriminator) {
       minItems: 2,
       uniqueItems: true
     },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
-      const at = `${path42}.${field}`;
+      const at = `${path43}.${field}`;
       if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
         issue2(
           ctx,
@@ -64470,11 +64522,11 @@ function intMarkerSpec() {
   return {
     required: true,
     json: { const: true },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       if (raw[field] !== true) {
         issue2(
           ctx,
-          `${path42}.${field}`,
+          `${path43}.${field}`,
           `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue2(raw[field])}`
         );
         return void 0;
@@ -64487,10 +64539,10 @@ function layoutNameSpec(field) {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path42, f, raw) => {
-      const v = requireString(ctx, path42, raw, f);
+    parse: (ctx, path43, f, raw) => {
+      const v = requireString(ctx, path43, raw, f);
       if (v === null) return void 0;
-      const at = `${path42}.${f}`;
+      const at = `${path43}.${f}`;
       if (v === "") {
         issue2(ctx, at, `${field} must be non-empty (a segment name)`);
         return void 0;
@@ -64511,12 +64563,12 @@ function relationSpec() {
   return {
     required: true,
     json: { enum: ["before", "after"] },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v !== "before" && v !== "after") {
         issue2(
           ctx,
-          `${path42}.${field}`,
+          `${path43}.${field}`,
           `relation must be "before" or "after", got ${describeValue2(v)}`
         );
         return void 0;
@@ -64529,12 +64581,12 @@ function requireIntSpec() {
   return {
     required: true,
     json: { type: "integer" },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (typeof v !== "number" || !Number.isInteger(v)) {
         issue2(
           ctx,
-          `${path42}.${field}`,
+          `${path43}.${field}`,
           `${field} must be an integer, got ${describeValue2(v)}`
         );
         return void 0;
@@ -65898,7 +65950,6 @@ var RuntimeStats = class _RuntimeStats {
       watchersActive: 0,
       dirWatchesActive: 0,
       handlerProbes: [],
-      handlerProbe: { nonce: "", link: "" },
       clients: [],
       bundle: "/",
       sourceDigest: null,
@@ -65968,7 +66019,6 @@ var RuntimeStats = class _RuntimeStats {
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,
       handlerProbes: extras.handlerProbes,
-      handlerProbe: extras.handlerProbe,
       clients: extras.clients,
       bundle: extras.bundle,
       daemon: extras.daemon,
@@ -65993,16 +66043,6 @@ function buildLabel(version, digest2) {
 var ARRIVALS_KEPT = 16;
 var ProbeArrivals = class {
   arrivals = [];
-  // A probe link for the doctor to open, signed with the daemon's own key:
-  // the doctor's shell may keep its state elsewhere than the shell that
-  // spawned the daemon, so only the daemon can sign a link it will honour.
-  offer(signLink) {
-    const nonce = randomUUID();
-    return {
-      nonce,
-      link: signLink(`${URL_SCHEME}://${VERB_DOCTOR_PROBE}/${nonce}`)
-    };
-  }
   arrive(arrival) {
     this.arrivals = [...this.arrivals, arrival].slice(-ARRIVALS_KEPT);
   }
@@ -66183,8 +66223,8 @@ function parserOf(parse3) {
 function refusalOf2({ identity: { read: read2, refresh } }) {
   return (read2.kind === "file" ? absolute("file.path", read2.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (read2.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
 }
-function absolute(where, path42) {
-  return (0, import_node_path31.isAbsolute)(path42) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path42)}`;
+function absolute(where, path43) {
+  return (0, import_node_path31.isAbsolute)(path43) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path43)}`;
 }
 function capturing(pattern2) {
   let regex;
@@ -67501,8 +67541,8 @@ function boundOf2(listKeys) {
   const found2 = BOUND.exec(listKeys);
   return found2 === null ? null : { line: found2[0], command: found2[1] };
 }
-var clickUrl = (socket) => `${STATUS_CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
-var isClickBinding = (bound) => bound?.command.includes(STATUS_CLICK_URL) ?? false;
+var clickUrl = (socket) => `${STATUS_LINE_CLICK_PREFIX}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
+var isClickBinding = (bound) => bound?.command.includes(STATUS_LINE_CLICK_PREFIX) ?? false;
 function bindingRestorePlan(prior, listKeys) {
   const forget = {
     command: ["set-option", "-g", "-q", "-u", BINDING_OPTION]
@@ -68719,11 +68759,11 @@ var import_node_path35 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
-function presence(path42) {
+function presence(path43) {
   try {
-    return fs_default.statSync(path42, { throwIfNoEntry: false }) === void 0 ? "absent" : "present";
+    return fs_default.statSync(path43, { throwIfNoEntry: false }) === void 0 ? "absent" : "present";
   } catch (e) {
-    return { path: path42, error: e.message };
+    return { path: path43, error: e.message };
   }
 }
 
@@ -68887,8 +68927,8 @@ var REPO_CONFIG_BASE = ".cc-candybar";
 function xdgConfigBase(locs) {
   return import_node_path35.default.join(locs.configHome, "cc-candybar", "config");
 }
-function homeLayer(path42) {
-  return { path: path42, scope: "plugins" };
+function homeLayer(path43) {
+  return { path: path43, scope: "plugins" };
 }
 function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
   const unchecked = [];
@@ -69215,11 +69255,11 @@ function segmentNameSpec() {
     // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
     required: true,
     json: { type: "string" },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && v.length > 0) return v;
       ctx.issues.push({
-        path: `${path42}.${field}`,
+        path: `${path43}.${field}`,
         message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue2(v)}`,
         line: findKeyLine(ctx.source, ["root"])
       });
@@ -69234,13 +69274,13 @@ function directionSpec() {
     // `cellsSegmentsSpec`.
     required: true,
     json: { enum: [...DIRECTIONS] },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && DIRECTIONS.includes(v)) {
         return v;
       }
       ctx.issues.push({
-        path: `${path42}.${field}`,
+        path: `${path43}.${field}`,
         message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(v)})`,
         line: findKeyLine(ctx.source, ["root"])
       });
@@ -69258,17 +69298,17 @@ function childrenSpec(node) {
     // self-reference. The runtime recursion and the schema recursion break the
     // same cycle, declared in one place.
     json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (!Array.isArray(v)) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
+          path: `${path43}.${field}`,
           message: `a container must have a "children" array of layout nodes, got ${describeType2(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
         return [];
       }
-      return v.map((child, i) => node(ctx, `${path42}.${field}[${i}]`, child));
+      return v.map((child, i) => node(ctx, `${path43}.${field}[${i}]`, child));
     }
   };
 }
@@ -69297,13 +69337,13 @@ function segArmSpec() {
   return {
     required: true,
     json: { type: "string" },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && v.length > 0) return v;
       ctx.issues.push({
-        path: `${path42}.${field}`,
+        path: `${path43}.${field}`,
         message: `a "seg" node must have a non-empty segment name, got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, [...path42.split("."), field])
+        line: findKeyLine(ctx.source, [...path43.split("."), field])
       });
       return "";
     }
@@ -69334,11 +69374,11 @@ var V_ARM_SCHEMA = {
     distribution: distributionSpec()
   }
 };
-var validateRoot = (ctx, path42, raw) => {
+var validateRoot = (ctx, path43, raw) => {
   if (typeof raw === "string") {
     if (raw.length === 0) {
       ctx.issues.push({
-        path: path42,
+        path: path43,
         message: `a bare-string layout node must be a non-empty segment name`,
         line: findKeyLine(ctx.source, ["root"])
       });
@@ -69348,21 +69388,21 @@ var validateRoot = (ctx, path42, raw) => {
   }
   if (!isPlainObject3(raw)) {
     ctx.issues.push({
-      path: path42,
+      path: path43,
       message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType2(raw)}`,
       line: findKeyLine(ctx.source, ["root"])
     });
     return EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "container") {
-    return record(ctx, CONTAINER_SCHEMA, path42, raw) ?? EMPTY_VERTICAL_NODE;
+    return record(ctx, CONTAINER_SCHEMA, path43, raw) ?? EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "segment") {
-    return record(ctx, SEGMENT_NODE_SCHEMA, path42, raw) ?? EMPTY_VERTICAL_NODE;
+    return record(ctx, SEGMENT_NODE_SCHEMA, path43, raw) ?? EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "cells") {
     ctx.issues.push({
-      path: path42,
+      path: path43,
       message: `kind: "cells" is no longer supported \u2014 use the h-arm spelling instead:
   Old: { kind: "cells", segments: ["seg1", "seg2"] }
   New: { h: ["seg1", "seg2"] }`,
@@ -69371,7 +69411,7 @@ var validateRoot = (ctx, path42, raw) => {
     return EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "group") {
-    const group = record(ctx, GROUP_SCHEMA, path42, raw);
+    const group = record(ctx, GROUP_SCHEMA, path43, raw);
     if (group === null) return EMPTY_VERTICAL_NODE;
     ctx.groups.push({
       name: group.name,
@@ -69382,7 +69422,7 @@ var validateRoot = (ctx, path42, raw) => {
       ...group.bg !== void 0 && { bg: group.bg },
       ...group.fg !== void 0 && { fg: group.fg },
       ...group.when !== void 0 && { when: group.when },
-      path: path42
+      path: path43
     });
     return lowerGroup(group);
   }
@@ -69393,14 +69433,14 @@ var validateRoot = (ctx, path42, raw) => {
   if (armCount > 1) {
     const present = ["seg", "h", "v"].filter((k) => k in raw);
     ctx.issues.push({
-      path: path42,
+      path: path43,
       message: `a layout node may have exactly one of "seg", "h", or "v" \u2014 got ${present.map((k) => `"${k}"`).join(" and ")} together`,
       line: findKeyLine(ctx.source, ["root"])
     });
     return EMPTY_VERTICAL_NODE;
   }
   if (hasSeg) {
-    const arm2 = record(ctx, SEG_ARM_SCHEMA, path42, raw);
+    const arm2 = record(ctx, SEG_ARM_SCHEMA, path43, raw);
     if (arm2 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "segment",
@@ -69411,7 +69451,7 @@ var validateRoot = (ctx, path42, raw) => {
     };
   }
   if (hasH) {
-    const arm2 = record(ctx, H_ARM_SCHEMA, path42, raw);
+    const arm2 = record(ctx, H_ARM_SCHEMA, path43, raw);
     if (arm2 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "container",
@@ -69422,7 +69462,7 @@ var validateRoot = (ctx, path42, raw) => {
     };
   }
   if (hasV) {
-    const arm2 = record(ctx, V_ARM_SCHEMA, path42, raw);
+    const arm2 = record(ctx, V_ARM_SCHEMA, path43, raw);
     if (arm2 === null) return EMPTY_VERTICAL_NODE;
     return {
       kind: "container",
@@ -69433,7 +69473,7 @@ var validateRoot = (ctx, path42, raw) => {
     };
   }
   ctx.issues.push({
-    path: `${path42}.kind`,
+    path: `${path43}.kind`,
     message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
     line: findKeyLine(ctx.source, ["root"])
   });
@@ -69447,13 +69487,13 @@ function rowsSpec() {
       propertyNames: { pattern: ROW_NAME_RE.source },
       additionalProperties: { $ref: LAYOUT_NODE_REF }
     },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (!isPlainObject3(v)) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
+          path: `${path43}.${field}`,
           message: `"rows" must be an object of row name \u2192 layout node, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
+          line: findKeyLine(ctx.source, [...path43.split("."), field])
         });
         return {};
       }
@@ -69461,13 +69501,13 @@ function rowsSpec() {
       for (const [name, node] of Object.entries(v)) {
         if (!ROW_NAME_RE.test(name)) {
           ctx.issues.push({
-            path: `${path42}.${field}.${name}`,
+            path: `${path43}.${field}.${name}`,
             message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
-            line: findKeyLine(ctx.source, [...path42.split("."), field, name])
+            line: findKeyLine(ctx.source, [...path43.split("."), field, name])
           });
           continue;
         }
-        rows[name] = validateRoot(ctx, `${path42}.${field}.${name}`, node);
+        rows[name] = validateRoot(ctx, `${path43}.${field}.${name}`, node);
       }
       return rows;
     }
@@ -69481,11 +69521,11 @@ var ROWS_SCHEMA = {
     distribution: distributionSpec()
   }
 };
-function validateRootFragment(ctx, path42, raw) {
+function validateRootFragment(ctx, path43, raw) {
   if (isPlainObject3(raw) && "rows" in raw) {
-    return record(ctx, ROWS_SCHEMA, path42, raw) ?? { rows: {} };
+    return record(ctx, ROWS_SCHEMA, path43, raw) ?? { rows: {} };
   }
-  return validateRoot(ctx, path42, raw);
+  return validateRoot(ctx, path43, raw);
 }
 var INSERT_SCHEMA = {
   noun: "insert key",
@@ -69506,25 +69546,25 @@ function validateInsert(ctx, raw, file) {
     return [];
   }
   return raw.flatMap((entry, i) => {
-    const path42 = `insert.${i}`;
-    const arm2 = record(ctx, INSERT_SCHEMA, path42, entry);
+    const path43 = `insert.${i}`;
+    const arm2 = record(ctx, INSERT_SCHEMA, path43, entry);
     if (arm2 === null) return [];
     const sides = ["before", "after"].filter(
       (side) => arm2[side] !== void 0
     );
     if (sides.length !== 1) {
       ctx.issues.push({
-        path: path42,
+        path: path43,
         message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
-        line: findKeyLine(ctx.source, path42.split("."))
+        line: findKeyLine(ctx.source, path43.split("."))
       });
       return [];
     }
     if (isReservedName(arm2.seg)) {
       ctx.issues.push({
-        path: `${path42}.seg`,
+        path: `${path43}.seg`,
         message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
-        line: findKeyLine(ctx.source, [...path42.split("."), "seg"])
+        line: findKeyLine(ctx.source, [...path43.split("."), "seg"])
       });
       return [];
     }
@@ -69532,9 +69572,9 @@ function validateInsert(ctx, raw, file) {
     const anchor = arm2[relation];
     if (isReservedName(anchor)) {
       ctx.issues.push({
-        path: `${path42}.${relation}`,
+        path: `${path43}.${relation}`,
         message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome \u2014 anchor on a placement id instead`,
-        line: findKeyLine(ctx.source, [...path42.split("."), relation])
+        line: findKeyLine(ctx.source, [...path43.split("."), relation])
       });
       return [];
     }
@@ -69544,7 +69584,7 @@ function validateInsert(ctx, raw, file) {
         ...arm2.id !== void 0 && { id: arm2.id },
         anchor,
         relation,
-        by: { file, entry: path42 }
+        by: { file, entry: path43 }
       }
     ];
   });
@@ -69553,11 +69593,11 @@ function groupNameSpec() {
   return {
     required: true,
     json: { type: "string", pattern: ROW_NAME_RE.source },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
+          path: `${path43}.${field}`,
           message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
@@ -69571,12 +69611,12 @@ function groupKeySpec() {
   return {
     required: false,
     json: { type: "string", minLength: 1 },
-    parse: (ctx, path42, field, raw) => {
+    parse: (ctx, path43, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
       if (typeof v !== "string" || v === "" || v.includes("/")) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
+          path: `${path43}.${field}`,
           message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue2(v)}`,
           line: findKeyLine(ctx.source, ["root"])
         });
@@ -69590,14 +69630,14 @@ function groupLabelSpec() {
   return {
     required: true,
     json: { type: "string", pattern: "^[^\\n\\r]*$" },
-    parse: (ctx, path42, field, raw) => {
-      const s = requireString(ctx, path42, raw, field);
+    parse: (ctx, path43, field, raw) => {
+      const s = requireString(ctx, path43, raw, field);
       if (s === null) return void 0;
       if (/[\n\r]/.test(s)) {
         ctx.issues.push({
-          path: `${path42}.${field}`,
-          message: `${path42}.${field}: group label must not contain newlines`,
-          line: findKeyLine(ctx.source, [...path42.split("."), field])
+          path: `${path43}.${field}`,
+          message: `${path43}.${field}: group label must not contain newlines`,
+          line: findKeyLine(ctx.source, [...path43.split("."), field])
         });
         return void 0;
       }
@@ -69639,9 +69679,9 @@ function lowerGroup(g) {
     g.when
   );
 }
-function groupIssue(ctx, path42, message) {
+function groupIssue(ctx, path43, message) {
   ctx.issues.push({
-    path: path42,
+    path: path43,
     message,
     line: findKeyLine(ctx.source, ["root"])
   });
@@ -69800,8 +69840,8 @@ function segmentReferencesMenu(template) {
     return false;
   }
 }
-function menuIssue(ctx, path42, message) {
-  ctx.issues.push({ path: path42, message, line: findKeyLine(ctx.source, ["root"]) });
+function menuIssue(ctx, path43, message) {
+  ctx.issues.push({ path: path43, message, line: findKeyLine(ctx.source, ["root"]) });
 }
 function checkMenuDecls(ctx, out) {
   reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
@@ -69884,10 +69924,10 @@ function synthesizePlacementMenus(config2, issues) {
   const callsOf = /* @__PURE__ */ new Map();
   const reported = /* @__PURE__ */ new Set();
   const issue3 = (segName, message) => {
-    const path42 = `segments.${segName}`;
-    if (reported.has(`${path42}\0${message}`)) return;
-    reported.add(`${path42}\0${message}`);
-    issues.push({ path: path42, message });
+    const path43 = `segments.${segName}`;
+    if (reported.has(`${path43}\0${message}`)) return;
+    reported.add(`${path43}\0${message}`);
+    issues.push({ path: path43, message });
   };
   for (const preset of presetNames(config2.presets)) {
     const ownerBySynthKey = /* @__PURE__ */ new Map();
@@ -70001,12 +70041,12 @@ init_globals();
 var presetRootSpec = {
   required: false,
   json: { $ref: ROOT_FRAGMENT_REF },
-  parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path42}.${field}`, raw[field])
+  parse: (ctx, path43, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path43}.${field}`, raw[field])
 };
 var presetGlobalsSpec = {
   required: false,
   json: presetGlobalsJson(),
-  parse: (ctx, path42, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path42}.${field}`, raw[field])
+  parse: (ctx, path43, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path43}.${field}`, raw[field])
 };
 var PRESET_SCHEMA = {
   noun: "preset key",
@@ -70456,8 +70496,8 @@ function shortenModelName(formatted) {
   const version = minor ? `${major}.${minor}` : major;
   return `${initial2}${version}`;
 }
-function abbreviatePath(path42) {
-  const segments = path42.split("/");
+function abbreviatePath(path43) {
+  const segments = path43.split("/");
   const lastIndex = segments.length - 1;
   return segments.map((seg2, i) => {
     if (i === lastIndex) return seg2;
@@ -71042,9 +71082,9 @@ function authoredPlacement(raw, name) {
   ];
   for (const [layoutKey, fragment] of layouts) {
     if (fragment === void 0) continue;
-    for (const [node, path42] of fragmentNodePaths(fragment, layoutKey)) {
+    for (const [node, path43] of fragmentNodePaths(fragment, layoutKey)) {
       if (node.kind === "segment" && node.name === name)
-        return { layoutKey, path: path42 };
+        return { layoutKey, path: path43 };
     }
   }
   return void 0;
@@ -71155,12 +71195,12 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
     return AXIS_OF[node.direction] === "row" && !placesRows ? where : void 0;
   }
   const whereBelow = (node, where) => node.kind === "segment" ? "band" : AXIS_OF[node.direction] === "cell" ? "nested" : where;
-  const childPaths = (node, path42) => node.kind === "container" ? node.children.map((child, i) => [child, childPath(path42, i)]) : node.opens === void 0 ? [] : [[node.opens.body, bodyPath(path42)]];
+  const childPaths = (node, path43) => node.kind === "container" ? node.children.map((child, i) => [child, childPath(path43, i)]) : node.opens === void 0 ? [] : [[node.opens.body, bodyPath(path43)]];
   function* unreadBelow(children2, where) {
-    for (const [child, path42] of children2) {
+    for (const [child, path43] of children2) {
       const own2 = unreadAt(child, where);
-      if (own2 !== void 0) yield [own2, path42];
-      yield* unreadBelow(childPaths(child, path42), whereBelow(child, where));
+      if (own2 !== void 0) yield [own2, path43];
+      yield* unreadBelow(childPaths(child, path43), whereBelow(child, where));
     }
   }
   const reported = /* @__PURE__ */ new Set();
@@ -71169,27 +71209,27 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
     const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
       ([name, row2]) => [row2, `${layoutKey}.rows.${name}`]
     ) : childPaths(top, layoutKey);
-    for (const [where, path42] of unreadBelow(rows, whereBelow(top, "bar"))) {
+    for (const [where, path43] of unreadBelow(rows, whereBelow(top, "bar"))) {
       ctx.issues.push({
-        path: path42,
-        message: UNREAD_DISTRIBUTION[where](path42),
-        line: findKeyLine(ctx.source, path42.split("."))
+        path: path43,
+        message: UNREAD_DISTRIBUTION[where](path43),
+        line: findKeyLine(ctx.source, path43.split("."))
       });
     }
-    for (const [node, path42] of fragmentNodePaths(root, layoutKey)) {
-      const line = findKeyLine(ctx.source, path42.split("."));
+    for (const [node, path43] of fragmentNodePaths(root, layoutKey)) {
+      const line = findKeyLine(ctx.source, path43.split("."));
       if (node.when !== void 0) {
-        checkTemplateRefs(ctx, `${path42}.when`, node.when, templateScope, {
+        checkTemplateRefs(ctx, `${path43}.when`, node.when, templateScope, {
           line
         });
-        checkWhenParses(ctx, `${path42}.when`, node.when, line);
-        checkActionRefs(ctx, cfg, `${path42}.when`, node.when, line);
+        checkWhenParses(ctx, `${path43}.when`, node.when, line);
+        checkActionRefs(ctx, cfg, `${path43}.when`, node.when, line);
       }
       if (node.kind !== "segment") continue;
       if (isSettingsAnchor(node.name)) {
         if (node.id !== void 0 || node.settings !== void 0) {
           ctx.issues.push({
-            path: path42,
+            path: path43,
             message: `${layoutKey} gives the global settings menu anchor "${SETTINGS_ANCHOR}" an id or settings \u2014 the anchor only marks where the menu goes, so place it as the bare name "${SETTINGS_ANCHOR}"`,
             line
           });
@@ -71200,12 +71240,12 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       if (reportable(placed2)) {
         reported.add(node.name);
         ctx.unplaced.push({
-          path: path42,
+          path: path43,
           message: unplacedMessage(layoutKey, node.name, cfg.segments, placed2),
           line
         });
       }
-      checkPlacementSettings(ctx, cfg, node, path42, line);
+      checkPlacementSettings(ctx, cfg, node, path43, line);
     }
   };
   if (authored.root !== void 0) checkLayoutTree(authored.root, "root");
@@ -71216,8 +71256,8 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
   }
   const rendered = /* @__PURE__ */ new Map([["root", rootNode(cfg.root)]]);
   for (const name of presetNames(cfg.presets)) {
-    const { node, path: path42 } = presetRoot(cfg, name);
-    rendered.set(path42, node);
+    const { node, path: path43 } = presetRoot(cfg, name);
+    rendered.set(path43, node);
   }
   for (const [key, tree] of rendered) {
     checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
@@ -71454,9 +71494,9 @@ function checkRuleSlotReads(ctx, cfg) {
   const declared = new Map(declaredVariables(cfg));
   const fold = valueReadsOf(cfg);
   const slotRead = (reads, seen2) => {
-    for (const { path: path42, reaches } of reads) {
+    for (const { path: path43, reaches } of reads) {
       const atSlot = EXPRESSION_SLOTS.find(
-        (slot) => SLOT_PATHS[slot] === path42 || SLOT_PATHS[slot].startsWith(`${path42}.`)
+        (slot) => SLOT_PATHS[slot] === path43 || SLOT_PATHS[slot].startsWith(`${path43}.`)
       );
       if (atSlot !== void 0)
         return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
@@ -71484,27 +71524,27 @@ function checkRuleSlotReads(ctx, cfg) {
   for (const { at, rule } of authoredRules(cfg)) {
     const why2 = slotRead(fold.ofTemplate(rule), /* @__PURE__ */ new Set());
     if (why2 === null) continue;
-    const path42 = at.join(".");
+    const path43 = at.join(".");
     ctx.issues.push({
-      path: path42,
-      message: `${path42} ${why2}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
+      path: path43,
+      message: `${path43} ${why2}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
       line: findKeyLine(ctx.source, [...at])
     });
   }
 }
-function checkWhenParses(ctx, path42, when2, line) {
+function checkWhenParses(ctx, path43, when2, line) {
   try {
     SYNTAX_ENGINE.parse(when2);
   } catch (e) {
     ctx.issues.push({
-      path: path42,
-      message: `Template parse error in ${path42}: ${e.message}`,
+      path: path43,
+      message: `Template parse error in ${path43}: ${e.message}`,
       line
     });
   }
 }
-function checkActionRefs(ctx, cfg, path42, template, line, helpers = cfg.helpers, segment) {
-  const field = path42.slice(path42.lastIndexOf(".") + 1);
+function checkActionRefs(ctx, cfg, path43, template, line, helpers = cfg.helpers, segment) {
+  const field = path43.slice(path43.lastIndexOf(".") + 1);
   for (const { name: aref, site, via } of templateActionRefs(
     template,
     helpers
@@ -71521,7 +71561,7 @@ function checkActionRefs(ctx, cfg, path42, template, line, helpers = cfg.helpers
       continue;
     }
     ctx.issues.push({
-      path: path42,
+      path: path43,
       message: `${field} references unknown action "${aref}"${inOptions}`,
       line
     });
@@ -71566,10 +71606,10 @@ function helperKeyPath(name, segment) {
   return segment?.partials !== void 0 && Object.hasOwn(segment.partials, name) ? ["segments", segment.name, "partials", name] : ["helpers", name];
 }
 function checkHelperIssue(ctx, helper, message, keyPath = ["helpers", helper]) {
-  const path42 = keyPath.join(".");
-  if (ctx.issues.some((i) => i.path === path42 && i.message === message)) return;
+  const path43 = keyPath.join(".");
+  if (ctx.issues.some((i) => i.path === path43 && i.message === message)) return;
   ctx.issues.push({
-    path: path42,
+    path: path43,
     message,
     line: findKeyLine(ctx.source, keyPath)
   });
@@ -71951,15 +71991,15 @@ function validateNoNesting(ctx, cfg, names) {
 function noFile(dflt) {
   return { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) };
 }
-function loadConfigSource(path42, source, dflt, ctx, allowedPalettes) {
-  const parsed2 = parseDslFile(path42, source, allowedPalettes, (refs, names) => {
+function loadConfigSource(path43, source, dflt, ctx, allowedPalettes) {
+  const parsed2 = parseDslFile(path43, source, allowedPalettes, (refs, names) => {
     const layer = applyPlugins(
       // [LAW:one-source-of-truth] The layer's scope, decided where the
       // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path42, ctx.scope, ctx.home),
+      listedPlugins(refs, path43, ctx.scope, ctx.home),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path42, allowedPalettes)
+      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path43, allowedPalettes)
     );
     const owning2 = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -72036,11 +72076,11 @@ function loadConfigChain(locs, chain2, dflt, trace, session, read2 = (p2) => fs_
   );
   const base = plugins2.config;
   const layers = [];
-  for (const { path: path42, scope } of chain2) {
+  for (const { path: path43, scope } of chain2) {
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
-      path42,
-      read2(path42),
+      path43,
+      read2(path43),
       layers.at(-1)?.config ?? base,
       {
         ...ctx,
@@ -72058,7 +72098,7 @@ function loadConfigChain(locs, chain2, dflt, trace, session, read2 = (p2) => fs_
       allowedPalettes
     );
     trace.warned(loaded.warnings);
-    layers.push({ ...loaded, path: path42 });
+    layers.push({ ...loaded, path: path43 });
   }
   const reached = new Set(layers.flatMap((l) => [...l.plugins.reached]));
   const isReached = (d) => reached.has(d.path);
@@ -74103,8 +74143,8 @@ function filePath(fileKey) {
   }
   return persistPath(target);
 }
-function holds(doc, path42) {
-  const [step4, ...rest2] = path42;
+function holds(doc, path43) {
+  const [step4, ...rest2] = path43;
   if (step4 === void 0) return doc !== void 0;
   return typeof doc === "object" && doc !== null && holds(doc[step4], rest2);
 }
@@ -74383,16 +74423,16 @@ function requireDeclared(doc, own2, bundled, key) {
   }
 }
 function valuePathOf(doc, target) {
-  const path42 = persistPath(target);
+  const path43 = persistPath(target);
   if (target.scope === "segment-palette") {
     requireDeclared(
       doc,
       ["segments", target.segment],
       RAW_SEGMENTS[target.segment],
-      path42.join(".")
+      path43.join(".")
     );
   }
-  return path42;
+  return path43;
 }
 function bundledDoc(value) {
   return parseDocument(json5Text(value));
@@ -74407,25 +74447,25 @@ function bundledRowLayers() {
     };
   });
 }
-function fileLayer(doc, path42) {
-  const fragment = doc === null ? void 0 : nodeAt(doc, path42);
-  return fragment === void 0 ? null : { path: path42, fragment, unit: null };
+function fileLayer(doc, path43) {
+  const fragment = doc === null ? void 0 : nodeAt(doc, path43);
+  return fragment === void 0 ? null : { path: path43, fragment, unit: null };
 }
-function bundledRootLayer(path42, root) {
+function bundledRootLayer(path43, root) {
   if (root === void 0) return null;
   const authored = authoredFragment(root);
   return {
-    path: path42,
+    path: path43,
     fragment: bundledDoc(authored),
-    unit: { path: path42, value: authored }
+    unit: { path: path43, value: authored }
   };
 }
 function presetLayer(doc, preset) {
   const own2 = ["presets", preset];
-  const path42 = [...own2, "root"];
+  const path43 = [...own2, "root"];
   const bundled = RAW_PRESETS[preset];
-  requireDeclared(doc, own2, bundled, path42.join("."));
-  const layer = fileLayer(doc, path42) ?? bundledRootLayer(path42, bundled?.root);
+  requireDeclared(doc, own2, bundled, path43.join("."));
+  const layer = fileLayer(doc, path43) ?? bundledRootLayer(path43, bundled?.root);
   return layer !== null && restagesFragment(layer.fragment) ? layer : null;
 }
 var TREE_BLOCK = "#";
@@ -74644,25 +74684,25 @@ function withPlacements(text4, file, placements, own2) {
 function ownRow(text4, preset, id2) {
   const doc = docOf(text4);
   const own2 = ["presets", preset, "root"];
-  for (const [row2, { path: path42, unit, node }] of cascadeOf(doc, preset)) {
+  for (const [row2, { path: path43, unit, node }] of cascadeOf(doc, preset)) {
     if (!hasSegmentRef(node, id2)) continue;
-    if (own2.every((key, i) => path42[i] === key)) return text4;
+    if (own2.every((key, i) => path43[i] === key)) return text4;
     const rowText = unit === null ? movableTextOf(text4, node) : json5Text(unit.value);
     if (row2 !== TREE_BLOCK) {
       return setValue(text4, [...own2, "rows", row2], rowText, JSON5_DIALECT);
     }
     if (presetLayer(doc, preset) !== null) {
       throw new BadVerbArgs(
-        `cannot give preset "${preset}" its own copy of ${path42.join(".")}: it already stages rows of its own over that tree`
+        `cannot give preset "${preset}" its own copy of ${path43.join(".")}: it already stages rows of its own over that tree`
       );
     }
     return setValue(text4, own2, rowText, JSON5_DIALECT);
   }
   return text4;
 }
-function deleteAtPath(text4, path42) {
-  const ownPreset = path42[0] === "presets" && path42.length > 2 && !isBundledPreset(path42[1]);
-  return deleteValue(text4, path42, ownPreset ? 2 : 0);
+function deleteAtPath(text4, path43) {
+  const ownPreset = path43[0] === "presets" && path43.length > 2 && !isBundledPreset(path43[1]);
+  return deleteValue(text4, path43, ownPreset ? 2 : 0);
 }
 function deleteValues(store, home, keys2) {
   const targets = keys2.map(requireTarget);
@@ -74800,14 +74840,14 @@ function applyLayoutOp(store, home, key, op) {
   commit2(store, home, before, after, refuseHidden);
   return placed2;
 }
-function spliceOp(text4, path42, op, rendered) {
+function spliceOp(text4, path43, op, rendered) {
   switch (op.op) {
     case "remove":
-      return { after: removeSegmentRef(text4, path42, op.target), placed: null };
+      return { after: removeSegmentRef(text4, path43, op.target), placed: null };
     case "insert": {
       const placed2 = mintPlacement(op.segment, op.anchor, rendered());
       return {
-        after: insertSegmentRef(text4, path42, placed2, op.anchor, op.relation),
+        after: insertSegmentRef(text4, path43, placed2, op.anchor, op.relation),
         placed: placed2
       };
     }
@@ -75441,48 +75481,6 @@ var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typ
 var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
 var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
 
-// src/doctor/sightings.ts
-init_globals();
-var inScope = (scope, sightings) => sightings.filter(
-  (s) => scope.kind === "recent" ? s.ago <= RECENT_CLIENT_S : s.sessionId === scope.sessionId
-);
-var barsOf = (scope, sightings) => inScope(scope, sightings).map(
-  ({ role, frame: frame2, projectDir, claudeConfigDir: claudeConfigDir2 }) => ({
-    role,
-    frame: frame2,
-    projectDir,
-    claudeConfigDir: claudeConfigDir2
-  })
-);
-var NONCE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
-function parseProbeNonce(value) {
-  return NONCE.test(value) ? value : null;
-}
-function clickArrived2(arrival) {
-  switch (arrival.via) {
-    case "link":
-      return { kind: "arrived", delivery: arrival.delivery };
-    case "tmux-status":
-      return {
-        kind: "unprobed",
-        reason: "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler \u2014 run `cc-candybar doctor` to probe the handler"
-      };
-  }
-}
-function sessionWidth(sessionId2, said) {
-  const statusline = said.find((s) => s.role === "statusline");
-  return statusline === void 0 ? {
-    kind: "failed",
-    reason: `the daemon holds no statusline render of session ${sessionId2} \u2014 none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width \u2014 so no width a statusline client measured is known; run this again once the statusline has redrawn`
-  } : {
-    kind: "ok",
-    value: {
-      columns: statusline.termCols,
-      of: { kind: "session", sessionId: sessionId2 }
-    }
-  };
-}
-
 // src/renderer/verbs/index.ts
 var inTurn = (handler) => ({
   gathers: false,
@@ -75696,8 +75694,8 @@ function recordedOrigin(ctx, sid) {
 function reloadIfWritten(ctx, sid, step4) {
   const origin = recordedOrigin(ctx, sid);
   if (origin === null) return;
-  const { path: path42 } = originHome(ctx, origin);
-  if (step4.some((c) => c.kind === "file" && c.file === path42)) {
+  const { path: path43 } = originHome(ctx, origin);
+  if (step4.some((c) => c.kind === "file" && c.file === path43)) {
     ctx.reloadConfig(origin);
   }
 }
@@ -76155,7 +76153,7 @@ async function clickFacts(ctx, sid, gathered) {
   };
   return {
     ...read2,
-    urlHandler: clickArrived2(ctx.arrival),
+    urlHandler: clickArrived(ctx.arrival),
     install: install2,
     clicked: clickedFrom(ctx, read2)
   };
@@ -76182,20 +76180,6 @@ var doctorRun = {
     const gathered = await gatherClick(ctx, sid);
     return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
   }
-};
-var doctorProbe = async (value, ctx) => {
-  const nonce = parseProbeNonce(oneArg(value));
-  if (nonce === null) {
-    throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
-  }
-  if (ctx.arrival.via !== "link")
-    throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
-  const { delivery } = ctx.arrival;
-  ctx.probes.arrive({ nonce, delivery });
-  ctx.log(
-    "info",
-    `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`
-  );
 };
 var doctorFix = {
   gathers: true,
@@ -76366,15 +76350,10 @@ var repoConfig = async (value, ctx) => {
     () => decodeSegments(value)
   );
   const sid = requireSessionId(sessionId2);
-  const answered = REPO_ANSWERS.find((a) => a === answer2);
-  if (answered === void 0) {
+  const answered = REPO_ANSWERS.find((known) => known === answer2);
+  if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
     throw new BadVerbArgs(
-      `an answer is one of ${REPO_ANSWERS.join(", ")}, got ${JSON.stringify(answer2)}`
-    );
-  }
-  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
-    throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: the bar's question did not draw it"
+      "the answer's signature does not match what it carries: it was not drawn by this daemon"
     );
   }
   const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);
@@ -76441,7 +76420,6 @@ var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, inTurn(doctorProbe)],
   [VERB_SLASH, inTurn(slash)],
   [VERB_RUN, inTurn(run2)],
   [VERB_REPO_CONFIG, inTurn(repoConfig)],
@@ -76608,10 +76586,7 @@ var VERBS = new Map([
       )
     ]
   ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
-  // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn.
-  [VERB_DOCTOR_PROBE, doctorProbe]
+  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)]
 ]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
@@ -76794,10 +76769,10 @@ var UNBOUND = {
   }
 };
 var found = (value) => ({ kind: "found", value });
-function resolvePath2(obj, path42) {
+function resolvePath2(obj, path43) {
   let cur = obj;
   let inDocument = false;
-  for (const part of path42.split(".")) {
+  for (const part of path43.split(".")) {
     if (!inDocument && isPending(cur)) return cur;
     if (cur == null || typeof cur !== "object") return found(void 0);
     inDocument ||= part === "value" && cur.kind === "ok";
@@ -77027,18 +77002,18 @@ var SourceRegistry = class _SourceRegistry {
   // value: it is not answered yet, never its default, which answers a payload
   // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
   // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
-  declareInput(name, path42, type3, varDefault, derivation) {
+  declareInput(name, path43, type3, varDefault, derivation) {
     this.store.defineDerived(
       name,
       type3,
       derivation,
-      () => this.inputAt(name, path42, type3, varDefault)
+      () => this.inputAt(name, path43, type3, varDefault)
     );
   }
   // [LAW:single-enforcer] The one reading of an input: its path's value cast
   // to its type, else the fallback chain with the failure recorded.
-  inputAt(name, path42, type3, varDefault) {
-    const resolved = this.inputs.get().read(path42);
+  inputAt(name, path43, type3, varDefault) {
+    const resolved = this.inputs.get().read(path43);
     if (resolved.kind === "pending") {
       this.lastErrors.delete(name);
       throw new PendingValueError(
@@ -77052,7 +77027,7 @@ var SourceRegistry = class _SourceRegistry {
         name,
         type3,
         varDefault,
-        `input path "${path42}" not found in payload`
+        `input path "${path43}" not found in payload`
       );
     }
     try {
@@ -77609,17 +77584,17 @@ function wrapOffsets(plain, line, indent2) {
 }
 function takenOnLine(before, options) {
   if (before.length === 0) return 0;
-  const lines2 = stripCellsText(
+  const { lines: lines2 } = drawStripCells(
     before.map(({ owner }) => owner),
     options
   );
-  const last2 = cellLen(lines2[lines2.length - 1]);
+  const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
   return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
 }
 function fits(cell3, line, options) {
   if (cell3.cellLength <= line) return true;
-  const lines2 = stripCellsText([cell3], { ...options, width: Infinity });
-  return cellLen(lines2.join("")) <= options.width;
+  const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
+  return cellLen(plainOf2(lines2.flat())) <= options.width;
 }
 function dividedToLine(item, line, before, options) {
   if (fits(item.owner, line, options)) return [item];
@@ -77653,9 +77628,9 @@ function filled(row2, options) {
   });
   if (demands.length === 0) return items();
   if (!Number.isFinite(options.width)) return items();
-  const natural = stripCellsText(row2.map(stripItem), options);
+  const natural = drawStripCells(row2.map(stripItem), options).lines;
   if (natural.length > 1) return items();
-  const deficit = Math.max(0, options.width - cellLen(natural.join("")));
+  const deficit = Math.max(0, options.width - cellLen(plainOf2(natural.flat())));
   const share = Math.floor(deficit / demands.length);
   const remainder = deficit - share * demands.length;
   demands.forEach(({ at, how }, i) => {
@@ -80054,7 +80029,7 @@ var ViewParts = class {
     });
     registry.bindInputs({
       session: () => this.view.get().session,
-      read: (path42) => this.inputAt(path42),
+      read: (path43) => this.inputAt(path43),
       run: (digest2) => this.view.get().run(digest2),
       drawnAt: () => drawnDepth(this.colorCompatibility())
     });
@@ -80116,12 +80091,12 @@ var ViewParts = class {
   // [LAW:dataflow-not-control-flow] The value at a payload path, by who
   // answers it: a selection's `.effective` its slot, a field of the instant
   // the draw in progress, every other the view's payload.
-  inputAt(path42) {
-    const slot = slotAt(path42);
+  inputAt(path43) {
+    const slot = slotAt(path43);
     if (slot !== void 0) return found(this.slotName(slot));
-    if (drawProjectionAt(path42) !== void 0)
-      return resolvePath2(this.projected, path42);
-    return resolvePath2(this.view.get().payload(), path42);
+    if (drawProjectionAt(path43) !== void 0)
+      return resolvePath2(this.projected, path43);
+    return resolvePath2(this.view.get().payload(), path43);
   }
   // The depth the view's colour setting draws at: its floor while the payload
   // has not said, or says something no depth is.
@@ -80824,12 +80799,12 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
       fg: seg2.fg !== void 0 ? parseField(seg2.fg, "fg", segParse) : void 0
     };
   }
-  const parseNodeField = (src, path42, field) => {
+  const parseNodeField = (src, path43, field) => {
     try {
       return parseShared(src);
     } catch (e) {
       throw new Error(
-        `Template parse error in ${path42}.${field}: ${e.message}`,
+        `Template parse error in ${path43}.${field}: ${e.message}`,
         { cause: e }
       );
     }
@@ -80854,12 +80829,12 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
     }
     return Object.freeze(out);
   };
-  const compileNode = (node, path42, at) => {
+  const compileNode = (node, path43, at) => {
     const cctx = {
-      path: path42,
+      path: path43,
       at,
-      when: node.when === void 0 ? void 0 : parseNodeField(node.when, path42, "when"),
-      parse: (src, field) => parseNodeField(src, path42, field),
+      when: node.when === void 0 ? void 0 : parseNodeField(node.when, path43, "when"),
+      parse: (src, field) => parseNodeField(src, path43, field),
       compileChild: compileNode,
       placementSettings: resolvedSettings
     };
@@ -80867,8 +80842,8 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
   };
   const roots = /* @__PURE__ */ new Map();
   for (const name of presetOptions) {
-    const { node, path: path42 } = presetRoot(config2, name);
-    roots.set(name, compileNode(node, path42, void 0));
+    const { node, path: path43 } = presetRoot(config2, name);
+    roots.set(name, compileNode(node, path43, void 0));
   }
   const globalExpressions = new Map(
     EXPRESSION_SLOTS.map((slot) => [slot, /* @__PURE__ */ new Map()])
@@ -80952,12 +80927,12 @@ var layoutGates = (segments) => (root) => {
     ...node.kind === "segment" && segments[node.name].when !== void 0 ? [segments[node.name].when] : []
   ]);
 };
-function parseExpressionSlot(parse3, path42, source) {
+function parseExpressionSlot(parse3, path43, source) {
   try {
     return parse3(source);
   } catch (e) {
     throw new Error(
-      `${path42} is not a valid template: ${e instanceof Error ? e.message : String(e)}`
+      `${path43} is not a valid template: ${e instanceof Error ? e.message : String(e)}`
     );
   }
 }
@@ -81165,7 +81140,6 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         ...drawStripCells(
           items.map((item) => item.owner),
           drawOpts,
-          compiled.runtime.signer,
           motion.row(row2, kind, items)
         )
       };
@@ -81737,19 +81711,20 @@ function renderFrame(parts, sessionId2, fps, at, feed2) {
         feed2.feeds,
         feed2.idleSince
       );
-      const answer2 = RENDER_ANSWERS.ansi(drawn.body);
+      const signed = signingFrames(parts.linkSigner);
+      const bar = signed(drawn.body);
+      const answer2 = RENDER_ANSWERS.ansi(bar);
       const statusline = statuslineOf(
         sessionId2,
         drawn,
-        handedOffTo(lanes, feed2.following),
-        parts.linkSigner
+        handedOffTo(lanes, feed2.following)
       );
       delivered();
       return {
-        bar: drawn.body,
+        bar,
         resp: answer2,
         // Mostly the bar itself, and one frame encodes once.
-        statusline: statusline === drawn.body ? answer2 : RENDER_ANSWERS.ansi(statusline),
+        statusline: statusline === drawn.body ? answer2 : RENDER_ANSWERS.ansi(signed(statusline)),
         evaluated: evaluated2,
         cellBreaks,
         lanes,
@@ -82108,14 +82083,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
   );
   const body = viewing === null ? frame2 : standIn(
     frame2,
-    viewerRows(
-      diagnostics,
-      viewing,
-      sessionId2,
-      drawing2.by,
-      geometry,
-      linkSigner2
-    )
+    viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry)
   );
   const fx = effects.lastFrame();
   const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
@@ -82309,7 +82277,9 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
     );
     const elsewhere = handedOffTo(lanes, feed2.following);
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-    const frame2 = toStatusline ? statuslineOf(sessionId2, drawn, elsewhere, parts.linkSigner) : drawn.body;
+    const frame2 = signingFrames(parts.linkSigner)(
+      toStatusline ? statuslineOf(sessionId2, drawn, elsewhere) : drawn.body
+    );
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-",
       drew: `${elapsedMs(clock, drawFrom)}ms`
@@ -82338,7 +82308,7 @@ function answerDelivered(parts, sessionId2, copied, clickShown, eventsShown) {
     for (const event of eventsShown) parts.eventAnswered(event);
   };
 }
-function statuslineOf(sessionId2, drawn, elsewhere, links2) {
+function statuslineOf(sessionId2, drawn, elsewhere) {
   const [first2, ...rest2] = elsewhere;
   return first2 === void 0 || drawn.viewerOpen ? drawn.body : standIn(
     drawn.body,
@@ -82346,8 +82316,7 @@ function statuslineOf(sessionId2, drawn, elsewhere, links2) {
       laneHandoff(sessionId2, [first2, ...rest2]),
       drawn.diagnostics,
       sessionId2,
-      drawn.geometry,
-      links2
+      drawn.geometry
     )
   );
 }
@@ -84057,7 +84026,7 @@ function orderedSegmentNames(config2) {
 function extractReferencedVars(template, helpers, declared) {
   const found2 = new Set(
     [...templateReads(template, helpers).keys()].flatMap(
-      (path42) => variableRead(path42, declared)
+      (path43) => variableRead(path43, declared)
     )
   );
   return Array.from(found2).sort();
@@ -84077,16 +84046,15 @@ var DEBUG_RENDER_OPTS = {
   width: Number.POSITIVE_INFINITY
 };
 var EMPTY_RENDER_MAP = /* @__PURE__ */ new Map();
-function serializeSegmentCells(cells, colorCompatibility, links2) {
+function serializeSegmentCells(cells, colorCompatibility) {
   const out = /* @__PURE__ */ new Map();
   for (const [name, segCells] of cells) {
     out.set(
       name,
-      renderStripCells(
-        segCells,
-        { ...DEBUG_RENDER_OPTS, colorCompatibility },
-        links2
-      )
+      renderStripCells(segCells, {
+        ...DEBUG_RENDER_OPTS,
+        colorCompatibility
+      })
     );
   }
   return out;
@@ -84428,7 +84396,6 @@ function startOver(inputs, sessionState, history, host) {
     },
     installFacts: installFacts2,
     doctorStores: inputs.storage.doctor,
-    probes: host.probes,
     clients: host.renderSightings,
     bundle: inputs.bundle,
     serving: host.serving,
@@ -84559,8 +84526,7 @@ function debugOf(view, what) {
       compiled: view.state.compiled,
       lastRenderBySegment: what === "segments" ? serializeSegmentCells(
         view.lastRenderCellsBySegment,
-        view.state.config.globals.colorCompatibility ?? floorOf2("colorCompatibility"),
-        view.state.compiled.runtime.signer
+        view.state.config.globals.colorCompatibility ?? floorOf2("colorCompatibility")
       ) : EMPTY_RENDER_MAP
     }
   );
@@ -84604,7 +84570,6 @@ var REACH_KINDS = {
   clicks: { gone: "call" },
   serving: "call",
   renderSightings: { ofSession: "call" },
-  probes: { arrive: "notice" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" }
@@ -86196,14 +86161,12 @@ function createDaemon(inputs) {
     }
   });
   const probe2 = inputs.probe(launcher);
-  const { linkKey } = inputs;
-  const links2 = linkKey.kind === "ok" ? linkSigner(linkKey.value) : keylessSigner(linkKey.reason);
   const preparedRenderer = inputs.renderer({
     load: () => loadMainRenderer({
       clock,
       now: instant,
       storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
-      linkSigner: links2,
+      linkSigner: inputs.linkSigner,
       stateDir: paths2.state,
       locations: locs,
       env: host.env,
@@ -86212,13 +86175,13 @@ function createDaemon(inputs) {
       bundle: bundle.path,
       memoryLimitBytes: memoryLimitBytes2
     }),
-    boot: {
+    boot: () => ({
       digest: bundle.digest,
       host: { ...host, env: bootEnv(host.env) },
       bundle: bundle.path,
       memoryLimitBytes: memoryLimitBytes2,
-      linkKey: linkKey.kind === "ok" ? { kind: "ok", value: linkKey.value.toString("base64") } : linkKey
-    },
+      linkKey: inputs.linkKey()
+    }),
     node: bundle.node
   });
   const limits = makeLimits({
@@ -86490,7 +86453,6 @@ function createDaemon(inputs) {
     renderSightings: {
       ofSession: async (sessionId2, now2) => renderSightings.ofSession(sessionId2, now2)
     },
-    probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -86557,7 +86519,6 @@ function createDaemon(inputs) {
     }
   });
   const parts = {
-    links: links2,
     clicks,
     home: host.home,
     tmp: host.tmp,
@@ -86569,6 +86530,7 @@ function createDaemon(inputs) {
     doctorStores,
     stats,
     handlerProbes,
+    linkSigner: inputs.linkSigner,
     renderSightings,
     watcherRegistry,
     refreshLedger,
@@ -87676,6 +87638,69 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
   };
 }
 
+// src/daemon/link-key.ts
+init_globals();
+var import_node_path47 = __toESM(require_path_browserify(), 1);
+function linkKeyFile(dir) {
+  return import_node_path47.default.join(dir, "link.key");
+}
+function linkSignerFromKeyFile(file) {
+  let signer;
+  const loaded = () => signer ??= linkSigner(readOrCreate(file));
+  return {
+    sign: (fields2) => loaded().sign(fields2),
+    verify: (fields2, mac) => loaded().verify(fields2, mac),
+    signLink: (link) => loaded().signLink(link),
+    openLink: (signed) => {
+      let opener;
+      try {
+        opener = loaded();
+      } catch (e) {
+        return { kind: "failed", reason: e.message };
+      }
+      return opener.openLink(signed);
+    }
+  };
+}
+function readLinkKey(file) {
+  try {
+    return { kind: "ok", value: readOrCreate(file).toString("base64") };
+  } catch (e) {
+    return { kind: "failed", reason: e.message };
+  }
+}
+function readOrCreate(file) {
+  let key;
+  try {
+    key = fs_default.readFileSync(file);
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+    create(file);
+    key = fs_default.readFileSync(file);
+  }
+  if (key.length !== LINK_KEY_BYTES) {
+    throw new Error(
+      `link key ${file} holds ${key.length} bytes, not ${LINK_KEY_BYTES}: remove it and a new one is made (links drawn before then stop working)`
+    );
+  }
+  return key;
+}
+function create(file) {
+  fs_default.mkdirSync(import_node_path47.default.dirname(file), { recursive: true });
+  const written2 = `${file}.${process_default.pid}.${randomBytes(6).toString("hex")}`;
+  fs_default.writeFileSync(written2, randomBytes(LINK_KEY_BYTES), {
+    mode: 384,
+    flag: "wx"
+  });
+  try {
+    fs_default.linkSync(written2, file);
+  } catch (e) {
+    if (e.code !== "EEXIST") throw e;
+  } finally {
+    fs_default.unlinkSync(written2);
+  }
+}
+
 // src/daemon/renderer-process.ts
 init_globals();
 var inProcessPort = ({ load }) => {
@@ -87706,6 +87731,10 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     ...rendererAdapters(paths2, machine),
+    // [LAW:one-source-of-truth] One key file, which the host opens every
+    // click with and reads afresh for each renderer it starts.
+    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
+    linkKey: () => readLinkKey(linkKeyFile(paths2.state)),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
@@ -87955,7 +87984,7 @@ var repo;
 var CONFIG_FILE = `${HOME}/.config/cc-candybar/config.json5`;
 var SETTINGS2 = "{}\n";
 function seedWorld(state) {
-  import_memfs.vol.fromJSON({
+  vol.fromJSON({
     [`${REPO}/README.md`]: "# tidepool\n",
     [`${REPO}/src/cache.ts`]: "export {};\n",
     [`${GIT}/HEAD`]: `ref: refs/heads/${state.branch}
@@ -87979,8 +88008,8 @@ function seedWorld(state) {
 }
 function updateRepo(next) {
   repo = { ...repo, ...next };
-  import_memfs.vol.writeFileSync(`${GIT}/index`, JSON.stringify(repo));
-  import_memfs.vol.writeFileSync(`${GIT}/refs/heads/${repo.branch}`, `${repo.head}
+  vol.writeFileSync(`${GIT}/index`, JSON.stringify(repo));
+  vol.writeFileSync(`${GIT}/refs/heads/${repo.branch}`, `${repo.head}
 `);
 }
 var ok2 = (stdout2) => ({ code: 0, stdout: stdout2 });
@@ -88009,20 +88038,20 @@ programs.set("git", (args) => {
 ` };
 });
 function forgetWrites() {
-  if (import_memfs.vol.existsSync(CONFIG_FILE)) import_memfs.vol.unlinkSync(CONFIG_FILE);
-  import_memfs.vol.writeFileSync(`${CLAUDE_DIR}/settings.json`, SETTINGS2);
+  if (vol.existsSync(CONFIG_FILE)) vol.unlinkSync(CONFIG_FILE);
+  vol.writeFileSync(`${CLAUDE_DIR}/settings.json`, SETTINGS2);
 }
 function newTranscript(sessionId2) {
   const dir = `${CLAUDE_DIR}/projects/-home-demo-code-tidepool`;
   const file = `${dir}/${sessionId2}.jsonl`;
-  import_memfs.vol.mkdirSync(dir, { recursive: true });
-  import_memfs.vol.writeFileSync(`${file}.next`, "");
-  import_memfs.vol.renameSync(`${file}.next`, file);
+  vol.mkdirSync(dir, { recursive: true });
+  vol.writeFileSync(`${file}.next`, "");
+  vol.renameSync(`${file}.next`, file);
   return file;
 }
 function appendTranscript(file, entries) {
   if (entries.length === 0) return;
-  import_memfs.vol.appendFileSync(file, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  vol.appendFileSync(file, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
 }
 
 // site/transport.ts
@@ -88048,9 +88077,6 @@ var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
-  // Its links are clicked on the page alone, so its key is the page's own. The
-  // page's crypto hands back bytes that are no Buffer, so they are made one.
-  linkKey: { kind: "ok", value: import_buffer.Buffer.from(randomBytes(LINK_KEY_BYTES)) },
   gates: daemonGates(),
   paths,
   host: HOST,
