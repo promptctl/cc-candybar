@@ -58079,18 +58079,20 @@ function makeUpdateWatch(opts) {
   let build = pendingOf("unread");
   let release4 = pendingOf("unread");
   const readStart = async (pid2) => {
-    const read3 = await probe2.startTime(pid2);
+    const read2 = await probe2.startTime(pid2);
     if (closed) throw new DaemonClosing("apply-update");
-    return read3;
+    return read2;
   };
   const acts = makeActReader(actsDir2, readStart, launcher, clock);
   let seen2 = null;
   let unreadable = null;
-  const read2 = observable.box(
+  const actsRead = observable.box(
     { act: IDLE, actsError: null },
     { deep: false, equals: compareStructural }
   );
-  const publishActs = () => runInAction(() => read2.set({ act: seen2 ?? IDLE, actsError: unreadable }));
+  const publishActs = () => runInAction(
+    () => actsRead.set({ act: seen2 ?? IDLE, actsError: unreadable })
+  );
   let gate2 = null;
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
@@ -58165,13 +58167,13 @@ function makeUpdateWatch(opts) {
     log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
   }
   async function watchAct() {
-    const read3 = await touchActs(async () => {
+    const read2 = await touchActs(async () => {
       const facts = await acts.read();
       if (!closed) endIfOverdue(facts);
       return facts;
     });
-    if (closed || !read3.ok) return;
-    const next = judgeAct(read3.value);
+    if (closed || !read2.ok) return;
+    const next = judgeAct(read2.value);
     const was = seen2;
     seen2 = next;
     if (was === null && next.kind === "running") {
@@ -58211,16 +58213,16 @@ function makeUpdateWatch(opts) {
       publish();
       armed.forEach((release5) => release5());
     },
-    acts: () => read2.get(),
+    acts: () => actsRead.get(),
     running: () => actTurn(async () => {
-      const read3 = await touchActs(() => acts.read());
-      return read3.ok && judgeAct(read3.value).kind === "running";
+      const read2 = await touchActs(() => acts.read());
+      return read2.ok && judgeAct(read2.value).kind === "running";
     }),
     act: () => actTurn(async () => {
       if (closed) throw new DaemonClosing("apply-update");
-      const read3 = await touchActs(() => acts.read());
+      const read2 = await touchActs(() => acts.read());
       if (closed) throw new DaemonClosing("apply-update");
-      if (!read3.ok) throw new BadVerbArgs(`apply-update: ${read3.error}`);
+      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
       const update = current();
       if (update === null) {
         throw new BadVerbArgs(
@@ -58229,7 +58231,7 @@ function makeUpdateWatch(opts) {
       }
       const words2 = wordsOf(update);
       const command = commandOf(update);
-      const newest = read3.value;
+      const newest = read2.value;
       if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${words2.busy}`);
       }
@@ -65141,11 +65143,13 @@ var ManagedStorage = class {
         this.judged(watched, () => this.sessions.changed(inFolder));
         return;
       case "changed": {
-        const paths2 = new Set(invalidation.paths);
-        if (paths2.has(import_node_path30.default.join(key.folder, import_node_path30.default.basename(key.folder)))) {
+        const { paths: paths2 } = invalidation;
+        if (paths2.includes(import_node_path30.default.join(key.folder, import_node_path30.default.basename(key.folder)))) {
           this.judged(watched, () => this.sessions.changed(inFolder));
         } else {
-          this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
+          this.sessions.changed(
+            (f) => inFolder(f) && paths2.includes(fileOf(f))
+          );
         }
         return;
       }
@@ -65878,13 +65882,6 @@ function capturing(pattern2) {
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
-function readOf(what, read2) {
-  try {
-    return ok(read2());
-  } catch (e) {
-    return failed(`${what}: ${String(e)}`, "read");
-  }
-}
 var locatorOf = (req) => ({
   hookData: req.hookData,
   cwd: req.cwd,
@@ -65924,10 +65921,9 @@ var Collector = class {
   stopSweep = null;
   // [LAW:one-source-of-truth] The daemon's facts, derived once for every
   // session, and moved only when what they say moved.
-  daemon = computed(
-    () => readOf("reading the daemon", () => this.deps.daemon()),
-    { equals: compareStructural }
-  );
+  daemon = computed(() => this.deps.daemon(), {
+    equals: compareStructural
+  });
   // [LAW:single-enforcer] A request names the session's keys: they are
   // declared again and stamped in one action, and that stamp is returned to
   // go with the session's `config`. The record's reaction runs when the action ends,
@@ -66048,12 +66044,11 @@ var Collector = class {
     let document;
     try {
       if (first2.owners.kind === "failed") throw new Error(first2.owners.reason);
-      if (first2.daemon.kind === "failed") throw new Error(first2.daemon.reason);
       document = assembleFacts(
         void 0,
         session,
         first2.owners.value,
-        first2.daemon.value,
+        first2.daemon,
         instantAt(this.deps.clock)
       );
     } catch (e) {
@@ -66161,10 +66156,11 @@ var Collector = class {
     return { ...locator, deps: this.deps.owners };
   }
   read({ locator, lanes }) {
-    return readOf(
-      "reading the owners",
-      () => readingsOf(this.inputsOf(locator), lanes)
-    );
+    try {
+      return ok(readingsOf(this.inputsOf(locator), lanes));
+    } catch (e) {
+      return failed(`reading the owners: ${String(e)}`, "read");
+    }
   }
   // [LAW:single-enforcer] The one stamp of a session's document, against the
   // one it replaces: the document itself when nothing it holds moved, and a
@@ -66173,11 +66169,10 @@ var Collector = class {
   stamp({ session, stamped }, moved) {
     const prior = stamped.document;
     const { owners, daemon: daemon3 } = moved;
-    const facts = daemon3.kind === "ok" ? daemon3.value : prior.daemon;
-    const next = owners.kind === "failed" ? failedStamp(prior, owners.reason, facts) : daemon3.kind === "failed" ? failedStamp(prior, daemon3.reason, facts) : this.assembled(
+    const next = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon3) : this.assembled(
       prior,
       owners.value,
-      facts,
+      daemon3,
       instantAt(this.deps.clock)
     );
     const failure = next === prior ? null : stampFailureOf(next);
@@ -85692,6 +85687,28 @@ function createDaemon(inputs) {
   let closed = false;
   const log = (level, msg) => inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
   const stats = new RuntimeStats(clock);
+  const watcherRegistry = new WatcherRegistry({
+    clock,
+    counters: stats,
+    logger: log
+  });
+  const fileEvents = new FileEventDelivery({
+    watchers: watcherRegistry,
+    logger: log,
+    clock
+  });
+  const daemonFaults = observable.box(
+    { fileEvents: [], launcher: [] },
+    { deep: false, equals: compareStructural }
+  );
+  function restateFaults() {
+    runInAction(
+      () => daemonFaults.set({
+        fileEvents: fileEventsWarnings(fileEvents.delivery()),
+        launcher: launcher.standing()
+      })
+    );
+  }
   const launcher = inputs.launcher({
     inherited: host.env,
     stats: stats.launchStats,
@@ -85739,29 +85756,7 @@ function createDaemon(inputs) {
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
   const doctorStores = inputs.doctorStores;
-  const watcherRegistry = new WatcherRegistry({
-    clock,
-    counters: stats,
-    logger: log
-  });
   const refreshLedger = new RefreshLedger(log);
-  const fileEvents = new FileEventDelivery({
-    watchers: watcherRegistry,
-    logger: log,
-    clock
-  });
-  const daemonFaults = observable.box(
-    { fileEvents: [], launcher: [] },
-    { deep: false, equals: compareStructural }
-  );
-  function restateFaults() {
-    runInAction(
-      () => daemonFaults.set({
-        fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing()
-      })
-    );
-  }
   restateFaults();
   const sourceRuns = new SourceRuns({
     launcher,
