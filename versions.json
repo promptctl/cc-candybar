@@ -4,15 +4,22 @@
     {
       "version": "pr-759",
       "ref": "refs/pull/759/merge",
-      "sha": "43e7cdb6e58588f0263679bcbde062e30914b87c",
-      "timestamp": "2026-11-15T21:36:44.033Z",
+      "sha": "efb5c11dea09c07463626a67a0d77ab63f3f9d86",
+      "timestamp": "2026-11-15T21:54:56.595Z",
       "commits": [
         {
-          "sha": "43e7cdb6e58588f0263679bcbde062e30914b87c",
+          "sha": "efb5c11dea09c07463626a67a0d77ab63f3f9d86",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T14:35:47-07:00",
-          "message": "Merge 5c932c954564990c286ceadf00d54eb88e3d4b1d into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+          "timestamp": "2026-11-15T21:54:00Z",
+          "message": "Merge e03f85d9cc765d0d573392bd68f48cc66b9cd717 into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+        },
+        {
+          "sha": "e03f85d9cc765d0d573392bd68f48cc66b9cd717",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T14:53:47-07:00",
+          "message": "fix(click): the host and every renderer hold the one key the daemon read, and every click writes its event (candybar-host-renderer-x96a.35o)\n\n- One reader of the link key feeds the host's signer and each renderer's\n  boot, so a key file removed and made again while the daemon runs can no\n  longer leave the two on different keys, refusing every click.\n- Whatever a click throws becomes its outcome where every click is run, so a\n  status-line click whose opener fails writes its event and answers its\n  failure.\n- A URL frame the daemon could not handle (it is closing) is answered with the\n  failure instead of leaving the app to wait out its timeout.\n- The app tells a frame written but answered with no verdict as \"Click\n  unconfirmed\", since the click may still land.\n- A non-bar link's own #fragment stays in the click's event.\n"
         },
         {
           "sha": "5c932c954564990c286ceadf00d54eb88e3d4b1d",

@@ -24080,7 +24080,7 @@ function transitForm(link) {
   );
 }
 function unprovenLink(signed) {
-  const mark = signed.lastIndexOf(LINK_MAC_MARK);
+  const mark = isBarLink(signed) ? signed.lastIndexOf(LINK_MAC_MARK) : -1;
   return mark === -1 ? signed : signed.slice(0, mark);
 }
 function linkMac(key, link) {
@@ -24129,6 +24129,27 @@ function linkSigner(key) {
     },
     signLink: (link) => signLinkWith(key, link),
     openLink: (signed) => openLinkWith(key, signed)
+  };
+}
+function linkSignerOver(key) {
+  let signer;
+  const loaded = () => {
+    const asked2 = key();
+    return asked2.kind === "ok" ? { kind: "ok", value: signer ??= linkSigner(asked2.value) } : asked2;
+  };
+  const held = () => {
+    const asked2 = loaded();
+    if (asked2.kind === "failed") throw new Error(asked2.reason);
+    return asked2.value;
+  };
+  return {
+    sign: (fields2) => held().sign(fields2),
+    verify: (fields2, mac) => held().verify(fields2, mac),
+    signLink: (link) => held().signLink(link),
+    openLink: (signed) => {
+      const asked2 = loaded();
+      return asked2.kind === "ok" ? asked2.value.openLink(signed) : asked2;
+    }
   };
 }
 function signingFrames(signer) {
@@ -54686,7 +54707,7 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
     id: accepted.id,
     gone: () => timedOut() || clientLeft()
   };
-  const outcome = await run3(facts, click3);
+  const outcome = await run3(facts, click3).catch(failureOf);
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -54760,23 +54781,14 @@ async function ranClick(parts, read2, facts, click3) {
       noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
       return statusLineClick(parts, read2.value, facts, click3);
     case "link":
-      return clickRan(
-        () => handleClick(
-          parts,
-          read2.verb,
-          read2.value,
-          { via: "link", delivery: read2.delivery },
-          facts,
-          click3
-        )
+      return handleClick(
+        parts,
+        read2.verb,
+        read2.value,
+        { via: "link", delivery: read2.delivery },
+        facts,
+        click3
       );
-  }
-}
-async function clickRan(click3) {
-  try {
-    return await click3();
-  } catch (error) {
-    return failureOf(error);
   }
 }
 var VERB_FACT = {
@@ -54847,15 +54859,13 @@ async function statusLineClick(parts, value, facts, click3) {
   if (isBarLink(link.url)) {
     const opened = openClick(link.url, parts.linkSigner);
     if (opened.kind === "refused") return badRequest(opened.problem);
-    return clickRan(
-      () => handleClick(
-        parts,
-        opened.verb,
-        opened.value,
-        { via: "tmux-status" },
-        facts,
-        click3
-      )
+    return handleClick(
+      parts,
+      opened.verb,
+      opened.value,
+      { via: "tmux-status" },
+      facts,
+      click3
     );
   }
   await clickHandoff(
@@ -86161,12 +86171,13 @@ function createDaemon(inputs) {
     }
   });
   const probe2 = inputs.probe(launcher);
+  const linkSigner2 = linkSignerOver(inputs.linkKey);
   const preparedRenderer = inputs.renderer({
     load: () => loadMainRenderer({
       clock,
       now: instant,
       storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
-      linkSigner: inputs.linkSigner,
+      linkSigner: linkSigner2,
       stateDir: paths2.state,
       locations: locs,
       env: host.env,
@@ -86175,13 +86186,17 @@ function createDaemon(inputs) {
       bundle: bundle.path,
       memoryLimitBytes: memoryLimitBytes2
     }),
-    boot: () => ({
-      digest: bundle.digest,
-      host: { ...host, env: bootEnv(host.env) },
-      bundle: bundle.path,
-      memoryLimitBytes: memoryLimitBytes2,
-      linkKey: inputs.linkKey()
-    }),
+    // The key crosses in base64, so the boot crosses as a line.
+    boot: () => {
+      const key = inputs.linkKey();
+      return {
+        digest: bundle.digest,
+        host: { ...host, env: bootEnv(host.env) },
+        bundle: bundle.path,
+        memoryLimitBytes: memoryLimitBytes2,
+        linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
+      };
+    },
     node: bundle.node
   });
   const limits = makeLimits({
@@ -86530,7 +86545,7 @@ function createDaemon(inputs) {
     doctorStores,
     stats,
     handlerProbes,
-    linkSigner: inputs.linkSigner,
+    linkSigner: linkSigner2,
     renderSightings,
     watcherRegistry,
     refreshLedger,
@@ -87644,30 +87659,16 @@ var import_node_path47 = __toESM(require_path_browserify(), 1);
 function linkKeyFile(dir) {
   return import_node_path47.default.join(dir, "link.key");
 }
-function linkSignerFromKeyFile(file) {
-  let signer;
-  const loaded = () => signer ??= linkSigner(readOrCreate(file));
-  return {
-    sign: (fields2) => loaded().sign(fields2),
-    verify: (fields2, mac) => loaded().verify(fields2, mac),
-    signLink: (link) => loaded().signLink(link),
-    openLink: (signed) => {
-      let opener;
-      try {
-        opener = loaded();
-      } catch (e) {
-        return { kind: "failed", reason: e.message };
-      }
-      return opener.openLink(signed);
+function linkKeyFromFile(file) {
+  let key;
+  return () => {
+    try {
+      key ??= readOrCreate(file);
+      return { kind: "ok", value: key };
+    } catch (e) {
+      return { kind: "failed", reason: e.message };
     }
   };
-}
-function readLinkKey(file) {
-  try {
-    return { kind: "ok", value: readOrCreate(file).toString("base64") };
-  } catch (e) {
-    return { kind: "failed", reason: e.message };
-  }
 }
 function readOrCreate(file) {
   let key;
@@ -87731,10 +87732,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     ...rendererAdapters(paths2, machine),
-    // [LAW:one-source-of-truth] One key file, which the host opens every
-    // click with and reads afresh for each renderer it starts.
-    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
-    linkKey: () => readLinkKey(linkKeyFile(paths2.state)),
+    linkKey: linkKeyFromFile(linkKeyFile(paths2.state)),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
