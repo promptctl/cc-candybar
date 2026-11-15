@@ -8,11 +8,12 @@ const { version } = require("../package.json");
 globalThis.__PACKAGE_VERSION__ = version;
 
 // The NODE_OPTIONS a caller spawns children with: whatever it already had,
-// plus a preload. One merge, so no caller clobbers an operator's own flags or
-// spells the append a second way.
-const withPreload = (nodeOptions, file) =>
-  [nodeOptions ?? "", `--import=${require("node:url").pathToFileURL(file).href}`]
+// plus this stamp's preload. One merge, so no caller clobbers an operator's own
+// flags or spells the append a second way.
+exports.withStamp = (nodeOptions) =>
+  [
+    nodeOptions ?? "",
+    `--import=${require("node:url").pathToFileURL(__filename).href}`,
+  ]
     .filter((s) => s !== "")
     .join(" ");
-exports.withPreload = withPreload;
-exports.withStamp = (nodeOptions) => withPreload(nodeOptions, __filename);

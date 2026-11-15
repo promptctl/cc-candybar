@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { withPreload } from "../scripts/version-stamp.cjs";
+import { withStamp } from "../scripts/version-stamp.cjs";
 
 // package.json is the version's sole authority; the tests read it the same way
 // the build does rather than restating the number.
@@ -53,9 +54,8 @@ describe("PACKAGE_VERSION", () => {
   );
 });
 
-test("a preload keeps what NODE_OPTIONS already held", () => {
-  expect(withPreload("--trace-warnings", "/a b/p.cjs")).toBe(
-    "--trace-warnings --import=file:///a%20b/p.cjs",
-  );
-  expect(withPreload(undefined, "/p.cjs")).toBe("--import=file:///p.cjs");
+test("the stamp's preload keeps what NODE_OPTIONS already held", () => {
+  const preload = `--import=${pathToFileURL(join(process.cwd(), "scripts", "version-stamp.cjs")).href}`;
+  expect(withStamp("--trace-warnings")).toBe(`--trace-warnings ${preload}`);
+  expect(withStamp(undefined)).toBe(preload);
 });

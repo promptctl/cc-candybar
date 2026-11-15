@@ -54,7 +54,6 @@ test("the refusal report names the phase and quotes the daemon's reason", async 
   }
 });
 
-
 // A PINNED LIMIT, not a wish: readiness is "a daemon answers on this socket",
 // never "the daemon this call spawned answers". Spawned against a socket a LIVE
 // incumbent owns, the second daemon loses the EADDRINUSE arbitration and exits —

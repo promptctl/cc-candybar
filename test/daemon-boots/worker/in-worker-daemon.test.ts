@@ -4,13 +4,7 @@
 // state. Its cases hold what a migrated file would otherwise find out by failing.
 
 import type { RequestId } from "../../../src/renderer-interface/interface";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { hostOf } from "../../helpers/host";
 import os from "node:os";
 import path from "node:path";
@@ -27,9 +21,20 @@ import {
   type Request,
   type Response,
 } from "../../../src/daemon/foundations/protocol";
-import { DRAW_RESERVE_MS, REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
+import {
+  DRAW_RESERVE_MS,
+  REQUEST_TIMEOUT_MS,
+} from "../../../src/daemon/foundations/request-deadline";
 import { textOf, type Frame } from "../../../src/render/frame";
-import { click, frameRequest, render, renderBody, renderRequest, renderUntil, refusedClick } from "../../helpers/daemon-e2e";
+import {
+  click,
+  frameRequest,
+  render,
+  renderBody,
+  renderRequest,
+  renderUntil,
+  refusedClick,
+} from "../../helpers/daemon-e2e";
 import { renderLines } from "../../helpers/daemon-log";
 import { linkUrls } from "../../helpers/frame";
 import {
@@ -94,7 +99,6 @@ describe("a daemon in this worker", () => {
     );
     expect(await renderLines(env, sid, 2)).not.toEqual([]);
   });
-
 
   // [LAW:verifiable-goals] An answer carries a failed click's error only once
   // it has flushed. Past the hold, an error an answer carried is over, and one

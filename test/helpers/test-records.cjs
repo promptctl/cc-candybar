@@ -227,7 +227,6 @@ function summarise(records, entries, now) {
   };
 }
 
-
 /** @param {number} ms */
 function seconds(ms) {
   return `${(ms / 1000).toFixed(1)} s`;
