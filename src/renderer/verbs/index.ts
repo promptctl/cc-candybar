@@ -138,7 +138,7 @@ import {
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
 import type { JournalTurn, JournalTurns } from "../journal-turns";
-import { recordAnswer, repoConfigs } from "../repo-configs";
+import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
 import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   RunRequest,
@@ -1793,13 +1793,14 @@ const run: VerbHandler = async (value, ctx) => {
 
 // ─── Repository configs (brandon-unfiled-3248.kezw) ─────────────────────────
 
-// An answer reaches its verb only from a link the bar drew, whose mac the
-// host proved, so it is the answer the bar offered for this session and this
-// directory. The book lives beside the link key, and the render cache watches
-// it, so every bar reloads; the clicking session's reloads before the click
-// answers, as save's does.
+// [LAW:parse-dont-validate] An answer is recorded only when its own mac
+// verifies: the bar's question drew it, for this session, for this directory
+// and this answer. The link's mac proves only that the bar drew it, and a
+// config draws any link it likes. The book lives beside the link key, and the
+// render cache watches it, so every bar reloads; the clicking session's
+// reloads before the click answers, as save's does.
 const repoConfig: VerbHandler = async (value, ctx) => {
-  const [sessionId = "", dir = "", answer = ""] = decodeWire(() =>
+  const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),
   );
   const sid = requireSessionId(sessionId);
@@ -1807,6 +1808,11 @@ const repoConfig: VerbHandler = async (value, ctx) => {
   if (answered === undefined) {
     throw new BadVerbArgs(
       `an answer is one of ${REPO_ANSWERS.join(", ")}, got ${JSON.stringify(answer)}`,
+    );
+  }
+  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: the bar's question did not draw it",
     );
   }
   const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);

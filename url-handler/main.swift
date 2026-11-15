@@ -9,9 +9,9 @@
 // src/daemon/foundations/protocol.ts and src/daemon/paths.ts and pinned by
 // scripts/check-protocol.mjs: the frame (a 4-byte big-endian length, then the
 // JSON `{"kind":"url","urlV":2,"url":…}`), the answer the daemon writes back
-// in the same framing (`ok`, and on a failure its `error` and `code`), and the
-// socket path, derived from the uid because Launch Services starts the app
-// with no shell's environment.
+// in the same framing (`ok`, and on a failure its `error`), and the socket
+// path, derived from the uid because Launch Services starts the app with no
+// shell's environment.
 // A handler goes stale through what it knows, and this one knows nothing a
 // release changes: not a bundle path, not a node binary, not a verb.
 //
@@ -22,14 +22,15 @@
 // ANSWER_WAIT_MS) so a daemon that reads nothing cannot hold this app's main
 // thread, which is the thread Launch Services delivers the next click on.
 //
-// [LAW:no-silent-failure] Two failures are this app's to tell: a frame that
-// could not be written, and a click the daemon refused (a link no bar drew, or
-// no renderer there to take it), which has no bar to land on. Each is written
-// to the unified log under the app's subsystem
+// [LAW:no-silent-failure] Two failures are this app's to tell: a click that
+// was not delivered (a frame that could not be written, or no answer read),
+// and one the daemon answered as failed (a link no bar drew, no renderer
+// there to take it within the daemon's deadline, a verb's own failure), which
+// may have no bar to land on. Each is written to the unified log under the
+// app's subsystem
 // (`log stream --predicate 'subsystem == "com.cccandybar.url-handler"'`) and
 // told to the user as a macOS user notification carrying what was observed or
-// the daemon's reason, never a diagnosis. An answer that did not come in time
-// is logged only: the click may still land. The click is lost by design: the app never starts a
+// the daemon's reason, never a diagnosis. The click is lost by design: the app never starts a
 // daemon, because that would need the paths that age, and a launcher the
 // daemon left beside its socket would make this app a second enforcer
 // [LAW:single-enforcer] of that directory's trust check and of the daemon's
@@ -44,19 +45,19 @@ import UserNotifications
 import os
 
 // Mirrored: src/daemon/foundations/protocol.ts FRAME_HEADER_BYTES, URL_FRAME_KIND,
-// URL_FRAME_VERSION and the code of an answer that is not the click's own.
+// URL_FRAME_VERSION.
 let FRAME_HEADER_BYTES = 4
 let URL_FRAME_KIND = "url"
 let URL_FRAME_VERSION = 2
-let TIMEOUT_CODE = "TIMEOUT"
 
 // How long a write waits for the daemon to make room in the socket buffer.
 // A daemon that is up reads a frame as soon as its loop turns; a bound this
 // long is only ever reached by one that is wedged.
 let WRITE_WAIT_MS: Int32 = 1000
 
-// How long the app waits for the daemon's answer. The daemon answers once the
-// click's turn has taken it, which is at once for any click a bar can make.
+// How long the app waits for the daemon's answer. The daemon answers when the
+// click's turn has run, or at its own request deadline, which is well inside
+// this bound; one that has not answered by then is wedged.
 let ANSWER_WAIT_MS: Int32 = 1000
 
 // Mirrored: src/daemon/paths.ts defaultSocketPath.
@@ -69,10 +70,9 @@ let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
 
 enum Forward {
   case delivered
-  // The daemon refused the click, for the reason it gave.
+  // The daemon answered that the click failed, for the reason it gave.
   case refused(String)
-  // Written, but no answer was read: the click may yet land.
-  case unanswered(String)
+  // Not written, or no answer was read.
   case failed(String)
 }
 
@@ -150,9 +150,8 @@ func forward(_ url: String) -> Forward {
   return answer(fd)
 }
 
-// The daemon's answer, one frame: its length, then its JSON. A failure that
-// is the click's own carries the daemon's reason; a TIMEOUT says only that the
-// daemon was slow to answer.
+// The daemon's answer, one frame: its length, then its JSON. A failure
+// carries the daemon's reason.
 func answer(_ fd: Int32) -> Forward {
   var data = Data()
   var need = FRAME_HEADER_BYTES
@@ -161,17 +160,17 @@ func answer(_ fd: Int32) -> Forward {
   var chunk = [UInt8](repeating: 0, count: 4096)
   while data.count < need {
     let now = DispatchTime.now().uptimeNanoseconds
-    if now >= deadline { return .unanswered("no answer within \(ANSWER_WAIT_MS)ms") }
+    if now >= deadline { return .failed("no answer within \(ANSWER_WAIT_MS)ms") }
     var ready = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
     let polled = poll(&ready, 1, Int32((deadline - now) / 1_000_000) + 1)
-    if polled < 0 { return .unanswered(errnoText("poll")) }
+    if polled < 0 { return .failed(errnoText("poll")) }
     if polled == 0 { continue }
     let n = read(fd, &chunk, min(chunk.count, need - data.count))
     if n < 0 {
       if errno == EAGAIN { continue }
-      return .unanswered(errnoText("read"))
+      return .failed(errnoText("read"))
     }
-    if n == 0 { return .unanswered("the daemon closed the socket before it answered") }
+    if n == 0 { return .failed("the daemon closed the socket before it answered") }
     data.append(contentsOf: chunk[0..<n])
     if header && data.count == FRAME_HEADER_BYTES {
       need = FRAME_HEADER_BYTES + Int(data.reduce(UInt32(0)) { $0 << 8 | UInt32($1) })
@@ -181,11 +180,9 @@ func answer(_ fd: Int32) -> Forward {
   let body = data.subdata(in: FRAME_HEADER_BYTES..<data.count)
   guard let reply = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
     let ok = reply["ok"] as? Bool
-  else { return .unanswered("an answer this app cannot read") }
+  else { return .failed("an answer this app cannot read") }
   if ok { return .delivered }
-  let error = reply["error"] as? String ?? "the daemon gave no reason"
-  if reply["code"] as? String == TIMEOUT_CODE { return .unanswered(error) }
-  return .refused(error)
+  return .refused(reply["error"] as? String ?? "the daemon gave no reason")
 }
 
 // Tells the user a click was lost or refused, in a form that needs no bar. The
@@ -244,11 +241,9 @@ final class Handler: NSObject, NSApplicationDelegate {
       // [LAW:nothing-unseen]
       case .delivered:
         log.notice("forwarded \(link, privacy: .private)")
-      case .unanswered(let why):
-        log.notice("forwarded \(link, privacy: .private), unanswered: \(why, privacy: .public)")
       case .refused(let why):
-        log.error("refused \(link, privacy: .private): \(why, privacy: .public)")
-        notify("Click refused", why)
+        log.error("failed \(link, privacy: .private): \(why, privacy: .public)")
+        notify("Click failed", why)
       case .failed(let why):
         log.error("lost \(link, privacy: .private): \(why, privacy: .public)")
         notify("Click not delivered", why)

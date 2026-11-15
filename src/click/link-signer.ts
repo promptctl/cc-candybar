@@ -36,6 +36,9 @@ const MAC_SPELLING = /^[0-9a-f]{64}$/;
 const LINK_MAC_MARK = "#";
 const LINK_MAC_BYTES = 16;
 const LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
+// The signed links a signer keeps: many times the links of every bar drawn at
+// once, and a few hundred kilobytes at most.
+const SIGNED_KEPT = 1024;
 
 // [LAW:parse-dont-validate] A clicked link as its mac proves it: the link the
 // bar drew, its mac removed, or why it is not one.
@@ -81,6 +84,16 @@ const linkMac = (key: Buffer, link: string): Buffer =>
       .replaceAll("/", "_"),
   );
 
+// The characters a link carries as they are on its way to the handler: RFC
+// 3986's unreserved and sub-delims, `:`, `@`, `/`, `?`, and `%` for the
+// escapes already made. A terminal, or Foundation's URL on macOS 14 and
+// later, escapes any other (a second `#`, a space, non-ASCII text) before the
+// handler reads the link, and the mac covers the bytes, so the signer escapes
+// them first. A verb decodes its arguments, so the escaped link means the same.
+const OUTSIDE_TRANSIT = /[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu;
+const transitForm = (link: string): string =>
+  link.replace(OUTSIDE_TRANSIT, (c) => encodeURIComponent(c));
+
 // A drawn link with its mac removed, unproven: what a reader of a frame (the
 // harness, the page, the bench) reads a link's effects off. Only the host's
 // `verifyLink` proves one.
@@ -95,6 +108,15 @@ export function linkSigner(key: Buffer): LinkSigner {
   if (key.length !== LINK_KEY_BYTES) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
+  // A link's signature is fixed by its key and its bytes, and a bar draws the
+  // same links frame after frame, so each is signed once, not once a frame.
+  // Emptied when full, since the links drawn change only as configs and
+  // sessions do.
+  const signed = new Map<string, string>();
+  const signOnce = (link: string): string => {
+    const form = transitForm(link);
+    return `${form}${LINK_MAC_MARK}${linkMac(key, form)}`;
+  };
   return {
     sign: (fields) => digest(key, fieldsOf(fields)).toString("hex"),
     verify: (fields, mac) => {
@@ -107,7 +129,14 @@ export function linkSigner(key: Buffer): LinkSigner {
         digest(key, fieldsOf(fields)),
       );
     },
-    signLink: (link) => `${link}${LINK_MAC_MARK}${linkMac(key, link)}`,
+    signLink: (link) => {
+      const known = signed.get(link);
+      if (known !== undefined) return known;
+      if (signed.size >= SIGNED_KEPT) signed.clear();
+      const fresh = signOnce(link);
+      signed.set(link, fresh);
+      return fresh;
+    },
     verifyLink: (signed) => {
       const mark = signed.lastIndexOf(LINK_MAC_MARK);
       const mac = signed.slice(mark + 1);

@@ -38,7 +38,7 @@ import type { Subscriber } from "./frame-feed.js";
 import {
   decodeSegments,
   encodeSegments,
-  VERB_TMUX_STATUS_CLICK,
+  STATUS_CLICK_URL,
 } from "../click/wire.js";
 import {
   RANGE_PREFIX,
@@ -379,15 +379,14 @@ export function boundOf(listKeys: string): Bound | null {
 // writes it into the binding and reads it back in `linkAt`: tmux expands the
 // pane (its `%` stripped, which a URL would read as an escape) and the range,
 // shell-quoted, before the shell runs the line.
-const CLICK_URL = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/`;
 const clickUrl = (socket: string): string =>
-  `${CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
+  `${STATUS_CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
 
 // A binding a cc-candybar daemon wrote — this one or any other — told by the
 // click it runs, which `list-keys` prints as it was bound whatever the
 // padding before it.
 const isClickBinding = (bound: Bound | null): boolean =>
-  bound?.command.includes(CLICK_URL) ?? false;
+  bound?.command.includes(STATUS_CLICK_URL) ?? false;
 
 // What `@cc-candybar-binding-prior` holds: the daemon that bound the click,
 // and the binding it replaced.

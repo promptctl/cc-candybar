@@ -15,7 +15,8 @@ import {
   URL_FRAME_VERSION,
   type Response,
 } from "../src/daemon/foundations/protocol";
-import { effectsUrl, VERB_COPY } from "../src/click/wire";
+import { effectsUrl, STATUS_CLICK_URL, VERB_COPY } from "../src/click/wire";
+import { badRequest } from "../src/daemon/foundations/verb-error";
 import { TEST_SIGNER } from "./helpers/link-signer";
 
 const DRAWN = TEST_SIGNER.signLink(
@@ -24,7 +25,8 @@ const DRAWN = TEST_SIGNER.signLink(
 const lastFlipped = (link: string): string =>
   `${link.slice(0, -1)}${link.endsWith("A") ? "B" : "A"}`;
 
-function host() {
+// The renderer's answer to every click it is handed: by default, it took it.
+function host(answer: unknown = { kind: "answered", record: [] }) {
   const handed: unknown[] = [];
   const parts = {
     clock: systemTimekeeper,
@@ -38,7 +40,7 @@ function host() {
     renderer: {
       answer: async (input: unknown) => {
         handed.push(input);
-        return { kind: "answered", record: [] };
+        return answer;
       },
     },
   } as unknown as DaemonParts;
@@ -98,6 +100,35 @@ describe.each([
       expect(rig.handed).toEqual([]);
     },
   );
+
+  // A link that names no session has no bar to hold its failure, so its
+  // sender is told, whichever way it came.
+  test("whose verb fails in its turn is told the failure", async () => {
+    const rig = host({
+      kind: "threw",
+      record: [],
+      failure: badRequest("unknown click verb: gone-verb"),
+    });
+    expect(await rig[via](DRAWN)).toMatchObject({
+      ok: false,
+      code: "BAD_REQUEST",
+      error: "unknown click verb: gone-verb",
+    });
+  });
+});
+
+// A range is tmux's to send: it expands one from its binding at the click, so
+// one carries no mac, and one through the URL handler came from a page.
+test("a status-line range delivered by the URL handler reaches no renderer, and is refused", async () => {
+  const rig = host();
+  expect(
+    await rig.viaForwarder(`${STATUS_CLICK_URL}default/0/ccb0123456789ab`),
+  ).toMatchObject({
+    ok: false,
+    code: "BAD_REQUEST",
+    error: expect.stringMatching(/tmux's click binding/),
+  });
+  expect(rig.handed).toEqual([]);
 });
 
 // The forwarder of this version waits for its answer and shows a refusal; one

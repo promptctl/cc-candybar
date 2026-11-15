@@ -83,22 +83,22 @@ function draw(
     }),
   ];
   return {
-    segments,
+    lines: writtenLines(segments),
     depth: destination.colorSystem,
     nextChange: Math.min(Segment.nextChange(segments), told),
   };
 }
 
 interface Drawn {
-  readonly segments: readonly Segment[];
+  readonly lines: ReadonlyArray<readonly Segment[]>;
   readonly depth: ReturnType<typeof resolveDestination>["colorSystem"];
   readonly nextChange: number;
 }
 
 // The text of each line a draw wrote: what a measure reads, which no link
 // reaches.
-const textLines = ({ segments }: Drawn): string[] =>
-  writtenLines(segments).map((line) => line.map((s) => s.text).join(""));
+const textLines = ({ lines }: Drawn): string[] =>
+  lines.map((line) => line.map((s) => s.text).join(""));
 
 // [LAW:one-source-of-truth] `Endcaps`/`ColorCompatibility` and their value lists live
 // in themes/policy.ts (the render-identifier policy module, importable by the
@@ -304,7 +304,7 @@ export function drawStripCells(
   if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
   const drawn = drawStrip(cells, options, motion);
   return {
-    lines: runLines(drawn.segments, drawn.depth, links),
+    lines: runLines(drawn.lines, drawn.depth, links),
     nextChange: drawn.nextChange,
   };
 }
@@ -345,7 +345,7 @@ function drawStrip(
   // block renderable's contract in rich-js), which `runLines` reads as that
   // line's end, so a row is its lines' content and no more. A strip that drew
   // no line broke that contract, and would drop its row from the frame.
-  if (writtenLines(row.segments).length === 0) {
+  if (row.lines.length === 0) {
     throw new Error("drawStripCells: rich-js strip drew no line");
   }
   return row;

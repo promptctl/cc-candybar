@@ -9,6 +9,7 @@ import type {
   FileEventsStats,
   SourceRunsStats,
   ProbeArrival,
+  ProbeOffer,
   StoresRead,
   SourceSnapshots,
   StatsSnapshot,
@@ -315,6 +316,7 @@ export class RuntimeStats {
       watchersActive: 0,
       dirWatchesActive: 0,
       handlerProbes: [],
+      handlerProbe: { nonce: "", link: "" },
       clients: [],
       bundle: "/",
       sourceDigest: null,
@@ -352,6 +354,7 @@ export class RuntimeStats {
     dirWatchesActive: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
+    handlerProbe: ProbeOffer;
     clients: readonly RenderSighting[];
     bundle: string;
     sourceDigest: string | null;
@@ -410,6 +413,7 @@ export class RuntimeStats {
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,
       handlerProbes: extras.handlerProbes,
+      handlerProbe: extras.handlerProbe,
       clients: extras.clients,
       bundle: extras.bundle,
       daemon: extras.daemon,

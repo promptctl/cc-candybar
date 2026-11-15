@@ -70,10 +70,6 @@ import {
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import { answerRepo } from "../../helpers/repo-approval";
 import { TEST_SIGNER } from "../../helpers/link-signer";
-import {
-  linkKeyFile,
-  linkSignerFromKeyFile,
-} from "../../../src/daemon/link-key";
 
 jest.setTimeout(30_000);
 
@@ -328,7 +324,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 // the link to the forwarder app, which would deliver it to the user's own
 // daemon — replaced by the frame that app writes.
 test("the CLI's probe reads its own link back from the daemon it was delivered to", async () => {
-  const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   // The env it places names this socket, which is where the CLI's send looks.
@@ -336,12 +332,8 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   try {
     await daemon.listen(sockPath);
     const facts = await probeUrlHandler({
-      // Signed as the CLI signs: with the key file of the daemon it asks.
-      ...productionHandlerProbeEdge(
-        WORLD.launcher,
-        WORLD,
-        linkSignerFromKeyFile(linkKeyFile(stateDir)).signLink,
-      ),
+      // The link is the one the daemon offered, signed with its own key.
+      ...productionHandlerProbeEdge(WORLD.launcher, WORLD),
       platform: "darwin",
       // The stand-in for the handler app below delivers to this daemon as
       // the app does: one frame, then hang up, reading no answer.

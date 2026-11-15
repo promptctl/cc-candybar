@@ -476,12 +476,14 @@ export type Click =
   | { readonly kind: "range"; readonly value: string }
   | { readonly kind: "refused"; readonly problem: string };
 
-const RANGE_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
+// [LAW:one-source-of-truth] The link a tmux status-line click runs, up to its
+// range: the binding writes it and the host reads it.
+export const STATUS_CLICK_URL = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
 
 // [LAW:single-enforcer] The host's one reading of a clicked URL.
 export function parseClick(url: string, links: LinkSigner): Click {
-  if (url.startsWith(RANGE_PREFIX))
-    return { kind: "range", value: url.slice(RANGE_PREFIX.length) };
+  if (url.startsWith(STATUS_CLICK_URL))
+    return { kind: "range", value: url.slice(STATUS_CLICK_URL.length) };
   const verified = links.verifyLink(url);
   if (!verified.ok) return { kind: "refused", problem: verified.problem };
   const link = parseHandlerUrl(verified.link);

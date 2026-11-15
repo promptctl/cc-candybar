@@ -25,7 +25,10 @@ import { forwarderExecutable } from "../install/index.js";
 import { type OneShotLauncher } from "../proc/launch.js";
 import { failureText, type LaunchCategory } from "../proc/launcher.js";
 import type { Asked, HandlerApp, UrlHandlerFacts } from "./checks.js";
-import type { ProbeArrival } from "../daemon/foundations/stats-snapshot";
+import type {
+  ProbeArrival,
+  ProbeOffer,
+} from "../daemon/foundations/stats-snapshot";
 
 const ok = <T>(value: T): Asked<T> => ({ kind: "ok", value });
 const failed = (reason: string): Asked<never> => ({ kind: "failed", reason });
@@ -37,6 +40,17 @@ const ARRIVALS_KEPT = 16;
 export class ProbeArrivals {
   private arrivals: readonly ProbeArrival[] = [];
 
+  // A probe link for the doctor to open, signed with the daemon's own key:
+  // the doctor's shell may keep its state elsewhere than the shell that
+  // spawned the daemon, so only the daemon can sign a link it will honour.
+  offer(signLink: (link: string) => string): ProbeOffer {
+    const nonce = randomUUID();
+    return {
+      nonce,
+      link: signLink(`${URL_SCHEME}://${VERB_DOCTOR_PROBE}/${nonce}`),
+    };
+  }
+
   arrive(arrival: ProbeArrival): void {
     this.arrivals = [...this.arrivals, arrival].slice(-ARRIVALS_KEPT);
   }
@@ -46,9 +60,11 @@ export class ProbeArrivals {
   }
 }
 
-// What the CLI needs of the running daemon: the probes that reached it.
+// What the CLI needs of the running daemon: the probes that reached it, and a
+// link it signed for the next.
 export interface DaemonView {
   readonly arrivals: readonly ProbeArrival[];
+  readonly offer: ProbeOffer;
 }
 
 export interface HandlerProbeEdge {
@@ -56,10 +72,6 @@ export interface HandlerProbeEdge {
   // The socket this process reaches its daemon on, and the one the handler
   // app delivers to. They differ under `CC_CANDYBAR_SOCKET`.
   readonly sockets: { readonly own: string; readonly handler: string };
-  readonly nonce: () => string;
-  // The link with the daemon's mac, which the daemon verifies as it does every
-  // link the bar draws (src/click/link-signer.ts).
-  readonly signLink: (link: string) => string;
   readonly daemon: () => Promise<Asked<DaemonView>>;
   // Hand a URL to Launch Services. The reason it refused, or null.
   readonly open: (url: string) => string | null;
@@ -129,10 +141,8 @@ export async function probeUrlHandler(
       reason: `the daemon could not be asked whether a link arrives: ${daemon.reason}`,
     };
   }
-  const nonce = edge.nonce();
-  const unopened = edge.open(
-    edge.signLink(`${URL_SCHEME}://${VERB_DOCTOR_PROBE}/${nonce}`),
-  );
+  const { nonce, link } = daemon.value.offer;
+  const unopened = edge.open(link);
   const arrived = unopened === null ? await awaitArrival(edge, nonce) : null;
   return arrived ?? { kind: "lost", unopened, opener: handlerApp(edge) };
 }
@@ -174,8 +184,17 @@ async function daemonView(world: ClientWorld): Promise<Asked<DaemonView>> {
   }
   // A daemon of another build may carry no arrivals and would never record
   // the probe: told by the one shape comparison daemon-stats makes.
-  const skew = shapeSkew(outcome.value, ["handlerProbes"]);
+  const skew = shapeSkew(outcome.value, ["handlerProbes", "handlerProbe"]);
   if (skew !== null) return failed(skew);
+  const offer = outcome.value.handlerProbe as {
+    nonce?: unknown;
+    link?: unknown;
+  };
+  if (typeof offer.nonce !== "string" || typeof offer.link !== "string") {
+    return failed(
+      "the daemon offers its probe link without a nonce and a link, so it is from another build — restart it to run the installed one",
+    );
+  }
   // [LAW:parse-dont-validate] An arrival is read off the wire here, once: a
   // daemon from before the forwarder lists its probes with no delivery, and
   // that is told as the skew it is, never carried on as one.
@@ -189,7 +208,7 @@ async function daemonView(world: ClientWorld): Promise<Asked<DaemonView>> {
     }
     arrivals.push(arrival);
   }
-  return ok({ arrivals });
+  return ok({ arrivals, offer: { nonce: offer.nonce, link: offer.link } });
 }
 
 export function parseArrival(raw: unknown): ProbeArrival | null {
@@ -208,15 +227,12 @@ export function parseArrival(raw: unknown): ProbeArrival | null {
 export function productionHandlerProbeEdge(
   launcher: OneShotLauncher,
   world: ClientWorld,
-  signLink: (link: string) => string,
 ): HandlerProbeEdge {
   const { host, clock } = world;
   return {
     platform: process.platform,
     sockets: { own: socketPath(host), handler: defaultSocketPath() },
     monotonic: () => clock.monotonic(),
-    nonce: randomUUID,
-    signLink,
     daemon: () => daemonView(world),
     open: (url) => {
       // -g: the handler app must not take focus from the terminal.

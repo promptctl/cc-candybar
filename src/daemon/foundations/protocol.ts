@@ -370,10 +370,10 @@ export interface ClickRequest {
 // versioned by itself (`urlV`), never by PROTOCOL_VERSION: the app is resident
 // and knows nothing a release changes, so a daemon upgrade must not refuse it,
 // and the daemon accepts every `urlV` it has shipped (URL_FRAME_VERSIONS).
-// From version 2 the app reads one answer, a Response: a click the host
-// refused is `ok: false` with the reason in `error`, which the app shows as a
-// notification, since a refused click has no bar to land on; a TIMEOUT is a
-// click still in flight. Version 1 hangs up at once and is answered nothing.
+// From version 2 the app reads one answer, a Response, as every client that
+// waits does: a click that failed is `ok: false` with the reason in `error`,
+// which the app shows as a notification, since a failed click may have no bar
+// to land on. Version 1 hangs up at once and is answered nothing.
 // Not a member of `Request`, which is what the `v` gate admits. Mirrored by
 // url-handler/main.swift, the one frame that app spells, and pinned by
 // scripts/check-protocol.mjs.

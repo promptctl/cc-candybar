@@ -44,6 +44,23 @@ describe("a signed link", () => {
   });
 });
 
+describe("a link carrying text a URL parser escapes", () => {
+  // A config's own link, written without urlEncode: a second `#`, a space and
+  // non-ASCII text, each of which a terminal or Foundation escapes on its way.
+  const RAW = "cc-candybar://copy/fix/#12-x y é";
+  const signed = TEST_SIGNER.signLink(RAW);
+
+  test("is signed in a form a URL parser keeps byte for byte", () => {
+    expect(new URL(signed).href).toBe(signed);
+  });
+
+  test("verifies as the link it names, once its escapes are read", () => {
+    const verified = TEST_SIGNER.verifyLink(new URL(signed).href);
+    expect(verified.ok).toBe(true);
+    if (verified.ok) expect(decodeURIComponent(verified.link)).toBe(RAW);
+  });
+});
+
 describe("a link with no mac", () => {
   test("is refused, saying it carries none", () => {
     expect(TEST_SIGNER.verifyLink(LINK)).toEqual({

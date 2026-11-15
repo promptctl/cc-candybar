@@ -596,7 +596,7 @@ export function drawRender(
   );
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
-  const questions = repoQuestions(entry.repos, sessionId);
+  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
   // What a load or a request could not honour: each its own message, named by
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open

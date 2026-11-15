@@ -156,6 +156,7 @@ export interface StatsSnapshot {
   // The `doctor-probe` links that reached this daemon, newest last — what
   // `cc-candybar doctor` reads to learn whether the link it opened arrived.
   handlerProbes: readonly ProbeArrival[];
+  handlerProbe: ProbeOffer;
   // Each session's latest client, as this daemon process saw its last render
   // request (src/daemon/render-sightings.ts), and the bundle this daemon
   // runs — what `cc-candybar doctor` judges the install by.
@@ -288,6 +289,13 @@ export interface JournalTurnStats {
 export interface ProbeArrival {
   readonly nonce: string;
   readonly delivery: ClickDelivery;
+}
+
+// A probe link this daemon signed, for `cc-candybar doctor` to open: the
+// daemon's own key signs it, wherever the doctor's shell keeps its state.
+export interface ProbeOffer {
+  readonly nonce: string;
+  readonly link: string;
 }
 
 // [LAW:one-source-of-truth] The documents the doctor keeps under the daemon's

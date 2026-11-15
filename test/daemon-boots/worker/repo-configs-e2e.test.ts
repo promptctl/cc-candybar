@@ -30,7 +30,8 @@ import {
   prepareIsolatedDaemonEnv,
   type IsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
-import { VERB_REPO_CONFIG } from "../../../src/click/wire";
+import { effectsUrl, VERB_REPO_CONFIG } from "../../../src/click/wire";
+import { TEST_SIGNER } from "../../helpers/link-signer";
 import { logPath } from "../../../src/daemon/paths";
 import {
   repoConfigs,
@@ -164,6 +165,17 @@ describe("a repository's config waits for the user's one answer", () => {
     const forged = `${approve.slice(0, -1)}${approve.endsWith("A") ? "B" : "A"}`;
     expect(forged).not.toBe(approve);
     await refusedClick(daemon, forged, "bad-request");
+    // A config draws any link and the bar signs it, so an answer a config
+    // drew carries the bar's mac but not the question's, and is refused too.
+    const configDrawn = TEST_SIGNER.signLink(
+      effectsUrl([
+        {
+          verb: VERB_REPO_CONFIG,
+          args: ["repo-ask", project, "approved", "0".repeat(64)],
+        },
+      ]),
+    );
+    await refusedClick(daemon, configDrawn, "bad-request");
     expect(fs.existsSync(repoConfigsPath(stateDir(hostOf(isolated.env))))).toBe(
       false,
     );

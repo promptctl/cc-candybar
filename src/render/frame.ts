@@ -190,25 +190,19 @@ export function writtenLines(segments: readonly Segment[]): Segment[][] {
   );
 }
 
-// Rich-js segments as the runs of each line they draw.
+// Written lines (`writtenLines`) as their runs.
 // [LAW:single-enforcer] Every link enters a frame here, so here every
 // `cc-candybar://` link is signed: one the bar draws proves the bar drew it
 // (src/click/link-signer.ts). A link of any other scheme is the terminal's to
-// open and carries no mac. Every word cell of a line repeats its link, so each
-// is signed once per draw.
+// open and carries no mac.
 export function runLines(
-  segments: readonly Segment[],
+  lines: ReadonlyArray<readonly Segment[]>,
   depth: ColorDepth | null,
   links: LinkSigner,
 ): Run[][] {
-  const signed = new Map<string, string>();
-  const link = (url: string): string => {
-    if (!isBarLink(url)) return url;
-    const known = signed.get(url) ?? links.signLink(url);
-    signed.set(url, known);
-    return known;
-  };
-  return writtenLines(segments).map((line) =>
+  const link = (url: string): string =>
+    isBarLink(url) ? links.signLink(url) : url;
+  return lines.map((line) =>
     line.map((segment) => runOf(segment, depth, link)),
   );
 }

@@ -152,6 +152,7 @@ describe("RuntimeStats.snapshot", () => {
       watchersActive: 2,
       dirWatchesActive: 5,
       handlerProbes: [{ nonce: "n", delivery: { kind: "forwarder", urlV: 1 } }],
+      handlerProbe: { nonce: "o", link: "cc-candybar://doctor-probe/o" },
       clients: [
         {
           client: null,
@@ -382,6 +383,7 @@ describe("formatStats", () => {
       },
       nextRestartReason: null,
       handlerProbes: [],
+      handlerProbe: { nonce: "", link: "" },
       clients: [],
       bundle: "/",
       daemon: {
@@ -533,6 +535,7 @@ describe("formatStats", () => {
       },
       nextRestartReason: null,
       handlerProbes: [],
+      handlerProbe: { nonce: "", link: "" },
       clients: [],
       bundle: "/",
       daemon: {

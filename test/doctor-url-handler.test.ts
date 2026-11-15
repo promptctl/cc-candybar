@@ -144,6 +144,11 @@ describe("urlHandler probe", () => {
 // ─── The CLI's probe ─────────────────────────────────────────────────────────
 
 const NONCE = "123e4567-e89b-42d3-a456-426614174000";
+// The probe link the daemon offers, signed with its own key.
+const OFFER = {
+  nonce: NONCE,
+  link: `cc-candybar://${VERB_DOCTOR_PROBE}/${NONCE}#signed`,
+};
 
 // An edge that records what the probe did. `arrivesOnPoll` is the daemon read
 // (counting the one before the link is opened as read 0) from which the nonce
@@ -159,12 +164,11 @@ function fakeEdge(
     platform: "darwin",
     sockets: { own: "/tmp/s", handler: "/tmp/s" },
     monotonic: () => clock as Monotonic,
-    nonce: () => NONCE,
-    signLink: (link) => `${link}#signed`,
     daemon: async () => {
       const read = reads++;
       calls.push("daemon");
       const view: DaemonView = {
+        offer: OFFER,
         arrivals:
           arrivesOnRead !== null && read >= arrivesOnRead
             ? [
@@ -308,6 +312,7 @@ describe("probeUrlHandler", () => {
           : {
               kind: "ok",
               value: {
+                offer: OFFER,
                 arrivals: reads > 2 ? [{ nonce: NONCE, delivery: CLI }] : [],
               },
             },

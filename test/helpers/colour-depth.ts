@@ -12,7 +12,7 @@ import {
   render as richRender,
   resolveDestination,
 } from "@promptctl/rich-js";
-import { runLines } from "../../src/render/frame";
+import { runLines, writtenLines } from "../../src/render/frame";
 import { barOf } from "./drawn-frame";
 import { POWERLINE } from "./powerline";
 import {
@@ -84,7 +84,7 @@ function joinerInk(
   const drawn = drawnChars(
     barOf(
       ...runLines(
-        [
+        writtenLines([
           ...richRender(
             new Strip([cell(left), cell(right)], RICH_JOINERS.powerline),
             {
@@ -94,7 +94,7 @@ function joinerInk(
               colorSystem: destination.colorSystem,
             },
           ),
-        ],
+        ]),
         destination.colorSystem,
         TEST_SIGNER,
       ),

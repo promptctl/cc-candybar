@@ -32,11 +32,11 @@ import {
   parseClick,
   VERB_TMUX_STATUS_CLICK,
 } from "../click/wire";
-import { badRequest, failureOf, type Failure } from "./foundations/verb-error";
+import { badRequest, failureOf } from "./foundations/verb-error";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/gather";
-import type { ClickArrival } from "../doctor/sightings";
+import type { ClickArrival, Delivery } from "../doctor/sightings";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
@@ -285,6 +285,7 @@ export async function replyTo(
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
+        handlerProbe: handlerProbes.offer(parts.links.signLink),
         clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest,
@@ -428,13 +429,8 @@ export async function replyTo(
 
   if (req.kind === "click") {
     return stay(
-      await clickEvent(
-        parts,
-        accepted,
-        timedOut,
-        clientLeft,
-        (facts, click) => clickOutcome(parts, req, facts, click),
-        cliAnswer,
+      await clickEvent(parts, accepted, timedOut, clientLeft, (facts, click) =>
+        clickOutcome(parts, req, facts, click),
       ),
     );
   }
@@ -513,22 +509,6 @@ function sourceSnapshots(
   };
 }
 
-// [LAW:types-are-the-program] A click as the host took it: refused before any
-// renderer saw it, or handed to one, with its turn's outcome. The URL handler
-// is told only the first, and a turn whose renderer was not there to take it:
-// a verb's own failure is held on the bar the click came from.
-type Taken =
-  | { readonly kind: "refused"; readonly failure: Failure }
-  | { readonly kind: "handed"; readonly outcome: RequestOutcome };
-
-const refused = (failure: Failure): Taken => ({ kind: "refused", failure });
-const handed = (outcome: RequestOutcome): Taken => ({
-  kind: "handed",
-  outcome,
-});
-const outcomeOf = (taken: Taken): RequestOutcome =>
-  taken.kind === "refused" ? taken.failure : taken.outcome;
-
 // [LAW:nothing-unseen][LAW:single-enforcer] One click event per click,
 // however it arrived (a `click` request, the URL handler's frame), whatever
 // its outcome: how long it was queued behind the loop from its accept, how
@@ -540,8 +520,7 @@ async function clickEvent(
   accepted: Acceptance,
   timedOut: () => boolean,
   clientLeft: () => boolean,
-  run: (facts: RequestFacts, click: ClickInFlight) => Promise<Taken>,
-  reply: (taken: Taken) => Response,
+  run: (facts: RequestFacts, click: ClickInFlight) => Promise<RequestOutcome>,
 ): Promise<Response> {
   const { clock } = parts;
   const t0 = clock.monotonic();
@@ -556,7 +535,7 @@ async function clickEvent(
     id: accepted.id,
     gone: () => timedOut() || clientLeft(),
   };
-  const taken = await run(facts, click);
+  const outcome = await run(facts, click);
   // Whether the client was told TIMEOUT, and whether a client that waited
   // hung up, while the click ran: its effect lands though the client reported
   // a failure. One still waiting for its turn at either moment was refused
@@ -568,11 +547,14 @@ async function clickEvent(
   const { level, line } = requestEvent(
     "click",
     facts,
-    outcomeOf(taken),
+    outcome,
     elapsedMs(clock, t0),
   );
   parts.log(level, line);
-  return reply(taken);
+  // [LAW:single-enforcer] Every client that waits is told the click's
+  // outcome, the URL handler app as the CLI: a click that did nothing is told
+  // where it was sent from, whether or not a bar holds the failure too.
+  return clickReply(outcome);
 }
 
 // [LAW:parse-dont-validate][LAW:no-silent-failure] A click request run to its
@@ -582,21 +564,15 @@ async function clickOutcome(
   req: ClickRequest,
   facts: RequestFacts,
   click: ClickInFlight,
-): Promise<Taken> {
+): Promise<RequestOutcome> {
   noteFacts(facts, { via: "cli" });
   const { url } = req as { url: unknown };
   if (typeof url !== "string") {
-    return refused(
-      badRequest(`a click carries its link as a url string, got ${typeof url}`),
+    return badRequest(
+      `a click carries its link as a url string, got ${typeof url}`,
     );
   }
-  return clickArrived(
-    parts,
-    url,
-    { via: "link", delivery: { kind: "cli" } },
-    facts,
-    click,
-  );
+  return clickArrived(parts, url, { kind: "cli" }, facts, click);
 }
 
 // [LAW:parse-dont-validate][LAW:no-silent-failure] The URL handler's frame run
@@ -618,55 +594,57 @@ async function urlClick(
       const { urlV, url } = frame;
       noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
       if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
-        return refused(
-          badRequest(
-            `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`,
-          ),
+        return badRequest(
+          `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`,
         );
       }
       if (typeof url !== "string") {
-        return refused(
-          badRequest(`the URL handler's frame carries no url string`),
-        );
+        return badRequest(`the URL handler's frame carries no url string`);
       }
       return clickArrived(
         parts,
         url,
-        { via: "link", delivery: { kind: "forwarder", urlV } },
+        { kind: "forwarder", urlV },
         facts,
         click,
       );
     },
-    forwarderAnswer,
   );
 }
 
 // [LAW:single-enforcer] Every clicked URL is read here, whichever way it
 // arrived, so no link reaches a renderer before its mac is proven
-// (parseClick). A tmux range is the link its frame drew there.
+// (parseClick). A tmux range is the link its frame drew there, and only
+// tmux's click binding sends one: tmux expands it at the click, so it carries
+// no mac, and the URL handler app delivers what any web page opens.
 async function clickArrived(
   parts: DaemonParts,
   url: string,
-  arrival: ClickArrival,
+  delivery: Delivery,
   facts: RequestFacts,
   click: ClickInFlight,
-): Promise<Taken> {
+): Promise<RequestOutcome> {
   const parsed = parseClick(url, parts.links);
   switch (parsed.kind) {
     case "refused":
-      return refused(badRequest(parsed.problem));
+      return badRequest(parsed.problem);
     case "range":
       noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
-      // What finding the range's link throws (a malformed range) refuses it.
-      try {
-        return await statusLineClick(parts, parsed.value, facts, click);
-      } catch (error) {
-        return refused(failureOf(error));
+      if (delivery.kind !== "cli") {
+        return badRequest(
+          "a status-line range comes from tmux's click binding, never through the URL handler",
+        );
       }
+      return clickRan(() => statusLineClick(parts, parsed.value, facts, click));
     case "link":
-      return handed(
-        await clickRan(() =>
-          handleClick(parts, parsed.verb, parsed.value, arrival, facts, click),
+      return clickRan(() =>
+        handleClick(
+          parts,
+          parsed.verb,
+          parsed.value,
+          { via: "link", delivery },
+          facts,
+          click,
         ),
       );
   }
@@ -766,24 +744,6 @@ function clickReply(outcome: RequestOutcome): Response {
   }
 }
 
-const cliAnswer = (taken: Taken): Response => clickReply(outcomeOf(taken));
-
-// [LAW:dataflow-not-control-flow] What the URL handler is told, by what the
-// host did with its click: a refusal, and a turn no renderer was there to
-// take, are failures the app shows; any turn a renderer took is delivered,
-// since what went wrong in it is held on the bar.
-const UNTAKEN: ReadonlySet<RequestOutcome["kind"]> = new Set([
-  "closing",
-  "abandoned",
-  "down",
-]);
-function forwarderAnswer(taken: Taken): Response {
-  const outcome = outcomeOf(taken);
-  return taken.kind === "refused" || UNTAKEN.has(outcome.kind)
-    ? clickReply(outcome)
-    : { ok: true, output: "" };
-}
-
 // A click in a tmux status line: the link the daemon's frame marks that range
 // with, run as a click on it in the bar would run — a `cc-candybar://` link
 // through its own verb, any other through the platform's opener. Its verb
@@ -793,54 +753,44 @@ async function statusLineClick(
   value: string,
   facts: RequestFacts,
   click: ClickInFlight,
-): Promise<Taken> {
+): Promise<RequestOutcome> {
   const { tmuxStatusLines } = parts;
   const link = tmuxStatusLines.linkAt(value);
-  if (link.kind === "refused") return refused(badRequest(link.reason));
+  if (link.kind === "refused") return badRequest(link.reason);
   noteFacts(facts, { link: link.url });
   if (isBarLink(link.url)) {
     const parsed = parseClick(link.url, parts.links);
     switch (parsed.kind) {
       case "refused":
-        return refused(badRequest(parsed.problem));
+        return badRequest(parsed.problem);
       // [LAW:no-silent-failure] A link the bar draws never names a range;
       // one that did would be a click that only ever clicks another.
       case "range":
-        return refused(
-          badRequest("a status-line link names another status-line click"),
-        );
+        return badRequest("a status-line link names another status-line click");
       case "link":
-        return handed(
-          await clickRan(() =>
-            handleClick(
-              parts,
-              parsed.verb,
-              parsed.value,
-              { via: "tmux-status" },
-              facts,
-              click,
-            ),
-          ),
+        return handleClick(
+          parts,
+          parsed.verb,
+          parsed.value,
+          { via: "tmux-status" },
+          facts,
+          click,
         );
     }
   }
-  return handed(
-    await clickRan(async () => {
-      await clickHandoff(
-        parts.launcher,
-        {
-          bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-          args: [link.url],
-          category: "click.open",
-        },
-        `opening ${link.url}`,
-        parts.log,
-        CLICK_PROGRAM_TIMEOUT_MS,
-        parts.tmp,
-      );
-      return { kind: "ok" };
-    }),
+  await clickHandoff(
+    parts.launcher,
+    {
+      bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
+      args: [link.url],
+      category: "click.open",
+    },
+    `opening ${link.url}`,
+    parts.log,
+    CLICK_PROGRAM_TIMEOUT_MS,
+    parts.tmp,
   );
+  return { kind: "ok" };
 }
 
 // The answer to a request the checkpoint refused.
