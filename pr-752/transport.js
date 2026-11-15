@@ -5680,15 +5680,15 @@ var require_lib = __commonJS({
         if (length === 1)
           source = compile(set2[0], extglob, nodot, "", true);
         else {
-          const seen = /* @__PURE__ */ new Set();
+          const seen2 = /* @__PURE__ */ new Set();
           source = "(?:";
           for (let i = 0; i < length; i++) {
             const one = set2[i];
-            if (seen.has(one))
+            if (seen2.has(one))
               continue;
-            if (seen.size)
+            if (seen2.size)
               source += "|";
-            seen.add(one);
+            seen2.add(one);
             source += compile(one, extglob, nodot, "", true);
           }
           source += ")";
@@ -39813,19 +39813,19 @@ function actionBindsTemplateValue(a) {
 
 // src/config/loader/value-reads.ts
 function valueReads({ names, helpers, actions }) {
-  const actionTexts = (name, seen) => {
+  const actionTexts = (name, seen2) => {
     const decl = Object.hasOwn(actions, name) ? actions[name] : void 0;
-    if (decl === void 0 || seen.has(name)) return [];
-    seen.add(name);
+    if (decl === void 0 || seen2.has(name)) return [];
+    seen2.add(name);
     return [
       ...[...actionTemplates(decl)].map(([, source]) => source),
-      ..."do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen)) : []
+      ..."do" in decl ? decl.do.flatMap((m) => actionTexts(m, seen2)) : []
     ];
   };
   const texts = perTemplate((template) => {
     const bound = bindsComputedAction(template, helpers) ? Object.keys(actions) : templateActionRefs(template, helpers).map((ref) => ref.name);
-    const seen = /* @__PURE__ */ new Set();
-    return [template, ...bound.flatMap((name) => actionTexts(name, seen))];
+    const seen2 = /* @__PURE__ */ new Set();
+    return [template, ...bound.flatMap((name) => actionTexts(name, seen2))];
   });
   const ofTemplate = perTemplate(
     (template) => texts(template).flatMap(
@@ -46841,10 +46841,10 @@ var SessionEffects = class {
       const parts = /* @__PURE__ */ new Map();
       for (const { owner, placement } of items) {
         const part = placement.effect === FOLLOW_BAR ? bar : ownPart(placement.id, placement.effect);
-        const seen = parts.get(part.scope);
-        if (seen === void 0)
+        const seen2 = parts.get(part.scope);
+        if (seen2 === void 0)
           parts.set(part.scope, { ...part, owners: [owner] });
-        else seen.owners.push(owner);
+        else seen2.owners.push(owner);
       }
       return [...parts.values()];
     };
@@ -47099,6 +47099,21 @@ var BREACH_ARTIFACTS = {
   heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
 };
 
+// src/doctor/busy.ts
+init_globals();
+var busy = (what) => ({ kind: "busy", what });
+var DoctorBusy = class extends Error {
+  constructor(what) {
+    super(`the doctor looked at ${what} less than a second ago \u2014 click again`);
+    this.name = "DoctorBusy";
+  }
+};
+async function seen(answer2) {
+  const probed = await answer2;
+  if (probed.kind === "busy") throw new DoctorBusy(probed.what);
+  return probed;
+}
+
 // src/doctor/gather.ts
 function asked(read2) {
   try {
@@ -47196,7 +47211,7 @@ function settingsChains(originAt, bars) {
 async function tmuxFacts(edge, hint) {
   if (hint === void 0) return { kind: "unreported" };
   if (hint === null) return { kind: "outside" };
-  return { kind: "inside", hint, client: await edge.probeTmux(hint) };
+  return { kind: "inside", hint, client: await seen(edge.probeTmux(hint)) };
 }
 function terminalIdentity(tmux3, env2) {
   switch (tmux3.kind) {
@@ -47229,7 +47244,7 @@ async function terminalFacts(edge, identity2, hints, glyphs) {
   if (isBundling(name)) return { kind: "bundling", name, version };
   if (!isConfigured(name)) return { kind: "unread", name, version };
   const { ITERM_PROFILE: startedIn, ...unattached } = env2 ?? {};
-  const remote = client === null ? { kind: "ok", value: hints.ssh === true } : await edge.remoteLogin(client.pid);
+  const remote = client === null ? { kind: "ok", value: hints.ssh === true } : await seen(edge.remoteLogin(client.pid));
   return {
     kind: "configured",
     name,
@@ -47242,10 +47257,12 @@ async function terminalFacts(edge, identity2, hints, glyphs) {
     } : remote.value ? {
       kind: "failed",
       reason: "the terminal is on the far side of a remote login, so its font is on the machine it runs on"
-    } : await edge.fontInUse(
-      { name, version },
-      client === null ? env2 ?? {} : unattached,
-      glyphs
+    } : await seen(
+      edge.fontInUse(
+        { name, version },
+        client === null ? env2 ?? {} : unattached,
+        glyphs
+      )
     )
   };
 }
@@ -48235,11 +48252,11 @@ function identityOf(message) {
   return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
 }
 function stopsOf(list2) {
-  const seen = /* @__PURE__ */ new Map();
+  const seen2 = /* @__PURE__ */ new Map();
   return list2.map((m) => {
     const id2 = identityOf(m);
-    const n = seen.get(id2) ?? 0;
-    seen.set(id2, n + 1);
+    const n = seen2.get(id2) ?? 0;
+    seen2.set(id2, n + 1);
     return id2 * OCCURRENCES + Math.min(n, OCCURRENCES - 1);
   });
 }
@@ -54162,7 +54179,7 @@ var unknownMotion = (unseen) => ({
   ok: false,
   reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
 });
-function chainVerdict(sources, seen) {
+function chainVerdict(sources, seen2) {
   const statusLine = statusLineOf(sources);
   if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
     return {
@@ -54170,17 +54187,17 @@ function chainVerdict(sources, seen) {
       note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
     };
   }
-  switch (seen.kind) {
+  switch (seen2.kind) {
     case "none":
       return null;
     case "still":
       return { ok: true };
     case "unknown":
-      return unknownMotion(seen.unseen);
+      return unknownMotion(seen2.unseen);
     case "moving":
       break;
   }
-  const { wearing } = seen;
+  const { wearing } = seen2;
   switch (statusLine.kind) {
     case "unread":
       return {
@@ -54496,7 +54513,7 @@ function dataFields(data) {
     if (data.rateLimits.kind === "unneeded") return "-";
     const fact = data.rateLimits.fact;
     if (fact.kind === "failed") return "failed";
-    const count = (seen) => fact.value.filter((v) => v === seen).length;
+    const count = (seen2) => fact.value.filter((v) => v === seen2).length;
     return `${count("carried")}/${count("missing")}/${count("unanswered")}`;
   };
   return `data=pr:${pr()},rateLimits:${rateLimits()}`;
@@ -54508,7 +54525,7 @@ function frameFields(frames, { origin, elsewhere }) {
     return `frames=failed chains=${valueOf(lines2)}`;
   }
   const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
-  const count = (seen) => drawn.filter((f) => f.frame === seen).length;
+  const count = (seen2) => drawn.filter((f) => f.frame === seen2).length;
   return `frames=${FRAMES_SEEN.map(count).join("/")} chains=${valueOf(lines2)}`;
 }
 function statusLineValue(sources) {
@@ -56402,7 +56419,7 @@ function makeUpdateWatch(opts) {
     return read2;
   };
   const acts = makeActReader(actsDir2, readStart, launcher, clock);
-  let seen = null;
+  let seen2 = null;
   let gate2 = null;
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
@@ -56483,10 +56500,10 @@ function makeUpdateWatch(opts) {
     });
     if (closed || !read2.ok) return;
     const next = judgeAct(read2.value);
-    if (seen === null && next.kind === "running") {
+    if (seen2 === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
     }
-    if (seen?.kind === "running" && next.kind !== "running") {
+    if (seen2?.kind === "running" && next.kind !== "running") {
       if (next.kind === "succeeded") {
         log("info", `apply-update: act ${next.act} succeeded`);
         sampleBuild();
@@ -56496,7 +56513,7 @@ function makeUpdateWatch(opts) {
         log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
       }
     }
-    seen = next;
+    seen2 = next;
   }
   let clearTick;
   async function tick() {
@@ -56520,7 +56537,7 @@ function makeUpdateWatch(opts) {
       publish();
       armed.forEach((release5) => release5());
     },
-    notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
+    notice: (ctx) => updateNotice(current(), seen2 ?? IDLE, ctx),
     running: () => actTurn(async () => {
       const read2 = await touchActs(() => acts.read());
       return read2.ok && judgeAct(read2.value).kind === "running";
@@ -56559,7 +56576,7 @@ function makeUpdateWatch(opts) {
         "info",
         `apply-update: act ${claim.act}: ${facts.act} \u2014 ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`
       );
-      seen = { kind: "running", act: claim.act };
+      seen2 = { kind: "running", act: claim.act };
     })
   };
 }
@@ -60181,8 +60198,8 @@ var SessionUsageStore = class {
   }
   // The slot something is about to be stored in, created on the first store.
   hold(sessionId2) {
-    const seen = this.see(sessionId2);
-    if (seen) return seen;
+    const seen2 = this.see(sessionId2);
+    if (seen2) return seen2;
     const slot = {
       lastSeenAt: this.clock.now(),
       record: void 0,
@@ -69237,16 +69254,16 @@ function synthesizeGroupDecls(ctx, out) {
   reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
   const groups = ctx.groups;
   if (groups.length === 0) return;
-  const seen = /* @__PURE__ */ new Set();
+  const seen2 = /* @__PURE__ */ new Set();
   for (const g of groups) {
-    if (seen.has(g.name)) {
+    if (seen2.has(g.name)) {
       groupIssue(
         ctx,
         g.path,
         `duplicate group name "${g.name}" \u2014 group names must be unique (they name the synthesized state var, action, and toggle segment)`
       );
     }
-    seen.add(g.name);
+    seen2.add(g.name);
   }
   for (const inner of groups) {
     for (const outer of groups) {
@@ -71040,7 +71057,7 @@ function checkPolicyInstant(ctx, declPath, v, cfg) {
 function checkRuleSlotReads(ctx, cfg) {
   const declared = new Map(declaredVariables(cfg));
   const fold = valueReadsOf(cfg);
-  const slotRead = (reads, seen) => {
+  const slotRead = (reads, seen2) => {
     for (const { path: path43, reaches } of reads) {
       const atSlot = EXPRESSION_SLOTS.find(
         (slot) => SLOT_PATHS[slot] === path43 || SLOT_PATHS[slot].startsWith(`${path43}.`)
@@ -71048,21 +71065,21 @@ function checkRuleSlotReads(ctx, cfg) {
       if (atSlot !== void 0)
         return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
       for (const name of reaches) {
-        const through = nameRead(name, seen);
+        const through = nameRead(name, seen2);
         if (through !== null) return through;
       }
     }
     return null;
   };
-  const nameRead = (name, seen) => {
-    if (seen.has(name)) return null;
-    seen.add(name);
+  const nameRead = (name, seen2) => {
+    if (seen2.has(name)) return null;
+    seen2.add(name);
     const decl = declared.get(name);
     const at = payloadPathOf(name, decl);
     const slot = at === void 0 ? void 0 : slotAt(at);
     if (slot !== void 0) return `reads "${name}", the ${slot}'s own name`;
     for (const read2 of fold.ofVariable(decl)) {
-      const through = slotRead([read2], seen);
+      const through = slotRead([read2], seen2);
       if (through === null) continue;
       return read2.field === "template" ? `reads "${name}", which ${through}` : `reads "${name}", whose ${read2.field} ${through}`;
     }
@@ -75028,15 +75045,6 @@ var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typ
 var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
 var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
 
-// src/doctor/busy.ts
-init_globals();
-var DoctorBusy = class extends Error {
-  constructor(what) {
-    super(`the doctor looked at ${what} less than a second ago \u2014 click again`);
-    this.name = "DoctorBusy";
-  }
-};
-
 // src/doctor/sightings.ts
 init_globals();
 var inScope = (scope, sightings) => sightings.filter(
@@ -75684,35 +75692,41 @@ async function clickGather(ctx, sid, doctor, load) {
     sessionId: sid,
     via: ctx.arrival.via
   };
-  const said = await ctx.clients.ofSession(sid, ctx.now());
-  const serving = await ctx.serving();
+  const [said, serving] = await Promise.all([
+    ctx.clients.ofSession(sid, ctx.now()),
+    ctx.serving()
+  ]);
   let facts;
+  let install2;
   try {
-    facts = await gatherFacts(
-      { ...doctor, loadConfig: () => load },
-      sessionHints(ctx, sid),
-      sessionOrigin(ctx, sid),
-      (key) => ctx.sessionState.get(sid, key),
-      { kind: "ok", value: serving },
-      { kind: "ok", value: said.map((s) => s.rateLimits) },
-      { kind: "ok", value: said.map((s) => s.transcript) },
-      scope,
-      { kind: "ok", value: barsOf(scope, said) },
-      sessionWidth(sid, said),
-      readStores(ctx.doctorStores)
-    );
+    [facts, install2] = await Promise.all([
+      gatherFacts(
+        { ...doctor, loadConfig: () => load },
+        sessionHints(ctx, sid),
+        sessionOrigin(ctx, sid),
+        (key) => ctx.sessionState.get(sid, key),
+        { kind: "ok", value: serving },
+        { kind: "ok", value: said.map((s) => s.rateLimits) },
+        { kind: "ok", value: said.map((s) => s.transcript) },
+        scope,
+        { kind: "ok", value: barsOf(scope, said) },
+        sessionWidth(sid, said),
+        readStores(ctx.doctorStores)
+      ),
+      // The client that drew the bar this click came from, and the daemon the
+      // click reached — this process.
+      ctx.installFacts(
+        ctx.bundle,
+        said.map((s) => s.client)
+      )
+    ]);
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
   const gathered = {
     facts,
-    // The client that drew the bar this click came from, and the daemon the
-    // click reached — this process.
-    install: await ctx.installFacts(
-      ctx.bundle,
-      said.map((s) => s.client)
-    ),
+    install: install2,
     current: async (now2) => {
       const stands = doctor.loadConfig(sessionOrigin(now2, sid));
       const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
@@ -80456,10 +80470,10 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
   for (const { at, slot, rule: authored } of authoredRules(config2)) {
     const where = at.join(".");
     const rules = globalExpressions.get(slot);
-    const seen = rules.get(authored);
+    const seen2 = rules.get(authored);
     rules.set(
       authored,
-      seen === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen.where}, ${where}`, template: seen.template }
+      seen2 === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen2.where}, ${where}`, template: seen2.template }
     );
   }
   const instantNames = new Set(projections.map(([name]) => name));
@@ -81812,7 +81826,7 @@ function laneClicked(parts, sessionId2, before, after) {
       on: after.tmuxStatus
     });
 }
-async function answerRequest(parts, req, at, waitMs, idleSince, facts) {
+async function answerRequest(parts, id2, req, at, waitMs, idleSince, facts) {
   var _stack = [];
   try {
     const { clock, frameFeeds, log } = parts;
@@ -81829,10 +81843,20 @@ async function answerRequest(parts, req, at, waitMs, idleSince, facts) {
       deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
     });
     let refreshed = null;
+    let answered = false;
     const ended = await waitWithin(
       (signal) => settleWorld(
         () => parts.refresh(setup.viewFacts, at).then((took) => {
-          refreshed = took;
+          if (answered)
+            log(
+              "info",
+              eventLine("refreshed", [
+                ["req", String(id2)],
+                ["sid", setup.sessionId],
+                ["refreshed", refreshedFact(took)]
+              ])
+            );
+          else refreshed = took;
         }),
         () => parts.worldStates.of(setup.sessionId),
         () => setup.view.registry.namedRuns().values(),
@@ -81849,6 +81873,7 @@ async function answerRequest(parts, req, at, waitMs, idleSince, facts) {
       parts.renderCache.closing
     );
     const drawFrom = clock.monotonic();
+    answered = true;
     noteFacts(facts, {
       waited: `${Math.round(drawFrom - waitFrom)}ms`,
       ended,
@@ -83507,18 +83532,18 @@ function placementsBySegment(config2) {
 }
 function orderedSegmentNames(config2) {
   const out = [];
-  const seen = /* @__PURE__ */ new Set();
+  const seen2 = /* @__PURE__ */ new Set();
   for (const node of walkNodes(rootNode(config2.root))) {
     if (node.kind !== "segment") continue;
-    if (config2.segments[node.name] && !seen.has(node.name)) {
+    if (config2.segments[node.name] && !seen2.has(node.name)) {
       out.push(node.name);
-      seen.add(node.name);
+      seen2.add(node.name);
     }
   }
   for (const name of Object.keys(config2.segments)) {
-    if (!seen.has(name)) {
+    if (!seen2.has(name)) {
       out.push(name);
-      seen.add(name);
+      seen2.add(name);
     }
   }
   return out;
@@ -83594,13 +83619,13 @@ var JournalTurns = class {
     this.queued++;
     return this.queue.run(DAEMON_WIDE, async () => {
       this.queued--;
-      this.refuseClosed(verb);
-      if (await gone()) throw new ClickAbandoned(verb);
-      this.refuseClosed(verb);
       const since = this.deps.monotonic();
       waited(spanMs(asked2, since));
       this.holder = { verb, since };
       try {
+        this.refuseClosed(verb);
+        if (await gone()) throw new ClickAbandoned(verb);
+        this.refuseClosed(verb);
         return await body({
           holds: (commit3) => {
             const held = { verb, commit: commit3 };
@@ -83693,6 +83718,7 @@ function mainRenderer(parts, pushed) {
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
           parts,
+          event.id,
           event.context,
           at,
           event.waitMs,
@@ -83849,6 +83875,7 @@ function startOver(inputs, sessionState, history, host) {
   const reloadConfig = (origin) => renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
     kind: "write"
   });
+  const { install: installFacts2, ...machineReads } = host.doctor;
   const verbCtx = {
     gates,
     sessionState,
@@ -83861,12 +83888,7 @@ function startOver(inputs, sessionState, history, host) {
     now: now2,
     applyUpdate: host.applyUpdate,
     doctor: {
-      probeTmux: host.doctor.probeTmux,
-      remoteLogin: host.doctor.remoteLogin,
-      fontInUse: host.doctor.fontInUse,
-      daemons: host.doctor.daemons,
-      forge: host.doctor.forge,
-      transcript: host.doctor.transcript,
+      ...machineReads,
       // The load the session's bar is drawn from: its cache entry's load
       // outcome, and what the config that entry renders left unused.
       // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
@@ -83887,7 +83909,7 @@ function startOver(inputs, sessionState, history, host) {
       home: inputs.home,
       managedSettingsDir: claudeManagedSettingsDirIn(inputs.env)
     },
-    installFacts: host.doctor.install,
+    installFacts: installFacts2,
     doctorStores: inputs.storage.doctor,
     probes: host.probes,
     clients: host.renderSightings,
@@ -84041,9 +84063,9 @@ function processTable(ps2) {
   return procs;
 }
 function* lineage(procs, pid2) {
-  const seen = /* @__PURE__ */ new Set();
-  for (let p2 = procs.get(pid2); p2 !== void 0 && !seen.has(p2.pid); ) {
-    seen.add(p2.pid);
+  const seen2 = /* @__PURE__ */ new Set();
+  for (let p2 = procs.get(pid2); p2 !== void 0 && !seen2.has(p2.pid); ) {
+    seen2.add(p2.pid);
     yield p2;
     p2 = procs.get(p2.ppid);
   }
@@ -84609,7 +84631,7 @@ function parseKey(ctx, end = 61) {
 function parseInlineTable(ctx) {
   let startPtr = ctx.p++;
   let res = /* @__PURE__ */ Object.create(null);
-  let seen = /* @__PURE__ */ new Set();
+  let seen2 = /* @__PURE__ */ new Set();
   let c;
   while (ctx.p < ctx.s.length) {
     skipVoid(ctx);
@@ -84626,7 +84648,7 @@ function parseInlineTable(ctx) {
       if (i)
         t2 = hasOwn ? t2[k] : t2[k] = /* @__PURE__ */ Object.create(null);
       k = key[i];
-      if ((hasOwn = Object.hasOwn(t2, k)) && (typeof t2[k] !== "object" || seen.has(t2[k]))) {
+      if ((hasOwn = Object.hasOwn(t2, k)) && (typeof t2[k] !== "object" || seen2.has(t2[k]))) {
         TomlError.x("trying to redefine an already defined value", ctx, errPtr);
       }
       let unsafe = k === "__proto__";
@@ -84648,7 +84670,7 @@ function parseInlineTable(ctx) {
       /* } */
     );
     if (t2 && typeof (t2[k] = value) === "object")
-      seen.add(value);
+      seen2.add(value);
     skipVoid(ctx);
     if ((c = ctx.s.charCodeAt(ctx.p++)) === 125) {
       return res;
@@ -84888,7 +84910,7 @@ async function jxa(launcher, args) {
     category: "doctor.font"
   });
   if (!run3.ok) {
-    if (run3.reason === "rate-limited") throw new DoctorBusy("the font");
+    if (run3.reason === "rate-limited") return busy("the font");
     const detail = failureText(run3);
     return { kind: "failed", reason: `osascript failed (${detail})` };
   }
@@ -84910,7 +84932,7 @@ async function macCoverage(launcher, ref, glyphs) {
     launcher,
     ["font", ref.kind, ref.name, pointsArg(glyphs)]
   );
-  if (answer2.kind === "failed") return answer2;
+  if (answer2.kind !== "ok") return answer2;
   const { lacks } = answer2.value;
   return {
     kind: "ok",
@@ -84968,7 +84990,7 @@ async function itermFont(launcher, version, env2, glyphs) {
   }
   const wanted = env2.ITERM_PROFILE ?? null;
   const answer2 = await jxa(launcher, ["iterm", wanted ?? "", pointsArg(glyphs)]);
-  if (answer2.kind === "failed") return answer2;
+  if (answer2.kind !== "ok") return answer2;
   const profiles = answer2.value.profiles.map((p2) => ({
     ...p2,
     lacks: p2.lacks === null ? null : glyphsOf2(p2.lacks)
@@ -85014,7 +85036,7 @@ async function fcCoverage(launcher, family, glyphs) {
     category: "doctor.font"
   });
   if (!run3.ok) {
-    if (run3.reason === "rate-limited") throw new DoctorBusy("the font");
+    if (run3.reason === "rate-limited") return busy("the font");
     const detail = failureText(run3);
     return { kind: "failed", reason: `fc-match failed (${detail})` };
   }
@@ -85092,7 +85114,7 @@ async function alacrittyFont(launcher, env2, glyphs, home) {
     { kind: "family", name: family },
     glyphs
   );
-  if (drawn.kind === "failed") return drawn;
+  if (drawn.kind !== "ok") return drawn;
   const { font, lacks } = drawn.value;
   return {
     kind: "ok",
@@ -85211,7 +85233,7 @@ async function remoteLogin(launcher, pid2) {
     category: "doctor.process"
   });
   if (!run3.ok) {
-    if (run3.reason === "rate-limited") throw new DoctorBusy("the processes");
+    if (run3.reason === "rate-limited") return busy("the processes");
     const detail = failureText(run3);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
@@ -85276,7 +85298,7 @@ async function probeTmux(launcher, hint) {
     hint.pane,
     TMUX_CLIENT_FORMAT
   ]);
-  if (run3.kind === "rate-limited") throw new DoctorBusy("tmux");
+  if (run3.kind === "rate-limited") return busy("tmux");
   if (run3.kind === "failed") return { kind: "failed", reason: run3.reason };
   return parseTmuxClient(run3.stdout);
 }
@@ -85836,12 +85858,7 @@ function createDaemon(inputs) {
     },
     refresh: readings.refresh,
     doctor: {
-      probeTmux: doctorEdge.probeTmux,
-      remoteLogin: doctorEdge.remoteLogin,
-      fontInUse: doctorEdge.fontInUse,
-      daemons: doctorEdge.daemons,
-      forge: doctorEdge.forge,
-      transcript: doctorEdge.transcript,
+      ...doctorEdge,
       install: async (daemonBundle, clients) => installFacts(doctorEdge.install, daemonBundle, clients)
     },
     laneSetups: {

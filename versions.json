@@ -4,15 +4,22 @@
     {
       "version": "pr-752",
       "ref": "refs/pull/752/merge",
-      "sha": "d49f7c891696efcde7265c9fbb1a0aa34df54394",
-      "timestamp": "2026-11-15T12:45:03.930Z",
+      "sha": "e5b29ffd7fda07303fca6e71f2d78e0bc88ab665",
+      "timestamp": "2026-11-15T13:04:42.114Z",
       "commits": [
         {
-          "sha": "d49f7c891696efcde7265c9fbb1a0aa34df54394",
+          "sha": "e5b29ffd7fda07303fca6e71f2d78e0bc88ab665",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T05:44:06-07:00",
-          "message": "Merge 9b221c480f7c530b8246aa0ceb356f387c8dafae into 3bb8666947fbd73f1923b0ac3d53781eed9732f2\n"
+          "timestamp": "2026-11-15T13:03:33Z",
+          "message": "Merge cbb5d5f81322881c9890b02793070ae8e06af40e into 3bb8666947fbd73f1923b0ac3d53781eed9732f2\n"
+        },
+        {
+          "sha": "cbb5d5f81322881c9890b02793070ae8e06af40e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T06:03:23-07:00",
+          "message": "fix(renderer): a busy probe crosses as data, a late refresh logs its lanes, and the crossing check names any (candybar-host-renderer-x96a.5ym)\n\n- The doctor's rate-limited probes answer busy as data; the gather turns it\n  into the click's refusal, so it survives a process boundary.\n- A request refresh that lands after its answer writes a refreshed line\n  naming the request, with every lane's time.\n- Reaches refuses an answer of any; Crosses refuses undefined under every\n  index signature, numbered and templated ones included.\n- A journal turn is held from the head of its queue, so a slow gone() shows.\n- The click gather's independent host reads run together; the doctor's\n  reads are spread rather than copied member by member.\n"
         },
         {
           "sha": "9b221c480f7c530b8246aa0ceb356f387c8dafae",
