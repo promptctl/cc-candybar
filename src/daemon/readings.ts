@@ -41,7 +41,8 @@ import type { Holds } from "../utils/holds.js";
 import { dateOf, type Instant } from "../utils/instant.js";
 import type { RefreshFaults } from "./refresh-faults.js";
 import type { SessionId } from "./foundations/session-id.js";
-import type { ManagedStorage } from "./cache/managed-storage.js";
+import type { ManagedStorage, StorageKey } from "./cache/managed-storage.js";
+import type { Judged } from "./foundations/judge-run.js";
 import {
   declareRuns,
   type SourceLane,
@@ -53,8 +54,16 @@ import { elapsedMs, type Timekeeper } from "../time";
 import type {
   ViewFacts,
   RefreshTimes,
-  Subscribed,
 } from "../renderer-interface/request-context";
+
+// What a session's renderer subscribes to, as the collector holds it: its
+// config's plugin sources, by variable name, at the key the collector minted
+// for each one's folder, and the runs its `shell` and `file` sources name, by
+// digest, as the host judged each one.
+export interface Subscribed {
+  readonly plugins: ReadonlyMap<string, StorageKey>;
+  readonly runs: ReadonlyMap<string, Judged>;
+}
 
 // ─── Provider dependencies ────────────────────────────────────────────────────
 

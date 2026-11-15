@@ -1765,10 +1765,10 @@ function runOf(
     // The bundled config's runs go in the user's home.
     cwd: decl.cwd ?? ctx.locations.home,
     // The loader proved every name a declared source of this config, whose
-    // state holds its key.
+    // state holds its folder.
     refreshes: decl.refreshes.map((name) => ({
       name,
-      storage: sources.get(name)!,
+      folder: sources.get(name)!,
     })),
   };
 }

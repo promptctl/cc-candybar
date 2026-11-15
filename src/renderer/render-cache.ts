@@ -12,12 +12,8 @@ import type {
 import type {
   Subscription,
   Subscriptions,
-  StorageKey,
 } from "../renderer-interface/interface.js";
-import type {
-  AdapterToHost,
-  EveryEntryLoad,
-} from "../renderer-interface/adapter.js";
+import type { EveryEntryLoad } from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { Watches } from "./watches.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
@@ -174,9 +170,6 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The renderer's watches (src/renderer/watches.ts): the answers book's and
   // each entry's config watch.
   watchers: Pick<Watches, "acquire" | "follow">;
-  // The owner of every plugin's managed storage, whose folders a state's
-  // build holds (StateDeps).
-  storage: PluginStorage;
   // What signs the `run` links its compiles draw (StateDeps).
   signer: LinkSigner;
   // The gates a load builds against (StateDeps).
@@ -189,21 +182,6 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // providers and the usage store.
   log?: DaemonLogger;
 }
-
-// What a render state's build asks of the managed storage owner: the key of
-// each storage folder its config declares (creating the folder), and that
-// folder's watch, held from the build to the state's reclaim.
-export type PluginStorage = AdapterToHost["managedStorage"];
-
-// [LAW:single-enforcer] The storage of a build outside the daemon (the
-// doctor's load, the demo's): it creates, watches and sweeps no folder,
-// because only the daemon's owner knows which files its sessions hold, and a
-// sweep anywhere else removes theirs. A view reading its keys reads the files
-// as they are.
-export const UNOWNED_STORAGE: PluginStorage = {
-  keyFor: (folder) => ({ folder, generation: 0 }),
-  watch: () => () => {},
-};
 
 // What building one config's state needs.
 export interface StateDeps {
@@ -218,7 +196,6 @@ export interface StateDeps {
   // The environment an `env` source reads: the daemon's host.
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly sessionState: SessionStateRW;
-  readonly storage: PluginStorage;
   // What signs the `run` links a compile draws.
   readonly signer: LinkSigner;
   // The gates a config's sessions click through, which a load builds once so a
@@ -335,11 +312,8 @@ export interface DslRenderState {
   readonly unused: readonly UnusedDecl[];
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;
-  // [LAW:no-ambient-temporal-coupling] Each plugin source the config
-  // declares, at the key its build took for the source's folder. The build
-  // holds each folder's watch until the state is reclaimed (its registry's
-  // teardown), so a reload — which builds its successor first — never closes
-  // and reopens one, and no view touches a watch.
+  // Each plugin source the config declares, at its storage folder, which the
+  // host's collector keys and watches while a session subscribes to it.
   readonly sources: DeclaredSources;
 }
 
@@ -644,12 +618,6 @@ function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
       ...roots,
       ...loaded.map((d) => d.path),
       ...[...dropped, ...unreached].map((d) => d.path),
-      // [LAW:single-enforcer] A declared storage folder is watched by name in
-      // its plugin folder, by the follower that already watches the
-      // definition: its removal, recreation or replacement reloads the
-      // config, whose build recreates the folder and takes a new generation
-      // from the storage owner — which never re-arms a watch itself.
-      ...new Set([...entry.state.sources.values()].map((k) => k.folder)),
     ],
     // An existing root is watched for every child: a folder created in it is
     // a plugin installed.
@@ -707,9 +675,7 @@ interface Failed {
 
 // [LAW:types-are-the-program] What a build reads, all of it read from disk
 // before the build starts: the chain as it resolved, the loaded chain, and the
-// storage key of every plugin source the config declares. `keyFor` moves a
-// folder's generation on a loss or a changed identity, so a key is an input
-// to the build, never something it finds out.
+// storage folder of every plugin source the config declares.
 interface LoadInputs {
   readonly cwd: string;
   readonly chain: ConfigChain;
@@ -795,26 +761,17 @@ function loadKey(inputs: LoadInputs): string {
     } satisfies Projection<LoadedChain>,
     sources: [...inputs.sources]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, key]) => [name, key.folder, key.generation] as const),
+      .map(([name, folder]) => [name, folder] as const),
   } satisfies Projection<LoadInputs>);
 }
 
-// [LAW:single-enforcer] The storage owner's one ask per load: for each folder
-// the config's sources name, its key. The owner creates the folder, so its
-// program has somewhere to write before any session reads it. The render path
-// does no I/O for a source: a session's subscription takes the key from here.
-function declaredSources(
-  config: DslConfig,
-  storage: PluginStorage,
-): DeclaredSources {
-  const keys = new Map<string, StorageKey>();
-  const sources = new Map<string, StorageKey>();
-  for (const [name, decl] of Object.entries(config.variables)) {
-    if (decl.kind !== "source") continue;
-    const key = keys.get(decl.storage) ?? storage.keyFor(decl.storage);
-    keys.set(decl.storage, key);
-    sources.set(name, key);
-  }
+// The storage folder of each plugin source the config declares. The render
+// path does no I/O for a source: a session's subscription names the folder
+// from here.
+function declaredSources(config: DslConfig): DeclaredSources {
+  const sources = new Map<string, string>();
+  for (const [name, decl] of Object.entries(config.variables))
+    if (decl.kind === "source") sources.set(name, decl.storage);
   return sources;
 }
 
@@ -826,7 +783,6 @@ function declaredSources(
 export function resolveLoad(
   cwd: string,
   chain: ConfigChain,
-  storage: PluginStorage,
 ): ResolvedLoad | Failed {
   const warnings: string[] = [];
   try {
@@ -841,7 +797,7 @@ export function resolveLoad(
       cwd,
       chain,
       loaded,
-      sources: declaredSources(loaded.config, storage),
+      sources: declaredSources(loaded.config),
     };
     return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
   } catch (err) {
@@ -923,10 +879,6 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     // click.
     deps.gates.state.gateFor(config);
     deps.gates.config.gateFor(config);
-    // [LAW:no-ambient-temporal-coupling] Each folder's watch, held by the
-    // registry until the state's teardown.
-    for (const key of new Set(load.sources.values()))
-      registry.own(deps.storage.watch(key));
   } catch (err) {
     registry.dispose();
     if (err instanceof ConfigError) warnings.push(...err.warnings);
@@ -1048,7 +1000,7 @@ export function loadChain(
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const resolved = resolveLoad(cwd, chain, deps.storage);
+  const resolved = resolveLoad(cwd, chain);
   if (resolved.kind === "failed") {
     return settle(frame, chain, [], resolved, deps.clock);
   }
@@ -1125,11 +1077,12 @@ export function fallbackState(
 ): DslRenderState {
   // The failed load's approved project: the seed draws the plugins it ships,
   // as the load would have.
-  const resolved = resolveLoad(
-    cwd,
-    { layers: [], home: "", repo, locs: deps.locations },
-    deps.storage,
-  );
+  const resolved = resolveLoad(cwd, {
+    layers: [],
+    home: "",
+    repo,
+    locs: deps.locations,
+  });
   const built =
     resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
   // [LAW:no-silent-failure] The default validates by program invariant
@@ -1315,13 +1268,13 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
 }
 
 // What a view needs read: each plugin source its config declares, at its
-// folder's storage key, then each run its registry names, in digest order.
+// storage folder, then each run its registry names, in digest order.
 export const subscriptionsOf = ({
   state,
   registry,
 }: Pick<SessionView, "state" | "registry">): Subscription[] => [
   ...[...state.sources].map(
-    ([source, storage]): Subscription => ({ kind: "plugin", source, storage }),
+    ([source, folder]): Subscription => ({ kind: "plugin", source, folder }),
   ),
   ...registry
     .subscriptions()
@@ -1759,7 +1712,7 @@ export class RenderCache<
   }
 
   // [LAW:one-source-of-truth] What every session's open view needs read: the
-  // plugin sources its config declares, at their folders' storage keys, and
+  // plugin sources its config declares, at their storage folders, and
   // the runs its `shell` and `file` sources name. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.

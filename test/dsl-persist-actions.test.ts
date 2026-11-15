@@ -50,7 +50,10 @@ import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
-import { persistValueText, writeValues } from "../src/renderer/config-file-store";
+import {
+  persistValueText,
+  writeValues,
+} from "../src/renderer/config-file-store";
 import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -62,7 +65,6 @@ import {
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
 import { instantOf } from "../src/utils/instant";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
@@ -567,10 +569,7 @@ describe("persist action click → the config file", () => {
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, S1);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
-      "",
-      sessionState,
-    );
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -760,7 +759,8 @@ describe("persist action click → the config file", () => {
   // back to the bare key "colorCompatibility", which no variable projects, so readVar
   // would always see "".
   test("a persist-option action over a newly-exposed field (colorCompatibility) marks the matching link active via its *.effective projection", () => {
-    const { render } = buildPersistRuntime(`{
+    const { render } = buildPersistRuntime(
+      `{
       globals: {},
       actions: { applyDepth: { persist: 'colorCompatibility', from: 'colorCompatibilities' } },
       segments: {
@@ -770,7 +770,11 @@ describe("persist action click → the config file", () => {
         },
       },
       root: 'bar',
-    }`, S1, EMPTY_DEFAULT, { colorCompatibility: "256" });
+    }`,
+      S1,
+      EMPTY_DEFAULT,
+      { colorCompatibility: "256" },
+    );
     const active = boldUrls(render()).map(effectsOf);
     expect(active).toHaveLength(1);
     expect(active[0]![0]!.args[2]).toBe("256");
@@ -852,7 +856,6 @@ function makeCache(): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       env: durable.host.env,
-      storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,

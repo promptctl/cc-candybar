@@ -63,11 +63,7 @@ import {
   type HandlerProbeEdge,
 } from "./handler-probe.js";
 import { cliConfigTarget, type RenderOrigin } from "../config-hint.js";
-import {
-  fallbackState,
-  loadFromDisk,
-  UNOWNED_STORAGE,
-} from "../renderer/render-cache.js";
+import { fallbackState, loadFromDisk } from "../renderer/render-cache.js";
 import { SessionState } from "../renderer/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
@@ -110,7 +106,6 @@ export function loadConfigOnce(
     locations: locations(host),
     env: host.env,
     sessionState: new SessionState(),
-    storage: UNOWNED_STORAGE,
     signer: linkSignerFromKeyFile(linkKeyFile(stateDir(host))),
     gates: daemonGates(),
     stateDir: stateDir(host),

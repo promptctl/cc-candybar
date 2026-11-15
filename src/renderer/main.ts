@@ -294,7 +294,6 @@ function startOver(
       sessionState,
       watchers: watches,
       log,
-      storage: host.managedStorage,
       signer: linkSigner,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload

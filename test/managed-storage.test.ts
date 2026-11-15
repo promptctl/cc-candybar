@@ -50,7 +50,10 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "managed-storage-")),
   );
+  // The storage folder sits in its plugin's folder, which the loader resolved,
+  // so it is there before any key request.
   const folder = path.join(root, "plug", "session");
+  fs.mkdirSync(path.dirname(folder));
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -259,8 +262,8 @@ describe("ManagedStorage reads", () => {
     const holds = new Holds();
     const lane = r.storage.declare(holds, key, A);
     await answered(lane);
-    const one = r.storage.supersede(key, A);
-    const two = r.storage.supersede(key, A);
+    const one = r.storage.supersede(key.folder, A);
+    const two = r.storage.supersede(key.folder, A);
     expect(lane.current()).toMatchObject({
       kind: "pending",
       why: "superseded",
@@ -350,13 +353,29 @@ describe("ManagedStorage watches", () => {
     fs.rmSync(r.folder, { recursive: true });
     watches[0]!.listener("rename", path.basename(r.folder));
     await until(() => r.storage.stats().lost === 1, "the loss");
+    expect(r.storage.ended(key)).toBe("lost");
     await until(() => lane.current().kind !== "ok", "the re-read");
     expect(await answered(lane)).toEqual(ABSENT);
+  });
+
+  test("a lost folder whose plugin folder is gone keeps its generation, and neither folder is made again", async () => {
+    const watches = fakeWatches();
+    const r = rig();
+    const key = r.storage.keyFor(r.folder);
+    r.storage.watch(key);
+    expect(r.storage.ended(key)).toBeNull();
+    fs.rmSync(path.dirname(r.folder), { recursive: true });
+    watches[0]!.listener("rename", path.basename(r.folder));
+    await until(() => r.storage.stats().lost === 1, "the loss");
+    expect(r.storage.keyFor(r.folder)).toEqual(key);
+    expect(fs.existsSync(path.dirname(r.folder))).toBe(false);
+    expect(r.storage.stats().faults.unusable).toBe(0);
   });
 
   test("a folder that cannot be created is a standing fault of its sources, not a throw; the next key request tries again", async () => {
     const r = rig();
     // A file where the folder's parent should be: mkdir fails ENOTDIR.
+    fs.rmdirSync(path.dirname(r.folder));
     fs.writeFileSync(path.dirname(r.folder), "");
     const key = r.storage.keyFor(r.folder);
     r.storage.watch(key);
@@ -377,6 +396,7 @@ describe("ManagedStorage watches", () => {
       ),
     );
     fs.rmSync(path.dirname(r.folder));
+    fs.mkdirSync(path.dirname(r.folder));
     const next = r.storage.keyFor(r.folder);
     expect(next.generation).toBe(1);
     r.storage.watch(next);
@@ -445,6 +465,7 @@ describe("ManagedStorage watches", () => {
       reason: `cannot refresh: ${r0.folder} EMFILE: too many open files, watch '${r0.folder}'; reload the config or restart the daemon`,
     });
     expect(r0.counters.watchRefusals).toBe(1);
+    expect(r0.storage.ended(key)).toBe("faulted");
     expect(r0.storage.stats().faults).toEqual({
       unusable: 0,
       refused: 1,

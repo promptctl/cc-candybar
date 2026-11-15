@@ -12,7 +12,6 @@ import type {
 } from "../../src/renderer/verbs/port";
 import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
-import { UNOWNED_STORAGE } from "../../src/renderer/render-cache";
 import {
   readingsHost,
   type RenderPayloadDeps,
@@ -71,7 +70,6 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
     probes: { arrive: unhosted("probes") },
     pipeEventAnswered: () => {},
     watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
-    managedStorage: UNOWNED_STORAGE,
   };
 }
 

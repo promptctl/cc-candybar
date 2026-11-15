@@ -41,7 +41,6 @@ import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { viewFacts } from "./helpers/view-facts";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
@@ -86,7 +85,6 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
-      storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
@@ -157,10 +155,7 @@ const drawAlone = (
   compiled: CompiledConfig,
 ): VariableStore => {
   const store = new ProbeStore(systemTimekeeper);
-  const registry = new SourceRegistry(store,
-    "",
-    new SessionState(),
-  );
+  const registry = new SourceRegistry(store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   drawPayload(
     config,

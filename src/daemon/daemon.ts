@@ -417,8 +417,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
   // flight (src/daemon/runs.ts), closed with the daemon.
   const runs = new Runs({
-    supersede: (storage, sessionId) =>
-      managedStorage.supersede(storage, sessionId),
+    supersede: (folder, sessionId) =>
+      managedStorage.supersede(folder, sessionId),
     launch: launcher.launch,
     holdClickError,
     log,
@@ -725,9 +725,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         rendererWatches.delete(id);
       },
     },
-    // [LAW:effects-at-boundaries] exception: the part the renderer still
-    // reaches in process.
-    managedStorage,
   });
   const parts: DaemonParts = {
     clicks,
@@ -783,6 +780,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     reloadConfig: (origin) => {
       closing.signal.throwIfAborted();
+      collector.reloaded();
       parts.renderer.tell({ kind: "reload-config", origin }, instant());
     },
     arm() {

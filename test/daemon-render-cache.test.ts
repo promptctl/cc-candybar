@@ -60,7 +60,6 @@ import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import { repoConfigsDir, repoConfigsPath } from "../src/renderer/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
@@ -122,7 +121,6 @@ function makeCache(
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
-      storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
@@ -1410,7 +1408,6 @@ describe("RenderCache close", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1464,7 +1461,6 @@ describe("RenderCache frames and pins", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1607,7 +1603,6 @@ describe("RenderCache frames and pins", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1678,7 +1673,6 @@ describe("RenderCache frames and pins", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1721,7 +1715,6 @@ describe("RenderCache frames and pins", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         env: host.env,
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),

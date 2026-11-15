@@ -36,7 +36,7 @@ import {
   type RenderPayloadDeps,
 } from "../src/daemon/readings";
 import { type ViewFacts } from "../src/renderer-interface/request-context";
-import type { StorageKey } from "../src/renderer-interface/interface";
+import type { Ended, StorageKey } from "../src/daemon/cache/managed-storage";
 import type { Fact } from "../src/facts/fact";
 import type { Update, WorldState } from "../src/facts/world-state";
 import type { Subscriptions } from "../src/renderer-interface/interface";
@@ -76,8 +76,17 @@ function requestAt(cwd: string, session = SID): ViewFacts {
 
 // Owners whose every keyed entry is a hold named by its key and a value a
 // test lands (`land`), absent until it does. `held` is what the owners hold.
+// The storage owner mints each folder at the generation `generations` names
+// (0 until it does), says a key ended as `endings` names, and keeps in
+// `watching` the keys whose watch is held and in `declaredAt` the key of each
+// session file declared, in order.
 function handLanded() {
   const held = new Set<string>();
+  const generations = new Map<string, number>();
+  const endings = new Map<string, Ended>();
+  const watching = new Set<string>();
+  const declaredAt: string[] = [];
+  const at = (key: StorageKey) => `${key.folder}@${key.generation}`;
   const values = observable.map<string, Current<unknown>>({}, { deep: false });
   const entry = <T>(holds: Holds, key: string): Lane<T> => {
     holds.take(key, () => {
@@ -103,14 +112,26 @@ function handLanded() {
       declareToday: (holds: Holds) => entry(holds, "today"),
     },
     managedStorage: {
-      declare: (holds: Holds, storage: StorageKey) =>
-        entry(holds, `source:${storage.folder}`),
+      keyFor: (folder: string): StorageKey => ({
+        folder,
+        generation: generations.get(folder) ?? 0,
+      }),
+      watch: (key: StorageKey) => {
+        if (watching.has(at(key))) throw new Error(`${at(key)} watched twice`);
+        watching.add(at(key));
+        return () => watching.delete(at(key));
+      },
+      ended: (key: StorageKey) => endings.get(at(key)) ?? null,
+      declare: (holds: Holds, storage: StorageKey) => {
+        declaredAt.push(at(storage));
+        return entry(holds, `source:${storage.folder}`);
+      },
     },
     log: () => {},
   } as unknown as RenderPayloadDeps;
   const land = (key: string, value: Current<unknown>) =>
     runInAction(() => values.set(key, value));
-  return { owners, held, land };
+  return { owners, held, land, generations, endings, watching, declaredAt };
 }
 
 const ANSWERED = { kind: "answered" } as const;
@@ -156,7 +177,7 @@ const subscribing = (
     [session]: folders.map((folder) => ({
       kind: "plugin" as const,
       source: folder,
-      storage: { folder, generation: 1 },
+      folder,
     })),
   },
 });
@@ -323,6 +344,67 @@ describe("the renderer's subscriptions", () => {
     });
     collector.subscribed({ sources: {} });
     expect(held.has("source:/plugin")).toBe(false);
+  });
+
+  test("a folder is keyed and watched once for every session subscribing to it, and released with the last of them", () => {
+    const { owners, watching } = handLanded();
+    const { collector } = collectorOver(owners);
+    const other = sessionIdOf("other");
+    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/b", other));
+    const both = {
+      sources: {
+        ...subscribing(SID, "/plugin").sources,
+        ...subscribing(other, "/plugin").sources,
+      },
+    };
+    collector.subscribed(both);
+    collector.subscribed(both);
+    expect([...watching]).toEqual(["/plugin@0"]);
+    collector.subscribed(subscribing(other, "/plugin"));
+    expect([...watching]).toEqual(["/plugin@0"]);
+    collector.subscribed({ sources: {} });
+    expect([...watching]).toEqual([]);
+  });
+
+  test("a folder found lost is minted again at the next output, its sessions move to the new key, and the old key's watch goes after them", () => {
+    const { owners, watching, generations, endings, declaredAt } = handLanded();
+    const { collector } = collectorOver(owners);
+    collector.requested(requestAt("/a"));
+    collector.subscribed(subscribing(SID, "/plugin"));
+    endings.set("/plugin@0", "lost");
+    generations.set("/plugin", 1);
+    collector.subscribed(subscribing(SID, "/plugin"));
+    expect([...watching]).toEqual(["/plugin@1"]);
+    expect(declaredAt.at(-1)).toBe("/plugin@1");
+    collector.requested(requestAt("/a"));
+    expect(declaredAt.at(-1)).toBe("/plugin@1");
+  });
+
+  test("a lost folder the owner keys as before keeps its watch, and its sessions their key", () => {
+    const { owners, watching, endings, declaredAt } = handLanded();
+    const { collector } = collectorOver(owners);
+    collector.requested(requestAt("/a"));
+    collector.subscribed(subscribing(SID, "/plugin"));
+    const declared = declaredAt.length;
+    endings.set("/plugin@0", "lost");
+    collector.subscribed(subscribing(SID, "/plugin"));
+    expect([...watching]).toEqual(["/plugin@0"]);
+    expect(declaredAt).toHaveLength(declared);
+  });
+
+  test("a faulted folder is minted again at a config reload, not at an output", () => {
+    const { owners, watching, generations, endings, declaredAt } = handLanded();
+    const { collector } = collectorOver(owners);
+    collector.requested(requestAt("/a"));
+    collector.subscribed(subscribing(SID, "/plugin"));
+    endings.set("/plugin@0", "faulted");
+    generations.set("/plugin", 1);
+    collector.subscribed(subscribing(SID, "/plugin"));
+    expect([...watching]).toEqual(["/plugin@0"]);
+    collector.reloaded();
+    expect([...watching]).toEqual(["/plugin@1"]);
+    expect(declaredAt.at(-1)).toBe("/plugin@1");
   });
 
   test("a run the host refuses is logged once as it joins the set, and stands as its fault; requests judge nothing again", () => {

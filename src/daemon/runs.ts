@@ -12,7 +12,6 @@ import {
   type Launcher,
 } from "../proc/launcher.js";
 import type { SessionId } from "./foundations/session-id.js";
-import type { StorageKey } from "../renderer-interface/interface.js";
 import type { Resume } from "../utils/keyed-source.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import type { Instant } from "../utils/instant.js";
@@ -38,7 +37,7 @@ export type RunOutcome =
 
 export interface RunsDeps {
   // [LAW:one-source-of-truth] The storage owner's one supersede.
-  readonly supersede: (storage: StorageKey, sessionId: SessionId) => Resume;
+  readonly supersede: (folder: string, sessionId: SessionId) => Resume;
   readonly launch: Launcher["launch"];
   // Holds a failed run's error in the session's state for its bar — not a
   // click's journal, which committed long before.
@@ -106,7 +105,7 @@ export class Runs {
     // [LAW:no-ambient-temporal-coupling] Superseded before the program
     // starts, so no draw after the click shows the value from before it.
     const resumes = run.refreshes.map((r) =>
-      this.deps.supersede(r.storage, run.sessionId),
+      this.deps.supersede(r.folder, run.sessionId),
     );
     const abort = new AbortController();
     this.inFlight.add(abort);

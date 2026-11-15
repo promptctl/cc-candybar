@@ -225,7 +225,6 @@ function rig(): Rig {
       env: host.env,
       sessionState,
       watchers,
-      storage: providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
@@ -371,7 +370,6 @@ describe("a source's declaration", () => {
       locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -382,12 +380,8 @@ describe("a source's declaration", () => {
         storage: path.join(dir, "p", "session"),
       });
       expect([...loaded.state!.sources]).toEqual([
-        [STATUS, { folder: path.join(dir, "p", "session"), generation: 0 }],
+        [STATUS, path.join(dir, "p", "session")],
       ]);
-      // The build created the folder, so the program has somewhere to write.
-      expect(fs.statSync(path.join(dir, "p", "session")).isDirectory()).toBe(
-        true,
-      );
     } finally {
       loaded.state?.registry.dispose();
     }
@@ -466,7 +460,6 @@ describe("a source's declaration", () => {
       locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -501,7 +494,6 @@ describe("a source's declaration", () => {
       locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -628,7 +620,6 @@ describe("a source's declaration", () => {
       locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -1174,21 +1165,26 @@ describe("a storage folder's watch", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
-  test("removing the session folder, and nothing else, reloads the config, recreates the folder, and the next write shows", async () => {
+  test("removing the session folder, and nothing else, recreates it at a new generation by the session's next turn, and the next write shows", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
     const held = r.hold(file);
     await answered(held.view);
     held[Symbol.dispose]();
-    const entry = r.cache.getOrCreate(dir, dir, file);
     const storage = storageOf();
-    const before = entry.state.sources.get(STATUS)!;
-    await r.reloads.afterRemoving(entry, storage, () => fs.mkdirSync(storage));
-    expect(fs.statSync(storage).isDirectory()).toBe(true);
-    expect(entry.state.sources.get(STATUS)!.generation).toBeGreaterThan(
-      before.generation,
+    const state = r.cache.getOrCreate(dir, dir, file).state;
+    fs.rmSync(storage, { recursive: true });
+    await until(
+      () => r.providers.managedStorage.stats().lost === 1,
+      "the folder's loss",
     );
     const view = viewOf(r, file);
+    expect(fs.statSync(storage).isDirectory()).toBe(true);
+    expect(
+      r.lines.filter((l) => l.startsWith("info plugin storage generation")),
+    ).toEqual([expect.stringMatching(/ generation=1$/)]);
+    // No reload: the state the folder's loss found is the one drawing.
+    expect(r.cache.getOrCreate(dir, dir, file).state).toBe(state);
     await answered(view);
     await writeUntilShown(
       () => programWrites(storage, "s1", { home: "/after" }),
@@ -1254,7 +1250,7 @@ describe("an installed plugin's storage", () => {
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.gated"] } }`,
     );
 
-  test("uninstalling it closes its watch once its states are reclaimed, and does not recreate its folder", async () => {
+  test("uninstalling it closes its watch once no session subscribes to it, and does not recreate its folder", async () => {
     const r = rig();
     plugin("", path.join(root(), "p"));
     // Placing none of its segments: a config that placed one would fail to
@@ -1263,13 +1259,15 @@ describe("an installed plugin's storage", () => {
       "config.json5",
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const held = r.hold(file);
-    held[Symbol.dispose]();
-    // The state holds the folder its config declares, read by a view or not.
+    r.hold(file)[Symbol.dispose]();
+    // The session's view subscribes to every source its config declares,
+    // placed or not.
     expect(r.providers.managedStorage.stats().folders).toBe(1);
     const entry = r.cache.getOrCreate(dir, dir, file);
     const folder = path.join(root(), "p");
     await r.reloads.afterRemoving(entry, folder, () => plugin("", folder));
+    // The session's next turn subscribes to what the reloaded config declares.
+    r.hold(file)[Symbol.dispose]();
     expect(
       Object.keys(entry.state.config.variables).filter((n) =>
         n.startsWith("plugins.p."),
@@ -1306,7 +1304,7 @@ describe("an installed plugin's storage", () => {
       { path: path.join(root(), "p", "plugin.json5"), placed: "replaced" },
     ]);
     await until(
-      () => entry.state.sources.get(STATUS)?.folder === installed,
+      () => entry.state.sources.get(STATUS) === installed,
       "the reload onto the installed folder",
       10_000,
     );

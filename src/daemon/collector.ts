@@ -2,7 +2,8 @@
 // §6): the one reader of every session's world. It keeps one record per
 // session the host has had a request from, holds the owners' entries that
 // session reads (the built-in lanes at the keys its newest request names, and
-// each plugin source its renderer subscribes to), stamps one world state from
+// each plugin source its renderer subscribes to, at the key it mints for the
+// source's folder), stamps one world state from
 // what they hold, and hands it to the renderer. A renderer declares nothing,
 // holds no lane and stamps nothing.
 //
@@ -35,14 +36,17 @@ import {
   type Event,
   type Subscription,
   type Subscriptions,
-  type StorageKey,
 } from "../renderer-interface/interface.js";
 import type { Timekeeper } from "../time.js";
 import { instantAt, type Instant } from "../utils/instant.js";
-import { Holds } from "../utils/holds.js";
+import { Holds, type Release } from "../utils/holds.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { failed, ok, type Failed, type Ok } from "../utils/outcome.js";
-import { sameKey } from "./cache/managed-storage.js";
+import {
+  sameKey,
+  type Ended,
+  type StorageKey,
+} from "./cache/managed-storage.js";
 import { assembleFacts, failedStamp } from "./facts-assembly.js";
 import {
   declareLanes,
@@ -51,11 +55,9 @@ import {
   type DeclaredLanes,
   type Readings,
   type RenderPayloadDeps,
-} from "./readings.js";
-import {
   type Subscribed,
-  type ViewFacts,
-} from "../renderer-interface/request-context.js";
+} from "./readings.js";
+import type { ViewFacts } from "../renderer-interface/request-context.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { judgeRun } from "./foundations/judge-run.js";
 import { valueOf } from "../utils/logfmt.js";
@@ -161,16 +163,25 @@ const locatorOf = (req: ViewFacts): ViewFacts => ({
   hints: req.hints,
 });
 
+// A storage folder the collector holds for the sessions subscribing to it:
+// the key it minted, and that key's watch.
+interface HeldFolder {
+  readonly key: StorageKey;
+  readonly release: Release;
+}
+
 // [LAW:single-enforcer] A set is judged where it arrives, and only for the
 // digests new to it: a run the session already subscribed keeps its verdict,
-// so a request, which declares the set again, judges nothing.
+// so a request, which declares the set again, judges nothing. A plugin source
+// is read at the key the collector holds for its folder.
 const sourcesOf = (
   subscriptions: readonly Subscription[],
   prior: Subscribed,
+  keyOf: (folder: string) => StorageKey,
 ): Subscribed => ({
   plugins: new Map(
     subscriptions.flatMap((s) =>
-      s.kind === "plugin" ? [[s.source, s.storage] as const] : [],
+      s.kind === "plugin" ? [[s.source, keyOf(s.folder)] as const] : [],
     ),
   ),
   runs: new Map(
@@ -189,6 +200,9 @@ const sourcesOf = (
 
 // [LAW:one-source-of-truth] A run is its digest, so two sets naming the same
 // digests are the same set.
+const foldersOf = (subscriptions: readonly Subscription[]): string[] =>
+  subscriptions.flatMap((s) => (s.kind === "plugin" ? [s.folder] : []));
+
 const sameSources = (a: Subscribed, b: Subscribed): boolean =>
   a.plugins.size === b.plugins.size &&
   [...a.plugins].every(([name, key]) => {
@@ -206,6 +220,11 @@ function release({ stop, holds }: Live): void {
 
 export class Collector {
   private readonly records = new Map<SessionId, SessionRecord>();
+  // [LAW:no-ambient-temporal-coupling] Each storage folder a record's
+  // subscriptions name, a retiring record's included, held from the first
+  // subscription naming it to the last one's going: a folder's watch is
+  // opened once, not once per session or per view.
+  private readonly folders = new Map<string, HeldFolder>();
   private stopSweep: (() => void) | null = null;
 
   constructor(private readonly deps: CollectorDeps) {}
@@ -274,12 +293,22 @@ export class Collector {
           `subscriptions name session ${JSON.stringify(session)}, which the collector has no record of`,
         );
     }
+    const lists = new Map(
+      [...this.records.values()].map((record) => [
+        record,
+        sources.get(record.session) ?? [],
+      ]),
+    );
     runInAction(() => {
-      for (const record of this.records.values()) {
-        const next = sourcesOf(
-          sources.get(record.session) ?? [],
-          record.subscriptions,
-        );
+      // A folder found lost is minted again here, within a turn of the loss's
+      // own re-read; a faulted one waits for a config reload (`reloaded`), so
+      // a watch the OS refuses is not asked again at every turn.
+      const stale = this.hold(
+        [...lists.values()].flatMap(foldersOf),
+        (ended) => ended === "lost",
+      );
+      for (const [record, list] of lists) {
+        const next = sourcesOf(list, record.subscriptions, this.keyOf);
         if (sameSources(next, record.subscriptions)) continue;
         // [LAW:nothing-unseen] A refusal is logged once, as its run joins
         // the set; a set that keeps it says nothing more.
@@ -292,16 +321,30 @@ export class Collector {
               "warn",
               `run refused sid=${JSON.stringify(record.session)} digest=${shortDigest(digest)} reason=${valueOf(judged.reason)}`,
             );
-        record.subscriptions = next;
-        const { phase } = record;
-        if (phase.kind === "live")
-          phase.declared.set(
-            this.declared(
-              { ...record, locator: phase.declared.get().locator },
-              phase.holds,
-            ),
-          );
+        this.moved(record, next);
       }
+      for (const release of stale) release();
+      this.releaseUnnamed();
+    });
+  }
+
+  // [LAW:single-enforcer] The host's config reload: every folder whose
+  // generation ended, faulted or lost, is minted again, so a fault's "reload
+  // the config" is the reload that clears it.
+  reloaded(): void {
+    runInAction(() => {
+      const stale = this.hold([...this.folders.keys()], () => true);
+      for (const record of this.records.values()) {
+        const { plugins, runs } = record.subscriptions;
+        const next = {
+          plugins: new Map(
+            [...plugins].map(([name, key]) => [name, this.keyOf(key.folder)]),
+          ),
+          runs,
+        };
+        if (!sameSources(next, record.subscriptions)) this.moved(record, next);
+      }
+      for (const release of stale) release();
     });
   }
 
@@ -339,12 +382,74 @@ export class Collector {
     };
   }
 
-  // Every session's holds close with the daemon.
+  // Every session's holds close with the daemon, and every folder's watch.
   close(): void {
     this.disarmSweep();
     for (const { phase } of this.records.values())
       if (phase.kind === "live") release(phase);
     this.records.clear();
+    this.releaseUnnamed();
+  }
+
+  // A record's subscriptions moved: a live one declares its holds again.
+  private moved(record: SessionRecord, next: Subscribed): void {
+    record.subscriptions = next;
+    const { phase } = record;
+    if (phase.kind === "live")
+      phase.declared.set(
+        this.declared(
+          { ...record, locator: phase.declared.get().locator },
+          phase.holds,
+        ),
+      );
+  }
+
+  // Holds each folder named: one not yet held is keyed and watched, and one
+  // whose generation ended as `remint` takes is keyed again, its new key
+  // watched. Returns the releases of the keys a mint replaced, which go once
+  // every session has moved off them, so no read is left on a closed watch.
+  private hold(
+    folders: readonly string[],
+    remint: (ended: Ended) => boolean,
+  ): Release[] {
+    const storage = this.deps.owners.managedStorage;
+    const stale: Release[] = [];
+    for (const folder of new Set(folders)) {
+      const held = this.folders.get(folder);
+      if (held !== undefined) {
+        const ended = storage.ended(held.key);
+        if (ended === null || !remint(ended)) continue;
+      }
+      const key = storage.keyFor(folder);
+      // A lost folder whose plugin folder is gone keeps its key.
+      if (held !== undefined && sameKey(key, held.key)) continue;
+      this.folders.set(folder, { key, release: storage.watch(key) });
+      if (held !== undefined) stale.push(held.release);
+    }
+    return stale;
+  }
+
+  // [LAW:no-silent-failure] A subscription is read only at a folder `hold`
+  // took.
+  private readonly keyOf = (folder: string): StorageKey => {
+    const held = this.folders.get(folder);
+    if (held === undefined)
+      throw new Error(`plugin storage: the collector holds no ${folder}`);
+    return held.key;
+  };
+
+  // Releases every folder no record's subscriptions name.
+  private releaseUnnamed(): void {
+    const named = new Set(
+      [...this.records.values()].flatMap((r) =>
+        [...r.subscriptions.plugins.values()].map((key) => key.folder),
+      ),
+    );
+    for (const [folder, held] of this.folders)
+      if (!named.has(folder)) {
+        held.release();
+        this.folders.delete(folder);
+      }
   }
 
   private open(session: SessionId, locator: ViewFacts): SessionRecord {
@@ -561,6 +666,7 @@ export class Collector {
           this.records.get(record.session) === record
         )
           this.records.delete(record.session);
+        this.releaseUnnamed();
         if (this.records.size === 0) this.disarmSweep();
       });
   }

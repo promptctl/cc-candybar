@@ -10,10 +10,9 @@ import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { ClientHints, Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { Answered } from "../daemon/foundations/sighting-roles.js";
-import type { StorageKey, RequestId } from "./interface.js";
+import type { RequestId } from "./interface.js";
 import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
-import type { Release } from "../utils/holds.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
 import type { Crosses, Reaches } from "./crosses.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -60,11 +59,11 @@ export interface LaneSession {
   readonly answered: Answered;
 }
 
-// A source a run makes stale: its full name, for the event, and its file's key
-// in the storage owner.
+// A source a run makes stale: its full name, for the event, and its storage
+// folder.
 export interface RunRefresh {
   readonly name: string;
-  readonly storage: StorageKey;
+  readonly folder: string;
 }
 
 // [LAW:types-are-the-program] One run, as the verb hands it over: everything
@@ -153,9 +152,9 @@ export type DoctorReads = Omit<DoctorMachineEdge, "install"> & {
 };
 
 // [LAW:effects-at-boundaries] exception: what the renderer reaches in the
-// host that crosses a process: each a notice, which answers nothing, or an
+// host, handed in at its start: each a notice, which answers nothing, or an
 // awaited call answering plain data. Each is a reach a later step removes.
-export interface HostCalls {
+export interface AdapterToHost {
   // A feed's next frame brought forward.
   readonly wake: (sessionId: SessionId, cause: WakeCause) => void;
   // A line into the host's one log, which rotates itself: two writers would
@@ -237,21 +236,7 @@ export interface HostCalls {
 
 // [LAW:types-are-the-program] Every reach above crosses: the build fails on
 // one a process could not carry, naming it.
-export const HOST_CALLS_CROSS: Reaches<HostCalls> = true;
-
-// What the renderer still reaches in the host as a part of it, in process.
-// Each keeps its in-process shape until a later step hands it in.
-export interface InProcessReaches {
-  // [LAW:effects-at-boundaries] exception: the owner of every plugin's
-  // session files, which a config's sources are keyed and watched in.
-  readonly managedStorage: {
-    keyFor(folder: string): StorageKey;
-    watch(key: StorageKey): Release;
-  };
-}
-
-// What the renderer reaches in the host, handed in at its start.
-export type AdapterToHost = HostCalls & InProcessReaches;
+export const ADAPTER_TO_HOST_CROSSES: Reaches<AdapterToHost> = true;
 
 // Why a feed's next frame was brought forward: a value its bar reads changed
 // (`data`), its session's own state moved (`state`), its config reloaded
