@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-754",
+      "ref": "refs/pull/754/merge",
+      "sha": "28b82fa63ff912380cc7b9899af3e5dc4f5f3281",
+      "timestamp": "2026-11-15T14:46:11.568Z",
+      "commits": [
+        {
+          "sha": "28b82fa63ff912380cc7b9899af3e5dc4f5f3281",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T07:45:09-07:00",
+          "message": "Merge 9813f5d8a9e338817750b9088deeb3240c5b32d0 into 3aee42acb63d4aec4de6dd98eb4c2d6d28857df7\n"
+        },
+        {
+          "sha": "9813f5d8a9e338817750b9088deeb3240c5b32d0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T07:44:58-07:00",
+          "message": "refactor(renderer): plugin storage keys are minted by the collector, so no reach lies outside the crossing check (candybar-host-renderer-x96a.2r6)\n\nA plugin subscription names its folder. The collector keys and watches each\nsubscribed folder while a session subscribes to it, re-mints a folder found\nlost at the next output and a faulted one at a config reload, and resolves\nits sessions' reads to the key it holds. A run's supersede is addressed by\nfolder. The build keys and watches nothing, so managedStorage leaves the\nadapter and AdapterToHost is checked whole by Crosses.\n\nThe owner creates only the storage folder, never its plugin's folder, so a\nsubscription that outlives a plugin's removal cannot bring the plugin back.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3aee42acb63d4aec4de6dd98eb4c2d6d28857df7",
