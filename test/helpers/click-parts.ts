@@ -32,7 +32,7 @@ export function clickParts(
   // open views' subscriptions: this rig opens none.
   const clicks = new ClicksInFlight();
   const parts = {
-    verbs: verbsOver(verbCtx, clicks),
+    verbs: verbsOver(verbCtx, { gone: async (click) => clicks.gone(click) }),
     menuIdle,
     renderCache: { subscriptions: () => ({ sources: {} }) },
   } as unknown as MainRendererParts;

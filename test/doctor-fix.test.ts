@@ -35,7 +35,7 @@ import {
   statusLineOf,
   envVarOf,
 } from "../src/doctor/checks";
-import { applyFix, gatherFacts } from "../src/doctor/edge";
+import { applyFix, gatherFacts } from "../src/doctor/gather";
 import { type DoctorEdge } from "../src/doctor/ports";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -59,7 +59,6 @@ const loadsConfig =
     config,
   });
 const NO_TMUX: DoctorEdge = {
-  install: HEALTHY_INSTALL_EDGE,
   ...healthyDaemonEdge(),
   ...healthyDataEdge(),
   ...noManagedSettings(),
@@ -743,7 +742,6 @@ describe("gatherFacts", () => {
     expect((await factsIn(absent, null)).tmux).toEqual({ kind: "outside" });
     const asked: unknown[] = [];
     const edge: DoctorEdge = {
-      install: HEALTHY_INSTALL_EDGE,
       ...healthyDaemonEdge(),
       ...healthyDataEdge(),
       ...noManagedSettings(),

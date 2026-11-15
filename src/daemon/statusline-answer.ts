@@ -24,6 +24,7 @@ import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { RendererHost } from "./renderer-host.js";
+import type { MenuIdle } from "./menu-idle.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -84,6 +85,8 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 export async function answerStatusline(
   host: RendererHost,
   collector: Pick<Collector, "requested">,
+  // The session's idle clock, which the request's draw reads at its instant.
+  menuIdle: Pick<MenuIdle, "since">,
   clock: Pick<Timekeeper, "monotonic" | "now">,
   arrived: CheckedRenderRequest,
   id: RequestId,
@@ -146,6 +149,7 @@ export async function answerStatusline(
       id,
       context: req,
       waitMs: waitEndsAt - clock.monotonic(),
+      idleSince: menuIdle.since(req.hookData.session_id, at) ?? null,
     },
   });
   recorded(facts, delivered);

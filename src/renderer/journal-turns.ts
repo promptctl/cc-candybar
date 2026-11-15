@@ -41,10 +41,10 @@ export interface JournalTurn {
 }
 
 // How a click asks for its turn: `waited` hears how many ms it took to come,
-// and `gone` says whether whoever asked has left.
+// and `gone` answers whether whoever asked has left.
 export interface TurnAsker {
   readonly waited: (ms: number) => void;
-  readonly gone: () => boolean;
+  readonly gone: () => Promise<boolean>;
 }
 
 // The same, for a click that may gather first: `placed` hears how long it
@@ -93,12 +93,17 @@ export class JournalTurns {
     this.queued++;
     return this.queue.run(DAEMON_WIDE, async () => {
       this.queued--;
-      this.refuseClosed(verb);
-      if (gone()) throw new ClickAbandoned(verb);
       const since = this.deps.monotonic();
       waited(spanMs(asked, since));
+      // [LAW:nothing-unseen] Held from the head of the queue: asking whether
+      // the client left is the turn's too, and its answer may be slow.
       this.holder = { verb, since };
       try {
+        this.refuseClosed(verb);
+        if (await gone()) throw new ClickAbandoned(verb);
+        // [LAW:no-ambient-temporal-coupling] The close may land while the
+        // answer is out.
+        this.refuseClosed(verb);
         return await body({
           holds: (commit) => {
             const held = { verb, commit };
@@ -131,13 +136,16 @@ export class JournalTurns {
     const inPlace = async (): Promise<T> => {
       placed(elapsedMs(this.deps, arrived));
       this.refuseClosed(verb);
-      if (gone()) throw new ClickAbandoned(verb);
+      if (await gone()) throw new ClickAbandoned(verb);
+      this.refuseClosed(verb);
       const started = this.deps.monotonic();
       const gathering = await gather();
       gathered(elapsedMs(this.deps, started));
-      const left = gone();
-      return this.take(verb, { waited, gone: () => !left && gone() }, (turn) =>
-        body(gathering, turn),
+      const left = await gone();
+      return this.take(
+        verb,
+        { waited, gone: async () => !left && (await gone()) },
+        (turn) => body(gathering, turn),
       );
     };
     return session === null ? inPlace() : this.sessions.run(session, inPlace);

@@ -855,6 +855,7 @@ function statusline(r: Rig, configFile: string) {
     const answered = await answerStatusline(
       host,
       r.collector,
+      { since: () => undefined },
       systemTimekeeper,
       checked.req,
       ++id as RequestId,

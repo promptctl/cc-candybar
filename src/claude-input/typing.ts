@@ -56,18 +56,25 @@ export function tmuxPaneOf(
   return { kind: "pane", hint: tmux };
 }
 
+// A slash line typed into the session's pane: refused for a session whose
+// client reported none, and otherwise typed into it (`typeInPane`).
 export async function typeSlash(
-  edge: ClaudeInputEdge,
+  type: (pane: TmuxHint, line: SlashLine) => Promise<TypeResult>,
   hint: ClientHints["tmux"],
   line: SlashLine,
 ): Promise<TypeResult> {
   const pane = tmuxPaneOf(hint);
-  if (pane.kind === "refused") return pane;
-  const tmux = pane.hint;
-  const state = promptState(await edge.read(tmux));
-  if (state.kind !== "ready") {
-    return { kind: "refused", reason: REFUSALS[state.kind] };
-  }
-  const typed = await edge.type(tmux, line);
-  return typed.kind === "typed" ? { kind: "typed", pane: tmux.pane } : typed;
+  return pane.kind === "refused" ? pane : type(pane.hint, line);
 }
+
+// A slash line typed into `tmux`, once the prompt there reads ready.
+export const typeInPane =
+  (edge: ClaudeInputEdge) =>
+  async (tmux: TmuxHint, line: SlashLine): Promise<TypeResult> => {
+    const state = promptState(await edge.read(tmux));
+    if (state.kind !== "ready") {
+      return { kind: "refused", reason: REFUSALS[state.kind] };
+    }
+    const typed = await edge.type(tmux, line);
+    return typed.kind === "typed" ? { kind: "typed", pane: tmux.pane } : typed;
+  };

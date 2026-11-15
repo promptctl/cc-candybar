@@ -41,6 +41,7 @@ import type { Instant } from "../utils/instant.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import {
   tmuxPaneOf,
+  typeInPane,
   typeSlash,
   type ClaudeInputEdge,
 } from "../claude-input/typing.js";
@@ -324,7 +325,7 @@ async function installBand(
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
   const typed = await typeSlash(
-    edge.claudeInput,
+    typeInPane(edge.claudeInput),
     session.hints.tmux,
     RELOAD_PLUGINS,
   );

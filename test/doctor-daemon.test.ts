@@ -11,7 +11,8 @@ import {
   type DaemonFacts,
   type Verdict,
 } from "../src/doctor/checks";
-import { applyFix, daemonProcesses, ownsEntry } from "../src/doctor/edge";
+import { daemonProcesses, ownsEntry } from "../src/doctor/edge";
+import { applyFix } from "../src/doctor/gather";
 import {
   parseDoctorStores,
   parseServingDaemon,

@@ -18,13 +18,6 @@ import {
   readingsHost,
   type RenderPayloadDeps,
 } from "../../src/daemon/readings";
-import {
-  applyFix,
-  gatherFacts,
-  installFacts,
-  oneAskPerClick,
-  readStores,
-} from "../../src/doctor/edge";
 import { systemTimekeeper } from "../../src/time";
 import { TEST_SIGNER } from "./link-signer";
 import { unscriptedLauncher } from "./fake-launcher";
@@ -48,11 +41,40 @@ const unhosted = (what: string) => (): never => {
 // set up; a request's refresh and the cache tallies are the test's owners'.
 export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
   return {
+    wake: () => {},
+    log: () => {},
+    launch: unhosted("launch"),
+    typeSlash: unhosted("type slash"),
+    applyUpdate: () =>
+      Promise.reject(new Error("apply-update: no update watch in this rig")),
+    runs: { start: unhosted("runs"), refused: unhosted("runs") },
+    ...readingsHost(providers),
+    doctor: {
+      probeTmux: unhosted("doctor"),
+      remoteLogin: unhosted("doctor"),
+      fontInUse: unhosted("doctor"),
+      daemons: unhosted("doctor"),
+      forge: unhosted("doctor"),
+      transcript: unhosted("doctor"),
+      install: unhosted("doctor"),
+    },
+    laneSetups: { noted: () => {}, clicked: () => {} },
+    tmuxStatusLines: { observe: () => {} },
+    menuIdle: {
+      clicked: () => {},
+      observe: () => {},
+      clickArrived: () => {},
+      clickSettled: () => {},
+      confirmClose: async () => true,
+    },
+    clicks: { gone: async () => false },
+    serving: unhosted("serving"),
+    renderSightings: { ofSession: async () => [] },
+    probes: { arrive: unhosted("probes") },
     frameFeeds: {
       feedsOf: () => UNFOLLOWED_FEEDS,
       following: () => new Set(),
       latest: () => null,
-      wake: () => {},
     },
     updateWatch: {
       notice: () => ({ offer: [], failure: [] }),
@@ -65,54 +87,9 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
         missedSince: null,
       }),
     },
-    menuIdle: {
-      clicked: () => {},
-      observe: () => {},
-      since: () => undefined,
-      clickArrived: () => {},
-      clickSettled: () => {},
-      confirmClose: () => true,
-    },
     launcher: unscriptedLauncher,
-    laneSetups: { noted: () => {}, clicked: () => {} },
-    tmuxStatusLines: { observe: () => {} },
-    clicks: { gone: () => false },
-    ...readingsHost(providers),
     managedStorage: UNOWNED_STORAGE,
     watchers: { acquire: unhosted("watchers"), follow: unhosted("watchers") },
-    linkSigner: TEST_SIGNER,
-    runs: { start: unhosted("runs"), refused: unhosted("runs") },
-    serving: unhosted("serving"),
-    renderSightings: { ofSession: () => [] },
-    probes: { arrive: unhosted("probes") },
-    doctor: {
-      gatherFacts,
-      applyFix,
-      installFacts,
-      readStores,
-      oneAskPerClick,
-      edge: unhosted("doctor edge"),
-      stores: {
-        marks: {
-          read: unhosted("doctor stores"),
-          update: unhosted("doctor stores"),
-        },
-        clicked: {
-          read: unhosted("doctor stores"),
-          update: unhosted("doctor stores"),
-        },
-        postMortemsRead: {
-          read: unhosted("doctor stores"),
-          update: unhosted("doctor stores"),
-        },
-      },
-    },
-    claudeInput: {
-      read: unhosted("claude input"),
-      type: unhosted("claude input"),
-    },
-    applyUpdate: () =>
-      Promise.reject(new Error("apply-update: no update watch in this rig")),
   };
 }
 
@@ -133,7 +110,7 @@ export function rendererParts({
   return {
     ...inertHost(providers as RenderPayloadDeps),
     clock: systemTimekeeper,
-    log: () => {},
+    linkSigner: TEST_SIGNER,
     sessionState,
     renderCache: cache as never,
     worldStates,

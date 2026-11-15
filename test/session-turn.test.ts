@@ -235,7 +235,6 @@ describe("what wakes a view", () => {
             hints: requestOf(dir).hints,
           },
           AT,
-          new Map(),
         ),
       () => rig.served.worldStates.of(SID),
       () => view.registry.namedRuns().values(),

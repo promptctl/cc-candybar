@@ -17,7 +17,7 @@ import type { CollectorDeps } from "../../src/daemon/collector";
 import { collected } from "./collected";
 import { settleWorld } from "../../src/renderer/render-payload";
 import { refreshPayload } from "../../src/daemon/readings";
-import { type Refreshed } from "../../src/renderer-interface/request-context";
+import { type RefreshTimes } from "../../src/renderer-interface/request-context";
 import {
   sessionSource,
   type SessionSource,
@@ -235,13 +235,13 @@ export function requestOf(dir: string) {
 // A request of the session over `configFile`, as the daemon makes one: the
 // request and the world state read at its keys taken as the daemon's renderer
 // takes them, the view held, and its wait settled as the daemon settles one.
-// `refreshed` records what its arrival refreshed.
+// `refreshed` hears what its arrival refreshed.
 export async function settledRequest(
   rig: SessionRig,
   dir: string,
   configFile: string,
   cleanups: Array<() => void>,
-  refreshed: Refreshed = new Map(),
+  refreshed: (took: RefreshTimes) => void = () => {},
 ): Promise<SessionView<SessionSource>> {
   const request = requestOf(dir);
   const held = rig.served.config(request, () =>
@@ -258,8 +258,7 @@ export async function settledRequest(
           hints: request.hints,
         },
         AT,
-        refreshed,
-      ),
+      ).then(refreshed),
     () => rig.served.worldStates.of(request.hookData.session_id),
     () => held.view.registry.namedRuns().values(),
     new AbortController().signal,

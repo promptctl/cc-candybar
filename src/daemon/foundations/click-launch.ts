@@ -3,12 +3,30 @@
 // hands off.
 
 import type { DaemonLogger } from "../../utils/logger";
-import { failureText, type Failed } from "../../proc/launcher";
+import {
+  failureText,
+  type Failed,
+  type Launcher,
+  type LaunchResult,
+} from "../../proc/launcher";
+import type { ClickLaunch } from "../../renderer-interface/adapter";
 import { DaemonClosing } from "./verb-error";
 
 // How long a program a click launches has before the click fails, or, for an
 // opener's handoff, before it counts as handed off: a handful of seconds at most.
 export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
+
+// [LAW:no-ambient-temporal-coupling] A click's launch through `launcher`: a
+// click holds the daemon-wide turn while it waits, so the bound is no option.
+// It is what gives the turn back.
+export const clickLaunchVia =
+  (launcher: Pick<Launcher, "launch">) =>
+  (launch: ClickLaunch): Promise<LaunchResult> =>
+    launcher.launch({
+      ...launch,
+      args: launch.args?.slice(),
+      timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
+    });
 
 // [LAW:single-enforcer] What a click's launch that ended badly does to the
 // click, for both of the launches a click makes (`clickLaunch`, `clickHandoff`).

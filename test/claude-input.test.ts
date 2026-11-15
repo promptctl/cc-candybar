@@ -5,6 +5,7 @@
 // `tmux` on PATH that records its argv and serves a captured screen — so the
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
+import { typeInPane } from "../src/claude-input/typing";
 import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
@@ -233,7 +234,7 @@ function runtime(tmux: TmuxHint | null) {
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
     log: (_level: string, msg: string) => logged.push(msg),
-    claudeInput: productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)),
+    typeSlash: typeInPane(productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper))),
   };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
@@ -364,7 +365,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const ctx = {
     ...testVerbContext(sessionState, undefined, config),
-    claudeInput: productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)),
+    typeSlash: typeInPane(productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper))),
   };
   // What the daemon's payload carries for that hint (RenderPayload.tmux).
   const payload = {

@@ -120,6 +120,10 @@ export type Event =
       // its turns overlap: other inputs, other requests' included, arrive
       // while this one waits.
       readonly waitMs: number;
+      // When the idle period of the menus the session's last frame drew
+      // began, as the host's idle clock reads it at the request's instant:
+      // null while that frame drew none, or a click is in flight.
+      readonly idleSince: Instant | null;
     }
   | {
       // A session's world state moved since the one the renderer holds: read

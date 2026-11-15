@@ -139,7 +139,7 @@ test("two hooks that differ only in their instantaneous fields read one document
   // Each document is its own hook's refresh and read, so a hook value either
   // one stored would show as a difference.
   const documentOf = async (inputs: PayloadInputs) => {
-    await refreshPayload(inputs, AT, new Map());
+    await refreshPayload(inputs, AT);
     return assembleFacts(
       undefined,
       SID,

@@ -26,7 +26,7 @@ import {
   BUNDLED_GLYPHS_LOGGED,
   BUNDLED_GLYPHS_NAMED,
 } from "./helpers/bundled-glyphs";
-import { DoctorBusy } from "../src/doctor/busy";
+import { busy } from "../src/doctor/busy";
 import { memoryStateFile } from "./helpers/state-file";
 import { fileMarkBook } from "../src/doctor/mark-book";
 import fs from "node:fs";
@@ -43,7 +43,7 @@ import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
 } from "../src/config/disclosure";
-import { clickUrl, effectsOf } from "./helpers/click";
+import { asyncSightings, clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import {
   VERB_DOCTOR_FIX,
@@ -153,7 +153,6 @@ function doctorBar(
   const settingsPath = path.join(dir, "settings.json");
   let probes = 0;
   const doctor: DoctorEdge = {
-    install: HEALTHY_INSTALL_EDGE,
     ...healthyDaemonEdge(),
     ...healthyDataEdge(),
     ...noManagedSettings(),
@@ -181,8 +180,8 @@ function doctorBar(
     ...rig.ctx,
     doctor,
     doctorStores: { ...emptyStores(), clicked },
-    clients,
-    serving: () => serving,
+    clients: asyncSightings(clients),
+    serving: async () => serving,
     log: (level, message) =>
       logs.push(level === "warn" ? `warn: ${message}` : message),
   };
@@ -638,13 +637,11 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     });
 
     test("a probe the rate limit refused refuses the click, and the report stands", async () => {
-      const busy: TerminalFixture = {
+      const limited: TerminalFixture = {
         ...ITERM_MENLO,
-        fontInUse: async () => {
-          throw new DoctorBusy("the font");
-        },
+        fontInUse: async () => busy("the font"),
       };
-      const rt = doctorBar(null, CLEAN_LOAD, busy);
+      const rt = doctorBar(null, CLEAN_LOAD, limited);
       await rt.openTools();
       await expect(VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).rejects.toThrow(
         new BadVerbArgs(

@@ -48,9 +48,8 @@ export type CheckedRenderRequest = Omit<
   readonly [CHECKED]: true;
 };
 
-// The lanes a request's arrival refreshed: how long each took, or null while
-// it is still out.
-export type Refreshed = Map<RefreshLane, number | null>;
+// The lanes a request's arrival refreshed: how long each took, in ms.
+export type RefreshTimes = Readonly<Record<RefreshLane, number>>;
 
 // What a session's declaration reads of its newest request: the keys every
 // keyed lane is read at, the session among them.

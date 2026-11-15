@@ -344,6 +344,8 @@ const ZONE_ROWS = {
   "src/doctor/checks.ts": "shared",
   "src/help-text.ts": "shared",
   "src/doctor/data-needs.ts": "shared",
+  "src/doctor/gather.ts": "shared",
+  "src/claude-settings-read.ts": "shared",
   "src/index.ts": "root",
   "src/check.ts": "root",
   "src/check-runs.ts": "root",

@@ -10,7 +10,7 @@ import {
 import type { LauncherWarning, PipeEvent } from "../proc/launcher";
 import {
   type CheckedRenderRequest,
-  type Refreshed,
+  type RefreshTimes,
   type ViewFacts,
 } from "../renderer-interface/request-context.js";
 import { UPDATE_DISMISSED_KEY } from "../daemon/foundations/update-keys";
@@ -73,6 +73,7 @@ import {
   type FeedFrame,
   type LaneSession,
 } from "../renderer-interface/adapter.js";
+import type { RequestId } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -94,6 +95,7 @@ import {
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { type Instant } from "../utils/instant.js";
 import { waitWithin } from "../utils/reading.js";
+import { eventLine } from "../utils/logfmt.js";
 import {
   noteFacts,
   requestEvent,
@@ -103,7 +105,7 @@ import {
 import type { SessionState } from "./session-state";
 import type { RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import type { DaemonLogger } from "../utils/logger";
+import type { LinkSigner } from "../click/link-signer.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
 import {
   failedWith,
@@ -117,12 +119,14 @@ import {
 // views read.
 export interface RendererState {
   readonly clock: Pick<Timekeeper, "monotonic" | "after">;
-  readonly log: DaemonLogger;
   readonly sessionState: SessionState;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly worldStates: WorldStates;
   readonly renderWarnings: RenderWarningRecords;
   readonly effectSessions: EffectSessions<RenderedLine>;
+  // [LAW:single-enforcer] The signer every link this renderer draws is
+  // signed with, over the state directory's key.
+  readonly linkSigner: LinkSigner;
 }
 
 export type RendererParts = RendererState & AdapterToHost;
@@ -147,8 +151,13 @@ export function renderFrame(
   fps: number,
   at: Instant,
   // What the feed knows of its own lanes as it asks for the frame: which
-  // follow the session and draw it now, and what each was sent of late.
-  feed: { readonly following: ReadonlySet<Lane>; readonly feeds: LaneFeeds },
+  // follow the session and draw it now, and what each was sent of late; and
+  // the session's idle period, as the host's clock read it.
+  feed: {
+    readonly following: ReadonlySet<Lane>;
+    readonly feeds: LaneFeeds;
+    readonly idleSince: Instant | null;
+  },
 ): FeedFrame | null {
   const { clock } = parts;
   const started = clock.monotonic();
@@ -161,6 +170,7 @@ export function renderFrame(
       setup,
       { by: "feed", fps },
       feed.feeds,
+      feed.idleSince,
     );
     const answer = RENDER_ANSWERS.ansi(drawn.body);
     const statusline = statuslineOf(
@@ -502,6 +512,9 @@ export function drawRender(
   // What each lane following the session was sent of late, as the bar's rate
   // cell shows it.
   feeds: LaneFeeds,
+  // When the idle period of the menus the session's last frame drew began,
+  // as the host's idle clock read it for this draw.
+  idleSince: Instant | null,
 ): {
   drawn: DrawnBar;
   evaluated: number;
@@ -699,7 +712,6 @@ export function drawRender(
   // computation to drift from it.
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId);
-  const idleSince = menuIdle.since(sessionId, at);
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
   // its opening): the draw hands only its own instant's facts.
   const { frame, evaluated, cellBreaks, rules } = drawDsl(
@@ -724,7 +736,7 @@ export function drawRender(
     // effect memory. The theme, style and effect are not among them: the
     // view's slots settle those names (src/dsl/parts.ts), the same ones its
     // payload's `.effective` fields read.
-    { ...effective, effects, idleSince },
+    { ...effective, effects, idleSince: idleSince ?? undefined },
   );
   // [LAW:one-source-of-truth] What each copy click this frame mints copies,
   // read back when the click runs (the copy-diagnostic verb): the list this
@@ -742,12 +754,12 @@ export function drawRender(
     frame.rows.some((row) => row.kind === "menu"),
     effective.menuTimeout,
   );
-  const menusSince = menuIdle.since(sessionId, at);
+  // [LAW:one-source-of-truth] The idle period this walk drew with.
   noteFacts(facts, {
     menuIdle:
-      menusSince === undefined
+      idleSince === null
         ? "-"
-        : `${(at - menusSince).toFixed(1)}s/${effective.menuTimeout}s`,
+        : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`,
   });
   // [LAW:no-silent-failure] Every frame records what it warned; a record that
   // moved is shown by the renderer's next frame: a feed's next spaced frame,
@@ -982,11 +994,11 @@ function arrived(
 ): void {
   const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.noted(laneSessionOf(parts, req), lanes);
-  tmuxStatusLines.observe(
-    req.hookData.session_id,
-    req.hints.tmux,
-    lanes.tmuxStatus,
-  );
+  tmuxStatusLines.observe({
+    sessionId: req.hookData.session_id,
+    tmux: req.hints.tmux,
+    on: lanes.tmuxStatus,
+  });
 }
 
 // [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
@@ -1028,14 +1040,21 @@ export function laneClicked(
     after,
   );
   if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe(sessionId, latest.hints.tmux, after.tmuxStatus);
+    tmuxStatusLines.observe({
+      sessionId,
+      tmux: latest.hints.tmux,
+      on: after.tmuxStatus,
+    });
 }
 
 export async function answerRequest(
   parts: RendererParts,
+  id: RequestId,
   req: CheckedRenderRequest,
   at: Instant,
   waitMs: number,
+  // When the session's menus' idle period began, as the host read it.
+  idleSince: Instant | null,
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
   const { clock, frameFeeds, log } = parts;
@@ -1061,11 +1080,27 @@ export async function answerRequest(
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
   });
-  const refreshed: Refreshed = new Map();
+  // What the refresh took, lane by lane, once it has landed: a fact of the
+  // render event, or, landing after the answer, a line of its own that names
+  // the request, so a lane slower than the deadline is seen with its time.
+  let refreshed: RefreshTimes | null = null;
+  let answered = false;
   const ended = await waitWithin(
     (signal) =>
       settleWorld(
-        () => parts.refresh(setup.viewFacts, at, refreshed),
+        () =>
+          parts.refresh(setup.viewFacts, at).then((took) => {
+            if (answered)
+              log(
+                "info",
+                eventLine("refreshed", [
+                  ["req", String(id)],
+                  ["sid", setup.sessionId],
+                  ["refreshed", refreshedFact(took)],
+                ]),
+              );
+            else refreshed = took;
+          }),
         () => parts.worldStates.of(setup.sessionId),
         () => setup.view.registry.namedRuns().values(),
         signal,
@@ -1084,6 +1119,7 @@ export async function answerRequest(
   // [LAW:nothing-unseen] How the wait went, on the render event: an answer
   // drawn with values pending says so by name.
   const drawFrom = clock.monotonic();
+  answered = true;
   noteFacts(facts, {
     waited: `${Math.round(drawFrom - waitFrom)}ms`,
     ended,
@@ -1095,6 +1131,7 @@ export async function answerRequest(
     setup,
     ANSWERING,
     frameFeeds.feedsOf(sessionId, setup.at),
+    idleSince,
   );
   const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands

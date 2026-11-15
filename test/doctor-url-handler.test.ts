@@ -31,7 +31,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { asyncSightings, recordRender, testVerbContext } from "./helpers/click";
 import {
   emptyStores,
   HEALTHY_FACTS,
@@ -371,11 +371,10 @@ describe("the daemon's side of the round trip", () => {
       ...testVerbContext(sessionState, undefined, DEFAULT_DSL_CONFIG),
       arrival,
       probes,
-      clients,
+      clients: asyncSightings(clients),
       log: (_level, message) => logs.push(message),
       doctorStores: emptyStores(),
       doctor: {
-        install: HEALTHY_INSTALL_EDGE,
         ...healthyDaemonEdge(),
         ...healthyDataEdge(),
         ...noManagedSettings(),

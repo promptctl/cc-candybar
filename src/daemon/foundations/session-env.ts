@@ -29,16 +29,12 @@ export interface SessionFacts {
 }
 
 // The overlay on the daemon's inherited environment: every session-fact
-// variable unset (an overlay entry of `undefined` removes it), then the ones
+// variable unset (an overlay entry of null removes it), then the ones
 // this session knows set. The inherited environment is the launcher's, so the
 // daemon's own reaches no program but through this.
-export function sessionEnv(
-  facts: SessionFacts,
-): Record<string, string | undefined> {
+export function sessionEnv(facts: SessionFacts): Record<string, string | null> {
   return {
-    ...Object.fromEntries(
-      SESSION_FACT_VARIABLES.map((name) => [name, undefined]),
-    ),
+    ...Object.fromEntries(SESSION_FACT_VARIABLES.map((name) => [name, null])),
     CLAUDE_CODE_SESSION_ID: facts.sessionId,
     CLAUDE_PROJECT_DIR: facts.projectDir,
     ...(facts.claudeConfigDir !== undefined && {

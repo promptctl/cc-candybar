@@ -16,14 +16,19 @@ import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
 import type { Release } from "../utils/holds.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
-import type { Crosses } from "./crosses.js";
+import type { Crosses, Reaches } from "./crosses.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { ClientHint } from "../client-hint.js";
-import type { Launcher } from "../proc/launcher.js";
-import type { LinkSigner } from "../click/link-signer.js";
+import type {
+  LaunchCategory,
+  LaunchResult,
+  Launcher,
+} from "../proc/launcher.js";
+import type { SlashLine } from "../claude-input/slash-line.js";
+import type { TypeResult } from "../claude-input/typing.js";
 import type {
   CheckedRenderRequest,
-  Refreshed,
+  RefreshTimes,
   ViewFacts,
 } from "./request-context.js";
 import type {
@@ -31,18 +36,13 @@ import type {
   ProbeArrival,
   RenderCacheStats,
   StatsSnapshot,
-  StoresRead,
 } from "../daemon/foundations/stats-snapshot.js";
 import type {
   DebugSnapshot,
   DebugWhat,
 } from "../daemon/foundations/debug-types.js";
 import type { ServingDaemon } from "../daemon/foundations/memory-limit.js";
-import type {
-  RateLimitsSeen,
-  RenderSighting,
-  TranscriptSaid,
-} from "../daemon/foundations/sightings.js";
+import type { RenderSighting } from "../daemon/foundations/sightings.js";
 import type {
   HeldWatch,
   Invalidation,
@@ -51,16 +51,8 @@ import type {
   WatchTargets,
   WatcherHandle,
 } from "../daemon/foundations/watch-targets.js";
-import type { SightedBar, SightingScope } from "../doctor/sightings.js";
-import type {
-  Asked,
-  DoctorFacts,
-  Fix,
-  InstallFacts,
-  Width,
-} from "../doctor/checks.js";
-import type { DoctorEdge, DoctorStores, InstallEdge } from "../doctor/ports.js";
-import type { ClaudeInputEdge } from "../claude-input/typing.js";
+import type { InstallFacts } from "../doctor/checks.js";
+import type { DoctorMachineEdge } from "../doctor/ports.js";
 
 // The per-session facts the notice reads: whose clicks these are, what this
 // session dismissed (the identity it wrote, or nothing), and whether the
@@ -114,8 +106,8 @@ export interface RunRequest {
   readonly sessionId: SessionId;
   readonly action: string;
   readonly argv: readonly [string, ...string[]];
-  // Set over the owner's launcher's inherited environment.
-  readonly envOverlay: Readonly<Record<string, string | undefined>>;
+  // Set over the owner's launcher's inherited environment; null unsets.
+  readonly envOverlay: Readonly<Record<string, string | null>>;
   readonly cwd: string;
   readonly refreshes: readonly RunRefresh[];
 }
@@ -170,49 +162,122 @@ export interface CacheTally {
   readonly misses: number;
 }
 
-// The doctor's world probes: the machine, the settings files and the stores,
-// each over the edge it is handed.
-export interface DoctorProbes {
-  readonly gatherFacts: (
-    edge: DoctorEdge,
-    hints: Pick<
-      ClientHints,
-      "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh"
-    >,
-    origin: RenderOrigin,
-    sessionPick: (key: string) => string | null,
-    serving: Asked<ServingDaemon>,
-    rateLimits: Asked<readonly RateLimitsSeen[]>,
-    transcripts: Asked<readonly TranscriptSaid[]>,
-    sighted: SightingScope,
-    bars: Asked<readonly SightedBar[]>,
-    width: Asked<Width>,
-    stores: StoresRead,
-  ) => Promise<Omit<DoctorFacts, "urlHandler" | "install">>;
-  readonly applyFix: (
-    stores: DoctorStores,
-    fix: Fix,
-    facts: DoctorFacts,
-  ) => Asked<DoctorFacts>;
-  readonly installFacts: (
-    edge: InstallEdge,
-    daemonBundle: string,
-    clients: ReadonlyArray<ClientHint | null>,
-  ) => InstallFacts;
-  readonly readStores: (stores: DoctorStores) => StoresRead;
-  readonly oneAskPerClick: (edge: DoctorEdge) => DoctorEdge;
+// [LAW:types-are-the-program] A launch a click makes: the program, its
+// arguments and what it reads on stdin, as text. The host bounds it by the
+// click's own timeout, so a click's turn comes back.
+export interface ClickLaunch {
+  readonly bin: string;
+  readonly args?: readonly string[];
+  readonly stdinInput?: string;
+  readonly category: LaunchCategory;
 }
 
-// What the renderer reaches in the host, handed in at its start. Each member
-// keeps its in-process shape: the methods the renderer calls on a host part.
-export interface AdapterToHost {
+// The tmux status line a session's lane switch holds, in the pane its client
+// reported: the hint's three states, an absent one included.
+export interface TmuxStatusSighting {
+  readonly sessionId: SessionId;
+  readonly tmux?: TmuxHint | null;
+  readonly on: boolean;
+}
+
+// The doctor's reads of the machine, each the host's to make: the gather
+// (src/doctor/gather.ts) runs in the renderer over them.
+export type DoctorReads = Omit<DoctorMachineEdge, "install"> & {
+  // The install check's facts for the daemon's bundle and the clients judged.
+  readonly install: (
+    daemonBundle: string,
+    clients: ReadonlyArray<ClientHint | null>,
+  ) => Promise<InstallFacts>;
+};
+
+// [LAW:effects-at-boundaries] exception: what the renderer reaches in the
+// host that crosses a process: each a notice, which answers nothing, or an
+// awaited call answering plain data. Each is a reach a later step removes.
+export interface HostCalls {
+  // A feed's next frame brought forward.
+  readonly wake: (sessionId: SessionId, cause: WakeCause) => void;
+  // A line into the host's one log, which rotates itself: two writers would
+  // each shift its generations.
+  readonly log: (level: Level, line: string) => void;
+  // A click's launch, answered by how it ended.
+  readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
+  // A slash line typed into the pane, once the prompt there reads ready.
+  readonly typeSlash: (pane: TmuxHint, line: SlashLine) => Promise<TypeResult>;
+  // The update notice's act.
+  readonly applyUpdate: () => Promise<void>;
+  // The one owner of `run` programs in flight.
+  readonly runs: {
+    readonly start: (run: RunRequest) => void;
+    readonly refused: (
+      sessionId: string,
+      action: string,
+      reason: string,
+    ) => void;
+  };
+  // The providers' refresh a request's arrival triggers, answered by how
+  // long each lane took.
+  readonly refresh: (facts: ViewFacts, at: Instant) => Promise<RefreshTimes>;
+  readonly doctor: DoctorReads;
+  // What turning an animation lane on or off takes.
+  readonly laneSetups: {
+    readonly noted: (session: LaneSession, switches: LaneSwitches) => void;
+    readonly clicked: (
+      sessionId: SessionId,
+      session: LaneSession | null,
+      before: LaneSwitches,
+      after: LaneSwitches,
+    ) => void;
+  };
+  // The tmux status lines this daemon lays out.
+  readonly tmuxStatusLines: {
+    readonly observe: (sighting: TmuxStatusSighting) => void;
+  };
+  // Each session's idle clock and the timer that closes its menus. The draw's
+  // idle period is read by the host and handed in with the input it draws.
+  readonly menuIdle: {
+    readonly clicked: (sessionId: SessionId, at: Instant) => void;
+    readonly clickArrived: (sessionId: SessionId) => void;
+    readonly clickSettled: (sessionId: SessionId) => void;
+    readonly observe: (
+      sessionId: SessionId,
+      at: Instant,
+      shown: boolean,
+      timeoutS: number,
+    ) => void;
+    readonly confirmClose: (
+      sessionId: SessionId,
+      firedAt: Instant,
+    ) => Promise<boolean>;
+  };
+  // Whether a click's client has left.
+  readonly clicks: { readonly gone: (click: RequestId) => Promise<boolean> };
+  // This daemon as the doctor's daemon row judges it.
+  readonly serving: () => Promise<ServingDaemon>;
+  // Which client drew each session's bar, as this process saw it render.
+  readonly renderSightings: {
+    readonly ofSession: (
+      sessionId: SessionId,
+      now: Instant,
+    ) => Promise<readonly RenderSighting[]>;
+  };
+  // Where a `doctor-probe` link records that it arrived.
+  readonly probes: { readonly arrive: (arrival: ProbeArrival) => void };
+}
+
+// [LAW:types-are-the-program] Every reach above crosses: the build fails on
+// one a process could not carry, naming it.
+export const HOST_CALLS_CROSS: Reaches<HostCalls> = true;
+
+// What the renderer still reaches in the host as a part of it, in process:
+// the facts the draw reads synchronously and the owners of its watches and
+// storage. Each keeps its in-process shape until a later step hands it in.
+export interface InProcessReaches {
   // [LAW:effects-at-boundaries] exception: the feeds' subscribers, which lanes
   // follow a session and the request each feed draws from.
   readonly frameFeeds: {
     following(sessionId: SessionId): ReadonlySet<Lane>;
     latest(sessionId: SessionId): CheckedRenderRequest | null;
     feedsOf(sessionId: SessionId, at: Instant): LaneFeeds;
-    wake(sessionId: SessionId, cause: WakeCause): void;
   };
   // [LAW:effects-at-boundaries] exception: the update watch's notice and the
   // failure of its last act.
@@ -222,53 +287,9 @@ export interface AdapterToHost {
   };
   // [LAW:effects-at-boundaries] exception: whether file events are heard.
   readonly fileEvents: { delivery(): Delivery };
-  // [LAW:effects-at-boundaries] exception: each session's idle clock and the
-  // timer that closes its menus.
-  readonly menuIdle: {
-    clicked(sessionId: SessionId, at: Instant): void;
-    clickArrived(sessionId: SessionId): void;
-    clickSettled(sessionId: SessionId): void;
-    since(sessionId: SessionId, at: Instant): Instant | undefined;
-    observe(
-      sessionId: SessionId,
-      at: Instant,
-      shown: boolean,
-      timeoutS: number,
-    ): void;
-    confirmClose(sessionId: SessionId, firedAt: Instant): boolean;
-  };
-  // [LAW:effects-at-boundaries] exception: the launcher a click's programs
-  // run through, and the warnings it holds.
-  readonly launcher: Launcher;
-  // [LAW:effects-at-boundaries] exception: what turning an animation lane on
-  // or off takes.
-  readonly laneSetups: {
-    noted(session: LaneSession, switches: LaneSwitches): void;
-    clicked(
-      sessionId: SessionId,
-      session: LaneSession | null,
-      before: LaneSwitches,
-      after: LaneSwitches,
-    ): void;
-  };
-  // [LAW:effects-at-boundaries] exception: the tmux status lines this daemon
-  // lays out.
-  readonly tmuxStatusLines: {
-    observe(
-      sessionId: SessionId,
-      tmux: TmuxHint | null | undefined,
-      on: boolean,
-    ): void;
-  };
-  // [LAW:effects-at-boundaries] exception: whether a click's client has left.
-  readonly clicks: { gone(click: RequestId): boolean };
-  // [LAW:effects-at-boundaries] exception: the providers' refresh a request's
-  // arrival triggers, which `refreshed` records lane by lane.
-  readonly refresh: (
-    facts: ViewFacts,
-    at: Instant,
-    refreshed: Refreshed,
-  ) => Promise<void>;
+  // [LAW:effects-at-boundaries] exception: the launcher's warnings a draw
+  // shows, and the pipe event an answer delivered.
+  readonly launcher: Pick<Launcher, "launcherWarnings" | "answeredPipeEvent">;
   // [LAW:effects-at-boundaries] exception: the repository and usage caches'
   // tallies.
   readonly cacheTallies: () => {
@@ -294,39 +315,10 @@ export interface AdapterToHost {
       onInvalidate: (invalidation: Invalidation) => void,
     ): { readonly watch: HeldWatch; readonly move: WatchMove };
   };
-  // [LAW:effects-at-boundaries] exception: the signer over the state
-  // directory's key.
-  readonly linkSigner: LinkSigner;
-  // [LAW:effects-at-boundaries] exception: the one owner of `run` programs in
-  // flight.
-  readonly runs: {
-    start(run: RunRequest): void;
-    refused(sessionId: string, action: string, reason: string): void;
-  };
-  // [LAW:effects-at-boundaries] exception: this daemon as the doctor's daemon
-  // row judges it.
-  readonly serving: () => ServingDaemon;
-  // [LAW:effects-at-boundaries] exception: which client drew each session's
-  // bar, as this process saw it render.
-  readonly renderSightings: {
-    ofSession(sessionId: SessionId, now: Instant): readonly RenderSighting[];
-  };
-  // [LAW:effects-at-boundaries] exception: where a `doctor-probe` link
-  // records that it arrived.
-  readonly probes: { arrive(arrival: ProbeArrival): void };
-  // [LAW:effects-at-boundaries] exception: the doctor's world probes, its
-  // reads of the machine over the config load the renderer hands it (the load
-  // its bar is drawn from), and its stores, which the host files.
-  readonly doctor: DoctorProbes & {
-    readonly edge: (loadConfig: DoctorEdge["loadConfig"]) => DoctorEdge;
-    readonly stores: DoctorStores;
-  };
-  // [LAW:effects-at-boundaries] exception: the tmux pane read and the typing
-  // of a slash line.
-  readonly claudeInput: ClaudeInputEdge;
-  // [LAW:effects-at-boundaries] exception: the update notice's act.
-  readonly applyUpdate: () => Promise<void>;
 }
+
+// What the renderer reaches in the host, handed in at its start.
+export type AdapterToHost = HostCalls & InProcessReaches;
 
 // Why a feed's next frame was brought forward: a value its bar reads changed
 // (`data`), its session's own state moved (`state`), its config reloaded
@@ -347,13 +339,17 @@ export type EveryEntryLoad =
 // The list is the work left: each later step deletes an arm.
 export type AdapterPush =
   // The feed's draw of one frame of a subscribed session, with the lanes that
-  // follow it and draw it now, and what each lane was sent of late.
+  // follow it and draw it now, what each lane was sent of late, and its idle
+  // period.
   | {
       readonly kind: "frame";
       readonly session: SessionId;
       readonly fps: number;
       readonly following: readonly Lane[];
       readonly feeds: LaneFeeds;
+      // When the idle period of the menus its last frame drew began, as the
+      // host's idle clock reads it at the push.
+      readonly idleSince: Instant | null;
     }
   // The lanes the session's view switches on, which a subscribe is gated by.
   | { readonly kind: "lanes"; readonly session: SessionId }

@@ -335,7 +335,7 @@ export type GlyphMark = (typeof GLYPH_MARKS)[number];
 // Every mark the user has made: per check that takes one, the mark on each
 // sighting (Sighting.id) it was made on (src/doctor/mark-book.ts keeps it).
 export type MarkBook = Readonly<
-  Partial<Record<string, Readonly<Record<string, GlyphMark>>>>
+  Record<string, Readonly<Record<string, GlyphMark>>>
 >;
 
 // [LAW:types-are-the-program] A bar that draws no private-use glyph has no

@@ -52,7 +52,7 @@ import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Timekeeper } from "../time";
 import type {
   ViewFacts,
-  Refreshed,
+  RefreshTimes,
   Subscribed,
 } from "../renderer-interface/request-context";
 
@@ -123,15 +123,13 @@ function settingsPathOf(hints: ClientHints, home: string): string {
 // derived from what is stored, reads it failed rather than not answered.
 //
 // `at` is the request's arrival, the instant its speed sample is taken at.
-// `refreshed` is the request's record of them: each lane it starts, and how
-// long the lane took once it lands.
+// It answers how long each lane took, once every lane has landed.
 // [LAW:one-source-of-truth] What a renderer reaches of the host's readings: the
 // refresh over these providers, and their caches' tallies.
 export const readingsHost = (
   deps: RenderPayloadDeps,
 ): Pick<AdapterToHost, "refresh" | "cacheTallies"> => ({
-  refresh: (facts, at, refreshed) =>
-    refreshPayload({ ...facts, deps }, at, refreshed),
+  refresh: (facts, at) => refreshPayload({ ...facts, deps }, at),
   cacheTallies: () => ({
     git: deps.gitProvider.getStats(),
     usage: deps.usageStore.getStats(),
@@ -141,8 +139,7 @@ export const readingsHost = (
 export async function refreshPayload(
   inputs: PayloadInputs,
   at: Instant,
-  refreshed: Refreshed,
-): Promise<void> {
+): Promise<RefreshTimes> {
   const { hookData, deps, hints } = inputs;
   const sessionId = hookData.session_id;
   // The request's one refresh of its session's record, which the session,
@@ -151,9 +148,8 @@ export async function refreshPayload(
   const lane = async (
     name: RefreshLane,
     run: () => Promise<unknown>,
-  ): Promise<void> => {
+  ): Promise<readonly [RefreshLane, number]> => {
     const startedAt = deps.clock.monotonic();
-    refreshed.set(name, null);
     let threw: string | null = null;
     try {
       await run();
@@ -161,34 +157,32 @@ export async function refreshPayload(
       deps.log("error", `${name} lane threw: ${inspect(e)}`);
       threw = `${name}: ${String(e)}`;
     }
-    refreshed.set(name, elapsedMs(deps.clock, startedAt));
     deps.faults.refreshed(sessionId, name, threw);
+    return [name, elapsedMs(deps.clock, startedAt)];
   };
-  await Promise.all([
-    lane("session", () => session.usage()),
-    lane("today", () => session.today()),
-    lane("context", () =>
+  // [LAW:types-are-the-program] One run per lane, every lane named.
+  const runs: Readonly<Record<RefreshLane, () => Promise<unknown>>> = {
+    session: () => session.usage(),
+    today: () => session.today(),
+    context: () =>
       deps.contextProvider.refresh(sessionId, hookData.transcript_path),
-    ),
-    lane("metrics", () =>
+    metrics: () =>
       deps.metricsProvider.refresh(sessionId, hookData.transcript_path),
-    ),
-    lane("activity", () =>
-      deps.activityProvider.getActivityInfo(sessionId, hookData),
-    ),
+    activity: () => deps.activityProvider.getActivityInfo(sessionId, hookData),
     // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
     // seam, made only when the transcript's stamp moved.
-    lane("cache", () =>
-      deps.cacheExpiry.refresh(sessionId, hookData.transcript_path),
-    ),
+    cache: () => deps.cacheExpiry.refresh(sessionId, hookData.transcript_path),
     // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
     // lane reads, one sample per request: a frame takes none, so how often the
     // bar is drawn moves no rate.
-    lane("speed", () => session.speed(dateOf(at).getTime())),
-    lane("autocompact", async () =>
+    speed: () => session.speed(dateOf(at).getTime()),
+    autocompact: async () =>
       deps.autoCompact.window(settingsPathOf(hints, deps.home)),
-    ),
-  ]);
+  };
+  const took = await Promise.all(
+    REFRESH_LANES.map((name) => lane(name, runs[name])),
+  );
+  return Object.fromEntries(took) as RefreshTimes;
 }
 
 // Each lane's value as its owner holds it now. The keyed lanes' (git, tmux)

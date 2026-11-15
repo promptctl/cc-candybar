@@ -3,6 +3,7 @@
 // hands in.
 
 import type { Outcome } from "../utils/outcome.js";
+import type { Probed } from "./busy.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type { DslConfig } from "../config/dsl-types.js";
@@ -41,10 +42,10 @@ export type DoctorStores = {
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
-  readonly probeTmux: (hint: TmuxHint) => Promise<Asked<TmuxClient | null>>;
+  readonly probeTmux: (hint: TmuxHint) => Promise<Probed<TmuxClient | null>>;
   // Whether a process came in through a remote login (sshd, mosh-server) —
   // asked of the tmux client attached to the session's pane.
-  readonly remoteLogin: (pid: number) => Promise<Asked<boolean>>;
+  readonly remoteLogin: (pid: number) => Promise<Probed<boolean>>;
   // The font a configured terminal draws the bar's glyphs with, read where
   // the terminal reads it (src/doctor/font-edge.ts).
   readonly fontInUse: (
@@ -54,7 +55,7 @@ export interface DoctorEdge {
     },
     env: TerminalEnvHint,
     glyphs: string,
-  ) => Promise<Asked<FontInUse>>;
+  ) => Promise<Probed<FontInUse>>;
   // What loading the config at an origin finds now — the daemon reloads the
   // render-cache entry the session's bar is drawn from and answers from it
   // (so the doctor and the bar's strip report one load), the CLI runs one
@@ -67,7 +68,6 @@ export interface DoctorEdge {
   readonly managedSettingsDir: string;
   // The user's home: where Claude Code's default directory is.
   readonly home: string;
-  readonly install: InstallEdge;
   // Every cc-candybar daemon process this user runs (`daemonProcesses`).
   readonly daemons: () => Promise<Asked<readonly DaemonProcess[]>>;
   // Whether the forge CLI the checkout's remote names is installed and logged
@@ -75,8 +75,15 @@ export interface DoctorEdge {
   readonly forge: (cwd: string) => Promise<Asked<ForgeLogin | null>>;
   // The tail of a session's transcript, read as the bar reads it — absent
   // when no file is at the path (`readTranscriptWindow`).
-  readonly transcript: (path: string) => Outcome<TranscriptWindow>;
+  readonly transcript: (path: string) => Promise<Outcome<TranscriptWindow>>;
 }
+
+// [LAW:effects-at-boundaries] The doctor's reads of the machine: what the
+// gather asks through its edge, and the install check's reads.
+export type DoctorMachineEdge = Pick<
+  DoctorEdge,
+  "probeTmux" | "remoteLogin" | "fontInUse" | "daemons" | "forge" | "transcript"
+> & { readonly install: InstallEdge };
 
 // One load's outcome, as both a cache entry and a fresh load carry it: the
 // file it resolved, the error that stopped it, the advisories it earned (one

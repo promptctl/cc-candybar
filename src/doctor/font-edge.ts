@@ -19,7 +19,7 @@ import { parse as parseToml } from "smol-toml";
 import { failureText, type Launcher } from "../proc/launcher.js";
 import type { Asked, FontInUse } from "./checks.js";
 import { itermDrawsItself, type ConfiguredTerminal } from "./terminal.js";
-import { DoctorBusy } from "./busy.js";
+import { busy, type Probed } from "./busy.js";
 import type { TerminalEnvHint } from "../terminal-hint.js";
 
 // [LAW:types-are-the-program] How a font is named where a terminal stores it:
@@ -100,7 +100,7 @@ function run(argv) {
 async function jxa<T>(
   launcher: Launcher,
   args: readonly string[],
-): Promise<Asked<T>> {
+): Promise<Probed<T>> {
   const run = await launcher.launch({
     bin: "osascript",
     args: ["-l", "JavaScript", "-e", JXA, ...args],
@@ -108,7 +108,7 @@ async function jxa<T>(
     category: "doctor.font",
   });
   if (!run.ok) {
-    if (run.reason === "rate-limited") throw new DoctorBusy("the font");
+    if (run.reason === "rate-limited") return busy("the font");
     const detail = failureText(run);
     return { kind: "failed", reason: `osascript failed (${detail})` };
   }
@@ -143,12 +143,12 @@ async function macCoverage(
   launcher: Launcher,
   ref: FontRef,
   glyphs: string,
-): Promise<Asked<Coverage>> {
+): Promise<Probed<Coverage>> {
   const answer = await jxa<{ readonly lacks: readonly string[] | null }>(
     launcher,
     ["font", ref.kind, ref.name, pointsArg(glyphs)],
   );
-  if (answer.kind === "failed") return answer;
+  if (answer.kind !== "ok") return answer;
   const { lacks } = answer.value;
   return {
     kind: "ok",
@@ -247,7 +247,7 @@ async function itermFont(
   version: string | null,
   env: TerminalEnvHint,
   glyphs: string,
-): Promise<Asked<FontInUse>> {
+): Promise<Probed<FontInUse>> {
   if (process.platform !== "darwin") {
     return { kind: "failed", reason: "iTerm2 runs only on macOS" };
   }
@@ -257,7 +257,7 @@ async function itermFont(
       Omit<ItermProfile, "lacks"> & { readonly lacks: string[] | null }
     >;
   }>(launcher, ["iterm", wanted ?? "", pointsArg(glyphs)]);
-  if (answer.kind === "failed") return answer;
+  if (answer.kind !== "ok") return answer;
   const profiles = answer.value.profiles.map((p) => ({
     ...p,
     lacks: p.lacks === null ? null : glyphsOf(p.lacks),
@@ -320,7 +320,7 @@ async function fcCoverage(
   launcher: Launcher,
   family: string,
   glyphs: string,
-): Promise<Asked<Coverage>> {
+): Promise<Probed<Coverage>> {
   const run = await launcher.launch({
     bin: "fc-match",
     args: [
@@ -333,7 +333,7 @@ async function fcCoverage(
     category: "doctor.font",
   });
   if (!run.ok) {
-    if (run.reason === "rate-limited") throw new DoctorBusy("the font");
+    if (run.reason === "rate-limited") return busy("the font");
     const detail = failureText(run);
     return { kind: "failed", reason: `fc-match failed (${detail})` };
   }
@@ -344,7 +344,7 @@ function coverage(
   launcher: Launcher,
   ref: FontRef,
   glyphs: string,
-): Promise<Asked<Coverage>> {
+): Promise<Probed<Coverage>> {
   return process.platform === "darwin"
     ? macCoverage(launcher, ref, glyphs)
     : fcCoverage(launcher, ref.name, glyphs);
@@ -444,7 +444,7 @@ async function alacrittyFont(
   env: TerminalEnvHint,
   glyphs: string,
   home: string,
-): Promise<Asked<FontInUse>> {
+): Promise<Probed<FontInUse>> {
   const config = alacrittyConfigPaths(home, env.XDG_CONFIG_HOME).find((p) =>
     fs.existsSync(p),
   );
@@ -465,7 +465,7 @@ async function alacrittyFont(
     { kind: "family", name: family },
     glyphs,
   );
-  if (drawn.kind === "failed") return drawn;
+  if (drawn.kind !== "ok") return drawn;
   const { font, lacks } = drawn.value;
   return {
     kind: "ok",
@@ -489,7 +489,7 @@ const READERS: Readonly<
       env: TerminalEnvHint,
       glyphs: string,
       home: string,
-    ) => Promise<Asked<FontInUse>>
+    ) => Promise<Probed<FontInUse>>
   >
 > = {
   iterm2: itermFont,
@@ -506,6 +506,6 @@ export function fontInUse(
   env: TerminalEnvHint,
   glyphs: string,
   home: string,
-): Promise<Asked<FontInUse>> {
+): Promise<Probed<FontInUse>> {
   return READERS[terminal.name](launcher, terminal.version, env, glyphs, home);
 }

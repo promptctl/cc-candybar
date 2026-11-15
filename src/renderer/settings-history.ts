@@ -29,6 +29,7 @@ import { BadVerbArgs } from "../daemon/foundations/verb-error";
 import { type SessionId } from "../daemon/foundations/session-id";
 import {
   type HistoryStorage,
+  type LoadedHistory,
   type Change,
   type Step,
   type SessionHistory,
@@ -110,12 +111,14 @@ export class SettingsHistory {
     runInAction(() => this.held.replace(next));
   }
 
+  // `loaded` is what the storage held, read before the renderer starts.
   constructor(
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
     private readonly storage: HistoryStorage = EPHEMERAL_HISTORY_STORAGE,
+    loaded: LoadedHistory = storage.load(),
   ) {
-    this.state = new Map(storage.load());
+    this.state = new Map(loaded);
   }
 
   depth(sessionId: SessionId): HistoryDepth {
