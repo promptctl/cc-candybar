@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-754",
-      "ref": "refs/pull/754/merge",
-      "sha": "28b82fa63ff912380cc7b9899af3e5dc4f5f3281",
-      "timestamp": "2026-11-15T14:46:11.568Z",
+      "version": "pr-755",
+      "ref": "refs/pull/755/merge",
+      "sha": "94963abf52bfa011e21773f325c4ba8bef5fe135",
+      "timestamp": "2026-11-15T15:22:23.679Z",
       "commits": [
         {
-          "sha": "28b82fa63ff912380cc7b9899af3e5dc4f5f3281",
+          "sha": "94963abf52bfa011e21773f325c4ba8bef5fe135",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T07:45:09-07:00",
-          "message": "Merge 9813f5d8a9e338817750b9088deeb3240c5b32d0 into 3aee42acb63d4aec4de6dd98eb4c2d6d28857df7\n"
+          "timestamp": "2026-11-15T08:21:19-07:00",
+          "message": "Merge c0caff0e59b7313283503492f9842e8a0965f840 into 3aee42acb63d4aec4de6dd98eb4c2d6d28857df7\n"
         },
         {
-          "sha": "9813f5d8a9e338817750b9088deeb3240c5b32d0",
+          "sha": "c0caff0e59b7313283503492f9842e8a0965f840",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T07:44:58-07:00",
-          "message": "refactor(renderer): plugin storage keys are minted by the collector, so no reach lies outside the crossing check (candybar-host-renderer-x96a.2r6)\n\nA plugin subscription names its folder. The collector keys and watches each\nsubscribed folder while a session subscribes to it, re-mints a folder found\nlost at the next output and a faulted one at a config reload, and resolves\nits sessions' reads to the key it holds. A run's supersede is addressed by\nfolder. The build keys and watches nothing, so managedStorage leaves the\nadapter and AdapterToHost is checked whole by Crosses.\n\nThe owner creates only the storage folder, never its plugin's folder, so a\nsubscription that outlives a plugin's removal cannot bring the plugin back.\n"
+          "timestamp": "2026-11-15T08:20:42-07:00",
+          "message": "refactor(renderer): a build's storage folders cross as holds, and session reads are keyed by folder (candybar-host-renderer-x96a.2r6)\n\nThe last in-process reach, the storage owner, leaves the adapter, so every\nentry the renderer reaches in the host crosses a process and the crossing\ncheck covers all of it.\n\nA build names its storage folders; it keys and watches none. The render cache\ntells the host's storage owner which folders each served state's latest load\nnames (`storage.hold`), at every load, built, kept or failed, and releases\nthem when the state is reclaimed. So a folder's watch lives as long as a build\nnames it, never as long as a view or a session, and every config load is a\nlost or faulted folder's recovery, as before. A reload holds its successor\nbefore it releases its predecessor, so a folder both name stays open.\n\nThe generation is the owner's own fact: session reads are keyed by folder, a\nlane carries across a generation and is re-read when it moves, and the owner\nmakes only the storage folder, never its plugin's folder.\n"
         }
       ]
     },

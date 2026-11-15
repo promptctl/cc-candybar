@@ -30140,16 +30140,16 @@ function declareLanes(owners, holds2, facts, sources) {
       "today",
       () => owners.usageStore.declareToday(holds2, facts.hints.claudeConfigDir)
     ),
-    // [LAW:one-source-of-truth] Each source's hold at (its folder's storage
-    // key, the session the checkpoint parsed).
+    // [LAW:one-source-of-truth] Each source's hold at (its storage folder,
+    // the session the checkpoint parsed).
     sources: new Map(
-      [...sources.plugins].map(([name, storage]) => [
+      [...sources.plugins].map(([name, folder]) => [
         name,
         declare(
           name,
           () => owners.managedStorage.declare(
             holds2,
-            storage,
+            folder,
             facts.hookData.session_id
           )
         )
@@ -52625,7 +52625,7 @@ var SessionEffects = class {
     const knownPlacements = this.placements;
     const placements = /* @__PURE__ */ new Map();
     const known = this.made;
-    const made2 = /* @__PURE__ */ new Map();
+    const made = /* @__PURE__ */ new Map();
     const own2 = [];
     const { last: last2 } = given2;
     const inFlight = this.passages;
@@ -52705,8 +52705,8 @@ var SessionEffects = class {
       return { scope: placement, name: name2, t: t2 };
     };
     const effectOf = (rowKey, part) => {
-      const row3 = made2.get(rowKey) ?? /* @__PURE__ */ new Map();
-      made2.set(rowKey, row3);
+      const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
+      made.set(rowKey, row3);
       const current = row3.get(part.scope);
       if (current !== void 0) return current.effect;
       const last3 = known.get(rowKey)?.get(part.scope);
@@ -52799,7 +52799,7 @@ var SessionEffects = class {
         this.anchor = clock.timeline;
         this.inForce = inForce;
         this.placements = placements;
-        this.made = made2;
+        this.made = made;
         this.passages = basis === "off" ? null : passages;
         this.frame = frame2;
       }
@@ -57701,9 +57701,9 @@ function diagnosticSpan(text4, link) {
 function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   const plain = /* @__PURE__ */ new Set();
   const plainOf3 = (text4, severity) => {
-    const made2 = plainMessage(text4, severity);
-    for (const m of made2) plain.add(m);
-    return made2;
+    const made = plainMessage(text4, severity);
+    for (const m of made) plain.add(m);
+    return made;
   };
   const list2 = [
     ...errors2.flatMap((e) => plainOf3(e, ERROR_SEVERITY)),
@@ -64960,20 +64960,22 @@ var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
 var STORAGE_SWEEP_EVERY_MS = DAY_MS;
 var MAX_ENTRIES2 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
-var fileOf = (f) => import_node_path30.default.join(f.storage.folder, fileName(f.sessionId));
-var made = (folder) => {
+var fileOf = (f) => import_node_path30.default.join(f.folder, fileName(f.sessionId));
+var keyString = (key) => JSON.stringify([key.folder, key.generation]);
+function madeOnce(folder) {
   try {
     fs_default.mkdirSync(folder);
   } catch (e) {
     if (e.code !== "EEXIST") throw e;
   }
-};
-var keyString = (key) => JSON.stringify([key.folder, key.generation]);
-var sameKey = (a, b) => a.folder === b.folder && a.generation === b.generation;
+}
 var ManagedStorage = class {
   sessions;
   folders = /* @__PURE__ */ new Map();
+  // By folder: each folder's current generation's watch.
   watched = /* @__PURE__ */ new Map();
+  // The folders each render state's latest load named.
+  holds = /* @__PURE__ */ new Map();
   faultCounts = {
     unusable: 0,
     refused: 0,
@@ -64998,8 +65000,8 @@ var ManagedStorage = class {
     this.sessions = new KeyedSource({
       name: "plugin storage",
       scope: "session",
-      keyOf: (f) => JSON.stringify([f.storage.folder, f.storage.generation, f.sessionId]),
-      fields: (f) => `file=${valueOf(fileOf(f))} generation=${f.storage.generation}`,
+      keyOf: (f) => JSON.stringify([f.folder, f.sessionId]),
+      fields: (f) => `file=${valueOf(fileOf(f))}`,
       read: (f) => this.read(f),
       // [LAW:types-are-the-program] A plugin source has no period: its watch
       // is its trigger, and a hold's return re-reads a kept entry.
@@ -65011,29 +65013,71 @@ var ManagedStorage = class {
       clock: opts.clock
     });
   }
-  // The key the collector holds for a folder a session subscribes to.
-  // Creates the folder, so its program has somewhere to write before any
-  // session reads it, and stats it. The generation moves when the folder was
-  // marked lost or is no longer the folder its watch opened on; so whichever
-  // of a removal's events comes first, a recreated folder is a new key.
+  // A render state's load names its folders: held under its id until the next
+  // load replaces the list or its `release`. Each named folder is keyed: one
+  // not yet watched, or whose generation ended, opens its new generation's
+  // watch before any old one closes, and its held files are re-read, since
+  // what they read before came from the path unwatched. So every load is a
+  // lost or faulted folder's recovery, and a folder two states name is never
+  // closed between them.
+  hold(id2, folders) {
+    this.holds.set(id2, folders);
+    for (const folder of new Set(folders)) {
+      const key = this.keyFor(folder);
+      const was = this.watched.get(folder);
+      if (was?.key.generation === key.generation) continue;
+      this.opened(key);
+      if (was !== void 0) this.closed(was);
+      this.sessions.changed((f) => f.folder === folder);
+    }
+    this.closeUnheld();
+  }
+  // A render state reclaimed: the folders only it named close.
+  release(id2) {
+    this.holds.delete(id2);
+    this.closeUnheld();
+  }
+  // A session's declaration of one session's file: held at (folder, session
+  // id) until the session's next declaration takes it no more. A folder no
+  // hold names has no standing failure: its file reads the path.
+  declare(holds2, folder, sessionId2) {
+    return this.sessions.declare(holds2, { folder, sessionId: sessionId2 });
+  }
+  // [LAW:one-source-of-truth] The keyed source's one supersede: a program run
+  // for the session is about to write this file.
+  supersede(folder, sessionId2) {
+    return this.sessions.supersede({ folder, sessionId: sessionId2 });
+  }
+  stats() {
+    return {
+      ...this.sessions.stats(),
+      folders: this.watched.size,
+      faults: { ...this.faultCounts },
+      lost: this.lost
+    };
+  }
+  close() {
+    this.unsubscribe();
+    this.sessions.close();
+    this.holds.clear();
+    this.closeUnheld();
+  }
+  // The key of a folder a hold names. Creates the storage folder, so its
+  // program has somewhere to write before any session reads it, and stats
+  // it. The generation moves when the folder was marked lost or is no longer
+  // the folder its watch opened on; so whichever of a removal's events comes
+  // first, a recreated folder is a new key.
   // [LAW:no-silent-failure] A folder that cannot be created or read is its
   // generation's standing fault, read by every source in it, never a throw:
-  // one plugin's folder fails only that plugin's sources.
-  // Only the storage folder is created, never the plugin's folder it sits in:
-  // a subscription can outlive its plugin's removal until the config's reload
-  // drops it, so a lost folder whose plugin folder is gone keeps its
-  // generation, read from the path, rather than bringing the plugin back.
+  // one plugin's folder fails only that plugin's sources, not the build.
   keyFor(folder) {
     const known = this.folders.get(folder) ?? this.recorded(folder);
     let now2 = "gone";
     known.unusable = null;
     try {
-      made(folder);
+      madeOnce(folder);
       now2 = this.identityOf(folder);
     } catch (e) {
-      const { code } = e;
-      if (known.lost && code === "ENOENT")
-        return { folder, generation: known.generation };
       known.unusable = `could not be created or read: ${e.message}`;
     }
     const moved = known.lost || known.identity !== null && (now2 === "gone" || !sameIdentity(now2, known.identity));
@@ -65048,63 +65092,11 @@ var ManagedStorage = class {
     }
     return { folder, generation: known.generation };
   }
-  // The collector's hold on a folder's watch, while a session subscribes to
-  // it. The first holder of a generation opens its one watch and sweeps it; the
-  // last release closes it.
-  watch(key) {
-    const watched = this.watched.get(keyString(key)) ?? this.opened(key);
-    watched.holders++;
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      watched.holders--;
-      if (watched.holders === 0) this.closed(watched);
-    };
-  }
-  // A session's declaration of one session's file: held at (storage key,
-  // session id) until the session's next declaration takes it no more.
-  declare(holds2, storage, sessionId2) {
-    return this.sessions.declare(holds2, { storage, sessionId: sessionId2 });
-  }
-  // [LAW:one-source-of-truth] The keyed source's one supersede: a program run
-  // for the session is about to write this file, at the folder's current
-  // generation, or the first it will be keyed at.
-  supersede(folder, sessionId2) {
-    const generation = this.folders.get(folder)?.generation ?? 0;
-    return this.sessions.supersede({
-      storage: { folder, generation },
-      sessionId: sessionId2
-    });
-  }
-  // How a key's generation ended, or null while it serves (or nothing holds
-  // its watch). An older generation has ended whatever its health says: its
-  // folder has moved on.
-  ended(key) {
-    const watched = this.watched.get(keyString(key));
-    if (watched === void 0) return null;
-    if (key.generation !== watched.folder.generation) return "lost";
-    switch (watched.health.kind) {
-      case "lost":
-      case "faulted":
-        return watched.health.kind;
-      case "watching":
-      case "closed":
-        return null;
-    }
-  }
-  stats() {
-    return {
-      ...this.sessions.stats(),
-      folders: this.watched.size,
-      faults: { ...this.faultCounts },
-      lost: this.lost
-    };
-  }
-  close() {
-    this.unsubscribe();
-    this.sessions.close();
-    for (const watched of [...this.watched.values()]) this.closed(watched);
+  // Closes every folder no hold names.
+  closeUnheld() {
+    const named3 = new Set([...this.holds.values()].flat());
+    for (const [folder, watched] of [...this.watched])
+      if (!named3.has(folder)) this.closed(watched);
   }
   recorded(folder) {
     const known = {
@@ -65116,21 +65108,19 @@ var ManagedStorage = class {
     this.folders.set(folder, known);
     return known;
   }
+  // Opens a folder's generation just keyed, as the folder's current watch.
   opened(key) {
     const folder = this.folders.get(key.folder);
     if (folder === void 0) {
       throw new Error(`plugin storage: no key was asked for ${key.folder}`);
     }
-    const unusable = key.generation === folder.generation ? folder.unusable : null;
+    const { unusable } = folder;
     const identity2 = unusable === null ? this.identityOf(key.folder) : "gone";
-    if (key.generation === folder.generation) {
-      folder.identity = identity2 === "gone" ? null : identity2;
-    }
+    folder.identity = identity2 === "gone" ? null : identity2;
     const watched = {
       key,
       folder,
       identity: identity2,
-      holders: 0,
       // [LAW:single-enforcer] The only acquirer of this registry key, so the
       // slot's one callback is this generation's own.
       handle: this.watchers.acquire(
@@ -65145,7 +65135,7 @@ var ManagedStorage = class {
       ),
       health: { kind: "watching" }
     };
-    this.watched.set(keyString(key), watched);
+    this.watched.set(key.folder, watched);
     if (unusable !== null) this.faulted(watched, "unusable", unusable);
     for (const refusal of watched.handle.deaf) {
       this.faulted(watched, "refused", refusal.reason);
@@ -65153,9 +65143,12 @@ var ManagedStorage = class {
     void this.sweep(key);
     return watched;
   }
+  // Closes a generation's watch. The folder's entry goes only if it is still
+  // this one: a hold that moved the generation has already put its successor
+  // there.
   closed(watched) {
-    const id2 = keyString(watched.key);
-    this.watched.delete(id2);
+    if (this.watched.get(watched.key.folder) === watched)
+      this.watched.delete(watched.key.folder);
     watched.health = { kind: "closed" };
     watched.stopSweep();
     watched.handle.release();
@@ -65170,7 +65163,7 @@ var ManagedStorage = class {
   // joined with its own name.
   invalidated(watched, invalidation) {
     const { key } = watched;
-    const inFolder = (f) => sameKey(f.storage, key);
+    const inFolder = (f) => f.folder === key.folder;
     switch (invalidation.kind) {
       case "unknown":
         this.judged(watched, () => this.sessions.changed(inFolder));
@@ -65199,7 +65192,7 @@ var ManagedStorage = class {
   // as a removal does. Lost only if the path is gone or holds another folder;
   // otherwise `present` runs. A lost folder's held files are re-read from the
   // path, so no draw shows a value from a folder no longer there while the
-  // config's reload opens the next generation. A generation already ended has
+  // next load opens the next generation. A generation already ended has
   // nothing left to judge.
   judged(watched, present) {
     const { health } = watched;
@@ -65218,31 +65211,30 @@ var ManagedStorage = class {
       return;
     }
     watched.health = { kind: "lost" };
-    if (key.generation !== folder.generation) return;
     folder.lost = true;
     this.lost++;
     this.logger(
       "info",
       `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${now2 === "gone" ? "gone" : "replaced"}`
     );
-    this.sessions.changed((f) => sameKey(f.storage, key));
+    this.sessions.changed((f) => f.folder === key.folder);
   }
   // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
   // folder still there, is a standing fault: every source read from the
-  // generation reads it, and the folder is marked lost, so the next key
-  // request opens a fresh generation. No retry here: the OS refusing a watch
+  // generation reads it, and the folder is marked lost, so the next load's
+  // hold opens a fresh generation. No retry here: the OS refusing a watch
   // (limits, permissions) refuses an immediate retry the same way.
   faulted(watched, cause, reason) {
     const { key, folder } = watched;
     if (watched.health.kind !== "watching") return;
     watched.health = { kind: "faulted", reason };
     this.faultCounts[cause]++;
-    if (key.generation === folder.generation) folder.lost = true;
+    folder.lost = true;
     this.logger(
       "warn",
       `plugin storage fault folder=${valueOf(key.folder)} generation=${key.generation} cause=${cause} reason=${JSON.stringify(reason)}`
     );
-    this.sessions.changed((f) => sameKey(f.storage, key));
+    this.sessions.changed((f) => f.folder === key.folder);
   }
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
   // folder. Each period judges every folder against the disk: the event naming
@@ -65263,15 +65255,16 @@ var ManagedStorage = class {
         return;
     }
   }
-  // The generation's standing failure, which every source in it reads first.
-  // A generation nothing watches has none: its files read the path.
-  standing(storage) {
-    const watched = this.watched.get(keyString(storage));
+  // The folder's current generation's standing failure, which every source
+  // in it reads first. A folder no hold names has none: its files read the
+  // path.
+  standing(folder) {
+    const watched = this.watched.get(folder);
     if (watched === void 0) return null;
     const { health } = watched;
     switch (health.kind) {
       case "faulted":
-        return `cannot refresh: ${storage.folder} ${health.reason}; reload the config or restart the daemon`;
+        return `cannot refresh: ${folder} ${health.reason}; reload the config or restart the daemon`;
       // A lost folder's watch is still open, and the reload that would move
       // it on rides the same file events, so while they are stalled its
       // sources read the stall, never a file read once from the path and then
@@ -65280,14 +65273,14 @@ var ManagedStorage = class {
       case "watching":
       case "lost": {
         const stall = stallReason(this.fileEvents.delivery());
-        return stall === null ? null : `cannot refresh: ${storage.folder}: ${stall}`;
+        return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
       }
       case "closed":
         return null;
     }
   }
   async read(f) {
-    const fault = this.standing(f.storage);
+    const fault = this.standing(f.folder);
     if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
     let text4;
@@ -65320,7 +65313,7 @@ var ManagedStorage = class {
         try {
           const { mtimeMs } = await fs_default.promises.stat(file);
           const held = this.sessions.isHeld(
-            (f) => f.storage.folder === key.folder && fileName(f.sessionId) === entry.name
+            (f) => f.folder === key.folder && fileName(f.sessionId) === entry.name
           );
           if (mtimeMs >= cutoff || held) continue;
           await fs_default.promises.unlink(file);
@@ -65920,10 +65913,10 @@ var locatorOf = (req) => ({
   cwd: req.cwd,
   hints: req.hints
 });
-var sourcesOf2 = (subscriptions, prior, keyOf2) => ({
+var sourcesOf2 = (subscriptions, prior) => ({
   plugins: new Map(
     subscriptions.flatMap(
-      (s) => s.kind === "plugin" ? [[s.source, keyOf2(s.folder)]] : []
+      (s) => s.kind === "plugin" ? [[s.source, s.folder]] : []
     )
   ),
   runs: new Map(
@@ -65937,11 +65930,7 @@ var sourcesOf2 = (subscriptions, prior, keyOf2) => ({
     )
   )
 });
-var foldersOf = (subscriptions) => subscriptions.flatMap((s) => s.kind === "plugin" ? [s.folder] : []);
-var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, key]) => {
-  const other = b.plugins.get(name);
-  return other !== void 0 && sameKey(key, other);
-}) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2));
+var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2));
 function release3({ stop: stop2, holds: holds2 }) {
   stop2();
   holds2.close();
@@ -65952,11 +65941,6 @@ var Collector = class {
   }
   deps;
   records = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] Each storage folder a record's
-  // subscriptions name, a retiring record's included, held from the first
-  // subscription naming it to the last one's going: a folder's watch is
-  // opened once, not once per session or per view.
-  folders = /* @__PURE__ */ new Map();
   stopSweep = null;
   // [LAW:one-source-of-truth] The daemon's facts, derived once for every
   // session, and moved only when what they say moved.
@@ -66012,19 +65996,12 @@ var Collector = class {
           `subscriptions name session ${JSON.stringify(session)}, which the collector has no record of`
         );
     }
-    const lists = new Map(
-      [...this.records.values()].map((record2) => [
-        record2,
-        sources.get(record2.session) ?? []
-      ])
-    );
     runInAction(() => {
-      const stale = this.hold(
-        [...lists.values()].flatMap(foldersOf),
-        (ended) => ended === "lost"
-      );
-      for (const [record2, list2] of lists) {
-        const next = sourcesOf2(list2, record2.subscriptions, this.keyOf);
+      for (const record2 of this.records.values()) {
+        const next = sourcesOf2(
+          sources.get(record2.session) ?? [],
+          record2.subscriptions
+        );
         if (sameSources(next, record2.subscriptions)) continue;
         for (const [digest2, judged] of next.runs)
           if (judged.kind === "refused" && !record2.subscriptions.runs.has(digest2))
@@ -66032,29 +66009,16 @@ var Collector = class {
               "warn",
               `run refused sid=${JSON.stringify(record2.session)} digest=${shortDigest(digest2)} reason=${valueOf(judged.reason)}`
             );
-        this.moved(record2, next);
+        record2.subscriptions = next;
+        const { phase } = record2;
+        if (phase.kind === "live")
+          phase.declared.set(
+            this.declared(
+              { ...record2, locator: phase.declared.get().locator },
+              phase.holds
+            )
+          );
       }
-      for (const release4 of stale) release4();
-      this.releaseUnnamed();
-    });
-  }
-  // [LAW:single-enforcer] The host's config reload: every folder whose
-  // generation ended, faulted or lost, is minted again, so a fault's "reload
-  // the config" is the reload that clears it.
-  reloaded() {
-    runInAction(() => {
-      const stale = this.hold([...this.folders.keys()], () => true);
-      for (const record2 of this.records.values()) {
-        const { plugins: plugins2, runs } = record2.subscriptions;
-        const next = {
-          plugins: new Map(
-            [...plugins2].map(([name, key]) => [name, this.keyOf(key.folder)])
-          ),
-          runs
-        };
-        if (!sameSources(next, record2.subscriptions)) this.moved(record2, next);
-      }
-      for (const release4 of stale) release4();
     });
   }
   // [LAW:no-ambient-temporal-coupling] A turn on a session holds it for as
@@ -66089,66 +66053,12 @@ var Collector = class {
       retiring: all2.filter((r) => r.phase.kind === "retiring").length
     };
   }
-  // Every session's holds close with the daemon, and every folder's watch.
+  // Every session's holds close with the daemon.
   close() {
     this.disarmSweep();
     for (const { phase } of this.records.values())
       if (phase.kind === "live") release3(phase);
     this.records.clear();
-    this.releaseUnnamed();
-  }
-  // A record's subscriptions moved: a live one declares its holds again.
-  moved(record2, next) {
-    record2.subscriptions = next;
-    const { phase } = record2;
-    if (phase.kind === "live")
-      phase.declared.set(
-        this.declared(
-          { ...record2, locator: phase.declared.get().locator },
-          phase.holds
-        )
-      );
-  }
-  // Holds each folder named: one not yet held is keyed and watched, and one
-  // whose generation ended as `remint` takes is keyed again, its new key
-  // watched. Returns the releases of the keys a mint replaced, which go once
-  // every session has moved off them, so no read is left on a closed watch.
-  hold(folders, remint) {
-    const storage = this.deps.owners.managedStorage;
-    const stale = [];
-    for (const folder of new Set(folders)) {
-      const held = this.folders.get(folder);
-      if (held !== void 0) {
-        const ended = storage.ended(held.key);
-        if (ended === null || !remint(ended)) continue;
-      }
-      const key = storage.keyFor(folder);
-      if (held !== void 0 && sameKey(key, held.key)) continue;
-      this.folders.set(folder, { key, release: storage.watch(key) });
-      if (held !== void 0) stale.push(held.release);
-    }
-    return stale;
-  }
-  // [LAW:no-silent-failure] A subscription is read only at a folder `hold`
-  // took.
-  keyOf = (folder) => {
-    const held = this.folders.get(folder);
-    if (held === void 0)
-      throw new Error(`plugin storage: the collector holds no ${folder}`);
-    return held.key;
-  };
-  // Releases every folder no record's subscriptions name.
-  releaseUnnamed() {
-    const named3 = new Set(
-      [...this.records.values()].flatMap(
-        (r) => [...r.subscriptions.plugins.values()].map((key) => key.folder)
-      )
-    );
-    for (const [folder, held] of this.folders)
-      if (!named3.has(folder)) {
-        held.release();
-        this.folders.delete(folder);
-      }
   }
   open(session, locator) {
     const subscriptions = { plugins: /* @__PURE__ */ new Map(), runs: /* @__PURE__ */ new Map() };
@@ -66327,7 +66237,6 @@ var Collector = class {
     void this.deps.deliver({ kind: "retire", session: record2.session }).then(() => {
       if (record2.phase === retiring && this.records.get(record2.session) === record2)
         this.records.delete(record2.session);
-      this.releaseUnnamed();
       if (this.records.size === 0) this.disarmSweep();
     });
   }
@@ -76024,13 +75933,13 @@ var doctorMark = {
           `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
         );
       }
-      const made2 = [
+      const made = [
         check.name,
         verdict.sighting.id,
         mark
       ];
       const marks = c.doctorStores.marks.update(
-        (book) => withMark(book, ...made2)
+        (book) => withMark(book, ...made)
       );
       if (marks.kind === "failed") {
         throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
@@ -80078,9 +79987,9 @@ function bindView(source, store, registry, view) {
     parts.bind(view);
     return parts;
   }
-  const made2 = new ViewParts(store, registry, source, view);
-  source.views.set(store, made2);
-  return made2;
+  const made = new ViewParts(store, registry, source, view);
+  source.views.set(store, made);
+  return made;
 }
 function partsOf(source, store) {
   const parts = source.views.get(store);
@@ -82647,7 +82556,13 @@ function watchTargetsFor(entry, locs) {
       ),
       ...roots,
       ...loaded.map((d) => d.path),
-      ...[...dropped, ...unreached].map((d) => d.path)
+      ...[...dropped, ...unreached].map((d) => d.path),
+      // [LAW:single-enforcer] A declared storage folder is watched by name in
+      // its plugin folder, by the follower that already watches the
+      // definition: its removal, recreation or replacement reloads the
+      // config, whose load's hold has the storage owner recreate the folder
+      // under a new generation — the owner never re-arms a watch itself.
+      ...new Set(entry.state.sources.values())
     ],
     // An existing root is watched for every child: a folder created in it is
     // a plugin installed.
@@ -82982,6 +82897,8 @@ var RenderCache = class {
   walk = null;
   // Every state the map serves or served, until reclaimed.
   holds = /* @__PURE__ */ new Map();
+  // The last storage hold id minted.
+  storageHolds = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   views = /* @__PURE__ */ new Map();
@@ -83074,6 +82991,7 @@ var RenderCache = class {
       watch: null
     };
     this.serve(entry.state);
+    this.holdFolders(entry.state);
     this.entries.set(key, entry);
     this.fit(entry);
     this.log(
@@ -83393,13 +83311,23 @@ var RenderCache = class {
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`
       );
-    this.holds.set(state, { holders: 0, retired: null });
+    this.holds.set(state, {
+      id: ++this.storageHolds,
+      holders: 0,
+      retired: null
+    });
     this.compiles.set(state.compileKey, state.compiled);
     if (held === void 0)
       this.log(
         "info",
         `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`
       );
+  }
+  // The host holds the storage folders a served state's latest load named.
+  holdFolders(state) {
+    this.deps.storage.hold(this.holdOf(state).id, [
+      ...new Set(state.sources.values())
+    ]);
   }
   holdOf(state) {
     const hold2 = this.holds.get(state);
@@ -83435,6 +83363,7 @@ var RenderCache = class {
   reclaim(state, hold2) {
     if (hold2.retired === null || hold2.holders > 0) return;
     this.holds.delete(state);
+    this.deps.storage.release(hold2.id);
     this.log("info", configDisposeLine(hold2.retired, state.registry.dispose()));
     if (![...this.holds.keys()].some((s) => s.compileKey === state.compileKey))
       this.compiles.delete(state.compileKey);
@@ -83483,8 +83412,10 @@ var RenderCache = class {
     if (loaded.kind === "built") {
       entry.state = loaded.state;
       this.serve(loaded.state);
-      this.retire(served, "reload", { entry, state: loaded.state });
     }
+    this.holdFolders(entry.state);
+    if (loaded.kind === "built")
+      this.retire(served, "reload", { entry, state: loaded.state });
     this.fit(entry);
     this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
@@ -84030,6 +83961,7 @@ function startOver(inputs, sessionState, history, host) {
       sessionState,
       watchers: watches,
       log,
+      storage: host.storage,
       signer: linkSigner2,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
@@ -84127,7 +84059,7 @@ function startOver(inputs, sessionState, history, host) {
     // render drew the bar with, so a save compares against the bar the user saw.
     configFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.config,
     reloadConfig,
-    // The storage keys of the same entry `configFor` reads the config of.
+    // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.sources,
     links: linkSigner2,
     runs: host.runs,
@@ -86132,6 +86064,10 @@ function createDaemon(inputs) {
         rendererWatches.get(id2)?.release();
         rendererWatches.delete(id2);
       }
+    },
+    storage: {
+      hold: (id2, folders) => managedStorage.hold(id2, folders),
+      release: (id2) => managedStorage.release(id2)
     }
   });
   const parts = {
@@ -86187,7 +86123,6 @@ function createDaemon(inputs) {
     },
     reloadConfig: (origin) => {
       closing.signal.throwIfAborted();
-      collector.reloaded();
       parts.renderer.tell({ kind: "reload-config", origin }, instant());
     },
     arm() {
