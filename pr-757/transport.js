@@ -58536,9 +58536,7 @@ ${outcome.text}`;
   ].join("\n");
 }
 async function memoryReports(each) {
-  const reports = [];
-  for (const probes of each) reports.push(await memoryReport(probes));
-  return reports.join("\n\n");
+  return (await Promise.all(each.map(memoryReport))).join("\n\n");
 }
 var FOOTPRINT = "/usr/bin/footprint";
 var VMMAP = "/usr/bin/vmmap";
@@ -87601,17 +87599,22 @@ function inProcessRenderer(loaded, reaches) {
 }
 
 // src/daemon/production-adapters.ts
+function rendererAdapters(paths2, machine) {
+  return {
+    storage: (log) => fileStorage(paths2, log, machine),
+    doctorStores: fileStores(paths2.state),
+    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state))
+  };
+}
 function productionAdapters(paths2, daemonLog, machine) {
   return {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
-    storage: (log) => fileStorage(paths2, log, machine),
-    doctorStores: fileStores(paths2.state),
+    ...rendererAdapters(paths2, machine),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
     laneEdge: (launcher, following, closing, probe2) => productionLaneEdge(launcher, following, closing, machine, probe2),
-    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
       log,

@@ -4,15 +4,22 @@
     {
       "version": "pr-757",
       "ref": "refs/pull/757/merge",
-      "sha": "842a1ef28ef48c0272f8bcbb77abd9d554ca3a4a",
-      "timestamp": "2026-11-15T19:04:33.159Z",
+      "sha": "cf96f0e305f164385cddf6ab6a4477c6070440e5",
+      "timestamp": "2026-11-15T19:17:56.386Z",
       "commits": [
         {
-          "sha": "842a1ef28ef48c0272f8bcbb77abd9d554ca3a4a",
+          "sha": "cf96f0e305f164385cddf6ab6a4477c6070440e5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T19:03:31Z",
-          "message": "Merge cdfcfa8e70bc12ffc8e35aa2509ef450c58eb040 into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+          "timestamp": "2026-11-15T19:16:55Z",
+          "message": "Merge a432e1cd9806f39053475c1f2609532750630e5c into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+        },
+        {
+          "sha": "a432e1cd9806f39053475c1f2609532750630e5c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T12:16:45-07:00",
+          "message": "fix(renderer): a boot that never answered counts young, only a renderer that took over hands its holds on, and a line after its end reaches nothing (candybar-host-renderer-x96a.v58)\n\nA renderer ended for hanging in its boot had lived the whole allowance, so\nit restarted at once, forever; one whose boot never answered now counts\nyoung. Only a renderer that started and answered its start hands what it\nholds to the next, so a refusal loop keeps no ended links. A start that\nthrows is said rather than ending the daemon. A line heard after a link's\nend performs no reach, so a late watch or hold cannot leak. Ids of an ended\nrenderer fail as down again, as the supervisor's to say. Both processes'\nmemory reports are taken at one moment. The renderer's file adapters are\nbuilt in one place. Comments and the design doc say what the code does:\nthe digest boot, the charge on Linux, storage refused in the renderer's\nboot, and inputs landing between a request's two turns.\n"
         },
         {
           "sha": "cdfcfa8e70bc12ffc8e35aa2509ef450c58eb040",
