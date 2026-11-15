@@ -8314,9 +8314,9 @@ var require_util3 = __commonJS({
     Object.defineProperty(exports, "createWatchError", { enumerable: true, get: function() {
       return fs_core_1.createWatchError;
     } });
-    function promisify(fs3, fn, getResult = (input) => input) {
+    function promisify(fs2, fn, getResult = (input) => input) {
       return (...args) => new Promise((resolve, reject2) => {
-        fs3[fn].bind(fs3)(...args, (error, result) => {
+        fs2[fn].bind(fs2)(...args, (error, result) => {
           if (error)
             return reject2(error);
           return resolve(getResult(result));
@@ -8612,8 +8612,8 @@ var require_glob = __commonJS({
       return dirent;
     };
     var Cache = class {
-      constructor(fs3) {
-        this.fs = fs3;
+      constructor(fs2) {
+        this.fs = fs2;
         this.stats = /* @__PURE__ */ new Map();
         this.followStats = /* @__PURE__ */ new Map();
         this.realpaths = /* @__PURE__ */ new Map();
@@ -8702,8 +8702,8 @@ var require_glob = __commonJS({
     };
     var EMPTY_OPTIONS = {};
     var Glob = class {
-      constructor(fs3, pattern2, options = EMPTY_OPTIONS) {
-        this.fs = fs3;
+      constructor(fs2, pattern2, options = EMPTY_OPTIONS) {
+        this.fs = fs2;
         this.followSymlinks = false;
         this.isExcluded = () => false;
         this.results = /* @__PURE__ */ new Set();
@@ -8711,7 +8711,7 @@ var require_glob = __commonJS({
         this.subpatterns = /* @__PURE__ */ new Map();
         (0, validators_1.validateObject)(options, "options");
         const { exclude, cwd: cwd2, followSymlinks, withFileTypes, maxdepth } = options;
-        this.cache = new Cache(fs3);
+        this.cache = new Cache(fs2);
         this.root = toPathIfFileURL(cwd2) ?? ".";
         if (followSymlinks != null) {
           (0, validators_1.validateBoolean)(followSymlinks, "options.followSymlinks");
@@ -8950,17 +8950,17 @@ var require_glob = __commonJS({
         }
       }
     };
-    var globWalk = (fs3, pattern2, options) => new Glob(fs3, pattern2, options).walk();
+    var globWalk = (fs2, pattern2, options) => new Glob(fs2, pattern2, options).walk();
     exports.globWalk = globWalk;
-    var globSync = (fs3, pattern2, options) => {
+    var globSync = (fs2, pattern2, options) => {
       const results = [];
-      for (const match of (0, exports.globWalk)(fs3, pattern2, options))
+      for (const match of (0, exports.globWalk)(fs2, pattern2, options))
         results.push(match);
       return results;
     };
     exports.globSync = globSync;
-    async function* glob(fs3, pattern2, options) {
-      yield* (0, exports.globWalk)(fs3, pattern2, options);
+    async function* glob(fs2, pattern2, options) {
+      yield* (0, exports.globWalk)(fs2, pattern2, options);
     }
   }
 });
@@ -14804,12 +14804,12 @@ var require_FileHandle = __commonJS({
       throw error;
     };
     var FileHandle = class extends events_1.EventEmitter {
-      constructor(fs3, fd) {
+      constructor(fs2, fd) {
         super();
         this.refs = 1;
         this.closePromise = null;
         this.readableWebStreamLocked = false;
-        this.fs = fs3;
+        this.fs = fs2;
         this.fd = fd;
       }
       getAsyncId() {
@@ -15557,8 +15557,8 @@ var require_FsPromises = __commonJS({
       return error;
     };
     var FSWatchAsyncIterator = class {
-      constructor(fs3, path43, options = {}) {
-        this.fs = fs3;
+      constructor(fs2, path43, options = {}) {
+        this.fs = fs2;
         this.path = path43;
         this.options = options;
         this.eventQueue = [];
@@ -15668,8 +15668,8 @@ var require_FsPromises = __commonJS({
       }
     };
     var FsPromises = class {
-      constructor(fs3, FileHandle) {
-        this.fs = fs3;
+      constructor(fs2, FileHandle) {
+        this.fs = fs2;
         this.FileHandle = FileHandle;
         this.constants = fs_node_utils_1.constants;
         this.cp = (src, dest, options) => new Promise((resolve, reject2) => {
@@ -15807,7 +15807,7 @@ var require_lib5 = __commonJS({
     exports.toTreeSync = void 0;
     var tree_dump_1 = require_lib4();
     var fs_node_utils_1 = require_lib2();
-    var toTreeSync = (fs3, opts = {}) => {
+    var toTreeSync = (fs2, opts = {}) => {
       const separator = opts.separator || "/";
       let dir = opts.dir || separator;
       if (dir[dir.length - 1] !== separator)
@@ -15817,7 +15817,7 @@ var require_lib5 = __commonJS({
       const sort = opts.sort ?? true;
       let subtree = " (...)";
       if (depth > 0) {
-        const list2 = fs3.readdirSync(dir, { withFileTypes: true });
+        const list2 = fs2.readdirSync(dir, { withFileTypes: true });
         if (sort) {
           list2.sort((a, b) => {
             if (a.isDirectory() && b.isDirectory()) {
@@ -15833,9 +15833,9 @@ var require_lib5 = __commonJS({
         }
         subtree = (0, tree_dump_1.printTree)(tab, list2.map((entry) => (tab2) => {
           if (entry.isDirectory()) {
-            return (0, exports.toTreeSync)(fs3, { dir: dir + entry.name, depth: depth - 1, tab: tab2 });
+            return (0, exports.toTreeSync)(fs2, { dir: dir + entry.name, depth: depth - 1, tab: tab2 });
           } else if (entry.isSymbolicLink()) {
-            return "" + entry.name + " \u2192 " + fs3.readlinkSync(dir + entry.name);
+            return "" + entry.name + " \u2192 " + fs2.readlinkSync(dir + entry.name);
           } else {
             return "" + entry.name;
           }
@@ -16149,34 +16149,34 @@ var require_sync = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.fromSnapshotSync = exports.toSnapshotSync = void 0;
     var shared_1 = require_shared();
-    var toSnapshotSync = ({ fs: fs3, path: path43 = "/", separator = "/" }) => {
-      const stats = fs3.lstatSync(path43);
+    var toSnapshotSync = ({ fs: fs2, path: path43 = "/", separator = "/" }) => {
+      const stats = fs2.lstatSync(path43);
       if (stats.isDirectory()) {
-        const list2 = fs3.readdirSync(path43);
+        const list2 = fs2.readdirSync(path43);
         const entries = {};
         const dir = path43.endsWith(separator) ? path43 : path43 + separator;
         for (const child of list2) {
-          const childSnapshot = (0, exports.toSnapshotSync)({ fs: fs3, path: `${dir}${child}`, separator });
+          const childSnapshot = (0, exports.toSnapshotSync)({ fs: fs2, path: `${dir}${child}`, separator });
           if (childSnapshot)
             entries["" + child] = childSnapshot;
         }
         return [0, {}, entries];
       } else if (stats.isFile()) {
-        const buf = fs3.readFileSync(path43);
+        const buf = fs2.readFileSync(path43);
         const uint8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         return [1, {}, uint8];
       } else if (stats.isSymbolicLink()) {
         return [
           2,
           {
-            target: fs3.readlinkSync(path43).toString()
+            target: fs2.readlinkSync(path43).toString()
           }
         ];
       }
       return null;
     };
     exports.toSnapshotSync = toSnapshotSync;
-    var fromSnapshotSync = (snapshot, { fs: fs3, path: path43 = "/", separator = "/" }) => {
+    var fromSnapshotSync = (snapshot, { fs: fs2, path: path43 = "/", separator = "/" }) => {
       if (!snapshot)
         return;
       switch (snapshot[0]) {
@@ -16184,21 +16184,21 @@ var require_sync = __commonJS({
           if (!path43.endsWith(separator))
             path43 = path43 + separator;
           const [, , entries] = snapshot;
-          fs3.mkdirSync(path43, { recursive: true });
+          fs2.mkdirSync(path43, { recursive: true });
           for (const [name, child] of Object.entries(entries)) {
             (0, shared_1.validateEntryName)(name);
-            (0, exports.fromSnapshotSync)(child, { fs: fs3, path: `${path43}${name}`, separator });
+            (0, exports.fromSnapshotSync)(child, { fs: fs2, path: `${path43}${name}`, separator });
           }
           break;
         }
         case 1: {
           const [, , data] = snapshot;
-          fs3.writeFileSync(path43, data);
+          fs2.writeFileSync(path43, data);
           break;
         }
         case 2: {
           const [, { target }] = snapshot;
-          fs3.symlinkSync(target, path43);
+          fs2.symlinkSync(target, path43);
           break;
         }
       }
@@ -17982,34 +17982,34 @@ var require_async = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.fromSnapshot = exports.toSnapshot = void 0;
     var shared_1 = require_shared();
-    var toSnapshot = async ({ fs: fs3, path: path43 = "/", separator = "/" }) => {
-      const stats = await fs3.lstat(path43);
+    var toSnapshot = async ({ fs: fs2, path: path43 = "/", separator = "/" }) => {
+      const stats = await fs2.lstat(path43);
       if (stats.isDirectory()) {
-        const list2 = await fs3.readdir(path43);
+        const list2 = await fs2.readdir(path43);
         const entries = {};
         const dir = path43.endsWith(separator) ? path43 : path43 + separator;
-        const snapshots = await Promise.all(list2.map((child) => (0, exports.toSnapshot)({ fs: fs3, path: `${dir}${child}`, separator })));
+        const snapshots = await Promise.all(list2.map((child) => (0, exports.toSnapshot)({ fs: fs2, path: `${dir}${child}`, separator })));
         for (let i = 0; i < list2.length; i++) {
           if (snapshots[i])
             entries["" + list2[i]] = snapshots[i];
         }
         return [0, {}, entries];
       } else if (stats.isFile()) {
-        const buf = await fs3.readFile(path43);
+        const buf = await fs2.readFile(path43);
         const uint8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         return [1, {}, uint8];
       } else if (stats.isSymbolicLink()) {
         return [
           2,
           {
-            target: await fs3.readlink(path43, { encoding: "utf8" })
+            target: await fs2.readlink(path43, { encoding: "utf8" })
           }
         ];
       }
       return null;
     };
     exports.toSnapshot = toSnapshot;
-    var fromSnapshot = async (snapshot, { fs: fs3, path: path43 = "/", separator = "/" }) => {
+    var fromSnapshot = async (snapshot, { fs: fs2, path: path43 = "/", separator = "/" }) => {
       if (!snapshot)
         return;
       switch (snapshot[0]) {
@@ -18017,21 +18017,21 @@ var require_async = __commonJS({
           if (!path43.endsWith(separator))
             path43 = path43 + separator;
           const [, , entries] = snapshot;
-          await fs3.mkdir(path43, { recursive: true });
+          await fs2.mkdir(path43, { recursive: true });
           for (const [name, child] of Object.entries(entries)) {
             (0, shared_1.validateEntryName)(name);
-            await (0, exports.fromSnapshot)(child, { fs: fs3, path: `${path43}${name}`, separator });
+            await (0, exports.fromSnapshot)(child, { fs: fs2, path: `${path43}${name}`, separator });
           }
           break;
         }
         case 1: {
           const [, , data] = snapshot;
-          await fs3.writeFile(path43, data);
+          await fs2.writeFile(path43, data);
           break;
         }
         case 2: {
           const [, { target }] = snapshot;
-          await fs3.symlink(target, path43);
+          await fs2.symlink(target, path43);
           break;
         }
       }
@@ -19588,7 +19588,7 @@ var require_volume = __commonJS({
       if (typeof gid !== "number")
         throw TypeError(fs_node_utils_2.ERRSTR.GID);
     }
-    var Volume = class {
+    var Volume2 = class {
       get promises() {
         if (this.promisesApi === null)
           throw new Error("Promise is not supported in this environment.");
@@ -20529,9 +20529,9 @@ var require_volume = __commonJS({
         return fsSnapshot.fromJsonSnapshotSync(uint8, { fs: this, path: path43 });
       }
     };
-    exports.Volume = Volume;
-    Volume.fromJSON = (json2, cwd2, opts) => new Volume(fs_core_1.Superblock.fromJSON(json2, cwd2, opts));
-    Volume.fromNestedJSON = (json2, cwd2, opts) => new Volume(fs_core_1.Superblock.fromNestedJSON(json2, cwd2, opts));
+    exports.Volume = Volume2;
+    Volume2.fromJSON = (json2, cwd2, opts) => new Volume2(fs_core_1.Superblock.fromJSON(json2, cwd2, opts));
+    Volume2.fromNestedJSON = (json2, cwd2, opts) => new Volume2(fs_core_1.Superblock.fromNestedJSON(json2, cwd2, opts));
     function emitStop(self2) {
       self2.emit("stop");
     }
@@ -21078,7 +21078,7 @@ var require_lib8 = __commonJS({
     init_globals();
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.memfs = exports.fs = exports.vol = exports.Volume = void 0;
-    exports.createFsFromVolume = createFsFromVolume;
+    exports.createFsFromVolume = createFsFromVolume2;
     var fs_node_1 = require_lib7();
     Object.defineProperty(exports, "Volume", { enumerable: true, get: function() {
       return fs_node_1.Volume;
@@ -21116,43 +21116,43 @@ var require_lib8 = __commonJS({
       FileReadStream: streamSlot(2),
       FileWriteStream: streamSlot(3)
     };
-    function createFsFromVolume(vol2) {
-      const fs3 = { F_OK, R_OK, W_OK, X_OK, constants: fs_node_utils_1.constants, Stats: fs_node_1.Stats, Dir: fs_node_1.Dir, Dirent: fs_node_1.Dirent };
+    function createFsFromVolume2(vol2) {
+      const fs2 = { F_OK, R_OK, W_OK, X_OK, constants: fs_node_utils_1.constants, Stats: fs_node_1.Stats, Dir: fs_node_1.Dir, Dirent: fs_node_1.Dirent };
       for (const method of fs_node_1.fsSynchronousApiList)
         if (typeof vol2[method] === "function")
-          fs3[method] = vol2[method].bind(vol2);
+          fs2[method] = vol2[method].bind(vol2);
       for (const method of fs_node_1.fsCallbackApiList)
         if (typeof vol2[method] === "function")
-          fs3[method] = vol2[method].bind(vol2);
-      fs3.StatWatcher = vol2.StatWatcher;
-      fs3.FSWatcher = vol2.FSWatcher;
-      fs3[kStreams] = [vol2.ReadStream, vol2.WriteStream, vol2.ReadStream, vol2.WriteStream];
-      Object.defineProperties(fs3, streamDescriptors);
-      fs3.promises = vol2.promises;
+          fs2[method] = vol2[method].bind(vol2);
+      fs2.StatWatcher = vol2.StatWatcher;
+      fs2.FSWatcher = vol2.FSWatcher;
+      fs2[kStreams] = [vol2.ReadStream, vol2.WriteStream, vol2.ReadStream, vol2.WriteStream];
+      Object.defineProperties(fs2, streamDescriptors);
+      fs2.promises = vol2.promises;
       if (typeof vol2.realpath === "function") {
-        fs3.realpath = vol2.realpath.bind(vol2);
+        fs2.realpath = vol2.realpath.bind(vol2);
         if (typeof vol2.realpath.native === "function") {
-          fs3.realpath.native = vol2.realpath.native.bind(vol2);
+          fs2.realpath.native = vol2.realpath.native.bind(vol2);
         }
       }
       if (typeof vol2.realpathSync === "function") {
-        fs3.realpathSync = vol2.realpathSync.bind(vol2);
+        fs2.realpathSync = vol2.realpathSync.bind(vol2);
         if (typeof vol2.realpathSync.native === "function") {
-          fs3.realpathSync.native = vol2.realpathSync.native.bind(vol2);
+          fs2.realpathSync.native = vol2.realpathSync.native.bind(vol2);
         }
       }
-      fs3._toUnixTimestamp = fs_node_1.toUnixTimestamp;
-      fs3.__vol = vol2;
-      return fs3;
+      fs2._toUnixTimestamp = fs_node_1.toUnixTimestamp;
+      fs2.__vol = vol2;
+      return fs2;
     }
-    exports.fs = createFsFromVolume(exports.vol);
+    exports.fs = createFsFromVolume2(exports.vol);
     var memfs = (json2 = {}, cwdOrOpts = "/") => {
       const opts = typeof cwdOrOpts === "string" ? { cwd: cwdOrOpts } : cwdOrOpts;
       const cwd2 = opts.cwd ?? (opts.process ? void 0 : "/");
       const process = opts.process ?? createProcess(cwd2 ?? "/");
       const vol2 = fs_node_1.Volume.fromNestedJSON(json2, cwd2, { process });
-      const fs3 = createFsFromVolume(vol2);
-      return { fs: fs3, vol: vol2 };
+      const fs2 = createFsFromVolume2(vol2);
+      return { fs: fs2, vol: vol2 };
     };
     exports.memfs = memfs;
     module.exports = { ...module.exports, ...exports.fs };
@@ -22739,6 +22739,7 @@ function sessionKeyed(record2, refused) {
 
 // src/click/wire.ts
 var URL_SCHEME = "cc-candybar";
+var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
 var VERB_DISPATCH = "dispatch";
 var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
@@ -22768,6 +22769,8 @@ var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var VERB_TMUX_STATUS_CLICK = "tmux-status-click";
+var STATUS_LINE_CLICK_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
+var DOCTOR_PROBE_PREFIX = `${URL_SCHEME}://${VERB_DOCTOR_PROBE}/`;
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
@@ -22958,7 +22961,12 @@ init_globals();
 // site/shims/fs.ts
 init_globals();
 var import_memfs = __toESM(require_lib8(), 1);
-var fs_default = import_memfs.fs;
+init_process();
+var vol = import_memfs.Volume.fromNestedJSON({}, "/", {
+  process: { cwd: () => "/", platform: process_default.platform, env: process_default.env, getuid: process_default.getuid, getgid: process_default.getgid, emitWarning: process_default.emitWarning }
+});
+var fs = (0, import_memfs.createFsFromVolume)(vol);
+var fs_default = fs;
 var {
   existsSync,
   readFileSync,
@@ -22996,7 +23004,7 @@ var {
   ftruncateSync,
   fsyncSync,
   Stats
-} = import_memfs.fs;
+} = fs;
 
 // src/proc/launch.ts
 var import_node_string_decoder = __toESM(require_string_decoder(), 1);
@@ -24013,6 +24021,161 @@ function processWorld() {
 
 // src/click/read.ts
 init_globals();
+
+// src/click/link-signer.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer3 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer3.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer3.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i) => byte === b[i]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => import_buffer3.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/click/link-signer.ts
+var LINK_KEY_BYTES = 32;
+var MAC_SPELLING = /^[0-9a-f]{64}$/;
+var LINK_MAC_BYTES = 16;
+var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
+var LINK_MAC_MARK = "#";
+function transitForm(link) {
+  return link.toWellFormed().replace(
+    /%(?![0-9A-Fa-f]{2})|[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu,
+    encodeURIComponent
+  );
+}
+function unprovenLink(signed) {
+  const mark = isBarLink(signed) ? signed.lastIndexOf(LINK_MAC_MARK) : -1;
+  return mark === -1 ? signed : signed.slice(0, mark);
+}
+function linkMac(key, link) {
+  return import_buffer.Buffer.from(
+    createHmac("sha256", key).update(link).digest().subarray(0, LINK_MAC_BYTES)
+  ).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+function signLinkWith(key, link) {
+  const sent = transitForm(link);
+  return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
+}
+function openLinkWith(key, signed) {
+  const mark = signed.lastIndexOf(LINK_MAC_MARK);
+  if (mark === -1)
+    return {
+      kind: "failed",
+      reason: "the link carries no signature: the bar did not draw it, or drew it before its links were signed"
+    };
+  const link = signed.slice(0, mark);
+  const mac = signed.slice(mark + LINK_MAC_MARK.length);
+  const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(import_buffer.Buffer.from(mac), import_buffer.Buffer.from(linkMac(key, link)));
+  return proven ? { kind: "ok", value: link } : {
+    kind: "failed",
+    reason: "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it"
+  };
+}
+function digest(key, fields2) {
+  return createHmac("sha256", key).update(
+    JSON.stringify([
+      fields2.sessionId,
+      fields2.action,
+      fields2.declaration,
+      fields2.evaluated
+    ])
+  ).digest();
+}
+function linkSigner(key) {
+  if (key.length !== LINK_KEY_BYTES) {
+    throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
+  }
+  const signed = /* @__PURE__ */ new Map();
+  return {
+    sign: (fields2) => digest(key, fields2).toString("hex"),
+    verify: (fields2, mac) => {
+      if (!MAC_SPELLING.test(mac)) return false;
+      return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
+    },
+    signLink: (link) => {
+      let done2 = signed.get(link);
+      if (done2 === void 0) {
+        if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
+        done2 = signLinkWith(key, link);
+        signed.set(link, done2);
+      }
+      return done2;
+    },
+    openLink: (link) => openLinkWith(key, link)
+  };
+}
+var SIGNED_LINKS_HELD = 1024;
+function linkSignerOver(key) {
+  let signer;
+  const loaded = () => {
+    const asked2 = key();
+    return asked2.kind === "ok" ? { kind: "ok", value: signer ??= linkSigner(asked2.value) } : asked2;
+  };
+  const held = () => {
+    const asked2 = loaded();
+    if (asked2.kind === "failed") throw new Error(asked2.reason);
+    return asked2.value;
+  };
+  return {
+    sign: (fields2) => held().sign(fields2),
+    verify: (fields2, mac) => held().verify(fields2, mac),
+    signLink: (link) => held().signLink(link),
+    openLink: (signed) => {
+      const asked2 = loaded();
+      return asked2.kind === "ok" ? asked2.value.openLink(signed) : asked2;
+    }
+  };
+}
+function signingFrames(signer) {
+  const sign = (link) => isBarLink(link) ? signer.signLink(link) : link;
+  return (frame2) => ({
+    ...frame2,
+    rows: frame2.rows.map((row2) => ({
+      ...row2,
+      runs: row2.runs.map(
+        (run3) => run3.link === void 0 ? run3 : { ...run3, link: sign(run3.link) }
+      )
+    }))
+  });
+}
+
+// src/click/read.ts
 function linksOf({ rows }) {
   return rows.flatMap(({ runs }) => {
     const stretches = [];
@@ -24026,7 +24189,6 @@ function linksOf({ rows }) {
     );
   });
 }
-var isBarLink = (url) => url.startsWith(`${URL_SCHEME}://`);
 function decodeArgs(verb, value) {
   if (SEGMENTED_VERBS.has(verb)) return decodeSegments(value);
   const slash2 = value.indexOf("/");
@@ -24039,7 +24201,7 @@ function decodeArgs(verb, value) {
   return [decodeURIComponent(value)];
 }
 function clickOf(url) {
-  const link = parseHandlerUrl(url);
+  const link = parseHandlerUrl(unprovenLink(url));
   if (!link.ok) throw new Error(link.problem);
   return { verb: link.verb, value: link.value };
 }
@@ -28675,8 +28837,7 @@ init_globals();
 
 // site/shims/fs-promises.ts
 init_globals();
-var import_memfs2 = __toESM(require_lib8(), 1);
-var p = import_memfs2.fs.promises;
+var p = fs.promises;
 var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
 
 // src/daemon/cache/watchers.ts
@@ -30436,12 +30597,13 @@ function sanitizeTermExtent(v) {
 function sanitizeSsh(v) {
   return typeof v === "boolean" ? v : void 0;
 }
-var URL_FRAME_VERSION = 1;
-var EARLIER_URL_FRAME_VERSIONS = [];
+var URL_FRAME_VERSION = 2;
+var EARLIER_URL_FRAME_VERSIONS = [1];
 var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   ...EARLIER_URL_FRAME_VERSIONS,
   URL_FRAME_VERSION
 ]);
+var awaitsVerdict = (urlV) => typeof urlV === "number" && urlV >= 2;
 var MAX_FRAME_BYTES = 16 * 1024 * 1024;
 function sanitizeClient(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
@@ -43475,6 +43637,2321 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
   }
 }
 
+// src/daemon/click-reading.ts
+init_globals();
+
+// src/doctor/sightings.ts
+init_globals();
+
+// src/doctor/checks.ts
+init_globals();
+
+// src/tmux-hint.ts
+init_globals();
+var TMUX_ENV = {
+  // `socket,server-pid,session-id` — the socket is the part before the first
+  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
+  socket: "TMUX",
+  pane: "TMUX_PANE",
+  // Claude Code's own switch: when this is truthy in ITS environment, it stops
+  // re-encoding the statusline at 256 colours inside tmux (verified against the
+  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
+  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
+};
+var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
+
+// src/config/lanes.ts
+init_globals();
+var RENDERERS = ["claude", "tmux"];
+var IN_TMUX = 'ne .tmux.pane ""';
+var LANES = {
+  band: {
+    switch: { setting: "experimentalBand", on: true, inTmux: false },
+    label: "\u{1F9EA} band (A)",
+    handsOff: true,
+    rows: null
+  },
+  statusline: {
+    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
+    label: "\u{1F9EA} statusline (B)",
+    handsOff: false,
+    rows: null
+  },
+  pane: {
+    switch: { setting: "experimentalPane", on: true, inTmux: false },
+    label: "\u{1F9EA} tmux pane (C)",
+    handsOff: true,
+    rows: null
+  },
+  tmuxStatus: {
+    switch: {
+      setting: "renderer",
+      on: "tmux",
+      inTmux: true
+    },
+    label: "tmux status line",
+    handsOff: true,
+    // tmux draws at most five status rows (`status` takes on, off, 2…5).
+    rows: 5
+  }
+};
+var LANE_NAMES = Object.keys(LANES);
+var TOGGLED_LANES = LANE_NAMES.filter(
+  (lane) => LANES[lane].switch.on === true
+);
+var MOVING_FPS = 30;
+var ANSWERING = { by: "request" };
+var DRAWING_VAR = "drawing";
+var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
+var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
+var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
+function perLane(value) {
+  return Object.fromEntries(
+    LANE_NAMES.map((lane) => [lane, value(lane)])
+  );
+}
+var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
+function parseLane(raw) {
+  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
+}
+function feedsFact(feeds) {
+  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
+    const { subscribers, fps, shown } = feeds[lane];
+    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
+  }).join(",") || "-";
+}
+
+// src/render/strip.ts
+init_globals();
+
+// src/render/rich-theme.ts
+init_globals();
+var RENDER_THEME = new Theme({
+  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
+  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
+  // slot some terminal themes paint as that ground. The terminal's own text on
+  // its own ground is the one pair known to read there.
+  "strip.separator": "default",
+  "strip.rail": "default"
+});
+function resolvedStyle(style) {
+  return RENDER_THEME.resolve(style);
+}
+
+// src/render/effect.ts
+init_globals();
+
+// src/themes/policy.ts
+init_globals();
+
+// src/themes/decor.ts
+init_globals();
+
+// src/themes/palette-memo.ts
+init_globals();
+function memoPerPalette() {
+  const memo = /* @__PURE__ */ new WeakMap();
+  return (palette, key, compute) => {
+    let entries = memo.get(palette);
+    if (entries === void 0) {
+      entries = /* @__PURE__ */ new Map();
+      memo.set(palette, entries);
+    }
+    const hit = entries.get(key);
+    if (hit !== void 0) return hit;
+    const value = compute();
+    entries.set(key, value);
+    return value;
+  };
+}
+
+// src/utils/same.ts
+init_globals();
+var is = (a, b) => a === b;
+function sameBy(fields2) {
+  const keys2 = Object.keys(fields2);
+  return (a, b) => keys2.every((key) => fields2[key](a[key], b[key]));
+}
+var sameEach = (same2) => (a, b) => a.length === b.length && a.every((item, i) => same2(item, b[i]));
+
+// src/themes/decor.ts
+var DECOR_HUES = ["primary", "secondary", "accent"];
+var LADDER = [
+  "darken-3",
+  "darken-2",
+  "darken-1",
+  "base",
+  "lighten-1",
+  "lighten-2",
+  "lighten-3"
+];
+var SHADE_SUFFIX = {
+  "darken-3": "-darken-3",
+  "darken-2": "-darken-2",
+  "darken-1": "-darken-1",
+  base: "",
+  "lighten-1": "-lighten-1",
+  "lighten-2": "-lighten-2",
+  "lighten-3": "-lighten-3",
+  muted: "-muted"
+};
+var shadeRole = (hue, shade) => `${hue}${SHADE_SUFFIX[shade]}`;
+var poleText = (palette, _hue, background, drawnAt) => textOn2(palette, background, drawnAt);
+var roleText = (palette, hue, background, drawnAt) => legibleOn(palette, palette.get(`text-${hue}`), background, drawnAt);
+var ladderWindow = (from) => ({
+  // [LAW:no-defensive-null-guards] Every position below starts at most four
+  // rungs up a ladder of seven; the `!`s state that, they do not guard it.
+  tones: [LADDER[from], LADDER[from + 2], LADDER[from + 1]],
+  text: poleText,
+  activated: "muted"
+});
+var centredWindow = (apart) => ({
+  // [LAW:no-defensive-null-guards] The role is rung 3 of seven; a window up to
+  // three rungs each side stays on the ladder.
+  tones: [LADDER[3 - apart], LADDER[3 + apart], LADDER[3]],
+  text: poleText,
+  activated: "muted"
+});
+var pairWindow = (apart) => ({
+  tones: [LADDER[3 - apart], LADDER[3 + apart]],
+  text: poleText,
+  activated: "muted"
+});
+var TRIAL_SHADES = {
+  wide: centredWindow(2),
+  widest: centredWindow(3),
+  pair: pairWindow(2),
+  "pair-wide": pairWindow(3)
+};
+var TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES);
+var SHADES = {
+  muted: {
+    tones: ["muted", "base"],
+    text: roleText,
+    activated: "lighten-2"
+  },
+  deepest: ladderWindow(0),
+  deeper: ladderWindow(1),
+  middle: ladderWindow(2),
+  brighter: ladderWindow(3),
+  brightest: ladderWindow(4),
+  ...TRIAL_SHADES
+};
+var lineageHue = (lineage2, depth) => (
+  // [LAW:no-defensive-null-guards] A lineage is non-empty by type and the
+  // index is in range by construction; the `!` states that, it does not guard it.
+  lineage2[depth % lineage2.length]
+);
+var KEYSTONE_HUE = "accent";
+var WHOLE_ROW = Infinity;
+var OPENS_TODAY = {
+  keystones: [],
+  open: ["accent", "primary", "secondary"]
+};
+var KEYSTONE_PLACEMENTS = {
+  door: ["bar-start"],
+  start: ["line-start"],
+  end: ["line-end"],
+  ends: ["line-start", "line-end"]
+};
+var OPEN_LINEAGES = {
+  primary: ["primary"],
+  secondary: ["secondary"],
+  alternate: ["primary", "secondary"]
+};
+function tunings() {
+  const rows = Object.entries(KEYSTONE_PLACEMENTS).flatMap(
+    ([at, keystones]) => Object.entries(OPEN_LINEAGES).map(
+      ([into, open2]) => [
+        `${at}-${into}`,
+        { hues: ["secondary"], run: WHOLE_ROW, keystones, open: open2 }
+      ]
+    )
+  );
+  return Object.fromEntries(rows);
+}
+var TUNINGS = tunings();
+var VARIATIONS = {
+  accent: { hues: ["secondary", "accent"], run: WHOLE_ROW, ...OPENS_TODAY },
+  duo: { hues: ["primary", "secondary"], run: WHOLE_ROW, ...OPENS_TODAY },
+  mono: { hues: ["primary"], run: WHOLE_ROW, ...OPENS_TODAY },
+  alt: { hues: ["secondary", "accent"], run: 3, ...OPENS_TODAY },
+  // Trial tunings of the accent variation (brandon-menus-sjhy.4fi): one row
+  // per keystone placement and open-menu lineage. Every closed cell wears
+  // `secondary` but the keystones, which wear the accent, and no depth of an
+  // open menu wears it.
+  ...TUNINGS
+};
+var TRIAL_VARIATION_NAMES = Object.keys(
+  TUNINGS
+);
+var vocabularyOf = (palette, decor, drawnAt) => turnsHeld(
+  palette,
+  decor,
+  decor.variation.hues.flatMap((hue) => {
+    const window2 = windowAt(palette, hue, decor.shade, drawnAt);
+    return decor.shade.tones.map((_, at) => ({
+      hue,
+      shade: window2[at % window2.length]
+    }));
+  }),
+  drawnAt
+);
+function windowAt(palette, hue, shade, drawnAt) {
+  return WINDOWS(palette, `${hue}|${shade.tones.join(",")}|${drawnAt}`, () => {
+    const drawn = drawnIn(palette, hue, drawnAt);
+    const size = windowSize(
+      shade.tones.length,
+      new Set(LADDER.map(drawn)).size
+    );
+    const [first2, ...rest2] = shade.tones;
+    const kept = [first2];
+    for (const tone of rest2) {
+      if (kept.length < size && kept.every((held) => drawn(held) !== drawn(tone)))
+        kept.push(tone);
+    }
+    return inWalkOrder(
+      Array.from({ length: size - kept.length }).reduce((window2) => {
+        const wider = widen(
+          palette,
+          hue,
+          shade.tones,
+          window2.map(drawn),
+          drawnAt
+        );
+        return wider === void 0 ? window2 : [...window2, wider];
+      }, kept)
+    );
+  });
+}
+var inWalkOrder = (window2) => {
+  if (window2.length < 3) return window2;
+  const ladder2 = LADDER;
+  const [low, ...above] = [...window2].sort(
+    (a, b) => ladder2.indexOf(a) - ladder2.indexOf(b)
+  );
+  return [low, above.at(-1), ...above.slice(0, -1)];
+};
+var windowSize = (count, colours) => Math.max(2, Math.min(count, colours - 1));
+var WINDOWS = memoPerPalette();
+var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(palette.get(shadeRole(hue, tone)), drawnAt).hex;
+function widen(palette, hue, from, taken, drawnAt) {
+  const drawn = drawnIn(palette, hue, drawnAt);
+  return ladderFrom(from, palette.dark).find(
+    (rung) => !taken.includes(drawn(rung))
+  );
+}
+function ladderFrom(from, dark) {
+  const ladder2 = LADDER;
+  const place = (shade) => shade === "muted" ? dark ? -1 : ladder2.length : ladder2.indexOf(shade);
+  const away = dark ? 1 : -1;
+  return LADDER.map((rung, at) => ({
+    rung,
+    at,
+    distance: Math.min(...from.map((shade) => Math.abs(at - place(shade))))
+  })).filter(({ distance }) => distance > 0).sort((a, b) => a.distance - b.distance || (b.at - a.at) * away).map(({ rung }) => rung);
+}
+var inBin = (placement, size) => Math.floor(placement * size);
+var inHalves = (placement, size) => {
+  let entry = size - 1;
+  for (let half = placement; half < 0.5 && entry > 0; half *= 2) entry--;
+  return entry;
+};
+var PHI = 0.6180339887498949;
+var vanDerCorput = (index) => {
+  let value = 0;
+  let place = 0.5;
+  for (let i = index; i > 0; i >>= 1, place /= 2) value += place * (i & 1);
+  return value;
+};
+var DISTRIBUTION_NAMES = [
+  "van-der-corput",
+  "golden-angle",
+  "ends-interleaved",
+  "monotonic",
+  "uniform"
+];
+var isDistributionName = (value) => typeof value === "string" && DISTRIBUTION_NAMES.includes(value);
+var DISTRIBUTIONS = {
+  "van-der-corput": { place: vanDerCorput, quantize: inHalves },
+  "golden-angle": { place: (index) => index * PHI % 1, quantize: inBin },
+  "ends-interleaved": {
+    place: (index, count) => {
+      const slot = index % 2 === 0 ? index / 2 : count - 1 - (index - 1) / 2;
+      return (slot + 0.5) / count;
+    },
+    quantize: inBin
+  },
+  monotonic: {
+    place: (index, count) => (index + 0.5) / count,
+    quantize: inBin
+  },
+  uniform: { place: () => 0.5, quantize: inHalves }
+};
+var DEFAULT_DISTRIBUTION = "van-der-corput";
+var placedBy = (name) => DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
+function entryOf(step4, size) {
+  if (step4 === void 0) return 0;
+  const { place, quantize } = step4.distribution;
+  return quantize(place(step4.index, step4.count), size);
+}
+function vocabularySelect(vocabulary, step4) {
+  const entry = vocabulary[entryOf(step4, vocabulary.length)];
+  if (entry === void 0)
+    throw new Error("vocabularySelect: empty vocabulary");
+  return entry;
+}
+function rowAndCell(address) {
+  const isCell = (step4) => step4.axis === "cell";
+  const at = address.findIndex(isCell);
+  const rows = at === -1 ? address : address.slice(0, at);
+  return { row: rows.at(-1), cell: address.findLast(isCell) };
+}
+var rowStart = (variation, row2) => entryOf(row2, variation.hues.length);
+function decorEntryFor(palette, decor, address, drawnAt) {
+  const { row: row2, cell: cell3 } = rowAndCell(address);
+  if (cell3 === void 0) return dealtAt(palette, decor, row2, cell3, drawnAt);
+  return lineAt(palette, decor, row2, cell3, drawnAt)[cell3.index - cell3.lineStart];
+}
+function dealtAt(palette, decor, row2, cell3, drawnAt) {
+  const { hues, run: run3, keystones } = decor.variation;
+  const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
+  const stepped2 = hues[(rowStart(decor.variation, row2) + turn) % hues.length];
+  if (stepped2 === void 0) throw new Error("decorEntryFor: empty variation");
+  const hue = keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped2;
+  return {
+    hue,
+    shade: vocabularySelect(windowAt(palette, hue, decor.shade, drawnAt), cell3)
+  };
+}
+function lineAt(palette, decor, row2, cell3, drawnAt) {
+  const { hues, run: run3, keystones, open: open2 } = decor.variation;
+  const key = [
+    hues.join(","),
+    run3,
+    keystones.join(","),
+    open2.join(","),
+    decor.shade.tones.join(","),
+    decor.shade.activated,
+    row2 === void 0 ? "" : stepKey(row2),
+    // One answer for every place along the line, so the cell is keyed at
+    // the line's first.
+    stepKey(cell3, cell3.lineStart),
+    drawnAt
+  ].join("|");
+  return LINES(
+    palette,
+    key,
+    () => turnsHeld(
+      palette,
+      decor,
+      Array.from(
+        { length: cell3.lineEnd - cell3.lineStart + 1 },
+        (_, at) => dealtAt(
+          palette,
+          decor,
+          row2,
+          { ...cell3, index: cell3.lineStart + at },
+          drawnAt
+        )
+      ),
+      drawnAt
+    )
+  );
+}
+var LINES = memoPerPalette();
+function stepKey({
+  axis,
+  index,
+  count,
+  distribution,
+  lineStart,
+  lineEnd,
+  ...unkeyed
+}, at = index) {
+  const none2 = unkeyed;
+  void none2;
+  return `${axis},${at},${count},${distributionName(distribution)},${lineStart},${lineEnd}`;
+}
+function distributionName(distribution) {
+  const name = DISTRIBUTION_NAME.get(distribution);
+  if (name === void 0)
+    throw new Error("decorEntryFor: a cell placed outside DISTRIBUTIONS");
+  return name;
+}
+var DISTRIBUTION_NAME = new Map(
+  DISTRIBUTION_NAMES.map((name) => [DISTRIBUTIONS[name], name])
+);
+function turnsHeld(palette, decor, dealt, drawnAt) {
+  const line = [...dealt];
+  const drawn = (at) => {
+    const entry = line[at];
+    return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
+  };
+  const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
+  const apart = (at, off) => {
+    const { hue } = line[at];
+    const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
+      (colour) => colour !== void 0
+    );
+    const window2 = windowAt(palette, hue, decor.shade, drawnAt);
+    const tone = window2.find((t2) => !taken.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken, drawnAt);
+    return tone === void 0 ? void 0 : { hue, shade: tone };
+  };
+  const moves = (at) => [[pressed], []].flatMap(
+    (off) => [at, at - 1].map((place) => ({ place, off }))
+  );
+  for (let at = 1; at < line.length; at++) {
+    if (line[at - 1].hue === line[at].hue || drawn(at - 1) !== drawn(at))
+      continue;
+    for (const { place, off } of moves(at)) {
+      const entry = apart(place, off);
+      if (entry === void 0) continue;
+      line[place] = entry;
+      break;
+    }
+  }
+  return line;
+}
+var KEYSTONE_AT = {
+  "bar-start": (row2, cell3) => (row2?.index ?? 0) === 0 && (cell3?.index ?? 0) === 0,
+  "line-start": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.lineStart,
+  "line-end": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.lineEnd
+};
+var PLANE_ROLE = "surface";
+var decorEntryColour = (palette, entry) => palette.get(shadeRole(entry.hue, entry.shade));
+var TEXT_MIN_CONTRAST = 4.5;
+function textOn2(palette, background, drawnAt) {
+  return POLE_TEXT(palette, `${background.hex}|${drawnAt}`, () => {
+    const side = contrastFor(background);
+    const pole = ["background", "foreground"].map((role) => palette.get(role)).reduce(
+      (best, pole2) => contrastRatio(side, pole2) < contrastRatio(side, best) ? pole2 : best
+    );
+    return legibleOn(palette, pole, background, drawnAt);
+  });
+}
+var POLE_TEXT = memoPerPalette();
+function legibleOn(palette, text4, background, drawnAt) {
+  return LEGIBLE2(
+    palette,
+    `${text4.hex}|${background.hex}|${drawnAt}`,
+    () => ensureContrast(text4, background, TEXT_MIN_CONTRAST, drawnAt)
+  );
+}
+var LEGIBLE2 = memoPerPalette();
+var hueOf2 = ({ decor, depth }) => lineageHue(decor.variation.open, depth);
+var bandEntries = (palette, disclosure, drawnAt) => windowAt(palette, hueOf2(disclosure), disclosure.decor.shade, drawnAt).map(
+  (shade) => ({ hue: hueOf2(disclosure), shade })
+);
+function pressedAt(palette, disclosure, drawnAt) {
+  const { decor, depth } = disclosure;
+  const { variation, shade } = decor;
+  const key = [
+    depth,
+    variation.open.join(","),
+    variation.hues.join(","),
+    variation.keystones.length,
+    shade.tones.join(","),
+    shade.activated,
+    drawnAt
+  ].join("|");
+  return PRESSED(palette, key, () => {
+    const hue = hueOf2(disclosure);
+    const dealt = (at) => windowAt(palette, at, shade, drawnAt).map(drawnIn(palette, at, drawnAt));
+    const keystone = variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
+    const besideBand = (up) => [
+      ...dealt(hueOf2(up)),
+      drawnPress(palette, up, drawnAt)
+    ];
+    const besideTrigger = depth === 0 ? [...variation.hues, ...keystone].flatMap(dealt) : besideBand({ decor, depth: depth - 1 });
+    const taken = [...dealt(hue), ...besideTrigger];
+    if (!taken.includes(drawnIn(palette, hue, drawnAt)(shade.activated)))
+      return shade.activated;
+    return widen(palette, hue, [shade.activated], taken, drawnAt) ?? shade.activated;
+  });
+}
+var PRESSED = memoPerPalette();
+var drawnPress = (palette, disclosure, drawnAt) => drawnIn(
+  palette,
+  hueOf2(disclosure),
+  drawnAt
+)(pressedAt(palette, disclosure, drawnAt));
+var nestedIn = (disclosure) => ({
+  ...disclosure,
+  depth: disclosure.depth + 1
+});
+function bandFor(palette, disclosure, drawnAt) {
+  return {
+    state: palette.get(
+      shadeRole(hueOf2(disclosure), pressedAt(palette, disclosure, drawnAt))
+    ),
+    plane: palette.get(PLANE_ROLE),
+    items: bandEntries(palette, disclosure, drawnAt).map(
+      (entry) => decorEntryColour(palette, entry)
+    )
+  };
+}
+function bandItemFor(palette, disclosure, place, drawnAt) {
+  return vocabularySelect(bandFor(palette, disclosure, drawnAt).items, place);
+}
+function bandItem(palette, disclosure, place, drawnAt) {
+  const tint = bandItemFor(palette, disclosure, place, drawnAt);
+  return {
+    tint,
+    text: disclosure.decor.shade.text(
+      palette,
+      hueOf2(disclosure),
+      tint,
+      drawnAt
+    )
+  };
+}
+function sameRegion(a, b) {
+  switch (a.kind) {
+    case "bar":
+      return b.kind === "bar" && sameBarRegion(a, b);
+    case "band":
+      return b.kind === "band" && sameBandRegion(a, b);
+  }
+}
+var sameAddress = sameEach(
+  sameBy({
+    index: is,
+    count: is,
+    distribution: is,
+    axis: is,
+    lineStart: is,
+    lineEnd: is
+  })
+);
+var sameDecor = sameBy({ variation: is, shade: is });
+var sameDisclosure = sameBy({
+  decor: sameDecor,
+  depth: is
+});
+var sameBarRegion = sameBy({
+  kind: is,
+  decor: sameDecor,
+  address: sameAddress
+});
+var sameBandRegion = sameBy({
+  kind: is,
+  band: sameDisclosure,
+  address: sameAddress
+});
+var barRoot = (decor) => ({
+  kind: "bar",
+  decor,
+  address: []
+});
+var descend = (region, step4) => ({
+  ...region,
+  address: [...region.address, step4]
+});
+var bandRoot = (band) => ({
+  kind: "band",
+  band,
+  address: []
+});
+function decorationFor(palette, region, drawnAt) {
+  switch (region.kind) {
+    case "bar": {
+      const { decor, address } = region;
+      const entry = decorEntryFor(palette, decor, address, drawnAt);
+      const tint = decorEntryColour(palette, entry);
+      return {
+        tint,
+        text: decor.shade.text(palette, entry.hue, tint, drawnAt),
+        disclosure: { decor, depth: 0 }
+      };
+    }
+    case "band": {
+      const { band, address } = region;
+      return {
+        ...bandItem(palette, band, rowAndCell(address).cell, drawnAt),
+        disclosure: nestedIn(band)
+      };
+    }
+  }
+}
+
+// src/themes/policy.ts
+var RETIRED_THEMES = /* @__PURE__ */ new Map([
+  ["dark", "textual-dark"],
+  ["light", "textual-light"]
+]);
+function retiredThemeNote(name) {
+  const to = typeof name === "string" ? RETIRED_THEMES.get(name) : void 0;
+  return to === void 0 ? "" : ` \u2014 "${name}" was retired; write "${to}", the same palette`;
+}
+var THEME_FLOOR = "textual-dark";
+function effectiveGlobal(staged, sessionPick, configDefault, floor2, parseSession) {
+  const picked = sessionPick === null ? null : parseSession(sessionPick);
+  return staged ?? picked ?? configDefault ?? floor2;
+}
+function listResolvablePaletteNames() {
+  return listThemePalettes();
+}
+var FOLLOW_BAR = "bar";
+function placementThemeNames() {
+  return [FOLLOW_BAR, ...listResolvablePaletteNames()];
+}
+var placementThemeSet;
+function isPlacementThemeName(name) {
+  placementThemeSet ??= new Set(placementThemeNames());
+  return placementThemeSet.has(name);
+}
+function effectiveMemberName(stagedName, sessionPick, configDefault, floor2, declared) {
+  const member = (raw) => Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
+  return effectiveGlobal(
+    stagedName === void 0 ? null : member(stagedName),
+    sessionPick,
+    member(configDefault ?? floor2),
+    floor2,
+    member
+  );
+}
+var EXPRESSION_SLOTS = ["style", "palette", "effect"];
+function isExpression(globalsValue) {
+  return globalsValue !== void 0 && globalsValue.includes("{{");
+}
+function resolveSelection(stagedName, sessionPick, globalsValue, floor2, named3) {
+  const configRung = isExpression(globalsValue) ? { kind: "expression", source: globalsValue } : named3(globalsValue ?? floor2.name);
+  return effectiveGlobal(
+    stagedName === void 0 ? null : named3(stagedName),
+    sessionPick,
+    configRung,
+    floor2,
+    named3
+  );
+}
+var STYLE_FLOOR = "none";
+function namedStyle(name, declaredStyles) {
+  const value = declaredStyles[name];
+  return value === void 0 ? null : { kind: "decided", name, value };
+}
+function decideStyleName(name, declaredStyles) {
+  return namedStyle(name, declaredStyles) ?? namedStyle(STYLE_FLOOR, declaredStyles) ?? {
+    kind: "decided",
+    name: STYLE_FLOOR,
+    value: IDENTITY
+  };
+}
+function resolveStyleSelection(stagedStyle, sessionStyle, globalsStyle, declaredStyles) {
+  return resolveSelection(
+    stagedStyle,
+    sessionStyle,
+    globalsStyle,
+    decideStyleName(STYLE_FLOOR, declaredStyles),
+    (raw) => namedStyle(raw, declaredStyles)
+  );
+}
+var EFFECT_FLOOR = "none";
+var SLOT_FLOORS = {
+  style: STYLE_FLOOR,
+  palette: THEME_FLOOR,
+  effect: EFFECT_FLOOR
+};
+function ruleFloorMessage(where, slot, why2) {
+  return `${where} rendered "${SLOT_FLOORS[slot]}": ${why2}`;
+}
+var EFFECT_NAMES = Object.freeze([
+  EFFECT_FLOOR,
+  ...Object.keys(EFFECT_CATALOGUE.loops)
+]);
+var ANIMATION_SPEEDS = Object.freeze({
+  "1x": 1,
+  "5x": 5,
+  "10x": 10,
+  "20x": 20
+});
+var ANIMATION_SPEED_NAMES = Object.keys(
+  ANIMATION_SPEEDS
+);
+var PLACEMENT_EFFECTS = Object.freeze([
+  FOLLOW_BAR,
+  ...EFFECT_NAMES
+]);
+function namedEffect(name) {
+  const value = EFFECT_NAMES.find((member) => member === name);
+  return value === void 0 ? null : { kind: "decided", name, value };
+}
+function decideEffectName(name) {
+  return namedEffect(name) ?? {
+    kind: "decided",
+    name: EFFECT_FLOOR,
+    value: EFFECT_FLOOR
+  };
+}
+function resolveEffectSelection(stagedEffect, sessionEffect, globalsEffect) {
+  return resolveSelection(
+    stagedEffect,
+    sessionEffect,
+    globalsEffect,
+    decideEffectName(EFFECT_FLOOR),
+    namedEffect
+  );
+}
+var ENDCAPS_SHAPES = Object.freeze(
+  Object.keys(JOINERS2)
+);
+var STYLE_ERA_ENDCAPS = [
+  "powerline",
+  "capsule",
+  "plain"
+];
+function isStyleEraEndcaps(value) {
+  return STYLE_ERA_ENDCAPS.includes(value);
+}
+var COLOR_COMPATIBILITIES = [
+  "truecolor",
+  "256",
+  "ansi",
+  "none"
+];
+function isColorCompatibility(value) {
+  return COLOR_COMPATIBILITIES.includes(value);
+}
+function drawnDepth(compatibility) {
+  return resolveColorSystem(compatibility) ?? ColorDepth.DEFAULT;
+}
+var VARIATION_NAMES = Object.keys(
+  VARIATIONS
+);
+var SHADE_NAMES = Object.keys(SHADES);
+var BOOLEAN_TRUE = "true";
+var BOOLEAN_FALSE = "false";
+var BOOLEAN_MEMBERS = [BOOLEAN_TRUE, BOOLEAN_FALSE];
+var PADDING_RANGE = { min: 0, max: 16 };
+function parseSessionBoolean(raw) {
+  return raw === BOOLEAN_TRUE ? true : raw === BOOLEAN_FALSE ? false : null;
+}
+function parseSessionInt(raw, range) {
+  const value = Number(raw);
+  return Number.isInteger(value) && String(value) === raw && value >= range.min && value <= range.max ? value : null;
+}
+
+// src/config/menu-timeout.ts
+init_globals();
+var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i) => ({ lit: i % 2 === 0, seconds }));
+var CLOSING_FLASH = [
+  ...flashes(3, 1),
+  ...flashes(3, 0.25)
+];
+var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
+  (sum2, { seconds }) => sum2 + seconds,
+  0
+);
+var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
+var MENU_TIMEOUT_DEFAULT = 120;
+var closesAt = (since, timeoutS) => since + timeoutS;
+var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
+
+// src/render/effect.ts
+var STILL3 = { kind: "still" };
+var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
+var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
+function isMoving(part) {
+  return part.name !== EFFECT_FLOOR;
+}
+function together(parts) {
+  return (drawn) => Animation.map(
+    Animation.all(
+      parts.map(
+        ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
+      )
+    ),
+    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
+  );
+}
+var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
+function fromGround(effect, ground) {
+  const terminal = new TerminalTheme(
+    ground,
+    ASSUMED_TERMINAL.foregroundColor,
+    ASSUMED_TERMINAL.ansiColors,
+    ASSUMED_TERMINAL.palette
+  );
+  return (drawn) => effect({ ...drawn, theme: terminal });
+}
+function paintedOn(effect, owners) {
+  return (row2) => confined(() => effect(row2), ...owners)(row2);
+}
+function noiseOffset(text4) {
+  let hash2 = 2166136261;
+  for (let i = 0; i < text4.length; i++) {
+    hash2 ^= text4.charCodeAt(i);
+    hash2 = Math.imul(hash2, 16777619) >>> 0;
+  }
+  return hash2 / 4294967296;
+}
+var NOISE_DEPTH = 4096;
+function closingFlash(fill, text4, begins) {
+  const lit = (look, { terminal }) => ({
+    ...look,
+    bg: terminal.bg ? look.bg : fill,
+    fg: terminal.fg ? look.fg : terminal.bg ? fill : text4
+  });
+  const dark = (colors) => colors;
+  const holds2 = CLOSING_FLASH.reduceRight(
+    (after, { lit: on2, seconds }) => Animation.sequence(Animation.constant(on2 ? lit : dark), seconds, after),
+    Animation.constant(dark)
+  );
+  const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
+  return () => idle;
+}
+var SessionEffects = class {
+  constructor(key) {
+    this.key = key;
+  }
+  key;
+  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
+  // changed to its current value: the effect's own t = 0 is a recorded fact,
+  // never inferred from when renders happened to arrive.
+  inForce = null;
+  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
+  // its last drawn frame left it — where the clock stood and the speed it ran
+  // at from there: the anchor every later reading is measured from, so a
+  // change of speed changes the clock's slope from the frame it lands in and
+  // never its reading, so no loop jumps phase. The host clock itself before
+  // the session's first frame.
+  anchor = Timeline.play(0);
+  // The same fact for each placement wearing its own effect, by placement id,
+  // kept for the placements the latest render drew: one that stopped being
+  // drawn starts its effect again at t = 0 when it is drawn again, as the
+  // effect comes into force for it again.
+  placements = /* @__PURE__ */ new Map();
+  // The effects made for the rows the latest render drew, by row and scope (the
+  // bar's, or one placement's), with the name each was made for. Each render
+  // starts an empty map and keeps only what it draws, so a row that stopped
+  // being drawn (a menu closed) takes its effects and their settled shares with
+  // it.
+  made = /* @__PURE__ */ new Map();
+  // The transitions in flight at the last frame drawn, by placement — what a
+  // placement's appearing and leaving go on from when the next frame is drawn
+  // from the same source as the view's record of it (`FrameRecord`) — or
+  // null: no frame drawn, or the last drawn with transitions off, which
+  // nothing compares against.
+  passages = null;
+  // [LAW:nothing-unseen] What the latest render wore, for the render's event.
+  frame = {
+    effect: EFFECT_FLOOR,
+    t: 0,
+    speed: 1,
+    made: 0,
+    reused: 0,
+    own: [],
+    basis: "off",
+    revision: 0,
+    fades: [],
+    leaves: []
+  };
+  // The latest render's effects: the bar's, at what t, how many of its rows'
+  // effects were made fresh rather than reused — one made every frame pays
+  // rich-js's share settling every frame — and each placement's own.
+  lastFrame() {
+    return this.frame;
+  }
+  // The effects this session holds: the ones its latest render drew, and the
+  // transitions still in flight.
+  get heldCount() {
+    const passing = this.passages?.size ?? 0;
+    return [...this.made.values()].reduce((n, row2) => n + row2.size, passing);
+  }
+  /**
+   * The session's animation clock read at the wall instant `at`, running at
+   * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
+   * the last drawn frame passed at the speed in force then; before the first
+   * frame the timeline is the host clock itself, so a session that has only
+   * ever run at 1x reads the wall instant at every frame. Reads only: the frame
+   * that draws keeps it as the anchor (`drawn`).
+   */
+  clockAt(at, speed2) {
+    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed2) };
+  }
+  /**
+   * The motion of each row of a render drawn at `clock` whose bar wears `name`,
+   * given the row's strip items. Records an effect coming into force — the
+   * bar's, or a placement's — when it differs from the last render's, so every
+   * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
+   * from off the row, wheel at the theme's own hues. Records every placement
+   * the render draws, fades in each one the last frame did not, and dissolves
+   * out each one the last frame drew and this one does not. All of it is kept
+   * once the frame is `drawn`.
+   */
+  motion(name, clock, given2, flash = null) {
+    const at = animationAt(clock);
+    const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
+    const inForce = this.inForce?.name === name ? this.inForce : { name, since: at };
+    const bar = {
+      scope: BAR_SCOPE,
+      name,
+      t: at - inForce.since
+    };
+    const knownPlacements = this.placements;
+    const placements = /* @__PURE__ */ new Map();
+    const known = this.made;
+    const made = /* @__PURE__ */ new Map();
+    const own2 = [];
+    const { last: last2 } = given2;
+    const inFlight = this.passages;
+    const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
+    const before = basis === "compared" ? (id2) => {
+      const record2 = last2.placements.get(id2);
+      return record2?.kind === "drew" ? {
+        drawing: record2.drawing,
+        passage: inFlight.get(id2) ?? null
+      } : void 0;
+    } : null;
+    const reachedIds = /* @__PURE__ */ new Set();
+    const passages = /* @__PURE__ */ new Map();
+    const fading = [];
+    const leaving = [];
+    const frame2 = {
+      effect: name,
+      t: bar.t,
+      speed: clock.timeline.rate,
+      made: 0,
+      reused: 0,
+      own: own2,
+      basis,
+      revision: given2.source.revision,
+      fades: fading,
+      leaves: leaving
+    };
+    const begin = (transition2, id2, { ground }) => {
+      const begun = EFFECT_CATALOGUE.transitions[transition2]({
+        z: noiseOffset(`${this.key}@${id2}`) * NOISE_DEPTH
+      });
+      return {
+        name: transition2,
+        since: at,
+        done: (t2) => begun.done(t2),
+        effect: fromGround(begun.effect, ground)
+      };
+    };
+    const over2 = ({ since, done: done2 }) => done2(at - since);
+    const shown = (id2, drawing2, last3) => ({
+      drawing: drawing2,
+      passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over2(last3.passage) ? last3.passage : null
+    });
+    const gone = (id2, last3) => {
+      if (last3 === void 0 || last3.drawing.opened || last3.drawing.own.length === 0)
+        return void 0;
+      if (last3.passage?.name === "dissolve")
+        return over2(last3.passage) ? void 0 : last3;
+      const held = { ...last3.drawing, own: last3.drawing.own.map(given2.hold) };
+      return { drawing: held, passage: begin("dissolve", id2, held) };
+    };
+    const reached = (id2, lines2) => {
+      if (reachedIds.has(id2))
+        throw new Error(`placement "${id2}" was reached twice in one frame`);
+      reachedIds.add(id2);
+      const last3 = before?.(id2);
+      const { drawing: drawing2, deeper } = given2.returned(id2, lines2);
+      const now2 = drawing2 === null ? gone(id2, last3) : shown(id2, drawing2, last3);
+      if (now2 === void 0) return lines2;
+      if (now2.passage !== null) {
+        passages.set(id2, now2.passage);
+        (now2.passage.name === "fade" ? fading : leaving).push({
+          placement: id2,
+          t: at - now2.passage.since
+        });
+      }
+      return drawing2 === null ? [...now2.drawing.own, ...deeper] : lines2;
+    };
+    const ownPart = (placement, name2) => {
+      const last3 = placements.get(placement) ?? knownPlacements.get(placement);
+      const since = last3?.name === name2 ? last3 : { name: name2, since: at };
+      const t2 = at - since.since;
+      if (!placements.has(placement)) {
+        placements.set(placement, since);
+        own2.push({ placement, effect: name2, t: t2 });
+      }
+      return { scope: placement, name: name2, t: t2 };
+    };
+    const effectOf = (rowKey, part) => {
+      const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
+      made.set(rowKey, row3);
+      const current2 = row3.get(part.scope);
+      if (current2 !== void 0) return current2.effect;
+      const last3 = known.get(rowKey)?.get(part.scope);
+      const reuse = last3?.name === part.name;
+      const z = noiseOffset(
+        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`
+      );
+      const effect = reuse ? last3.effect : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
+      frame2[reuse ? "reused" : "made"]++;
+      row3.set(part.scope, { name: part.name, effect });
+      return effect;
+    };
+    const byScope = (items) => {
+      const parts = /* @__PURE__ */ new Map();
+      for (const { owner, placement } of items) {
+        const part = placement.effect === FOLLOW_BAR ? bar : ownPart(placement.id, placement.effect);
+        const seen2 = parts.get(part.scope);
+        if (seen2 === void 0)
+          parts.set(part.scope, { ...part, owners: [owner] });
+        else seen2.owners.push(owner);
+      }
+      return [...parts.values()];
+    };
+    const passagesOf = (items) => {
+      const byPlacement = /* @__PURE__ */ new Map();
+      for (const { owner, placement } of items) {
+        const mine = byPlacement.get(placement.id);
+        if (mine === void 0) byPlacement.set(placement.id, [owner]);
+        else mine.push(owner);
+      }
+      return [...byPlacement].flatMap(([id2, owners]) => {
+        const passage = passages.get(id2) ?? null;
+        return passage === null ? [] : [
+          {
+            timeline: onSession(at - passage.since),
+            effect: confined(passage.effect, ...owners)
+          }
+        ];
+      });
+    };
+    const flashPart = flash === null ? [] : [
+      {
+        timeline: Timeline.play(flash.idleSince),
+        effect: closingFlash(
+          flash.fill,
+          flash.text,
+          flashBegins(flash.timeoutS)
+        )
+      }
+    ];
+    const flashing = (kind) => kind === "menu" ? flashPart : [];
+    const row2 = (rowName, kind, items) => {
+      const parts = items.some(
+        (i) => i.placement.effect !== FOLLOW_BAR
+      ) ? byScope(items) : [{ ...bar, owners: void 0 }];
+      const moving = parts.filter(isMoving);
+      const passing = passagesOf(items);
+      const flashed = flashing(kind);
+      if (moving.length === 0 && passing.length === 0 && flashed.length === 0)
+        return STILL3;
+      const rowKey = `${this.key}#${rowName}`;
+      return {
+        kind: "moving",
+        time: clock.wall,
+        wrap: (strip) => new Effected(
+          strip,
+          together([
+            ...moving.map((part) => {
+              const effect = effectOf(rowKey, part);
+              return {
+                timeline: onSession(part.t),
+                effect: part.owners === void 0 ? effect : paintedOn(effect, part.owners)
+              };
+            }),
+            ...passing,
+            // Last, so a lit hold is the flash's over whatever a fade
+            // veils: the menu is about to close.
+            ...flashed
+          ]),
+          { key: rowKey, theme: ASSUMED_TERMINAL }
+        )
+      };
+    };
+    return {
+      // [LAW:dataflow-not-control-flow] With transitions off nothing is
+      // compared or kept, so every placement draws exactly what it returned.
+      placed: basis === "off" ? (_id, lines2) => lines2 : reached,
+      row: row2,
+      drawn: () => {
+        this.anchor = clock.timeline;
+        this.inForce = inForce;
+        this.placements = placements;
+        this.made = made;
+        this.passages = basis === "off" ? null : passages;
+        this.frame = frame2;
+      }
+    };
+  }
+};
+var MAX_SESSIONS = 256;
+var EffectSessions = class {
+  constructor(maxSessions = MAX_SESSIONS) {
+    this.maxSessions = maxSessions;
+  }
+  maxSessions;
+  sessions = /* @__PURE__ */ new Map();
+  of(sessionId2) {
+    const known = this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
+    this.sessions.delete(sessionId2);
+    this.sessions.set(sessionId2, known);
+    for (const oldest of this.sessions.keys()) {
+      if (this.sessions.size <= this.maxSessions) break;
+      this.sessions.delete(oldest);
+    }
+    return known;
+  }
+  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
+  // effect made for a row keeps rich-js's settled shares, so their count is the
+  // size that grows.
+  getStats() {
+    let effects = 0;
+    for (const session of this.sessions.values()) effects += session.heldCount;
+    return { sessions: this.sessions.size, effects };
+  }
+};
+
+// src/render/strip.ts
+var UNBOUNDED_DRAW_WIDTH = 80;
+var ROW_HOST = {};
+function draw(renderable, options) {
+  const destination = resolveDestination(options.colorSystem);
+  const { time } = options;
+  let told = Infinity;
+  const segments = [
+    ...render(renderable, {
+      maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
+      isTerminal: false,
+      asciiOnly: false,
+      theme: RENDER_THEME,
+      colorSystem: destination.colorSystem,
+      ...time === void 0 ? {} : { frame: { time, host: ROW_HOST } },
+      // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
+      // as no style at all; a name the theme lacks is a broken config, so it
+      // throws here exactly as the cell splitter throws on it.
+      onStyleError: (error) => {
+        throw error;
+      },
+      onHold: ({ nextChange }) => {
+        told = Math.min(told, nextChange);
+      }
+    })
+  ];
+  return {
+    lines: runLines(segments, destination.colorSystem),
+    nextChange: Math.min(Segment.nextChange(segments), told)
+  };
+}
+var DEFAULT_TERMINAL_WIDTH = 120;
+var separatorJoiners = /* @__PURE__ */ new Map();
+function plainWith(separator) {
+  const known = separatorJoiners.get(separator);
+  if (known !== void 0) return known;
+  const withGlyph = (form) => {
+    const seam2 = form.seam.map(
+      (cell3) => "cap" in cell3 ? cell3 : { ...cell3, glyph: separator }
+    );
+    return { seam: seam2 };
+  };
+  const { seam, caps } = JOINERS2.plain;
+  const joiner = new CellJoiner(
+    {
+      glyph: withGlyph(seam.glyph),
+      ascii: seam.ascii
+    },
+    caps
+  );
+  separatorJoiners.set(separator, joiner);
+  return joiner;
+}
+function pickJoiner(endcaps, separator) {
+  return endcaps === "plain" && separator !== void 0 ? plainWith(separator) : JOINERS2[endcaps];
+}
+var geometryMemo = /* @__PURE__ */ new Map();
+function stripGeometry(options) {
+  const key = JSON.stringify([options.endcaps, options.separator ?? null]);
+  const known = geometryMemo.get(key);
+  if (known !== void 0) return known;
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const cell3 = (bgcolor) => new RichText("x", {
+    end: "",
+    overflow: "ignore",
+    style: new Style({ bgcolor })
+  });
+  const width = (cells) => {
+    const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+    return new RichText(plainOf2(lines2.flat())).cellLength;
+  };
+  const one = width([cell3("#101010")]);
+  const geometry = {
+    chrome: one - 1,
+    seam: width([cell3("#101010"), cell3("#202020")]) - one - 1
+  };
+  geometryMemo.set(key, geometry);
+  return geometry;
+}
+function stripChromeCols(options) {
+  return stripGeometry(options).chrome;
+}
+function stripSeamCols(options) {
+  return stripGeometry(options).seam;
+}
+var PRIVATE_USE = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
+function privateGlyphsIn(text4) {
+  return [...new Set(text4.match(PRIVATE_USE) ?? [])].join("");
+}
+function stripPrivateGlyphs(options) {
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
+  const cells = [cell3("#101010"), cell3("#202020")];
+  const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+  return privateGlyphsIn(plainOf2(lines2.flat()));
+}
+var WIDEST_GLYPH_COLS = 2;
+function lineWidth(options) {
+  return options.wrap ? options.width : Infinity;
+}
+function wrappedLines(plain, width) {
+  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
+  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf2);
+}
+function drawStripCells(cells, options, motion = STILL3) {
+  if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
+  const joiner = pickJoiner(options.endcaps, options.separator);
+  const flex = Number.isFinite(lineWidth(options));
+  const drawn = {
+    colorSystem: options.colorCompatibility,
+    ...flex ? { width: options.width } : {}
+  };
+  const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
+  const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
+  if (row2.lines.length === 0) {
+    throw new Error("drawStripCells: rich-js strip drew no line");
+  }
+  return row2;
+}
+function renderStripCells(cells, options) {
+  return encodeAnsi(
+    drawStripCells(cells, options).lines,
+    options.colorCompatibility
+  );
+}
+
+// src/daemon/foundations/memory-limit.ts
+init_globals();
+var BYTES_PER_MB = 1024 * 1024;
+var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
+function laterIdentity(a, b) {
+  return a > b;
+}
+var NEAR_LIMIT = 0.75;
+function approachingLimit(bytes, limit) {
+  return bytes > limit * NEAR_LIMIT;
+}
+function chargeWords(charge) {
+  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+}
+function measureOf(charge) {
+  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+}
+var BREACH_ARTIFACTS = {
+  memoryReport: { prefix: "memory-", suffix: ".txt" },
+  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
+  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
+};
+
+// src/doctor/terminal.ts
+init_globals();
+var TERMINALS = {
+  kitty: {
+    label: "kitty",
+    xtversion: "kitty",
+    program: null,
+    programVersion: true,
+    term: "xterm-kitty",
+    links: { since: "0.19.0" },
+    glyphs: { kind: "bundled", since: "0.36.0" }
+  },
+  wezterm: {
+    label: "WezTerm",
+    xtversion: "WezTerm",
+    program: "WezTerm",
+    programVersion: true,
+    term: "wezterm",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: "20230712" }
+  },
+  ghostty: {
+    label: "Ghostty",
+    xtversion: "ghostty",
+    program: "ghostty",
+    programVersion: true,
+    term: "xterm-ghostty",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: null }
+  },
+  iterm2: {
+    label: "iTerm2",
+    xtversion: "iTerm2",
+    program: "iTerm.app",
+    programVersion: true,
+    term: null,
+    links: { since: "3.1" },
+    glyphs: { kind: "configured" }
+  },
+  alacritty: {
+    label: "Alacritty",
+    xtversion: "alacritty",
+    program: null,
+    programVersion: true,
+    term: "alacritty",
+    links: { since: "0.11.0" },
+    glyphs: { kind: "configured" }
+  },
+  "apple-terminal": {
+    label: "Terminal",
+    xtversion: null,
+    program: "Apple_Terminal",
+    programVersion: true,
+    term: null,
+    links: null,
+    glyphs: { kind: "unread" }
+  },
+  vscode: {
+    label: "VS Code",
+    xtversion: null,
+    program: "vscode",
+    programVersion: false,
+    term: null,
+    links: { since: "1.72" },
+    glyphs: { kind: "unread" }
+  }
+};
+var row = (name) => TERMINALS[name];
+function isBundling(name) {
+  return row(name).glyphs.kind === "bundled";
+}
+function isConfigured(name) {
+  return row(name).glyphs.kind === "configured";
+}
+var terminalLabel = (name) => row(name).label;
+var ITERM_POWERLINE = [
+  { since: "3.5.0", from: 57504, to: 57507 },
+  { since: "3.5.0", from: 57520, to: 57554 },
+  { since: "3.5.0", from: 57556, to: 57556 },
+  { since: "3.5.6", from: 57558, to: 57559 }
+];
+function itermDrawsItself(version, glyph) {
+  const point = glyph.codePointAt(0);
+  return ITERM_POWERLINE.some(
+    ({ since, from, to }) => from <= point && point <= to && version !== null && releasedSince(version, since) === true
+  );
+}
+var NAMES = Object.keys(TERMINALS);
+function release2(version) {
+  const lead = /^\d+(?:\.\d+)*/.exec(version);
+  return lead === null ? null : lead[0].split(".").map(Number);
+}
+function releasedSince(version, since) {
+  const have = release2(version);
+  const need2 = release2(since);
+  if (have === null) return null;
+  for (let i = 0; i < Math.max(have.length, need2.length); i++) {
+    const a = have[i] ?? 0;
+    const b = need2[i] ?? 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
+function fromXtversion(termtype) {
+  for (const name of NAMES) {
+    const prefix = row(name).xtversion;
+    if (prefix !== null && termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
+      const rest2 = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
+      const version = /^[^\s)]+/.exec(rest2)?.[0] ?? null;
+      return { name, version };
+    }
+  }
+  return null;
+}
+function fromTerm(term) {
+  const name = NAMES.find((n) => row(n).term === term);
+  return name === void 0 ? null : { name, version: null };
+}
+function identifyInTmux(client) {
+  const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
+  if (terminal !== null) return { kind: "known", terminal };
+  const called = /^[^\s(]*/.exec(client.termtype)[0];
+  return called === "" ? { kind: "unnamed", term: client.termname } : { kind: "unknown", called };
+}
+function identifyFromEnv(env2) {
+  const program = env2.TERM_PROGRAM;
+  const byProgram = NAMES.find((n) => row(n).program === program);
+  const terminal = byProgram === void 0 ? fromTerm(env2.TERM) : {
+    name: byProgram,
+    version: row(byProgram).programVersion ? env2.TERM_PROGRAM_VERSION ?? null : null
+  };
+  if (terminal !== null) return { kind: "known", terminal };
+  return program === void 0 || program === "tmux" ? { kind: "unnamed", term: env2.TERM ?? "" } : { kind: "unknown", called: program };
+}
+function sightingOf(identified) {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || null;
+  }
+}
+function identifiedAs(identified) {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || "this terminal";
+  }
+}
+function linkSupport({ name, version }) {
+  const links2 = row(name).links;
+  if (links2 === null) return { kind: "none" };
+  if (links2.since === null) return { kind: "draws" };
+  if (version === null) return { kind: "unsaid", since: links2.since };
+  const drawn = releasedSince(version, links2.since);
+  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
+}
+var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
+
+// src/doctor/checks.ts
+function statusLineOf(sources) {
+  if (sources.kind === "failed") {
+    return { kind: "unread", reason: sources.reason };
+  }
+  const lines2 = sources.value.flatMap(
+    ({ scope, path: path43, settings }) => "statusLine" in settings ? [{ from: { scope, path: path43 }, line: settings.statusLine }] : []
+  );
+  const top = lines2[0];
+  if (top === void 0) {
+    return { kind: "absent", read: sources.value.map((s) => s.path) };
+  }
+  if (!isJsonObject(top.line)) {
+    return { kind: "not-an-object", value: top.line, from: top.from };
+  }
+  for (const { from, line } of lines2) {
+    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
+    if ("refreshInterval" in line) {
+      return { kind: "present", refreshInterval: line.refreshInterval, from };
+    }
+  }
+  return { kind: "present", refreshInterval: void 0, from: top.from };
+}
+function envVarOf(sources, name) {
+  if (sources.kind === "failed") return sources;
+  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
+  return {
+    kind: "ok",
+    value: top === void 0 ? { kind: "unset" } : {
+      kind: "set",
+      value: top.env[name],
+      from: { scope: top.scope, path: top.path }
+    }
+  };
+}
+var UNWRITTEN_SCOPES = [
+  "managed",
+  "project"
+];
+var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
+var ENV_FIX_FILE = {
+  managed: () => null,
+  "project-local": (path43) => ({ scope: "project-local", path: path43 }),
+  project: (_, at) => ({
+    scope: "project-local",
+    path: projectLocalSettingsFile(at.projectDir)
+  }),
+  user: (path43) => ({ scope: "user", path: path43 })
+};
+var GLYPH_MARKS = ["drawn", "boxes"];
+var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
+var whoseWidth = (of) => of.kind === "session" ? `session ${of.sessionId}'s statusline client` : "this command's terminal";
+function describeFix(fix) {
+  switch (fix.kind) {
+    case "claude-settings":
+      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
+    case "post-mortems-read":
+      return `${fix.kind} through=${fix.through}`;
+  }
+}
+function problemsVerdict(problems) {
+  const [reason, ...more] = problems;
+  return reason === void 0 ? { ok: true } : { ok: false, reason, more };
+}
+var TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
+function ofTmuxClient(tmux3, decide) {
+  switch (tmux3.kind) {
+    case "unreported":
+      return {
+        ok: false,
+        reason: "the client reported no tmux facts \u2014 re-run `cc-candybar install` to stage a current client"
+      };
+    case "outside":
+      return { ok: true };
+    case "inside":
+      if (tmux3.client.kind === "failed") {
+        return {
+          ok: false,
+          reason: `tmux could not be asked: ${tmux3.client.reason}`
+        };
+      }
+      return tmux3.client.value === null ? { ok: true } : decide(tmux3.client.value, tmux3.hint);
+  }
+}
+var tmuxTruecolor = {
+  name: "tmuxTruecolor",
+  label: "tmux truecolor",
+  takesMark: false,
+  probe: ({ tmux: tmux3, claudeSettings: { origin } }) => ofTmuxClient(tmux3, (client, hint) => {
+    if (!client.features.includes("RGB")) return { ok: true };
+    if (hint.truecolor !== null) return { ok: true };
+    const staged = envVarOf(origin.sources, TMUX_TRUECOLOR_VAR);
+    if (staged.kind === "failed") return { ok: false, reason: staged.reason };
+    const told = staged.value;
+    if (told.kind === "set" && typeof told.value === "string" && told.value !== "") {
+      return {
+        ok: false,
+        reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} \u2014 restart Claude Code to apply`
+      };
+    }
+    const reason = "Claude Code renders the bar in 256 colours inside tmux";
+    const fixInto = (file2) => ({
+      ok: false,
+      reason,
+      fix: {
+        kind: "claude-settings",
+        file: file2,
+        path: ["env", TMUX_TRUECOLOR_VAR],
+        value: "1"
+      }
+    });
+    if (told.kind === "unset") {
+      return fixInto({ scope: "user", path: origin.at.userFile });
+    }
+    const file = ENV_FIX_FILE[told.from.scope](told.from.path, origin.at);
+    return file === null ? {
+      ok: false,
+      reason: `${reason} \u2014 the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`
+    } : fixInto(file);
+  })
+};
+var utf82 = {
+  name: "utf8",
+  label: "UTF-8",
+  takesMark: false,
+  probe: ({ tmux: tmux3 }) => ofTmuxClient(
+    tmux3,
+    (client) => client.utf8 ? { ok: true } : {
+      ok: false,
+      reason: "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` \u2014 attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux"
+    }
+  )
+};
+var termWidth = {
+  name: "termWidth",
+  label: "terminal width",
+  takesMark: false,
+  probe: ({ width }) => width.kind === "failed" ? { ok: false, reason: width.reason } : width.value.columns !== null ? {
+    ok: true,
+    note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`
+  } : {
+    ok: false,
+    reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask \u2014 or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`
+  }
+};
+var UNUSED = {
+  variable: "is never read",
+  action: "is never clicked",
+  helper: "is never called",
+  segment: "is in no preset"
+};
+var NAMED_BY = {
+  argument: "command argument",
+  environment: `$${CONFIG_ENV}`,
+  pick: "load-config pick",
+  unknown: "source unknown"
+};
+function judgedConfig({ target, layers }) {
+  if (target.source !== "search") {
+    return `${target.path} (${NAMED_BY[target.source]})`;
+  }
+  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
+}
+function configProblems(config2) {
+  switch (config2.kind) {
+    case "failed": {
+      const problems = [
+        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
+        ...config2.warnings
+      ];
+      return problems.length === 0 ? ["the config failed to load"] : problems;
+    }
+    case "loaded":
+      return [
+        ...config2.warnings,
+        ...config2.unused.map(
+          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
+        )
+      ];
+  }
+}
+var config = {
+  name: "config",
+  label: "config",
+  takesMark: false,
+  probe: ({ config: config2 }) => {
+    const judged = judgedConfig(config2);
+    const verdict = problemsVerdict(configProblems(config2));
+    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
+  }
+};
+var REINSTALL = "re-run `cc-candybar install`";
+function handlerAppProblems(opener) {
+  if (opener.kind === "failed") {
+    return [
+      `Launch Services could not be asked which app opens cc-candybar:// \u2014 ${opener.reason}`
+    ];
+  }
+  if (opener.value === null) {
+    return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
+  }
+  const { app, forwarder } = opener.value;
+  return forwarder ? [] : [
+    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
+  ];
+}
+var urlHandler = {
+  name: "urlHandler",
+  label: "URL handler",
+  takesMark: false,
+  probe: ({ urlHandler: urlHandler2 }) => {
+    switch (urlHandler2.kind) {
+      case "unsupported":
+        return { ok: true };
+      case "unprobed":
+        return { ok: false, reason: urlHandler2.reason };
+      case "arrived":
+        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
+        return {
+          ok: false,
+          // What is known: a click request brought it, which is what the
+          // retired applet runs — and a hand-run `cc-candybar url-handle`,
+          // or the browser page. Which app Launch Services opens the scheme
+          // with is the opener's row to say (handlerAppProblems).
+          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
+        };
+      case "lost":
+        return problemsVerdict([
+          ...handlerAppProblems(urlHandler2.opener),
+          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
+        ]);
+    }
+  }
+};
+var RECENT_CLIENT_S = 300;
+function clientStanding({ bundle, checkout }, client) {
+  return {
+    bundle: client.bundle.kind === "failed" ? { kind: "unresolved", reason: client.bundle.reason } : client.bundle.value === bundle ? { kind: "same" } : { kind: "other", path: client.bundle.value },
+    source: client.client !== "native" || checkout === null ? { kind: "uncompared" } : checkout.rustSource.kind === "failed" ? {
+      kind: "unreadable",
+      root: checkout.root,
+      reason: checkout.rustSource.reason
+    } : client.source === null ? { kind: "unstamped" } : client.source === checkout.rustSource.value ? { kind: "same" } : { kind: "other", root: checkout.root }
+  };
+}
+function remedy(daemon3, client) {
+  if (client === "frames")
+    return `run \`node ${daemon3.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
+  return daemon3.checkout === null ? REINSTALL : `run \`just install-rust\` and point the statusLine command at ${daemon3.checkout.root}/bin/cc-candybar-native`;
+}
+function installProblems(daemon3, nativeShipped, client) {
+  const { checkout } = daemon3;
+  if (client.kind === "unreported") {
+    return [
+      `the bar is drawn by a statusline client too old to say what it is \u2014 ${remedy(daemon3, "native")}`
+    ];
+  }
+  const { bundle, source } = clientStanding(daemon3, client);
+  switch (bundle.kind) {
+    case "unresolved":
+      return [
+        `the statusline client's bundle cannot be resolved: ${bundle.reason}`
+      ];
+    case "other":
+      return [
+        `the statusline client runs ${bundle.path}, not the daemon's ${daemon3.bundle} \u2014 ${remedy(daemon3, client.client)}`
+      ];
+    case "same":
+      break;
+  }
+  if (client.client === "node" && (nativeShipped || checkout !== null)) {
+    return [
+      `the bar is drawn by the Node fallback, which starts node on every render \u2014 ${remedy(daemon3, "native")}`
+    ];
+  }
+  switch (source.kind) {
+    case "uncompared":
+    case "same":
+      return [];
+    case "unreadable":
+      return [`${source.root}/rust-client could not be read: ${source.reason}`];
+    case "unstamped":
+      return [
+        "the native client carries no source stamp, so which source it was built from is unknown \u2014 run `just install-rust`"
+      ];
+    case "other":
+      return [
+        `the native client was built from other source than ${source.root}/rust-client holds \u2014 run \`just install-rust\``
+      ];
+  }
+}
+var noRenderOf = (sighted) => {
+  const lost = `restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions`;
+  return sighted.kind === "clicked" ? `this daemon holds no render of this bar (it ${lost})` : `this daemon holds no render of session ${sighted.sessionId}'s bar (its statusLine does not run cc-candybar \u2014 a \`claude -p\` session draws none \u2014 or the daemon ${lost}; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently)`;
+};
+var install = {
+  name: "install",
+  label: "install",
+  takesMark: false,
+  probe: ({ install: install2, sighted }) => {
+    if (install2.kind === "failed") {
+      return {
+        ok: false,
+        reason: `the daemon could not be asked which clients draw the bar: ${install2.reason}`
+      };
+    }
+    const { daemon: daemon3, nativeShipped, clients } = install2.value;
+    if (clients.length === 0) {
+      return {
+        ok: false,
+        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which client draws it is unknown \u2014 run the doctor again once the bar has redrawn` : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes \u2014 run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`
+      };
+    }
+    return problemsVerdict([
+      ...new Set(
+        clients.flatMap((c) => installProblems(daemon3, nativeShipped, c))
+      )
+    ]);
+  }
+};
+function unreadPostMortems({ postMortems }, read2) {
+  return postMortems.kind === "ok" && read2.kind === "ok" ? postMortems.value.filter(
+    (m) => read2.value.through === null || laterIdentity(m.identity, read2.value.through)
+  ) : [];
+}
+function otherDaemons(serving, processes) {
+  return serving.kind === "failed" ? processes : processes.filter((p2) => p2.pid !== serving.value.pid);
+}
+var daemon = {
+  name: "daemon",
+  label: "daemon",
+  takesMark: false,
+  probe: ({ daemon: { serving, processes, read: read2 } }) => {
+    const unreadable = processes.kind === "failed" ? [`the process table could not be read: ${processes.reason}`] : [];
+    const others = processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
+    if (serving.kind === "failed") {
+      const running = others.length > 0 ? ` \u2014 daemon ${others.map((p2) => p2.pid).join(", ")} running` : "";
+      return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
+    }
+    const { pid: pid2, memory, limit, postMortems } = serving.value;
+    const unread2 = unreadPostMortems(serving.value, read2);
+    const verdict = problemsVerdict([
+      ...unread2.map(
+        (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
+      ),
+      ...postMortems.kind === "failed" ? [
+        `the daemon's post-mortems could not be listed: ${postMortems.reason}`
+      ] : [],
+      // Which were read decides nothing only while none are listed.
+      ...read2.kind === "failed" && !(postMortems.kind === "ok" && postMortems.value.length === 0) ? [`which post-mortems were read could not be read: ${read2.reason}`] : [],
+      ...unreadable,
+      ...others.map(
+        (p2) => `daemon ${p2.pid} (started ${p2.started}, rss ${mb(p2.rss)} MB${p2.ppid === 1 ? "" : `, child of ${p2.ppid}`}) runs beside the one serving the bar (${pid2}) \u2014 \`kill ${p2.pid}\``
+      ),
+      // [LAW:no-silent-failure] RSS standing in for the platform's charge is
+      // the limit judging an estimate — or, with no gap yet read, what macOS
+      // has already reclaimed, the very misjudgment the charge exists to end —
+      // so it is a finding, near the limit or not.
+      ...memory.kind === "measured" && memory.charge.kind === "stand-in" ? [
+        `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${memory.charge.gap !== 0 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate` : "RSS, which counts pages macOS has reclaimed"}`
+      ] : [],
+      ...memory.kind === "measured" && approachingLimit(memory.charge.bytes, limit) ? [
+        `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
+      ] : []
+    ]);
+    if (verdict.ok && memory.kind === "unmeasured") {
+      return { ok: true, note: "the daemon has not measured its memory yet" };
+    }
+    const newest = unread2[0];
+    return verdict.ok || newest === void 0 ? verdict : {
+      ...verdict,
+      fix: { kind: "post-mortems-read", through: newest.identity }
+    };
+  }
+};
+var CLICK_TO_SEE = "click \u{1FA7A} doctor in the bar's settings menu: if it runs, links work";
+function drawsLinks(identified, clicked) {
+  const id2 = sightingOf(identified);
+  if (clicked.kind === "ok" && id2 !== null && clicked.value.includes(id2)) {
+    return { kind: "draws" };
+  }
+  return identified.kind === "known" ? linkSupport(identified.terminal) : { kind: "unknown" };
+}
+function linkProblems({ identified, tmuxClient }, clicked) {
+  const called = identifiedAs(identified);
+  const support = drawsLinks(identified, clicked);
+  const prove = sightingOf(identified) === null ? CLICK_TO_SEE : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
+  const terminal = (() => {
+    switch (support.kind) {
+      case "draws":
+        return [];
+      case "none":
+        return [
+          `${called} draws no links (OSC 8), so nothing on the bar can be clicked \u2014 run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`
+        ];
+      case "older":
+        return [
+          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) \u2014 update ${called}`
+        ];
+      case "unsaid":
+        return [
+          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is \u2014 ${prove}`
+        ];
+      case "unknown":
+        return [
+          `the doctor does not know whether ${called} draws links (OSC 8) \u2014 ${prove}`
+        ];
+    }
+  })();
+  const remembered = clicked.kind === "failed" && support.kind !== "draws" ? [
+    `the terminals a doctor click came back from could not be read: ${clicked.reason}`
+  ] : [];
+  const tmux3 = support.kind === "none" || tmuxClient === null || tmuxClient.features.includes("hyperlinks") ? [] : [
+    `tmux does not pass links through to ${called} \u2014 add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`
+  ];
+  return [...terminal, ...remembered, ...tmux3];
+}
+var links = {
+  name: "links",
+  label: "links",
+  takesMark: false,
+  probe: ({ sighted, terminal, clicked }) => {
+    if (sighted.kind === "clicked" && sighted.via === "link")
+      return { ok: true };
+    switch (terminal.kind) {
+      case "unreported":
+        return {
+          ok: false,
+          reason: "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
+        };
+      case "unasked":
+        return {
+          ok: false,
+          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`
+        };
+      case "seen":
+        return problemsVerdict(linkProblems(terminal, clicked));
+    }
+  }
+};
+var EFFECT_REFRESH_INTERVAL = 1;
+var refreshedFrames = (frames) => frames.filter((f) => f.role === "statusline");
+var effectRefresh = {
+  name: "effectRefresh",
+  label: "effect refresh",
+  takesMark: false,
+  probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
+    const verdicts = [origin, ...elsewhere].flatMap(
+      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? []
+    );
+    const [first2] = verdicts;
+    if (first2 === void 0) {
+      if (frames.kind === "failed") return { ok: false, reason: frames.reason };
+      return unknownMotion(
+        sighted.kind !== "recent" ? noRenderOf(sighted) : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`
+      );
+    }
+    const [lead, ...others] = verdicts.flatMap((v) => v.ok ? [] : [v]);
+    if (lead === void 0) return first2;
+    const more = [...new Set(others.map((f) => f.reason))].filter(
+      (r) => r !== lead.reason
+    );
+    return more.length === 0 ? lead : { ...lead, more };
+  }
+};
+var barsSeen = (bars) => {
+  const drawn = refreshedFrames(bars).map((f) => f.frame);
+  if (drawn.includes("moves")) {
+    return {
+      kind: "moving",
+      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
+    };
+  }
+  if (drawn.includes("can-move")) {
+    return {
+      kind: "moving",
+      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
+    };
+  }
+  if (drawn.includes("still")) return { kind: "still" };
+  if (drawn.includes("drawing")) {
+    return {
+      kind: "unknown",
+      unseen: "the bar's latest render has not finished"
+    };
+  }
+  if (drawn.length > 0) {
+    return { kind: "unknown", unseen: "the bar's recent renders failed" };
+  }
+  if (bars.length > 0) {
+    return {
+      kind: "unknown",
+      unseen: "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
+    };
+  }
+  return { kind: "none" };
+};
+var unknownMotion = (unseen) => ({
+  ok: false,
+  reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
+});
+function chainVerdict(sources, seen2) {
+  const statusLine = statusLineOf(sources);
+  if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
+    return {
+      ok: true,
+      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
+    };
+  }
+  switch (seen2.kind) {
+    case "none":
+      return null;
+    case "still":
+      return { ok: true };
+    case "unknown":
+      return unknownMotion(seen2.unseen);
+    case "moving":
+      break;
+  }
+  const { wearing } = seen2;
+  switch (statusLine.kind) {
+    case "unread":
+      return {
+        ok: false,
+        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`
+      };
+    case "absent":
+      return {
+        ok: false,
+        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) \u2014 the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`
+      };
+    case "not-an-object":
+      return {
+        ok: false,
+        // `cc-candybar install` writes the user file only, so only there
+        // does re-running it replace the line.
+        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object \u2014 ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`
+      };
+    case "present": {
+      const { from, refreshInterval: interval } = statusLine;
+      const why2 = interval === void 0 ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events" : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL ? `its statusLine redraws it only every ${interval} s` : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
+      return doctorWrites(from) ? {
+        ok: false,
+        reason: `${wearing}, but ${why2} (statusLine from ${from.path})`,
+        fix: {
+          kind: "claude-settings",
+          file: from,
+          path: ["statusLine", "refreshInterval"],
+          value: EFFECT_REFRESH_INTERVAL
+        }
+      } : {
+        ok: false,
+        reason: `${wearing}, but ${why2} \u2014 its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`
+      };
+    }
+  }
+}
+var codePoints = (glyphs) => [...glyphs].map((g) => `U+${g.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
+function terminalCalled(terminal) {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return "this terminal";
+    case "unknown":
+    case "unnamed":
+      return identifiedAs(terminal);
+    case "bundling":
+    case "unread":
+    case "configured":
+      return [terminalLabel(terminal.name), terminal.version].filter((part) => part !== null).join(" ");
+  }
+}
+function sightedIn(terminal) {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return null;
+    case "unknown":
+    case "unnamed":
+      return sightingOf(terminal);
+    case "bundling":
+    case "unread":
+      return terminalLabel(terminal.name);
+    case "configured": {
+      const label2 = terminalLabel(terminal.name);
+      return terminal.font.kind === "ok" ? `${label2} with ${terminal.font.value.font} (${terminal.font.value.from})` : `${label2}, its font unread: ${terminal.font.reason}`;
+    }
+  }
+}
+function glyphSighting(facts) {
+  const where = sightedIn(facts.terminal);
+  return where === null ? void 0 : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
+}
+var NERD_FONT_CHECK = "nerdFont";
+var nerdFont = {
+  name: NERD_FONT_CHECK,
+  label: "Nerd Font",
+  takesMark: true,
+  probe: ({ nerdFont: facts, marks }) => {
+    if (facts.kind === "none") return { ok: true };
+    const sighting = glyphSighting(facts);
+    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
+      ok: false,
+      reason,
+      more: [`the mark book could not be read: ${marks.reason}`]
+    } : { ok: false, reason, ...sighting !== void 0 && { sighting } };
+    const terminal = facts.terminal;
+    const called = terminalCalled(terminal);
+    const mark = sighting === void 0 || marks.kind === "failed" ? null : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null;
+    switch (mark) {
+      case "drawn":
+        return { ok: true };
+      case "boxes":
+        return failed3(
+          `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
+        );
+      case null:
+        break;
+    }
+    switch (terminal.kind) {
+      case "unreported":
+        return failed3(
+          "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
+        );
+      case "unasked":
+        return failed3(
+          `tmux could not be asked which terminal is attached: ${terminal.reason}`
+        );
+      case "unknown":
+      case "unnamed":
+      case "unread":
+        return failed3(`the doctor cannot read ${called}'s font`);
+      case "bundling": {
+        const since = TERMINALS[terminal.name].glyphs.since;
+        if (since === null) return { ok: true };
+        const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
+        if (shipped === true) return { ok: true };
+        const label2 = terminalLabel(terminal.name);
+        return failed3(
+          shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
+        );
+      }
+      case "configured": {
+        if (terminal.font.kind === "failed") {
+          return failed3(
+            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
+          );
+        }
+        const { font, from, lacks } = terminal.font.value;
+        if (lacks === null) {
+          return failed3(
+            `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
+          );
+        }
+        if (lacks.length === 0) return { ok: true };
+        return failed3(
+          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
+        );
+      }
+    }
+  }
+};
+function named(segments) {
+  return segments.join(", ");
+}
+function optOut(segments) {
+  return `or set missingData: "ignore" on ${named(segments)}`;
+}
+function pullRequestProblems(need2) {
+  if (need2.kind === "unneeded") return [];
+  const { segments, fact } = need2;
+  if (fact.kind === "failed") {
+    return [
+      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`
+    ];
+  }
+  if (fact.value === null) return [];
+  const { cli, host, status } = fact.value;
+  if (status === "ready") return [];
+  return status === "missing" ? [
+    `${named(segments)}: ${cli} is not installed, so no pull request is ever shown \u2014 install it, ${optOut(segments)}`
+  ] : [
+    `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) \u2014 run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`
+  ];
+}
+function rateLimitProblems(need2, sighted) {
+  if (need2.kind === "unneeded") return [];
+  const { segments, fact } = need2;
+  if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
+  if (fact.value.length === 0) {
+    return [
+      sighted.kind !== "recent" ? `${named(segments)}: ${noRenderOf(sighted)}, so whether Claude Code sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn` : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn`
+    ];
+  }
+  return fact.value.includes("missing") && !fact.value.includes("carried") ? [
+    `${named(segments)}: Claude Code sent no rate_limits \u2014 it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`
+  ] : [];
+}
+var segmentData = {
+  name: "segmentData",
+  label: "segment data",
+  takesMark: false,
+  probe: ({ data, sighted }) => problemsVerdict([
+    ...pullRequestProblems(data.pullRequests),
+    ...rateLimitProblems(data.rateLimits, sighted)
+  ])
+};
+function transcriptProblems({
+  path: path43,
+  answered,
+  read: read2
+}) {
+  switch (read2.kind) {
+    case "absent":
+      return answered ? [
+        `the transcript ${path43} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
+      ] : [];
+    case "failed":
+      return [`the transcript ${path43} cannot be read: ${read2.reason}`];
+    case "ok": {
+      const { lines: lines2, unparsed, whole } = read2.value;
+      return unparsed === 0 ? [] : [
+        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path43} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
+      ];
+    }
+  }
+}
+var sessionData = {
+  name: "sessionData",
+  label: "session data",
+  takesMark: false,
+  probe: ({ transcripts, sighted }) => {
+    if (transcripts.kind === "failed") {
+      return { ok: false, reason: transcripts.reason };
+    }
+    if (transcripts.value.length === 0) {
+      return {
+        ok: false,
+        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which transcript it reads is unknown \u2014 run the doctor again once the bar has redrawn` : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named \u2014 run the doctor again once the bar has redrawn`
+      };
+    }
+    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
+  }
+};
+var CHECKS = [
+  config,
+  install,
+  daemon,
+  urlHandler,
+  links,
+  tmuxTruecolor,
+  utf82,
+  termWidth,
+  effectRefresh,
+  nerdFont,
+  segmentData,
+  sessionData
+];
+var MARKED_CHECKS = CHECKS.filter(
+  (c) => c.takesMark
+);
+function runDoctor(facts) {
+  return CHECKS.map((check) => ({ check, verdict: check.probe(facts) }));
+}
+function checkByName(name) {
+  return CHECKS.find((c) => c.name === name);
+}
+
+// src/doctor/sightings.ts
+var inScope = (scope, sightings) => sightings.filter(
+  (s) => scope.kind === "recent" ? s.ago <= RECENT_CLIENT_S : s.sessionId === scope.sessionId
+);
+var barsOf = (scope, sightings) => inScope(scope, sightings).map(
+  ({ role, frame: frame2, projectDir, claudeConfigDir: claudeConfigDir2 }) => ({
+    role,
+    frame: frame2,
+    projectDir,
+    claudeConfigDir: claudeConfigDir2
+  })
+);
+var NONCE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
+function parseProbeNonce(value) {
+  return NONCE.test(value) ? value : null;
+}
+function clickArrived(arrival) {
+  switch (arrival.via) {
+    case "link":
+      return { kind: "arrived", delivery: arrival.delivery };
+    case "tmux-status":
+      return {
+        kind: "unprobed",
+        reason: "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler \u2014 run `cc-candybar doctor` to probe the handler"
+      };
+  }
+}
+function sessionWidth(sessionId2, said) {
+  const statusline = said.find((s) => s.role === "statusline");
+  return statusline === void 0 ? {
+    kind: "failed",
+    reason: `the daemon holds no statusline render of session ${sessionId2} \u2014 none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width \u2014 so no width a statusline client measured is known; run this again once the statusline has redrawn`
+  } : {
+    kind: "ok",
+    value: {
+      columns: statusline.termCols,
+      of: { kind: "session", sessionId: sessionId2 }
+    }
+  };
+}
+
+// src/daemon/click-reading.ts
+function parseClick(url, delivery, links2) {
+  if (url.startsWith(DOCTOR_PROBE_PREFIX)) {
+    const nonce = parseProbeNonce(url.slice(DOCTOR_PROBE_PREFIX.length));
+    return nonce === null ? { kind: "refused", problem: "the probe link carries no probe nonce" } : { kind: "probe", nonce, delivery };
+  }
+  if (url.startsWith(STATUS_LINE_CLICK_PREFIX)) {
+    return delivery.kind === "cli" ? {
+      kind: "status-line",
+      value: url.slice(STATUS_LINE_CLICK_PREFIX.length)
+    } : {
+      kind: "refused",
+      problem: "a status-line click comes only from tmux's own binding"
+    };
+  }
+  if (!isBarLink(url))
+    return {
+      kind: "refused",
+      problem: `expected a ${URL_SCHEME}:// link, got: ${url}`
+    };
+  const opened = openClick(url, links2);
+  return opened.kind === "link" ? { ...opened, delivery } : opened;
+}
+function openClick(signed, links2) {
+  const opened = links2.openLink(signed);
+  if (opened.kind === "failed")
+    return { kind: "refused", problem: opened.reason };
+  const link = parseHandlerUrl(opened.value);
+  return link.ok ? { kind: "link", verb: link.verb, value: link.value, link: opened.value } : { kind: "refused", problem: link.problem };
+}
+
 // src/utils/transcript-fs.ts
 init_globals();
 
@@ -43906,13 +46383,13 @@ function parseDocument(text4) {
   if (s.pos !== text4.length) s.fail("trailing content after the document");
   return root;
 }
-function entryOf(node, key) {
+function entryOf2(node, key) {
   return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
 }
 function nodeAt(root, path43) {
   let node = root;
   for (const key of path43) {
-    node = node === void 0 ? void 0 : entryOf(node, key)?.value;
+    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
   }
   return node;
 }
@@ -44098,7 +46575,7 @@ function setBelow(text4, start, path43, valueText, dialect) {
         node.span.start
       );
     }
-    const entry = entryOf(node, path43[i]);
+    const entry = entryOf2(node, path43[i]);
     if (entry === void 0) {
       return appendMember(
         text4,
@@ -44127,7 +46604,7 @@ function deleteValue(text4, path43, keep2 = 0) {
   if (/^\s*$/.test(text4)) return text4;
   const parentPath = path43.slice(0, -1);
   const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf(parent, path43[path43.length - 1]);
+  const entry = parent === void 0 ? void 0 : entryOf2(parent, path43[path43.length - 1]);
   if (entry === void 0 || parent?.kind !== "object") return text4;
   const pruned = removeMember(text4, entry.span);
   return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
@@ -44136,22 +46613,22 @@ var CHILD_KEYS = ["h", "v", "children"];
 function placementIdOf(node) {
   if (node.kind === "string") return node.value;
   if (node.kind !== "object") return void 0;
-  const seg2 = entryOf(node, "seg")?.value;
-  const kind = entryOf(node, "kind")?.value;
-  const name = entryOf(node, "name")?.value;
+  const seg2 = entryOf2(node, "seg")?.value;
+  const kind = entryOf2(node, "kind")?.value;
+  const name = entryOf2(node, "name")?.value;
   const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
   if (segName === void 0) return void 0;
-  const id2 = entryOf(node, "id")?.value;
+  const id2 = entryOf2(node, "id")?.value;
   return id2?.kind === "string" ? id2.value : segName;
 }
 function childArraysOf(node) {
   if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf(node, k)?.value).filter(
+  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
     (v) => v?.kind === "array"
   );
 }
 function rowEntriesOf(node) {
-  const rows = entryOf(node, "rows")?.value;
+  const rows = entryOf2(node, "rows")?.value;
   return rows?.kind === "object" ? rows.entries : null;
 }
 function restagesFragment(node) {
@@ -44229,7 +46706,7 @@ function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
       `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
     );
   }
-  return entryOf(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }
 
 // src/claude-settings-read.ts
@@ -44324,698 +46801,6 @@ init_globals();
 
 // src/config/dsl-types.ts
 init_globals();
-
-// src/themes/policy.ts
-init_globals();
-
-// src/themes/decor.ts
-init_globals();
-
-// src/themes/palette-memo.ts
-init_globals();
-function memoPerPalette() {
-  const memo = /* @__PURE__ */ new WeakMap();
-  return (palette, key, compute) => {
-    let entries = memo.get(palette);
-    if (entries === void 0) {
-      entries = /* @__PURE__ */ new Map();
-      memo.set(palette, entries);
-    }
-    const hit = entries.get(key);
-    if (hit !== void 0) return hit;
-    const value = compute();
-    entries.set(key, value);
-    return value;
-  };
-}
-
-// src/utils/same.ts
-init_globals();
-var is = (a, b) => a === b;
-function sameBy(fields2) {
-  const keys2 = Object.keys(fields2);
-  return (a, b) => keys2.every((key) => fields2[key](a[key], b[key]));
-}
-var sameEach = (same2) => (a, b) => a.length === b.length && a.every((item, i) => same2(item, b[i]));
-
-// src/themes/decor.ts
-var DECOR_HUES = ["primary", "secondary", "accent"];
-var LADDER = [
-  "darken-3",
-  "darken-2",
-  "darken-1",
-  "base",
-  "lighten-1",
-  "lighten-2",
-  "lighten-3"
-];
-var SHADE_SUFFIX = {
-  "darken-3": "-darken-3",
-  "darken-2": "-darken-2",
-  "darken-1": "-darken-1",
-  base: "",
-  "lighten-1": "-lighten-1",
-  "lighten-2": "-lighten-2",
-  "lighten-3": "-lighten-3",
-  muted: "-muted"
-};
-var shadeRole = (hue, shade) => `${hue}${SHADE_SUFFIX[shade]}`;
-var poleText = (palette, _hue, background, drawnAt) => textOn2(palette, background, drawnAt);
-var roleText = (palette, hue, background, drawnAt) => legibleOn(palette, palette.get(`text-${hue}`), background, drawnAt);
-var ladderWindow = (from) => ({
-  // [LAW:no-defensive-null-guards] Every position below starts at most four
-  // rungs up a ladder of seven; the `!`s state that, they do not guard it.
-  tones: [LADDER[from], LADDER[from + 2], LADDER[from + 1]],
-  text: poleText,
-  activated: "muted"
-});
-var centredWindow = (apart) => ({
-  // [LAW:no-defensive-null-guards] The role is rung 3 of seven; a window up to
-  // three rungs each side stays on the ladder.
-  tones: [LADDER[3 - apart], LADDER[3 + apart], LADDER[3]],
-  text: poleText,
-  activated: "muted"
-});
-var pairWindow = (apart) => ({
-  tones: [LADDER[3 - apart], LADDER[3 + apart]],
-  text: poleText,
-  activated: "muted"
-});
-var TRIAL_SHADES = {
-  wide: centredWindow(2),
-  widest: centredWindow(3),
-  pair: pairWindow(2),
-  "pair-wide": pairWindow(3)
-};
-var TRIAL_SHADE_NAMES = Object.keys(TRIAL_SHADES);
-var SHADES = {
-  muted: {
-    tones: ["muted", "base"],
-    text: roleText,
-    activated: "lighten-2"
-  },
-  deepest: ladderWindow(0),
-  deeper: ladderWindow(1),
-  middle: ladderWindow(2),
-  brighter: ladderWindow(3),
-  brightest: ladderWindow(4),
-  ...TRIAL_SHADES
-};
-var lineageHue = (lineage2, depth) => (
-  // [LAW:no-defensive-null-guards] A lineage is non-empty by type and the
-  // index is in range by construction; the `!` states that, it does not guard it.
-  lineage2[depth % lineage2.length]
-);
-var KEYSTONE_HUE = "accent";
-var WHOLE_ROW = Infinity;
-var OPENS_TODAY = {
-  keystones: [],
-  open: ["accent", "primary", "secondary"]
-};
-var KEYSTONE_PLACEMENTS = {
-  door: ["bar-start"],
-  start: ["line-start"],
-  end: ["line-end"],
-  ends: ["line-start", "line-end"]
-};
-var OPEN_LINEAGES = {
-  primary: ["primary"],
-  secondary: ["secondary"],
-  alternate: ["primary", "secondary"]
-};
-function tunings() {
-  const rows = Object.entries(KEYSTONE_PLACEMENTS).flatMap(
-    ([at, keystones]) => Object.entries(OPEN_LINEAGES).map(
-      ([into, open2]) => [
-        `${at}-${into}`,
-        { hues: ["secondary"], run: WHOLE_ROW, keystones, open: open2 }
-      ]
-    )
-  );
-  return Object.fromEntries(rows);
-}
-var TUNINGS = tunings();
-var VARIATIONS = {
-  accent: { hues: ["secondary", "accent"], run: WHOLE_ROW, ...OPENS_TODAY },
-  duo: { hues: ["primary", "secondary"], run: WHOLE_ROW, ...OPENS_TODAY },
-  mono: { hues: ["primary"], run: WHOLE_ROW, ...OPENS_TODAY },
-  alt: { hues: ["secondary", "accent"], run: 3, ...OPENS_TODAY },
-  // Trial tunings of the accent variation (brandon-menus-sjhy.4fi): one row
-  // per keystone placement and open-menu lineage. Every closed cell wears
-  // `secondary` but the keystones, which wear the accent, and no depth of an
-  // open menu wears it.
-  ...TUNINGS
-};
-var TRIAL_VARIATION_NAMES = Object.keys(
-  TUNINGS
-);
-var vocabularyOf = (palette, decor, drawnAt) => turnsHeld(
-  palette,
-  decor,
-  decor.variation.hues.flatMap((hue) => {
-    const window2 = windowAt(palette, hue, decor.shade, drawnAt);
-    return decor.shade.tones.map((_, at) => ({
-      hue,
-      shade: window2[at % window2.length]
-    }));
-  }),
-  drawnAt
-);
-function windowAt(palette, hue, shade, drawnAt) {
-  return WINDOWS(palette, `${hue}|${shade.tones.join(",")}|${drawnAt}`, () => {
-    const drawn = drawnIn(palette, hue, drawnAt);
-    const size = windowSize(
-      shade.tones.length,
-      new Set(LADDER.map(drawn)).size
-    );
-    const [first2, ...rest2] = shade.tones;
-    const kept = [first2];
-    for (const tone of rest2) {
-      if (kept.length < size && kept.every((held) => drawn(held) !== drawn(tone)))
-        kept.push(tone);
-    }
-    return inWalkOrder(
-      Array.from({ length: size - kept.length }).reduce((window2) => {
-        const wider = widen(
-          palette,
-          hue,
-          shade.tones,
-          window2.map(drawn),
-          drawnAt
-        );
-        return wider === void 0 ? window2 : [...window2, wider];
-      }, kept)
-    );
-  });
-}
-var inWalkOrder = (window2) => {
-  if (window2.length < 3) return window2;
-  const ladder2 = LADDER;
-  const [low, ...above] = [...window2].sort(
-    (a, b) => ladder2.indexOf(a) - ladder2.indexOf(b)
-  );
-  return [low, above.at(-1), ...above.slice(0, -1)];
-};
-var windowSize = (count, colours) => Math.max(2, Math.min(count, colours - 1));
-var WINDOWS = memoPerPalette();
-var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(palette.get(shadeRole(hue, tone)), drawnAt).hex;
-function widen(palette, hue, from, taken, drawnAt) {
-  const drawn = drawnIn(palette, hue, drawnAt);
-  return ladderFrom(from, palette.dark).find(
-    (rung) => !taken.includes(drawn(rung))
-  );
-}
-function ladderFrom(from, dark) {
-  const ladder2 = LADDER;
-  const place = (shade) => shade === "muted" ? dark ? -1 : ladder2.length : ladder2.indexOf(shade);
-  const away = dark ? 1 : -1;
-  return LADDER.map((rung, at) => ({
-    rung,
-    at,
-    distance: Math.min(...from.map((shade) => Math.abs(at - place(shade))))
-  })).filter(({ distance }) => distance > 0).sort((a, b) => a.distance - b.distance || (b.at - a.at) * away).map(({ rung }) => rung);
-}
-var inBin = (placement, size) => Math.floor(placement * size);
-var inHalves = (placement, size) => {
-  let entry = size - 1;
-  for (let half = placement; half < 0.5 && entry > 0; half *= 2) entry--;
-  return entry;
-};
-var PHI = 0.6180339887498949;
-var vanDerCorput = (index) => {
-  let value = 0;
-  let place = 0.5;
-  for (let i = index; i > 0; i >>= 1, place /= 2) value += place * (i & 1);
-  return value;
-};
-var DISTRIBUTION_NAMES = [
-  "van-der-corput",
-  "golden-angle",
-  "ends-interleaved",
-  "monotonic",
-  "uniform"
-];
-var isDistributionName = (value) => typeof value === "string" && DISTRIBUTION_NAMES.includes(value);
-var DISTRIBUTIONS = {
-  "van-der-corput": { place: vanDerCorput, quantize: inHalves },
-  "golden-angle": { place: (index) => index * PHI % 1, quantize: inBin },
-  "ends-interleaved": {
-    place: (index, count) => {
-      const slot = index % 2 === 0 ? index / 2 : count - 1 - (index - 1) / 2;
-      return (slot + 0.5) / count;
-    },
-    quantize: inBin
-  },
-  monotonic: {
-    place: (index, count) => (index + 0.5) / count,
-    quantize: inBin
-  },
-  uniform: { place: () => 0.5, quantize: inHalves }
-};
-var DEFAULT_DISTRIBUTION = "van-der-corput";
-var placedBy = (name) => DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
-function entryOf2(step4, size) {
-  if (step4 === void 0) return 0;
-  const { place, quantize } = step4.distribution;
-  return quantize(place(step4.index, step4.count), size);
-}
-function vocabularySelect(vocabulary, step4) {
-  const entry = vocabulary[entryOf2(step4, vocabulary.length)];
-  if (entry === void 0)
-    throw new Error("vocabularySelect: empty vocabulary");
-  return entry;
-}
-function rowAndCell(address) {
-  const isCell = (step4) => step4.axis === "cell";
-  const at = address.findIndex(isCell);
-  const rows = at === -1 ? address : address.slice(0, at);
-  return { row: rows.at(-1), cell: address.findLast(isCell) };
-}
-var rowStart = (variation, row2) => entryOf2(row2, variation.hues.length);
-function decorEntryFor(palette, decor, address, drawnAt) {
-  const { row: row2, cell: cell3 } = rowAndCell(address);
-  if (cell3 === void 0) return dealtAt(palette, decor, row2, cell3, drawnAt);
-  return lineAt(palette, decor, row2, cell3, drawnAt)[cell3.index - cell3.lineStart];
-}
-function dealtAt(palette, decor, row2, cell3, drawnAt) {
-  const { hues, run: run3, keystones } = decor.variation;
-  const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
-  const stepped2 = hues[(rowStart(decor.variation, row2) + turn) % hues.length];
-  if (stepped2 === void 0) throw new Error("decorEntryFor: empty variation");
-  const hue = keystones.some((at) => KEYSTONE_AT[at](row2, cell3)) ? KEYSTONE_HUE : stepped2;
-  return {
-    hue,
-    shade: vocabularySelect(windowAt(palette, hue, decor.shade, drawnAt), cell3)
-  };
-}
-function lineAt(palette, decor, row2, cell3, drawnAt) {
-  const { hues, run: run3, keystones, open: open2 } = decor.variation;
-  const key = [
-    hues.join(","),
-    run3,
-    keystones.join(","),
-    open2.join(","),
-    decor.shade.tones.join(","),
-    decor.shade.activated,
-    row2 === void 0 ? "" : stepKey(row2),
-    // One answer for every place along the line, so the cell is keyed at
-    // the line's first.
-    stepKey(cell3, cell3.lineStart),
-    drawnAt
-  ].join("|");
-  return LINES(
-    palette,
-    key,
-    () => turnsHeld(
-      palette,
-      decor,
-      Array.from(
-        { length: cell3.lineEnd - cell3.lineStart + 1 },
-        (_, at) => dealtAt(
-          palette,
-          decor,
-          row2,
-          { ...cell3, index: cell3.lineStart + at },
-          drawnAt
-        )
-      ),
-      drawnAt
-    )
-  );
-}
-var LINES = memoPerPalette();
-function stepKey({
-  axis,
-  index,
-  count,
-  distribution,
-  lineStart,
-  lineEnd,
-  ...unkeyed
-}, at = index) {
-  const none2 = unkeyed;
-  void none2;
-  return `${axis},${at},${count},${distributionName(distribution)},${lineStart},${lineEnd}`;
-}
-function distributionName(distribution) {
-  const name = DISTRIBUTION_NAME.get(distribution);
-  if (name === void 0)
-    throw new Error("decorEntryFor: a cell placed outside DISTRIBUTIONS");
-  return name;
-}
-var DISTRIBUTION_NAME = new Map(
-  DISTRIBUTION_NAMES.map((name) => [DISTRIBUTIONS[name], name])
-);
-function turnsHeld(palette, decor, dealt, drawnAt) {
-  const line = [...dealt];
-  const drawn = (at) => {
-    const entry = line[at];
-    return entry && drawnIn(palette, entry.hue, drawnAt)(entry.shade);
-  };
-  const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
-  const apart = (at, off) => {
-    const { hue } = line[at];
-    const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
-      (colour) => colour !== void 0
-    );
-    const window2 = windowAt(palette, hue, decor.shade, drawnAt);
-    const tone = window2.find((t2) => !taken.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken, drawnAt);
-    return tone === void 0 ? void 0 : { hue, shade: tone };
-  };
-  const moves = (at) => [[pressed], []].flatMap(
-    (off) => [at, at - 1].map((place) => ({ place, off }))
-  );
-  for (let at = 1; at < line.length; at++) {
-    if (line[at - 1].hue === line[at].hue || drawn(at - 1) !== drawn(at))
-      continue;
-    for (const { place, off } of moves(at)) {
-      const entry = apart(place, off);
-      if (entry === void 0) continue;
-      line[place] = entry;
-      break;
-    }
-  }
-  return line;
-}
-var KEYSTONE_AT = {
-  "bar-start": (row2, cell3) => (row2?.index ?? 0) === 0 && (cell3?.index ?? 0) === 0,
-  "line-start": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.lineStart,
-  "line-end": (_row, cell3) => cell3 === void 0 || cell3.index === cell3.lineEnd
-};
-var PLANE_ROLE = "surface";
-var decorEntryColour = (palette, entry) => palette.get(shadeRole(entry.hue, entry.shade));
-var TEXT_MIN_CONTRAST = 4.5;
-function textOn2(palette, background, drawnAt) {
-  return POLE_TEXT(palette, `${background.hex}|${drawnAt}`, () => {
-    const side = contrastFor(background);
-    const pole = ["background", "foreground"].map((role) => palette.get(role)).reduce(
-      (best, pole2) => contrastRatio(side, pole2) < contrastRatio(side, best) ? pole2 : best
-    );
-    return legibleOn(palette, pole, background, drawnAt);
-  });
-}
-var POLE_TEXT = memoPerPalette();
-function legibleOn(palette, text4, background, drawnAt) {
-  return LEGIBLE2(
-    palette,
-    `${text4.hex}|${background.hex}|${drawnAt}`,
-    () => ensureContrast(text4, background, TEXT_MIN_CONTRAST, drawnAt)
-  );
-}
-var LEGIBLE2 = memoPerPalette();
-var hueOf2 = ({ decor, depth }) => lineageHue(decor.variation.open, depth);
-var bandEntries = (palette, disclosure, drawnAt) => windowAt(palette, hueOf2(disclosure), disclosure.decor.shade, drawnAt).map(
-  (shade) => ({ hue: hueOf2(disclosure), shade })
-);
-function pressedAt(palette, disclosure, drawnAt) {
-  const { decor, depth } = disclosure;
-  const { variation, shade } = decor;
-  const key = [
-    depth,
-    variation.open.join(","),
-    variation.hues.join(","),
-    variation.keystones.length,
-    shade.tones.join(","),
-    shade.activated,
-    drawnAt
-  ].join("|");
-  return PRESSED(palette, key, () => {
-    const hue = hueOf2(disclosure);
-    const dealt = (at) => windowAt(palette, at, shade, drawnAt).map(drawnIn(palette, at, drawnAt));
-    const keystone = variation.keystones.length > 0 ? [KEYSTONE_HUE] : [];
-    const besideBand = (up) => [
-      ...dealt(hueOf2(up)),
-      drawnPress(palette, up, drawnAt)
-    ];
-    const besideTrigger = depth === 0 ? [...variation.hues, ...keystone].flatMap(dealt) : besideBand({ decor, depth: depth - 1 });
-    const taken = [...dealt(hue), ...besideTrigger];
-    if (!taken.includes(drawnIn(palette, hue, drawnAt)(shade.activated)))
-      return shade.activated;
-    return widen(palette, hue, [shade.activated], taken, drawnAt) ?? shade.activated;
-  });
-}
-var PRESSED = memoPerPalette();
-var drawnPress = (palette, disclosure, drawnAt) => drawnIn(
-  palette,
-  hueOf2(disclosure),
-  drawnAt
-)(pressedAt(palette, disclosure, drawnAt));
-var nestedIn = (disclosure) => ({
-  ...disclosure,
-  depth: disclosure.depth + 1
-});
-function bandFor(palette, disclosure, drawnAt) {
-  return {
-    state: palette.get(
-      shadeRole(hueOf2(disclosure), pressedAt(palette, disclosure, drawnAt))
-    ),
-    plane: palette.get(PLANE_ROLE),
-    items: bandEntries(palette, disclosure, drawnAt).map(
-      (entry) => decorEntryColour(palette, entry)
-    )
-  };
-}
-function bandItemFor(palette, disclosure, place, drawnAt) {
-  return vocabularySelect(bandFor(palette, disclosure, drawnAt).items, place);
-}
-function bandItem(palette, disclosure, place, drawnAt) {
-  const tint = bandItemFor(palette, disclosure, place, drawnAt);
-  return {
-    tint,
-    text: disclosure.decor.shade.text(
-      palette,
-      hueOf2(disclosure),
-      tint,
-      drawnAt
-    )
-  };
-}
-function sameRegion(a, b) {
-  switch (a.kind) {
-    case "bar":
-      return b.kind === "bar" && sameBarRegion(a, b);
-    case "band":
-      return b.kind === "band" && sameBandRegion(a, b);
-  }
-}
-var sameAddress = sameEach(
-  sameBy({
-    index: is,
-    count: is,
-    distribution: is,
-    axis: is,
-    lineStart: is,
-    lineEnd: is
-  })
-);
-var sameDecor = sameBy({ variation: is, shade: is });
-var sameDisclosure = sameBy({
-  decor: sameDecor,
-  depth: is
-});
-var sameBarRegion = sameBy({
-  kind: is,
-  decor: sameDecor,
-  address: sameAddress
-});
-var sameBandRegion = sameBy({
-  kind: is,
-  band: sameDisclosure,
-  address: sameAddress
-});
-var barRoot = (decor) => ({
-  kind: "bar",
-  decor,
-  address: []
-});
-var descend = (region, step4) => ({
-  ...region,
-  address: [...region.address, step4]
-});
-var bandRoot = (band) => ({
-  kind: "band",
-  band,
-  address: []
-});
-function decorationFor(palette, region, drawnAt) {
-  switch (region.kind) {
-    case "bar": {
-      const { decor, address } = region;
-      const entry = decorEntryFor(palette, decor, address, drawnAt);
-      const tint = decorEntryColour(palette, entry);
-      return {
-        tint,
-        text: decor.shade.text(palette, entry.hue, tint, drawnAt),
-        disclosure: { decor, depth: 0 }
-      };
-    }
-    case "band": {
-      const { band, address } = region;
-      return {
-        ...bandItem(palette, band, rowAndCell(address).cell, drawnAt),
-        disclosure: nestedIn(band)
-      };
-    }
-  }
-}
-
-// src/themes/policy.ts
-var RETIRED_THEMES = /* @__PURE__ */ new Map([
-  ["dark", "textual-dark"],
-  ["light", "textual-light"]
-]);
-function retiredThemeNote(name) {
-  const to = typeof name === "string" ? RETIRED_THEMES.get(name) : void 0;
-  return to === void 0 ? "" : ` \u2014 "${name}" was retired; write "${to}", the same palette`;
-}
-var THEME_FLOOR = "textual-dark";
-function effectiveGlobal(staged, sessionPick, configDefault, floor2, parseSession) {
-  const picked = sessionPick === null ? null : parseSession(sessionPick);
-  return staged ?? picked ?? configDefault ?? floor2;
-}
-function listResolvablePaletteNames() {
-  return listThemePalettes();
-}
-var FOLLOW_BAR = "bar";
-function placementThemeNames() {
-  return [FOLLOW_BAR, ...listResolvablePaletteNames()];
-}
-var placementThemeSet;
-function isPlacementThemeName(name) {
-  placementThemeSet ??= new Set(placementThemeNames());
-  return placementThemeSet.has(name);
-}
-function effectiveMemberName(stagedName, sessionPick, configDefault, floor2, declared) {
-  const member = (raw) => Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
-  return effectiveGlobal(
-    stagedName === void 0 ? null : member(stagedName),
-    sessionPick,
-    member(configDefault ?? floor2),
-    floor2,
-    member
-  );
-}
-var EXPRESSION_SLOTS = ["style", "palette", "effect"];
-function isExpression(globalsValue) {
-  return globalsValue !== void 0 && globalsValue.includes("{{");
-}
-function resolveSelection(stagedName, sessionPick, globalsValue, floor2, named3) {
-  const configRung = isExpression(globalsValue) ? { kind: "expression", source: globalsValue } : named3(globalsValue ?? floor2.name);
-  return effectiveGlobal(
-    stagedName === void 0 ? null : named3(stagedName),
-    sessionPick,
-    configRung,
-    floor2,
-    named3
-  );
-}
-var STYLE_FLOOR = "none";
-function namedStyle(name, declaredStyles) {
-  const value = declaredStyles[name];
-  return value === void 0 ? null : { kind: "decided", name, value };
-}
-function decideStyleName(name, declaredStyles) {
-  return namedStyle(name, declaredStyles) ?? namedStyle(STYLE_FLOOR, declaredStyles) ?? {
-    kind: "decided",
-    name: STYLE_FLOOR,
-    value: IDENTITY
-  };
-}
-function resolveStyleSelection(stagedStyle, sessionStyle, globalsStyle, declaredStyles) {
-  return resolveSelection(
-    stagedStyle,
-    sessionStyle,
-    globalsStyle,
-    decideStyleName(STYLE_FLOOR, declaredStyles),
-    (raw) => namedStyle(raw, declaredStyles)
-  );
-}
-var EFFECT_FLOOR = "none";
-var SLOT_FLOORS = {
-  style: STYLE_FLOOR,
-  palette: THEME_FLOOR,
-  effect: EFFECT_FLOOR
-};
-function ruleFloorMessage(where, slot, why2) {
-  return `${where} rendered "${SLOT_FLOORS[slot]}": ${why2}`;
-}
-var EFFECT_NAMES = Object.freeze([
-  EFFECT_FLOOR,
-  ...Object.keys(EFFECT_CATALOGUE.loops)
-]);
-var ANIMATION_SPEEDS = Object.freeze({
-  "1x": 1,
-  "5x": 5,
-  "10x": 10,
-  "20x": 20
-});
-var ANIMATION_SPEED_NAMES = Object.keys(
-  ANIMATION_SPEEDS
-);
-var PLACEMENT_EFFECTS = Object.freeze([
-  FOLLOW_BAR,
-  ...EFFECT_NAMES
-]);
-function namedEffect(name) {
-  const value = EFFECT_NAMES.find((member) => member === name);
-  return value === void 0 ? null : { kind: "decided", name, value };
-}
-function decideEffectName(name) {
-  return namedEffect(name) ?? {
-    kind: "decided",
-    name: EFFECT_FLOOR,
-    value: EFFECT_FLOOR
-  };
-}
-function resolveEffectSelection(stagedEffect, sessionEffect, globalsEffect) {
-  return resolveSelection(
-    stagedEffect,
-    sessionEffect,
-    globalsEffect,
-    decideEffectName(EFFECT_FLOOR),
-    namedEffect
-  );
-}
-var ENDCAPS_SHAPES = Object.freeze(
-  Object.keys(JOINERS2)
-);
-var STYLE_ERA_ENDCAPS = [
-  "powerline",
-  "capsule",
-  "plain"
-];
-function isStyleEraEndcaps(value) {
-  return STYLE_ERA_ENDCAPS.includes(value);
-}
-var COLOR_COMPATIBILITIES = [
-  "truecolor",
-  "256",
-  "ansi",
-  "none"
-];
-function isColorCompatibility(value) {
-  return COLOR_COMPATIBILITIES.includes(value);
-}
-function drawnDepth(compatibility) {
-  return resolveColorSystem(compatibility) ?? ColorDepth.DEFAULT;
-}
-var VARIATION_NAMES = Object.keys(
-  VARIATIONS
-);
-var SHADE_NAMES = Object.keys(SHADES);
-var BOOLEAN_TRUE = "true";
-var BOOLEAN_FALSE = "false";
-var BOOLEAN_MEMBERS = [BOOLEAN_TRUE, BOOLEAN_FALSE];
-var PADDING_RANGE = { min: 0, max: 16 };
-function parseSessionBoolean(raw) {
-  return raw === BOOLEAN_TRUE ? true : raw === BOOLEAN_FALSE ? false : null;
-}
-function parseSessionInt(raw, range) {
-  const value = Number(raw);
-  return Number.isInteger(value) && String(value) === raw && value >= range.min && value <= range.max ? value : null;
-}
-
-// src/config/dsl-types.ts
 var DIRECTIONS = ["vertical", "horizontal"];
 var AXIS_OF = {
   vertical: "row",
@@ -46202,67 +47987,6 @@ function dataNeeds(config2, preset) {
 
 // src/config/effective-globals.ts
 init_globals();
-
-// src/config/lanes.ts
-init_globals();
-var RENDERERS = ["claude", "tmux"];
-var IN_TMUX = 'ne .tmux.pane ""';
-var LANES = {
-  band: {
-    switch: { setting: "experimentalBand", on: true, inTmux: false },
-    label: "\u{1F9EA} band (A)",
-    handsOff: true,
-    rows: null
-  },
-  statusline: {
-    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
-    label: "\u{1F9EA} statusline (B)",
-    handsOff: false,
-    rows: null
-  },
-  pane: {
-    switch: { setting: "experimentalPane", on: true, inTmux: false },
-    label: "\u{1F9EA} tmux pane (C)",
-    handsOff: true,
-    rows: null
-  },
-  tmuxStatus: {
-    switch: {
-      setting: "renderer",
-      on: "tmux",
-      inTmux: true
-    },
-    label: "tmux status line",
-    handsOff: true,
-    // tmux draws at most five status rows (`status` takes on, off, 2…5).
-    rows: 5
-  }
-};
-var LANE_NAMES = Object.keys(LANES);
-var TOGGLED_LANES = LANE_NAMES.filter(
-  (lane) => LANES[lane].switch.on === true
-);
-var MOVING_FPS = 30;
-var ANSWERING = { by: "request" };
-var DRAWING_VAR = "drawing";
-var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
-var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
-var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
-function perLane(value) {
-  return Object.fromEntries(
-    LANE_NAMES.map((lane) => [lane, value(lane)])
-  );
-}
-var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-function parseLane(raw) {
-  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
-}
-function feedsFact(feeds) {
-  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
-    const { subscribers, fps, shown } = feeds[lane];
-    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
-  }).join(",") || "-";
-}
 
 // src/config/loader/edit-mode.ts
 init_globals();
@@ -51081,7 +52805,7 @@ function elementPathLine(source, document, pathParts) {
   let indexed = false;
   for (const part of pathParts) {
     const element = node.kind === "array" && /^\d+$/.test(part);
-    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf(node, part)?.value;
+    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
     if (next === void 0) break;
     indexed ||= element;
     node = next;
@@ -51523,22 +53247,6 @@ function oneOfPresentJson(schema) {
     }))
   };
 }
-
-// src/config/menu-timeout.ts
-init_globals();
-var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i) => ({ lit: i % 2 === 0, seconds }));
-var CLOSING_FLASH = [
-  ...flashes(3, 1),
-  ...flashes(3, 0.25)
-];
-var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
-  (sum2, { seconds }) => sum2 + seconds,
-  0
-);
-var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
-var MENU_TIMEOUT_DEFAULT = 120;
-var closesAt = (since, timeoutS) => since + timeoutS;
-var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
 // src/config/globals-fields.ts
 var control = (label2, place, {
@@ -52396,689 +54104,6 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
   };
 }
 
-// src/doctor/terminal.ts
-init_globals();
-var TERMINALS = {
-  kitty: {
-    label: "kitty",
-    xtversion: "kitty",
-    program: null,
-    programVersion: true,
-    term: "xterm-kitty",
-    links: { since: "0.19.0" },
-    glyphs: { kind: "bundled", since: "0.36.0" }
-  },
-  wezterm: {
-    label: "WezTerm",
-    xtversion: "WezTerm",
-    program: "WezTerm",
-    programVersion: true,
-    term: "wezterm",
-    links: { since: null },
-    glyphs: { kind: "bundled", since: "20230712" }
-  },
-  ghostty: {
-    label: "Ghostty",
-    xtversion: "ghostty",
-    program: "ghostty",
-    programVersion: true,
-    term: "xterm-ghostty",
-    links: { since: null },
-    glyphs: { kind: "bundled", since: null }
-  },
-  iterm2: {
-    label: "iTerm2",
-    xtversion: "iTerm2",
-    program: "iTerm.app",
-    programVersion: true,
-    term: null,
-    links: { since: "3.1" },
-    glyphs: { kind: "configured" }
-  },
-  alacritty: {
-    label: "Alacritty",
-    xtversion: "alacritty",
-    program: null,
-    programVersion: true,
-    term: "alacritty",
-    links: { since: "0.11.0" },
-    glyphs: { kind: "configured" }
-  },
-  "apple-terminal": {
-    label: "Terminal",
-    xtversion: null,
-    program: "Apple_Terminal",
-    programVersion: true,
-    term: null,
-    links: null,
-    glyphs: { kind: "unread" }
-  },
-  vscode: {
-    label: "VS Code",
-    xtversion: null,
-    program: "vscode",
-    programVersion: false,
-    term: null,
-    links: { since: "1.72" },
-    glyphs: { kind: "unread" }
-  }
-};
-var row = (name) => TERMINALS[name];
-function isBundling(name) {
-  return row(name).glyphs.kind === "bundled";
-}
-function isConfigured(name) {
-  return row(name).glyphs.kind === "configured";
-}
-var terminalLabel = (name) => row(name).label;
-var ITERM_POWERLINE = [
-  { since: "3.5.0", from: 57504, to: 57507 },
-  { since: "3.5.0", from: 57520, to: 57554 },
-  { since: "3.5.0", from: 57556, to: 57556 },
-  { since: "3.5.6", from: 57558, to: 57559 }
-];
-function itermDrawsItself(version, glyph) {
-  const point = glyph.codePointAt(0);
-  return ITERM_POWERLINE.some(
-    ({ since, from, to }) => from <= point && point <= to && version !== null && releasedSince(version, since) === true
-  );
-}
-var NAMES = Object.keys(TERMINALS);
-function release2(version) {
-  const lead = /^\d+(?:\.\d+)*/.exec(version);
-  return lead === null ? null : lead[0].split(".").map(Number);
-}
-function releasedSince(version, since) {
-  const have = release2(version);
-  const need2 = release2(since);
-  if (have === null) return null;
-  for (let i = 0; i < Math.max(have.length, need2.length); i++) {
-    const a = have[i] ?? 0;
-    const b = need2[i] ?? 0;
-    if (a !== b) return a > b;
-  }
-  return true;
-}
-function fromXtversion(termtype) {
-  for (const name of NAMES) {
-    const prefix = row(name).xtversion;
-    if (prefix !== null && termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
-      const rest2 = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
-      const version = /^[^\s)]+/.exec(rest2)?.[0] ?? null;
-      return { name, version };
-    }
-  }
-  return null;
-}
-function fromTerm(term) {
-  const name = NAMES.find((n) => row(n).term === term);
-  return name === void 0 ? null : { name, version: null };
-}
-function identifyInTmux(client) {
-  const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
-  if (terminal !== null) return { kind: "known", terminal };
-  const called = /^[^\s(]*/.exec(client.termtype)[0];
-  return called === "" ? { kind: "unnamed", term: client.termname } : { kind: "unknown", called };
-}
-function identifyFromEnv(env2) {
-  const program = env2.TERM_PROGRAM;
-  const byProgram = NAMES.find((n) => row(n).program === program);
-  const terminal = byProgram === void 0 ? fromTerm(env2.TERM) : {
-    name: byProgram,
-    version: row(byProgram).programVersion ? env2.TERM_PROGRAM_VERSION ?? null : null
-  };
-  if (terminal !== null) return { kind: "known", terminal };
-  return program === void 0 || program === "tmux" ? { kind: "unnamed", term: env2.TERM ?? "" } : { kind: "unknown", called: program };
-}
-function sightingOf(identified) {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return identified.term || null;
-  }
-}
-function identifiedAs(identified) {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return identified.term || "this terminal";
-  }
-}
-function linkSupport({ name, version }) {
-  const links2 = row(name).links;
-  if (links2 === null) return { kind: "none" };
-  if (links2.since === null) return { kind: "draws" };
-  if (version === null) return { kind: "unsaid", since: links2.since };
-  const drawn = releasedSince(version, links2.since);
-  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
-}
-var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
-
-// src/render/strip.ts
-init_globals();
-
-// src/render/rich-theme.ts
-init_globals();
-var RENDER_THEME = new Theme({
-  // A joiner draws `plain`'s separator and `metro`'s rail on the terminal's own
-  // ground, which the detached daemon cannot see; rich-js's `bright_black` is a
-  // slot some terminal themes paint as that ground. The terminal's own text on
-  // its own ground is the one pair known to read there.
-  "strip.separator": "default",
-  "strip.rail": "default"
-});
-function resolvedStyle(style) {
-  return RENDER_THEME.resolve(style);
-}
-
-// src/render/effect.ts
-init_globals();
-var STILL3 = { kind: "still" };
-var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
-var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
-function isMoving(part) {
-  return part.name !== EFFECT_FLOOR;
-}
-function together(parts) {
-  return (drawn) => Animation.map(
-    Animation.all(
-      parts.map(
-        ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
-      )
-    ),
-    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
-  );
-}
-var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
-function fromGround(effect, ground) {
-  const terminal = new TerminalTheme(
-    ground,
-    ASSUMED_TERMINAL.foregroundColor,
-    ASSUMED_TERMINAL.ansiColors,
-    ASSUMED_TERMINAL.palette
-  );
-  return (drawn) => effect({ ...drawn, theme: terminal });
-}
-function paintedOn(effect, owners) {
-  return (row2) => confined(() => effect(row2), ...owners)(row2);
-}
-function noiseOffset(text4) {
-  let hash2 = 2166136261;
-  for (let i = 0; i < text4.length; i++) {
-    hash2 ^= text4.charCodeAt(i);
-    hash2 = Math.imul(hash2, 16777619) >>> 0;
-  }
-  return hash2 / 4294967296;
-}
-var NOISE_DEPTH = 4096;
-function closingFlash(fill, text4, begins) {
-  const lit = (look, { terminal }) => ({
-    ...look,
-    bg: terminal.bg ? look.bg : fill,
-    fg: terminal.fg ? look.fg : terminal.bg ? fill : text4
-  });
-  const dark = (colors) => colors;
-  const holds2 = CLOSING_FLASH.reduceRight(
-    (after, { lit: on2, seconds }) => Animation.sequence(Animation.constant(on2 ? lit : dark), seconds, after),
-    Animation.constant(dark)
-  );
-  const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
-  return () => idle;
-}
-var SessionEffects = class {
-  constructor(key) {
-    this.key = key;
-  }
-  key;
-  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
-  // changed to its current value: the effect's own t = 0 is a recorded fact,
-  // never inferred from when renders happened to arrive.
-  inForce = null;
-  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
-  // its last drawn frame left it — where the clock stood and the speed it ran
-  // at from there: the anchor every later reading is measured from, so a
-  // change of speed changes the clock's slope from the frame it lands in and
-  // never its reading, so no loop jumps phase. The host clock itself before
-  // the session's first frame.
-  anchor = Timeline.play(0);
-  // The same fact for each placement wearing its own effect, by placement id,
-  // kept for the placements the latest render drew: one that stopped being
-  // drawn starts its effect again at t = 0 when it is drawn again, as the
-  // effect comes into force for it again.
-  placements = /* @__PURE__ */ new Map();
-  // The effects made for the rows the latest render drew, by row and scope (the
-  // bar's, or one placement's), with the name each was made for. Each render
-  // starts an empty map and keeps only what it draws, so a row that stopped
-  // being drawn (a menu closed) takes its effects and their settled shares with
-  // it.
-  made = /* @__PURE__ */ new Map();
-  // The transitions in flight at the last frame drawn, by placement — what a
-  // placement's appearing and leaving go on from when the next frame is drawn
-  // from the same source as the view's record of it (`FrameRecord`) — or
-  // null: no frame drawn, or the last drawn with transitions off, which
-  // nothing compares against.
-  passages = null;
-  // [LAW:nothing-unseen] What the latest render wore, for the render's event.
-  frame = {
-    effect: EFFECT_FLOOR,
-    t: 0,
-    speed: 1,
-    made: 0,
-    reused: 0,
-    own: [],
-    basis: "off",
-    revision: 0,
-    fades: [],
-    leaves: []
-  };
-  // The latest render's effects: the bar's, at what t, how many of its rows'
-  // effects were made fresh rather than reused — one made every frame pays
-  // rich-js's share settling every frame — and each placement's own.
-  lastFrame() {
-    return this.frame;
-  }
-  // The effects this session holds: the ones its latest render drew, and the
-  // transitions still in flight.
-  get heldCount() {
-    const passing = this.passages?.size ?? 0;
-    return [...this.made.values()].reduce((n, row2) => n + row2.size, passing);
-  }
-  /**
-   * The session's animation clock read at the wall instant `at`, running at
-   * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
-   * the last drawn frame passed at the speed in force then; before the first
-   * frame the timeline is the host clock itself, so a session that has only
-   * ever run at 1x reads the wall instant at every frame. Reads only: the frame
-   * that draws keeps it as the anchor (`drawn`).
-   */
-  clockAt(at, speed2) {
-    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed2) };
-  }
-  /**
-   * The motion of each row of a render drawn at `clock` whose bar wears `name`,
-   * given the row's strip items. Records an effect coming into force — the
-   * bar's, or a placement's — when it differs from the last render's, so every
-   * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
-   * from off the row, wheel at the theme's own hues. Records every placement
-   * the render draws, fades in each one the last frame did not, and dissolves
-   * out each one the last frame drew and this one does not. All of it is kept
-   * once the frame is `drawn`.
-   */
-  motion(name, clock, given2, flash = null) {
-    const at = animationAt(clock);
-    const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
-    const inForce = this.inForce?.name === name ? this.inForce : { name, since: at };
-    const bar = {
-      scope: BAR_SCOPE,
-      name,
-      t: at - inForce.since
-    };
-    const knownPlacements = this.placements;
-    const placements = /* @__PURE__ */ new Map();
-    const known = this.made;
-    const made = /* @__PURE__ */ new Map();
-    const own2 = [];
-    const { last: last2 } = given2;
-    const inFlight = this.passages;
-    const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
-    const before = basis === "compared" ? (id2) => {
-      const record2 = last2.placements.get(id2);
-      return record2?.kind === "drew" ? {
-        drawing: record2.drawing,
-        passage: inFlight.get(id2) ?? null
-      } : void 0;
-    } : null;
-    const reachedIds = /* @__PURE__ */ new Set();
-    const passages = /* @__PURE__ */ new Map();
-    const fading = [];
-    const leaving = [];
-    const frame2 = {
-      effect: name,
-      t: bar.t,
-      speed: clock.timeline.rate,
-      made: 0,
-      reused: 0,
-      own: own2,
-      basis,
-      revision: given2.source.revision,
-      fades: fading,
-      leaves: leaving
-    };
-    const begin = (transition2, id2, { ground }) => {
-      const begun = EFFECT_CATALOGUE.transitions[transition2]({
-        z: noiseOffset(`${this.key}@${id2}`) * NOISE_DEPTH
-      });
-      return {
-        name: transition2,
-        since: at,
-        done: (t2) => begun.done(t2),
-        effect: fromGround(begun.effect, ground)
-      };
-    };
-    const over2 = ({ since, done: done2 }) => done2(at - since);
-    const shown = (id2, drawing2, last3) => ({
-      drawing: drawing2,
-      passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over2(last3.passage) ? last3.passage : null
-    });
-    const gone = (id2, last3) => {
-      if (last3 === void 0 || last3.drawing.opened || last3.drawing.own.length === 0)
-        return void 0;
-      if (last3.passage?.name === "dissolve")
-        return over2(last3.passage) ? void 0 : last3;
-      const held = { ...last3.drawing, own: last3.drawing.own.map(given2.hold) };
-      return { drawing: held, passage: begin("dissolve", id2, held) };
-    };
-    const reached = (id2, lines2) => {
-      if (reachedIds.has(id2))
-        throw new Error(`placement "${id2}" was reached twice in one frame`);
-      reachedIds.add(id2);
-      const last3 = before?.(id2);
-      const { drawing: drawing2, deeper } = given2.returned(id2, lines2);
-      const now2 = drawing2 === null ? gone(id2, last3) : shown(id2, drawing2, last3);
-      if (now2 === void 0) return lines2;
-      if (now2.passage !== null) {
-        passages.set(id2, now2.passage);
-        (now2.passage.name === "fade" ? fading : leaving).push({
-          placement: id2,
-          t: at - now2.passage.since
-        });
-      }
-      return drawing2 === null ? [...now2.drawing.own, ...deeper] : lines2;
-    };
-    const ownPart = (placement, name2) => {
-      const last3 = placements.get(placement) ?? knownPlacements.get(placement);
-      const since = last3?.name === name2 ? last3 : { name: name2, since: at };
-      const t2 = at - since.since;
-      if (!placements.has(placement)) {
-        placements.set(placement, since);
-        own2.push({ placement, effect: name2, t: t2 });
-      }
-      return { scope: placement, name: name2, t: t2 };
-    };
-    const effectOf = (rowKey, part) => {
-      const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
-      made.set(rowKey, row3);
-      const current2 = row3.get(part.scope);
-      if (current2 !== void 0) return current2.effect;
-      const last3 = known.get(rowKey)?.get(part.scope);
-      const reuse = last3?.name === part.name;
-      const z = noiseOffset(
-        part.scope === BAR_SCOPE ? rowKey : `${rowKey}@${part.scope}`
-      );
-      const effect = reuse ? last3.effect : EFFECT_CATALOGUE.loops[part.name]({ z: z * NOISE_DEPTH });
-      frame2[reuse ? "reused" : "made"]++;
-      row3.set(part.scope, { name: part.name, effect });
-      return effect;
-    };
-    const byScope = (items) => {
-      const parts = /* @__PURE__ */ new Map();
-      for (const { owner, placement } of items) {
-        const part = placement.effect === FOLLOW_BAR ? bar : ownPart(placement.id, placement.effect);
-        const seen2 = parts.get(part.scope);
-        if (seen2 === void 0)
-          parts.set(part.scope, { ...part, owners: [owner] });
-        else seen2.owners.push(owner);
-      }
-      return [...parts.values()];
-    };
-    const passagesOf = (items) => {
-      const byPlacement = /* @__PURE__ */ new Map();
-      for (const { owner, placement } of items) {
-        const mine = byPlacement.get(placement.id);
-        if (mine === void 0) byPlacement.set(placement.id, [owner]);
-        else mine.push(owner);
-      }
-      return [...byPlacement].flatMap(([id2, owners]) => {
-        const passage = passages.get(id2) ?? null;
-        return passage === null ? [] : [
-          {
-            timeline: onSession(at - passage.since),
-            effect: confined(passage.effect, ...owners)
-          }
-        ];
-      });
-    };
-    const flashPart = flash === null ? [] : [
-      {
-        timeline: Timeline.play(flash.idleSince),
-        effect: closingFlash(
-          flash.fill,
-          flash.text,
-          flashBegins(flash.timeoutS)
-        )
-      }
-    ];
-    const flashing = (kind) => kind === "menu" ? flashPart : [];
-    const row2 = (rowName, kind, items) => {
-      const parts = items.some(
-        (i) => i.placement.effect !== FOLLOW_BAR
-      ) ? byScope(items) : [{ ...bar, owners: void 0 }];
-      const moving = parts.filter(isMoving);
-      const passing = passagesOf(items);
-      const flashed = flashing(kind);
-      if (moving.length === 0 && passing.length === 0 && flashed.length === 0)
-        return STILL3;
-      const rowKey = `${this.key}#${rowName}`;
-      return {
-        kind: "moving",
-        time: clock.wall,
-        wrap: (strip) => new Effected(
-          strip,
-          together([
-            ...moving.map((part) => {
-              const effect = effectOf(rowKey, part);
-              return {
-                timeline: onSession(part.t),
-                effect: part.owners === void 0 ? effect : paintedOn(effect, part.owners)
-              };
-            }),
-            ...passing,
-            // Last, so a lit hold is the flash's over whatever a fade
-            // veils: the menu is about to close.
-            ...flashed
-          ]),
-          { key: rowKey, theme: ASSUMED_TERMINAL }
-        )
-      };
-    };
-    return {
-      // [LAW:dataflow-not-control-flow] With transitions off nothing is
-      // compared or kept, so every placement draws exactly what it returned.
-      placed: basis === "off" ? (_id, lines2) => lines2 : reached,
-      row: row2,
-      drawn: () => {
-        this.anchor = clock.timeline;
-        this.inForce = inForce;
-        this.placements = placements;
-        this.made = made;
-        this.passages = basis === "off" ? null : passages;
-        this.frame = frame2;
-      }
-    };
-  }
-};
-var MAX_SESSIONS = 256;
-var EffectSessions = class {
-  constructor(maxSessions = MAX_SESSIONS) {
-    this.maxSessions = maxSessions;
-  }
-  maxSessions;
-  sessions = /* @__PURE__ */ new Map();
-  of(sessionId2) {
-    const known = this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, known);
-    for (const oldest of this.sessions.keys()) {
-      if (this.sessions.size <= this.maxSessions) break;
-      this.sessions.delete(oldest);
-    }
-    return known;
-  }
-  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
-  // effect made for a row keeps rich-js's settled shares, so their count is the
-  // size that grows.
-  getStats() {
-    let effects = 0;
-    for (const session of this.sessions.values()) effects += session.heldCount;
-    return { sessions: this.sessions.size, effects };
-  }
-};
-
-// src/render/strip.ts
-var UNBOUNDED_DRAW_WIDTH = 80;
-var ROW_HOST = {};
-function draw(renderable, options) {
-  const destination = resolveDestination(options.colorSystem);
-  const { time } = options;
-  let told = Infinity;
-  const segments = [
-    ...render(renderable, {
-      maxWidth: options.width ?? UNBOUNDED_DRAW_WIDTH,
-      isTerminal: false,
-      asciiOnly: false,
-      theme: RENDER_THEME,
-      colorSystem: destination.colorSystem,
-      ...time === void 0 ? {} : { frame: { time, host: ROW_HOST } },
-      // [LAW:no-silent-failure] rich-js would draw a style it cannot resolve
-      // as no style at all; a name the theme lacks is a broken config, so it
-      // throws here exactly as the cell splitter throws on it.
-      onStyleError: (error) => {
-        throw error;
-      },
-      onHold: ({ nextChange }) => {
-        told = Math.min(told, nextChange);
-      }
-    })
-  ];
-  return {
-    lines: runLines(segments, destination.colorSystem),
-    nextChange: Math.min(Segment.nextChange(segments), told)
-  };
-}
-var DEFAULT_TERMINAL_WIDTH = 120;
-var separatorJoiners = /* @__PURE__ */ new Map();
-function plainWith(separator) {
-  const known = separatorJoiners.get(separator);
-  if (known !== void 0) return known;
-  const withGlyph = (form) => {
-    const seam2 = form.seam.map(
-      (cell3) => "cap" in cell3 ? cell3 : { ...cell3, glyph: separator }
-    );
-    return { seam: seam2 };
-  };
-  const { seam, caps } = JOINERS2.plain;
-  const joiner = new CellJoiner(
-    {
-      glyph: withGlyph(seam.glyph),
-      ascii: seam.ascii
-    },
-    caps
-  );
-  separatorJoiners.set(separator, joiner);
-  return joiner;
-}
-function pickJoiner(endcaps, separator) {
-  return endcaps === "plain" && separator !== void 0 ? plainWith(separator) : JOINERS2[endcaps];
-}
-var geometryMemo = /* @__PURE__ */ new Map();
-function stripGeometry(options) {
-  const key = JSON.stringify([options.endcaps, options.separator ?? null]);
-  const known = geometryMemo.get(key);
-  if (known !== void 0) return known;
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const cell3 = (bgcolor) => new RichText("x", {
-    end: "",
-    overflow: "ignore",
-    style: new Style({ bgcolor })
-  });
-  const width = (cells) => {
-    const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
-    return new RichText(plainOf2(lines2.flat())).cellLength;
-  };
-  const one = width([cell3("#101010")]);
-  const geometry = {
-    chrome: one - 1,
-    seam: width([cell3("#101010"), cell3("#202020")]) - one - 1
-  };
-  geometryMemo.set(key, geometry);
-  return geometry;
-}
-function stripChromeCols(options) {
-  return stripGeometry(options).chrome;
-}
-function stripSeamCols(options) {
-  return stripGeometry(options).seam;
-}
-var PRIVATE_USE = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
-function privateGlyphsIn(text4) {
-  return [...new Set(text4.match(PRIVATE_USE) ?? [])].join("");
-}
-function stripPrivateGlyphs(options) {
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
-  const cells = [cell3("#101010"), cell3("#202020")];
-  const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
-  return privateGlyphsIn(plainOf2(lines2.flat()));
-}
-var WIDEST_GLYPH_COLS = 2;
-function lineWidth(options) {
-  return options.wrap ? options.width : Infinity;
-}
-function wrappedLines(plain, width) {
-  const wrapping = new RichText(plain, { overflow: "fold", end: "" });
-  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf2);
-}
-function drawStripCells(cells, options, motion = STILL3) {
-  if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
-  const joiner = pickJoiner(options.endcaps, options.separator);
-  const flex = Number.isFinite(lineWidth(options));
-  const drawn = {
-    colorSystem: options.colorCompatibility,
-    ...flex ? { width: options.width } : {}
-  };
-  const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
-  const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
-  if (row2.lines.length === 0) {
-    throw new Error("drawStripCells: rich-js strip drew no line");
-  }
-  return row2;
-}
-function renderStripCells(cells, options) {
-  return encodeAnsi(
-    drawStripCells(cells, options).lines,
-    options.colorCompatibility
-  );
-}
-
-// src/daemon/foundations/memory-limit.ts
-init_globals();
-var BYTES_PER_MB = 1024 * 1024;
-var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
-function laterIdentity(a, b) {
-  return a > b;
-}
-var NEAR_LIMIT = 0.75;
-function approachingLimit(bytes, limit) {
-  return bytes > limit * NEAR_LIMIT;
-}
-function chargeWords(charge) {
-  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
-}
-function measureOf(charge) {
-  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
-}
-var BREACH_ARTIFACTS = {
-  memoryReport: { prefix: "memory-", suffix: ".txt" },
-  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
-  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
-};
-
 // src/doctor/busy.ts
 init_globals();
 var busy = (what) => ({ kind: "busy", what });
@@ -53401,13 +54426,8 @@ function subscription(req) {
   return { kind: "subscribe", sessionId: sessionId2.id, lane };
 }
 async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
-  if (inbound.kind === "url") {
-    return replied(
-      stay(
-        await urlClick(parts, inbound.frame, timedOut, accepted, clientLeft)
-      )
-    );
-  }
+  if (inbound.kind === "url")
+    return urlClick(parts, inbound.frame, timedOut, accepted, clientLeft);
   const req = inbound.req;
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
     return refuse2("BAD_REQUEST", "malformed request");
@@ -53694,7 +54714,7 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
     id: accepted.id,
     gone: () => timedOut() || clientLeft()
   };
-  const outcome = await run3(facts, click3);
+  const outcome = await run3(facts, click3).catch(failureOf);
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -53709,50 +54729,74 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
   return clickReply(outcome);
 }
 async function clickOutcome(parts, req, facts, click3) {
-  const arrival = { via: "link", delivery: { kind: "cli" } };
   noteFacts(facts, { via: "cli" });
-  const { verb, value } = req;
-  if (typeof verb !== "string" || typeof value !== "string") {
-    return badRequest(
-      `a click's verb and value are strings, got ${typeof verb} and ${typeof value}`
-    );
-  }
-  return clickRan(() => handleClick(parts, verb, value, arrival, facts, click3));
-}
-async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
-  return clickEvent(
+  const { url } = req;
+  if (typeof url !== "string")
+    return badRequest(`a click's url is a string, got ${typeof url}`);
+  return ranClick(
     parts,
-    accepted,
-    timedOut,
-    clientLeft,
-    async (facts, click3) => {
-      const { urlV, url } = frame2;
-      noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
-      if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
-        return badRequest(
-          `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
-        );
-      }
-      if (typeof url !== "string") {
-        return badRequest(`the URL handler's frame carries no url string`);
-      }
-      const link = parseHandlerUrl(url);
-      if (!link.ok) return badRequest(link.problem);
-      const arrival = {
-        via: "link",
-        delivery: { kind: "forwarder", urlV }
-      };
-      return clickRan(
-        () => handleClick(parts, link.verb, link.value, arrival, facts, click3)
-      );
-    }
+    parseClick(url, { kind: "cli" }, parts.linkSigner),
+    facts,
+    click3
   );
 }
-async function clickRan(click3) {
-  try {
-    return await click3();
-  } catch (error) {
-    return failureOf(error);
+function readUrlFrame(frame2, links2) {
+  const { urlV, url } = frame2;
+  if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV))
+    return {
+      kind: "refused",
+      problem: `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
+    };
+  if (typeof url !== "string")
+    return {
+      kind: "refused",
+      problem: "the URL handler's frame carries no url string"
+    };
+  return parseClick(url, { kind: "forwarder", urlV }, links2);
+}
+function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
+  const read2 = readUrlFrame(frame2, parts.linkSigner);
+  return {
+    kind: "url",
+    awaitsVerdict: awaitsVerdict(frame2.urlV),
+    verdict: read2.kind === "refused" ? clickReply(badRequest(read2.problem)) : { ok: true, output: "" },
+    land: () => clickEvent(
+      parts,
+      accepted,
+      timedOut,
+      clientLeft,
+      async (facts, click3) => {
+        noteFacts(facts, { via: "forwarder", urlV: String(frame2.urlV) });
+        return ranClick(parts, read2, facts, click3);
+      }
+    ).then(() => {
+    })
+  };
+}
+async function ranClick(parts, read2, facts, click3) {
+  switch (read2.kind) {
+    case "refused":
+      return badRequest(read2.problem);
+    case "probe":
+      noteFacts(facts, { verb: VERB_DOCTOR_PROBE, nonce: read2.nonce });
+      parts.handlerProbes.arrive({
+        nonce: read2.nonce,
+        delivery: read2.delivery
+      });
+      return { kind: "ok" };
+    case "status-line":
+      noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
+      return statusLineClick(parts, read2.value, facts, click3);
+    case "link":
+      noteFacts(facts, { link: read2.link });
+      return handleClick(
+        parts,
+        read2.verb,
+        read2.value,
+        { via: "link", delivery: read2.delivery },
+        facts,
+        click3
+      );
   }
 }
 var VERB_FACT = {
@@ -53762,10 +54806,6 @@ var VERB_FACT = {
 async function handleClick(parts, verb, value, arrival, facts, click3) {
   var _stack = [];
   try {
-    if (verb === VERB_TMUX_STATUS_CLICK) {
-      noteFacts(facts, { verb });
-      return statusLineClick(parts, value, facts, click3);
-    }
     noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
     const session = clickSessionOf(verb, value);
     if (session === null) noteFacts(facts, { sid: "-" });
@@ -53823,16 +54863,14 @@ async function statusLineClick(parts, value, facts, click3) {
   const { tmuxStatusLines } = parts;
   const link = tmuxStatusLines.linkAt(value);
   if (link.kind === "refused") return badRequest(link.reason);
-  noteFacts(facts, { link: link.url });
-  if (link.url.startsWith("cc-candybar://")) {
-    const parsed2 = parseHandlerUrl(link.url);
-    if (!parsed2.ok) return badRequest(parsed2.problem);
-    if (parsed2.verb === VERB_TMUX_STATUS_CLICK)
-      return badRequest("a status-line link names another status-line click");
+  noteFacts(facts, { link: unprovenLink(link.url) });
+  if (isBarLink(link.url)) {
+    const opened = openClick(link.url, parts.linkSigner);
+    if (opened.kind === "refused") return badRequest(opened.problem);
     return handleClick(
       parts,
-      parsed2.verb,
-      parsed2.value,
+      opened.verb,
+      opened.value,
       { via: "tmux-status" },
       facts,
       click3
@@ -53865,50 +54903,6 @@ var refusedRender = (problems) => ({
 
 // src/daemon/update-act.ts
 init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i = 0; i < text4.length; i++) h = Math.imul(h ^ text4.charCodeAt(i), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i) => byte === b[i]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/daemon/update-act.ts
 init_os();
 var import_node_path15 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
@@ -55417,791 +56411,6 @@ init_globals();
 var QUIET_PCT = 60;
 var QUIET_MIN_CONTRAST = 3;
 var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
-
-// src/doctor/checks.ts
-init_globals();
-
-// src/tmux-hint.ts
-init_globals();
-var TMUX_ENV = {
-  // `socket,server-pid,session-id` — the socket is the part before the first
-  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
-  socket: "TMUX",
-  pane: "TMUX_PANE",
-  // Claude Code's own switch: when this is truthy in ITS environment, it stops
-  // re-encoding the statusline at 256 colours inside tmux (verified against the
-  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
-  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
-};
-var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
-
-// src/doctor/checks.ts
-function statusLineOf(sources) {
-  if (sources.kind === "failed") {
-    return { kind: "unread", reason: sources.reason };
-  }
-  const lines2 = sources.value.flatMap(
-    ({ scope, path: path43, settings }) => "statusLine" in settings ? [{ from: { scope, path: path43 }, line: settings.statusLine }] : []
-  );
-  const top = lines2[0];
-  if (top === void 0) {
-    return { kind: "absent", read: sources.value.map((s) => s.path) };
-  }
-  if (!isJsonObject(top.line)) {
-    return { kind: "not-an-object", value: top.line, from: top.from };
-  }
-  for (const { from, line } of lines2) {
-    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
-    if ("refreshInterval" in line) {
-      return { kind: "present", refreshInterval: line.refreshInterval, from };
-    }
-  }
-  return { kind: "present", refreshInterval: void 0, from: top.from };
-}
-function envVarOf(sources, name) {
-  if (sources.kind === "failed") return sources;
-  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
-  return {
-    kind: "ok",
-    value: top === void 0 ? { kind: "unset" } : {
-      kind: "set",
-      value: top.env[name],
-      from: { scope: top.scope, path: top.path }
-    }
-  };
-}
-var UNWRITTEN_SCOPES = [
-  "managed",
-  "project"
-];
-var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
-var ENV_FIX_FILE = {
-  managed: () => null,
-  "project-local": (path43) => ({ scope: "project-local", path: path43 }),
-  project: (_, at) => ({
-    scope: "project-local",
-    path: projectLocalSettingsFile(at.projectDir)
-  }),
-  user: (path43) => ({ scope: "user", path: path43 })
-};
-var GLYPH_MARKS = ["drawn", "boxes"];
-var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
-var whoseWidth = (of) => of.kind === "session" ? `session ${of.sessionId}'s statusline client` : "this command's terminal";
-function describeFix(fix) {
-  switch (fix.kind) {
-    case "claude-settings":
-      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
-    case "post-mortems-read":
-      return `${fix.kind} through=${fix.through}`;
-  }
-}
-function problemsVerdict(problems) {
-  const [reason, ...more] = problems;
-  return reason === void 0 ? { ok: true } : { ok: false, reason, more };
-}
-var TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
-function ofTmuxClient(tmux3, decide) {
-  switch (tmux3.kind) {
-    case "unreported":
-      return {
-        ok: false,
-        reason: "the client reported no tmux facts \u2014 re-run `cc-candybar install` to stage a current client"
-      };
-    case "outside":
-      return { ok: true };
-    case "inside":
-      if (tmux3.client.kind === "failed") {
-        return {
-          ok: false,
-          reason: `tmux could not be asked: ${tmux3.client.reason}`
-        };
-      }
-      return tmux3.client.value === null ? { ok: true } : decide(tmux3.client.value, tmux3.hint);
-  }
-}
-var tmuxTruecolor = {
-  name: "tmuxTruecolor",
-  label: "tmux truecolor",
-  takesMark: false,
-  probe: ({ tmux: tmux3, claudeSettings: { origin } }) => ofTmuxClient(tmux3, (client, hint) => {
-    if (!client.features.includes("RGB")) return { ok: true };
-    if (hint.truecolor !== null) return { ok: true };
-    const staged = envVarOf(origin.sources, TMUX_TRUECOLOR_VAR);
-    if (staged.kind === "failed") return { ok: false, reason: staged.reason };
-    const told = staged.value;
-    if (told.kind === "set" && typeof told.value === "string" && told.value !== "") {
-      return {
-        ok: false,
-        reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} \u2014 restart Claude Code to apply`
-      };
-    }
-    const reason = "Claude Code renders the bar in 256 colours inside tmux";
-    const fixInto = (file2) => ({
-      ok: false,
-      reason,
-      fix: {
-        kind: "claude-settings",
-        file: file2,
-        path: ["env", TMUX_TRUECOLOR_VAR],
-        value: "1"
-      }
-    });
-    if (told.kind === "unset") {
-      return fixInto({ scope: "user", path: origin.at.userFile });
-    }
-    const file = ENV_FIX_FILE[told.from.scope](told.from.path, origin.at);
-    return file === null ? {
-      ok: false,
-      reason: `${reason} \u2014 the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`
-    } : fixInto(file);
-  })
-};
-var utf82 = {
-  name: "utf8",
-  label: "UTF-8",
-  takesMark: false,
-  probe: ({ tmux: tmux3 }) => ofTmuxClient(
-    tmux3,
-    (client) => client.utf8 ? { ok: true } : {
-      ok: false,
-      reason: "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` \u2014 attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux"
-    }
-  )
-};
-var termWidth = {
-  name: "termWidth",
-  label: "terminal width",
-  takesMark: false,
-  probe: ({ width }) => width.kind === "failed" ? { ok: false, reason: width.reason } : width.value.columns !== null ? {
-    ok: true,
-    note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`
-  } : {
-    ok: false,
-    reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask \u2014 or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`
-  }
-};
-var UNUSED = {
-  variable: "is never read",
-  action: "is never clicked",
-  helper: "is never called",
-  segment: "is in no preset"
-};
-var NAMED_BY = {
-  argument: "command argument",
-  environment: `$${CONFIG_ENV}`,
-  pick: "load-config pick",
-  unknown: "source unknown"
-};
-function judgedConfig({ target, layers }) {
-  if (target.source !== "search") {
-    return `${target.path} (${NAMED_BY[target.source]})`;
-  }
-  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
-}
-function configProblems(config2) {
-  switch (config2.kind) {
-    case "failed": {
-      const problems = [
-        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
-        ...config2.warnings
-      ];
-      return problems.length === 0 ? ["the config failed to load"] : problems;
-    }
-    case "loaded":
-      return [
-        ...config2.warnings,
-        ...config2.unused.map(
-          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
-        )
-      ];
-  }
-}
-var config = {
-  name: "config",
-  label: "config",
-  takesMark: false,
-  probe: ({ config: config2 }) => {
-    const judged = judgedConfig(config2);
-    const verdict = problemsVerdict(configProblems(config2));
-    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
-  }
-};
-var REINSTALL = "re-run `cc-candybar install`";
-function handlerAppProblems(opener) {
-  if (opener.kind === "failed") {
-    return [
-      `Launch Services could not be asked which app opens cc-candybar:// \u2014 ${opener.reason}`
-    ];
-  }
-  if (opener.value === null) {
-    return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
-  }
-  const { app, forwarder } = opener.value;
-  return forwarder ? [] : [
-    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
-  ];
-}
-var urlHandler = {
-  name: "urlHandler",
-  label: "URL handler",
-  takesMark: false,
-  probe: ({ urlHandler: urlHandler2 }) => {
-    switch (urlHandler2.kind) {
-      case "unsupported":
-        return { ok: true };
-      case "unprobed":
-        return { ok: false, reason: urlHandler2.reason };
-      case "arrived":
-        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
-        return {
-          ok: false,
-          // What is known: a click request brought it, which is what the
-          // retired applet runs — and a hand-run `cc-candybar url-handle`,
-          // or the browser page. Which app Launch Services opens the scheme
-          // with is the opener's row to say (handlerAppProblems).
-          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
-        };
-      case "lost":
-        return problemsVerdict([
-          ...handlerAppProblems(urlHandler2.opener),
-          urlHandler2.unopened === null ? "a cc-candybar:// link was opened and did not arrive at the daemon" : `a cc-candybar:// link could not be opened \u2014 ${urlHandler2.unopened}`
-        ]);
-    }
-  }
-};
-var RECENT_CLIENT_S = 300;
-function clientStanding({ bundle, checkout }, client) {
-  return {
-    bundle: client.bundle.kind === "failed" ? { kind: "unresolved", reason: client.bundle.reason } : client.bundle.value === bundle ? { kind: "same" } : { kind: "other", path: client.bundle.value },
-    source: client.client !== "native" || checkout === null ? { kind: "uncompared" } : checkout.rustSource.kind === "failed" ? {
-      kind: "unreadable",
-      root: checkout.root,
-      reason: checkout.rustSource.reason
-    } : client.source === null ? { kind: "unstamped" } : client.source === checkout.rustSource.value ? { kind: "same" } : { kind: "other", root: checkout.root }
-  };
-}
-function remedy(daemon3, client) {
-  if (client === "frames")
-    return `run \`node ${daemon3.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
-  return daemon3.checkout === null ? REINSTALL : `run \`just install-rust\` and point the statusLine command at ${daemon3.checkout.root}/bin/cc-candybar-native`;
-}
-function installProblems(daemon3, nativeShipped, client) {
-  const { checkout } = daemon3;
-  if (client.kind === "unreported") {
-    return [
-      `the bar is drawn by a statusline client too old to say what it is \u2014 ${remedy(daemon3, "native")}`
-    ];
-  }
-  const { bundle, source } = clientStanding(daemon3, client);
-  switch (bundle.kind) {
-    case "unresolved":
-      return [
-        `the statusline client's bundle cannot be resolved: ${bundle.reason}`
-      ];
-    case "other":
-      return [
-        `the statusline client runs ${bundle.path}, not the daemon's ${daemon3.bundle} \u2014 ${remedy(daemon3, client.client)}`
-      ];
-    case "same":
-      break;
-  }
-  if (client.client === "node" && (nativeShipped || checkout !== null)) {
-    return [
-      `the bar is drawn by the Node fallback, which starts node on every render \u2014 ${remedy(daemon3, "native")}`
-    ];
-  }
-  switch (source.kind) {
-    case "uncompared":
-    case "same":
-      return [];
-    case "unreadable":
-      return [`${source.root}/rust-client could not be read: ${source.reason}`];
-    case "unstamped":
-      return [
-        "the native client carries no source stamp, so which source it was built from is unknown \u2014 run `just install-rust`"
-      ];
-    case "other":
-      return [
-        `the native client was built from other source than ${source.root}/rust-client holds \u2014 run \`just install-rust\``
-      ];
-  }
-}
-var noRenderOf = (sighted) => {
-  const lost = `restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions`;
-  return sighted.kind === "clicked" ? `this daemon holds no render of this bar (it ${lost})` : `this daemon holds no render of session ${sighted.sessionId}'s bar (its statusLine does not run cc-candybar \u2014 a \`claude -p\` session draws none \u2014 or the daemon ${lost}; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently)`;
-};
-var install = {
-  name: "install",
-  label: "install",
-  takesMark: false,
-  probe: ({ install: install2, sighted }) => {
-    if (install2.kind === "failed") {
-      return {
-        ok: false,
-        reason: `the daemon could not be asked which clients draw the bar: ${install2.reason}`
-      };
-    }
-    const { daemon: daemon3, nativeShipped, clients } = install2.value;
-    if (clients.length === 0) {
-      return {
-        ok: false,
-        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which client draws it is unknown \u2014 run the doctor again once the bar has redrawn` : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes \u2014 run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`
-      };
-    }
-    return problemsVerdict([
-      ...new Set(
-        clients.flatMap((c) => installProblems(daemon3, nativeShipped, c))
-      )
-    ]);
-  }
-};
-function unreadPostMortems({ postMortems }, read2) {
-  return postMortems.kind === "ok" && read2.kind === "ok" ? postMortems.value.filter(
-    (m) => read2.value.through === null || laterIdentity(m.identity, read2.value.through)
-  ) : [];
-}
-function otherDaemons(serving, processes) {
-  return serving.kind === "failed" ? processes : processes.filter((p2) => p2.pid !== serving.value.pid);
-}
-var daemon = {
-  name: "daemon",
-  label: "daemon",
-  takesMark: false,
-  probe: ({ daemon: { serving, processes, read: read2 } }) => {
-    const unreadable = processes.kind === "failed" ? [`the process table could not be read: ${processes.reason}`] : [];
-    const others = processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
-    if (serving.kind === "failed") {
-      const running = others.length > 0 ? ` \u2014 daemon ${others.map((p2) => p2.pid).join(", ")} running` : "";
-      return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
-    }
-    const { pid: pid2, memory, limit, postMortems } = serving.value;
-    const unread2 = unreadPostMortems(serving.value, read2);
-    const verdict = problemsVerdict([
-      ...unread2.map(
-        (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
-      ),
-      ...postMortems.kind === "failed" ? [
-        `the daemon's post-mortems could not be listed: ${postMortems.reason}`
-      ] : [],
-      // Which were read decides nothing only while none are listed.
-      ...read2.kind === "failed" && !(postMortems.kind === "ok" && postMortems.value.length === 0) ? [`which post-mortems were read could not be read: ${read2.reason}`] : [],
-      ...unreadable,
-      ...others.map(
-        (p2) => `daemon ${p2.pid} (started ${p2.started}, rss ${mb(p2.rss)} MB${p2.ppid === 1 ? "" : `, child of ${p2.ppid}`}) runs beside the one serving the bar (${pid2}) \u2014 \`kill ${p2.pid}\``
-      ),
-      // [LAW:no-silent-failure] RSS standing in for the platform's charge is
-      // the limit judging an estimate — or, with no gap yet read, what macOS
-      // has already reclaimed, the very misjudgment the charge exists to end —
-      // so it is a finding, near the limit or not.
-      ...memory.kind === "measured" && memory.charge.kind === "stand-in" ? [
-        `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${memory.charge.gap !== 0 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate` : "RSS, which counts pages macOS has reclaimed"}`
-      ] : [],
-      ...memory.kind === "measured" && approachingLimit(memory.charge.bytes, limit) ? [
-        `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
-      ] : []
-    ]);
-    if (verdict.ok && memory.kind === "unmeasured") {
-      return { ok: true, note: "the daemon has not measured its memory yet" };
-    }
-    const newest = unread2[0];
-    return verdict.ok || newest === void 0 ? verdict : {
-      ...verdict,
-      fix: { kind: "post-mortems-read", through: newest.identity }
-    };
-  }
-};
-var CLICK_TO_SEE = "click \u{1FA7A} doctor in the bar's settings menu: if it runs, links work";
-function drawsLinks(identified, clicked) {
-  const id2 = sightingOf(identified);
-  if (clicked.kind === "ok" && id2 !== null && clicked.value.includes(id2)) {
-    return { kind: "draws" };
-  }
-  return identified.kind === "known" ? linkSupport(identified.terminal) : { kind: "unknown" };
-}
-function linkProblems({ identified, tmuxClient }, clicked) {
-  const called = identifiedAs(identified);
-  const support = drawsLinks(identified, clicked);
-  const prove = sightingOf(identified) === null ? CLICK_TO_SEE : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
-  const terminal = (() => {
-    switch (support.kind) {
-      case "draws":
-        return [];
-      case "none":
-        return [
-          `${called} draws no links (OSC 8), so nothing on the bar can be clicked \u2014 run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`
-        ];
-      case "older":
-        return [
-          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) \u2014 update ${called}`
-        ];
-      case "unsaid":
-        return [
-          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is \u2014 ${prove}`
-        ];
-      case "unknown":
-        return [
-          `the doctor does not know whether ${called} draws links (OSC 8) \u2014 ${prove}`
-        ];
-    }
-  })();
-  const remembered = clicked.kind === "failed" && support.kind !== "draws" ? [
-    `the terminals a doctor click came back from could not be read: ${clicked.reason}`
-  ] : [];
-  const tmux3 = support.kind === "none" || tmuxClient === null || tmuxClient.features.includes("hyperlinks") ? [] : [
-    `tmux does not pass links through to ${called} \u2014 add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`
-  ];
-  return [...terminal, ...remembered, ...tmux3];
-}
-var links = {
-  name: "links",
-  label: "links",
-  takesMark: false,
-  probe: ({ sighted, terminal, clicked }) => {
-    if (sighted.kind === "clicked" && sighted.via === "link")
-      return { ok: true };
-    switch (terminal.kind) {
-      case "unreported":
-        return {
-          ok: false,
-          reason: "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
-        };
-      case "unasked":
-        return {
-          ok: false,
-          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`
-        };
-      case "seen":
-        return problemsVerdict(linkProblems(terminal, clicked));
-    }
-  }
-};
-var EFFECT_REFRESH_INTERVAL = 1;
-var refreshedFrames = (frames) => frames.filter((f) => f.role === "statusline");
-var effectRefresh = {
-  name: "effectRefresh",
-  label: "effect refresh",
-  takesMark: false,
-  probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
-    const verdicts = [origin, ...elsewhere].flatMap(
-      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? []
-    );
-    const [first2] = verdicts;
-    if (first2 === void 0) {
-      if (frames.kind === "failed") return { ok: false, reason: frames.reason };
-      return unknownMotion(
-        sighted.kind !== "recent" ? noRenderOf(sighted) : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`
-      );
-    }
-    const [lead, ...others] = verdicts.flatMap((v) => v.ok ? [] : [v]);
-    if (lead === void 0) return first2;
-    const more = [...new Set(others.map((f) => f.reason))].filter(
-      (r) => r !== lead.reason
-    );
-    return more.length === 0 ? lead : { ...lead, more };
-  }
-};
-var barsSeen = (bars) => {
-  const drawn = refreshedFrames(bars).map((f) => f.frame);
-  if (drawn.includes("moves")) {
-    return {
-      kind: "moving",
-      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
-    };
-  }
-  if (drawn.includes("can-move")) {
-    return {
-      kind: "moving",
-      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
-    };
-  }
-  if (drawn.includes("still")) return { kind: "still" };
-  if (drawn.includes("drawing")) {
-    return {
-      kind: "unknown",
-      unseen: "the bar's latest render has not finished"
-    };
-  }
-  if (drawn.length > 0) {
-    return { kind: "unknown", unseen: "the bar's recent renders failed" };
-  }
-  if (bars.length > 0) {
-    return {
-      kind: "unknown",
-      unseen: "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
-    };
-  }
-  return { kind: "none" };
-};
-var unknownMotion = (unseen) => ({
-  ok: false,
-  reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
-});
-function chainVerdict(sources, seen2) {
-  const statusLine = statusLineOf(sources);
-  if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
-    return {
-      ok: true,
-      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
-    };
-  }
-  switch (seen2.kind) {
-    case "none":
-      return null;
-    case "still":
-      return { ok: true };
-    case "unknown":
-      return unknownMotion(seen2.unseen);
-    case "moving":
-      break;
-  }
-  const { wearing } = seen2;
-  switch (statusLine.kind) {
-    case "unread":
-      return {
-        ok: false,
-        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`
-      };
-    case "absent":
-      return {
-        ok: false,
-        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) \u2014 the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`
-      };
-    case "not-an-object":
-      return {
-        ok: false,
-        // `cc-candybar install` writes the user file only, so only there
-        // does re-running it replace the line.
-        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object \u2014 ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`
-      };
-    case "present": {
-      const { from, refreshInterval: interval } = statusLine;
-      const why2 = interval === void 0 ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events" : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL ? `its statusLine redraws it only every ${interval} s` : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
-      return doctorWrites(from) ? {
-        ok: false,
-        reason: `${wearing}, but ${why2} (statusLine from ${from.path})`,
-        fix: {
-          kind: "claude-settings",
-          file: from,
-          path: ["statusLine", "refreshInterval"],
-          value: EFFECT_REFRESH_INTERVAL
-        }
-      } : {
-        ok: false,
-        reason: `${wearing}, but ${why2} \u2014 its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`
-      };
-    }
-  }
-}
-var codePoints = (glyphs) => [...glyphs].map((g) => `U+${g.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
-function terminalCalled(terminal) {
-  switch (terminal.kind) {
-    case "unreported":
-    case "unasked":
-      return "this terminal";
-    case "unknown":
-    case "unnamed":
-      return identifiedAs(terminal);
-    case "bundling":
-    case "unread":
-    case "configured":
-      return [terminalLabel(terminal.name), terminal.version].filter((part) => part !== null).join(" ");
-  }
-}
-function sightedIn(terminal) {
-  switch (terminal.kind) {
-    case "unreported":
-    case "unasked":
-      return null;
-    case "unknown":
-    case "unnamed":
-      return sightingOf(terminal);
-    case "bundling":
-    case "unread":
-      return terminalLabel(terminal.name);
-    case "configured": {
-      const label2 = terminalLabel(terminal.name);
-      return terminal.font.kind === "ok" ? `${label2} with ${terminal.font.value.font} (${terminal.font.value.from})` : `${label2}, its font unread: ${terminal.font.reason}`;
-    }
-  }
-}
-function glyphSighting(facts) {
-  const where = sightedIn(facts.terminal);
-  return where === null ? void 0 : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
-}
-var NERD_FONT_CHECK = "nerdFont";
-var nerdFont = {
-  name: NERD_FONT_CHECK,
-  label: "Nerd Font",
-  takesMark: true,
-  probe: ({ nerdFont: facts, marks }) => {
-    if (facts.kind === "none") return { ok: true };
-    const sighting = glyphSighting(facts);
-    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
-      ok: false,
-      reason,
-      more: [`the mark book could not be read: ${marks.reason}`]
-    } : { ok: false, reason, ...sighting !== void 0 && { sighting } };
-    const terminal = facts.terminal;
-    const called = terminalCalled(terminal);
-    const mark = sighting === void 0 || marks.kind === "failed" ? null : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null;
-    switch (mark) {
-      case "drawn":
-        return { ok: true };
-      case "boxes":
-        return failed3(
-          `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
-        );
-      case null:
-        break;
-    }
-    switch (terminal.kind) {
-      case "unreported":
-        return failed3(
-          "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
-        );
-      case "unasked":
-        return failed3(
-          `tmux could not be asked which terminal is attached: ${terminal.reason}`
-        );
-      case "unknown":
-      case "unnamed":
-      case "unread":
-        return failed3(`the doctor cannot read ${called}'s font`);
-      case "bundling": {
-        const since = TERMINALS[terminal.name].glyphs.since;
-        if (since === null) return { ok: true };
-        const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
-        if (shipped === true) return { ok: true };
-        const label2 = terminalLabel(terminal.name);
-        return failed3(
-          shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
-        );
-      }
-      case "configured": {
-        if (terminal.font.kind === "failed") {
-          return failed3(
-            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
-          );
-        }
-        const { font, from, lacks } = terminal.font.value;
-        if (lacks === null) {
-          return failed3(
-            `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
-          );
-        }
-        if (lacks.length === 0) return { ok: true };
-        return failed3(
-          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
-        );
-      }
-    }
-  }
-};
-function named(segments) {
-  return segments.join(", ");
-}
-function optOut(segments) {
-  return `or set missingData: "ignore" on ${named(segments)}`;
-}
-function pullRequestProblems(need2) {
-  if (need2.kind === "unneeded") return [];
-  const { segments, fact } = need2;
-  if (fact.kind === "failed") {
-    return [
-      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`
-    ];
-  }
-  if (fact.value === null) return [];
-  const { cli, host, status } = fact.value;
-  if (status === "ready") return [];
-  return status === "missing" ? [
-    `${named(segments)}: ${cli} is not installed, so no pull request is ever shown \u2014 install it, ${optOut(segments)}`
-  ] : [
-    `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) \u2014 run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`
-  ];
-}
-function rateLimitProblems(need2, sighted) {
-  if (need2.kind === "unneeded") return [];
-  const { segments, fact } = need2;
-  if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
-  if (fact.value.length === 0) {
-    return [
-      sighted.kind !== "recent" ? `${named(segments)}: ${noRenderOf(sighted)}, so whether Claude Code sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn` : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn`
-    ];
-  }
-  return fact.value.includes("missing") && !fact.value.includes("carried") ? [
-    `${named(segments)}: Claude Code sent no rate_limits \u2014 it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`
-  ] : [];
-}
-var segmentData = {
-  name: "segmentData",
-  label: "segment data",
-  takesMark: false,
-  probe: ({ data, sighted }) => problemsVerdict([
-    ...pullRequestProblems(data.pullRequests),
-    ...rateLimitProblems(data.rateLimits, sighted)
-  ])
-};
-function transcriptProblems({
-  path: path43,
-  answered,
-  read: read2
-}) {
-  switch (read2.kind) {
-    case "absent":
-      return answered ? [
-        `the transcript ${path43} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
-      ] : [];
-    case "failed":
-      return [`the transcript ${path43} cannot be read: ${read2.reason}`];
-    case "ok": {
-      const { lines: lines2, unparsed, whole } = read2.value;
-      return unparsed === 0 ? [] : [
-        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path43} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
-      ];
-    }
-  }
-}
-var sessionData = {
-  name: "sessionData",
-  label: "session data",
-  takesMark: false,
-  probe: ({ transcripts, sighted }) => {
-    if (transcripts.kind === "failed") {
-      return { ok: false, reason: transcripts.reason };
-    }
-    if (transcripts.value.length === 0) {
-      return {
-        ok: false,
-        reason: sighted.kind !== "recent" ? `${noRenderOf(sighted)}, so which transcript it reads is unknown \u2014 run the doctor again once the bar has redrawn` : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named \u2014 run the doctor again once the bar has redrawn`
-      };
-    }
-    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
-  }
-};
-var CHECKS = [
-  config,
-  install,
-  daemon,
-  urlHandler,
-  links,
-  tmuxTruecolor,
-  utf82,
-  termWidth,
-  effectRefresh,
-  nerdFont,
-  segmentData,
-  sessionData
-];
-var MARKED_CHECKS = CHECKS.filter(
-  (c) => c.takesMark
-);
-function runDoctor(facts) {
-  return CHECKS.map((check) => ({ check, verdict: check.probe(facts) }));
-}
-function checkByName(name) {
-  return CHECKS.find((c) => c.name === name);
-}
 
 // src/doctor/report.ts
 init_globals();
@@ -67350,9 +67559,8 @@ function boundOf2(listKeys) {
   const found2 = BOUND.exec(listKeys);
   return found2 === null ? null : { line: found2[0], command: found2[1] };
 }
-var CLICK_URL = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/`;
-var clickUrl = (socket) => `${CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
-var isClickBinding = (bound) => bound?.command.includes(CLICK_URL) ?? false;
+var clickUrl = (socket) => `${STATUS_LINE_CLICK_PREFIX}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
+var isClickBinding = (bound) => bound?.command.includes(STATUS_LINE_CLICK_PREFIX) ?? false;
 function bindingRestorePlan(prior, listKeys) {
   const forget = {
     command: ["set-option", "-g", "-q", "-u", BINDING_OPTION]
@@ -75291,48 +75499,6 @@ var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typ
 var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
 var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
 
-// src/doctor/sightings.ts
-init_globals();
-var inScope = (scope, sightings) => sightings.filter(
-  (s) => scope.kind === "recent" ? s.ago <= RECENT_CLIENT_S : s.sessionId === scope.sessionId
-);
-var barsOf = (scope, sightings) => inScope(scope, sightings).map(
-  ({ role, frame: frame2, projectDir, claudeConfigDir: claudeConfigDir2 }) => ({
-    role,
-    frame: frame2,
-    projectDir,
-    claudeConfigDir: claudeConfigDir2
-  })
-);
-var NONCE = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
-function parseProbeNonce(value) {
-  return NONCE.test(value) ? value : null;
-}
-function clickArrived(arrival) {
-  switch (arrival.via) {
-    case "link":
-      return { kind: "arrived", delivery: arrival.delivery };
-    case "tmux-status":
-      return {
-        kind: "unprobed",
-        reason: "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler \u2014 run `cc-candybar doctor` to probe the handler"
-      };
-  }
-}
-function sessionWidth(sessionId2, said) {
-  const statusline = said.find((s) => s.role === "statusline");
-  return statusline === void 0 ? {
-    kind: "failed",
-    reason: `the daemon holds no statusline render of session ${sessionId2} \u2014 none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width \u2014 so no width a statusline client measured is known; run this again once the statusline has redrawn`
-  } : {
-    kind: "ok",
-    value: {
-      columns: statusline.termCols,
-      of: { kind: "session", sessionId: sessionId2 }
-    }
-  };
-}
-
 // src/renderer/verbs/index.ts
 var inTurn = (handler) => ({
   gathers: false,
@@ -76033,20 +76199,6 @@ var doctorRun = {
     return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
   }
 };
-var doctorProbe = async (value, ctx) => {
-  const nonce = parseProbeNonce(oneArg(value));
-  if (nonce === null) {
-    throw new BadVerbArgs("doctor-probe: the value is not a probe nonce");
-  }
-  if (ctx.arrival.via !== "link")
-    throw new BadVerbArgs("doctor-probe: a probe arrives only as a link");
-  const { delivery } = ctx.arrival;
-  ctx.probes.arrive({ nonce, delivery });
-  ctx.log(
-    "info",
-    `doctor-probe: arrived nonce=${nonce} delivery=${delivery.kind}`
-  );
-};
 var doctorFix = {
   gathers: true,
   prepare: async (value, ctx) => {
@@ -76216,8 +76368,8 @@ var repoConfig = async (value, ctx) => {
     () => decodeSegments(value)
   );
   const sid = requireSessionId(sessionId2);
-  const answered = answer2;
-  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+  const answered = REPO_ANSWERS.find((known) => known === answer2);
+  if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
     throw new BadVerbArgs(
       "the answer's signature does not match what it carries: it was not drawn by this daemon"
     );
@@ -76286,7 +76438,6 @@ var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_DOCTOR_PROBE, inTurn(doctorProbe)],
   [VERB_SLASH, inTurn(slash)],
   [VERB_RUN, inTurn(run2)],
   [VERB_REPO_CONFIG, inTurn(repoConfig)],
@@ -76453,10 +76604,7 @@ var VERBS = new Map([
       )
     ]
   ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)],
-  // After the leaves, so it replaces the click they built: a probe writes no
-  // journal, so nothing may refuse it for a turn.
-  [VERB_DOCTOR_PROBE, doctorProbe]
+  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)]
 ]);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
@@ -81581,7 +81729,9 @@ function renderFrame(parts, sessionId2, fps, at, feed2) {
         feed2.feeds,
         feed2.idleSince
       );
-      const answer2 = RENDER_ANSWERS.ansi(drawn.body);
+      const signed = signingFrames(parts.linkSigner);
+      const bar = signed(drawn.body);
+      const answer2 = RENDER_ANSWERS.ansi(bar);
       const statusline = statuslineOf(
         sessionId2,
         drawn,
@@ -81589,10 +81739,10 @@ function renderFrame(parts, sessionId2, fps, at, feed2) {
       );
       delivered();
       return {
-        bar: drawn.body,
+        bar,
         resp: answer2,
         // Mostly the bar itself, and one frame encodes once.
-        statusline: statusline === drawn.body ? answer2 : RENDER_ANSWERS.ansi(statusline),
+        statusline: statusline === drawn.body ? answer2 : RENDER_ANSWERS.ansi(signed(statusline)),
         evaluated: evaluated2,
         cellBreaks,
         lanes,
@@ -82145,7 +82295,9 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
     );
     const elsewhere = handedOffTo(lanes, feed2.following);
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-    const frame2 = toStatusline ? statuslineOf(sessionId2, drawn, elsewhere) : drawn.body;
+    const frame2 = signingFrames(parts.linkSigner)(
+      toStatusline ? statuslineOf(sessionId2, drawn, elsewhere) : drawn.body
+    );
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-",
       drew: `${elapsedMs(clock, drawFrom)}ms`
@@ -84262,7 +84414,6 @@ function startOver(inputs, sessionState, history, host) {
     },
     installFacts: installFacts2,
     doctorStores: inputs.storage.doctor,
-    probes: host.probes,
     clients: host.renderSightings,
     bundle: inputs.bundle,
     serving: host.serving,
@@ -84437,7 +84588,6 @@ var REACH_KINDS = {
   clicks: { gone: "call" },
   serving: "call",
   renderSightings: { ofSession: "call" },
-  probes: { arrive: "notice" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" }
@@ -86029,12 +86179,13 @@ function createDaemon(inputs) {
     }
   });
   const probe2 = inputs.probe(launcher);
+  const linkSigner2 = linkSignerOver(inputs.linkKey);
   const preparedRenderer = inputs.renderer({
     load: () => loadMainRenderer({
       clock,
       now: instant,
       storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
-      linkSigner: inputs.linkSigner,
+      linkSigner: linkSigner2,
       stateDir: paths2.state,
       locations: locs,
       env: host.env,
@@ -86043,11 +86194,16 @@ function createDaemon(inputs) {
       bundle: bundle.path,
       memoryLimitBytes: memoryLimitBytes2
     }),
-    boot: {
-      digest: bundle.digest,
-      host: { ...host, env: bootEnv(host.env) },
-      bundle: bundle.path,
-      memoryLimitBytes: memoryLimitBytes2
+    // The key crosses in base64, so the boot crosses as a line.
+    boot: () => {
+      const key = inputs.linkKey();
+      return {
+        digest: bundle.digest,
+        host: { ...host, env: bootEnv(host.env) },
+        bundle: bundle.path,
+        memoryLimitBytes: memoryLimitBytes2,
+        linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
+      };
     },
     node: bundle.node
   });
@@ -86320,7 +86476,6 @@ function createDaemon(inputs) {
     renderSightings: {
       ofSession: async (sessionId2, now2) => renderSightings.ofSession(sessionId2, now2)
     },
-    probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -86398,6 +86553,7 @@ function createDaemon(inputs) {
     doctorStores,
     stats,
     handlerProbes,
+    linkSigner: linkSigner2,
     renderSightings,
     watcherRegistry,
     refreshLedger,
@@ -87508,44 +87664,18 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
 // src/daemon/link-key.ts
 init_globals();
 var import_node_path47 = __toESM(require_path_browserify(), 1);
-
-// src/click/link-signer.ts
-init_globals();
-var LINK_KEY_BYTES = 32;
-var MAC_SPELLING = /^[0-9a-f]{64}$/;
-function digest(key, fields2) {
-  return createHmac("sha256", key).update(
-    JSON.stringify([
-      fields2.sessionId,
-      fields2.action,
-      fields2.declaration,
-      fields2.evaluated
-    ])
-  ).digest();
-}
-function linkSigner(key) {
-  if (key.length !== LINK_KEY_BYTES) {
-    throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
-  }
-  return {
-    sign: (fields2) => digest(key, fields2).toString("hex"),
-    verify: (fields2, mac) => {
-      if (!MAC_SPELLING.test(mac)) return false;
-      return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
-    }
-  };
-}
-
-// src/daemon/link-key.ts
 function linkKeyFile(dir) {
   return import_node_path47.default.join(dir, "link.key");
 }
-function linkSignerFromKeyFile(file) {
-  let signer;
-  const loaded = () => signer ??= readOrCreate(file);
-  return {
-    sign: (fields2) => loaded().sign(fields2),
-    verify: (fields2, mac) => loaded().verify(fields2, mac)
+function linkKeyFromFile(file) {
+  let key;
+  return () => {
+    try {
+      key ??= readOrCreate(file);
+      return { kind: "ok", value: key };
+    } catch (e) {
+      return { kind: "failed", reason: e.message };
+    }
   };
 }
 function readOrCreate(file) {
@@ -87562,7 +87692,7 @@ function readOrCreate(file) {
       `link key ${file} holds ${key.length} bytes, not ${LINK_KEY_BYTES}: remove it and a new one is made (links drawn before then stop working)`
     );
   }
-  return linkSigner(key);
+  return key;
 }
 function create(file) {
   fs_default.mkdirSync(import_node_path47.default.dirname(file), { recursive: true });
@@ -87602,8 +87732,7 @@ function inProcessRenderer(loaded, reaches) {
 function rendererAdapters(paths2, machine) {
   return {
     storage: (log) => fileStorage(paths2, log, machine),
-    doctorStores: fileStores(paths2.state),
-    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state))
+    doctorStores: fileStores(paths2.state)
   };
 }
 function productionAdapters(paths2, daemonLog, machine) {
@@ -87611,6 +87740,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     ...rendererAdapters(paths2, machine),
+    linkKey: linkKeyFromFile(linkKeyFile(paths2.state)),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
@@ -87860,7 +87990,7 @@ var repo;
 var CONFIG_FILE = `${HOME}/.config/cc-candybar/config.json5`;
 var SETTINGS2 = "{}\n";
 function seedWorld(state) {
-  import_memfs.vol.fromJSON({
+  vol.fromJSON({
     [`${REPO}/README.md`]: "# tidepool\n",
     [`${REPO}/src/cache.ts`]: "export {};\n",
     [`${GIT}/HEAD`]: `ref: refs/heads/${state.branch}
@@ -87884,8 +88014,8 @@ function seedWorld(state) {
 }
 function updateRepo(next) {
   repo = { ...repo, ...next };
-  import_memfs.vol.writeFileSync(`${GIT}/index`, JSON.stringify(repo));
-  import_memfs.vol.writeFileSync(`${GIT}/refs/heads/${repo.branch}`, `${repo.head}
+  vol.writeFileSync(`${GIT}/index`, JSON.stringify(repo));
+  vol.writeFileSync(`${GIT}/refs/heads/${repo.branch}`, `${repo.head}
 `);
 }
 var ok2 = (stdout2) => ({ code: 0, stdout: stdout2 });
@@ -87914,20 +88044,20 @@ programs.set("git", (args) => {
 ` };
 });
 function forgetWrites() {
-  if (import_memfs.vol.existsSync(CONFIG_FILE)) import_memfs.vol.unlinkSync(CONFIG_FILE);
-  import_memfs.vol.writeFileSync(`${CLAUDE_DIR}/settings.json`, SETTINGS2);
+  if (vol.existsSync(CONFIG_FILE)) vol.unlinkSync(CONFIG_FILE);
+  vol.writeFileSync(`${CLAUDE_DIR}/settings.json`, SETTINGS2);
 }
 function newTranscript(sessionId2) {
   const dir = `${CLAUDE_DIR}/projects/-home-demo-code-tidepool`;
   const file = `${dir}/${sessionId2}.jsonl`;
-  import_memfs.vol.mkdirSync(dir, { recursive: true });
-  import_memfs.vol.writeFileSync(`${file}.next`, "");
-  import_memfs.vol.renameSync(`${file}.next`, file);
+  vol.mkdirSync(dir, { recursive: true });
+  vol.writeFileSync(`${file}.next`, "");
+  vol.renameSync(`${file}.next`, file);
   return file;
 }
 function appendTranscript(file, entries) {
   if (entries.length === 0) return;
-  import_memfs.vol.appendFileSync(file, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  vol.appendFileSync(file, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
 }
 
 // site/transport.ts
@@ -88101,10 +88231,9 @@ async function click2(url, size) {
     const refused2 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...await render2(size), refused: refused2 };
   }
-  const { verb, value } = clickOf(url);
   let refused = null;
   try {
-    await daemon2({ v: PROTOCOL_VERSION, kind: "click", verb, value });
+    await daemon2({ v: PROTOCOL_VERSION, kind: "click", url });
   } catch (e) {
     refused = e instanceof Error ? e.message : String(e);
   }
