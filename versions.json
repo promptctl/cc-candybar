@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-751",
+      "ref": "refs/pull/751/merge",
+      "sha": "713d91319f4f39148da9aa6138dcb52b795f9d93",
+      "timestamp": "2026-11-15T01:07:40.916Z",
+      "commits": [
+        {
+          "sha": "713d91319f4f39148da9aa6138dcb52b795f9d93",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T18:06:23-07:00",
+          "message": "Merge d7d0115c188739293e42b6b5e37743b2c125ede1 into 47e5c8cdc0cb272e742459205ca0547f581d5424\n"
+        },
+        {
+          "sha": "d7d0115c188739293e42b6b5e37743b2c125ede1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T18:06:04-07:00",
+          "message": "chore(testing): every test file lives in the directory of its laws:testing layer (candybar-testing-do00.950)\n\nThe unit refusal sorted the root and in-worker daemon files: the ten it passes are unit, and the rest touch a real dependency and are integration. The launcher's tests join integration, and the process tier is integration/process. The real-launcher lint names its allowed files, since the integration layer now holds tests with no program to start.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-747",
       "ref": "refs/pull/747/merge",
       "sha": "ae9dbd97bfdae1c12c77117f8a07f8db1a09135d",
