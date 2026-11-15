@@ -172,10 +172,10 @@ describe("CacheExpiryProvider", () => {
     expect(await provider.refresh("s", path, "change")).toEqual(ok(at(A)));
   });
 
-  // [LAW:nothing-unseen] Each read of the tail is a refresh of its own: counted
-  // under the trigger that asked, and a line; a hit reads nothing and says
-  // nothing.
-  test("each read of the tail is one refresh, counted and said; an answer believed under its stamp is none", async () => {
+  // [LAW:nothing-unseen] Each read of the tail is a refresh: counted under the
+  // trigger that asked. It is a step of its transcript entry's refresh, whose
+  // line says it, so a read that answers writes none; a hit is no refresh.
+  test("each read of the tail is one refresh, counted but not said; an answer believed under its stamp is none", async () => {
     const lines: string[] = [];
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
     const provider = new CacheExpiryProvider(systemTimekeeper, (level, msg) =>
@@ -183,9 +183,7 @@ describe("CacheExpiryProvider", () => {
     );
     await provider.refresh("s", path, "change");
     await provider.refresh("s", path, "change");
-    expect(lines).toEqual([
-      expect.stringMatching(/^info cache refresh sid=s .*by=change outcome=ok/),
-    ]);
+    expect(lines).toEqual([]);
     expect(provider.getStats()).toEqual({
       entries: 1,
       refreshes: { first: 0, period: 0, change: 1 },

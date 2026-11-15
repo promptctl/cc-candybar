@@ -66,6 +66,7 @@ export class ContextProvider {
         name: "context",
         scope: "session",
         refresh: ["first", "period", "change"],
+        event: "step",
       }),
       opts.clock,
       logger,

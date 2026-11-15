@@ -62,6 +62,11 @@ export interface LaneOwners {
   readonly faults: RefreshFaults;
 }
 
+// [LAW:one-source-of-truth] An entry's identity, which its watch is keyed by
+// too: two inputs with one key are one reading and one watch.
+const keyOfFollowed = ({ session, transcript, settings }: Followed): string =>
+  [session, transcript, settings].join("\0");
+
 export class TranscriptLanes {
   private readonly source: KeyedSource<Followed, null>;
 
@@ -80,8 +85,7 @@ export class TranscriptLanes {
     this.source = new KeyedSource({
       name: "transcript",
       scope: "session",
-      keyOf: ({ session, transcript, settings }) =>
-        [session, transcript, settings].join("\0"),
+      keyOf: keyOfFollowed,
       fields: ({ session }) => `sid=${valueOf(session)}`,
       read: (followed, _signal, by) => this.read(followed, by),
       every: () => deps.every ?? TRANSCRIPT_PERIOD,
@@ -112,7 +116,7 @@ export class TranscriptLanes {
   private watch(followed: Followed, changed: () => void): Release {
     const { transcript, settings } = followed;
     const handle = this.deps.watchers.acquire(
-      `transcript-lanes:${[followed.session, transcript, settings].join("\0")}`,
+      `transcript-lanes:${keyOfFollowed(followed)}`,
       {
         dirs: [
           { path: dirname(transcript), filenames: [basename(transcript)] },

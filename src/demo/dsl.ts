@@ -56,7 +56,7 @@ import {
   renderOptionsOf,
   renderWidth,
   settleWorld,
-  todayOf,
+  instantFacts,
 } from "../renderer/render-payload.js";
 import { Collector } from "../daemon/collector.js";
 import { WorldStates } from "../renderer/world-states.js";
@@ -264,7 +264,7 @@ async function renderFrames(): Promise<void> {
           {
             drawing: { by: "request" },
             feeds: UNFOLLOWED_FEEDS,
-            today: todayOf(view.source.facts().builtins.today, at),
+            ...instantFacts(view.source.facts().builtins, at),
           },
           at,
           renderOptionsOf(effective, width),

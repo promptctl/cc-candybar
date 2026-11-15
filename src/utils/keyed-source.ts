@@ -127,6 +127,7 @@ export class KeyedSource<I, T> {
       name: spec.name,
       scope: spec.scope,
       refresh: ["first", "period", "change", "supersede"],
+      event: "own",
     });
   }
 

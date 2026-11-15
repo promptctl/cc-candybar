@@ -704,7 +704,7 @@ export function awaitsReading(
   named: Iterable<Run>,
 ): boolean {
   return [
-    ...BUILTINS.filter((name) => AWAITED[name]).map((name) => builtins[name]),
+    ...AWAITED_BUILTINS.map((name) => builtins[name]),
     ...Object.values(sources),
     ...[...named].map((run) => (runs[run.digest] ?? UNREAD_RUN).reading),
   ].some(awaitedReading);
@@ -727,7 +727,9 @@ const AWAITED: Readonly<Record<keyof BuiltinFacts, boolean>> = {
   hostName: true,
   hostUser: true,
 };
-const BUILTINS = Object.keys(AWAITED) as ReadonlyArray<keyof BuiltinFacts>;
+const AWAITED_BUILTINS = (
+  Object.keys(AWAITED) as ReadonlyArray<keyof BuiltinFacts>
+).filter((name) => AWAITED[name]);
 
 // [LAW:single-enforcer] The one rule for whether a draw waits on a fact: it
 // has never answered. Why it is pending decides, never which fact it is
@@ -1102,8 +1104,9 @@ function burnOf(
 // [LAW:one-source-of-truth] `speed` at a draw's instant: a rate is the burn
 // between the last two samples, which says nothing of now once the draw is
 // further past the last sample than one sample window, so an idle session's
-// rate ends with no sample taken (DRAW_PROJECTIONS). The rates and the
-// burn-rate history fold independently from one observation — an
+// rate ends with no sample taken (DRAW_PROJECTIONS).
+// [LAW:dataflow-not-control-flow] The rates and the burn-rate history fold
+// independently from one observation — an
 // idle-after-burst session has a history but no current rate — and the whole
 // `speed` key drops only when both are absent.
 export function speedOf(
@@ -1119,6 +1122,25 @@ export function speedOf(
   return rates !== undefined || history !== undefined
     ? { ...rates, ...(history !== undefined && { history }) }
     : undefined;
+}
+
+// [LAW:one-source-of-truth] The world state's facts every draw projects at
+// its own instant (DRAW_PROJECTIONS) — the daemon's, the demo's and check's
+// alike, so none of them draws a projection another leaves out.
+export function instantFacts(
+  builtins: {
+    readonly today: Reading<TodayFacts>;
+    readonly speed: Reading<SpeedObservation>;
+  },
+  at: Instant,
+): {
+  readonly today: TodayPayload | Pending | undefined;
+  readonly speed: SpeedPayload | Pending | undefined;
+} {
+  return {
+    today: todayOf(builtins.today, at),
+    speed: speedOf(builtins.speed, at),
+  };
 }
 
 // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the

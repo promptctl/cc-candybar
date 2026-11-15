@@ -748,6 +748,7 @@ describe("a feed's draws and its summary", () => {
       name: "tmux",
       scope: "pane",
       refresh: ["first", "period"],
+      event: "own",
     });
     tmux.recorded("pane=%1", "first", ok(null), 1);
     note(S, "bar");

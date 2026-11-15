@@ -464,6 +464,7 @@ export class SessionUsageStore {
       name: "usage",
       scope: "session",
       refresh: ["first", "period", "change"],
+      event: "step",
     });
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     this.scans = new KeyedSource({

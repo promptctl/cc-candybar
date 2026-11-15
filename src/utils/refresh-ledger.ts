@@ -35,6 +35,11 @@ export interface SourceDeclaration<Trigger extends RefreshTrigger> {
   readonly name: string;
   readonly scope: SourceScope;
   readonly refresh: readonly Trigger[];
+  // [LAW:nothing-unseen] Which event a refresh is. `own`: a unit of work, so
+  // each writes its line. `step`: one step of another source's refresh (a
+  // session lane read inside its transcript entry's), which is the unit's one
+  // event, so a step writes a line only when it fails; it still counts.
+  readonly event: "own" | "step";
 }
 
 // [LAW:verifiable-goals] What one source has done since the daemon started:
@@ -84,7 +89,7 @@ export class RefreshLedger {
     };
     for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
     this.tallies.set(key, tally);
-    return new Refreshes(tally, this.logger);
+    return new Refreshes(tally, declaration.event, this.logger);
   }
 
   // Every source declared, by scope then name.
@@ -116,6 +121,7 @@ export class RefreshLedger {
 export class Refreshes<Trigger extends RefreshTrigger> {
   constructor(
     private readonly tally: Tally,
+    private readonly event: SourceDeclaration<Trigger>["event"],
     private readonly logger: DaemonLogger,
   ) {}
 
@@ -135,9 +141,10 @@ export class Refreshes<Trigger extends RefreshTrigger> {
     this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
-    // [LAW:nothing-unseen] Every refresh is a unit of work of its own, so
-    // each writes its line.
+    // [LAW:nothing-unseen] A unit of work writes its line; a step is a fact
+    // of its unit's event, so it writes one only to say it failed.
     const failure = outcome.kind === "failed";
+    if (!failure && this.event === "step") return;
     const why = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure ? "warn" : "info",

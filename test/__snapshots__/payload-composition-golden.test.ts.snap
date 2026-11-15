@@ -199,6 +199,7 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "project_dir": "/home/tester/code/cc-candybar",
     },
   },
+  "speed": undefined,
   "today": {
     "cost": 12.5,
     "tokens": 3400000,
@@ -405,6 +406,7 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
       "project_dir": "/home/tester/code/cc-candybar",
     },
   },
+  "speed": undefined,
   "today": {
     "cost": 12.5,
     "tokens": 3400000,
@@ -611,6 +613,7 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "project_dir": "/home/tester/code/cc-candybar",
     },
   },
+  "speed": undefined,
   "today": {
     "cost": 12.5,
     "tokens": 3400000,
@@ -817,6 +820,7 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "project_dir": "/home/tester/code/cc-candybar",
     },
   },
+  "speed": undefined,
   "today": {
     "cost": 12.5,
     "tokens": 3400000,
@@ -1023,6 +1027,7 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "project_dir": "/home/tester/code/cc-candybar",
     },
   },
+  "speed": undefined,
   "today": {
     "cost": 12.5,
     "tokens": 3400000,
@@ -1229,6 +1234,7 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "project_dir": "/home/tester/code/cc-candybar",
     },
   },
+  "speed": undefined,
   "today": {
     "cost": 12.5,
     "tokens": 3400000,
@@ -1435,6 +1441,7 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "project_dir": "/home/tester/code/cc-candybar",
     },
   },
+  "speed": undefined,
   "today": {
     "cost": 12.5,
     "tokens": 3400000,

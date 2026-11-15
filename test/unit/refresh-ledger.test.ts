@@ -21,6 +21,7 @@ describe("RefreshLedger", () => {
       name: "git",
       scope: "repo",
       refresh: ["first", "period", "change"],
+      event: "own",
     });
     expect(ledger.snapshot()).toEqual([
       {
@@ -54,16 +55,19 @@ describe("RefreshLedger", () => {
       name: "var.x",
       scope: "directory",
       refresh: ["first", "period"],
+      event: "own",
     });
     const b = ledger.declare({
       name: "var.x",
       scope: "directory",
       refresh: ["first", "period"],
+      event: "own",
     });
     const view = ledger.declare({
       name: "var.x",
       scope: "view",
       refresh: ["first", "change"],
+      event: "own",
     });
     a.recorded("", "first", ok(null), 1);
     b.recorded("", "period", ok(null), 1);
@@ -77,17 +81,19 @@ describe("RefreshLedger", () => {
     ]);
   });
 
-  test("totals sum every source's refreshes by trigger", () => {
+  test("totals sum every source's refreshes by trigger, a step's included", () => {
     const { ledger } = ledgerWithLog();
     const tmux = ledger.declare({
       name: "tmux",
       scope: "pane",
       refresh: ["first", "period"],
+      event: "own",
     });
     const usage = ledger.declare({
       name: "usage",
       scope: "session",
       refresh: ["change"],
+      event: "step",
     });
     tmux.recorded("", "period", ok(null), 1);
     tmux.recorded("", "period", ok(null), 1);
@@ -101,28 +107,44 @@ describe("RefreshLedger", () => {
     });
   });
 
-  // [LAW:nothing-unseen] Every refresh is its own event, a failure at warn,
+  // [LAW:nothing-unseen] A unit of work is its own event, a failure at warn,
   // logged once by the refresh that met it.
-  test("every refresh writes one line, a failed one at warn", () => {
+  test("a unit of work's refresh writes one line, a failed one at warn", () => {
+    const { ledger, lines } = ledgerWithLog();
+    const tmux = ledger.declare({
+      name: "tmux",
+      scope: "pane",
+      refresh: ["period"],
+      event: "own",
+    });
+    tmux.recorded("pane=%1", "period", ok(null), 5);
+    tmux.recorded("pane=%1", "period", failed("no server", "read"), 6);
+
+    expect(lines).toEqual([
+      "info tmux refresh pane=%1 by=period outcome=ok took=5ms",
+      'warn tmux refresh pane=%1 by=period outcome=failed reason="no server" took=6ms',
+    ]);
+  });
+
+  // A step is a fact of its unit's event (a session lane inside its
+  // transcript entry's refresh): it writes a line only to say it failed.
+  test("a step's refresh writes a line only when it fails, and still counts", () => {
     const { ledger, lines } = ledgerWithLog();
     const usage = ledger.declare({
       name: "usage",
       scope: "session",
       refresh: ["change"],
-    });
-    const tmux = ledger.declare({
-      name: "tmux",
-      scope: "pane",
-      refresh: ["period"],
+      event: "step",
     });
     usage.recorded("sid=s", "change", ok(null), 2);
     usage.recorded("sid=s", "change", failed("parse error", "read"), 3);
-    tmux.recorded("pane=%1", "period", ok(null), 5);
 
     expect(lines).toEqual([
-      "info usage refresh sid=s by=change outcome=ok took=2ms",
       'warn usage refresh sid=s by=change outcome=failed reason="parse error" took=3ms',
-      "info tmux refresh pane=%1 by=period outcome=ok took=5ms",
     ]);
+    expect(usage.record()).toMatchObject({
+      refreshes: { change: 2 },
+      failures: 1,
+    });
   });
 });

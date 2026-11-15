@@ -120,6 +120,7 @@ export class CacheExpiryProvider {
       name: "cache",
       scope: "session",
       refresh: ["first", "period", "change"],
+      event: "step",
     });
   }
 
