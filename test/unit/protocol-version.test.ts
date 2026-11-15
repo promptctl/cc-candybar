@@ -1,8 +1,7 @@
-// [LAW:types-are-the-program] PROTOCOL_VERSION says that old and new cannot
-// speak across, and nothing else. The protocol check only compares the two
-// runtimes' spellings, so a bump made in both passes it; this pin makes every
-// bump a deliberate edit, because each one answers every running session's
-// client with a version mismatch until that session restarts.
+// [LAW:types-are-the-program] The protocol check only compares the mirrored
+// spellings of PROTOCOL_VERSION, so a bump made in every one passes it. This pin
+// makes each bump a deliberate edit; the comment above the constant says why one
+// costs every running session.
 import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 
 describe("PROTOCOL_VERSION", () => {
