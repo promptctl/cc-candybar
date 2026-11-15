@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-750",
+      "ref": "refs/pull/750/merge",
+      "sha": "2cfeb072060597ea3025608c467f1a18bbd68884",
+      "timestamp": "2026-11-15T00:53:10.067Z",
+      "commits": [
+        {
+          "sha": "2cfeb072060597ea3025608c467f1a18bbd68884",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:52:15-07:00",
+          "message": "Merge 0a6539a74870c935b86ae198cee8c8c075942fc4 into 47e5c8cdc0cb272e742459205ca0547f581d5424\n"
+        },
+        {
+          "sha": "0a6539a74870c935b86ae198cee8c8c075942fc4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:51:15-07:00",
+          "message": "fix(watchers): a file watched by name is read by path, so only folders watched whole or as a tree subscribe fseventsd (brandon-unfiled-3248.iywk)\n\nOn macOS a directory watch is an FSEvents stream over the directory's whole\ntree, and libuv drops all but direct children only after fseventsd has routed\neach event here. The daemon heard named files (config candidates at project,\nworktree and home roots, git's HEAD and index) through such watches, which made\nit fseventsd's heaviest client.\n\nA target that names its entries now opens no OS watch on any platform: one\nsweep lstats every named path each second. One predicate on the target's shape\ndecides both the mechanism and what a stall deafens, so a file watched by name\ncarries no stall fault and the stall row names what it actually stops. The\nprobe watches its folder whole, since the stream is what it measures. Folder\nidentity stays in a watch's key only for OS-watched targets, derived in one\nplace for every consumer, git's spec included. daemon-stats shows polled names.\n\nAlso covers brandon-unfiled-3248.slsx (the stall row and the watch_file stall\nfault).\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "47e5c8cdc0cb272e742459205ca0547f581d5424",
