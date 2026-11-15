@@ -8,6 +8,7 @@
 // of a process they are on.
 
 import type { Failure } from "../daemon/foundations/verb-error.js";
+import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { Host } from "../host-facts.js";
 import type { AdapterToHost } from "./adapter.js";
@@ -22,17 +23,16 @@ import {
   type EventInput,
 } from "./interface.js";
 
-// [LAW:one-source-of-truth] The version of these lines. A renderer refuses a
-// boot of another version, so a host and a renderer built from different
-// bundles agree on the lines or say they do not; the build itself may differ.
-export const RENDERER_PROTOCOL = 1;
-
 // What a renderer process builds itself from: the host's view of its machine
 // (its environment, home and temporary directory, from which the renderer
 // derives the paths it owns as the host does), the bundle the doctor judges
 // clients against, and the one memory limit its cache's budget is a share of.
 export interface RendererBoot {
-  readonly protocol: number;
+  // [LAW:one-source-of-truth] The digest of the source the host was built
+  // from, which a renderer built from other source refuses: the renderer runs
+  // from the entry on disk, which an install can rewrite under a running
+  // host, and two builds agree on these lines only by being one build.
+  readonly digest: string | null;
   // [LAW:one-source-of-truth] The host's own `Host`, its environment's unset
   // variables left out as JSON leaves them, which a process environment
   // reads the same as absent.
@@ -84,11 +84,6 @@ export type HostLine =
       readonly file: string;
     };
 
-export interface MemoryUsage {
-  readonly rss: number;
-  readonly heapTotal: number;
-}
-
 export type RendererLine =
   // The boot answered: the renderer is built, or why it is not.
   | { readonly kind: "started"; readonly pid: number }
@@ -112,7 +107,7 @@ export type RendererLine =
       readonly reach: ReachPath;
       readonly args: readonly unknown[];
     }
-  | { readonly kind: "ping"; readonly n: number; readonly usage: MemoryUsage }
+  | { readonly kind: "ping"; readonly n: number; readonly usage: MemorySizes }
   | {
       readonly kind: "heap-snapshot";
       readonly n: number;
@@ -242,7 +237,7 @@ export function lineSplitter(heard: (line: string) => void): {
 // `ended` rejects whatever is still owed, with why.
 export interface RendererOverLines {
   readonly renderer: Renderer;
-  readonly ping: () => Promise<MemoryUsage>;
+  readonly ping: () => Promise<MemorySizes>;
   readonly heapSnapshot: (file: string) => Promise<void>;
   readonly heard: (line: RendererLine) => void;
   readonly ended: (why: Error) => void;
@@ -312,9 +307,20 @@ export function rendererOverLines(deps: {
     adapter: (input: AdapterInput) => answer(input) as Promise<AdapterOutput>,
   });
   // [LAW:no-ambient-temporal-coupling] Each reach is performed as its line
-  // arrives, so a call and the notices around it land in the order sent.
+  // arrives, a call's as a notice's, so a call and the notices around it land
+  // in the order sent; only a call's answer waits.
   const reached = (path: ReachPath, args: readonly unknown[]): unknown =>
     reachAt(host, path)(...args);
+  const calling = (
+    path: ReachPath,
+    args: readonly unknown[],
+  ): Promise<unknown> => {
+    try {
+      return Promise.resolve(reached(path, args));
+    } catch (thrown) {
+      return Promise.reject(thrown as Error);
+    }
+  };
   const heard = (line: RendererLine): void => {
     switch (line.kind) {
       case "notice":
@@ -327,8 +333,7 @@ export function rendererOverLines(deps: {
         }
         return;
       case "call":
-        void Promise.resolve()
-          .then(() => reached(line.reach, line.args))
+        void calling(line.reach, line.args)
           .then(
             (value): Returned => ({ kind: "ok", value }),
             (thrown: unknown): Returned => ({
@@ -371,7 +376,7 @@ export function rendererOverLines(deps: {
   return {
     renderer,
     ping: () =>
-      owe<MemoryUsage>(
+      owe<MemorySizes>(
         "a ping",
         (n) => ({ kind: "ping", n }),
         (heard, resolve) => {
@@ -465,7 +470,7 @@ export function serveRenderer(deps: {
   readonly renderer: Renderer;
   readonly host: HostOverLines;
   readonly send: (line: RendererLine) => void;
-  readonly memory: () => MemoryUsage;
+  readonly memory: () => MemorySizes;
   readonly heapSnapshot: (file: string) => void;
 }): (line: HostLine) => void {
   const { renderer, send } = deps;

@@ -4,7 +4,11 @@
 
 import type { Timekeeper } from "../time";
 import type { Drawing } from "../config/lanes";
-import { eventHoldAt, type HeldEvent } from "../utils/event-hold";
+import {
+  DAEMON_EVENT_HOLD_S,
+  eventHoldAt,
+  type HeldEvent,
+} from "../utils/event-hold";
 import type { Instant } from "../utils/instant";
 
 // Closed list of subprocess categories. Adding a new spawn site requires
@@ -275,10 +279,6 @@ export interface LaunchPipesFact {
 // while it stands, and the latest pipe event.
 export type LauncherFact = LifelineWarning | LaunchPipesFact;
 
-// Seconds every render shows a pipe event: long enough to read on a bar that
-// redraws only on events. That it is seen at all is the owed half of the hold.
-export const PIPE_EVENT_HOLD_S = 60;
-
 export interface LaunchPipesWarning {
   readonly kind: "launch-pipes";
   readonly message: string;
@@ -300,7 +300,7 @@ export function launcherWarningsAt(
 ): LauncherWarning[] {
   return facts.flatMap((fact): LauncherWarning[] => {
     if (fact.kind === "lifeline") return [fact];
-    const hold = eventHoldAt(fact.event, PIPE_EVENT_HOLD_S, at, render);
+    const hold = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render);
     return hold === "over" ? [] : [{ ...fact, message: fact.event.text, hold }];
   });
 }

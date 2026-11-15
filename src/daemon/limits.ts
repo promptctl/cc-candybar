@@ -26,6 +26,7 @@ import {
   BREACH_ARTIFACTS,
 } from "./foundations/memory-limit";
 import type { Launcher } from "../proc/launcher";
+import type { RendererProcess } from "./renderer-process";
 import type { Timekeeper } from "../time";
 
 // [LAW:single-enforcer] One module owns "when does the daemon plan to die".
@@ -209,14 +210,9 @@ export interface LimitsHandle {
 }
 
 // What the daemon's renderer link answers of the renderer's own process
-// (src/daemon/renderer-process.ts): its pid and its sizes as its latest ping
-// read them while one runs, and its heap written to a file.
+// (src/daemon/renderer-process.ts) while one runs.
 export interface RendererMemory {
-  readonly renderer: () => {
-    readonly pid: number;
-    readonly usage: MemorySizes | null;
-  } | null;
-  readonly writeRendererHeapSnapshot: (filePath: string) => Promise<void>;
+  readonly renderer: () => RendererProcess | null;
 }
 
 export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
@@ -305,12 +301,17 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
       deps.writeMemoryReport(file, report);
       deps.log("info", `memory report written: ${file}`);
     });
-    // [LAW:no-ambient-temporal-coupling] The close may have landed during the
-    // attribution, and `disarmed`'s rule holds past that await too.
-    if (disarmed) {
-      deps.log("info", "daemon closed during the breach: no snapshot, no exit");
-      return false;
-    }
+    // [LAW:no-ambient-temporal-coupling] The close may land during any of the
+    // breach's awaits, and `disarmed`'s rule holds past each of them.
+    const closedDuring = (): boolean => {
+      if (disarmed)
+        deps.log(
+          "info",
+          "daemon closed during the breach: no snapshot, no exit",
+        );
+      return disarmed;
+    };
+    if (closedDuring()) return false;
     // The renderer's heap first: it is the half that holds the caches, and its
     // write leaves the host's loop free to hear that it finished.
     if (renderer !== null)
@@ -320,9 +321,12 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
           "rendererHeapSnapshot",
           identity,
         );
-        await deps.writeRendererHeapSnapshot(file);
+        // The renderer measured, never one started since.
+        await renderer.heapSnapshot(file);
         deps.log("info", `renderer heap snapshot written: ${file}`);
       });
+    // The renderer's write can take seconds.
+    if (closedDuring()) return false;
     await attempt(deps.log, "heap snapshot", () => {
       // [LAW:no-ambient-temporal-coupling] The snapshot holds the loop for
       // seconds and can double the heap, which can draw the OS's kill with no

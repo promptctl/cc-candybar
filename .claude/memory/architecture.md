@@ -9,7 +9,7 @@ Inside the daemon the renderer side is a directory, and a lint rule over a table
 The daemon's process runs its renderer in a process of its own, speaking that contract as JSON lines over the child's stdio; tests, the page and `check` run it in process, through the same contract. Four things the code relies on that it cannot show:
 
 - The renderer is spawned from the process's own entry, never the bundle path the daemon reports: under a test's loader the module's file is no entry, and a renderer spawned from it runs nothing.
-- It is launched through the process's launcher, not the daemon's, because the daemon's close aborts its own launches before the renderer's last close step, which flushes the session state.
+- It is launched through a launcher of its own that the daemon closes last, because the daemon's close aborts its other launches before the renderer's last close step, which flushes the session state.
 - It ends on its stdin's EOF, so it dies with a host killed with no cleanup; the launcher's lifeline is no part of that.
 - While no renderer is live an input fails at once rather than starting one, because a request per tick that spawns would be a fork storm under a crash loop.
 

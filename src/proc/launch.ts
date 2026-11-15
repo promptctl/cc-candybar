@@ -677,11 +677,19 @@ function relay(
 function launchChannel(state: LaunchState, opts: ChannelOpts): Channel {
   let input: Writable | null = null;
   let pid: number | null = null;
+  // [LAW:no-ambient-temporal-coupling] A launch can conclude on its group's
+  // end before its pipes close, so the channel's end waits for them too: once
+  // nothing of its group is left to write, they close, and a launcher's close
+  // ends any it holds.
+  const streams: Array<Promise<void>> = [];
   const ended = track(
     state,
     launchPiped(state, opts, {
-      read: (s, category, stream, ends, which) =>
-        relay(s, category, stream, ends, opts.heard[which]),
+      read: (s, category, stream, ends, which) => {
+        if (stream !== null)
+          streams.push(new Promise((closed) => stream.once("close", closed)));
+        return relay(s, category, stream, ends, opts.heard[which]);
+      },
       opened: (opened, spawned) => {
         input = opened;
         pid = spawned;
@@ -689,6 +697,9 @@ function launchChannel(state: LaunchState, opts: ChannelOpts): Channel {
         // fails here, and the child's end is the verdict `ended` reports.
         opened?.on("error", () => {});
       },
+    }).then(async (result) => {
+      await Promise.all(streams);
+      return result;
     }),
   );
   return {

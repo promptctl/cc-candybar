@@ -24,9 +24,8 @@ function gated() {
   const gates = daemonGates();
   const gate = new UpdateGate(gates);
   const admits = (identity: string): boolean =>
-    gates.state
-      .gateFor(EMPTY_DEFAULT)
-      .validate(UPDATE_DISMISSED_KEY, identity).ok;
+    gates.state.gateFor(EMPTY_DEFAULT).validate(UPDATE_DISMISSED_KEY, identity)
+      .ok;
   return { gate, admits };
 }
 
@@ -45,6 +44,14 @@ describe("the update gate follows the newest fact", () => {
     const { gate, admits } = gated();
     gate.took(release(2, 20));
     gate.took(release(1, 10));
+    expect(admits("9.0.2")).toBe(true);
+    expect(admits("9.0.1")).toBe(false);
+  });
+
+  test("a fact read at the same instant moves it, as on a held clock", () => {
+    const { gate, admits } = gated();
+    gate.took(release(1, 10));
+    gate.took(release(2, 10));
     expect(admits("9.0.2")).toBe(true);
     expect(admits("9.0.1")).toBe(false);
   });

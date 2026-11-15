@@ -104,6 +104,20 @@ describe("the renderer over lines", () => {
     expect(there.saw).toEqual(["log pinned", "gone?"]);
   });
 
+  test("a call and the notice after it, heard in one chunk, reach the host in the order sent", () => {
+    const { host, saw } = recordingHost();
+    const lines = rendererOverLines({
+      send: () => {},
+      host,
+      fault: (message) => {
+        throw new Error(message);
+      },
+    });
+    lines.heard({ kind: "call", n: 1, reach: "clicks.gone", args: [{}] });
+    lines.heard({ kind: "notice", reach: "log", args: ["info", "after"] });
+    expect(saw).toEqual(["gone?", "log after"]);
+  });
+
   test("a push that threw fails as it does in this process, its failure kept", async () => {
     const here = talkingRenderer(recordingHost().host).answer(push("lanes"));
     const there = overLines(recordingHost().host).answer(push("lanes"));

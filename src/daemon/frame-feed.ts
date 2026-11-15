@@ -569,6 +569,14 @@ export class FrameFeeds<Req> {
     const moment = started + (at - wall) * 1000;
     try {
       await this.step(feed, started, moment, at);
+      // A step is whole only once nothing of it threw, its push included.
+      if (feed.fault !== null) {
+        this.deps.log(
+          "info",
+          `feed sid=${JSON.stringify(feed.sessionId)} recovered after ${feed.fault}`,
+        );
+        feed.fault = null;
+      }
     } catch (error) {
       // A frame that faulted spaces the next as a drawn one does, so a feed
       // woken while its adapter throws still draws at its spacing.
@@ -603,13 +611,6 @@ export class FrameFeeds<Req> {
       [...this.following(feed.sessionId)],
       this.feedsOf(feed.sessionId, at),
     );
-    if (feed.fault !== null) {
-      this.deps.log(
-        "info",
-        `feed sid=${JSON.stringify(feed.sessionId)} recovered after ${feed.fault}`,
-      );
-      feed.fault = null;
-    }
     // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits,
     // with no timer, until the event that opens one wakes it.
     // A draw that found no view drew nothing, so it spaces nothing: the

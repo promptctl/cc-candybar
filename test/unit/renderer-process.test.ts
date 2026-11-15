@@ -19,7 +19,6 @@ import type {
   LaunchResult,
 } from "../../src/proc/launcher";
 import type { HostLine, RendererLine } from "../../src/renderer-interface/wire";
-import { RENDERER_PROTOCOL } from "../../src/renderer-interface/wire";
 import type {
   StorageHoldId,
   WatchId,
@@ -33,7 +32,10 @@ import type {
 import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import { RendererDown } from "../../src/daemon/foundations/verb-error";
+import {
+  RendererDown,
+  failureOf,
+} from "../../src/daemon/foundations/verb-error";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
 import { inertHost } from "../helpers/renderer-parts";
 
@@ -122,6 +124,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     cwd: "/state",
     heapCapMb: 512,
     boot: {
+      digest: "d1",
       host: { env: {}, home: "/home", tmp: "/tmp" },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
@@ -147,7 +150,7 @@ const pin: AdapterInput = {
 const PINNED: AdapterOutput = { kind: "replied", reply: { kind: "pin" } };
 
 describe("a renderer process's start", () => {
-  test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots at the protocol", () => {
+  test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the host's digest", () => {
     const { link, children } = rig();
     link.arm();
     const [child] = children;
@@ -166,7 +169,7 @@ describe("a renderer process's start", () => {
       {
         kind: "boot",
         boot: {
-          protocol: RENDERER_PROTOCOL,
+          digest: "d1",
           host: { env: {}, home: "/home", tmp: "/tmp" },
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
@@ -195,6 +198,47 @@ describe("a renderer process's start", () => {
     expect(sent!.input).toEqual(pin);
     child.say({ kind: "output", n: sent!.n, output: PINNED });
     await expect(answered).resolves.toEqual(PINNED);
+  });
+
+  test("the complete start heads what waits for the boot, so an input during the boot follows it as a change", async () => {
+    const unpin: AdapterInput = {
+      ...pin,
+      push: { kind: "unpin", session: SESSION },
+    };
+    const r = rig(async () => {
+      await r.link.renderer.answer(pin);
+    });
+    r.link.arm();
+    void r.link.renderer.answer(unpin);
+    r.children[0]!.say({ kind: "started", pid: 9001 });
+    await settled();
+    expect(r.inputs(r.children[0]!).map((l) => l.input)).toEqual([pin, unpin]);
+  });
+
+  test("a boot that is refused ends with its reason, on the ⚠ as in the log", async () => {
+    const { link, children, ends } = rig();
+    link.arm();
+    children[0]!.say({
+      kind: "refused",
+      failure: failureOf(new Error("the session state cannot be read")),
+    });
+    children[0]!.exit({ ...CRASHED, reason: "non-zero", exitCode: 1 });
+    await settled();
+    expect(ends.map((e) => e.text)).toEqual([
+      expect.stringMatching(
+        /^renderer main\[1\] refused its boot: .*the session state cannot be read; it restarts/,
+      ),
+    ]);
+  });
+
+  test("a booting renderer counts as its process, and writes no heap until it is live", async () => {
+    const { link } = rig();
+    link.arm();
+    const booting = link.process();
+    expect(booting).toMatchObject({ pid: 9001, usage: null });
+    await expect(booting!.heapSnapshot("/s/heap")).rejects.toThrow(
+      "renderer main[1] is not live, so its heap was not written",
+    );
   });
 
   test("a start that never answers is ended as a renderer that stopped answering", async () => {
@@ -272,7 +316,7 @@ describe("a renderer process's end", () => {
       usage: { rss: 5, heapTotal: 3 },
     });
     await settled();
-    expect(link.process()).toEqual({
+    expect(link.process()).toMatchObject({
       pid: 9001,
       usage: { rss: 5, heapTotal: 3 },
     });
@@ -346,6 +390,39 @@ describe("ids a renderer mints", () => {
     });
   });
 
+  test("a gone renderer's holds stand while the next ends before its start answers, and go once one answers", async () => {
+    const starts: Array<() => void> = [];
+    const { link, children, clock, held } = rig(
+      () => new Promise<void>((resolve) => starts.push(resolve)),
+    );
+    link.arm();
+    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say({
+      kind: "notice",
+      reach: "storage.hold",
+      args: [1, ["/f"]],
+    });
+    starts[0]!();
+    await settled();
+    children[0]!.exit(CRASHED);
+    await settled();
+    clock.advance(BACKOFF_FIRST_MS);
+    children[1]!.say({ kind: "started", pid: 9002 });
+    await settled();
+    children[1]!.exit(CRASHED);
+    starts[1]!();
+    await settled();
+    expect(held).toEqual([["hold", 1]]);
+    clock.advance(2 * BACKOFF_FIRST_MS);
+    children[2]!.say({ kind: "started", pid: 9003 });
+    starts[2]!();
+    await settled();
+    expect(held).toEqual([
+      ["hold", 1],
+      ["release", 1],
+    ]);
+  });
+
   test("an effect's id is the host's, and its done goes back by the renderer's", async () => {
     const { link, children, inputs } = rig();
     link.arm();
@@ -397,6 +474,18 @@ describe("ids a renderer mints", () => {
 });
 
 describe("a renderer process's close", () => {
+  test("what waits for a boot the close lands in fails as a closed renderer's", async () => {
+    const { link, clock } = rig();
+    link.arm();
+    const waiting = link.renderer.answer(pin);
+    const closed = link.close();
+    await expect(waiting).rejects.toThrow(
+      new RendererDown("renderer main is closed"),
+    );
+    clock.advance(1_000);
+    await closed;
+  });
+
   test("its stdin closes, and one that does not end is signalled after the grace", async () => {
     const { link, children, clock } = rig();
     link.arm();

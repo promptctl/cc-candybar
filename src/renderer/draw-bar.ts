@@ -5,7 +5,11 @@ import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
-import { eventHoldAt, type HeldEvent } from "../utils/event-hold.js";
+import {
+  DAEMON_EVENT_HOLD_S,
+  eventHoldAt,
+  type HeldEvent,
+} from "../utils/event-hold.js";
 import { updateNotice } from "../daemon/foundations/update-offer.js";
 import {
   type CheckedRenderRequest,
@@ -931,17 +935,13 @@ interface RendererEndedWarning {
   readonly event: HeldEvent;
 }
 
-// Seconds every render shows it, as long as a pipe event and for the same
-// reason: a bar that redraws only on events still shows it long enough to read.
-const RENDERER_ENDED_HOLD_S = 60;
-
 function rendererEndedAt(
   event: HeldEvent | null,
   at: Instant,
   render: Drawing["by"],
 ): RendererEndedWarning | undefined {
   return event === null ||
-    eventHoldAt(event, RENDERER_ENDED_HOLD_S, at, render) === "over"
+    eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render) === "over"
     ? undefined
     : { kind: "renderer-ended", message: event.text, event };
 }

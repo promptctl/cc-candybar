@@ -61,12 +61,17 @@ function makeDeps(
       rec.chargedPids.push([...pids]);
       return rec.fakeCharge ?? { kind: "charged", measure: "rss", bytes: rss };
     },
-    renderer: () => rec.renderer,
-    writeRendererHeapSnapshot: async (file) => {
-      rec.order.push("write-renderer-heap");
-      rec.snapshotsWritten.push(file);
-      rec.existingFiles.push(file);
-    },
+    renderer: () =>
+      rec.renderer === null
+        ? null
+        : {
+            ...rec.renderer,
+            heapSnapshot: async (file) => {
+              rec.order.push("write-renderer-heap");
+              rec.snapshotsWritten.push(file);
+              rec.existingFiles.push(file);
+            },
+          },
     captureMemoryReport: async () => {
       rec.order.push("capture");
       if (rec.captureThrows) throw new Error("footprint exploded");
@@ -250,6 +255,30 @@ describe("limits.check", () => {
     expect(rec.logs.map((l) => l.msg)).toContain(
       "daemon closed during the breach: no snapshot, no exit",
     );
+  });
+
+  test("a close during the renderer's heap snapshot writes no host snapshot and does not shut down", async () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * 1024 * 1024;
+    let written!: () => void;
+    const limits = makeLimits({
+      ...makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }),
+      renderer: () => ({
+        pid: 4343,
+        usage: null,
+        heapSnapshot: () => new Promise<void>((resolve) => (written = resolve)),
+      }),
+    });
+    const checking = limits.check();
+    await until(
+      () => written !== undefined,
+      "the renderer's snapshot to start",
+    );
+    limits.disarm();
+    written();
+    expect(await checking).toBe(false);
+    expect(rec.snapshotsWritten).toEqual([]);
+    expect(rec.shutdownCalls).toEqual([]);
   });
 
   test("snapshot filename is written under the injected dir, not the real daemonDir", async () => {

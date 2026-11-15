@@ -5,7 +5,7 @@
 // can judge); for the daemon check, the daemon as it reports itself
 // (`daemon`, src/daemon/limits.ts `serving`).
 
-import { fetchStats, shapeSkew } from "../daemon/client-stats.js";
+import { buildSkew, fetchStats, shapeSkew } from "../daemon/client-stats.js";
 import type {
   StatsSnapshot,
   StoresRead,
@@ -216,12 +216,13 @@ export function parseServingDaemon(stats: StatsSnapshot): Asked<ServingDaemon> {
     isMemoryReading(d.memory) &&
     typeof d.limit === "number" &&
     postMortems.kind !== "misshapen";
-  return wellFormed
-    ? { kind: "ok", value: { ...(d as ServingDaemon), postMortems } }
-    : {
-        kind: "failed",
-        reason: `the running daemon (${stats.version}) reported itself as ${JSON.stringify(stats.daemon)}`,
-      };
+  if (wellFormed)
+    return { kind: "ok", value: { ...(d as ServingDaemon), postMortems } };
+  const build = buildSkew(stats);
+  return {
+    kind: "failed",
+    reason: `the running daemon (${stats.version}) reported itself as ${JSON.stringify(stats.daemon)}${build === null ? "" : `; ${build}`}`,
+  };
 }
 
 // [LAW:parse-dont-validate] [LAW:one-type-per-behavior] One half of the

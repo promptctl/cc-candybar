@@ -6,7 +6,8 @@
 // world state; the gate is the renderer's, because the renderer's loads are
 // what it gates. Documents of different sessions arrive in no order between
 // them, so the gate follows the newest answered fact by its stamp, and a late
-// document carrying an older one does not move it back. A pending fact has not
+// document carrying an older one does not move it back; one read at the same
+// instant is as new, so a held clock still moves it. A pending fact has not
 // been read yet and moves nothing.
 
 import type { Fact } from "../facts/fact.js";
@@ -27,7 +28,7 @@ export class UpdateGate {
 
   took(fact: Fact<Update>): void {
     if (fact.kind === "pending") return;
-    if (this.newest !== null && fact.at <= this.newest) return;
+    if (this.newest !== null && fact.at < this.newest) return;
     this.newest = fact.at;
     const identity = fact.kind === "ok" ? updateIdentity(fact.value) : null;
     if ((this.gate?.identity ?? null) === identity) return;

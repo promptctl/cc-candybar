@@ -209,11 +209,8 @@ async function boot(): Promise<void> {
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
     ...productionAdapters(paths, daemonLog, world.clock),
-    // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
-    // launched through the process's launcher: the daemon's close aborts its
-    // own launches before the renderer's last steps of it.
+    // [LAW:one-type-per-behavior] The renderer runs in a process of its own.
     renderer: processPort({
-      launcher: world.launcher,
       entry: processEntry(),
       cwd: paths.state,
       heapCapMb: heapCapMb(host.env),

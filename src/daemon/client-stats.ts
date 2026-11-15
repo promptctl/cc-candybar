@@ -88,13 +88,24 @@ export function shapeSkew(
     s,
   );
   if (missing.length === 0) return null;
-  // [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot
-  // is an unchecked cast from socket JSON, and an older daemon's carries no
-  // digest field.
-  const theirs = buildLabel(s.version, s.sourceDigest ?? null);
-  const mine = buildLabel(PACKAGE_VERSION, bakedDigest());
-  return `the daemon (${theirs}) reports no ${missing.join(", ")}; it is another build than this client (${mine}), and restarts only when its own bundle changes`;
+  return `the daemon (${theirLabel(s)}) reports no ${missing.join(", ")}; ${anotherBuild}`;
 }
+
+// [LAW:single-enforcer] Below a tagged union a shape comparison cannot see,
+// so a reader that finds an arm it cannot parse asks this: whether the daemon
+// is another build than this client, said as `shapeSkew` says it.
+export function buildSkew(s: StatsSnapshot): string | null {
+  return theirLabel(s) === myLabel ? null : anotherBuild;
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary — the snapshot is
+// an unchecked cast from socket JSON, and an older daemon's carries no digest
+// field.
+const theirLabel = (s: StatsSnapshot): string =>
+  buildLabel(s.version, s.sourceDigest ?? null);
+
+const myLabel = buildLabel(PACKAGE_VERSION, bakedDigest());
+const anotherBuild = `it is another build than this client (${myLabel}), and restarts only when its own bundle changes`;
 
 const STATS_FIELDS = Object.keys(RuntimeStats.referenceSnapshot()) as Array<
   keyof StatsSnapshot

@@ -21,8 +21,8 @@ import { instantAt } from "./utils/instant.js";
 import { loadMainRenderer } from "./renderer/main.js";
 import type { Renderer } from "./renderer-interface/interface.js";
 import type { AdapterToHost } from "./renderer-interface/adapter.js";
+import { bakedDigest } from "./daemon/build-currency.js";
 import {
-  RENDERER_PROTOCOL,
   hostOverLines,
   lineSplitter,
   serveRenderer,
@@ -121,9 +121,10 @@ function booted(
   boot: RendererBoot,
   reaches: AdapterToHost,
 ): Renderer {
-  if (boot.protocol !== RENDERER_PROTOCOL)
+  const own = bakedDigest();
+  if (boot.digest !== own)
     throw new Error(
-      `the host speaks renderer protocol ${boot.protocol}; this renderer speaks ${RENDERER_PROTOCOL}`,
+      `the host was built from source ${boot.digest ?? "of no digest"}; this renderer from ${own ?? "source of no digest"}, which the next daemon runs`,
     );
   const { host } = boot;
   const paths = daemonPaths(host);
