@@ -4,15 +4,22 @@
     {
       "version": "pr-749",
       "ref": "refs/pull/749/merge",
-      "sha": "c0d4825c21fb8e127fe6f6ee97614f7a019ebb83",
-      "timestamp": "2026-11-15T00:38:51.737Z",
+      "sha": "873ed1919da78e1fc0cf5ad64e0519db6d69e36f",
+      "timestamp": "2026-11-15T00:42:11.660Z",
       "commits": [
         {
-          "sha": "c0d4825c21fb8e127fe6f6ee97614f7a019ebb83",
+          "sha": "873ed1919da78e1fc0cf5ad64e0519db6d69e36f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T00:38:03Z",
-          "message": "Merge d85db0f7cbcd6320d94703d4545e9bc9136434a7 into 66b6aaaf80c9bcced51090a86d2eba72303a3269\n"
+          "timestamp": "2026-11-15T00:41:14Z",
+          "message": "Merge 989fa832ab7cdd07f2568a0a484ea10ada16f34c into 66b6aaaf80c9bcced51090a86d2eba72303a3269\n"
+        },
+        {
+          "sha": "989fa832ab7cdd07f2568a0a484ea10ada16f34c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:41:02-07:00",
+          "message": "test(testing): the stamp test pins its preload to the stamp file, and the pool test's stand-in stops citing the ledger (candybar-testing-do00.cfu)\n"
         },
         {
           "sha": "d85db0f7cbcd6320d94703d4545e9bc9136434a7",
