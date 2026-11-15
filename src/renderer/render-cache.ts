@@ -1456,13 +1456,14 @@ export class RenderCache<
     };
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, hold, bound, watch, then notify — in that
-    // order. The hold precedes the bound: an eviction there releases another
-    // state's folders, which this one may name too. From the moment the entry is in the map it is reachable for
+    // order. From the moment the entry is in the map it is reachable for
     // eviction and dispose, so a throwing observer cannot strand a registry
     // outside it, and a reentrant getOrCreate for this key finds the entry
-    // rather than building a duplicate. The bound runs first because it is a
-    // fact about the MAP, complete at insertion: nothing later (including an
-    // observer throwing) can skip it. [LAW:dataflow-not-control-flow]
+    // rather than building a duplicate. The hold precedes the bound: an
+    // eviction there releases another state's folders, which this one may
+    // name too. The bound runs before the watch because it is a fact about
+    // the MAP, complete at insertion: nothing later (including an observer
+    // throwing) can skip it. [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
     this.holdFolders(entry.state);
     this.fit(entry);

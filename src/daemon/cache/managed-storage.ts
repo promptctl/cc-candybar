@@ -40,7 +40,7 @@ export const STORAGE_SWEEP_EVERY_MS = DAY_MS;
 // last value while it is re-read.
 const MAX_ENTRIES = 256;
 
-// One generation of a folder: what tells one watch on a path from the next.
+// One generation of a folder: what tells one watch on a path from every other.
 interface StorageKey {
   readonly folder: string;
   readonly generation: number;
@@ -147,6 +147,9 @@ export class ManagedStorage {
     error: 0,
   };
   private lost = 0;
+  // [LAW:single-enforcer] Generations are numbered across every folder, so no
+  // two watches, a folder's closed one and its next included, share a key.
+  private generations = 0;
   private readonly watchers: WatcherRegistry;
   private readonly logger: DaemonLogger;
   private readonly identityOf: IdentityRead;
@@ -205,7 +208,7 @@ export class ManagedStorage {
       const was = this.watched.get(folder);
       const found = this.found(folder);
       if (was !== undefined && current(was, found)) continue;
-      const generation = was === undefined ? 0 : was.key.generation + 1;
+      const generation = this.generations++;
       if (was !== undefined)
         this.logger(
           "info",
