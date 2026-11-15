@@ -4,15 +4,22 @@
     {
       "version": "pr-753",
       "ref": "refs/pull/753/merge",
-      "sha": "0492c5ec224408ec0c61acece2bcb01b7a4bff00",
-      "timestamp": "2026-11-15T13:37:14.274Z",
+      "sha": "71cb614659589e027c982e460f4fdcee6e0542da",
+      "timestamp": "2026-11-15T14:01:50.043Z",
       "commits": [
         {
-          "sha": "0492c5ec224408ec0c61acece2bcb01b7a4bff00",
+          "sha": "71cb614659589e027c982e460f4fdcee6e0542da",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T06:36:15-07:00",
-          "message": "Merge ac81d1d16ac7ba66d7621e212978605aa0673598 into f6153274737f840e353302f669b6543916691714\n"
+          "timestamp": "2026-11-15T14:00:58Z",
+          "message": "Merge 23df569fa817e56c5ea112470466af5ba684db58 into f6153274737f840e353302f669b6543916691714\n"
+        },
+        {
+          "sha": "23df569fa817e56c5ea112470466af5ba684db58",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T07:00:46-07:00",
+          "message": "fix(renderer): the host's facts reach the draw current: deafness, a click's pane, the daemon's facts (candybar-host-renderer-x96a.gbw)\n\nHigh review of #753:\n- A watch deaf at its acquire, or deaf again for another reason, wakes its\n  holder: the registry tells a change of reason, and a renderer push whose\n  deafness moved is heard as an unknown window.\n- A click and an idle close carry the host's newest request of their session,\n  so a lane click after the session retired still follows its pane; the\n  renderer's own copy of the request is gone.\n- The daemon's facts are a typed field of the world state, read once for every\n  session apart from its owners: owners that fail leave them current, and a\n  move of them re-reads no owner. Its faults no longer pass through the\n  session's diagnostics to be sorted out again by every draw.\n- An update act's success publishes its sampled build and its end in one\n  action.\n- The one-type-per-behavior marker returns to the update offer.\n"
         },
         {
           "sha": "ac81d1d16ac7ba66d7621e212978605aa0673598",

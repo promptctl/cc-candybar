@@ -28773,6 +28773,8 @@ function watchFault(label2, watch2, beyond) {
   ];
   return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
 }
+var sameDeafness = (a, b) => a.kind === b.kind && a.path === b.path && a.reason === b.reason;
+var sameDeafnesses = (a, b) => a.length === b.length && a.every((d, i) => sameDeafness(d, b[i]));
 function followWatch(held, spec, acquire) {
   if (held !== null && (held.key === spec.key || spec.unbound))
     return { watch: held, move: "kept" };
@@ -28919,17 +28921,19 @@ var WatcherRegistry = class {
     for (const dir of this.dirs.values()) this.judged(dir, "period");
   }
   // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, it hears the fault. Listening again, it hears an
-  // `unknown` window: whatever changed while the directory was deaf or bound
-  // to another folder went unheard, and a holder that re-derives on it reports
-  // its fault cleared. Deaf staying deaf is no change and tells nothing.
+  // state. Going deaf, or deaf for another reason, it hears the fault.
+  // Listening again, it hears an `unknown` window: whatever changed while the
+  // directory was deaf or bound to another folder went unheard, and a holder
+  // that re-derives on it reports its fault cleared. Deaf for the same reason
+  // is no change and tells nothing.
   reopen(dir, cause) {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    dir.state = this.open(dir, () => dir, cause, was);
-    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening")
-      this.tell(dir, failedOf(dir.state.deafness));
+    const now2 = this.open(dir, () => dir, cause, was);
+    dir.state = now2;
+    if (now2.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (was.kind === "listening" || !sameDeafness(was.deafness, now2.deafness))
+      this.tell(dir, failedOf(now2.deafness));
   }
   // `dirOf` names the watch the handle belongs to; its callbacks run only
   // after the open returns, once the watch holds the state returned here.
@@ -28965,12 +28969,10 @@ var WatcherRegistry = class {
       return { kind: "listening", handle, bound };
     } catch (e) {
       const reason = e.message;
-      const same2 = was?.kind === "deaf" && was.deafness.kind === "refused" && was.deafness.reason === reason;
-      if (!same2) this.logger("warn", `watch failed ${at}: ${reason}`);
-      return {
-        kind: "deaf",
-        deafness: { kind: "refused", path: at, reason }
-      };
+      const deafness = { kind: "refused", path: at, reason };
+      if (was?.kind !== "deaf" || !sameDeafness(was.deafness, deafness))
+        this.logger("warn", `watch failed ${at}: ${reason}`);
+      return { kind: "deaf", deafness };
     }
   }
   // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
@@ -53679,7 +53681,15 @@ async function handleClick(parts, verb, value, arrival, facts, click3) {
     const delivered = await parts.renderer.answer({
       kind: "event",
       at: instantAt(parts.clock),
-      event: { kind: "click", verb, value, session, arrival, id: click3.id }
+      event: {
+        kind: "click",
+        verb,
+        value,
+        session,
+        arrival,
+        id: click3.id,
+        latest: session?.ok ? parts.frameFeeds.latest(session.id) : null
+      }
     });
     switch (delivered.kind) {
       case "answered":
@@ -58162,21 +58172,22 @@ function makeUpdateWatch(opts) {
     });
     if (closed || !read3.ok) return;
     const next = judgeAct(read3.value);
-    if (seen2 === null && next.kind === "running") {
+    const was = seen2;
+    seen2 = next;
+    if (was === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
     }
-    if (seen2?.kind === "running" && next.kind !== "running") {
-      if (next.kind === "succeeded") {
-        log("info", `apply-update: act ${next.act} succeeded`);
-        sampleBuild();
-        onApplied();
-      }
-      if (next.kind === "failed") {
-        log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
-      }
+    const ended = was?.kind === "running" && next.kind !== "running";
+    const succeeded = ended && next.kind === "succeeded";
+    if (succeeded) log("info", `apply-update: act ${next.act} succeeded`);
+    if (ended && next.kind === "failed") {
+      log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
     }
-    seen2 = next;
-    publishActs();
+    runInAction(() => {
+      if (succeeded) sampleBuild();
+      publishActs();
+    });
+    if (succeeded) onApplied();
   }
   let clearTick;
   async function tick() {
@@ -65794,12 +65805,11 @@ function assembleFacts(prior, session, readings, daemon3, at) {
       ];
     })
   );
-  const { update } = daemon3;
-  const diagnostics = [...readings.faults, ...daemon3.diagnostics];
-  const parts = { builtins, sources, runs, update, diagnostics };
+  const diagnostics = readings.faults;
+  const parts = { builtins, sources, runs, daemon: daemon3, diagnostics };
   if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && sameFacts(runs, prior.runs) && compareStructural(
-    { update, diagnostics },
-    { update: prior.update, diagnostics: prior.diagnostics }
+    { daemon: daemon3, diagnostics },
+    { daemon: prior.daemon, diagnostics: prior.diagnostics }
   )) {
     return prior;
   }
@@ -65810,11 +65820,13 @@ function assembleFacts(prior, session, readings, daemon3, at) {
     ...parts
   };
 }
-function failedStamp(prior, reason) {
+function failedStamp(prior, reason, daemon3) {
   const held = prior.diagnostics.find((d) => d.kind === "stamp");
-  if (held?.reason === reason) return prior;
+  if (held?.reason === reason && compareStructural(daemon3, prior.daemon))
+    return prior;
   return {
     ...prior,
+    daemon: daemon3,
     seq: prior.seq + 1,
     diagnostics: [
       ...prior.diagnostics.filter((d) => d.kind !== "stamp"),
@@ -65866,6 +65878,13 @@ function capturing(pattern2) {
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
+function readOf(what, read2) {
+  try {
+    return ok(read2());
+  } catch (e) {
+    return failed(`${what}: ${String(e)}`, "read");
+  }
+}
 var locatorOf = (req) => ({
   hookData: req.hookData,
   cwd: req.cwd,
@@ -65903,6 +65922,12 @@ var Collector = class {
   deps;
   records = /* @__PURE__ */ new Map();
   stopSweep = null;
+  // [LAW:one-source-of-truth] The daemon's facts, derived once for every
+  // session, and moved only when what they say moved.
+  daemon = computed(
+    () => readOf("reading the daemon", () => this.deps.daemon()),
+    { equals: compareStructural }
+  );
   // [LAW:single-enforcer] A request names the session's keys: they are
   // declared again and stamped in one action, and that stamp is returned to
   // go with the session's `config`. The record's reaction runs when the action ends,
@@ -66022,12 +66047,13 @@ var Collector = class {
     const first2 = reader.inputs.get();
     let document;
     try {
-      if (first2.kind === "failed") throw new Error(first2.reason);
+      if (first2.owners.kind === "failed") throw new Error(first2.owners.reason);
+      if (first2.daemon.kind === "failed") throw new Error(first2.daemon.reason);
       document = assembleFacts(
         void 0,
         session,
-        first2.readings,
-        first2.daemon,
+        first2.owners.value,
+        first2.daemon.value,
         instantAt(this.deps.clock)
       );
     } catch (e) {
@@ -66058,10 +66084,14 @@ var Collector = class {
     const declared = observable.box(this.declared(keys2, holds2), {
       deep: false
     });
+    const owners = computed(() => this.read(declared.get()));
     return {
       holds: holds2,
       declared,
-      inputs: computed(() => this.read(declared.get()))
+      inputs: computed(() => ({
+        owners: owners.get(),
+        daemon: this.daemon.get()
+      }))
     };
   }
   // [LAW:no-ambient-temporal-coupling] The stamp of every owner landing is
@@ -66131,15 +66161,10 @@ var Collector = class {
     return { ...locator, deps: this.deps.owners };
   }
   read({ locator, lanes }) {
-    try {
-      return {
-        kind: "read",
-        readings: readingsOf(this.inputsOf(locator), lanes),
-        daemon: this.deps.daemon()
-      };
-    } catch (e) {
-      return { kind: "failed", reason: `reading the owners: ${String(e)}` };
-    }
+    return readOf(
+      "reading the owners",
+      () => readingsOf(this.inputsOf(locator), lanes)
+    );
   }
   // [LAW:single-enforcer] The one stamp of a session's document, against the
   // one it replaces: the document itself when nothing it holds moved, and a
@@ -66147,7 +66172,14 @@ var Collector = class {
   // Answers whether the document moved.
   stamp({ session, stamped }, moved) {
     const prior = stamped.document;
-    const next = moved.kind === "failed" ? failedStamp(prior, moved.reason) : this.assembled(prior, moved, instantAt(this.deps.clock));
+    const { owners, daemon: daemon3 } = moved;
+    const facts = daemon3.kind === "ok" ? daemon3.value : prior.daemon;
+    const next = owners.kind === "failed" ? failedStamp(prior, owners.reason, facts) : daemon3.kind === "failed" ? failedStamp(prior, daemon3.reason, facts) : this.assembled(
+      prior,
+      owners.value,
+      facts,
+      instantAt(this.deps.clock)
+    );
     const failure = next === prior ? null : stampFailureOf(next);
     if (failure !== null)
       this.deps.log(
@@ -66158,17 +66190,15 @@ var Collector = class {
     stamped.from = moved;
     return next !== prior;
   }
-  assembled(prior, moved, at) {
+  assembled(prior, readings, daemon3, at) {
     try {
-      return assembleFacts(
-        prior,
-        prior.session,
-        moved.readings,
-        moved.daemon,
-        at
-      );
+      return assembleFacts(prior, prior.session, readings, daemon3, at);
     } catch (e) {
-      return failedStamp(prior, `stamping the world state: ${String(e)}`);
+      return failedStamp(
+        prior,
+        `stamping the world state: ${String(e)}`,
+        daemon3
+      );
     }
   }
   // [LAW:no-ambient-temporal-coupling] A retired session holds nothing at
@@ -75335,11 +75365,15 @@ function reloadIfWritten(ctx, sid, step4) {
 function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
-function laneMeter(ctx, sid) {
+function laneMeter(ctx, sid, latest) {
   const requested = requestedOrigin(ctx, sid);
   if (requested === null) return null;
-  const read2 = () => ctx.lanes.of(sessionRenderOrigin(requested, ctx.sessionState, sid), sid);
-  return { sessionId: sid, before: read2(), read: read2 };
+  const read2 = () => ctx.lanes.of(
+    sessionRenderOrigin(requested, ctx.sessionState, sid),
+    sid,
+    latest
+  );
+  return { sessionId: sid, latest, before: read2(), read: read2 };
 }
 function nestOf(ctx, sid) {
   const origin = recordedOrigin(ctx, sid);
@@ -76125,8 +76159,8 @@ function throwAll(failures) {
     );
   }
 }
-async function journaled(sid, ctx, turn, handler) {
-  const lanes = sid === null ? null : laneMeter(ctx, sid);
+async function journaled(sid, latest, ctx, turn, handler) {
+  const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin();
   const navigation = ctx.navigation.begin(journal.sessionState);
   const commit3 = turn.holds(() => {
@@ -76177,6 +76211,7 @@ async function journaled(sid, ctx, turn, handler) {
       const after = lanes.read();
       ctx.lanes.clicked(
         lanes.sessionId,
+        lanes.latest,
         journal.written() ? lanes.before : after,
         after
       );
@@ -76208,7 +76243,7 @@ function click(verb, gather, handler) {
         gathered: ctx.gatherTook
       },
       () => gather(value, ctx),
-      (gathered, turn) => journaled(sid, ctx, turn, async (c) => {
+      (gathered, turn) => journaled(sid, ctx.latest, ctx, turn, async (c) => {
         try {
           await handler(value, c, gathered);
         } finally {
@@ -76237,14 +76272,14 @@ var VERBS = new Map([
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
-function closeIdleMenus(sid, idle, ctx) {
+function closeIdleMenus(sid, latest, idle, ctx) {
   return ctx.journalTurns.take(
     "menu-idle",
     {
       waited: (ms) => ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
       gone: async () => false
     },
-    (turn) => journaled(sid, ctx, turn, async (c) => {
+    (turn) => journaled(sid, latest, ctx, turn, async (c) => {
       if (!await turn.landed(idle.confirm())) {
         c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
@@ -81422,16 +81457,15 @@ function viewLanes(parts, sessionId2) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function lanesAt(parts, origin, sessionId2) {
+function lanesAt(parts, origin, sessionId2, latest) {
   var _stack = [];
   try {
-    const { renderCache, contexts } = parts;
+    const { renderCache } = parts;
     const hold2 = __using(_stack, renderCache.hold(
       origin.projectDir,
       origin.cwd,
       origin.target.path
     ));
-    const latest = contexts.get(sessionId2) ?? null;
     return laneSwitches(
       sessionGlobals2(parts, sessionId2, hold2.state),
       latest === null || inTmux(latest.hints.tmux)
@@ -81467,14 +81501,12 @@ function configureSession(parts, req, worldState, at, facts) {
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
     recordRequest(parts, req);
-    parts.contexts.set(req.hookData.session_id, req);
     parts.worldStates.take(worldState);
     holdSessionAt(parts, req)[Symbol.dispose]();
   });
 }
 function retireSession(parts, session) {
   runInAction(() => {
-    parts.contexts.delete(session);
     parts.worldStates.drop(session);
     parts.renderCache.retireSession(session);
   });
@@ -81565,7 +81597,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
-  const { update } = document;
+  const { update } = document.daemon;
   const updates = updateNotice(
     update.newer.kind === "ok" ? update.newer.value : null,
     update.act,
@@ -81597,7 +81629,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
   const configWatch = entry.watch === null ? null : watchFault("config watch", entry.watch, null);
-  const daemon3 = daemonFaultsOf(document.diagnostics);
+  const { daemon: daemon3 } = document;
   const launched = launcherWarningsAt(daemon3.launcher, at, drawing2.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
   const pipeShown = pipeWarning?.event ?? null;
@@ -81805,25 +81837,6 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     lanes
   };
 }
-function daemonFaultsOf(diagnostics) {
-  const fileEvents = [];
-  const launcher = [];
-  for (const d of diagnostics) {
-    switch (d.kind) {
-      case "file-events":
-        fileEvents.push(d);
-        break;
-      case "lifeline":
-      case "launch-pipes":
-        launcher.push(d);
-        break;
-      case "lane":
-      case "stamp":
-        break;
-    }
-  }
-  return { fileEvents, launcher };
-}
 function recordRequest(parts, req) {
   const { sessionState } = parts;
   const sessionId2 = req.hookData.session_id;
@@ -81857,9 +81870,8 @@ function laneSessionOf(parts, req) {
     answered: answeredOf(req.hookData)
   };
 }
-function laneClicked(parts, sessionId2, before, after) {
-  const { contexts, laneSetups, tmuxStatusLines } = parts;
-  const latest = contexts.get(sessionId2) ?? null;
+function laneClicked(parts, sessionId2, latest, before, after) {
+  const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.clicked(
     sessionId2,
     latest === null ? null : laneSessionOf(parts, latest),
@@ -81980,7 +81992,7 @@ function statuslineOf(sessionId2, drawn, elsewhere) {
 
 // src/renderer/click.ts
 init_globals();
-async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, id: id2 }, record2) {
+async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, id: id2, latest }, record2) {
   const handler = verbs.handler(verb);
   if (handler === void 0)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
@@ -81992,7 +82004,8 @@ async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, i
       placeWaited: (ms) => noteFacts(record2, { placeWait: `${ms}ms` }),
       gatherTook: (ms) => noteFacts(record2, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(record2, { turnWait: `${ms}ms` }),
-      click: id2
+      click: id2,
+      latest
     });
   } finally {
     if (pending2 !== null) menuIdle.clickSettled(pending2);
@@ -82011,7 +82024,7 @@ function verbsOver(ctx, clicks) {
         clientGone: () => clicks.gone(click3)
       }));
     },
-    closeIdle: (sessionId2, idle) => closeIdleMenus(sessionId2, idle, ctx)
+    closeIdle: (sessionId2, latest, idle) => closeIdleMenus(sessionId2, latest, idle, ctx)
   };
 }
 
@@ -82264,8 +82277,10 @@ var Watches = class {
   pushed(id2, heard, deaf) {
     const watch2 = this.held.get(id2);
     if (watch2 === void 0) return;
+    const moved = !sameDeafnesses(watch2.deaf, deaf);
     watch2.deaf = deaf;
-    if (heard !== null) watch2.heard(heard);
+    const window2 = heard ?? (moved ? { kind: "unknown" } : null);
+    if (window2 !== null) watch2.heard(window2);
   }
 };
 
@@ -83457,7 +83472,7 @@ var RenderCache = class {
     if (move === "kept") return;
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch2.handle.deaf.length}`
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")}`
     );
     for (const { path: at, reason } of unresolved)
       this.log(
@@ -83851,7 +83866,7 @@ function mainRenderer(parts, pushed) {
         await clickTurn(parts, event, record2);
         return [];
       case "menu-idle":
-        await parts.verbs.closeIdle(event.session, {
+        await parts.verbs.closeIdle(event.session, event.latest, {
           ...event.idle,
           confirm: () => parts.menuIdle.confirmClose(event.session, event.idle.firedAt)
         });
@@ -83963,7 +83978,6 @@ function startOver(inputs, sessionState, history, host) {
     sessionState,
     renderCache,
     worldStates,
-    contexts: /* @__PURE__ */ new Map(),
     renderWarnings,
     effectSessions
   };
@@ -84022,8 +84036,8 @@ function startOver(inputs, sessionState, history, host) {
     links: linkSigner2,
     runs: host.runs,
     lanes: {
-      of: (origin, sessionId2) => lanesAt(parts, origin, sessionId2),
-      clicked: (sessionId2, before, after) => laneClicked(parts, sessionId2, before, after)
+      of: (origin, sessionId2, latest) => lanesAt(parts, origin, sessionId2, latest),
+      clicked: (sessionId2, latest, before, after) => laneClicked(parts, sessionId2, latest, before, after)
     },
     views: {
       follow: (sessionId2, origin) => renderCache.follow(
@@ -85500,11 +85514,11 @@ var ClicksInFlight = class {
 
 // src/daemon/menu-idle.ts
 init_globals();
-async function closeByTurn(host, at, sessionId2, idle) {
+async function closeByTurn(host, at, sessionId2, idle, latest) {
   const delivered = await host.answer({
     kind: "event",
     at: at(),
-    event: { kind: "menu-idle", session: sessionId2, idle }
+    event: { kind: "menu-idle", session: sessionId2, idle, latest }
   });
   return delivered.kind === "threw" ? delivered.failure : null;
 }
@@ -85736,16 +85750,16 @@ function createDaemon(inputs) {
     logger: log,
     clock
   });
-  const daemonFaults = observable.box([], {
-    deep: false,
-    equals: compareStructural
-  });
+  const daemonFaults = observable.box(
+    { fileEvents: [], launcher: [] },
+    { deep: false, equals: compareStructural }
+  );
   function restateFaults() {
     runInAction(
-      () => daemonFaults.set([
-        ...fileEventsWarnings(fileEvents.delivery()),
-        ...launcher.standing()
-      ])
+      () => daemonFaults.set({
+        fileEvents: fileEventsWarnings(fileEvents.delivery()),
+        launcher: launcher.standing()
+      })
     );
   }
   restateFaults();
@@ -85777,7 +85791,13 @@ function createDaemon(inputs) {
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
-    close: (sessionId2, idle) => closeByTurn(parts.renderer, instant, sessionId2, idle),
+    close: (sessionId2, idle) => closeByTurn(
+      parts.renderer,
+      instant,
+      sessionId2,
+      idle,
+      frameFeeds.latest(sessionId2)
+    ),
     failed: (sessionId2, failure) => log(
       LEVEL[failure.kind],
       `menu-idle: close failed (session=${sessionId2}): ${failure.detail}`
@@ -85947,7 +85967,7 @@ function createDaemon(inputs) {
     owners: payloadProviders,
     daemon: () => ({
       update: { newer: updateFact.get(), ...updateWatch.acts() },
-      diagnostics: daemonFaults.get()
+      ...daemonFaults.get()
     }),
     clock,
     watched: (sessionId2) => frameFeeds.feedOpen(sessionId2),
