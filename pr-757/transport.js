@@ -22678,10 +22678,17 @@ var ClickAbandoned = class extends Error {
     this.name = "ClickAbandoned";
   }
 };
+var RendererDown = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "RendererDown";
+  }
+};
 var KINDS = [
   [BadVerbArgs, "bad-request"],
   [DaemonClosing, "closing"],
-  [ClickAbandoned, "abandoned"]
+  [ClickAbandoned, "abandoned"],
+  [RendererDown, "down"]
 ];
 var CrossedFailure = class extends Error {
   constructor(failure) {
@@ -22719,6 +22726,15 @@ var SESSION_ID_MAX_BYTES = 250;
 function parseSessionId(raw) {
   const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
   return problem === null ? { ok: true, id: raw } : { ok: false, problem };
+}
+function sessionKeyed(record2, refused) {
+  const keyed = /* @__PURE__ */ new Map();
+  for (const [key, value] of Object.entries(record2)) {
+    const id2 = parseSessionId(key);
+    if (id2.ok) keyed.set(id2.id, value);
+    else refused(key, id2.problem);
+  }
+  return keyed;
 }
 
 // src/click/wire.ts
@@ -23325,34 +23341,32 @@ function hold(state, category, pipe, end) {
   state.drains.add(pipe);
   stats?.onDrainOpen(category);
 }
-function lines(state, category, stream, ends, heard) {
+var inputEnd = () => "closed";
+function feed(input, text4) {
+  input.on("error", () => {
+  });
+  input.end(text4);
+}
+var captured = (stdinInput) => ({
+  read: (state, category, stream, ends) => capture(state, category, stream, ends),
+  opened: (input) => {
+    if (input !== null) feed(input, stdinInput);
+  }
+});
+function relay(state, category, stream, ends, heard) {
   const decoder = new import_node_string_decoder.StringDecoder("utf8");
-  let partial = "";
-  let open2 = true;
   stream?.on("error", (err) => {
     state.scope.stats?.onPipeError(category);
-    if (open2) ends.failed(err);
+    ends.failed(err);
   });
   stream?.on("data", (chunk3) => {
-    if (!open2) return;
     const text4 = decoder.write(chunk3);
-    let from = 0;
-    for (let nl = text4.indexOf("\n"); nl !== -1; nl = text4.indexOf("\n", from)) {
-      heard(partial + text4.slice(from, nl));
-      partial = "";
-      from = nl + 1;
-    }
-    partial += text4.slice(from);
-    if (partial.length > MAX_CAPTURED_BYTES) ends.full();
-  });
-  stream?.on("end", () => {
-    const rest2 = partial + decoder.end();
-    partial = "";
-    if (open2 && rest2 !== "") heard(rest2);
+    if (text4 !== "") heard(text4);
   });
   return {
     take: () => {
-      open2 = false;
+      const tail = decoder.end();
+      if (tail !== "") heard(tail);
       return "";
     },
     drain: () => {
@@ -23361,13 +23375,39 @@ function lines(state, category, stream, ends, heard) {
     }
   };
 }
-var inputEnd = () => "closed";
-function feed(input, text4) {
-  input.on("error", () => {
-  });
-  input.end(text4);
+function launchChannel(state, opts) {
+  let input = null;
+  let pid2 = null;
+  const ended = track(
+    state,
+    launchPiped(state, opts, {
+      read: (s, category, stream, ends, which) => relay(s, category, stream, ends, opts.heard[which]),
+      opened: (opened, spawned) => {
+        input = opened;
+        pid2 = spawned;
+        opened?.on("error", () => {
+        });
+      }
+    })
+  );
+  return {
+    get pid() {
+      return pid2;
+    },
+    write: (text4) => {
+      if (input !== null && !input.writableEnded && !input.destroyed)
+        input.write(text4);
+    },
+    end: () => {
+      input?.end();
+    },
+    ended
+  };
 }
-async function launchWaited(state, opts, io) {
+function launchWaited(state, opts) {
+  return launchPiped(state, opts, captured(opts.stdinInput));
+}
+async function launchPiped(state, opts, pipes) {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category, opts.signal);
   if (refused !== null) return refused;
@@ -23409,8 +23449,20 @@ async function launchWaited(state, opts, io) {
         terminate("pipe-error");
       }
     };
-    const stdout2 = io.stdout(state, opts.category, child.stdout, ends);
-    const stderr2 = io.stderr(state, opts.category, child.stderr, ends);
+    const stdout2 = pipes.read(
+      state,
+      opts.category,
+      child.stdout,
+      ends,
+      "stdout"
+    );
+    const stderr2 = pipes.read(
+      state,
+      opts.category,
+      child.stderr,
+      ends,
+      "stderr"
+    );
     const output = () => ({ stdout: stdout2.take(), stderr: stderr2.take() });
     let settled3 = false;
     let timer = null;
@@ -23537,29 +23589,8 @@ async function launchWaited(state, opts, io) {
     }
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
-    if (input !== null) io.stdin(input);
+    pipes.opened(input, group ?? null);
   });
-}
-function launchChannel(state, opts, heard) {
-  let input = null;
-  const result = track(
-    state,
-    launchWaited(state, opts, {
-      stdout: (st, category, stream, ends) => lines(st, category, stream, ends, heard.stdout),
-      stderr: (st, category, stream, ends) => lines(st, category, stream, ends, heard.stderr),
-      stdin: (writable) => {
-        writable.on("error", () => {
-        });
-        input = writable;
-      }
-    })
-  );
-  return {
-    send: (line) => void input?.write(`${line}
-`),
-    close: () => void input?.end(),
-    result
-  };
 }
 function launchBlocking(state, opts) {
   const { stats, clock } = state.scope;
@@ -23780,15 +23811,8 @@ function createOneShotLauncher(owner, clock, spawner) {
 function launcherWithState(owner, clock, spawner) {
   const launcher = {
     clock,
-    launch: (opts) => track(
-      state,
-      launchWaited(state, opts, {
-        stdout: capture,
-        stderr: capture,
-        stdin: (input) => feed(input, opts.stdinInput)
-      })
-    ),
-    launchChannel: (opts, heard) => launchChannel(state, opts, heard),
+    launch: (opts) => track(state, launchWaited(state, opts)),
+    launchChannel: (opts) => launchChannel(state, opts),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     jobGroupAlive: (pid2) => spawner.signalJob(pid2, 0),
@@ -24213,6 +24237,82 @@ var Runs = class {
     );
   }
 };
+
+// src/daemon/paths.ts
+init_globals();
+init_os();
+var import_node_path2 = __toESM(require_path_browserify(), 1);
+function xdgEnv(env2, name) {
+  const v = env2[name];
+  return v && v.length > 0 ? v : void 0;
+}
+function stateDir(host) {
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path2.default.join(host.home, ".local", "state");
+  return import_node_path2.default.join(base, "cc-candybar");
+}
+function cacheDir(host) {
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path2.default.join(host.home, ".cache");
+  return import_node_path2.default.join(base, "cc-candybar");
+}
+function socketPath(host) {
+  return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
+}
+function defaultSocketPath() {
+  const uid = os_default.userInfo().uid;
+  return import_node_path2.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+}
+function leasePathFor(sockPath) {
+  return `${sockPath}.lease`;
+}
+function leasePath(host) {
+  return leasePathFor(socketPath(host));
+}
+function sessionStatePath(host) {
+  return import_node_path2.default.join(stateDir(host), "session-state.json");
+}
+function settingsHistoryPath(host) {
+  return import_node_path2.default.join(stateDir(host), "settings-history.json");
+}
+function daemonRegistryDir(host) {
+  const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
+  if (override) return override;
+  const uid = os_default.userInfo().uid;
+  return import_node_path2.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+}
+var SPAWN_BACKOFF_FILE = "spawn.backoff";
+function spawnBackoffPath(host) {
+  return import_node_path2.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+}
+function watchProbeDir(host) {
+  return import_node_path2.default.join(stateDir(host), "watch-probe");
+}
+function logPath(host) {
+  return import_node_path2.default.join(stateDir(host), "daemon.log");
+}
+function daemonPaths(host) {
+  return {
+    socket: socketPath(host),
+    lease: leasePath(host),
+    state: stateDir(host),
+    registry: daemonRegistryDir(host),
+    log: logPath(host),
+    sessionState: sessionStatePath(host),
+    settingsHistory: settingsHistoryPath(host),
+    watchProbe: watchProbeDir(host),
+    spawnBackoff: spawnBackoffPath(host)
+  };
+}
+function locations(host) {
+  const { env: env2 } = host;
+  const xdgDefault = "/usr/local/share:/usr/share";
+  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path2.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  return {
+    home: host.home,
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path2.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path2.default.join(host.home, ".local", "share"),
+    dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
+  };
+}
 
 // src/daemon/reply.ts
 init_globals();
@@ -28548,13 +28648,13 @@ function stampFailureOf(document) {
 
 // src/claude-settings.ts
 init_globals();
-var import_node_path2 = __toESM(require_path_browserify(), 1);
+var import_node_path3 = __toESM(require_path_browserify(), 1);
 var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
 function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path2.default.join(home, ".claude");
+  return detected ?? import_node_path3.default.join(home, ".claude");
 }
 function claudeSettingsPath(configDir) {
-  return import_node_path2.default.join(configDir, "settings.json");
+  return import_node_path3.default.join(configDir, "settings.json");
 }
 function claudeManagedSettingsDir(platform3) {
   switch (platform3) {
@@ -28567,7 +28667,7 @@ function claudeManagedSettingsDir(platform3) {
   }
 }
 var claudeManagedSettingsDirIn = (env2) => env2.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform);
-var projectLocalSettingsFile = (projectDir) => import_node_path2.default.join(projectDir, ".claude", "settings.local.json");
+var projectLocalSettingsFile = (projectDir) => import_node_path3.default.join(projectDir, ".claude", "settings.local.json");
 var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
 // src/daemon/source-runs.ts
@@ -28581,7 +28681,7 @@ var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open
 
 // src/daemon/cache/watchers.ts
 init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
+var import_node_path6 = __toESM(require_path_browserify(), 1);
 
 // src/utils/logger.ts
 init_globals();
@@ -28631,10 +28731,10 @@ init_globals();
 
 // src/utils/atomic-write.ts
 init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
+var import_node_path4 = __toESM(require_path_browserify(), 1);
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path3.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   try {
@@ -28676,8 +28776,8 @@ function walkLinks(at) {
 function linkTarget(file) {
   try {
     if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path3.default.resolve(
-      fs_default.realpathSync(import_node_path3.default.dirname(file)),
+    return import_node_path4.default.resolve(
+      fs_default.realpathSync(import_node_path4.default.dirname(file)),
       fs_default.readlinkSync(file)
     );
   } catch (e) {
@@ -28690,16 +28790,16 @@ var MAX_LINK_HOPS = 40;
 
 // src/utils/watch-target.ts
 init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
+var import_node_path5 = __toESM(require_path_browserify(), 1);
 function nearestWatchTarget(candidate) {
-  let name = import_node_path4.default.basename(candidate);
-  let dir = import_node_path4.default.dirname(candidate);
+  let name = import_node_path5.default.basename(candidate);
+  let dir = import_node_path5.default.dirname(candidate);
   for (; ; ) {
     const real = canonicalDirectory(dir);
     if (real !== null)
-      return { dir: real, name, leaf: dir === import_node_path4.default.dirname(candidate) };
-    name = import_node_path4.default.basename(dir);
-    dir = import_node_path4.default.dirname(dir);
+      return { dir: real, name, leaf: dir === import_node_path5.default.dirname(candidate) };
+    name = import_node_path5.default.basename(dir);
+    dir = import_node_path5.default.dirname(dir);
   }
 }
 function canonicalDirectory(p2) {
@@ -28781,7 +28881,7 @@ function folded(window2, next) {
   return window2;
 }
 var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path5.default.join(dir, filename)]) };
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path6.default.join(dir, filename)]) };
 var failedOf = (d) => ({
   kind: "failed",
   reason: `${d.path}: ${d.reason}`
@@ -28975,7 +29075,7 @@ var WatcherRegistry = class {
   heard(dir, handle, changed) {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path5.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    const moved = changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
       if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
@@ -29076,7 +29176,7 @@ var WatcherRegistry = class {
 
 // src/daemon/cache/file-events.ts
 init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
+var import_node_path7 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/file-events-warnings.ts
 init_globals();
@@ -29273,7 +29373,7 @@ var FileEventDelivery = class {
     }
     try {
       await fs_default.promises.writeFile(
-        import_node_path6.default.join(inst.folder, PROBE_FILE),
+        import_node_path7.default.join(inst.folder, PROBE_FILE),
         String(at)
       );
     } catch (e) {
@@ -29716,15 +29816,15 @@ var RefreshLedger = class {
   // Every source's refreshes summed by trigger: what the feed summary
   // compares across its window.
   totals() {
-    const sum = Object.fromEntries(
+    const sum2 = Object.fromEntries(
       REFRESH_TRIGGERS.map((t2) => [t2, 0])
     );
     for (const tally of this.tallies.values()) {
       for (const trigger of REFRESH_TRIGGERS) {
-        sum[trigger] += tally.refreshes[trigger] ?? 0;
+        sum2[trigger] += tally.refreshes[trigger] ?? 0;
       }
     }
-    return sum;
+    return sum2;
   }
 };
 var OWN_EVENT = {
@@ -30225,7 +30325,7 @@ init_globals();
 
 // src/daemon/foundations/protocol.ts
 init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
+var import_node_path8 = __toESM(require_path_browserify(), 1);
 
 // src/terminal-hint.ts
 init_globals();
@@ -30299,11 +30399,11 @@ var REFUSAL_LINES = {
   positional: (args) => `Unexpected arguments: ${args}`
 };
 function refusedArgsError(refused) {
-  const lines3 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
+  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
     const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
     return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
   });
-  return lines3.length === 0 ? null : lines3.join("\n");
+  return lines2.length === 0 ? null : lines2.join("\n");
 }
 function sanitizeTerminalEnv(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
@@ -30312,7 +30412,7 @@ function sanitizeTerminalEnv(v) {
   return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
 }
 function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path7.default.isAbsolute(v) ? v : void 0;
+  return typeof v === "string" && import_node_path8.default.isAbsolute(v) ? v : void 0;
 }
 function sanitizeTmux(v) {
   if (v === null) return null;
@@ -37482,8 +37582,8 @@ function nextUp(x) {
   return x > 0 ? x + ulp : x + (a === 2 ** e && a > MIN_NORMAL ? ulp / 2 : ulp);
 }
 var ULPS_OF_ROUNDING = 8;
-function walkUp(sum, reached, finer) {
-  let x = sum;
+function walkUp(sum2, reached, finer) {
+  let x = sum2;
   for (let walked = 0; !reached(x); walked++) {
     if (walked === ULPS_OF_ROUNDING)
       throw new RangeError(finer());
@@ -37522,7 +37622,7 @@ function beat(holds2) {
   if (holds2.length === 0)
     throw new RangeError("a beat needs at least one hold");
   holds2.forEach((hold2, i) => positiveSeconds(`beat hold ${i}`, hold2));
-  const period = holds2.reduce((sum, hold2) => sum + hold2, 0);
+  const period = holds2.reduce((sum2, hold2) => sum2 + hold2, 0);
   const starts = [];
   let elapsed = 0;
   for (const hold2 of holds2) {
@@ -38508,8 +38608,8 @@ var Segment = class _Segment {
    * Control segments occupy no cell and are left as they are. `firstRow` is
    * the owner's row that `lines[0]` is, for output that arrives in pieces.
    */
-  static anchorLines(lines3, owner, firstRow = 0) {
-    return lines3.map((line, i) => {
+  static anchorLines(lines2, owner, firstRow = 0) {
+    return lines2.map((line, i) => {
       const row2 = firstRow + i;
       let col = 0;
       return line.map((segment) => {
@@ -38554,11 +38654,11 @@ var Segment = class _Segment {
    * The anchor of the cell at column `x` of row `y` in a composed frame, or
    * `undefined` when that cell was drawn by no owner or lies outside the frame.
    */
-  static anchorAt(lines3, x, y) {
+  static anchorAt(lines2, x, y) {
     if (!Number.isInteger(x) || x < 0)
       return void 0;
     let start = 0;
-    for (const segment of lines3[y] ?? []) {
+    for (const segment of lines2[y] ?? []) {
       const end = start + segment.cellLength;
       if (x < end) {
         const anchor = segment.style?.anchor;
@@ -38604,7 +38704,7 @@ var Segment = class _Segment {
    * Splits segments at newlines. Yields arrays of segments per line.
    */
   static splitLines(segments) {
-    const lines3 = [];
+    const lines2 = [];
     let currentLine = [];
     for (const segment of segments) {
       if (segment.isControl) {
@@ -38619,7 +38719,7 @@ var Segment = class _Segment {
       const parts = text4.split("\n");
       for (let i = 0; i < parts.length; i++) {
         if (i > 0) {
-          lines3.push(currentLine);
+          lines2.push(currentLine);
           currentLine = [];
         }
         const part = parts[i];
@@ -38629,8 +38729,8 @@ var Segment = class _Segment {
       }
     }
     if (currentLine.length > 0)
-      lines3.push(currentLine);
-    return lines3;
+      lines2.push(currentLine);
+    return lines2;
   }
   /**
    * Adjusts a line of segments to exactly `width` cells.
@@ -38746,16 +38846,16 @@ var Segment = class _Segment {
   /**
    * Returns [width, height] of a set of lines.
    */
-  static getShape(lines3) {
-    if (lines3.length === 0)
+  static getShape(lines2) {
+    if (lines2.length === 0)
       return [0, 0];
     let maxWidth = 0;
-    for (const line of lines3) {
+    for (const line of lines2) {
       const w = _Segment.getLineLength(line);
       if (w > maxWidth)
         maxWidth = w;
     }
-    return [maxWidth, lines3.length];
+    return [maxWidth, lines2.length];
   }
   /**
    * Composes cells side by side into full lines. Each cell contributes its
@@ -38877,8 +38977,8 @@ var Segment = class _Segment {
   /**
    * Pads below to fill height.
    */
-  static alignTop(lines3, width, height, style) {
-    const result = lines3.map((line) => _Segment.adjustLineLength(line, width, style));
+  static alignTop(lines2, width, height, style) {
+    const result = lines2.map((line) => _Segment.adjustLineLength(line, width, style));
     const blankLine = [new _Segment(" ".repeat(width), style)];
     while (result.length < height) {
       result.push([...blankLine]);
@@ -38888,8 +38988,8 @@ var Segment = class _Segment {
   /**
    * Pads above to fill height. Content at bottom.
    */
-  static alignBottom(lines3, width, height, style) {
-    const adjusted = lines3.map((line) => _Segment.adjustLineLength(line, width, style));
+  static alignBottom(lines2, width, height, style) {
+    const adjusted = lines2.map((line) => _Segment.adjustLineLength(line, width, style));
     const blankLine = [new _Segment(" ".repeat(width), style)];
     const padCount = Math.max(0, height - adjusted.length);
     const result = [];
@@ -38902,8 +39002,8 @@ var Segment = class _Segment {
   /**
    * Pads above and below. Content in middle.
    */
-  static alignMiddle(lines3, width, height, style) {
-    const adjusted = lines3.map((line) => _Segment.adjustLineLength(line, width, style));
+  static alignMiddle(lines2, width, height, style) {
+    const adjusted = lines2.map((line) => _Segment.adjustLineLength(line, width, style));
     const blankLine = [new _Segment(" ".repeat(width), style)];
     const padAbove = Math.max(0, Math.floor((height - adjusted.length) / 2));
     const result = [];
@@ -38919,8 +39019,8 @@ var Segment = class _Segment {
   /**
    * Forces lines to exactly width x height.
    */
-  static setShape(lines3, width, height, style) {
-    const result = lines3.map((line) => _Segment.adjustLineLength(line, width, style));
+  static setShape(lines2, width, height, style) {
+    const result = lines2.map((line) => _Segment.adjustLineLength(line, width, style));
     const blankLine = [new _Segment(" ".repeat(width), style)];
     while (result.length < height) {
       result.push([...blankLine]);
@@ -39351,8 +39451,8 @@ function played(animation, { origin, time, rate }) {
   const behind = forward ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
   const past = forward ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
   const hostOf = (edge) => {
-    const sum = origin + (edge - time) / rate;
-    return Number.isFinite(sum) ? firstReaching(sum, (host) => past(mapped(host), edge)) : sum;
+    const sum2 = origin + (edge - time) / rate;
+    return Number.isFinite(sum2) ? firstReaching(sum2, (host) => past(mapped(host), edge)) : sum2;
   };
   return Animation.of({
     at: (host) => animation.at(mapped(hostTime(host))),
@@ -40195,9 +40295,9 @@ var RichText = class _RichText {
   }
   // --- Measurable ---
   measure(options) {
-    const lines3 = expandTabs(this._text.get(), this._tabSize).text.split("\n");
-    const maxLineWidth = lines3.reduce((widest, line) => Math.max(widest, cellLen(line)), 0);
-    const widths = lines3.flatMap(wordWidths);
+    const lines2 = expandTabs(this._text.get(), this._tabSize).text.split("\n");
+    const maxLineWidth = lines2.reduce((widest, line) => Math.max(widest, cellLen(line)), 0);
+    const widths = lines2.flatMap(wordWidths);
     const maxWordWidth = widths.length > 0 ? widths.reduce((widest, w) => Math.max(widest, w), 0) : maxLineWidth;
     const ceiling = cellCount(options.maxWidth);
     return {
@@ -40268,11 +40368,11 @@ var RichText = class _RichText {
    * and not the whole render — `Text.wrap` calls `Lines.justify` once per
    * *logical* line — and `Segment.divide` already handed it over whole.
    */
-  _justifyLines(lines3, maxWidth, base, justify) {
+  _justifyLines(lines2, maxWidth, base, justify) {
     if (justify !== "full") {
-      return lines3.map((line) => [...this._justifyLine(line, maxWidth, base, justify)]);
+      return lines2.map((line) => [...this._justifyLine(line, maxWidth, base, justify)]);
     }
-    return lines3.map(({ segments }, index) => index === lines3.length - 1 ? segments : this._fillLine(segments, maxWidth, base));
+    return lines2.map(({ segments }, index) => index === lines2.length - 1 ? segments : this._fillLine(segments, maxWidth, base));
   }
   /**
    * One line placed in a canvas `maxWidth` wide.
@@ -40392,16 +40492,16 @@ var RichText = class _RichText {
   }
 };
 function spanFreeLines(segments, covered) {
-  const lines3 = [[]];
+  const lines2 = [[]];
   segments.forEach((segment, piece) => {
     segment.text.split("\n").forEach((part, at) => {
       if (at > 0)
-        lines3.push([]);
-      const runs = lines3.at(-1);
+        lines2.push([]);
+      const runs = lines2.at(-1);
       runs.push({ end: (runs.at(-1)?.end ?? 0) + cellLen(part), free: !covered[piece] });
     });
   });
-  return lines3.map((runs) => (cell3) => {
+  return lines2.map((runs) => (cell3) => {
     let lo = 0;
     let hi = runs.length;
     while (lo < hi) {
@@ -41508,16 +41608,16 @@ function noise(x, y, z) {
   return lerp2(lerp2(lerp2(grad(P[AA], x, y, z), grad(P[BA], x - 1, y, z), u), lerp2(grad(P[AB], x, y - 1, z), grad(P[BB], x - 1, y - 1, z), u), v), lerp2(lerp2(grad(P[AA + 1], x, y, z - 1), grad(P[BA + 1], x - 1, y, z - 1), u), lerp2(grad(P[AB + 1], x, y - 1, z - 1), grad(P[BB + 1], x - 1, y - 1, z - 1), u), v), w);
 }
 function fbm(x, y, z, octaves) {
-  let sum = 0;
+  let sum2 = 0;
   let amplitude = 1;
   let total = 0;
   for (let i = 0; i < octaves; i++) {
     const f = 2 ** i;
-    sum += amplitude * noise(x * f, y * f, z * f);
+    sum2 += amplitude * noise(x * f, y * f, z * f);
     total += amplitude;
     amplitude /= 2;
   }
-  return sum / total;
+  return sum2 / total;
 }
 function hash(n, z) {
   const x = Math.sin(n * 12.9898 + z * 78.233) * 43758.5453;
@@ -41667,10 +41767,10 @@ function swell(shape, s, k) {
 function given(shape, s, k) {
   const whole = lasts(shape, k);
   const area = (to) => {
-    let sum = 0;
+    let sum2 = 0;
     for (let i = 0; i < 24; i++)
-      sum += swell(shape, (i + 0.5) / 24 * to, k);
-    return sum * to;
+      sum2 += swell(shape, (i + 0.5) / 24 * to, k);
+    return sum2 * to;
   };
   return area(Math.min(Math.max(s, 0), whole)) / area(whole);
 }
@@ -42408,7 +42508,7 @@ var FlexStrip = class {
     const startCap = (i) => joiner ? renderToBlock(drawJoin(joiner, null, items[i], { index: i }), options) : EMPTY_BLOCK;
     const endCap = (i) => joiner ? renderToBlock(drawJoin(joiner, items[i], null, { index: i + 1 }), options) : EMPTY_BLOCK;
     const midJoin = (i, j) => joiner ? renderToBlock(drawJoin(joiner, items[i], items[j], { index: j }), options) : EMPTY_BLOCK;
-    const lines3 = [];
+    const lines2 = [];
     let line = null;
     const gapBlock = gap > 0 ? { segments: [new Segment(" ".repeat(gap))], width: gap } : EMPTY_BLOCK;
     for (let i = 0; i < items.length; i++) {
@@ -42444,7 +42544,7 @@ var FlexStrip = class {
         if (closing.width > 0)
           line.blocks.push(closing);
         line.width += closing.width;
-        lines3.push(line);
+        lines2.push(line);
         const sc = startCap(i);
         const ec = endCap(i);
         const blocks = sc.width > 0 ? [sc, item] : [item];
@@ -42459,12 +42559,12 @@ var FlexStrip = class {
       if (closing.width > 0)
         finalLine.blocks.push(closing);
       finalLine.width += closing.width;
-      lines3.push(finalLine);
+      lines2.push(finalLine);
     }
     const align = this.align;
-    for (let li = 0; li < lines3.length; li++) {
-      const ln = lines3[li];
-      const isLast = li === lines3.length - 1;
+    for (let li = 0; li < lines2.length; li++) {
+      const ln = lines2[li];
+      const isLast = li === lines2.length - 1;
       const spare = Math.max(0, maxWidth - ln.width);
       const padLeft = computePadLeft(align, spare);
       const slotFills = computeSlotFills(align, isLast, spare, ln.itemBlockIndices.length);
@@ -42670,9 +42770,9 @@ function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
     })
   );
 }
-function encodeAnsi(lines3, depth) {
+function encodeAnsi(lines2, depth) {
   const destination = resolveDestination(depth);
-  return lines3.map((runs) => segmentsToString(runs.map(segmentOf), destination)).join("\n");
+  return lines2.map((runs) => segmentsToString(runs.map(segmentOf), destination)).join("\n");
 }
 function ansiOf(frame2) {
   return encodeAnsi(
@@ -42717,26 +42817,26 @@ var RENDER_ANSWERS = {
 
 // src/daemon/statusline-answer.ts
 init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
+var import_node_path10 = __toESM(require_path_browserify(), 1);
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
+var import_node_path9 = __toESM(require_path_browserify(), 1);
 function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path8.default.join(dir, ".git"));
+  return fs_default.existsSync(import_node_path9.default.join(dir, ".git"));
 }
 function gitRootOf(start) {
-  let dir = import_node_path8.default.resolve(start);
+  let dir = import_node_path9.default.resolve(start);
   for (; ; ) {
     if (holdsGit(dir)) return dir;
-    const parent = import_node_path8.default.dirname(dir);
+    const parent = import_node_path9.default.dirname(dir);
     if (parent === dir) return void 0;
     dir = parent;
   }
 }
 function checkoutOf(cwd2) {
   const root = gitRootOf(cwd2);
-  return root === void 0 ? { root: import_node_path8.default.resolve(cwd2), git: false } : { root, git: true };
+  return root === void 0 ? { root: import_node_path9.default.resolve(cwd2), git: false } : { root, git: true };
 }
 function probe(read2) {
   try {
@@ -42748,18 +42848,18 @@ function probe(read2) {
 var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
 var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
 function gitDirNamed(root) {
-  const text4 = probe(() => fs_default.readFileSync(import_node_path8.default.join(root, ".git"), "utf-8"));
+  const text4 = probe(() => fs_default.readFileSync(import_node_path9.default.join(root, ".git"), "utf-8"));
   if (text4.kind !== "ok") return text4;
   const named3 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named3 === void 0 ? failed(`${import_node_path8.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path8.default.resolve(root, named3));
+  return named3 === void 0 ? failed(`${import_node_path9.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path9.default.resolve(root, named3));
 }
 function commonDirOf(gitDir) {
   const text4 = probe(
-    () => fs_default.readFileSync(import_node_path8.default.join(gitDir, "commondir"), "utf-8")
+    () => fs_default.readFileSync(import_node_path9.default.join(gitDir, "commondir"), "utf-8")
   );
   if (text4.kind !== "ok") return text4;
   const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path8.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path8.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path9.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path9.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -42769,7 +42869,7 @@ var unproven = (reason) => ({
 function worktreeLink(dir) {
   const root = gitRootOf(dir);
   if (root === void 0) return UNLINKED;
-  const dotGit = import_node_path8.default.join(root, ".git");
+  const dotGit = import_node_path9.default.join(root, ".git");
   const followed = probe(() => fs_default.statSync(dotGit));
   if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
   const entry = probe(() => fs_default.lstatSync(dotGit));
@@ -42784,34 +42884,34 @@ function worktreeLink(dir) {
   if (common.kind === "failed") return unproven(common.reason);
   const realCommon = realDir(common.value);
   if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
-  if (import_node_path8.default.dirname(gitDir.value) !== import_node_path8.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path9.default.dirname(gitDir.value) !== import_node_path9.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path8.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path9.default.join(gitDir.value, "gitdir");
   const back2 = probe(() => fs_default.readFileSync(backFile, "utf-8"));
   if (back2.kind !== "ok") return unproven(why(backFile, back2));
-  const pointer = import_node_path8.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = realDir(import_node_path8.default.dirname(pointer));
-  if (import_node_path8.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+  const pointer = import_node_path9.default.resolve(gitDir.value, back2.value.trim());
+  const pointerDir = realDir(import_node_path9.default.dirname(pointer));
+  if (import_node_path9.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path8.default.basename(realCommon.value) === ".git" ? import_node_path8.default.dirname(realCommon.value) : realCommon.value;
-  return { kind: "linked", main: import_node_path8.default.join(main, import_node_path8.default.relative(root, dir)) };
+  const main = import_node_path9.default.basename(realCommon.value) === ".git" ? import_node_path9.default.dirname(realCommon.value) : realCommon.value;
+  return { kind: "linked", main: import_node_path9.default.join(main, import_node_path9.default.relative(root, dir)) };
 }
 function checkoutLocation(dir) {
   const real = realDir(dir);
-  const at = real.kind === "ok" ? real.value : import_node_path8.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path9.default.resolve(dir);
   const root = gitRootOf(at);
   if (root === void 0)
     return { main: "", worktree: "", subpath: "", noRepo: true };
-  const sub2 = import_node_path8.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path8.default.sep).join("/")}`;
+  const sub2 = import_node_path9.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path9.default.sep).join("/")}`;
   const link = worktreeLink(at);
   return link.kind === "linked" ? {
-    main: import_node_path8.default.resolve(link.main, import_node_path8.default.relative(at, root)),
-    worktree: import_node_path8.default.basename(root),
+    main: import_node_path9.default.resolve(link.main, import_node_path9.default.relative(at, root)),
+    worktree: import_node_path9.default.basename(root),
     subpath,
     noRepo: false
   } : { main: root, worktree: "", subpath, noRepo: false };
@@ -42827,7 +42927,10 @@ var LEVEL = {
   "bad-request": "warn",
   threw: "error",
   closing: "info",
-  abandoned: "info"
+  abandoned: "info",
+  // The supervisor says the renderer's end once, as a warning; a request
+  // that found none says it on its own event.
+  down: "warn"
 };
 function detailOf(outcome) {
   switch (outcome.kind) {
@@ -42841,6 +42944,8 @@ function detailOf(outcome) {
       return [["closing", outcome.message]];
     case "abandoned":
       return [["abandoned", "1"]];
+    case "down":
+      return [["down", outcome.message]];
   }
 }
 function requestEvent(kind, facts, outcome, tookMs) {
@@ -42873,7 +42978,7 @@ function located(req) {
     ...req,
     hookData: {
       ...req.hookData,
-      ...dir !== void 0 && import_node_path9.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
+      ...dir !== void 0 && import_node_path10.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
 }
@@ -42907,7 +43012,7 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
   });
   recorded(facts, configured);
   if (configured.kind === "threw") {
-    noteFacts(facts, { renderer: host.name, hop: `${configured.hopMs}ms` });
+    noteFacts(facts, { renderer: host.name });
     return failed2(host, configured.failure, "its config turn: ");
   }
   const delivered = await host.answer({
@@ -42926,15 +43031,16 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
     }
   });
   recorded(facts, delivered);
-  const hop = `${configured.hopMs + delivered.hopMs}ms`;
+  noteFacts(facts, {
+    hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
+  });
   if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name, hop });
+    noteFacts(facts, { renderer: host.name });
     return failed2(host, delivered.failure);
   }
   const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
-    hop,
     effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
   });
   let answer2 = null;
@@ -42978,16 +43084,16 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 
 // src/utils/user-path.ts
 init_globals();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
+var import_node_path11 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
   return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
 }
 function resolveUserPath(base, p2, home) {
-  return import_node_path10.default.resolve(base, expandHome(p2, home));
+  return import_node_path11.default.resolve(base, expandHome(p2, home));
 }
 function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
@@ -43234,7 +43340,7 @@ function checkRenderRequest(req, stats, log, home) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path11.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path12.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
@@ -43284,7 +43390,7 @@ function checkRenderRequest(req, stats, log, home) {
 
 // src/daemon/click-handoff.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/click-launch.ts
 init_globals();
@@ -43306,13 +43412,13 @@ function clickFailed(r, what, log) {
 // src/daemon/click-handoff.ts
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
-  const dir = mkdtempSync(import_node_path12.default.join(tmp, "cc-candybar-handoff-"));
+  const dir = mkdtempSync(import_node_path13.default.join(tmp, "cc-candybar-handoff-"));
   try {
     const files = {
       // Unread, and a handed-off browser would write to it for its whole life.
       stdout: "/dev/null",
-      stderr: import_node_path12.default.join(dir, "stderr"),
-      status: import_node_path12.default.join(dir, "status")
+      stderr: import_node_path13.default.join(dir, "stderr"),
+      status: import_node_path13.default.join(dir, "status")
     };
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
@@ -43624,7 +43730,7 @@ init_globals();
 
 // src/claude-settings-read.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 
 // src/config/json5-edit.ts
 init_globals();
@@ -44170,15 +44276,15 @@ function parseSettings(settingsPath, text4) {
   return parsed2;
 }
 function readSettingsChain(at) {
-  const dropIns = import_node_path13.default.join(at.managedDir, "managed-settings.d");
+  const dropIns = import_node_path14.default.join(at.managedDir, "managed-settings.d");
   const located2 = [
     ...visibleJsonFiles(dropIns).reverse().map((name) => ({
       scope: "managed",
-      path: import_node_path13.default.join(dropIns, name)
+      path: import_node_path14.default.join(dropIns, name)
     })),
     {
       scope: "managed",
-      path: import_node_path13.default.join(at.managedDir, "managed-settings.json")
+      path: import_node_path14.default.join(at.managedDir, "managed-settings.json")
     },
     {
       scope: "project-local",
@@ -44186,7 +44292,7 @@ function readSettingsChain(at) {
     },
     {
       scope: "project",
-      path: import_node_path13.default.join(at.projectDir, ".claude", "settings.json")
+      path: import_node_path14.default.join(at.projectDir, ".claude", "settings.json")
     },
     { scope: "user", path: at.userFile }
   ];
@@ -46274,20 +46380,20 @@ var FailError = class extends EvalError {
   }
 };
 function buildSnippet(source, pos) {
-  const lines3 = source.split("\n");
+  const lines2 = source.split("\n");
   const lineIdx = pos.line - 1;
   const display = [];
-  if (lineIdx - 1 >= 0 && lineIdx - 1 < lines3.length) display.push({
+  if (lineIdx - 1 >= 0 && lineIdx - 1 < lines2.length) display.push({
     num: lineIdx,
-    text: lines3[lineIdx - 1] ?? ""
+    text: lines2[lineIdx - 1] ?? ""
   });
-  if (lineIdx >= 0 && lineIdx < lines3.length) display.push({
+  if (lineIdx >= 0 && lineIdx < lines2.length) display.push({
     num: lineIdx + 1,
-    text: lines3[lineIdx] ?? ""
+    text: lines2[lineIdx] ?? ""
   });
-  if (lineIdx + 1 < lines3.length) display.push({
+  if (lineIdx + 1 < lines2.length) display.push({
     num: lineIdx + 2,
-    text: lines3[lineIdx + 1] ?? ""
+    text: lines2[lineIdx + 1] ?? ""
   });
   if (display.length === 0) return "";
   const numWidth = String(display[display.length - 1]?.num ?? 1).length;
@@ -51008,7 +51114,7 @@ function editabilityNotice(filePath2, source) {
 }
 function formatIssues(file, issues) {
   if (issues.length === 0) return `${file}: invalid config (no details)`;
-  const lines3 = [
+  const lines2 = [
     `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
   ];
   for (const issue3 of issues) {
@@ -51020,9 +51126,9 @@ function formatIssues(file, issues) {
     }
     if (issue3.path) locParts.push(issue3.path);
     const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
-    lines3.push(`  ${loc}${issue3.message}`);
+    lines2.push(`  ${loc}${issue3.message}`);
   }
-  return lines3.join("\n");
+  return lines2.join("\n");
 }
 
 // src/config/payload-inputs.ts
@@ -51426,7 +51532,7 @@ var CLOSING_FLASH = [
   ...flashes(3, 0.25)
 ];
 var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
-  (sum, { seconds }) => sum + seconds,
+  (sum2, { seconds }) => sum2 + seconds,
   0
 );
 var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
@@ -52057,9 +52163,9 @@ function pluginScopeCollisions(ctx, out, inherited) {
 }
 var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
 function payloadDeclarationNotices(filePath2, source, declared) {
-  const lineOf2 = keyLocator(source);
+  const lineOf = keyLocator(source);
   return declared.filter(isPayloadInput).map((name) => {
-    const line = lineOf2(["variables", name]);
+    const line = lineOf(["variables", name]);
     const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
     return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
   });
@@ -52668,14 +52774,14 @@ var SessionEffects = class {
       const held = { ...last3.drawing, own: last3.drawing.own.map(given2.hold) };
       return { drawing: held, passage: begin("dissolve", id2, held) };
     };
-    const reached = (id2, lines3) => {
+    const reached = (id2, lines2) => {
       if (reachedIds.has(id2))
         throw new Error(`placement "${id2}" was reached twice in one frame`);
       reachedIds.add(id2);
       const last3 = before?.(id2);
-      const { drawing: drawing2, deeper } = given2.returned(id2, lines3);
+      const { drawing: drawing2, deeper } = given2.returned(id2, lines2);
       const now2 = drawing2 === null ? gone(id2, last3) : shown(id2, drawing2, last3);
-      if (now2 === void 0) return lines3;
+      if (now2 === void 0) return lines2;
       if (now2.passage !== null) {
         passages.set(id2, now2.passage);
         (now2.passage.name === "fade" ? fading : leaving).push({
@@ -52683,7 +52789,7 @@ var SessionEffects = class {
           t: at - now2.passage.since
         });
       }
-      return drawing2 === null ? [...now2.drawing.own, ...deeper] : lines3;
+      return drawing2 === null ? [...now2.drawing.own, ...deeper] : lines2;
     };
     const ownPart = (placement, name2) => {
       const last3 = placements.get(placement) ?? knownPlacements.get(placement);
@@ -52784,7 +52890,7 @@ var SessionEffects = class {
     return {
       // [LAW:dataflow-not-control-flow] With transitions off nothing is
       // compared or kept, so every placement draws exactly what it returned.
-      placed: basis === "off" ? (_id, lines3) => lines3 : reached,
+      placed: basis === "off" ? (_id, lines2) => lines2 : reached,
       row: row2,
       drawn: () => {
         this.anchor = clock.timeline;
@@ -52892,8 +52998,8 @@ function stripGeometry(options) {
     style: new Style({ bgcolor })
   });
   const width = (cells) => {
-    const { lines: lines3 } = draw(new Strip(cells, joiner), { colorSystem: null });
-    return new RichText(plainOf2(lines3.flat())).cellLength;
+    const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+    return new RichText(plainOf2(lines2.flat())).cellLength;
   };
   const one = width([cell3("#101010")]);
   const geometry = {
@@ -52917,8 +53023,8 @@ function stripPrivateGlyphs(options) {
   const joiner = pickJoiner(options.endcaps, options.separator);
   const cell3 = (bgcolor) => new RichText("x", { end: "", style: new Style({ bgcolor }) });
   const cells = [cell3("#101010"), cell3("#202020")];
-  const { lines: lines3 } = draw(new Strip(cells, joiner), { colorSystem: null });
-  return privateGlyphsIn(plainOf2(lines3.flat()));
+  const { lines: lines2 } = draw(new Strip(cells, joiner), { colorSystem: null });
+  return privateGlyphsIn(plainOf2(lines2.flat()));
 }
 var WIDEST_GLYPH_COLS = 2;
 function lineWidth(options) {
@@ -52969,6 +53075,7 @@ function measureOf(charge) {
 }
 var BREACH_ARTIFACTS = {
   memoryReport: { prefix: "memory-", suffix: ".txt" },
+  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
   heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
 };
 
@@ -53708,6 +53815,7 @@ function clickReply(outcome) {
     case "threw":
     case "closing":
     case "abandoned":
+    case "down":
       return failedWith(outcome.message);
   }
 }
@@ -53802,10 +53910,10 @@ var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, rand
 
 // src/daemon/update-act.ts
 init_os();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
-  return import_node_path14.default.join(stateDir2, "update-act", key);
+  return import_node_path15.default.join(stateDir2, "update-act", key);
 }
 function judgeAct(facts) {
   if (facts === null) return IDLE;
@@ -53824,11 +53932,11 @@ function judgeAct(facts) {
   return { kind: "failed", act, identity: record2.identity, reason };
 }
 var filesOf = (actDir) => ({
-  stdout: import_node_path14.default.join(actDir, "stdout"),
-  stderr: import_node_path14.default.join(actDir, "stderr"),
-  status: import_node_path14.default.join(actDir, "status")
+  stdout: import_node_path15.default.join(actDir, "stdout"),
+  stderr: import_node_path15.default.join(actDir, "stderr"),
+  status: import_node_path15.default.join(actDir, "status")
 });
-var recordOf = (actDir) => import_node_path14.default.join(actDir, "record.json");
+var recordOf = (actDir) => import_node_path15.default.join(actDir, "record.json");
 function actNumbers(dir) {
   let names;
   try {
@@ -53852,9 +53960,9 @@ function lastLineOf(file) {
   }
 }
 function removeAct(dir, act) {
-  const leaving = import_node_path14.default.join(dir, `.removed-${act}-${process_default.pid}`);
+  const leaving = import_node_path15.default.join(dir, `.removed-${act}-${process_default.pid}`);
   try {
-    fs_default.renameSync(import_node_path14.default.join(dir, String(act)), leaving);
+    fs_default.renameSync(import_node_path15.default.join(dir, String(act)), leaving);
   } catch (err) {
     if (err.code === "ENOENT") return;
     throw err;
@@ -53879,7 +53987,7 @@ var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf(act) {
-    const actDir = import_node_path14.default.join(dir, String(act));
+    const actDir = import_node_path15.default.join(dir, String(act));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
@@ -53907,7 +54015,7 @@ function makeActReader(dir, read2, jobs, clock) {
         if (act === void 0) return null;
         if (act === vanished) {
           throw new Error(
-            `${import_node_path14.default.join(dir, String(act))}: an act with no record`
+            `${import_node_path15.default.join(dir, String(act))}: an act with no record`
           );
         }
         const facts = await factsOf(act);
@@ -53919,7 +54027,7 @@ function makeActReader(dir, read2, jobs, clock) {
 }
 function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
-  const staging = fs_default.mkdtempSync(import_node_path14.default.join(dir, ".claim-"));
+  const staging = fs_default.mkdtempSync(import_node_path15.default.join(dir, ".claim-"));
   try {
     fs_default.writeFileSync(recordOf(staging), JSON.stringify(record2));
     fs_default.renameSync(staging, actDir);
@@ -53934,7 +54042,7 @@ function stakeClaim(dir, actDir, record2) {
 }
 async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
-  const actDir = import_node_path14.default.join(dir, String(act));
+  const actDir = import_node_path15.default.join(dir, String(act));
   const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
@@ -53967,7 +54075,7 @@ var CLAIMED_FIRST = {
   reason: "another act claimed this bundle first"
 };
 function endOverdue(dir, facts, jobs) {
-  const status = filesOf(import_node_path14.default.join(dir, String(facts.act))).status;
+  const status = filesOf(import_node_path15.default.join(dir, String(facts.act))).status;
   return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
@@ -54055,23 +54163,23 @@ var PACKAGE_VERSION = "1.220.0";
 
 // src/daemon/build-currency.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 init_url();
 
 // src/source-digest.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
 function entryBytes(p2, st) {
   return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
 }
 function sourceEntries(root, dir, keep2 = isSourceEntry) {
   return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path15.default.join(dir, name);
+    const p2 = import_node_path16.default.join(dir, name);
     const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
     if (st === void 0) return [];
     if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path15.default.relative(root, p2).split(import_node_path15.default.sep).join("/");
+    const rel = import_node_path16.default.relative(root, p2).split(import_node_path16.default.sep).join("/");
     return [[rel, entryBytes(p2, st)]];
   });
 }
@@ -54098,8 +54206,8 @@ function crateDigest(crateDir) {
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path16.default.dirname(import_node_path16.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path16.default.join(root, "src")) ? root : null;
+  const root = import_node_path17.default.dirname(import_node_path17.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path17.default.join(root, "src")) ? root : null;
 }
 function bundleStamp(digest2) {
   if (digest2 === null) {
@@ -54111,11 +54219,11 @@ function bundleStamp(digest2) {
 }
 function checkoutVersion(root) {
   const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path16.default.join(root, "package.json"), "utf8")
+    fs_default.readFileSync(import_node_path17.default.join(root, "package.json"), "utf8")
   );
   const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
   if (typeof version !== "string") {
-    throw new Error(`${import_node_path16.default.join(root, "package.json")} has no version string`);
+    throw new Error(`${import_node_path17.default.join(root, "package.json")} has no version string`);
   }
   return version;
 }
@@ -54124,7 +54232,7 @@ function assessBuild(entryUrl, runningStamp) {
     const root = sourceCheckoutOf(fileURLToPath(entryUrl));
     if (root === null) return { kind: "not-source-checkout" };
     const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path16.default.join(root, "src"));
+    const digest2 = sourceDigest(import_node_path17.default.join(root, "src"));
     if (digest2 === running.digest)
       return { kind: "current", root, stamp: running };
     return {
@@ -54569,7 +54677,7 @@ function unknownOptionDomain(from, perConfigDomains) {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 
 // src/config/setting-control.ts
 init_globals();
@@ -55061,7 +55169,7 @@ var GROUP_LABELS = {
 // src/config/help.ts
 init_globals();
 var HELP_GLYPH_CLOSED = "(?)";
-function declareHelp(name, lines3, within4, out) {
+function declareHelp(name, lines2, within4, out) {
   const self2 = {
     variable: name,
     key: name,
@@ -55082,7 +55190,7 @@ function declareHelp(name, lines3, within4, out) {
     // (`within` empty) is always visible, and declares no `when` at all.
     ...gateOf(within4)
   };
-  const children2 = lines3.map((line, i) => {
+  const children2 = lines2.map((line, i) => {
     const lineName = `${name}.${i}`;
     out.segments[lineName] = { template: line };
     return { kind: "segment", name: lineName };
@@ -55329,17 +55437,17 @@ function statusLineOf(sources) {
   if (sources.kind === "failed") {
     return { kind: "unread", reason: sources.reason };
   }
-  const lines3 = sources.value.flatMap(
+  const lines2 = sources.value.flatMap(
     ({ scope, path: path43, settings }) => "statusLine" in settings ? [{ from: { scope, path: path43 }, line: settings.statusLine }] : []
   );
-  const top = lines3[0];
+  const top = lines2[0];
   if (top === void 0) {
     return { kind: "absent", read: sources.value.map((s) => s.path) };
   }
   if (!isJsonObject(top.line)) {
     return { kind: "not-an-object", value: top.line, from: top.from };
   }
-  for (const { from, line } of lines3) {
+  for (const { from, line } of lines2) {
     if (from.scope !== top.from.scope || !isJsonObject(line)) break;
     if ("refreshInterval" in line) {
       return { kind: "present", refreshInterval: line.refreshInterval, from };
@@ -56044,9 +56152,9 @@ function transcriptProblems({
     case "failed":
       return [`the transcript ${path43} cannot be read: ${read2.reason}`];
     case "ok": {
-      const { lines: lines3, unparsed, whole } = read2.value;
+      const { lines: lines2, unparsed, whole } = read2.value;
       return unparsed === 0 ? [] : [
-        `${unparsed} of the ${lines3} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path43} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
+        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path43} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
       ];
     }
   }
@@ -56144,7 +56252,10 @@ function daemonFields({
   const { memory, limit, postMortems } = serving.value;
   const told = postMortems.kind === "failed" || read2.kind === "failed" ? "unread" : `${unreadPostMortems(serving.value, read2).length}/${postMortems.value.length}`;
   const held = memory.kind === "unmeasured" ? "unmeasured" : `${measureOf(memory.charge)}${memory.charge.kind === "stand-in" ? `(${signedMb(-memory.charge.gap)})` : ""}:${mb(memory.charge.bytes)}`;
-  return `${running} memory=${held}/${mb(limit)} postMortems=${told}`;
+  const shares2 = memory.kind === "unmeasured" ? "-" : memory.processes.map(
+    (p2) => `${p2.role}:${p2.pid}:${p2.sizes === null ? "-" : mb(p2.sizes.rss)}`
+  ).join(",");
+  return `${running} memory=${held}/${mb(limit)} processes=${shares2} postMortems=${told}`;
 }
 function dataFields(data) {
   const pr = () => {
@@ -56166,13 +56277,13 @@ function dataFields(data) {
 }
 function frameFields(frames, { origin, elsewhere }) {
   const chains = [origin, ...elsewhere];
-  const lines3 = chains.map(({ sources }) => statusLineValue(sources)).join(",");
+  const lines2 = chains.map(({ sources }) => statusLineValue(sources)).join(",");
   if (frames.kind === "failed") {
-    return `frames=failed chains=${valueOf(lines3)}`;
+    return `frames=failed chains=${valueOf(lines2)}`;
   }
   const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
   const count = (seen2) => drawn.filter((f) => f.frame === seen2).length;
-  return `frames=${FRAMES_SEEN.map(count).join("/")} chains=${valueOf(lines3)}`;
+  return `frames=${FRAMES_SEEN.map(count).join("/")} chains=${valueOf(lines2)}`;
 }
 function statusLineValue(sources) {
   const line = statusLineOf(sources);
@@ -57217,7 +57328,7 @@ function editableUnit(child, spliced, first2, ctx) {
   ];
 }
 function fileLabel(file) {
-  return import_node_path17.default.join(import_node_path17.default.basename(import_node_path17.default.dirname(file)), import_node_path17.default.basename(file));
+  return import_node_path18.default.join(import_node_path18.default.basename(import_node_path18.default.dirname(file)), import_node_path18.default.basename(file));
 }
 function insertedUnit(child, insertedBy, spliced, ctx) {
   const decl = ctx.segments[child.name];
@@ -58317,7 +58428,7 @@ init_globals();
 
 // src/attach-launcher.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 
 // src/claude-command-line.ts
 init_globals();
@@ -58342,14 +58453,14 @@ function claudeCommandLine(command) {
 // src/attach-launcher.ts
 var ATTACH_DIR = "cc-extra";
 function attachLauncherOf(bundle) {
-  return import_node_path18.default.join(import_node_path18.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+  return import_node_path19.default.join(import_node_path19.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
 }
 function moduleGraphReaderOf(launcher) {
-  return import_node_path18.default.join(import_node_path18.default.dirname(launcher), "bun-graph.js");
+  return import_node_path19.default.join(import_node_path19.default.dirname(launcher), "bun-graph.js");
 }
 var ATTACH_PRELOAD = "attach-preload.cjs";
 function attachPreloadOf(bundle) {
-  return import_node_path18.default.join(import_node_path18.default.dirname(bundle), ATTACH_PRELOAD);
+  return import_node_path19.default.join(import_node_path19.default.dirname(bundle), ATTACH_PRELOAD);
 }
 var PRELOAD_VARIABLE = "BUN_OPTIONS";
 function attachCommandLine(preload, command) {
@@ -58382,82 +58493,6 @@ var text3 = refuse3("stream/consumers.text");
 var writeHeapSnapshot = refuse3("v8.writeHeapSnapshot");
 var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
 var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
-
-// src/daemon/paths.ts
-init_globals();
-init_os();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
-function xdgEnv(env2, name) {
-  const v = env2[name];
-  return v && v.length > 0 ? v : void 0;
-}
-function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path19.default.join(host.home, ".local", "state");
-  return import_node_path19.default.join(base, "cc-candybar");
-}
-function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path19.default.join(host.home, ".cache");
-  return import_node_path19.default.join(base, "cc-candybar");
-}
-function socketPath(host) {
-  return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
-}
-function defaultSocketPath() {
-  const uid = os_default.userInfo().uid;
-  return import_node_path19.default.join("/tmp", `cc-candybar-${uid}`, "socket");
-}
-function leasePathFor(sockPath) {
-  return `${sockPath}.lease`;
-}
-function leasePath(host) {
-  return leasePathFor(socketPath(host));
-}
-function sessionStatePath(host) {
-  return import_node_path19.default.join(stateDir(host), "session-state.json");
-}
-function settingsHistoryPath(host) {
-  return import_node_path19.default.join(stateDir(host), "settings-history.json");
-}
-function daemonRegistryDir(host) {
-  const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
-  if (override) return override;
-  const uid = os_default.userInfo().uid;
-  return import_node_path19.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
-}
-var SPAWN_BACKOFF_FILE = "spawn.backoff";
-function spawnBackoffPath(host) {
-  return import_node_path19.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
-}
-function watchProbeDir(host) {
-  return import_node_path19.default.join(stateDir(host), "watch-probe");
-}
-function logPath(host) {
-  return import_node_path19.default.join(stateDir(host), "daemon.log");
-}
-function daemonPaths(host) {
-  return {
-    socket: socketPath(host),
-    lease: leasePath(host),
-    state: stateDir(host),
-    registry: daemonRegistryDir(host),
-    log: logPath(host),
-    sessionState: sessionStatePath(host),
-    settingsHistory: settingsHistoryPath(host),
-    watchProbe: watchProbeDir(host),
-    spawnBackoff: spawnBackoffPath(host)
-  };
-}
-function locations(host) {
-  const { env: env2 } = host;
-  const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process_default.platform === "darwin" ? `${import_node_path19.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
-  return {
-    home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path19.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path19.default.join(host.home, ".local", "share"),
-    dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
-  };
-}
 
 // src/daemon/client.ts
 init_globals();
@@ -58497,6 +58532,11 @@ ${outcome.text}`;
     ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
   ].join("\n");
 }
+async function memoryReports(each) {
+  const reports = [];
+  for (const probes of each) reports.push(await memoryReport(probes));
+  return reports.join("\n\n");
+}
 var FOOTPRINT = "/usr/bin/footprint";
 var VMMAP = "/usr/bin/vmmap";
 function platformProbes(launcher, platform3, pid2) {
@@ -58512,31 +58552,30 @@ function platformProbes(launcher, platform3, pid2) {
   if (platform3 === "linux") {
     return [
       // One line per accounting class for the whole address space — Linux's
-      // answer to `footprint`, and free (no subprocess).
-      fileProbe("/proc/self/smaps_rollup"),
+      // answer to `footprint`, and free (no subprocess). A process may read
+      // its own child's.
+      fileProbe(`/proc/${pid2}/smaps_rollup`),
       // Always present, coarser: VmRSS and friends, so Linux never falls all
       // the way through to "no probe answered".
-      fileProbe("/proc/self/status")
+      fileProbe(`/proc/${pid2}/status`)
     ];
   }
   return [];
 }
-function chargeProbe(launcher, platform3, pid2) {
+function chargeProbe(launcher, platform3) {
   return platform3 === "darwin" ? footprintCharge(
-    pid2,
     (args) => launcher.launch({
       bin: FOOTPRINT,
       args,
       timeoutMs: PROBE_TIMEOUT_MS,
       category: "limits.charge"
     })
-  ) : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+  ) : async (_pids, rss) => ({ kind: "charged", measure: "rss", bytes: rss });
 }
-function footprintCharge(pid2, run3) {
-  return async (rss) => {
+function footprintCharge(run3) {
+  return async (pids, rss) => {
     const result = await run3([
-      "-p",
-      String(pid2),
+      ...pids.flatMap((pid2) => ["-p", String(pid2)]),
       "--noCategories",
       "-f",
       "bytes"
@@ -58548,17 +58587,22 @@ function footprintCharge(pid2, run3) {
         unread: `footprint ${failureText(result)}`
       };
     }
-    const bytes = physFootprintOf(result.stdout);
-    return bytes === null ? {
+    const each = physFootprintsOf(result.stdout);
+    return each.length !== pids.length ? {
       kind: "stand-in",
       bytes: rss,
-      unread: "footprint printed no phys_footprint line"
-    } : { kind: "charged", measure: "phys_footprint", bytes };
+      unread: `footprint printed ${each.length} phys_footprint lines for ${pids.length} processes`
+    } : {
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: each.reduce((total, bytes) => total + bytes, 0)
+    };
   };
 }
-function physFootprintOf(text4) {
-  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text4);
-  return m === null ? null : Number(m[1]);
+function physFootprintsOf(text4) {
+  return [...text4.matchAll(/^\s*phys_footprint:\s+(\d+) B\s*$/gm)].map(
+    (m) => Number(m[1])
+  );
 }
 function commandProbe(launcher, bin, args) {
   return {
@@ -58597,7 +58641,6 @@ function fileProbe(path43) {
 // src/daemon/limits.ts
 var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
 var DEFAULT_RSS_LIMIT_MB = 1024;
-var HEAP_CAP_OVER_RSS = 2;
 function memoryLimitMb(env2) {
   const raw = env2[RSS_LIMIT_ENV];
   if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
@@ -58609,7 +58652,6 @@ function memoryLimitMb(env2) {
   }
   return mb2;
 }
-var heapCapOf = (limitBytes) => Math.ceil(limitBytes / BYTES_PER_MB) * HEAP_CAP_OVER_RSS;
 function memoryLimitBytes(env2) {
   return memoryLimitMb(env2) * BYTES_PER_MB;
 }
@@ -58647,9 +58689,29 @@ function makeLimits(deps) {
   }
   async function measure3() {
     if (triggered) return true;
-    const { rss, heapTotal } = deps.memoryBytes();
-    const charge = readCharge(await deps.memoryCharge(rss), latest);
-    const reading = { kind: "measured", charge, rss, heapTotal };
+    const own2 = deps.memoryBytes();
+    const renderer = deps.renderer();
+    const processes = [
+      { role: "host", pid: deps.pid, sizes: own2 },
+      ...renderer === null ? [] : [
+        {
+          role: "renderer",
+          pid: renderer.pid,
+          sizes: renderer.usage
+        }
+      ]
+    ];
+    const pids = processes.map((p2) => p2.pid);
+    const rss = sum(processes, (s) => s.rss);
+    const heapTotal = sum(processes, (s) => s.heapTotal);
+    const charge = readCharge(await deps.memoryCharge(pids, rss), latest);
+    const reading = {
+      kind: "measured",
+      charge,
+      rss,
+      heapTotal,
+      processes
+    };
     latest = reading;
     deps.log("info", `memory ${readingFields(reading, limit)}`);
     if (disarmed || charge.bytes <= limit) return false;
@@ -58662,7 +58724,7 @@ function makeLimits(deps) {
     const identity2 = `${stamp2}-${deps.pid}`;
     await attempt2(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
-      const report2 = await deps.captureMemoryReport();
+      const report2 = await deps.captureMemoryReport(pids);
       if (disarmed) return;
       deps.writeMemoryReport(file, report2);
       deps.log("info", `memory report written: ${file}`);
@@ -58671,6 +58733,16 @@ function makeLimits(deps) {
       deps.log("info", "daemon closed during the breach: no snapshot, no exit");
       return false;
     }
+    if (renderer !== null)
+      await attempt2(deps.log, "renderer heap snapshot", async () => {
+        const file = artifactFile(
+          deps.snapshotDir,
+          "rendererHeapSnapshot",
+          identity2
+        );
+        await deps.writeRendererHeapSnapshot(file);
+        deps.log("info", `renderer heap snapshot written: ${file}`);
+      });
     await attempt2(deps.log, "heap snapshot", () => {
       deps.writeLogNow();
       const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
@@ -58727,9 +58799,23 @@ function makeLimits(deps) {
   }
   return { check, describeNextRestart, serving, arm: arm2, disarm };
 }
-function readingFields({ charge, rss, heapTotal }, limit) {
+function sum(processes, size) {
+  return processes.reduce(
+    (total, p2) => total + (p2.sizes === null ? 0 : size(p2.sizes)),
+    0
+  );
+}
+function readingFields({
+  charge,
+  rss,
+  heapTotal,
+  processes
+}, limit) {
   const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
-  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}`;
+  const each = processes.map(
+    (p2) => ` ${p2.role}=${p2.pid}:${p2.sizes === null ? "unread" : `rss${mb(p2.sizes.rss)}MB/heap${mb(p2.sizes.heapTotal)}MB`}`
+  ).join("");
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}${each}`;
 }
 async function attempt2(log, what, body) {
   try {
@@ -58767,9 +58853,11 @@ function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
       const mem = process_default.memoryUsage();
       return { rss: mem.rss, heapTotal: mem.heapTotal };
     },
-    memoryCharge: chargeProbe(owner.launcher, process_default.platform, process_default.pid),
-    captureMemoryReport: () => memoryReport(
-      platformProbes(owner.launcher, process_default.platform, process_default.pid)
+    memoryCharge: chargeProbe(owner.launcher, process_default.platform),
+    captureMemoryReport: (pids) => memoryReports(
+      pids.map(
+        (pid2) => platformProbes(owner.launcher, process_default.platform, pid2)
+      )
     ),
     // 0600 like the heap snapshot v8 writes beside it: the pair shares an
     // identity, so it shares a permission — a post-mortem pair where one half is
@@ -60786,9 +60874,9 @@ function daySumsOver(slots, roots) {
   for (const { record: record2 } of slots) {
     if (record2 === void 0 || !under2(record2.transcriptPath, roots)) continue;
     for (const [day, d] of record2.days) {
-      const sum = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum, d);
-      sums.set(day, sum);
+      const sum2 = sums.get(day) ?? { ...EMPTY_DAY };
+      addDay(sum2, d);
+      sums.set(day, sum2);
     }
   }
   return Object.fromEntries(sums);
@@ -62524,10 +62612,10 @@ async function findLastCacheActivityTs(transcriptPath) {
 }
 function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
   const text4 = buf.toString("utf8");
-  const lines3 = text4.split("\n");
+  const lines2 = text4.split("\n");
   const start = bufStartsAtFileBeginning ? 0 : 1;
-  for (let i = lines3.length - 1; i >= start; i--) {
-    const line = lines3[i];
+  for (let i = lines2.length - 1; i >= start; i--) {
+    const line = lines2[i];
     if (!line || !CACHE_HIT_RE.test(line)) continue;
     const ts = cacheActivityTs(line);
     if (ts != null) return ts;
@@ -66078,6 +66166,16 @@ var Collector = class {
       record2.turns--;
     };
   }
+  // Each session the collector reads now, with its latest stamp: what a
+  // renderer's complete start configures again. Unlike a request, it marks no
+  // session active, so a restart keeps none past a sweep that would retire it.
+  liveDocuments() {
+    return new Map(
+      [...this.records.values()].flatMap(
+        (r) => r.phase.kind === "live" ? [[r.session, r.stamped.document]] : []
+      )
+    );
+  }
   // One sweep. Public so a test can run it at an instant it chose.
   sweep() {
     for (const record2 of this.records.values()) {
@@ -66086,14 +66184,6 @@ var Collector = class {
       else if (record2.turns === 0 && !this.deps.watched(record2.session))
         this.retire(record2, record2.phase);
     }
-  }
-  // [LAW:one-source-of-truth] Every live session's document as last stamped:
-  // what a renderer's start carries of the world, so the renderer that
-  // answers it reads what the one before it read.
-  documents() {
-    return [...this.records.values()].flatMap(
-      (r) => r.phase.kind === "live" ? [r.stamped.document] : []
-    );
   }
   stats() {
     const all2 = [...this.records.values()];
@@ -66416,6 +66506,10 @@ var FrameFeeds = class {
       `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${feed2.followers.size} view=${lanes === null ? "N" : "Y"}`
     );
   }
+  // Every session an open feed draws: what a renderer's complete start pins.
+  openFeeds() {
+    return [...this.feeds.keys()];
+  }
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // fact its pin counts, from the feed's open to its close.
   feedOpen(sessionId2) {
@@ -66515,10 +66609,11 @@ var FrameFeeds = class {
       drawn: 0,
       noted: 0,
       noView: 0,
-      fault: null,
       moving: 0,
       unseen: 0,
       failed: 0,
+      fault: null,
+      faulted: 0,
       pushed: 0,
       drawMs: 0,
       evaluated: 0,
@@ -66578,24 +66673,17 @@ var FrameFeeds = class {
     const moment2 = started2 + (at - wall) * 1e3;
     try {
       await this.step(feed2, started2, moment2, at);
-      if (feed2.fault !== null)
-        this.deps.log(
-          "info",
-          `feed sid=${JSON.stringify(feed2.sessionId)} recovered faults=${feed2.fault.count}`
-        );
-      feed2.fault = null;
     } catch (error) {
       const woken = wokenWhileOut(feed2);
       feed2.lastStart = moment2;
-      const text4 = error instanceof Error ? error.message : inspect(error);
-      if (feed2.fault?.text === text4) feed2.fault.count++;
-      else {
-        feed2.fault = { text: text4, count: 1 };
+      feed2.faulted++;
+      const said = failureOf(error).message;
+      if (feed2.fault !== said)
         this.deps.log(
           "error",
           `feed sid=${JSON.stringify(feed2.sessionId)} threw: ${inspect(error)}`
         );
-      }
+      feed2.fault = said;
       if (this.feeds.get(feed2.sessionId) !== feed2) return;
       this.schedule(feed2, null, at);
       if (woken) this.hasten(feed2);
@@ -66609,6 +66697,13 @@ var FrameFeeds = class {
       [...this.following(feed2.sessionId)],
       this.feedsOf(feed2.sessionId, at)
     );
+    if (feed2.fault !== null) {
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(feed2.sessionId)} recovered after ${feed2.fault}`
+      );
+      feed2.fault = null;
+    }
     if (frame2 === null) {
       const woken2 = wokenWhileOut(feed2);
       feed2.noView++;
@@ -66790,7 +66885,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} faulted=${feed2.faulted} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed2.drawn === 0 ? "-" : (feed2.drawMs / feed2.drawn).toFixed(2)}ms`
     );
     feed2.summarizedAt = now2;
   }
@@ -67740,11 +67835,11 @@ var RULE = /^─{20,}/;
 var PROMPT = /^❯(\s|$)/;
 var STASHED = /›\s*stashed$/;
 function inputBox(snapshot) {
-  const lines3 = snapshot.screen.map((l) => l.trimEnd());
-  const rules = lines3.flatMap((l, i) => RULE.test(l) ? [i] : []);
+  const lines2 = snapshot.screen.map((l) => l.trimEnd());
+  const rules = lines2.flatMap((l, i) => RULE.test(l) ? [i] : []);
   const top = rules.at(-2);
-  if (top === void 0 || !PROMPT.test(lines3[top + 1] ?? "")) return null;
-  return { hint: lines3[top - 1] ?? "", prompt: lines3[top + 1] };
+  if (top === void 0 || !PROMPT.test(lines2[top + 1] ?? "")) return null;
+  return { hint: lines2[top - 1] ?? "", prompt: lines2[top + 1] };
 }
 function promptState(snapshot) {
   if (snapshot.inMode) return { kind: "in-mode" };
@@ -68345,15 +68440,14 @@ function rendererHost(name, clock, renderer, log, collector) {
     const release4 = session === null ? () => {
     } : collector.holding(session);
     try {
-      const {
-        output: { subscriptions, ...output },
-        hopMs
-      } = await renderer.answer(input);
+      const sentAt = clock.monotonic();
+      const { subscriptions, turnMs, ...answered } = await renderer.answer(input);
+      const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
       collector.subscribed(subscriptions);
       if (output.kind === "answered" && input.event.kind !== "request")
         for (const effect of output.effects)
           refuse4(effect, `a ${input.event.kind} turn answers no request`);
-      return { ...output, hopMs };
+      return output;
     } finally {
       release4();
     }
@@ -68363,7 +68457,7 @@ function rendererHost(name, clock, renderer, log, collector) {
       kind: "threw",
       failure: failureOf(thrown2),
       record: [],
-      hopMs: 0
+      hopMs: null
     })
   );
   const refuse4 = (effect, reason) => void deliver(
@@ -68393,6 +68487,7 @@ function rendererHost(name, clock, renderer, log, collector) {
           log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
+        if (delivered.failure.kind === "down") return;
         log(
           LEVEL[delivered.failure.kind],
           eventLine("turn", [
@@ -68409,26 +68504,25 @@ function rendererHost(name, clock, renderer, log, collector) {
     return delivered;
   };
   const ask = async (push, at) => {
-    const output = await renderer.answer({ kind: "adapter", push, at }).then(({ output: output2 }) => output2).catch(
+    const output = await renderer.answer({ kind: "adapter", push, at }).catch(
       (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
     );
     if (output.kind === "threw")
-      throw new Error(
-        `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`
-      );
+      throw new CrossedFailure({
+        ...output.failure,
+        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
+        detail: `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`
+      });
     if (output.reply.kind !== push.kind)
       throw new Error(
         `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`
       );
     return output.reply;
   };
-  const tell = (push, at) => (
-    // [LAW:types-are-the-program] exception: `ask` rejects only with the
-    // Errors it makes, which no promise type carries.
-    void ask(push, at).catch(
-      (thrown2) => log("error", thrown2.message)
-    )
-  );
+  const tell = (push, at) => void ask(push, at).catch((thrown2) => {
+    const failure = failureOf(thrown2);
+    if (failure.kind !== "down") log("error", failure.detail);
+  });
   return { name, answer: turn, deliver, ask, tell };
 }
 function sessionOf(event) {
@@ -68447,2735 +68541,19 @@ function sessionOf(event) {
   }
 }
 
-// src/daemon/renderer-supervisor.ts
+// src/renderer/main.ts
 init_globals();
 
-// src/renderer-interface/interface.ts
-init_globals();
-function minter(generation) {
-  let minted = 0;
-  return () => `${generation}.${++minted}`;
-}
-var generationOf = (id2) => Number(id2.slice(0, id2.indexOf(".")));
-function rendererOf(arms) {
-  function answer2(input) {
-    switch (input.kind) {
-      case "start":
-        return arms.start(input);
-      case "event":
-        return arms.event(input);
-      case "adapter":
-        return arms.adapter(input);
-    }
-  }
-  return { answer: answer2 };
-}
-
-// src/daemon/renderer-supervisor.ts
-var RESTART = {
-  youngMs: 6e4,
-  firstBackoffMs: 1e3,
-  maxBackoffMs: 6e4
-};
-var LIVENESS_MS = 1e4;
-var restartDelayMs = (endedYoung) => endedYoung === 0 ? 0 : Math.min(
-  RESTART.firstBackoffMs * 2 ** (endedYoung - 1),
-  RESTART.maxBackoffMs
-);
-var CARRIED = /* @__PURE__ */ new Set([
-  "close-journal",
-  "close-views",
-  "close-session-state",
-  "pin",
-  "unpin"
-]);
-function superviseRenderer(deps) {
-  const { log } = deps;
-  let state = { kind: "idle" };
-  let generations2 = 0;
-  let endedYoung = 0;
-  let stopHeartbeat = () => {
-  };
-  const pinned = /* @__PURE__ */ new Set();
-  let ended = [];
-  const push = (scope, push2) => {
-    const { link } = scope;
-    if (scope.dead || link === null) return;
-    void link.answer({ kind: "adapter", push: push2, at: deps.now() }).then(
-      ({ output }) => {
-        if ("kind" in output && output.kind === "threw")
-          log(
-            "error",
-            `renderer push ${push2.kind} threw: ${output.failure.detail}`
-          );
-      },
-      (thrown2) => {
-        if (!scope.dead)
-          log("error", `renderer push ${push2.kind} failed: ${String(thrown2)}`);
-      }
-    );
-  };
-  const scopeOf2 = () => {
-    const watches = /* @__PURE__ */ new Map();
-    const holds2 = /* @__PURE__ */ new Set();
-    const scope = {
-      host: {
-        ...deps.host,
-        watches: {
-          watch: (id2, key, targets) => {
-            const told = (heard) => push(scope, { kind: "watch", id: id2, heard, deaf: handle.deaf });
-            const handle = deps.watches.acquire(key, targets, told);
-            watches.set(id2, handle);
-            deps.defer(() => {
-              if (watches.get(id2) === handle) told(null);
-            });
-          },
-          unwatch: (id2) => {
-            watches.get(id2)?.release();
-            watches.delete(id2);
-          }
-        },
-        storage: {
-          hold: (id2, folders) => {
-            holds2.add(id2);
-            deps.storage.hold(id2, folders);
-          },
-          release: (id2) => {
-            holds2.delete(id2);
-            deps.storage.release(id2);
-          }
-        }
-      },
-      link: null,
-      dead: false,
-      release: () => {
-        for (const handle of watches.values()) handle.release();
-        watches.clear();
-        for (const id2 of holds2) deps.storage.release(id2);
-        holds2.clear();
-      }
-    };
-    return scope;
-  };
-  const startOne = (cause) => {
-    const generation = ++generations2;
-    const scope = scopeOf2();
-    const link = deps.start(scope.host, generation);
-    scope.link = link;
-    const startedAt = deps.monotonic();
-    const sessions = deps.sessions().map((s) => ({ ...s, pinned: pinned.has(s.worldState.session) }));
-    const ready = link.answer({ kind: "start", start: { cause, sessions }, at: deps.now() }).then(
-      ({ output }) => {
-        const started2 = output;
-        deps.subscribed(started2.subscriptions);
-        return started2.kind === "threw" ? started2.failure : null;
-      },
-      (thrown2) => failureOf(thrown2)
-    ).then((failed3) => {
-      log(
-        failed3 === null ? "info" : "error",
-        eventLine("renderer start", [
-          ["generation", String(generation)],
-          ["cause", cause.kind],
-          ["sessions", String(sessions.length)],
-          ["took", `${Math.round(deps.monotonic() - startedAt)}ms`],
-          ...failed3 === null ? [] : [["error", failed3.detail]]
-        ])
-      );
-      if (failed3 !== null) return;
-      for (const gone of ended) gone.release();
-      ended = [];
-      heartbeat(live);
-    });
-    void link.ended.then((words2) => {
-      scope.dead = true;
-      ended.push(scope);
-      const current2 = state.kind === "live" && state.live.link === link;
-      if (!current2) {
-        log(
-          "info",
-          eventLine("renderer end", [
-            ["generation", String(generation)],
-            ["ended", words2]
-          ])
-        );
-        return;
-      }
-      stopHeartbeat();
-      endedYoung = deps.monotonic() - startedAt < RESTART.youngMs ? endedYoung + 1 : 0;
-      const delay = restartDelayMs(endedYoung);
-      log(
-        "warn",
-        eventLine("renderer end", [
-          ["generation", String(generation)],
-          ["ended", words2],
-          ["restart", `${delay}ms`]
-        ])
-      );
-      let cancel = () => {
-      };
-      state = { kind: "down", ended: words2, cancel: () => cancel() };
-      cancel = deps.after(delay, () => {
-        state = startOne({ kind: "crashed", ended: words2 });
-      });
-    });
-    const live = { generation, link, scope, startedAt, ready };
-    return { kind: "live", live };
-  };
-  const heartbeat = (live) => {
-    let answered = true;
-    const beat2 = () => {
-      if (state.kind !== "live" || state.live !== live) return;
-      if (!answered) {
-        log(
-          "error",
-          eventLine("renderer hung", [
-            ["generation", String(live.generation)],
-            ["unanswered", `${LIVENESS_MS}ms`]
-          ])
-        );
-        void live.link.end();
-        return;
-      }
-      answered = false;
-      void live.link.alive().then(
-        () => answered = true,
-        () => {
-        }
-      );
-      stopHeartbeat = deps.after(LIVENESS_MS, beat2);
-    };
-    beat2();
-  };
-  const answer2 = async (input) => {
-    if (input.kind === "event" && input.event.kind === "effect-done") {
-      const of = input.event.of;
-      if (state.kind !== "live" || generationOf(of) !== state.live.generation)
-        throw new Error(
-          `effect ${of} was returned by a renderer that has ended`
-        );
-    }
-    if (input.kind === "adapter") {
-      const { push: push2 } = input;
-      if (push2.kind === "pin") pinned.add(push2.session);
-      if (push2.kind === "unpin") pinned.delete(push2.session);
-      if (CARRIED.has(push2.kind) && state.kind !== "live")
-        return { output: { kind: push2.kind }, hopMs: 0 };
-    }
-    if (state.kind === "idle") state = startOne({ kind: "first" });
-    switch (state.kind) {
-      case "closed":
-        throw new Error("the renderer supervisor is closed");
-      case "down":
-        throw new Error(
-          `no renderer runs: its process ${state.ended}, and another is starting`
-        );
-    }
-    const running = state.live;
-    await running.ready;
-    const from = deps.monotonic();
-    const { output, tookMs } = await running.link.answer(input);
-    return {
-      output,
-      hopMs: Math.max(0, Math.round(deps.monotonic() - from - tookMs))
-    };
-  };
-  return {
-    // [LAW:types-are-the-program] exception: each input's output is its own
-    // kind's, as the renderer answered it; one dispatch cannot name that.
-    answer: answer2,
-    arm: () => {
-      if (state.kind === "idle") state = startOne({ kind: "first" });
-    },
-    close: async () => {
-      const was = state;
-      state = { kind: "closed" };
-      stopHeartbeat();
-      if (was.kind === "down") was.cancel();
-      if (was.kind === "live") await was.live.link.end();
-      for (const gone of ended) gone.release();
-      ended = [];
-    }
-  };
-}
-
-// src/doctor/edge.ts
-init_globals();
-init_os();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
-
-// src/proc/process-table.ts
-init_globals();
-function processTable(ps2) {
-  const procs = /* @__PURE__ */ new Map();
-  for (const line of ps2.split("\n")) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
-    if (m === null) continue;
-    const pid2 = Number(m[1]);
-    procs.set(pid2, { pid: pid2, ppid: Number(m[2]), command: m[3].trim() });
-  }
-  return procs;
-}
-function* lineage(procs, pid2) {
-  const seen2 = /* @__PURE__ */ new Set();
-  for (let p2 = procs.get(pid2); p2 !== void 0 && !seen2.has(p2.pid); ) {
-    seen2.add(p2.pid);
-    yield p2;
-    p2 = procs.get(p2.ppid);
-  }
-}
-
-// src/doctor/font-edge.ts
-init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
+// src/renderer/draw-bar.ts
 init_globals();
 
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/parse.js
-init_globals();
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/struct.js
-init_globals();
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/primitive.js
-init_globals();
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/error.js
-init_globals();
-function getLineColFromPtr(string, ptr) {
-  let lines3 = string.slice(0, ptr).split(/\r?\n/);
-  return [lines3.length, lines3.pop().length + 1];
-}
-function makeCodeBlock(string, line, column) {
-  let lines3 = string.split(/\r?\n/);
-  let codeblock = "";
-  let numberLen = (Math.log10(line + 1) | 0) + 1;
-  for (let i = line - 1; i <= line + 1; i++) {
-    let l = lines3[i - 1];
-    if (!l)
-      continue;
-    codeblock += i.toString().padEnd(numberLen, " ");
-    codeblock += ":  ";
-    codeblock += l;
-    codeblock += "\n";
-    if (i === line) {
-      codeblock += " ".repeat(numberLen + column + 2);
-      codeblock += "^\n";
-    }
-  }
-  return codeblock;
-}
-var TomlError = class _TomlError extends Error {
-  line;
-  column;
-  codeblock;
-  constructor(message, options) {
-    const [line, column] = getLineColFromPtr(options.toml, options.ptr);
-    const codeblock = makeCodeBlock(options.toml, line, column);
-    super(`Invalid TOML document: ${message}
-
-${codeblock}`, options);
-    this.line = line;
-    this.column = column;
-    this.codeblock = codeblock;
-  }
-  /** @internal */
-  static x(message, ctx, ptr) {
-    throw new _TomlError(message, { toml: ctx.s, ptr: ptr ?? ctx.p });
-  }
-};
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/primitive.js
-function parseString(ctx) {
-  let startPtr = ctx.p;
-  let c = ctx.s.charCodeAt(ctx.p++);
-  let first2 = c;
-  let isLiteral = c === 39;
-  let isMultiline = c === ctx.s.charCodeAt(ctx.p) && c === ctx.s.charCodeAt(ctx.p + 1);
-  if (isMultiline) {
-    if ((c = ctx.s.charCodeAt(ctx.p += 2)) === 10)
-      ctx.p++;
-    else if (c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)
-      ctx.p += 2;
-  }
-  let parsed2 = "";
-  let sliceStart = ctx.p;
-  let state = 0;
-  for (; ctx.p < ctx.s.length; ctx.p++) {
-    c = ctx.s.charCodeAt(ctx.p);
-    if (isMultiline && (c === 10 || c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)) {
-      state = state && 3;
-    } else if (c < 32 && c !== 9 || c === 127) {
-      TomlError.x("control characters are not allowed in strings", ctx);
-    } else if ((!state || state === 3) && c === first2 && (!isMultiline || ctx.s.charCodeAt(ctx.p + 1) === first2 && ctx.s.charCodeAt(ctx.p + 2) === first2)) {
-      if (isMultiline) {
-        if (ctx.s.charCodeAt(ctx.p + 3) === first2)
-          ctx.p++;
-        if (ctx.s.charCodeAt(ctx.p + 3) === first2)
-          ctx.p++;
-      }
-      if (!state) {
-        let s = ctx.s.slice(sliceStart, ctx.p);
-        parsed2 = parsed2 ? parsed2 + s : s;
-      }
-      ctx.p += isMultiline ? 3 : 1;
-      return parsed2;
-    } else if (!state) {
-      if (!isLiteral && c === 92) {
-        parsed2 += ctx.s.slice(sliceStart, sliceStart = ctx.p);
-        state = 1;
-      }
-    } else if (state === 1) {
-      if (c === 120 || c === 117 || c === 85) {
-        let errPtr = ctx.p++ - 1;
-        let value = 0;
-        let len2 = c === 120 ? 2 : c === 117 ? 4 : 8;
-        for (let j = 0; j < len2; j++, ctx.p++) {
-          let hex3 = ctx.s.charCodeAt(ctx.p);
-          let digit = (
-            /* 0-9 */
-            hex3 >= 48 && hex3 <= 57 ? hex3 - 48 : (
-              /* A-F */
-              hex3 >= 65 && hex3 <= 70 ? hex3 - 65 + 10 : (
-                /* a-f */
-                hex3 >= 97 && hex3 <= 102 ? hex3 - 97 + 10 : -1
-              )
-            )
-          );
-          if (digit < 0)
-            TomlError.x("invalid non-hex character in unicode escape", ctx);
-          value = value << 4 | digit;
-        }
-        if (value < 0 || value > 1114111 || value >= 55296 && value <= 57343) {
-          TomlError.x("invalid unicode escape", ctx, errPtr);
-        }
-        parsed2 += String.fromCodePoint(value);
-        sliceStart = ctx.p--;
-        state = 0;
-      } else if (isMultiline && (c === 32 || c === 9)) {
-        state = 2;
-      } else {
-        if (c === 98)
-          parsed2 += "\b";
-        else if (c === 116)
-          parsed2 += "	";
-        else if (c === 110)
-          parsed2 += "\n";
-        else if (c === 102)
-          parsed2 += "\f";
-        else if (c === 114)
-          parsed2 += "\r";
-        else if (c === 101)
-          parsed2 += "\x1B";
-        else if (c === 34)
-          parsed2 += '"';
-        else if (c === 92)
-          parsed2 += "\\";
-        else
-          TomlError.x("unrecognised escape sequence", ctx);
-        sliceStart = ctx.p + 1;
-        state = 0;
-      }
-    } else if (c !== 32 && c !== 9) {
-      if (state === 2)
-        TomlError.x("invalid escape: only line-ending whitespace may be escaped", ctx, sliceStart);
-      state = !isLiteral && c === 92 ? 1 : 0;
-      sliceStart = ctx.p;
-    }
-  }
-  TomlError.x("unfinished string", ctx, startPtr);
-}
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/extract.js
-init_globals();
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/date.js
-init_globals();
-var DATE_TIME_RE = /^(\d{4}-\d{2}-\d{2})?[Tt ]?(?:(\d{2}):\d{2}(?::\d{2}(?:\.\d+)?)?)?(Z|z|[-+]\d{2}:\d{2})?$/i;
-var TomlDate = class _TomlDate extends Date {
-  #hasDate = false;
-  #hasTime = false;
-  #offset = null;
-  constructor(date2, fasttype, unsafeDelim) {
-    let hasDate = true;
-    let hasTime = true;
-    let offset = "Z";
-    let c;
-    if (typeof date2 === "string") {
-      if (fasttype)
-        prep: {
-          if (fasttype < 3) {
-            if (+date2.slice(11, 13) > 23) {
-              date2 = "";
-              break prep;
-            }
-            if (fasttype === 2) {
-              offset = null;
-              date2 += "Z";
-            } else if ((c = date2.charCodeAt(date2.length - 1)) !== 90 && c !== 122) {
-              offset = date2.slice(date2.length - 6);
-            }
-            if (unsafeDelim)
-              date2 = date2.slice(0, 10) + "T" + date2.slice(11);
-          } else if (fasttype === 4) {
-            date2 = +date2.slice(0, 2) > 23 ? "" : `0000-01-01T${date2}Z`;
-          }
-          hasDate = fasttype !== 4;
-          hasTime = fasttype !== 3;
-        }
-      else {
-        let match = date2.match(DATE_TIME_RE);
-        if (match) {
-          if (!match[1]) {
-            hasDate = false;
-            date2 = `0000-01-01T${date2}`;
-          }
-          hasTime = !!match[2];
-          hasTime && date2[10] === " " && (date2 = date2.replace(" ", "T"));
-          if (match[2] && +match[2] > 23) {
-            date2 = "";
-          } else {
-            offset = match[3] || null;
-            if (!offset && hasTime)
-              date2 += "Z";
-          }
-        } else {
-          date2 = "";
-        }
-      }
-    }
-    super(date2);
-    if (!isNaN(this.getTime())) {
-      this.#hasDate = hasDate;
-      this.#hasTime = hasTime;
-      this.#offset = offset;
-    }
-  }
-  isDateTime() {
-    return this.#hasDate && this.#hasTime;
-  }
-  isLocal() {
-    return !this.#hasDate || !this.#hasTime || !this.#offset;
-  }
-  isDate() {
-    return this.#hasDate && !this.#hasTime;
-  }
-  isTime() {
-    return this.#hasTime && !this.#hasDate;
-  }
-  isValid() {
-    return this.#hasDate || this.#hasTime;
-  }
-  toISOString() {
-    let iso2 = super.toISOString();
-    if (this.isDate())
-      return iso2.slice(0, 10);
-    if (this.isTime())
-      return iso2.slice(11, 23);
-    if (this.#offset === null)
-      return iso2.slice(0, -1);
-    if (this.#offset === "Z" || this.#offset === "z")
-      return iso2;
-    let offset = +this.#offset.slice(1, 3) * 60 + +this.#offset.slice(4, 6);
-    offset = this.#offset[0] === "-" ? offset : -offset;
-    let offsetDate = new Date(this.getTime() - offset * 6e4);
-    return offsetDate.toISOString().slice(0, -1) + this.#offset;
-  }
-  static wrapAsOffsetDateTime(jsDate, offset = "Z") {
-    let date2 = new _TomlDate(jsDate);
-    date2.#offset = offset;
-    return date2;
-  }
-  static wrapAsLocalDateTime(jsDate) {
-    let date2 = new _TomlDate(jsDate);
-    date2.#offset = null;
-    return date2;
-  }
-  static wrapAsLocalDate(jsDate) {
-    let date2 = new _TomlDate(jsDate);
-    date2.#hasTime = false;
-    date2.#offset = null;
-    return date2;
-  }
-  static wrapAsLocalTime(jsDate) {
-    let date2 = new _TomlDate(jsDate);
-    date2.#hasDate = false;
-    date2.#offset = null;
-    return date2;
-  }
-};
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/extract.js
-function isDigit2(char, base = 10) {
-  return base === 16 ? char > 47 && char < 58 || char > 64 && char < 71 || char > 96 && char < 103 : char > 47 && char < 48 + base;
-}
-function isEndOfValue(char, delim) {
-  return char === 32 || char === 9 || char === 10 || char === 13 || // Structure end or next value delimiter
-  delim && (char === delim || char === 44) || // Comment
-  char === 35;
-}
-function extractValue(ctx, end) {
-  let errPtr = ctx.p;
-  let c = ctx.s.charCodeAt(ctx.p);
-  if (c === 91 || c === 123) {
-    ctx.d-- || TomlError.x("document contains excessively nested structures. aborting.", ctx);
-    let value = c === 91 ? parseArray(ctx) : parseInlineTable(ctx);
-    ctx.d++;
-    return value;
-  }
-  if (c === 34 || c === 39) {
-    return parseString(ctx);
-  }
-  if (c === 116) {
-    if (ctx.s.charCodeAt(++ctx.p) !== 114 || ctx.s.charCodeAt(++ctx.p) !== 117 || ctx.s.charCodeAt(++ctx.p) !== 101)
-      TomlError.x("invalid value", ctx, errPtr);
-    return ctx.p++, true;
-  }
-  if (c === 102) {
-    if (ctx.s.charCodeAt(++ctx.p) !== 97 || ctx.s.charCodeAt(++ctx.p) !== 108 || ctx.s.charCodeAt(++ctx.p) !== 115 || ctx.s.charCodeAt(++ctx.p) !== 101)
-      TomlError.x("invalid value", ctx, errPtr);
-    return ctx.p++, false;
-  }
-  if (c === 43 || c === 45) {
-    return parseNumber(ctx, ctx.p, ctx.s.charCodeAt(++ctx.p), 44 - c, end);
-  }
-  if (ctx.s.charCodeAt(ctx.p + 4) === 45 && ctx.s.charCodeAt(ctx.p + 7) === 45) {
-    return parseDate(ctx, c, end);
-  }
-  if (ctx.s.charCodeAt(ctx.p + 2) === 58) {
-    return parseTime(ctx, c, end);
-  }
-  return parseNumber(ctx, ctx.p, c, 0, end);
-}
-function parseNumber(ctx, startPtr, startChr, sign, endChr) {
-  let c = startChr;
-  let state = 0;
-  let hasUnderscores = false;
-  if (c === 105) {
-    if (ctx.s.charCodeAt(++ctx.p) !== 110 || ctx.s.charCodeAt(++ctx.p) !== 102)
-      TomlError.x("invalid value", ctx, startPtr);
-    return ctx.p++, (sign || 1) / 0;
-  }
-  if (c === 110) {
-    if (ctx.s.charCodeAt(++ctx.p) !== 97 || ctx.s.charCodeAt(++ctx.p) !== 110)
-      TomlError.x("invalid value", ctx, startPtr);
-    return ctx.p++, NaN;
-  }
-  if (c === 48) {
-    if (++ctx.p >= ctx.s.length || isEndOfValue(c = ctx.s.charCodeAt(ctx.p), endChr))
-      return ctx.bi === true ? 0n : 0;
-    if (!sign) {
-      if (c === 120)
-        return parseIntegerBaseN(ctx, startPtr, 16, endChr);
-      else if (c === 98)
-        return parseIntegerBaseN(ctx, startPtr, 2, endChr);
-      else if (c === 111)
-        return parseIntegerBaseN(ctx, startPtr, 8, endChr);
-    }
-    if (c === 46)
-      state = 2;
-    else if (c === 101 || c === 69)
-      state = 4;
-    else
-      TomlError.x("illegal leading zero", ctx, startPtr);
-  } else if (!isDigit2(c))
-    TomlError.x("invalid value", ctx, startPtr);
-  while (++ctx.p < ctx.s.length && (c = ctx.s.charCodeAt(ctx.p), !isEndOfValue(c, endChr))) {
-    if (!state)
-      state = 1;
-    if (c === 95) {
-      if (!(state & 1))
-        TomlError.x("illegal underscore", ctx);
-      state += 11;
-      hasUnderscores = true;
-    } else if (state === 1 && c === 46)
-      state = 2;
-    else if ((state === 1 || state === 3) && (c === 101 || c === 69))
-      state = 4;
-    else if (state === 4 && (c === 43 || c === 45)) {
-      state = 6;
-    } else if (!isDigit2(c))
-      TomlError.x(`illegal character in numeric literal`, ctx);
-    else if (state > 9)
-      state -= 11;
-    else if (!(state & 1))
-      state++;
-  }
-  if (!state) {
-    let val = (startChr - 48) * (sign || 1);
-    return ctx.bi === true ? BigInt(val) : val;
-  }
-  if (!(state & 1))
-    TomlError.x("unfinished numeric value", ctx, startPtr);
-  let str = ctx.s.slice(startPtr, ctx.p);
-  if (hasUnderscores)
-    str = str.replaceAll("_", "");
-  return state > 1 ? parseFloat(str) : parseInteger(ctx, str, 10, startPtr);
-}
-function parseIntegerBaseN(ctx, startPtr, base, endChr) {
-  let c, underscore = 1;
-  while (++ctx.p < ctx.s.length && (c = ctx.s.charCodeAt(ctx.p), !isEndOfValue(c, endChr))) {
-    if (c === 95) {
-      if (underscore & 1)
-        TomlError.x("illegal underscore", ctx);
-      underscore = 3;
-    } else if (!isDigit2(c, base))
-      TomlError.x(`illegal character in numeric literal`, ctx);
-    else if (underscore & 1)
-      underscore--;
-  }
-  if (underscore & 1)
-    TomlError.x("unfinished numeric value", ctx);
-  let str = ctx.s.slice(startPtr + 2, ctx.p);
-  if (underscore)
-    str = str.replaceAll("_", "");
-  return parseInteger(ctx, str, base, startPtr);
-}
-function parseInteger(ctx, str, base, startPtr) {
-  if (ctx.bi !== true)
-    int: {
-      let val = parseInt(str, base);
-      if (!Number.isSafeInteger(val)) {
-        if (ctx.bi)
-          break int;
-        TomlError.x("integer value cannot be represented losslessly", ctx, startPtr);
-      }
-      return val;
-    }
-  return base === 10 ? BigInt(str) : BigInt((base === 2 ? "0b" : base === 8 ? "0o" : "0x") + str);
-}
-function parseDate(ctx, c, endChr) {
-  let startPtr = ctx.p++, unsafeSeparator;
-  if (!isDigit2(c) || !isDigit2(ctx.s.charCodeAt(ctx.p++)) || !isDigit2(ctx.s.charCodeAt(ctx.p++)) || !isDigit2(ctx.s.charCodeAt(ctx.p++))) {
-    return parseNumber(ctx, ctx.p = startPtr, c, 0, endChr);
-  }
-  ctx.p += 5;
-  if (!isDigit2(ctx.s.charCodeAt(ctx.p++)))
-    TomlError.x("invalid date-time: date part is malformed", ctx, startPtr);
-  if (ctx.p >= ctx.s.length || ((c = ctx.s.charCodeAt(ctx.p)) !== 32 || (unsafeSeparator = true, !isDigit2(ctx.s.charCodeAt(ctx.p + 1)))) && c !== 84 && c !== 116) {
-    let t3 = ctx.s.slice(startPtr, ctx.p);
-    return readDate(ctx, t3, 3, false, startPtr);
-  }
-  if (ctx.s.charCodeAt(ctx.p += 3) !== 58)
-    TomlError.x("invalid date-time: time part is malformed", ctx, startPtr);
-  if (ctx.s.charCodeAt(ctx.p += 3) === 58)
-    ctx.p += 3;
-  if (ctx.s.charCodeAt(ctx.p) === 46)
-    while (isDigit2(ctx.s.charCodeAt(++ctx.p)))
-      ;
-  if (c = ctx.s.charCodeAt(ctx.p)) {
-    if (c === 90 || c === 122) {
-      let t3 = ctx.s.slice(startPtr, ++ctx.p);
-      return readDate(ctx, t3, 1, unsafeSeparator, startPtr, "[+00:00]");
-    }
-    if (c === 43 || c === 45) {
-      let t3 = ctx.s.slice(startPtr, ctx.p += 6);
-      return readDate(ctx, t3, 1, unsafeSeparator, startPtr, !ctx.ld && "[" + ctx.s.slice(ctx.p - 6, ctx.p) + "]");
-    }
-  }
-  let t2 = ctx.s.slice(startPtr, ctx.p);
-  return readDate(ctx, t2, 2, unsafeSeparator, startPtr);
-}
-function parseTime(ctx, c, endChr) {
-  let start = ctx.p;
-  if (!isDigit2(c) || !isDigit2(ctx.s.charCodeAt(++ctx.p))) {
-    return parseNumber(ctx, --ctx.p, c, 0, endChr);
-  }
-  if (ctx.s.charCodeAt(ctx.p += 4) === 58)
-    ctx.p += 3;
-  if (ctx.s.charCodeAt(ctx.p) === 46)
-    while (isDigit2(ctx.s.charCodeAt(++ctx.p)))
-      ;
-  let t2 = ctx.s.slice(start, ctx.p);
-  return readDate(ctx, t2, 4, false, start);
-}
-function readDate(ctx, str, type3, unsafeDelim, errPtr, temporalSuffix) {
-  if (ctx.ld) {
-    let date2 = new TomlDate(str, type3, unsafeDelim);
-    if (!date2.isValid())
-      TomlError.x("invalid date", ctx, errPtr);
-    return date2;
-  }
-  try {
-    if (temporalSuffix)
-      str += temporalSuffix;
-    switch (type3) {
-      case 1:
-        return Temporal.ZonedDateTime.from(str);
-      case 2:
-        return Temporal.PlainDateTime.from(str);
-      case 3:
-        return Temporal.PlainDate.from(str);
-      case 4:
-        return Temporal.PlainTime.from(str);
-    }
-  } catch (e) {
-    TomlError.x(e instanceof Error ? e.message : "" + e, ctx, errPtr);
-  }
-}
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/util.js
-init_globals();
-function skipComment(ctx) {
-  for (; ctx.p < ctx.s.length; ctx.p++) {
-    let c = ctx.s.charCodeAt(ctx.p);
-    if (c === 10)
-      break;
-    if (c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10) {
-      ctx.p++;
-      break;
-    }
-    if (c < 32 && c !== 9 || c === 127) {
-      TomlError.x("control characters are not allowed in comments", ctx);
-    }
-  }
-}
-function skipVoid(ctx, banNewLines, banComments) {
-  let c;
-  while (ctx.p < ctx.s.length) {
-    while (ctx.p < ctx.s.length && ((c = ctx.s.charCodeAt(ctx.p)) === 32 || c === 9 || !banNewLines && (c === 10 || c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)))
-      ctx.p++;
-    if (banComments || c !== 35)
-      break;
-    skipComment(ctx);
-  }
-}
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/struct.js
-function parseKey(ctx, end = 61) {
-  let startPtr;
-  let state = 0;
-  let parsed2 = [];
-  let sliceStart;
-  let c = ctx.s.charCodeAt(startPtr = ctx.p);
-  do {
-    if (c === end) {
-      if (!state)
-        TomlError.x("unexpected end of key", ctx);
-      if (state === 1)
-        parsed2.push(ctx.s.slice(sliceStart, ctx.p));
-      return ctx.p++, parsed2;
-    } else if (c === 46) {
-      if (!state)
-        TomlError.x("illegal empty bare key", ctx);
-      if (state === 1)
-        parsed2.push(ctx.s.slice(sliceStart, ctx.p));
-      state = 0;
-    } else if (!state && (c === 34 || c === 39)) {
-      if (c === ctx.s.charCodeAt(ctx.p + 1) && c === ctx.s.charCodeAt(ctx.p + 2))
-        TomlError.x("illegal quoted key: multiline strings are not allowed", ctx);
-      parsed2.push(parseString(ctx));
-      state = 2;
-      ctx.p--;
-    } else if (c === 32 || c === 9) {
-      if (state === 1) {
-        parsed2.push(ctx.s.slice(sliceStart, ctx.p));
-        state = 2;
-      }
-    } else if (state === 2 || c < 48 && c !== 45 || c > 57 && c < 65 || c > 90 && c < 97 && c !== 95 || c > 122) {
-      TomlError.x("illegal character in key", ctx);
-    } else if (!state) {
-      state = 1;
-      sliceStart = ctx.p;
-    }
-  } while (c = ctx.s.charCodeAt(++ctx.p));
-  TomlError.x("incomplete key-value: cannot find end of key", ctx, startPtr);
-}
-function parseInlineTable(ctx) {
-  let startPtr = ctx.p++;
-  let res = /* @__PURE__ */ Object.create(null);
-  let seen2 = /* @__PURE__ */ new Set();
-  let c;
-  while (ctx.p < ctx.s.length) {
-    skipVoid(ctx);
-    if ((c = ctx.s.charCodeAt(ctx.p)) === 125) {
-      ctx.p++;
-      return res;
-    }
-    let k;
-    let t2 = res;
-    let hasOwn = false;
-    let errPtr = ctx.p;
-    let key = parseKey(ctx);
-    for (let i = 0; i < key.length; i++) {
-      if (i)
-        t2 = hasOwn ? t2[k] : t2[k] = /* @__PURE__ */ Object.create(null);
-      k = key[i];
-      if ((hasOwn = Object.hasOwn(t2, k)) && (typeof t2[k] !== "object" || seen2.has(t2[k]))) {
-        TomlError.x("trying to redefine an already defined value", ctx, errPtr);
-      }
-      let unsafe = k === "__proto__";
-      if (ctx.uk && (unsafe || k === "constructor")) {
-        t2 = ctx.uk !== 1 && TomlError.x("document contains an unsafe property", ctx, errPtr);
-        break;
-      }
-      if (!hasOwn && unsafe) {
-        Object.defineProperty(t2, k, { enumerable: true, configurable: true, writable: true });
-      }
-    }
-    if (hasOwn) {
-      TomlError.x("trying to redefine an already defined value", ctx, errPtr);
-    }
-    skipVoid(ctx, true, true);
-    let value = extractValue(
-      ctx,
-      125
-      /* } */
-    );
-    if (t2 && typeof (t2[k] = value) === "object")
-      seen2.add(value);
-    skipVoid(ctx);
-    if ((c = ctx.s.charCodeAt(ctx.p++)) === 125) {
-      return res;
-    }
-    if (c !== 44)
-      TomlError.x("expected comma or end of structure", ctx, ctx.p - 1);
-  }
-  TomlError.x("unfinished table", ctx, startPtr);
-}
-function parseArray(ctx) {
-  let startPtr = ctx.p++;
-  let res = [];
-  let c;
-  while (ctx.p < ctx.s.length) {
-    skipVoid(ctx);
-    if ((c = ctx.s.charCodeAt(ctx.p)) === 93) {
-      ctx.p++;
-      return res;
-    }
-    res.push(extractValue(
-      ctx,
-      93
-      /* ] */
-    ));
-    skipVoid(ctx);
-    if ((c = ctx.s.charCodeAt(ctx.p++)) === 93) {
-      return res;
-    }
-    if (c !== 44)
-      TomlError.x("expected comma or end of structure", ctx, ctx.p - 1);
-  }
-  TomlError.x("unfinished array", ctx, startPtr);
-}
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/parse.js
-function peekTable(ctx, key, table, meta, type3) {
-  let t2 = table;
-  let m = meta;
-  let k;
-  let hasOwn = false;
-  let state;
-  for (let i = 0; i < key.length; i++) {
-    if (i) {
-      t2 = hasOwn ? t2[k] : t2[k] = /* @__PURE__ */ Object.create(null);
-      m = (state = m[k]).c;
-      if (type3 === 0 && (state.t === 1 || state.t === 2)) {
-        return null;
-      }
-      if (state.t === 2) {
-        let l = t2.length - 1;
-        t2 = t2[l];
-        m = m[l].c;
-      }
-    }
-    k = key[i];
-    if ((hasOwn = Object.hasOwn(t2, k)) && m[k]?.t === 0 && m[k]?.d) {
-      return null;
-    }
-    if (!hasOwn) {
-      let unsafe = k === "__proto__";
-      if (ctx.uk && (unsafe || k === "constructor"))
-        return false;
-      if (unsafe) {
-        Object.defineProperty(t2, k, { enumerable: true, configurable: true, writable: true });
-        Object.defineProperty(m, k, { enumerable: true, configurable: true, writable: true });
-      }
-      m[k] = {
-        t: i < key.length - 1 && type3 === 2 ? 3 : type3,
-        d: false,
-        i: 0,
-        c: /* @__PURE__ */ Object.create(null)
-      };
-    }
-  }
-  state = m[k];
-  if (state.t !== type3 && !(type3 === 1 && state.t === 3)) {
-    return null;
-  }
-  if (type3 === 2) {
-    if (!state.d) {
-      state.d = true;
-      t2[k] = [];
-    }
-    t2[k].push(t2 = /* @__PURE__ */ Object.create(null));
-    state.c[state.i++] = state = { t: 1, d: false, i: 0, c: /* @__PURE__ */ Object.create(null) };
-  }
-  if (state.d) {
-    return null;
-  }
-  state.d = true;
-  if (type3 === 1) {
-    t2 = hasOwn ? t2[k] : t2[k] = /* @__PURE__ */ Object.create(null);
-  } else if (type3 === 0 && hasOwn) {
-    return null;
-  }
-  return [k, t2, state.c];
-}
-function validateTablePeek(ctx, peek, ptr) {
-  if (peek === null || ctx.uk === 2)
-    TomlError.x(peek === null ? "trying to redefine an already defined table or value" : "document contains an unsafe property", ctx, ptr);
-}
-function parse2(toml, options = {}) {
-  let ctx = {
-    s: toml,
-    p: 0,
-    d: options.maxDepth ?? 1e3,
-    bi: options.integersAsBigInt ?? false,
-    ld: options.useLegacyDate ?? true,
-    uk: options.unsafeKeyBehaviour === "throw" ? 2 : options.unsafeKeyBehaviour === "drop" ? 1 : 0
-  };
-  let res = /* @__PURE__ */ Object.create(null);
-  let meta = /* @__PURE__ */ Object.create(null);
-  let tmp;
-  let skipping = false;
-  let tbl = res;
-  let m = meta;
-  if (toml.charCodeAt(0) === 65279)
-    ctx.p++;
-  skipVoid(ctx);
-  while (ctx.p < toml.length) {
-    if (toml.charCodeAt(ctx.p) === 91) {
-      let isTableArray = toml.charCodeAt(++ctx.p) === 91;
-      tmp = ctx.p += +isTableArray;
-      skipping = false;
-      let k = parseKey(
-        ctx,
-        93
-        /* ] */
-      );
-      if (isTableArray) {
-        if (toml.charCodeAt(ctx.p) !== 93) {
-          TomlError.x("expected end of table array declaration", ctx);
-        }
-        ctx.p++;
-      }
-      let p2 = peekTable(
-        ctx,
-        k,
-        res,
-        meta,
-        isTableArray ? 2 : 1
-        /* Type.EXPLICIT */
-      );
-      if (!p2) {
-        validateTablePeek(ctx, p2, tmp);
-        skipping = true;
-      } else {
-        m = p2[2];
-        tbl = p2[1];
-      }
-    } else {
-      tmp = ctx.p;
-      let k = parseKey(ctx);
-      let p2 = peekTable(
-        ctx,
-        k,
-        tbl,
-        m,
-        0
-        /* Type.DOTTED */
-      );
-      if (!p2 && !skipping)
-        validateTablePeek(ctx, p2, tmp);
-      skipVoid(ctx, true, true);
-      let v = extractValue(ctx, void 0);
-      if (p2 && !skipping)
-        p2[1][p2[0]] = v;
-    }
-    skipVoid(ctx, true);
-    if (ctx.p < toml.length && (tmp = toml.charCodeAt(ctx.p)) !== 10 && (tmp !== 13 || toml.charCodeAt(ctx.p + 1) !== 10)) {
-      TomlError.x("each key-value declaration must be followed by an end-of-line", ctx);
-    }
-    skipVoid(ctx);
-  }
-  return res;
-}
-
-// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/stringify.js
-init_globals();
-var HAS_WELLFORMED = !!"".isWellFormed;
-
-// src/doctor/font-edge.ts
-var hex = (glyph) => glyph.codePointAt(0).toString(16).toUpperCase();
-var JXA = String.raw`
-ObjC.import("AppKit");
-ObjC.import("CoreText");
-function lacksOf(font, points) {
-  if (font.isNil()) return null;
-  return points.filter((p) => {
-    const text = $.NSString.stringWithString(String.fromCodePoint(parseInt(p, 16)));
-    const drawn = $.CTFontCreateForString(font, text, $.CFRangeMake(0, text.length));
-    return ObjC.castRefToObject($.CTFontCopyPostScriptName(drawn)).js === "LastResort";
-  });
-}
-function resolve(kind, name) {
-  return kind === "postscript"
-    ? $.NSFont.fontWithNameSize(name, 12)
-    : $.NSFontManager.sharedFontManager.fontWithFamilyTraitsWeightSize(name, 0, 5, 12);
-}
-function iterm(name, points) {
-  const prefs = $.NSUserDefaults.alloc.initWithSuiteName("com.googlecode.iterm2");
-  const books = prefs.arrayForKey("New Bookmarks");
-  if (books.isNil()) return { error: "iTerm2 has no profiles in its preferences" };
-  const profiles = [];
-  for (let i = 0; i < books.count; i++) {
-    const b = books.objectAtIndex(i);
-    const get = (k) => ObjC.deepUnwrap(b.objectForKey(k));
-    if (name !== "" && get("Name") !== name) continue;
-    const nonAscii = get("Use Non-ASCII Font") === true;
-    const setting = get(nonAscii ? "Non Ascii Font" : "Normal Font");
-    const font = typeof setting === "string" ? setting.replace(/ [0-9.]+$/, "") : null;
-    profiles.push({
-      name: String(get("Name")),
-      font,
-      nonAscii,
-      powerline: get("Draw Powerline Glyphs") === true,
-      lacks: font === null ? null : lacksOf(resolve("postscript", font), points),
-    });
-  }
-  return { profiles };
-}
-function run(argv) {
-  const last = argv[argv.length - 1];
-  const points = last === "" ? [] : last.split(",");
-  return JSON.stringify(
-    argv[0] === "font"
-      ? { lacks: lacksOf(resolve(argv[1], argv[2]), points) }
-      : iterm(argv[1], points),
-  );
-}
-`;
-async function jxa(launcher, args) {
-  const run3 = await launcher.launch({
-    bin: "osascript",
-    args: ["-l", "JavaScript", "-e", JXA, ...args],
-    timeoutMs: 3e3,
-    category: "doctor.font"
-  });
-  if (!run3.ok) {
-    if (run3.reason === "rate-limited") return busy("the font");
-    const detail = failureText(run3);
-    return { kind: "failed", reason: `osascript failed (${detail})` };
-  }
-  let answer2;
-  try {
-    answer2 = JSON.parse(run3.stdout);
-  } catch {
-    return {
-      kind: "failed",
-      reason: `osascript answered ${JSON.stringify(run3.stdout.trim())}, not JSON`
-    };
-  }
-  return typeof answer2 === "object" && answer2 !== null && "error" in answer2 ? { kind: "failed", reason: answer2.error } : { kind: "ok", value: answer2 };
-}
-var glyphsOf2 = (points) => points.map((p2) => String.fromCodePoint(parseInt(p2, 16)));
-var pointsArg = (glyphs) => [...glyphs].map(hex).join(",");
-async function macCoverage(launcher, ref, glyphs) {
-  const answer2 = await jxa(
-    launcher,
-    ["font", ref.kind, ref.name, pointsArg(glyphs)]
-  );
-  if (answer2.kind !== "ok") return answer2;
-  const { lacks } = answer2.value;
-  return {
-    kind: "ok",
-    value: { font: ref.name, lacks: lacks === null ? null : glyphsOf2(lacks) }
-  };
-}
-function profileReading(p2, version) {
-  if (p2.font === null) {
-    return {
-      kind: "failed",
-      reason: `iTerm2 profile ${JSON.stringify(p2.name)} names no font`
-    };
-  }
-  const from = `iTerm2 profile ${JSON.stringify(p2.name)}` + (p2.nonAscii ? ", its non-ASCII font" : "") + (p2.powerline ? ", built-in Powerline glyphs on" : "");
-  const lacks = p2.lacks === null || !p2.powerline ? p2.lacks : p2.lacks.filter((g) => !itermDrawsItself(version, g));
-  return { kind: "ok", value: { font: p2.font, from, lacks } };
-}
-var drawsEvery = (r) => r.kind === "ok" && r.value.lacks !== null && r.value.lacks.length === 0;
-function itermFontInUse(profiles, wanted, version) {
-  if (profiles.length === 0) {
-    return {
-      kind: "failed",
-      reason: wanted === null ? "iTerm2 has no profiles in its preferences" : `iTerm2 has no profile named ${JSON.stringify(wanted)}`
-    };
-  }
-  const readings = profiles.map((p2) => profileReading(p2, version));
-  if (wanted !== null) return readings[0];
-  const short = readings.find((r) => !drawsEvery(r));
-  if (short !== void 0) {
-    return short.kind === "failed" ? short : {
-      kind: "ok",
-      value: {
-        ...short.value,
-        from: `${short.value.from}, one of its profiles, and the session does not say which draws the bar`
-      }
-    };
-  }
-  const fonts = [
-    ...new Set(
-      readings.flatMap((r) => r.kind === "ok" ? [r.value.font] : [])
-    )
-  ];
-  return {
-    kind: "ok",
-    value: {
-      font: fonts.join(", "),
-      from: "every iTerm2 profile, since the session does not say which draws the bar",
-      lacks: []
-    }
-  };
-}
-async function itermFont(launcher, version, env2, glyphs) {
-  if (process_default.platform !== "darwin") {
-    return { kind: "failed", reason: "iTerm2 runs only on macOS" };
-  }
-  const wanted = env2.ITERM_PROFILE ?? null;
-  const answer2 = await jxa(launcher, ["iterm", wanted ?? "", pointsArg(glyphs)]);
-  if (answer2.kind !== "ok") return answer2;
-  const profiles = answer2.value.profiles.map((p2) => ({
-    ...p2,
-    lacks: p2.lacks === null ? null : glyphsOf2(p2.lacks)
-  }));
-  return itermFontInUse(profiles, wanted, version);
-}
-function fcMatchCoverage(output, glyphs) {
-  const lines3 = output.split("\n").filter((l) => l !== "");
-  const fonts = lines3.map((line) => {
-    const tab = line.indexOf("	");
-    return tab <= 0 ? null : {
-      family: line.slice(0, tab),
-      ranges: line.slice(tab + 1).split(/\s+/).filter((r) => r !== "").map((range) => {
-        const [lo, hi = lo] = range.split("-").map((h) => parseInt(h, 16));
-        return [lo, hi];
-      })
-    };
-  });
-  if (fonts.length === 0 || fonts.some((f) => f === null)) {
-    return {
-      kind: "failed",
-      reason: `fc-match answered ${JSON.stringify(output.slice(0, 200))}, not families and their charsets`
-    };
-  }
-  const drawable3 = fonts.flatMap((f) => f.ranges);
-  const lacks = [...glyphs].filter((g) => {
-    const p2 = g.codePointAt(0);
-    return !drawable3.some(([lo, hi]) => lo <= p2 && p2 <= hi);
-  });
-  return { kind: "ok", value: { font: fonts[0].family, lacks } };
-}
-var fcEscape = (value) => value.replace(/[\\:,=-]/g, "\\$&");
-async function fcCoverage(launcher, family, glyphs) {
-  const run3 = await launcher.launch({
-    bin: "fc-match",
-    args: [
-      "--sort",
-      "--format",
-      "%{family[0]}	%{charset}\n",
-      `:family=${fcEscape(family)}`
-    ],
-    timeoutMs: 3e3,
-    category: "doctor.font"
-  });
-  if (!run3.ok) {
-    if (run3.reason === "rate-limited") return busy("the font");
-    const detail = failureText(run3);
-    return { kind: "failed", reason: `fc-match failed (${detail})` };
-  }
-  return fcMatchCoverage(run3.stdout, glyphs);
-}
-function coverage(launcher, ref, glyphs) {
-  return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
-}
-function alacrittyConfigPaths(home, xdgConfigHome) {
-  const xdg = xdgConfigHome || import_node_path34.default.join(home, ".config");
-  return [
-    import_node_path34.default.join(xdg, "alacritty", "alacritty.toml"),
-    import_node_path34.default.join(xdg, "alacritty.toml"),
-    import_node_path34.default.join(home, ".config", "alacritty", "alacritty.toml"),
-    import_node_path34.default.join(home, ".alacritty.toml")
-  ];
-}
-function alacrittyDefaultFamily(platform3) {
-  return platform3 === "darwin" ? "Menlo" : "monospace";
-}
-var isTable = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-function alacrittyFile(doc) {
-  const font = isTable(doc.font) ? doc.font : {};
-  const normal = isTable(font.normal) ? font.normal : {};
-  const general = isTable(doc.general) ? doc.general : {};
-  const imports = general.import ?? doc.import ?? [];
-  return {
-    family: typeof normal.family === "string" ? normal.family : null,
-    imports: Array.isArray(imports) ? imports.filter((i) => typeof i === "string") : []
-  };
-}
-function alacrittyFamilyIn(file, home, depth) {
-  let text4;
-  try {
-    text4 = fs_default.readFileSync(file, "utf8");
-  } catch (e) {
-    return {
-      kind: "failed",
-      reason: `cannot read ${file}: ${e.message}`
-    };
-  }
-  let doc;
-  try {
-    doc = parse2(text4);
-  } catch (e) {
-    return {
-      kind: "failed",
-      reason: `cannot parse ${file}: ${e.message}`
-    };
-  }
-  const own2 = alacrittyFile(doc);
-  if (own2.family !== null)
-    return { kind: "ok", value: { family: own2.family, from: file } };
-  if (depth === 5) return { kind: "ok", value: null };
-  let found2 = null;
-  for (const imported of own2.imports) {
-    const target = imported.startsWith("~/") ? import_node_path34.default.join(home, imported.slice(2)) : import_node_path34.default.resolve(import_node_path34.default.dirname(file), imported);
-    if (!fs_default.existsSync(target)) continue;
-    const inner = alacrittyFamilyIn(target, home, depth + 1);
-    if (inner.kind === "failed") return inner;
-    found2 = inner.value ?? found2;
-  }
-  return { kind: "ok", value: found2 };
-}
-async function alacrittyFont(launcher, env2, glyphs, home) {
-  const config2 = alacrittyConfigPaths(home, env2.XDG_CONFIG_HOME).find(
-    (p2) => fs_default.existsSync(p2)
-  );
-  const named3 = config2 === void 0 ? { kind: "ok", value: null } : alacrittyFamilyIn(config2, home, 0);
-  if (named3.kind === "failed") return named3;
-  const family = named3.value?.family ?? alacrittyDefaultFamily(process_default.platform);
-  const from = named3.value?.from ?? (config2 === void 0 ? "Alacritty's default, no config file" : `Alacritty's default, ${config2} sets none`);
-  const drawn = await coverage(
-    launcher,
-    { kind: "family", name: family },
-    glyphs
-  );
-  if (drawn.kind !== "ok") return drawn;
-  const { font, lacks } = drawn.value;
-  return {
-    kind: "ok",
-    value: {
-      font,
-      from: font === family ? from : `${from}; ${family} as fontconfig matches it`,
-      lacks
-    }
-  };
-}
-var READERS = {
-  iterm2: itermFont,
-  alacritty: (launcher, _version, env2, glyphs, home) => alacrittyFont(launcher, env2, glyphs, home)
-};
-function fontInUse(launcher, terminal, env2, glyphs, home) {
-  return READERS[terminal.name](launcher, terminal.version, env2, glyphs, home);
-}
-
-// src/doctor/mark-book.ts
-init_globals();
-
-// src/doctor/state-file.ts
-init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
-function stateFile(dir, name, empty2, parse3) {
-  const file = import_node_path35.default.join(dir, name);
-  const read2 = () => {
-    let text4;
-    try {
-      text4 = fs_default.readFileSync(file, "utf8");
-    } catch (e) {
-      if (e.code === "ENOENT") {
-        return { kind: "ok", value: empty2 };
-      }
-      return { kind: "failed", reason: `${file}: ${e.message}` };
-    }
-    let doc;
-    try {
-      doc = JSON.parse(text4);
-    } catch (e) {
-      return {
-        kind: "failed",
-        reason: `${file} is not JSON: ${e.message}`
-      };
-    }
-    const parsed2 = parse3(doc);
-    return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
-  };
-  return {
-    read: read2,
-    update: (next) => {
-      const current2 = read2();
-      if (current2.kind === "failed") return current2;
-      const value = next(current2.value);
-      if (value !== current2.value) {
-        writeAtomic(file, `${JSON.stringify(value, null, 2)}
-`);
-      }
-      return { kind: "ok", value };
-    }
-  };
-}
-
-// src/doctor/mark-book.ts
-var isRecord2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-function parseMarkBook(doc) {
-  const fault = (reason) => ({
-    kind: "failed",
-    reason
-  });
-  if (!isRecord2(doc)) return fault("is not an object");
-  for (const [check, sightings] of Object.entries(doc)) {
-    if (!isRecord2(sightings)) {
-      return fault(
-        `holds ${JSON.stringify(check)} as something other than its sightings`
-      );
-    }
-    for (const [id2, mark] of Object.entries(sightings)) {
-      if (!GLYPH_MARKS.includes(mark)) {
-        return fault(
-          `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
-        );
-      }
-    }
-  }
-  return { kind: "ok", value: doc };
-}
-function withMark(book, check, sighting, mark) {
-  return { ...book, [check]: { ...book[check], [sighting]: mark } };
-}
-var fileMarkBook = (dir) => stateFile(dir, "doctor-marks.json", {}, parseMarkBook);
-
-// src/doctor/clicked-terminals.ts
-init_globals();
-var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typeof t2 === "string") ? { kind: "ok", value: doc } : { kind: "failed", reason: "is not a list of terminals" };
-var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
-var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
-
-// src/doctor/post-mortems-read.ts
-init_globals();
-function parsePostMortemsRead(doc) {
-  const through = doc?.through;
-  return typeof through === "string" || through === null ? { kind: "ok", value: { through } } : { kind: "failed", reason: "names no post-mortem read" };
-}
-var filePostMortemsRead = (dir) => stateFile(
-  dir,
-  "doctor-post-mortems-read.json",
-  { through: null },
-  parsePostMortemsRead
-);
-
-// src/doctor/edge.ts
-var productionInstallEdge = {
-  realpath: (p2) => asked(() => fs_default.realpathSync(p2)),
-  checkoutOf: sourceCheckoutOf,
-  digest: (crateDir) => asked(() => crateDigest(crateDir)),
-  nativeShipped: shipsNative(process_default.platform, process_default.arch)
-};
-function installFacts(edge, daemonBundle, clients) {
-  const bundle = edge.realpath(daemonBundle);
-  if (bundle.kind === "failed") {
-    return {
-      kind: "failed",
-      reason: `the daemon's bundle ${daemonBundle} cannot be resolved: ${bundle.reason}`
-    };
-  }
-  const root = edge.checkoutOf(bundle.value);
-  return {
-    kind: "ok",
-    value: {
-      daemon: {
-        bundle: bundle.value,
-        checkout: root === null ? null : {
-          root,
-          rustSource: edge.digest(import_node_path36.default.join(root, "rust-client"))
-        }
-      },
-      nativeShipped: edge.nativeShipped,
-      clients: clients.map(
-        (client) => client === null ? { kind: "unreported" } : {
-          kind: "reported",
-          client: client.kind,
-          bundle: edge.realpath(client.bundle),
-          source: client.source
-        }
-      )
-    }
-  };
-}
-var fileStores = (dir) => ({
-  marks: fileMarkBook(dir),
-  clicked: fileClickedTerminals(dir),
-  postMortemsRead: filePostMortemsRead(dir)
-});
-var TMUX_CLIENT_FORMAT = "#{client_termfeatures}	#{client_termtype}	#{client_termname}	#{client_pid}	#{client_utf8}";
-function parseTmuxClient(stdout2) {
-  const line = stdout2.replace(/\n$/, "");
-  if (line === "				") return { kind: "ok", value: null };
-  const fields2 = line.split("	");
-  const [features, termtype, termname, pid2, utf83] = fields2;
-  if (fields2.length !== 5 || !/^[1-9]\d*$/.test(pid2) || !/^[01]$/.test(utf83)) {
-    return {
-      kind: "failed",
-      reason: `tmux answered ${JSON.stringify(stdout2)}, not the five fields asked for`
-    };
-  }
-  return {
-    kind: "ok",
-    value: {
-      features: features.split(",").filter((f) => f !== ""),
-      termtype,
-      termname,
-      pid: Number(pid2),
-      utf8: utf83 === "1"
-    }
-  };
-}
-var REMOTE_LOGIN = /^(sshd|mosh-server)\b/;
-function descendsFromRemoteLogin(table, pid2) {
-  const procs = processTable(table);
-  if (!procs.has(pid2)) {
-    return { kind: "failed", reason: `process ${pid2} is not running` };
-  }
-  for (const p2 of lineage(procs, pid2)) {
-    if (REMOTE_LOGIN.test(p2.command.slice(p2.command.lastIndexOf("/") + 1))) {
-      return { kind: "ok", value: true };
-    }
-  }
-  return { kind: "ok", value: false };
-}
-async function remoteLogin(launcher, pid2) {
-  const run3 = await launcher.launch({
-    bin: "ps",
-    args: ["-A", "-o", "pid=,ppid=,comm="],
-    timeoutMs: 2e3,
-    category: "doctor.process"
-  });
-  if (!run3.ok) {
-    if (run3.reason === "rate-limited") return busy("the processes");
-    const detail = failureText(run3);
-    return { kind: "failed", reason: `ps failed (${detail})` };
-  }
-  return descendsFromRemoteLogin(run3.stdout, pid2);
-}
-var DAEMON_ENTRY = /^(.*)\/(?:dist\/index\.mjs|src\/index\.ts|bin\/cc-candybar)$/;
-function daemonProcesses(table, ownsEntry2) {
-  const found2 = [];
-  for (const line of table.split("\n")) {
-    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3} \w{3}\s+\d+ [\d:]{8} \d{4})\s+.* (\/.*) daemon$/.exec(
-      line
-    );
-    if (m === null || !ownsEntry2(m[5])) continue;
-    found2.push({
-      pid: Number(m[1]),
-      ppid: Number(m[2]),
-      rss: Number(m[3]) * 1024,
-      // The edge runs ps under TZ=UTC; the zone is said, so the time is
-      // not read as local.
-      started: `${m[4].replace(/\s+/g, " ")} UTC`
-    });
-  }
-  return found2.filter((p2) => !found2.some((child) => child.ppid === p2.pid));
-}
-function ownsEntry(entry) {
-  let real;
-  try {
-    real = fs_default.realpathSync(entry);
-  } catch {
-    return false;
-  }
-  const root = DAEMON_ENTRY.exec(real)?.[1];
-  return root !== void 0 && fs_default.existsSync(import_node_path36.default.join(root, "bin", "cc-candybar"));
-}
-async function daemons(launcher) {
-  const run3 = await launcher.launch({
-    bin: "ps",
-    args: [
-      "-U",
-      String(os_default.userInfo().uid),
-      "-ww",
-      "-o",
-      "pid=,ppid=,rss=,lstart=,args="
-    ],
-    timeoutMs: 2e3,
-    category: "doctor.daemons",
-    // The start time as the table writes it, in one format whatever the
-    // user's locale and zone (src/daemon/process-fingerprint.ts).
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (!run3.ok) {
-    const detail = failureText(run3);
-    return { kind: "failed", reason: `ps failed (${detail})` };
-  }
-  return { kind: "ok", value: daemonProcesses(run3.stdout, ownsEntry) };
-}
-async function probeTmux(launcher, hint) {
-  const run3 = await runTmuxAsync(launcher, hint, "doctor.tmux", [
-    "display",
-    "-p",
-    "-t",
-    hint.pane,
-    TMUX_CLIENT_FORMAT
-  ]);
-  if (run3.kind === "rate-limited") return busy("tmux");
-  if (run3.kind === "failed") return { kind: "failed", reason: run3.reason };
-  return parseTmuxClient(run3.stdout);
-}
-function productionMachineEdge(launcher, host) {
-  return {
-    probeTmux: (hint) => probeTmux(launcher, hint),
-    remoteLogin: (pid2) => remoteLogin(launcher, pid2),
-    fontInUse: (terminal, env2, glyphs) => fontInUse(launcher, terminal, env2, glyphs, host.home),
-    daemons: () => daemons(launcher),
-    forge: (cwd2) => forgeLogin(launcher, cwd2),
-    transcript: async (file) => readTranscriptWindow(file),
-    install: productionInstallEdge
-  };
-}
-function transcriptWindow(bytes, whole) {
-  const text4 = bytes.toString("utf-8");
-  const from = whole ? 0 : text4.indexOf("\n") + 1;
-  const to = text4.lastIndexOf("\n") + 1;
-  let lines3 = 0;
-  let unparsed = 0;
-  for (const line of text4.slice(from, to).split("\n")) {
-    const read2 = jsonLine(line);
-    if (read2.kind === "blank") continue;
-    lines3++;
-    if (read2.kind === "unparsed") unparsed++;
-  }
-  return { lines: lines3, unparsed, whole };
-}
-function readTranscriptWindow(file) {
-  const read2 = readTailSync(file, TRANSCRIPT_WINDOW_BYTES + 1);
-  return read2.kind === "ok" ? ok(transcriptWindow(read2.value.buf, read2.value.fromStart)) : read2;
-}
-var FORGE_PROBE = {
-  github: {
-    loginHost: () => "github.com",
-    args: (host) => ["auth", "token", "--hostname", host],
-    nonZero: "logged-out"
-  },
-  gitlab: {
-    loginHost: (host) => host,
-    args: () => ["--version"],
-    nonZero: "failed"
-  }
-};
-async function forgeLogin(launcher, cwd2) {
-  if (gitRootOf(cwd2) === void 0) return { kind: "ok", value: null };
-  const remotes = remotesOf(
-    await launcher.launch({
-      bin: "git",
-      args: [...REMOTES_ARGS],
-      cwd: cwd2,
-      envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
-      timeoutMs: 2e3,
-      category: "doctor.forge"
-    })
-  );
-  if (remotes.kind === "failed") return remotes;
-  const url = forgeRemoteUrl(remotes.value);
-  if (url === null) return { kind: "ok", value: null };
-  const forge = detectForge(url);
-  if (forge === null) return { kind: "ok", value: null };
-  const cli = FORGE_CLI[forge];
-  const probe2 = FORGE_PROBE[forge];
-  const host = probe2.loginHost(remoteHost(url));
-  const run3 = await launcher.launch({
-    bin: cli,
-    args: [...probe2.args(host)],
-    cwd: cwd2,
-    timeoutMs: 2e3,
-    category: "doctor.forge"
-  });
-  return forgeLoginOf(cli, host, probe2.nonZero, run3);
-}
-function forgeLoginOf(cli, host, nonZero, run3) {
-  const login = (status) => ({
-    kind: "ok",
-    value: { cli, host, status }
-  });
-  if (run3.ok) return login("ready");
-  if (isMissingCommand(run3)) return login("missing");
-  if (run3.reason === "non-zero" && nonZero === "logged-out") {
-    return login({ loggedOut: firstLine(run3.stderr) });
-  }
-  return { kind: "failed", reason: launchFailure(cli, run3) };
-}
-
-// src/daemon/clicks-in-flight.ts
-init_globals();
-var ClicksInFlight = class {
-  held = /* @__PURE__ */ new Map();
-  hold({ id: id2, gone }) {
-    this.held.set(id2, gone);
-    return { [Symbol.dispose]: () => void this.held.delete(id2) };
-  }
-  gone(click3) {
-    const gone = this.held.get(click3);
-    if (gone === void 0) throw new Error(`click ${click3} is not in flight`);
-    return gone();
-  }
-};
-
-// src/daemon/menu-idle.ts
-init_globals();
-async function closeByTurn(host, at, sessionId2, idle, latest) {
-  const delivered = await host.answer({
-    kind: "event",
-    at: at(),
-    event: { kind: "menu-idle", session: sessionId2, idle, latest }
-  });
-  return delivered.kind === "threw" ? delivered.failure : null;
-}
-var MAX_SESSIONS4 = 256;
-var MenuIdle = class {
-  constructor(deps) {
-    this.deps = deps;
-  }
-  deps;
-  sessions = /* @__PURE__ */ new Map();
-  // Clicks in flight per session, entries deleted at zero. Apart from the
-  // records, which eviction drops under a click that is still in flight.
-  pending = /* @__PURE__ */ new Map();
-  disposed = false;
-  // A click in the session starts a new idle period.
-  clicked(sessionId2, at) {
-    const idle = this.record(sessionId2, at);
-    idle.since = at;
-    this.settle(sessionId2);
-  }
-  // A click of the session arrived: no deadline until it settles.
-  clickArrived(sessionId2) {
-    this.pending.set(sessionId2, (this.pending.get(sessionId2) ?? 0) + 1);
-    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
-  }
-  // A click of the session landed or was refused, after any landing stamp. A
-  // record evicted meanwhile has no timer left to follow it.
-  clickSettled(sessionId2) {
-    const left = this.pending.get(sessionId2) - 1;
-    if (left === 0) this.pending.delete(sessionId2);
-    else this.pending.set(sessionId2, left);
-    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
-  }
-  // When the idle period of the menus the session's last frame drew began —
-  // its last click, or the first frame that drew them, whichever is later —
-  // or nothing, while it drew none: a menu that appears now has only begun.
-  // Nothing too while a click is in flight: no close is due to count down to.
-  since(sessionId2, at) {
-    const idle = this.record(sessionId2, at);
-    return idle.shown && !this.pending.has(sessionId2) ? idle.since : void 0;
-  }
-  // What the session's newest frame drew: whether a menu row, and the
-  // timeout its settings resolve to. Frames are taken by their instant, not
-  // by when their render finished, so a render that outlived a newer one
-  // tells nothing. A menu drawn where the last frame drew none begins its
-  // idle period here, so one nobody clicked open (a group open by default,
-  // from a reload) is not closed by a click from long ago.
-  observe(sessionId2, at, shown, timeoutS) {
-    const idle = this.record(sessionId2, at);
-    if (at < idle.drawnAt) return;
-    idle.drawnAt = at;
-    if (shown && !idle.shown && at > idle.since) idle.since = at;
-    idle.shown = shown;
-    idle.timeoutS = timeoutS;
-    this.settle(sessionId2);
-  }
-  // In the turn of the close the timer fired at `firedAt`: whether it goes
-  // ahead, the session still known idle since. A click arrived after the
-  // firing is queued behind the close, and a record evicted meanwhile stops
-  // counting, so neither is known idle: a record made since closes by its own
-  // firing, never by this one. Read without making a record, which would
-  // count as a session touched. When it goes ahead, the record follows it.
-  confirmClose(sessionId2, firedAt) {
-    const idle = this.sessions.get(sessionId2);
-    if (idle?.closing !== firedAt || this.pending.has(sessionId2)) return false;
-    this.shut(idle, firedAt);
-    return true;
-  }
-  // The sessions whose clocks are kept, those whose close timer is armed, and
-  // the clicks in flight.
-  getStats() {
-    let armed = 0;
-    for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;
-    let pending2 = 0;
-    for (const count of this.pending.values()) pending2 += count;
-    return { sessions: this.sessions.size, armed, pending: pending2 };
-  }
-  dispose() {
-    this.disposed = true;
-    for (const idle of this.sessions.values()) this.disarm(idle);
-    this.sessions.clear();
-  }
-  record(sessionId2, at) {
-    const idle = this.sessions.get(sessionId2) ?? {
-      since: at,
-      timeoutS: 0,
-      shown: false,
-      drawnAt: at,
-      timer: null,
-      closing: null
-    };
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, idle);
-    for (const [evicted, gone] of this.sessions) {
-      if (this.sessions.size <= MAX_SESSIONS4) break;
-      this.disarm(gone);
-      this.sessions.delete(evicted);
-    }
-    return idle;
-  }
-  // [LAW:single-enforcer] The one place the timer follows the record.
-  settle(sessionId2) {
-    const idle = this.sessions.get(sessionId2);
-    const due = idle.shown && idle.closing === null && !this.disposed && !this.pending.has(sessionId2) ? closesAt(idle.since, idle.timeoutS) : null;
-    if (idle.timer?.at === due) return;
-    this.disarm(idle);
-    if (due === null) return;
-    const clear = this.deps.clock.after(
-      Math.max(0, (due - this.deps.now()) * 1e3),
-      () => this.fire(sessionId2),
-      { unref: true }
-    );
-    idle.timer = { at: due, clear };
-  }
-  // A close went ahead or failed: what the last frame drew no longer stands,
-  // and a new idle period begins when it fired.
-  shut(idle, at) {
-    idle.since = at;
-    idle.shown = false;
-  }
-  disarm(idle) {
-    idle.timer?.clear();
-    idle.timer = null;
-  }
-  // The deadline passed with no click: close the menus, and begin a new idle
-  // period now. What the last frame drew no longer stands — the close wrote
-  // every menu shut — so the timer waits for a render that draws a menu again
-  // (a group open by default, a close that failed) and closes it a timeout
-  // after this one: never at once, and never for a session that stopped
-  // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
-  // among the journals, so whether the session is still idle is read in that
-  // turn: a click since this firing keeps what it opened. The record follows
-  // that decision (`confirmClose`), and until the close settles no frame arms
-  // another. A close that failed waits a timeout too, so it is retried at that
-  // pace and not at every frame.
-  fire(sessionId2) {
-    const idle = this.sessions.get(sessionId2);
-    idle.timer = null;
-    const now2 = this.deps.now();
-    idle.closing = now2;
-    void this.deps.close(sessionId2, {
-      firedAt: now2,
-      idleS: now2 - idle.since,
-      timeoutS: idle.timeoutS
-    }).then((failure) => {
-      if (failure === null) return;
-      this.shut(idle, now2);
-      this.deps.failed(sessionId2, failure);
-    }).finally(() => {
-      idle.closing = null;
-      if (this.sessions.get(sessionId2) === idle) this.settle(sessionId2);
-    });
-  }
-};
-
-// src/daemon/daemon.ts
-function createDaemon(inputs) {
-  const { bundle, memoryLimitBytes: memoryLimitBytes2, registryUrl, clock, exit: exit2, paths: paths2, host } = inputs;
-  const instant = () => instantAt(clock);
-  const closing = new AbortController();
-  let closed = false;
-  const log = (level, msg) => inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
-  const stats = new RuntimeStats(clock);
-  const watcherRegistry = new WatcherRegistry({
-    clock,
-    counters: stats,
-    logger: log
-  });
-  const fileEvents = new FileEventDelivery({
-    watchers: watcherRegistry,
-    logger: log,
-    clock
-  });
-  const daemonFaults = observable.box(
-    { fileEvents: [], launcher: [] },
-    { deep: false, equals: compareStructural }
-  );
-  function restateFaults() {
-    runInAction(
-      () => daemonFaults.set({
-        fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: [...launcher.standing(), ...rendererLauncher.standing()]
-      })
-    );
-  }
-  const observeWarnings = (whose) => (change) => {
-    if (change.kind === "launch-pipes") log("warn", `${whose}${change.text}`);
-    else
-      log(
-        change.fault === null ? "info" : "warn",
-        change.fault === null ? `${whose}launch lifeline running again` : `${whose}launch lifeline ${change.fault}; the next launch starts another`
-      );
-    restateFaults();
-  };
-  const launcher = inputs.launcher({
-    inherited: host.env,
-    stats: stats.launchStats,
-    signal: closing.signal,
-    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
-    // hold them against.
-    now: instant,
-    observeWarnings: observeWarnings("")
-  });
-  const rendererClosing = new AbortController();
-  const rendererLauncher = inputs.launcher({
-    inherited: host.env,
-    stats: stats.launchStats,
-    signal: rendererClosing.signal,
-    now: instant,
-    observeWarnings: observeWarnings("renderer ")
-  });
-  const probe2 = inputs.probe(launcher);
-  const limits = makeLimits({
-    ...inputs.limits({
-      startedAtMs: stats.startedAt.getTime(),
-      exit: exit2,
-      launcher,
-      log
-    }),
-    // [LAW:one-type-per-behavior] Each process the bars are served by is
-    // judged against the one published limit by its own backstop: a leak
-    // lives in one of them, and each is charged apart.
-    limitBytes: memoryLimitBytes2
-  });
-  const handlerProbes = new ProbeArrivals();
-  const renderSightings = new RenderSightings();
-  const doctorStores = inputs.doctorStores;
-  const refreshLedger = new RefreshLedger(log);
-  restateFaults();
-  const sourceRuns = new SourceRuns({
-    launcher,
-    clock,
-    logger: log,
-    ledger: refreshLedger,
-    watchers: watcherRegistry,
-    fileEvents
-  });
-  const payloadProviders = createPayloadProviders({
-    launcher,
-    host,
-    watchers: watcherRegistry,
-    fileEvents,
-    clock,
-    logger: log,
-    ledger: refreshLedger,
-    sourceRuns
-  });
-  const {
-    gitProvider: gitService,
-    usageStore,
-    tmuxService,
-    hostService,
-    managedStorage
-  } = payloadProviders;
-  const menuIdle = new MenuIdle({
-    clock,
-    now: instant,
-    close: (sessionId2, idle) => closeByTurn(
-      parts.renderer,
-      instant,
-      sessionId2,
-      idle,
-      frameFeeds.latest(sessionId2)
-    ),
-    failed: (sessionId2, failure) => log(
-      LEVEL[failure.kind],
-      `menu-idle: close failed (session=${sessionId2}): ${failure.detail}`
-    )
-  });
-  const holdClickError2 = (sessionId2, text4, at) => parts.renderer.tell(
-    { kind: "hold-click-error", session: sessionId2, text: text4 },
-    at
-  );
-  const runs = new Runs({
-    supersede: (folder, sessionId2) => managedStorage.supersede(folder, sessionId2),
-    launch: launcher.launch,
-    holdClickError: holdClickError2,
-    log,
-    now: instant,
-    clock
-  });
-  const laneSetups = new LaneSetups({
-    edge: inputs.laneEdge(
-      launcher,
-      (sessionId2) => frameFeeds.following(sessionId2),
-      closing.signal,
-      probe2
-    ),
-    // A bar pane runs this bundle under the node running it now, with the
-    // flags it runs with (tsx's loader, under the test harness).
-    host: {
-      bundle: bundle.path,
-      node: bundle.node,
-      socket: paths2.socket,
-      preload: stableAttachPreload(bundle.path, host)
-    },
-    holdClickError: holdClickError2,
-    log,
-    now: instant,
-    defer: (run3) => void clock.defer(run3)
-  });
-  const tmuxStatusLines = new TmuxStatusLines({
-    edge: {
-      run: (socket, args, stdin) => runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin)
-    },
-    subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
-    sessionInPane: (socket, pane) => frameFeeds.newestWhere(
-      ({ hints: { tmux: tmux3 } }) => tmux3 !== null && tmux3 !== void 0 && tmux3.socket === socket && tmux3.pane === pane
-    ),
-    handler: [
-      `CC_CANDYBAR_SOCKET=${shellWord(paths2.socket)}`,
-      ...[...bundle.node, bundle.path].map(shellWord),
-      "url-handle"
-    ].join(" "),
-    owner: paths2.socket,
-    log
-  });
-  const frameFeeds = new FrameFeeds({
-    frame: async (sessionId2, fps, at, following, feeds) => {
-      const { frame: frame2 } = await parts.renderer.ask(
-        {
-          kind: "frame",
-          session: sessionId2,
-          fps,
-          following,
-          feeds,
-          idleSince: menuIdle.since(sessionId2, at) ?? null
-        },
-        at
-      );
-      return frame2 === null ? null : { ...frame2, bar: parseFrame(frame2.bar) };
-    },
-    lanes: async (sessionId2) => (await parts.renderer.ask(
-      { kind: "lanes", session: sessionId2 },
-      instant()
-    )).lanes,
-    // [LAW:no-ambient-temporal-coupling] The pin's wake of the session's
-    // state only moves the feed's timer, which fires in a later turn. A click
-    // that awaits gives up the loop, so a frame may show its writes ahead of
-    // its commit; the step stays whole.
-    pin: (sessionId2) => parts.renderer.tell({ kind: "pin", session: sessionId2 }, instant()),
-    unpin: (sessionId2) => parts.renderer.tell({ kind: "unpin", session: sessionId2 }, instant()),
-    shown: (req) => paneVisibility.shown(req.hints.tmux),
-    watching: () => paneVisibility.follow(),
-    refreshes: () => refreshLedger.totals(),
-    periods: FEED_PERIODS,
-    clock,
-    instant,
-    log
-  });
-  const paneVisibility = new PaneVisibility({
-    clock,
-    listPanes: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
-      "list-panes",
-      "-a",
-      "-F",
-      LIST_PANES_FORMAT
-    ]),
-    listClients: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
-      "list-clients",
-      "-F",
-      LIST_CLIENTS_FORMAT
-    ]),
-    // The servers of the sessions someone is watching.
-    sockets: () => new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
-    onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
-    // Only the sessions on a server whose view changed are drawn again.
-    onChange: (sockets) => frameFeeds.wakeWhere(
-      "visibility",
-      (req) => tmuxServersOf(req).some((socket) => sockets.has(socket))
-    ),
-    intervalMs: 1e3,
-    log
-  });
-  function tmuxServersOf({
-    hints: { tmux: tmux3 }
-  }) {
-    return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
-  }
-  const updateFact = newUpdateFact();
-  fileEvents.subscribe((notice) => {
-    switch (notice.kind) {
-      case "period":
-        watcherRegistry.judge();
-        return;
-      case "caught-up":
-        restateFaults();
-        parts.renderer.tell(
-          { kind: "reload-every", since: notice.since },
-          instant()
-        );
-        return;
-      case "moved":
-        restateFaults();
-        return;
-    }
-  });
-  const BIN_CHECK_INTERVAL_MS = 60 * 1e3;
-  const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
-  const binaryWatch = makeBinaryWatch({
-    clock,
-    targets: bundle.targets,
-    intervalMs: BIN_CHECK_INTERVAL_MS,
-    stat: inputs.stat,
-    // The update notice's act rewrites the bundle, and a restart in the middle
-    // would start the next daemon from a half-written one: a restart waits for
-    // it. A success samples again at once; after a failure the next tick does.
-    held: () => updateWatch.running(),
-    exit: () => exit2(0),
-    log
-  });
-  const updateWatch = makeUpdateWatch({
-    fact: updateFact,
-    clock,
-    launcher,
-    probe: probe2,
-    entryUrl: bundle.entryUrl,
-    digest: bundle.digest,
-    // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
-    // this daemon runs from.
-    actsDir: actsDir(paths2.state, bundle.path),
-    intervalMs: BIN_CHECK_INTERVAL_MS,
-    releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
-    registryUrl,
-    fetchImpl: inputs.fetch,
-    onApplied: () => binaryWatch.checkNow(),
-    log
-  });
-  const collector = new Collector({
-    owners: payloadProviders,
-    daemon: () => ({
-      update: { newer: updateFact.get(), ...updateWatch.acts() },
-      ...daemonFaults.get()
-    }),
-    clock,
-    watched: (sessionId2) => frameFeeds.feedOpen(sessionId2),
-    deliver: (event) => parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
-    log
-  });
-  const clicks = new ClicksInFlight();
-  const doctorEdge = inputs.doctorEdge(launcher, host);
-  const claudeInput = inputs.claudeInput(launcher);
-  const readings = readingsHost(payloadProviders);
-  const renderer = superviseRenderer({
-    start: inputs.renderers({
-      launcher: rendererLauncher,
-      bundle,
-      log,
-      clock,
-      now: instant,
-      host,
-      memoryLimitBytes: memoryLimitBytes2
-    }),
-    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice, or an awaited call.
-    host: {
-      wake: (sessionId2, cause) => frameFeeds.wake(sessionId2, cause),
-      log,
-      launch: clickLaunchVia(launcher),
-      typeSlash: typeInPane(claudeInput),
-      applyUpdate: () => updateWatch.act(),
-      runs: {
-        start: (run3) => runs.start(run3),
-        refused: (sessionId2, action2, reason) => runs.refused(sessionId2, action2, reason)
-      },
-      refresh: readings.refresh,
-      doctor: {
-        ...doctorEdge,
-        install: async (daemonBundle, clients) => installFacts(doctorEdge.install, daemonBundle, clients)
-      },
-      laneSetups: {
-        noted: (session, switches) => laneSetups.noted(session, switches),
-        clicked: (sessionId2, session, before, after) => laneSetups.clicked(sessionId2, session, before, after)
-      },
-      tmuxStatusLines: {
-        observe: ({ sessionId: sessionId2, tmux: tmux3, on: on2 }) => tmuxStatusLines.observe(sessionId2, tmux3, on2)
-      },
-      menuIdle: {
-        clicked: (sessionId2, at) => menuIdle.clicked(sessionId2, at),
-        clickArrived: (sessionId2) => menuIdle.clickArrived(sessionId2),
-        clickSettled: (sessionId2) => menuIdle.clickSettled(sessionId2),
-        observe: (sessionId2, at, shown, timeoutS) => menuIdle.observe(sessionId2, at, shown, timeoutS),
-        confirmClose: async (sessionId2, firedAt) => menuIdle.confirmClose(sessionId2, firedAt)
-      },
-      clicks: { gone: async (click3) => clicks.gone(click3) },
-      serving: async () => limits.serving(),
-      renderSightings: {
-        ofSession: async (sessionId2, now2) => renderSightings.ofSession(sessionId2, now2)
-      },
-      probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
-      pipeEventAnswered: (event) => {
-        launcher.answeredPipeEvent(event);
-        restateFaults();
-      }
-    },
-    watches: watcherRegistry,
-    storage: {
-      hold: (id2, folders) => managedStorage.hold(id2, folders),
-      release: (id2) => managedStorage.release(id2)
-    },
-    // [LAW:one-source-of-truth] A start carries every live session the
-    // collector reads, at its latest request as the frame feeds hold it,
-    // located as a request's turns take it. A session whose request the feeds
-    // no longer hold is left out, and its next request declares it again.
-    sessions: () => collector.documents().flatMap((worldState) => {
-      const latest = frameFeeds.latest(worldState.session);
-      return latest === null ? [] : [{ context: located(latest), worldState }];
-    }),
-    subscribed: (subscriptions) => collector.subscribed(subscriptions),
-    monotonic: () => clock.monotonic(),
-    now: instant,
-    defer: (run3) => void clock.defer(run3),
-    after: (ms, run3) => clock.after(ms, run3, { unref: true }),
-    log
-  });
-  const parts = {
-    clicks,
-    home: host.home,
-    tmp: host.tmp,
-    launcher,
-    log,
-    clock,
-    bundle: bundle.path,
-    sourceDigest: bundle.digest,
-    doctorStores,
-    stats,
-    handlerProbes,
-    renderSightings,
-    watcherRegistry,
-    refreshLedger,
-    fileEvents,
-    payloadProviders,
-    menuIdle,
-    runs,
-    sourceRuns,
-    laneSetups,
-    tmuxStatusLines,
-    frameFeeds,
-    updateWatch,
-    limits,
-    collector,
-    renderer: rendererHost("main", clock, renderer, log, collector)
-  };
-  return {
-    stats,
-    launcher,
-    log,
-    memoryLimitBytes: memoryLimitBytes2,
-    clock,
-    exit: exit2,
-    // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in is gathering, or holds or waits for a journal's turn,
-    // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
-    // reached as the daemon closed is refused here and opens no feed.
-    handle: async (req, timedOut, accepted, clientLeft) => {
-      closing.signal.throwIfAborted();
-      return handleRequest(parts, req, timedOut, accepted, clientLeft);
-    },
-    reply: async (req, timedOut, accepted, clientLeft) => {
-      closing.signal.throwIfAborted();
-      return replyTo(parts, req, timedOut, accepted, clientLeft);
-    },
-    subscribe: (sessionId2, subscriber) => {
-      closing.signal.throwIfAborted();
-      return frameFeeds.subscribe(sessionId2, subscriber);
-    },
-    reloadConfig: (origin) => {
-      closing.signal.throwIfAborted();
-      parts.renderer.tell({ kind: "reload-config", origin }, instant());
-    },
-    arm() {
-      closing.signal.throwIfAborted();
-      fileEvents.start(paths2.watchProbe);
-      binaryWatch.arm();
-      updateWatch.arm();
-      limits.arm();
-      renderer.arm();
-    },
-    async close(atExit) {
-      const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
-      const teardown = [
-        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
-        // the journal in flight commits what landed; none opens after.
-        ["journalTurns close", rendererStep("close-journal")],
-        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts).
-        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
-        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
-        // is in flight is terminated, whichever owner's work it was, and the
-        // launcher's lifeline goes.
-        ["launches abort", () => closing.abort(new Error("the daemon closed"))],
-        ["frameFeeds close", () => frameFeeds.close()],
-        ["menuIdle dispose", () => menuIdle.dispose()],
-        ["updateWatch close", () => updateWatch.close()],
-        ["binaryWatch close", () => binaryWatch.close()],
-        ["limits disarm", () => limits.disarm()],
-        // Before the sources and the storage its states hold.
-        ["collector close", () => collector.close()],
-        ["renderer views close", rendererStep("close-views")],
-        ["gitService close", () => gitService.close()],
-        ["usageStore close", () => usageStore.close()],
-        ["tmuxService close", () => tmuxService.close()],
-        ["hostService close", () => hostService.close()],
-        ["runs close", () => runs.close()],
-        // After the collector, which holds every session's runs: its close
-        // releases them first, so this close drops nothing still held.
-        ["sourceRuns close", () => sourceRuns.close()],
-        ["managedStorage close", () => managedStorage.close()],
-        ["fileEvents close", () => fileEvents.close()],
-        ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        // Last: a run that ends in the teardown holds its click error first.
-        ["sessionState close", rendererStep("close-session-state")],
-        // [LAW:no-ambient-temporal-coupling] The renderer finishes once its
-        // steps are taken, and its launcher goes after it.
-        ["renderer end", () => renderer.close()],
-        [
-          "renderer launches abort",
-          () => rendererClosing.abort(new Error("the daemon closed"))
-        ]
-      ];
-      for (const [step4, run3] of teardown) {
-        try {
-          await run3();
-        } catch (e) {
-          log("warn", `${step4} failed: ${e.message}`);
-        }
-      }
-      closed = true;
-      return {
-        settled: Promise.all([
-          launcher.settled(),
-          rendererLauncher.settled()
-        ]).then(([own2, renderer2]) => ({
-          unreaped: [...own2.unreaped, ...renderer2.unreaped]
-        }))
-      };
-    }
-  };
-}
-
-// src/daemon/log.ts
+// src/renderer/repo-configs.ts
 init_globals();
 var import_node_path37 = __toESM(require_path_browserify(), 1);
-var MAX_BYTES = 5 * 1024 * 1024;
-var KEEP_GENERATIONS = 3;
-var MAX_WAITING_BYTES = 4 * 1024 * 1024;
-var EXIT_WAIT_MS = 1e3;
-var BREACH_WAIT_MS = 2e3;
-function idOf2(st) {
-  return `${st.dev}:${st.ino}`;
-}
-function writeAt(fd, bytes) {
-  return new Promise(
-    (resolve, reject2) => fs_default.write(
-      fd,
-      bytes,
-      (err, written2) => err === null ? resolve(written2) : reject2(err)
-    )
-  );
-}
-async function rotate(filePath2) {
-  for (let i = KEEP_GENERATIONS - 1; i >= 1; i--) {
-    await fs_default.promises.rename(`${filePath2}.${i}`, `${filePath2}.${i + 1}`).catch(() => {
-    });
-  }
-  await fs_default.promises.rename(filePath2, `${filePath2}.1`).catch(() => {
-  });
-}
-function logLine(level, msg, at) {
-  return `${new Date(at).toISOString()} [${level}] ${msg}
-`;
-}
-function sizeOnceLanded(clock, fd, endsAt, waitMs) {
-  const until2 = clock.monotonic() + waitMs;
-  const nap = new Int32Array(new SharedArrayBuffer(4));
-  for (; ; ) {
-    const { size } = fs_default.fstatSync(fd);
-    if (size >= endsAt || clock.monotonic() >= until2) return size;
-    Atomics.wait(nap, 0, 0, 1);
-  }
-}
-function unwritable(lines3, e) {
-  try {
-    process_default.stderr.write(
-      `${lines3}cc-candybar: daemon.log unwritable: ${e.message}
-`
-    );
-  } catch {
-  }
-}
-var DaemonLog = class {
-  // [LAW:effects-at-boundaries] `clock` is the machine's: the stamp on each
-  // line, and the blocking wait for a write in flight, which a held clock
-  // would never end.
-  constructor(filePath2, clock) {
-    this.filePath = filePath2;
-    this.clock = clock;
-  }
-  filePath;
-  clock;
-  sink = null;
-  // Lines not yet taken and their bytes, the count of the oldest dropped to
-  // stay within what the log holds, and the batch taken and on its way.
-  waiting = [];
-  waitingBytes = 0;
-  dropped = 0;
-  droppedBytes = 0;
-  onItsWay = null;
-  // Set by the flush itself as it starts and cleared as it ends, so a flush
-  // that ends without ever yielding leaves the next line free to start another.
-  flushing = false;
-  drainedWaiters = [];
-  // Once the process is exiting, no flush will run again: a line logged then —
-  // by an exit listener after this one — is written as it is logged.
-  exiting = false;
-  exitListener = null;
-  // Set by dispose: nothing registers or holds a resource for this log again.
-  disposed = false;
-  // One line, to the log: the daemon's `DaemonLogger`.
-  log = (level, msg) => {
-    const line = logLine(level, msg, this.clock.now());
-    if (this.exitListener === null && !this.disposed) {
-      this.exitListener = () => {
-        this.exiting = true;
-        this.writeWaitingSync(true, EXIT_WAIT_MS);
-      };
-      process_default.on("exit", this.exitListener);
-    }
-    this.waiting.push(line);
-    this.waitingBytes += import_buffer.Buffer.byteLength(line);
-    if (this.waitingBytes > MAX_WAITING_BYTES) {
-      let cut = 0;
-      while (this.waitingBytes > MAX_WAITING_BYTES / 2 && cut < this.waiting.length - 1) {
-        const bytes = import_buffer.Buffer.byteLength(this.waiting[cut]);
-        this.waitingBytes -= bytes;
-        this.droppedBytes += bytes;
-        cut++;
-      }
-      this.waiting.splice(0, cut);
-      this.dropped += cut;
-    }
-    if (this.exiting) this.writeWaitingSync(true, EXIT_WAIT_MS);
-    else if (!this.flushing) void this.flush();
-  };
-  // Resolves once every line logged so far is in the file (or reported
-  // unwritable).
-  drained() {
-    if (!this.flushing) return Promise.resolve();
-    return new Promise((resolve) => this.drainedWaiters.push(resolve));
-  }
-  // What is waiting, written now, synchronously: for a caller about to block
-  // the loop on the way to a death that may come with no exit event (a heap
-  // snapshot, which can draw the OS's kill), so what explains it is on disk
-  // first. The wait for a write already out may be long here: a snapshot that
-  // holds the loop for seconds follows it anyway.
-  writeNow() {
-    this.writeWaitingSync(false, BREACH_WAIT_MS);
-  }
-  // The log of a daemon that is done with it: its descriptor and its exit
-  // listener go, so a process that builds many logs holds none of the ended
-  // ones. A line logged after still reaches the file, through an open its flush
-  // ends, and is not written at the process's exit. A flush under way ends the
-  // descriptor itself: closed from here, its number could go to the next file
-  // opened while a write still holds it.
-  dispose() {
-    this.disposed = true;
-    if (this.exitListener !== null) {
-      process_default.off("exit", this.exitListener);
-      this.exitListener = null;
-    }
-    if (!this.flushing) this.closeSink();
-  }
-  closeSink() {
-    if (this.sink === null) return;
-    try {
-      fs_default.closeSync(this.sink.fd);
-    } catch {
-    }
-    this.sink = null;
-  }
-  // The file now at the log's path, held open, and its size. The held
-  // descriptor is kept only while it is still that file: a state dir removed
-  // under the daemon, or a log another daemon rotated, puts a different file
-  // there (or none), and the next write goes to it, never into a file nobody
-  // reads. One stat a write, not a line: lines arriving while a write is out go
-  // in the next one together. Asked less often, the lines between a state
-  // dir's removal and the next ask would go into a file nobody can read.
-  async sinkAt() {
-    const st = await fs_default.promises.stat(this.filePath).catch(() => null);
-    if (this.sink !== null && st !== null && this.sink.id === idOf2(st)) {
-      return { held: this.sink, size: st.size };
-    }
-    this.closeSink();
-    await fs_default.promises.mkdir(import_node_path37.default.dirname(this.filePath), { recursive: true });
-    const fd = await new Promise(
-      (resolve, reject2) => fs_default.open(
-        this.filePath,
-        "a",
-        (err, opened2) => err === null ? resolve(opened2) : reject2(err)
-      )
-    );
-    const opened = await new Promise(
-      (resolve, reject2) => fs_default.fstat(
-        fd,
-        (err, stats) => err === null ? resolve(stats) : reject2(err)
-      )
-    );
-    this.sink = { path: this.filePath, fd, id: idOf2(opened) };
-    return { held: this.sink, size: opened.size };
-  }
-  // One write at a time until nothing waits.
-  async flush() {
-    this.flushing = true;
-    try {
-      while (this.waiting.length > 0) {
-        const lines3 = this.take();
-        const batch = {
-          bytes: import_buffer.Buffer.from(lines3),
-          state: { kind: "taken" }
-        };
-        this.onItsWay = batch;
-        try {
-          await this.append(batch);
-        } catch (e) {
-          this.closeSink();
-          if (batch.state.kind !== "landed") unwritable(lines3, e);
-        } finally {
-          this.onItsWay = null;
-        }
-      }
-    } finally {
-      this.flushing = false;
-      if (this.disposed) this.closeSink();
-      for (const resolve of this.drainedWaiters.splice(0)) resolve();
-    }
-  }
-  // Everything waiting, after the count of the lines dropped before it.
-  take() {
-    const lost = this.dropped === 0 ? "" : logLine(
-      "warn",
-      `log: ${this.dropped} earlier line(s) dropped (${this.droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`,
-      this.clock.now()
-    );
-    const lines3 = lost + this.waiting.join("");
-    this.waiting = [];
-    this.waitingBytes = 0;
-    this.dropped = 0;
-    this.droppedBytes = 0;
-    return lines3;
-  }
-  async append(batch) {
-    const { held, size } = await this.sinkAt();
-    if (batch.state.kind === "landed") return;
-    const { bytes } = batch;
-    const endsAt = size + bytes.length;
-    batch.state = { kind: "issued", fd: held.fd, endsAt };
-    for (let done2 = 0; done2 < bytes.length; ) {
-      const written2 = await writeAt(held.fd, bytes.subarray(done2));
-      if (written2 === 0) throw new Error("the disk took 0 bytes of a write");
-      done2 += written2;
-    }
-    batch.state = { kind: "landed" };
-    if (endsAt >= MAX_BYTES) {
-      this.closeSink();
-      const now2 = await fs_default.promises.stat(held.path).catch(() => null);
-      if (now2 !== null && idOf2(now2) === held.id) await rotate(held.path);
-    }
-  }
-  // On the way out, after the event loop's last turn (or now, for a caller that
-  // cannot wait): a batch not yet written is written; one whose write is out is
-  // waited for, as the file's size says, so the lines after it follow it in
-  // order — and on the way out, one that has not landed by then is written
-  // again, since a write that never started never will. Every line still
-  // waiting follows.
-  // [LAW:no-silent-failure] exception: the size misleads in two ways, each
-  // costing that one batch: another process appending while it is out makes it
-  // look landed (lost), and a write that starts after the wait gave up lands
-  // beside its rewrite (doubled). A write at an offset of its own would answer
-  // exactly, and would overwrite the other daemon's lines at every handoff.
-  writeWaitingSync(finishing, waitMs) {
-    const out = this.onItsWay;
-    let first2 = import_buffer.Buffer.alloc(0);
-    if (out !== null && out.state.kind === "taken") {
-      first2 = out.bytes;
-      out.state = { kind: "landed" };
-    }
-    let stillOut = null;
-    if (out !== null && out.state.kind === "issued") {
-      const { fd, endsAt } = out.state;
-      try {
-        const size = sizeOnceLanded(this.clock, fd, endsAt, waitMs);
-        if (size < endsAt && finishing) {
-          first2 = out.bytes.subarray(
-            Math.max(0, size - (endsAt - out.bytes.length))
-          );
-          out.state = { kind: "landed" };
-        } else if (size < endsAt) {
-          stillOut = { fd, endsAt };
-        }
-      } catch (e) {
-        if (finishing) {
-          first2 = out.bytes;
-          out.state = { kind: "landed" };
-        }
-        unwritable(out.bytes.toString(), e);
-      }
-    }
-    if (first2.length === 0 && this.waiting.length === 0) return;
-    const lines3 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(this.take())]);
-    try {
-      fs_default.mkdirSync(import_node_path37.default.dirname(this.filePath), { recursive: true });
-      fs_default.appendFileSync(this.filePath, lines3);
-      if (stillOut !== null && out !== null && idOf2(fs_default.fstatSync(stillOut.fd)) === idOf2(fs_default.statSync(this.filePath))) {
-        out.state = {
-          kind: "issued",
-          fd: stillOut.fd,
-          endsAt: stillOut.endsAt + lines3.length
-        };
-      }
-    } catch (e) {
-      unwritable(lines3.toString(), e);
-    }
-  }
-};
 
-// src/daemon/production-adapters.ts
+// src/config/loader/discovery.ts
 init_globals();
-
-// src/claude-input/edge.ts
-init_globals();
-var THEN = ";";
-var BUFFER = "cc-candybar-slash";
-async function tmux(launcher, hint, category, args, stdinInput) {
-  const run3 = await runTmuxAsync(launcher, hint, category, args, stdinInput);
-  if (run3.kind === "failed") throw new Error(run3.reason);
-  return run3;
-}
-async function read(launcher, hint) {
-  const run3 = await tmux(launcher, hint, "claude-input.read", [
-    "display",
-    "-p",
-    "-t",
-    hint.pane,
-    "#{pane_in_mode}",
-    THEN,
-    "capture-pane",
-    "-p",
-    "-t",
-    hint.pane
-  ]);
-  if (run3.kind === "rate-limited") throw new Error(run3.reason);
-  const [mode = "", ...screen] = run3.stdout.split("\n");
-  return { inMode: mode !== "0", screen };
-}
-function pasteLineArgs(pane, buffer, before) {
-  return [
-    "load-buffer",
-    "-b",
-    buffer,
-    "-",
-    THEN,
-    ...before.length === 0 ? [] : ["send-keys", "-t", pane, ...before, THEN],
-    "paste-buffer",
-    "-p",
-    "-d",
-    "-b",
-    buffer,
-    "-t",
-    pane,
-    THEN,
-    "send-keys",
-    "-t",
-    pane,
-    "Enter"
-  ];
-}
-async function type2(launcher, hint, line) {
-  const run3 = await tmux(
-    launcher,
-    hint,
-    "claude-input.type",
-    pasteLineArgs(hint.pane, BUFFER, ["C-s"]),
-    line
-  );
-  return run3.kind === "ok" ? { kind: "typed" } : {
-    kind: "refused",
-    reason: `cc-candybar typed a command moments ago \u2014 click again in a second (${run3.reason})`
-  };
-}
-function productionClaudeInputEdge(launcher) {
-  return {
-    read: (hint) => read(launcher, hint),
-    type: (hint, line) => type2(launcher, hint, line)
-  };
-}
-
-// src/daemon/process-fingerprint.ts
-init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-function systemProbe(launcher) {
-  return {
-    alive: (pid2) => {
-      try {
-        process_default.kill(pid2, 0);
-        return true;
-      } catch (e) {
-        return e.code === "EPERM";
-      }
-    },
-    startTime: (pid2) => readStartTime(pid2, launcher.launch)
-  };
-}
-
-// src/daemon/lane-edge.ts
-init_globals();
+var import_node_path35 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
@@ -71187,586 +68565,23 @@ function presence(path43) {
   }
 }
 
-// src/daemon/foundations/session-env.ts
-init_globals();
-var SESSION_FACT_VARIABLES = [
-  "CLAUDE_CODE_SESSION_ID",
-  "CLAUDE_PROJECT_DIR",
-  "CLAUDE_CONFIG_DIR",
-  "TMUX",
-  "TMUX_PANE"
-];
-function sessionEnv(facts) {
-  return {
-    ...Object.fromEntries(SESSION_FACT_VARIABLES.map((name) => [name, null])),
-    CLAUDE_CODE_SESSION_ID: facts.sessionId,
-    CLAUDE_PROJECT_DIR: facts.projectDir,
-    ...facts.claudeConfigDir !== void 0 && {
-      CLAUDE_CONFIG_DIR: facts.claudeConfigDir
-    }
-  };
-}
-
-// src/path-search.ts
-init_globals();
-var import_node_path38 = __toESM(require_path_browserify(), 1);
-function executableOn(name, pathVariable, isExecutable) {
-  for (const dir of (pathVariable ?? "").split(import_node_path38.default.delimiter)) {
-    if (!import_node_path38.default.isAbsolute(dir)) continue;
-    const file = import_node_path38.default.join(dir, name);
-    if (isExecutable(file)) return file;
-  }
-  return null;
-}
-function regularFileWith(file, mode) {
-  try {
-    fs_default.accessSync(file, mode);
-    return fs_default.statSync(file).isFile();
-  } catch {
-    return false;
-  }
-}
-function canonical(file) {
-  try {
-    return fs_default.realpathSync(file);
-  } catch {
-    return import_node_path38.default.resolve(file);
-  }
-}
-
-// src/attach-preload.ts
-init_globals();
-var import_node_path39 = __toESM(require_path_browserify(), 1);
-function launcherNode(pathVariable, isExecutable, canonical3) {
-  const node = executableOn("node", pathVariable, isExecutable);
-  if (node === null) {
-    return {
-      kind: "refused",
-      why: "no `node` on PATH to run the attach launcher"
-    };
-  }
-  return import_node_path39.default.basename(canonical3(node)) === "bun" ? {
-    kind: "refused",
-    why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`
-  } : { kind: "node", file: node };
-}
-
-// src/daemon/lane-edge.ts
-var SHELL_BUFFER = "cc-candybar-lane";
-var EXIT_POLL_MS = 100;
-var SHELL_PATIENCE_MS = 2e3;
-async function tmux2(launcher, hint, args, stdinInput) {
-  const run3 = await runTmuxAsync(launcher, hint, "lane.tmux", args, stdinInput);
-  if (run3.kind !== "ok") throw new Error(run3.reason);
-  return run3.stdout;
-}
-function ran(what, result) {
-  if (result.ok) return result.stdout;
-  const told = saidBy(result, result.stdout);
-  throw new Error(
-    `${what} failed (${failureText(result)}${told === "" ? "" : `: ${told}`})`
-  );
-}
-function refusalOf3(stdout2) {
-  try {
-    const said = JSON.parse(stdout2);
-    if (typeof said === "object" && said !== null && "ok" in said && said.ok === false && "reason" in said && typeof said.reason === "string") {
-      return "detail" in said && typeof said.detail === "string" ? `${said.reason}: ${said.detail}` : said.reason;
-    }
-  } catch {
-  }
-  return null;
-}
-var PANE_STARTS_FORMAT = "#{pane_id} #{pane_start_command}";
-var BAR_PANE_START = /(?:^|\s)bar-pane\s+["'\\]*(%\d+)["']*\s*$/;
-function barPanesOf(listPanes, pane) {
-  return listPanes.split("\n").flatMap((line) => {
-    const [id2, ...start] = line.trim().split(" ");
-    return BAR_PANE_START.exec(start.join(" "))?.[1] === pane ? [id2] : [];
-  });
-}
-var ATTACH = /(^|\/)(cc-attach|bun-attach\.js)(\s|$)/;
-function runsAttached(table, pid2, panePid) {
-  for (const p2 of lineage(processTable(table), pid2)) {
-    if (p2.command.split(" ").some((word) => ATTACH.test(word))) return true;
-    if (p2.pid === panePid) return false;
-  }
-  return false;
-}
-var PROCARGS2 = [
-  "import ctypes, json, struct, sys",
-  "libc = ctypes.CDLL(None)",
-  "mib = (ctypes.c_int * 3)(1, 49, int(sys.argv[1]))",
-  "size = ctypes.c_size_t(0)",
-  "if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0: sys.exit('sysctl KERN_PROCARGS2 refused')",
-  "buf = ctypes.create_string_buffer(size.value)",
-  "if libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) != 0: sys.exit('sysctl KERN_PROCARGS2 refused')",
-  "raw = buf.raw[:size.value]",
-  "argc = struct.unpack_from('i', raw)[0]",
-  "rest = raw[4:]",
-  "end = rest.index(b'\\0')",
-  "exe = rest[:end].decode('utf-8', 'surrogateescape')",
-  "rest = rest[end:].lstrip(b'\\0')",
-  "words = [w.decode('utf-8', 'surrogateescape') for w in rest.split(b'\\0')]",
-  "end = words.index('', argc) if '' in words[argc:] else len(words)",
-  "print(json.dumps({'executable': exe, 'argv': words[:argc], 'env': words[argc:end]}))"
-].join("\n");
-async function imageOf(launcher, pid2) {
-  if (process_default.platform === "linux") {
-    return {
-      executable: await fs_default.promises.readlink(`/proc/${pid2}/exe`),
-      argv: (await fs_default.promises.readFile(`/proc/${pid2}/cmdline`, "utf8")).split("\0").slice(0, -1),
-      env: (await fs_default.promises.readFile(`/proc/${pid2}/environ`, "utf8")).split("\0").slice(0, -1)
-    };
-  }
-  const out = ran(
-    `reading process ${pid2}'s arguments`,
-    await launcher.launch({
-      bin: "python3",
-      args: ["-c", PROCARGS2, String(pid2)],
-      timeoutMs: 5e3,
-      category: "lane.process"
-    })
-  );
-  return JSON.parse(out);
-}
-async function ps(launcher, what, args) {
-  return ran(
-    what,
-    await launcher.launch({
-      bin: "ps",
-      args,
-      timeoutMs: 2e3,
-      category: "lane.process"
-    })
-  );
-}
-async function paneForeground(launcher, hint) {
-  const display = await runTmuxAsync(launcher, hint, "lane.tmux", [
-    "display",
-    "-p",
-    "-t",
-    hint.pane,
-    "#{pane_pid}	#{pane_current_path}"
-  ]);
-  if (display.kind !== "ok") throw new Error(display.reason);
-  const [panePid = "", cwd2 = ""] = display.stdout.trimEnd().split("	");
-  const foreground = (await ps(launcher, `asking pane ${hint.pane}'s foreground job`, [
-    "-o",
-    "tpgid=",
-    "-p",
-    panePid
-  ])).trim();
-  return { panePid: Number(panePid), cwd: cwd2, foreground: Number(foreground) };
-}
-async function paneClaude(launcher, hint) {
-  const {
-    panePid,
-    cwd: cwd2,
-    foreground: pid2
-  } = await paneForeground(launcher, hint);
-  const table = await ps(launcher, "listing processes", [
-    "-A",
-    "-o",
-    "pid=,ppid=,args="
-  ]);
-  const image = await imageOf(launcher, pid2);
-  const parent = processTable(table).get(pid2)?.ppid;
-  if (parent === void 0) {
-    throw new Error(`pane ${hint.pane}'s foreground job ${pid2} is gone`);
-  }
-  return {
-    pid: pid2,
-    // The installed binary itself, as cc-extra's own `bin/cc-attach` hands it
-    // to the launcher (`readlink -f`): `~/.local/bin/claude` is a link to the
-    // release it runs.
-    executable: await fs_default.promises.realpath(image.executable),
-    argv: image.argv,
-    env: image.env,
-    cwd: cwd2,
-    parent,
-    fromShell: pid2 !== panePid,
-    attached: runsAttached(table, pid2, panePid)
-  };
-}
-var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock, probe2) {
-  const wait = (ms) => sleep(clock, ms, closing);
-  return {
-    claudeInput: productionClaudeInputEdge(launcher),
-    barPanes: async (hint) => barPanesOf(
-      await tmux2(launcher, hint, [
-        "list-panes",
-        "-a",
-        "-F",
-        PANE_STARTS_FORMAT
-      ]),
-      hint.pane
-    ),
-    // Two or more words after the options are run as they are, with no shell
-    // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
-    // [LAW:no-ambient-temporal-coupling] One launch: the split records the
-    // pane's owner in its command (`barPanesOf`), so a daemon closing after it
-    // leaves no bar pane `pane off` cannot find. `-d` leaves focus untouched.
-    openBarPane: async (hint, argv2, env2) => (await tmux2(launcher, hint, [
-      "split-window",
-      "-d",
-      "-v",
-      "-l",
-      "1",
-      "-t",
-      hint.pane,
-      "-P",
-      "-F",
-      "#{pane_id}",
-      ...Object.entries(env2).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
-      ...argv2
-    ])).trim(),
-    closePane: async (hint, pane) => void await tmux2(launcher, hint, ["kill-pane", "-t", pane]),
-    // [LAW:single-enforcer] The session's process environment: the
-    // session's facts, never those of whichever shell spawned this detached
-    // daemon.
-    claude: async (args, session) => void ran(
-      `claude ${args.join(" ")}`,
-      await launcher.launch({
-        bin: "claude",
-        args: [...args],
-        envOverlay: sessionEnv(session),
-        timeoutMs: 3e4,
-        category: "lane.claude"
-      })
-    ),
-    fileExists: (file) => fs_default.existsSync(file),
-    presence,
-    paneClaude: (hint) => paneClaude(launcher, hint),
-    // [LAW:no-ambient-temporal-coupling] The pane's directory is the
-    // shell's once the shell holds its terminal again: until it has reaped
-    // Claude Code and taken the foreground back, tmux reads the directory of
-    // the job that held it, or none. An interactive shell leads its own
-    // process group, so it holds the terminal when it is the foreground job
-    // — the shell that started Claude Code, which may itself be a job of the
-    // pane's first shell (`nix develop`, a nested `bash`).
-    paneDir: async (hint, shell) => {
-      const until2 = clock.monotonic() + SHELL_PATIENCE_MS;
-      for (; ; ) {
-        const pane = await paneForeground(launcher, hint);
-        if (pane.foreground === shell) {
-          if (pane.cwd === "") {
-            throw new Error(`tmux read no directory for pane ${hint.pane}`);
-          }
-          return pane.cwd;
-        }
-        if (clock.monotonic() > until2) {
-          throw new Error(
-            `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1e3} s`
-          );
-        }
-        await wait(EXIT_POLL_MS);
-      }
-    },
-    launcherNode: (pathVariable) => launcherNode(
-      pathVariable,
-      (f) => regularFileWith(f, fs_default.constants.X_OK),
-      canonical
-    ),
-    onPath: (name, pathVariable) => {
-      const file = executableOn(
-        name,
-        pathVariable,
-        (f) => regularFileWith(f, fs_default.constants.X_OK)
-      );
-      return file === null ? null : fs_default.realpathSync(file);
-    },
-    followed: async (sessionId2, lane, withinMs) => {
-      const until2 = clock.monotonic() + withinMs;
-      while (!following(sessionId2).has(lane)) {
-        if (clock.monotonic() > until2) return false;
-        await wait(FOLLOW_POLL_MS);
-      }
-      return true;
-    },
-    // In a child: the reader holds the whole binary (~200 MB) in memory.
-    moduleGraph: async (node, reader, executable) => {
-      const result = await launcher.launch({
-        bin: node,
-        args: [reader, executable],
-        timeoutMs: 2e4,
-        category: "lane.process"
-      });
-      const refused = !result.ok && result.reason === "non-zero" ? refusalOf3(result.stdout) : null;
-      if (refused !== null) return { ok: false, reason: refused };
-      ran(`reading ${executable}'s module graph`, result);
-      return { ok: true };
-    },
-    // [LAW:no-silent-failure] A kill the OS refuses says which process it was
-    // sent to, not a bare `kill ESRCH`.
-    terminate: (pid2) => {
-      closing.throwIfAborted();
-      try {
-        process_default.kill(pid2, "SIGTERM");
-      } catch (err) {
-        throw new Error(
-          `Claude Code (pid ${pid2}) could not be sent SIGTERM: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-    },
-    exited: async (pid2, withinMs) => {
-      const until2 = clock.monotonic() + withinMs;
-      while (probe2.alive(pid2)) {
-        if (clock.monotonic() > until2) return false;
-        await wait(EXIT_POLL_MS);
-      }
-      return true;
-    },
-    // Typed as a slash command is, but with no ctrl+s first: in a shell that
-    // stops the terminal's output.
-    typeShellLine: async (hint, line) => void await tmux2(
-      launcher,
-      hint,
-      pasteLineArgs(hint.pane, SHELL_BUFFER, []),
-      line
-    )
-  };
-}
-
-// src/daemon/file-storage.ts
-init_globals();
-
-// src/daemon/session-state-file.ts
-init_globals();
-var import_node_path40 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/history-file.ts
-init_globals();
-var import_node_path41 = __toESM(require_path_browserify(), 1);
-
-// src/renderer-interface/history-storage.ts
-init_globals();
-var SETTING_SESSION_KEYS = new Set(
-  SETTING_PROJECTIONS.map((s) => s.sessionKey)
-);
-var isSettingKey = (key) => SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
-
-// src/daemon/link-key.ts
-init_globals();
-var import_node_path42 = __toESM(require_path_browserify(), 1);
-
-// src/click/link-signer.ts
-init_globals();
-var LINK_KEY_BYTES = 32;
-var MAC_SPELLING = /^[0-9a-f]{64}$/;
-function digest(key, fields2) {
-  return createHmac("sha256", key).update(
-    JSON.stringify([
-      fields2.sessionId,
-      fields2.action,
-      fields2.declaration,
-      fields2.evaluated
-    ])
-  ).digest();
-}
-function linkSigner(key) {
-  if (key.length !== LINK_KEY_BYTES) {
-    throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
-  }
-  return {
-    sign: (fields2) => digest(key, fields2).toString("hex"),
-    verify: (fields2, mac) => {
-      if (!MAC_SPELLING.test(mac)) return false;
-      return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
-    }
-  };
-}
-
-// src/daemon/link-key.ts
-function linkKeyFile(dir) {
-  return import_node_path42.default.join(dir, "link.key");
-}
-function linkSignerFromKeyFile(file) {
-  let signer;
-  const loaded = () => signer ??= readOrCreate(file);
-  return {
-    sign: (fields2) => loaded().sign(fields2),
-    verify: (fields2, mac) => loaded().verify(fields2, mac)
-  };
-}
-function readOrCreate(file) {
-  let key;
-  try {
-    key = fs_default.readFileSync(file);
-  } catch (e) {
-    if (e.code !== "ENOENT") throw e;
-    create(file);
-    key = fs_default.readFileSync(file);
-  }
-  if (key.length !== LINK_KEY_BYTES) {
-    throw new Error(
-      `link key ${file} holds ${key.length} bytes, not ${LINK_KEY_BYTES}: remove it and a new one is made (links drawn before then stop working)`
-    );
-  }
-  return linkSigner(key);
-}
-function create(file) {
-  fs_default.mkdirSync(import_node_path42.default.dirname(file), { recursive: true });
-  const written2 = `${file}.${process_default.pid}.${randomBytes(6).toString("hex")}`;
-  fs_default.writeFileSync(written2, randomBytes(LINK_KEY_BYTES), {
-    mode: 384,
-    flag: "wx"
-  });
-  try {
-    fs_default.linkSync(written2, file);
-  } catch (e) {
-    if (e.code !== "EEXIST") throw e;
-  } finally {
-    fs_default.unlinkSync(written2);
-  }
-}
-
-// src/daemon/renderer-links.ts
-init_globals();
-
-// src/renderer-interface/wire.ts
-init_globals();
-var isRecord3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-function parseToHost(line) {
-  const v = JSON.parse(line);
-  if (isRecord3(v)) {
-    if (v.k === "output" && typeof v.id === "number" && typeof v.tookMs === "number" && isRecord3(v.output))
-      return {
-        k: "output",
-        id: v.id,
-        output: v.output,
-        tookMs: v.tookMs
-      };
-    if (v.k === "reach" && (typeof v.id === "number" || v.id === null) && typeof v.path === "string" && Array.isArray(v.args))
-      return { k: "reach", id: v.id, path: v.path, args: v.args };
-    if (v.k === "pong" && typeof v.id === "number")
-      return { k: "pong", id: v.id };
-  }
-  throw new Error(
-    `not a line a renderer sends its host: ${line.slice(0, 200)}`
-  );
-}
-var lineOf = (message) => JSON.stringify(message);
-function reachInto(host, path43, args) {
-  const names = path43.split(".");
-  const holder = names.slice(0, -1).reduce(
-    (at, name) => at[name],
-    host
-  );
-  const member = holder[names[names.length - 1]];
-  if (typeof member !== "function")
-    throw new Error(`the adapter has no reach ${path43}`);
-  return member.apply(holder, [...args]);
-}
-function wireRenderer(channel, host) {
-  const pending2 = /* @__PURE__ */ new Map();
-  const pings = /* @__PURE__ */ new Map();
-  let lastInput = 0;
-  let failed3 = null;
-  const send = (message) => channel.send(lineOf(message));
-  const answerCall = (id2, outcome) => {
-    if (failed3 === null) send({ k: "reached", id: id2, outcome });
-  };
-  channel.hear((line) => {
-    const heard = parseToHost(line);
-    switch (heard.k) {
-      case "output": {
-        const input = pending2.get(heard.id);
-        if (input === void 0)
-          throw new Error(`an output for input ${heard.id}, which is not out`);
-        pending2.delete(heard.id);
-        input.resolve({ output: heard.output, tookMs: heard.tookMs });
-        return;
-      }
-      case "pong": {
-        const ping = pings.get(heard.id);
-        if (ping === void 0)
-          throw new Error(`a pong for ping ${heard.id}, which is not out`);
-        pings.delete(heard.id);
-        ping.resolve();
-        return;
-      }
-      case "reach": {
-        const { id: id2, path: path43, args } = heard;
-        if (id2 === null) {
-          try {
-            reachInto(host, path43, args);
-          } catch (thrown2) {
-            host.log(
-              "error",
-              `renderer notice ${path43} threw: ${failureOf(thrown2).detail}`
-            );
-          }
-          return;
-        }
-        void new Promise(
-          (resolve) => resolve(reachInto(host, path43, args))
-        ).then(
-          (value) => answerCall(id2, { ok: true, value }),
-          (thrown2) => answerCall(id2, { ok: false, failure: failureOf(thrown2) })
-        );
-      }
-    }
-  });
-  return {
-    answer: (input) => {
-      if (failed3 !== null) return Promise.reject(failed3);
-      const id2 = ++lastInput;
-      return new Promise((resolve, reject2) => {
-        pending2.set(id2, { resolve, reject: reject2 });
-        send({ k: "input", id: id2, input });
-      });
-    },
-    ping: () => {
-      if (failed3 !== null) return Promise.reject(failed3);
-      const id2 = ++lastInput;
-      return new Promise((resolve, reject2) => {
-        pings.set(id2, { resolve, reject: reject2 });
-        send({ k: "ping", id: id2 });
-      });
-    },
-    fail: (reason) => {
-      failed3 ??= reason;
-      for (const { reject: reject2 } of [...pending2.values(), ...pings.values()])
-        reject2(reason);
-      pending2.clear();
-      pings.clear();
-    }
-  };
-}
-
-// src/renderer/main.ts
-init_globals();
-
-// src/renderer/draw-bar.ts
-init_globals();
-
-// src/renderer/repo-configs.ts
-init_globals();
-var import_node_path45 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/discovery.ts
-init_globals();
-var import_node_path44 = __toESM(require_path_browserify(), 1);
-
 // src/config/loader/plugin-folders.ts
 init_globals();
-var import_node_path43 = __toESM(require_path_browserify(), 1);
+var import_node_path34 = __toESM(require_path_browserify(), 1);
 function pluginRoots(locs, repo2) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path43.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path34.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return [
     ...installed.filter((r, i) => installed.lastIndexOf(r) === i).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path43.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+    ...repo2 === null ? [] : [{ dir: import_node_path34.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
   ];
 }
 function userPluginRoot(locs) {
-  return import_node_path43.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path34.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path43.default.join(".cc-candybar", "plugins");
+var REPO_PLUGIN_DIR = import_node_path34.default.join(".cc-candybar", "plugins");
 function installedPlugins(locs, repo2) {
   const roots = pluginRoots(locs, repo2);
   const byNs = /* @__PURE__ */ new Map();
@@ -71780,7 +68595,7 @@ function installedPlugins(locs, repo2) {
     }
     for (const name of listed.folders) {
       const definition = pluginDefinition(
-        import_node_path43.default.join(root, name, DEFINITION_FILE),
+        import_node_path34.default.join(root, name, DEFINITION_FILE),
         scope
       );
       const key = `${scope}\0${name}`;
@@ -71789,10 +68604,10 @@ function installedPlugins(locs, repo2) {
     }
     for (const file of listed.files) {
       strays.push({
-        path: import_node_path43.default.join(root, file),
+        path: import_node_path34.default.join(root, file),
         scope,
         name: void 0,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path43.default.join(root, "<name>", DEFINITION_FILE)}`
+        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path34.default.join(root, "<name>", DEFINITION_FILE)}`
       });
     }
   }
@@ -71818,7 +68633,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path43.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path34.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -71897,10 +68712,10 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
   return [
     .../* @__PURE__ */ new Set([
       ...projectDir ? CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path44.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path35.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
       ) : [],
       ...CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path44.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path35.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
       ),
       ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
     ])
@@ -71908,7 +68723,7 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
 }
 var REPO_CONFIG_BASE = ".cc-candybar";
 function xdgConfigBase(locs) {
-  return import_node_path44.default.join(locs.configHome, "cc-candybar", "config");
+  return import_node_path35.default.join(locs.configHome, "cc-candybar", "config");
 }
 function homeLayer(path43) {
   return { path: path43, scope: "plugins" };
@@ -71928,10 +68743,10 @@ function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
       unchecked.push(p2);
       continue;
     }
-    const dir = fs_default.realpathSync.native(import_node_path44.default.dirname(candidate));
-    const location = import_node_path44.default.join(
+    const dir = fs_default.realpathSync.native(import_node_path35.default.dirname(candidate));
+    const location = import_node_path35.default.join(
       dir,
-      import_node_path44.default.basename(candidate).replace(/\.(json5|json)$/, "")
+      import_node_path35.default.basename(candidate).replace(/\.(json5|json)$/, "")
     );
     if (!atLocation.has(location)) {
       atLocation.set(location, {
@@ -71978,7 +68793,7 @@ function repoProject(projectDir) {
   if (projectDir === void 0 || presence(projectDir) !== "present") {
     return null;
   }
-  const listed = listFolders(import_node_path44.default.join(projectDir, REPO_PLUGIN_DIR));
+  const listed = listFolders(import_node_path35.default.join(projectDir, REPO_PLUGIN_DIR));
   const dir = fs_default.realpathSync.native(projectDir);
   return {
     dir,
@@ -72026,29 +68841,71 @@ function detectConfigCollisions(locs, projectDir, cwd2) {
   );
   const groups = /* @__PURE__ */ new Map();
   for (const candidate of existing) {
-    const dir = import_node_path44.default.dirname(candidate);
-    const base = import_node_path44.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path44.default.join(dir, base);
+    const dir = import_node_path35.default.dirname(candidate);
+    const base = import_node_path35.default.basename(candidate).replace(/\.(json5|json)$/, "");
+    const key = import_node_path35.default.join(dir, base);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(candidate);
   }
   const collisions = [...groups.values()].filter((g) => g.length > 1);
   if (collisions.length === 0) return null;
-  const lines3 = collisions.map((g) => {
+  const lines2 = collisions.map((g) => {
     const [winner, ...shadowed] = g;
     return `${winner} shadows ${shadowed.join(", ")}`;
   });
-  return `config-extension collision: ${lines3.join("; ")} \u2014 remove the duplicate`;
+  return `config-extension collision: ${lines2.join("; ")} \u2014 remove the duplicate`;
+}
+
+// src/doctor/state-file.ts
+init_globals();
+var import_node_path36 = __toESM(require_path_browserify(), 1);
+function stateFile(dir, name, empty2, parse3) {
+  const file = import_node_path36.default.join(dir, name);
+  const read2 = () => {
+    let text4;
+    try {
+      text4 = fs_default.readFileSync(file, "utf8");
+    } catch (e) {
+      if (e.code === "ENOENT") {
+        return { kind: "ok", value: empty2 };
+      }
+      return { kind: "failed", reason: `${file}: ${e.message}` };
+    }
+    let doc;
+    try {
+      doc = JSON.parse(text4);
+    } catch (e) {
+      return {
+        kind: "failed",
+        reason: `${file} is not JSON: ${e.message}`
+      };
+    }
+    const parsed2 = parse3(doc);
+    return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
+  };
+  return {
+    read: read2,
+    update: (next) => {
+      const current2 = read2();
+      if (current2.kind === "failed") return current2;
+      const value = next(current2.value);
+      if (value !== current2.value) {
+        writeAtomic(file, `${JSON.stringify(value, null, 2)}
+`);
+      }
+      return { kind: "ok", value };
+    }
+  };
 }
 
 // src/renderer/repo-configs.ts
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path45.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path37.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path45.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path37.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 var repoConfigs = (dir) => {
   const book = stateFile(
@@ -75281,7 +72138,7 @@ function layerInserts(top, beneath, presence2) {
     },
     // One locator per layer, so its source is parsed at most once.
     dropped: layers.flatMap((layer) => {
-      const lineOf2 = keyLocator(layer.source);
+      const lineOf = keyLocator(layer.source);
       return (layer.raw.insert ?? []).filter(broken).map((cell3) => ({
         file: layer.path,
         issue: {
@@ -75292,7 +72149,7 @@ function layerInserts(top, beneath, presence2) {
             top.config.segments,
             presence2(cell3.seg)
           ),
-          line: lineOf2(cell3.by.entry.split("."))
+          line: lineOf(cell3.by.entry.split("."))
         }
       }));
     })
@@ -77113,7 +73970,7 @@ var NO_NEST = {
   defaultOf: () => DISCLOSURE_CLOSED,
   menus: []
 };
-var idOf3 = (d) => `${d.key}\0${d.member}`;
+var idOf2 = (d) => `${d.key}\0${d.member}`;
 function buildDisclosureNest(config2) {
   const menus = /* @__PURE__ */ new Map();
   const hostedBy = (node) => {
@@ -77143,9 +74000,9 @@ function buildDisclosureNest(config2) {
     members.set(d.key, (members.get(d.key) ?? /* @__PURE__ */ new Set()).add(d.member));
   };
   const note = (parent, child) => {
-    const children2 = inside.get(idOf3(parent)) ?? /* @__PURE__ */ new Map();
-    children2.set(idOf3(child), child);
-    inside.set(idOf3(parent), children2);
+    const children2 = inside.get(idOf2(parent)) ?? /* @__PURE__ */ new Map();
+    children2.set(idOf2(child), child);
+    inside.set(idOf2(parent), children2);
   };
   const walk3 = (node, enclosing) => {
     if (node.kind === "container") {
@@ -77154,7 +74011,7 @@ function buildDisclosureNest(config2) {
     }
     for (const child of triggeredBy(node)) {
       known(child);
-      hung.set(idOf3(child), child);
+      hung.set(idOf2(child), child);
       for (const parent of enclosing) note(parent, child);
     }
     if (node.opens !== void 0) {
@@ -77175,11 +74032,11 @@ function buildDisclosureNest(config2) {
   }
   const closures = /* @__PURE__ */ new Map();
   const closure = (parent) => {
-    const memo = closures.get(idOf3(parent));
+    const memo = closures.get(idOf2(parent));
     if (memo !== void 0) return memo;
     const found2 = /* @__PURE__ */ new Map();
     const visit = (d) => {
-      for (const [id2, child] of inside.get(idOf3(d)) ?? []) {
+      for (const [id2, child] of inside.get(idOf2(d)) ?? []) {
         if (found2.has(id2)) continue;
         found2.set(id2, child);
         visit(child);
@@ -77194,7 +74051,7 @@ function buildDisclosureNest(config2) {
       key,
       outside: new Set([...members.get(key)].filter((m) => !held.has(m)))
     }));
-    closures.set(idOf3(parent), keys2);
+    closures.set(idOf2(parent), keys2);
     return keys2;
   };
   return {
@@ -77990,6 +74847,13 @@ var SessionState = class {
   }
 };
 
+// src/renderer-interface/history-storage.ts
+init_globals();
+var SETTING_SESSION_KEYS = new Set(
+  SETTING_PROJECTIONS.map((s) => s.sessionKey)
+);
+var isSettingKey = (key) => SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
+
 // src/renderer/settings-history.ts
 var EPHEMERAL_HISTORY_STORAGE = {
   load: () => /* @__PURE__ */ new Map(),
@@ -77997,8 +74861,8 @@ var EPHEMERAL_HISTORY_STORAGE = {
   }
 };
 var MAX_STEPS = 50;
-var MAX_SESSIONS5 = 32;
-var MAX_BYTES2 = 8 * 1024 * 1024;
+var MAX_SESSIONS4 = 32;
+var MAX_BYTES = 8 * 1024 * 1024;
 var EMPTY3 = { past: [], future: [] };
 var identity = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
 var SettingsHistory = class {
@@ -78233,7 +75097,7 @@ var SettingsHistory = class {
     if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
       next.set(sessionId2, history);
     }
-    while (next.size > MAX_SESSIONS5 || weight(next) > MAX_BYTES2) {
+    while (next.size > MAX_SESSIONS4 || weight(next) > MAX_BYTES) {
       const [oldest, h] = next.entries().next().value;
       if (next.size > 1) next.delete(oldest);
       else if (h.past.length + h.future.length > 0) {
@@ -78241,7 +75105,7 @@ var SettingsHistory = class {
       } else {
         this.logger(
           "warn",
-          `settings-history: edit mode's changes for session ${oldest} exceed ${MAX_BYTES2} bytes; cancel is no longer available`
+          `settings-history: edit mode's changes for session ${oldest} exceed ${MAX_BYTES} bytes; cancel is no longer available`
         );
         next.delete(oldest);
       }
@@ -78358,6 +75222,62 @@ function describeStep(step4) {
 function describe3(change) {
   return change.kind === "session" ? `session setting "${change.key}"` : change.file;
 }
+
+// src/daemon/foundations/session-env.ts
+init_globals();
+var SESSION_FACT_VARIABLES = [
+  "CLAUDE_CODE_SESSION_ID",
+  "CLAUDE_PROJECT_DIR",
+  "CLAUDE_CONFIG_DIR",
+  "TMUX",
+  "TMUX_PANE"
+];
+function sessionEnv(facts) {
+  return {
+    ...Object.fromEntries(SESSION_FACT_VARIABLES.map((name) => [name, null])),
+    CLAUDE_CODE_SESSION_ID: facts.sessionId,
+    CLAUDE_PROJECT_DIR: facts.projectDir,
+    ...facts.claudeConfigDir !== void 0 && {
+      CLAUDE_CONFIG_DIR: facts.claudeConfigDir
+    }
+  };
+}
+
+// src/doctor/mark-book.ts
+init_globals();
+var isRecord2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function parseMarkBook(doc) {
+  const fault = (reason) => ({
+    kind: "failed",
+    reason
+  });
+  if (!isRecord2(doc)) return fault("is not an object");
+  for (const [check, sightings] of Object.entries(doc)) {
+    if (!isRecord2(sightings)) {
+      return fault(
+        `holds ${JSON.stringify(check)} as something other than its sightings`
+      );
+    }
+    for (const [id2, mark] of Object.entries(sightings)) {
+      if (!GLYPH_MARKS.includes(mark)) {
+        return fault(
+          `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
+        );
+      }
+    }
+  }
+  return { kind: "ok", value: doc };
+}
+function withMark(book, check, sighting, mark) {
+  return { ...book, [check]: { ...book[check], [sighting]: mark } };
+}
+var fileMarkBook = (dir) => stateFile(dir, "doctor-marks.json", {}, parseMarkBook);
+
+// src/doctor/clicked-terminals.ts
+init_globals();
+var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typeof t2 === "string") ? { kind: "ok", value: doc } : { kind: "failed", reason: "is not a list of terminals" };
+var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
+var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
 
 // src/doctor/sightings.ts
 init_globals();
@@ -79386,13 +76306,12 @@ async function foldEffects(rawValue, ctx, gathered) {
     try {
       await perform(leaf, value, ctx, i === 0 ? gathered : void 0);
     } catch (e) {
-      const { kind } = failureOf(e);
-      if (kind === "closing") {
+      if (e instanceof DaemonClosing) {
         if (errors2.length > 0)
           ctx.log("warn", `dispatch: ${errors2.join("; ")}`);
         throw e;
       }
-      if (kind !== "bad-request") operational = true;
+      if (!(e instanceof BadVerbArgs)) operational = true;
       errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
@@ -79644,13 +76563,13 @@ init_globals();
 // src/utils/plain.ts
 init_globals();
 function digestOf2(value) {
-  return createHash("sha256").update(JSON.stringify(canonical2(value))).digest("hex");
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 }
-function canonical2(value) {
-  if (Array.isArray(value)) return value.map(canonical2);
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
   if (typeof value === "object" && value !== null) {
     return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical2(v)])
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
     );
   }
   return value;
@@ -80523,17 +77442,17 @@ function wrapOffsets(plain, line, indent2) {
 }
 function takenOnLine(before, options) {
   if (before.length === 0) return 0;
-  const { lines: lines3 } = drawStripCells(
+  const { lines: lines2 } = drawStripCells(
     before.map(({ owner }) => owner),
     options
   );
-  const last2 = cellLen(plainOf2(lines3[lines3.length - 1]));
+  const last2 = cellLen(plainOf2(lines2[lines2.length - 1]));
   return Math.max(0, last2 - stripChromeCols(options) + stripSeamCols(options));
 }
 function fits(cell3, line, options) {
   if (cell3.cellLength <= line) return true;
-  const { lines: lines3 } = drawStripCells([cell3], { ...options, width: Infinity });
-  return cellLen(plainOf2(lines3.flat())) <= options.width;
+  const { lines: lines2 } = drawStripCells([cell3], { ...options, width: Infinity });
+  return cellLen(plainOf2(lines2.flat())) <= options.width;
 }
 function dividedToLine(item, line, before, options) {
   if (fits(item.owner, line, options)) return [item];
@@ -81658,10 +78577,10 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   const bold = new Style({ bold: true });
   const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
   const where = pageSections.length === 1 ? [new RichText(`${pageSections[0].label}${position}`, { style: bold })] : [];
-  const lines3 = [assemble([...nav, ...where, ...next])];
+  const lines2 = [assemble([...nav, ...where, ...next])];
   for (const section of pageSections) {
     if (pageSections.length > 1) {
-      lines3.push(assemble([new RichText(section.label, { style: bold })]));
+      lines2.push(assemble([new RichText(section.label, { style: bold })]));
     }
     const nameWidth = Math.max(
       ...section.indices.map((i) => cellWidth2(labelOf(apply.options[i])))
@@ -81672,12 +78591,12 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
       const description = authored === void 0 ? void 0 : sanitizeText(authored);
       const gap = " ".repeat(nameWidth - cellWidth2(name) + 2);
       const row2 = description === void 0 ? name : `${name}${gap}${description}`;
-      lines3.push(
+      lines2.push(
         assemble([optionCell(optionFace(i, fitCells(row2, available)), i)])
       );
     }
   }
-  return lines3;
+  return lines2;
 }
 function pickerFuncs(runtime, activeSegment) {
   return {
@@ -82064,7 +78983,7 @@ function labelBudget(rows, available) {
     (row2) => row2.map(({ name }) => cellWidth2(blockLabel(name)))
   );
   const fits2 = (most2) => widths.every(
-    (row2) => row2.reduce((sum, w) => sum + Math.min(w, most2) + 2, 0) <= available
+    (row2) => row2.reduce((sum2, w) => sum2 + Math.min(w, most2) + 2, 0) <= available
   );
   let most = Math.max(1, ...widths.flat());
   while (most > 1 && !fits2(most)) most -= 1;
@@ -82072,7 +78991,7 @@ function labelBudget(rows, available) {
 }
 function renderLayoutPreview(rows, decor, drawnAt, available) {
   const most = labelBudget(rows, available);
-  const lines3 = rows.map((row2) => {
+  const lines2 = rows.map((row2) => {
     const blocks = [];
     let width = 0;
     for (const { name, address, palette } of row2) {
@@ -82088,7 +79007,7 @@ function renderLayoutPreview(rows, decor, drawnAt, available) {
     return blocks;
   });
   const preview = RichText.fromFragments(
-    lines3.flatMap(
+    lines2.flatMap(
       (blocks, i) => i === 0 ? blocks : [new RichText("\n"), ...blocks]
     )
   );
@@ -82406,7 +79325,7 @@ init_globals();
 // src/render/split-lines.ts
 init_globals();
 function splitCellsIntoLines(cells) {
-  const lines3 = [];
+  const lines2 = [];
   let current2 = [];
   for (const cell3 of cells) {
     if (!cell3.contains("\n")) {
@@ -82416,18 +79335,18 @@ function splitCellsIntoLines(cells) {
     const pieces = cell3.split("\n");
     current2.push(pieces[0]);
     for (let i = 1; i < pieces.length; i++) {
-      lines3.push(current2);
+      lines2.push(current2);
       current2 = [pieces[i]];
     }
   }
-  lines3.push(current2);
-  return lines3;
+  lines2.push(current2);
+  return lines2;
 }
 
 // src/dsl/node-registry.ts
-function rowIdentities(lines3) {
+function rowIdentities(lines2) {
   const counts = /* @__PURE__ */ new Map();
-  return lines3.map((line) => {
+  return lines2.map((line) => {
     const kind = `${line.place}.${line.band}`;
     const nth = counts.get(kind) ?? 0;
     counts.set(kind, nth + 1);
@@ -82438,11 +79357,11 @@ var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
 function within3(parent, own2) {
   return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
 }
-function returnedBy(id2, lines3) {
+function returnedBy(id2, lines2) {
   const own2 = [];
   const deeper = [];
   let ground;
-  for (const line of lines3) {
+  for (const line of lines2) {
     (line.band === "own" ? own2 : deeper).push(line);
     ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
   }
@@ -82477,7 +79396,7 @@ function composeFlow(direction, blocks) {
   }
 }
 function layoutRows(node, shown) {
-  const lines3 = (n, address) => {
+  const lines2 = (n, address) => {
     if (!shown(n)) return [];
     if (n.kind === "segment") {
       return [
@@ -82491,11 +79410,11 @@ function layoutRows(node, shown) {
     return composeBlocks(
       n.direction,
       n.children.map(
-        (child, index) => lines3(child, [...address, childStep(n, index)])
+        (child, index) => lines2(child, [...address, childStep(n, index)])
       )
     );
   };
-  return lines3(node, []).map((line) => [...line.cells]);
+  return lines2(node, []).map((line) => [...line.cells]);
 }
 function childStep(node, index) {
   return node.steps[index];
@@ -82520,7 +79439,7 @@ function laidOut(node) {
     return { start: at, span, ownLine: ownLine(i) };
   });
 }
-var widthOf2 = (laid) => laid.reduce((sum, { span, ownLine }) => sum + (ownLine ? 0 : span.width), 0);
+var widthOf2 = (laid) => laid.reduce((sum2, { span, ownLine }) => sum2 + (ownLine ? 0 : span.width), 0);
 var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
 function placeChildren(node, at) {
   const laid = laidOut(node);
@@ -82863,13 +79782,13 @@ var FrameMemory = class {
     const placements = /* @__PURE__ */ new Map();
     const rules = /* @__PURE__ */ new Map();
     return {
-      placed: (id2, lines3) => {
-        const { drawing: drawing2 } = returned2(id2, lines3);
+      placed: (id2, lines2) => {
+        const { drawing: drawing2 } = returned2(id2, lines2);
         placements.set(
           id2,
           drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
         );
-        return lines3;
+        return lines2;
       },
       rule: (slot, name) => rules.set(slot, name),
       commit: () => {
@@ -84051,7 +80970,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         // [LAW:one-source-of-truth] The row ✕ names the session every other
         // affordance's URL does.
         closeDisclosure: (key) => disclosureCloseFragment(registry.session(), key),
-        placed: (id2, lines3) => record2.placed(id2, motion.placed(id2, lines3)),
+        placed: (id2, lines2) => record2.placed(id2, motion.placed(id2, lines2)),
         lastDrawn: (id2) => last2?.placements.get(id2),
         waited: (variable) => waited.add(variable),
         decorations: (node2, palette2) => decoratedStyles(
@@ -84104,14 +81023,14 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       frame: {
         depth: drawOpts.colorCompatibility,
         rows: rendered.flatMap(
-          ({ kind, lines: lines3 }) => lines3.map((runs) => ({ kind, runs }))
+          ({ kind, lines: lines2 }) => lines2.map((runs) => ({ kind, runs }))
         ),
         nextChange,
         motion: frameMotion,
         pending: [...waited].sort()
       },
       evaluated: parts.evaluated - evaluatedBefore,
-      cellBreaks: rendered.reduce((sum, row2) => sum + row2.cellBreaks, 0),
+      cellBreaks: rendered.reduce((sum2, row2) => sum2 + row2.cellBreaks, 0),
       rules
     };
   } catch (_) {
@@ -84123,7 +81042,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
 
 // src/renderer/render-payload.ts
 init_globals();
-var import_node_path46 = __toESM(require_path_browserify(), 1);
+var import_node_path38 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
@@ -84545,7 +81464,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path46.default.sep !== "\\") return s;
+  if (import_node_path38.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(info, pullRequest, pending2) {
@@ -84890,10 +81809,14 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
   const { daemon: daemon3 } = document;
   const launched = launcherWarningsAt(daemon3.launcher, at, drawing2.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
-  const pipeShown = pipeWarning?.event ?? null;
+  const ended = rendererEndedAt(daemon3.rendererEnded, at, drawing2.by);
+  const eventsShown = [pipeWarning?.event, ended?.event].flatMap(
+    (e) => e === void 0 ? [] : [e]
+  );
   const standing2 = [
     ...daemon3.fileEvents,
     ...launched,
+    ...ended === void 0 ? [] : [ended],
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
@@ -85034,6 +81957,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
       case "config-watch":
       case "lifeline":
       case "launch-pipes":
+      case "renderer-ended":
       case "when":
         return w.kind;
     }
@@ -85090,10 +82014,14 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     evaluated: evaluated2,
     cellBreaks,
     clickShown,
-    pipeShown,
+    eventsShown,
     delivered,
     lanes
   };
+}
+var RENDERER_ENDED_HOLD_S = 60;
+function rendererEndedAt(event, at, render3) {
+  return event === null || eventHoldAt(event, RENDERER_ENDED_HOLD_S, at, render3) === "over" ? void 0 : { kind: "renderer-ended", message: event.text, event };
 }
 function recordRequest(parts, req) {
   const { sessionState } = parts;
@@ -85197,7 +82125,7 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
       refreshed: refreshedFact(refreshed)
     });
     const sessionId2 = req.hookData.session_id;
-    const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
+    const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
       parts,
       setup,
       ANSWERING,
@@ -85218,7 +82146,7 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
         sessionId2,
         delivered,
         clickShown,
-        pipeShown
+        eventsShown
       )
     };
   } catch (_) {
@@ -85227,12 +82155,12 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function answerDelivered(parts, sessionId2, copied, clickShown, pipeShown) {
+function answerDelivered(parts, sessionId2, copied, clickShown, eventsShown) {
   return () => {
     copied();
     if (clickShown !== null)
       answeredClickError(parts.sessionState, sessionId2, clickShown);
-    if (pipeShown !== null) parts.pipeEventAnswered(pipeShown);
+    for (const event of eventsShown) parts.eventAnswered(event);
   };
 }
 function statuslineOf(sessionId2, drawn, elsewhere) {
@@ -85289,7 +82217,7 @@ function verbsOver(ctx, clicks) {
 // src/renderer/navigation-history.ts
 init_globals();
 var MAX_STEPS2 = 20;
-var MAX_SESSIONS6 = 32;
+var MAX_SESSIONS5 = 32;
 var isNavigationKey = (key) => !isSettingKey(key) && !isConfirmKey(key) && key !== UPDATE_DISMISSED_KEY && key !== DIAGNOSTICS_VIEWING;
 var NavigationHistory = class {
   // Observable, so a view's payload over a session's depth (`◁`) is
@@ -85389,7 +82317,7 @@ var NavigationHistory = class {
     runInAction(() => {
       this.past.delete(sessionId2);
       if (steps2.length > 0) this.past.set(sessionId2, steps2);
-      while (this.past.size > MAX_SESSIONS6) {
+      while (this.past.size > MAX_SESSIONS5) {
         this.past.delete(this.past.keys().next().value);
       }
     });
@@ -85402,7 +82330,7 @@ var MAX_RECORDS = 512;
 var RENDERERS2 = ["request", "feed"];
 var generations = /* @__PURE__ */ new WeakMap();
 var nextGeneration = 0;
-var generationOf2 = (config2) => {
+var generationOf = (config2) => {
   const held = generations.get(config2);
   if (held !== void 0) return held;
   const minted = nextGeneration++;
@@ -85423,7 +82351,7 @@ var RenderWarningRecords = class {
   // every other renderer's drawn from the same config, each warning once
   // across renderers (a warning two renderers met is one fact).
   ofSession(sessionId2, by, scope) {
-    const generation = generationOf2(scope.config);
+    const generation = generationOf(scope.config);
     const listed = [];
     for (const renderer of RENDERERS2) {
       const held = this.records.get(keyOf(sessionId2, renderer));
@@ -85444,7 +82372,7 @@ var RenderWarningRecords = class {
     const key = keyOf(sessionId2, by);
     this.records.delete(key);
     this.records.set(key, {
-      generation: generationOf2(scope.config),
+      generation: generationOf(scope.config),
       warnings
     });
     for (const oldest of this.records.keys()) {
@@ -85458,19 +82386,18 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 
 // src/renderer/world-states.ts
 init_globals();
-var later = (held, next) => next.kind === "pending" ? held ?? next : held === null || held.kind === "pending" || next.at >= held.at ? next : held;
 var WorldStates = class {
+  // [LAW:single-enforcer] Told every document taken: each one carries the
+  // daemon-wide facts, which the update gate follows.
+  constructor(took) {
+    this.took = took;
+  }
+  took;
   // [LAW:one-source-of-truth] One document per session, the newest handed in.
   documents = observable.map(
     void 0,
     { deep: false }
   );
-  // [LAW:one-source-of-truth] The update the newest document handed in says:
-  // the daemon's facts are one value every session's document carries, so the
-  // newest one is current for all of them. Null before the first.
-  update = observable.box(null, {
-    deep: false
-  });
   // [LAW:no-ambient-temporal-coupling] The host hands each session's documents
   // in `seq` order, from its collector alone; a document older than the one
   // held breaks that order, and an equal `seq` that is not the held document is
@@ -85486,10 +82413,8 @@ var WorldStates = class {
         `world state seq ${document.seq} for session ${JSON.stringify(document.session)} does not follow the held seq ${held.seq}`
       );
     }
-    runInAction(() => {
-      this.documents.set(document.session, document);
-      this.update.set(later(this.update.get(), document.daemon.update.newer));
-    });
+    runInAction(() => this.documents.set(document.session, document));
+    this.took(document);
   }
   // [LAW:no-defensive-null-guards] The host delivers a session's `config`,
   // which carries its document, ahead of each of its requests, and a `retire`
@@ -85503,27 +82428,48 @@ var WorldStates = class {
       );
     return document;
   }
-  newestUpdate() {
-    return this.update.get();
-  }
   drop(session) {
     runInAction(() => this.documents.delete(session));
+  }
+};
+
+// src/renderer/update-gate.ts
+init_globals();
+var UpdateGate = class {
+  constructor(gates) {
+    this.gates = gates;
+  }
+  gates;
+  newest = null;
+  gate = null;
+  took(fact) {
+    if (fact.kind === "pending") return;
+    if (this.newest !== null && fact.at <= this.newest) return;
+    this.newest = fact.at;
+    const identity2 = fact.kind === "ok" ? updateIdentity(fact.value) : null;
+    if ((this.gate?.identity ?? null) === identity2) return;
+    this.gate?.dispose();
+    this.gate = identity2 === null ? null : {
+      identity: identity2,
+      dispose: this.gates.state.register(UPDATE_DISMISSED_KEY, [
+        identity2
+      ])
+    };
   }
 };
 
 // src/renderer/watches.ts
 init_globals();
 var Watches = class {
-  constructor(host, generation) {
+  constructor(host) {
     this.host = host;
-    this.mint = minter(generation);
   }
   host;
+  minted = 0;
   held = /* @__PURE__ */ new Map();
-  mint;
   // A watch of `targets` under `key`, whose every window `heard` hears.
   acquire(key, targets, heard) {
-    const id2 = this.mint();
+    const id2 = ++this.minted;
     const watch2 = { deaf: [], heard };
     this.held.set(id2, watch2);
     this.host.watch(id2, key, targets);
@@ -85615,7 +82561,7 @@ function sessionSource(deps) {
 
 // src/renderer/render-cache.ts
 init_globals();
-var import_node_path47 = __toESM(require_path_browserify(), 1);
+var import_node_path39 = __toESM(require_path_browserify(), 1);
 
 // src/config/unused.ts
 init_globals();
@@ -85722,7 +82668,7 @@ function unusedDeclarations(raw, config2, inserted) {
 var ENTRY_BYTES = 3 * 1024 * 1024;
 var COMPILE_BYTES = 10 * 1024 * 1024;
 var VIEW_BYTES = 2.5 * 1024 * 1024;
-var RENDER_CACHE_RESERVE_BYTES = 64 * 1024 * 1024;
+var RENDER_CACHE_RESERVE_BYTES = 96 * 1024 * 1024;
 function renderCacheBudget(memoryLimitBytes2) {
   return Math.floor(
     Math.max(
@@ -85797,7 +82743,7 @@ function watchTargetsFor(entry, locs) {
   const roots = [
     .../* @__PURE__ */ new Set([
       ...entry.state.plugins.roots,
-      import_node_path47.default.join(entry.projectDir, REPO_PLUGIN_DIR)
+      import_node_path39.default.join(entry.projectDir, REPO_PLUGIN_DIR)
     ])
   ];
   return watchTargetsOf({
@@ -86151,8 +83097,8 @@ var RenderCache = class {
   walk = null;
   // Every state the map serves or served, until reclaimed.
   holds = /* @__PURE__ */ new Map();
-  // What names each served state's storage hold.
-  mintHold;
+  // The last storage hold id minted.
+  storageHolds = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   views = /* @__PURE__ */ new Map();
@@ -86192,7 +83138,6 @@ var RenderCache = class {
       compile: (key, input) => this.compileOf(key, input)
     };
     this.log = deps.log ?? quietLogger;
-    this.mintHold = minter(deps.generation);
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES3;
     this.observers = opts.observers ?? {};
@@ -86567,7 +83512,7 @@ var RenderCache = class {
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`
       );
     this.holds.set(state, {
-      id: this.mintHold(),
+      id: ++this.storageHolds,
       holders: 0,
       retired: null
     });
@@ -86970,25 +83915,13 @@ function serializeSegmentCells(cells, colorCompatibility) {
   return out;
 }
 
-// src/renderer/dismiss-gate.ts
+// src/renderer-interface/interface.ts
 init_globals();
-function followDismissGate(gates, worldStates) {
-  let dispose = null;
-  const stop2 = reaction(
-    () => {
-      const newer = worldStates.newestUpdate();
-      return newer?.kind === "ok" ? updateIdentity(newer.value) : null;
-    },
-    (identity2) => {
-      dispose?.();
-      dispose = identity2 === null ? null : gates.state.register(UPDATE_DISMISSED_KEY, [identity2]);
-    },
-    { equals: compareStructural, fireImmediately: true }
-  );
-  return () => {
-    stop2();
-    dispose?.();
-  };
+function rendererOf(arms) {
+  function answer2(input) {
+    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
+  }
+  return { answer: answer2 };
 }
 
 // src/renderer/journal-turns.ts
@@ -87104,9 +84037,9 @@ var JournalTurns = class {
 };
 
 // src/renderer/main.ts
-function mainRenderer(parts, generation, pushed, started2) {
+function mainRenderer(parts, pushed) {
   const deliveries = /* @__PURE__ */ new Map();
-  const mintEffect = minter(generation);
+  let minted = 0;
   const turn = async (event, at, record2) => {
     switch (event.kind) {
       case "config":
@@ -87126,7 +84059,7 @@ function mainRenderer(parts, generation, pushed, started2) {
           },
           record2
         );
-        const id2 = mintEffect();
+        const id2 = ++minted;
         deliveries.set(id2, delivered);
         return [
           {
@@ -87166,61 +84099,7 @@ function mainRenderer(parts, generation, pushed, started2) {
         return [];
     }
   };
-  const ended = async (turned, record2) => {
-    const outcome = await turned.then(
-      (effects) => ({ kind: "answered", effects }),
-      // [LAW:single-enforcer] Classified here, where it was thrown: a
-      // class crosses no process.
-      (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
-    );
-    return {
-      ...outcome,
-      record: record2,
-      subscriptions: parts.renderCache.subscriptions()
-    };
-  };
   return rendererOf({
-    // [LAW:one-source-of-truth] A start opens every session it carries as
-    // that session's `config` does, so its output names every session's
-    // sources, and the host's set, whole, releases none.
-    start: async (input) => {
-      const record2 = [];
-      const { cause, sessions } = input.start;
-      return ended(
-        (async () => {
-          const failed3 = [];
-          const step4 = (session, what, run3) => {
-            try {
-              run3();
-            } catch (thrown2) {
-              failed3.push(
-                `${session.worldState.session} ${what}: ${failureOf(thrown2).detail}`
-              );
-            }
-          };
-          for (const session of sessions) {
-            step4(
-              session,
-              "open",
-              () => configureSession(
-                parts,
-                session.context,
-                session.worldState,
-                input.at,
-                record2
-              )
-            );
-            step4(session, "start", () => started2(session, cause, input.at));
-          }
-          if (failed3.length > 0)
-            throw new Error(
-              `the start of ${sessions.length} sessions failed ${failed3.length} steps; ${failed3.join("; ")}`
-            );
-          return [];
-        })(),
-        record2
-      );
-    },
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
     adapter: async (input) => {
@@ -87232,7 +84111,19 @@ function mainRenderer(parts, generation, pushed, started2) {
     },
     event: async (input) => {
       const record2 = [];
-      return ended(turn(input.event, input.at, record2), record2);
+      const from = parts.clock.monotonic();
+      const ended = await turn(input.event, input.at, record2).then(
+        (effects) => ({ kind: "answered", effects }),
+        // [LAW:single-enforcer] Classified here, where it was thrown: a
+        // class crosses no process.
+        (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
+      );
+      return {
+        ...ended,
+        record: record2,
+        subscriptions: parts.renderCache.subscriptions(),
+        turnMs: elapsedMs(parts.clock, from)
+      };
     }
   });
 }
@@ -87259,9 +84150,11 @@ function startOver(inputs, sessionState, history, host) {
   const navigationHistory = new NavigationHistory();
   const effectSessions = new EffectSessions();
   const renderWarnings = new RenderWarningRecords();
-  const worldStates = new WorldStates();
-  const stopDismissGate = followDismissGate(gates, worldStates);
-  const watches = new Watches(host.watches, inputs.generation);
+  const updateGate = new UpdateGate(gates);
+  const worldStates = new WorldStates(
+    (document) => updateGate.took(document.daemon.update.newer)
+  );
+  const watches = new Watches(host.watches);
   const renderCache = new RenderCache(
     {
       clock,
@@ -87272,7 +84165,6 @@ function startOver(inputs, sessionState, history, host) {
       watchers: watches,
       log,
       storage: host.storage,
-      generation: inputs.generation,
       signer: linkSigner2,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
@@ -87468,7 +84360,6 @@ function startOver(inputs, sessionState, history, host) {
         journalTurns.close();
         return { kind: "close-journal" };
       case "close-views":
-        stopDismissGate();
         renderCache.close();
         return { kind: "close-views" };
       case "close-session-state":
@@ -87476,22 +84367,9 @@ function startOver(inputs, sessionState, history, host) {
         return { kind: "close-session-state" };
     }
   };
-  const started2 = ({ worldState, pinned }, cause, at) => {
-    const sessionId2 = worldState.session;
-    if (pinned) pin(sessionId2);
-    if (cause.kind === "crashed")
-      holdClickError(
-        sessionState,
-        sessionId2,
-        `the renderer restarted: its process ${cause.ended}; open menus and armed confirms were lost`,
-        at
-      );
-  };
   return mainRenderer(
     { ...parts, verbs: verbsOver(verbCtx, host.clicks) },
-    inputs.generation,
-    pushed,
-    started2
+    pushed
   );
 }
 function debugOf(view, what) {
@@ -87510,120 +84388,3197 @@ function debugOf(view, what) {
   );
 }
 
-// src/daemon/renderer-links.ts
-var endedOf = (result) => result.ok ? `exited with code ${result.exitCode}` : whyFailed(result);
-var END_GRACE_MS = 100;
-var ownFlag = (flag) => !flag.startsWith("--max-old-space-size") && !flag.startsWith("--inspect");
-function processRenderers(paths2) {
-  return (own2) => (host, generation) => {
-    const boot = {
-      generation,
-      stateDir: paths2.state,
-      sessionState: paths2.sessionState,
-      settingsHistory: paths2.settingsHistory,
-      memoryLimitBytes: own2.memoryLimitBytes,
-      bundle: own2.bundle.path,
-      digest: own2.bundle.digest
-    };
-    const [bin, ...flags] = own2.bundle.node;
-    const signal = new AbortController();
-    let heard = () => {
-    };
-    const channel = own2.launcher.launchChannel(
-      {
-        bin,
-        args: [
-          ...flags.filter(ownFlag),
-          `--max-old-space-size=${heapCapOf(own2.memoryLimitBytes)}`,
-          own2.bundle.entry,
-          "renderer",
-          JSON.stringify(boot)
-        ],
-        category: "renderer",
-        signal: signal.signal
-      },
-      {
-        stdout: (line) => {
-          try {
-            heard(line);
-          } catch (thrown2) {
-            own2.log("error", `renderer line refused: ${String(thrown2)}`);
-            channel.close();
-          }
-        },
-        // [LAW:no-silent-failure] What it says before it reaches the host's
-        // log, or past it (node's own warnings, a crash's trace), is logged
-        // as it is said.
-        stderr: (line) => own2.log("warn", `renderer stderr: ${line}`)
+// src/renderer-interface/wire.ts
+init_globals();
+function bootEnv(env2) {
+  return Object.fromEntries(
+    Object.entries(env2).flatMap(
+      ([name, value]) => value === void 0 ? [] : [[name, value]]
+    )
+  );
+}
+var REACH_KINDS = {
+  wake: "notice",
+  log: "notice",
+  launch: "call",
+  typeSlash: "call",
+  applyUpdate: "call",
+  runs: { start: "notice", refused: "notice" },
+  refresh: "call",
+  doctor: {
+    probeTmux: "call",
+    remoteLogin: "call",
+    fontInUse: "call",
+    daemons: "call",
+    forge: "call",
+    transcript: "call",
+    install: "call"
+  },
+  laneSetups: { noted: "notice", clicked: "notice" },
+  tmuxStatusLines: { observe: "notice" },
+  menuIdle: {
+    clicked: "notice",
+    clickArrived: "notice",
+    clickSettled: "notice",
+    observe: "notice",
+    confirmClose: "call"
+  },
+  clicks: { gone: "call" },
+  serving: "call",
+  renderSightings: { ofSession: "call" },
+  probes: { arrive: "notice" },
+  eventAnswered: "notice",
+  watches: { watch: "notice", unwatch: "notice" },
+  storage: { hold: "notice", release: "notice" }
+};
+function reachesOf(table, prefix = "") {
+  return Object.entries(table).flatMap(
+    ([key, value]) => typeof value === "string" ? [[`${prefix}${key}`, value]] : reachesOf(value, `${prefix}${key}.`)
+  );
+}
+var REACHES = reachesOf(REACH_KINDS);
+
+// src/doctor/edge.ts
+init_globals();
+init_os();
+var import_node_path41 = __toESM(require_path_browserify(), 1);
+
+// src/proc/process-table.ts
+init_globals();
+function processTable(ps2) {
+  const procs = /* @__PURE__ */ new Map();
+  for (const line of ps2.split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+    if (m === null) continue;
+    const pid2 = Number(m[1]);
+    procs.set(pid2, { pid: pid2, ppid: Number(m[2]), command: m[3].trim() });
+  }
+  return procs;
+}
+function* lineage(procs, pid2) {
+  const seen2 = /* @__PURE__ */ new Set();
+  for (let p2 = procs.get(pid2); p2 !== void 0 && !seen2.has(p2.pid); ) {
+    seen2.add(p2.pid);
+    yield p2;
+    p2 = procs.get(p2.ppid);
+  }
+}
+
+// src/doctor/font-edge.ts
+init_globals();
+var import_node_path40 = __toESM(require_path_browserify(), 1);
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
+init_globals();
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/parse.js
+init_globals();
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/struct.js
+init_globals();
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/primitive.js
+init_globals();
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/error.js
+init_globals();
+function getLineColFromPtr(string, ptr) {
+  let lines2 = string.slice(0, ptr).split(/\r?\n/);
+  return [lines2.length, lines2.pop().length + 1];
+}
+function makeCodeBlock(string, line, column) {
+  let lines2 = string.split(/\r?\n/);
+  let codeblock = "";
+  let numberLen = (Math.log10(line + 1) | 0) + 1;
+  for (let i = line - 1; i <= line + 1; i++) {
+    let l = lines2[i - 1];
+    if (!l)
+      continue;
+    codeblock += i.toString().padEnd(numberLen, " ");
+    codeblock += ":  ";
+    codeblock += l;
+    codeblock += "\n";
+    if (i === line) {
+      codeblock += " ".repeat(numberLen + column + 2);
+      codeblock += "^\n";
+    }
+  }
+  return codeblock;
+}
+var TomlError = class _TomlError extends Error {
+  line;
+  column;
+  codeblock;
+  constructor(message, options) {
+    const [line, column] = getLineColFromPtr(options.toml, options.ptr);
+    const codeblock = makeCodeBlock(options.toml, line, column);
+    super(`Invalid TOML document: ${message}
+
+${codeblock}`, options);
+    this.line = line;
+    this.column = column;
+    this.codeblock = codeblock;
+  }
+  /** @internal */
+  static x(message, ctx, ptr) {
+    throw new _TomlError(message, { toml: ctx.s, ptr: ptr ?? ctx.p });
+  }
+};
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/primitive.js
+function parseString(ctx) {
+  let startPtr = ctx.p;
+  let c = ctx.s.charCodeAt(ctx.p++);
+  let first2 = c;
+  let isLiteral = c === 39;
+  let isMultiline = c === ctx.s.charCodeAt(ctx.p) && c === ctx.s.charCodeAt(ctx.p + 1);
+  if (isMultiline) {
+    if ((c = ctx.s.charCodeAt(ctx.p += 2)) === 10)
+      ctx.p++;
+    else if (c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)
+      ctx.p += 2;
+  }
+  let parsed2 = "";
+  let sliceStart = ctx.p;
+  let state = 0;
+  for (; ctx.p < ctx.s.length; ctx.p++) {
+    c = ctx.s.charCodeAt(ctx.p);
+    if (isMultiline && (c === 10 || c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)) {
+      state = state && 3;
+    } else if (c < 32 && c !== 9 || c === 127) {
+      TomlError.x("control characters are not allowed in strings", ctx);
+    } else if ((!state || state === 3) && c === first2 && (!isMultiline || ctx.s.charCodeAt(ctx.p + 1) === first2 && ctx.s.charCodeAt(ctx.p + 2) === first2)) {
+      if (isMultiline) {
+        if (ctx.s.charCodeAt(ctx.p + 3) === first2)
+          ctx.p++;
+        if (ctx.s.charCodeAt(ctx.p + 3) === first2)
+          ctx.p++;
       }
-    );
-    const wire = wireRenderer(
-      {
-        send: channel.send,
-        hear: (hear) => {
-          heard = hear;
-        }
-      },
-      host
-    );
-    const ended = channel.result.then((result) => {
-      const words2 = endedOf(result);
-      wire.fail(new Error(`the renderer's process ${words2}`));
-      return words2;
-    });
-    return {
-      answer: wire.answer,
-      ended,
-      alive: wire.ping,
-      end: async () => {
-        channel.close();
-        const cancel = own2.launcher.clock.after(
-          END_GRACE_MS,
-          () => signal.abort(
-            new Error(
-              `the renderer did not end ${END_GRACE_MS}ms after its stdin closed`
+      if (!state) {
+        let s = ctx.s.slice(sliceStart, ctx.p);
+        parsed2 = parsed2 ? parsed2 + s : s;
+      }
+      ctx.p += isMultiline ? 3 : 1;
+      return parsed2;
+    } else if (!state) {
+      if (!isLiteral && c === 92) {
+        parsed2 += ctx.s.slice(sliceStart, sliceStart = ctx.p);
+        state = 1;
+      }
+    } else if (state === 1) {
+      if (c === 120 || c === 117 || c === 85) {
+        let errPtr = ctx.p++ - 1;
+        let value = 0;
+        let len2 = c === 120 ? 2 : c === 117 ? 4 : 8;
+        for (let j = 0; j < len2; j++, ctx.p++) {
+          let hex3 = ctx.s.charCodeAt(ctx.p);
+          let digit = (
+            /* 0-9 */
+            hex3 >= 48 && hex3 <= 57 ? hex3 - 48 : (
+              /* A-F */
+              hex3 >= 65 && hex3 <= 70 ? hex3 - 65 + 10 : (
+                /* a-f */
+                hex3 >= 97 && hex3 <= 102 ? hex3 - 97 + 10 : -1
+              )
             )
-          )
-        );
-        await ended;
-        cancel();
+          );
+          if (digit < 0)
+            TomlError.x("invalid non-hex character in unicode escape", ctx);
+          value = value << 4 | digit;
+        }
+        if (value < 0 || value > 1114111 || value >= 55296 && value <= 57343) {
+          TomlError.x("invalid unicode escape", ctx, errPtr);
+        }
+        parsed2 += String.fromCodePoint(value);
+        sliceStart = ctx.p--;
+        state = 0;
+      } else if (isMultiline && (c === 32 || c === 9)) {
+        state = 2;
+      } else {
+        if (c === 98)
+          parsed2 += "\b";
+        else if (c === 116)
+          parsed2 += "	";
+        else if (c === 110)
+          parsed2 += "\n";
+        else if (c === 102)
+          parsed2 += "\f";
+        else if (c === 114)
+          parsed2 += "\r";
+        else if (c === 101)
+          parsed2 += "\x1B";
+        else if (c === 34)
+          parsed2 += '"';
+        else if (c === 92)
+          parsed2 += "\\";
+        else
+          TomlError.x("unrecognised escape sequence", ctx);
+        sliceStart = ctx.p + 1;
+        state = 0;
       }
+    } else if (c !== 32 && c !== 9) {
+      if (state === 2)
+        TomlError.x("invalid escape: only line-ending whitespace may be escaped", ctx, sliceStart);
+      state = !isLiteral && c === 92 ? 1 : 0;
+      sliceStart = ctx.p;
+    }
+  }
+  TomlError.x("unfinished string", ctx, startPtr);
+}
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/extract.js
+init_globals();
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/date.js
+init_globals();
+var DATE_TIME_RE = /^(\d{4}-\d{2}-\d{2})?[Tt ]?(?:(\d{2}):\d{2}(?::\d{2}(?:\.\d+)?)?)?(Z|z|[-+]\d{2}:\d{2})?$/i;
+var TomlDate = class _TomlDate extends Date {
+  #hasDate = false;
+  #hasTime = false;
+  #offset = null;
+  constructor(date2, fasttype, unsafeDelim) {
+    let hasDate = true;
+    let hasTime = true;
+    let offset = "Z";
+    let c;
+    if (typeof date2 === "string") {
+      if (fasttype)
+        prep: {
+          if (fasttype < 3) {
+            if (+date2.slice(11, 13) > 23) {
+              date2 = "";
+              break prep;
+            }
+            if (fasttype === 2) {
+              offset = null;
+              date2 += "Z";
+            } else if ((c = date2.charCodeAt(date2.length - 1)) !== 90 && c !== 122) {
+              offset = date2.slice(date2.length - 6);
+            }
+            if (unsafeDelim)
+              date2 = date2.slice(0, 10) + "T" + date2.slice(11);
+          } else if (fasttype === 4) {
+            date2 = +date2.slice(0, 2) > 23 ? "" : `0000-01-01T${date2}Z`;
+          }
+          hasDate = fasttype !== 4;
+          hasTime = fasttype !== 3;
+        }
+      else {
+        let match = date2.match(DATE_TIME_RE);
+        if (match) {
+          if (!match[1]) {
+            hasDate = false;
+            date2 = `0000-01-01T${date2}`;
+          }
+          hasTime = !!match[2];
+          hasTime && date2[10] === " " && (date2 = date2.replace(" ", "T"));
+          if (match[2] && +match[2] > 23) {
+            date2 = "";
+          } else {
+            offset = match[3] || null;
+            if (!offset && hasTime)
+              date2 += "Z";
+          }
+        } else {
+          date2 = "";
+        }
+      }
+    }
+    super(date2);
+    if (!isNaN(this.getTime())) {
+      this.#hasDate = hasDate;
+      this.#hasTime = hasTime;
+      this.#offset = offset;
+    }
+  }
+  isDateTime() {
+    return this.#hasDate && this.#hasTime;
+  }
+  isLocal() {
+    return !this.#hasDate || !this.#hasTime || !this.#offset;
+  }
+  isDate() {
+    return this.#hasDate && !this.#hasTime;
+  }
+  isTime() {
+    return this.#hasTime && !this.#hasDate;
+  }
+  isValid() {
+    return this.#hasDate || this.#hasTime;
+  }
+  toISOString() {
+    let iso2 = super.toISOString();
+    if (this.isDate())
+      return iso2.slice(0, 10);
+    if (this.isTime())
+      return iso2.slice(11, 23);
+    if (this.#offset === null)
+      return iso2.slice(0, -1);
+    if (this.#offset === "Z" || this.#offset === "z")
+      return iso2;
+    let offset = +this.#offset.slice(1, 3) * 60 + +this.#offset.slice(4, 6);
+    offset = this.#offset[0] === "-" ? offset : -offset;
+    let offsetDate = new Date(this.getTime() - offset * 6e4);
+    return offsetDate.toISOString().slice(0, -1) + this.#offset;
+  }
+  static wrapAsOffsetDateTime(jsDate, offset = "Z") {
+    let date2 = new _TomlDate(jsDate);
+    date2.#offset = offset;
+    return date2;
+  }
+  static wrapAsLocalDateTime(jsDate) {
+    let date2 = new _TomlDate(jsDate);
+    date2.#offset = null;
+    return date2;
+  }
+  static wrapAsLocalDate(jsDate) {
+    let date2 = new _TomlDate(jsDate);
+    date2.#hasTime = false;
+    date2.#offset = null;
+    return date2;
+  }
+  static wrapAsLocalTime(jsDate) {
+    let date2 = new _TomlDate(jsDate);
+    date2.#hasDate = false;
+    date2.#offset = null;
+    return date2;
+  }
+};
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/extract.js
+function isDigit2(char, base = 10) {
+  return base === 16 ? char > 47 && char < 58 || char > 64 && char < 71 || char > 96 && char < 103 : char > 47 && char < 48 + base;
+}
+function isEndOfValue(char, delim) {
+  return char === 32 || char === 9 || char === 10 || char === 13 || // Structure end or next value delimiter
+  delim && (char === delim || char === 44) || // Comment
+  char === 35;
+}
+function extractValue(ctx, end) {
+  let errPtr = ctx.p;
+  let c = ctx.s.charCodeAt(ctx.p);
+  if (c === 91 || c === 123) {
+    ctx.d-- || TomlError.x("document contains excessively nested structures. aborting.", ctx);
+    let value = c === 91 ? parseArray(ctx) : parseInlineTable(ctx);
+    ctx.d++;
+    return value;
+  }
+  if (c === 34 || c === 39) {
+    return parseString(ctx);
+  }
+  if (c === 116) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 114 || ctx.s.charCodeAt(++ctx.p) !== 117 || ctx.s.charCodeAt(++ctx.p) !== 101)
+      TomlError.x("invalid value", ctx, errPtr);
+    return ctx.p++, true;
+  }
+  if (c === 102) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 97 || ctx.s.charCodeAt(++ctx.p) !== 108 || ctx.s.charCodeAt(++ctx.p) !== 115 || ctx.s.charCodeAt(++ctx.p) !== 101)
+      TomlError.x("invalid value", ctx, errPtr);
+    return ctx.p++, false;
+  }
+  if (c === 43 || c === 45) {
+    return parseNumber(ctx, ctx.p, ctx.s.charCodeAt(++ctx.p), 44 - c, end);
+  }
+  if (ctx.s.charCodeAt(ctx.p + 4) === 45 && ctx.s.charCodeAt(ctx.p + 7) === 45) {
+    return parseDate(ctx, c, end);
+  }
+  if (ctx.s.charCodeAt(ctx.p + 2) === 58) {
+    return parseTime(ctx, c, end);
+  }
+  return parseNumber(ctx, ctx.p, c, 0, end);
+}
+function parseNumber(ctx, startPtr, startChr, sign, endChr) {
+  let c = startChr;
+  let state = 0;
+  let hasUnderscores = false;
+  if (c === 105) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 110 || ctx.s.charCodeAt(++ctx.p) !== 102)
+      TomlError.x("invalid value", ctx, startPtr);
+    return ctx.p++, (sign || 1) / 0;
+  }
+  if (c === 110) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 97 || ctx.s.charCodeAt(++ctx.p) !== 110)
+      TomlError.x("invalid value", ctx, startPtr);
+    return ctx.p++, NaN;
+  }
+  if (c === 48) {
+    if (++ctx.p >= ctx.s.length || isEndOfValue(c = ctx.s.charCodeAt(ctx.p), endChr))
+      return ctx.bi === true ? 0n : 0;
+    if (!sign) {
+      if (c === 120)
+        return parseIntegerBaseN(ctx, startPtr, 16, endChr);
+      else if (c === 98)
+        return parseIntegerBaseN(ctx, startPtr, 2, endChr);
+      else if (c === 111)
+        return parseIntegerBaseN(ctx, startPtr, 8, endChr);
+    }
+    if (c === 46)
+      state = 2;
+    else if (c === 101 || c === 69)
+      state = 4;
+    else
+      TomlError.x("illegal leading zero", ctx, startPtr);
+  } else if (!isDigit2(c))
+    TomlError.x("invalid value", ctx, startPtr);
+  while (++ctx.p < ctx.s.length && (c = ctx.s.charCodeAt(ctx.p), !isEndOfValue(c, endChr))) {
+    if (!state)
+      state = 1;
+    if (c === 95) {
+      if (!(state & 1))
+        TomlError.x("illegal underscore", ctx);
+      state += 11;
+      hasUnderscores = true;
+    } else if (state === 1 && c === 46)
+      state = 2;
+    else if ((state === 1 || state === 3) && (c === 101 || c === 69))
+      state = 4;
+    else if (state === 4 && (c === 43 || c === 45)) {
+      state = 6;
+    } else if (!isDigit2(c))
+      TomlError.x(`illegal character in numeric literal`, ctx);
+    else if (state > 9)
+      state -= 11;
+    else if (!(state & 1))
+      state++;
+  }
+  if (!state) {
+    let val = (startChr - 48) * (sign || 1);
+    return ctx.bi === true ? BigInt(val) : val;
+  }
+  if (!(state & 1))
+    TomlError.x("unfinished numeric value", ctx, startPtr);
+  let str = ctx.s.slice(startPtr, ctx.p);
+  if (hasUnderscores)
+    str = str.replaceAll("_", "");
+  return state > 1 ? parseFloat(str) : parseInteger(ctx, str, 10, startPtr);
+}
+function parseIntegerBaseN(ctx, startPtr, base, endChr) {
+  let c, underscore = 1;
+  while (++ctx.p < ctx.s.length && (c = ctx.s.charCodeAt(ctx.p), !isEndOfValue(c, endChr))) {
+    if (c === 95) {
+      if (underscore & 1)
+        TomlError.x("illegal underscore", ctx);
+      underscore = 3;
+    } else if (!isDigit2(c, base))
+      TomlError.x(`illegal character in numeric literal`, ctx);
+    else if (underscore & 1)
+      underscore--;
+  }
+  if (underscore & 1)
+    TomlError.x("unfinished numeric value", ctx);
+  let str = ctx.s.slice(startPtr + 2, ctx.p);
+  if (underscore)
+    str = str.replaceAll("_", "");
+  return parseInteger(ctx, str, base, startPtr);
+}
+function parseInteger(ctx, str, base, startPtr) {
+  if (ctx.bi !== true)
+    int: {
+      let val = parseInt(str, base);
+      if (!Number.isSafeInteger(val)) {
+        if (ctx.bi)
+          break int;
+        TomlError.x("integer value cannot be represented losslessly", ctx, startPtr);
+      }
+      return val;
+    }
+  return base === 10 ? BigInt(str) : BigInt((base === 2 ? "0b" : base === 8 ? "0o" : "0x") + str);
+}
+function parseDate(ctx, c, endChr) {
+  let startPtr = ctx.p++, unsafeSeparator;
+  if (!isDigit2(c) || !isDigit2(ctx.s.charCodeAt(ctx.p++)) || !isDigit2(ctx.s.charCodeAt(ctx.p++)) || !isDigit2(ctx.s.charCodeAt(ctx.p++))) {
+    return parseNumber(ctx, ctx.p = startPtr, c, 0, endChr);
+  }
+  ctx.p += 5;
+  if (!isDigit2(ctx.s.charCodeAt(ctx.p++)))
+    TomlError.x("invalid date-time: date part is malformed", ctx, startPtr);
+  if (ctx.p >= ctx.s.length || ((c = ctx.s.charCodeAt(ctx.p)) !== 32 || (unsafeSeparator = true, !isDigit2(ctx.s.charCodeAt(ctx.p + 1)))) && c !== 84 && c !== 116) {
+    let t3 = ctx.s.slice(startPtr, ctx.p);
+    return readDate(ctx, t3, 3, false, startPtr);
+  }
+  if (ctx.s.charCodeAt(ctx.p += 3) !== 58)
+    TomlError.x("invalid date-time: time part is malformed", ctx, startPtr);
+  if (ctx.s.charCodeAt(ctx.p += 3) === 58)
+    ctx.p += 3;
+  if (ctx.s.charCodeAt(ctx.p) === 46)
+    while (isDigit2(ctx.s.charCodeAt(++ctx.p)))
+      ;
+  if (c = ctx.s.charCodeAt(ctx.p)) {
+    if (c === 90 || c === 122) {
+      let t3 = ctx.s.slice(startPtr, ++ctx.p);
+      return readDate(ctx, t3, 1, unsafeSeparator, startPtr, "[+00:00]");
+    }
+    if (c === 43 || c === 45) {
+      let t3 = ctx.s.slice(startPtr, ctx.p += 6);
+      return readDate(ctx, t3, 1, unsafeSeparator, startPtr, !ctx.ld && "[" + ctx.s.slice(ctx.p - 6, ctx.p) + "]");
+    }
+  }
+  let t2 = ctx.s.slice(startPtr, ctx.p);
+  return readDate(ctx, t2, 2, unsafeSeparator, startPtr);
+}
+function parseTime(ctx, c, endChr) {
+  let start = ctx.p;
+  if (!isDigit2(c) || !isDigit2(ctx.s.charCodeAt(++ctx.p))) {
+    return parseNumber(ctx, --ctx.p, c, 0, endChr);
+  }
+  if (ctx.s.charCodeAt(ctx.p += 4) === 58)
+    ctx.p += 3;
+  if (ctx.s.charCodeAt(ctx.p) === 46)
+    while (isDigit2(ctx.s.charCodeAt(++ctx.p)))
+      ;
+  let t2 = ctx.s.slice(start, ctx.p);
+  return readDate(ctx, t2, 4, false, start);
+}
+function readDate(ctx, str, type3, unsafeDelim, errPtr, temporalSuffix) {
+  if (ctx.ld) {
+    let date2 = new TomlDate(str, type3, unsafeDelim);
+    if (!date2.isValid())
+      TomlError.x("invalid date", ctx, errPtr);
+    return date2;
+  }
+  try {
+    if (temporalSuffix)
+      str += temporalSuffix;
+    switch (type3) {
+      case 1:
+        return Temporal.ZonedDateTime.from(str);
+      case 2:
+        return Temporal.PlainDateTime.from(str);
+      case 3:
+        return Temporal.PlainDate.from(str);
+      case 4:
+        return Temporal.PlainTime.from(str);
+    }
+  } catch (e) {
+    TomlError.x(e instanceof Error ? e.message : "" + e, ctx, errPtr);
+  }
+}
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/util.js
+init_globals();
+function skipComment(ctx) {
+  for (; ctx.p < ctx.s.length; ctx.p++) {
+    let c = ctx.s.charCodeAt(ctx.p);
+    if (c === 10)
+      break;
+    if (c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10) {
+      ctx.p++;
+      break;
+    }
+    if (c < 32 && c !== 9 || c === 127) {
+      TomlError.x("control characters are not allowed in comments", ctx);
+    }
+  }
+}
+function skipVoid(ctx, banNewLines, banComments) {
+  let c;
+  while (ctx.p < ctx.s.length) {
+    while (ctx.p < ctx.s.length && ((c = ctx.s.charCodeAt(ctx.p)) === 32 || c === 9 || !banNewLines && (c === 10 || c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)))
+      ctx.p++;
+    if (banComments || c !== 35)
+      break;
+    skipComment(ctx);
+  }
+}
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/struct.js
+function parseKey(ctx, end = 61) {
+  let startPtr;
+  let state = 0;
+  let parsed2 = [];
+  let sliceStart;
+  let c = ctx.s.charCodeAt(startPtr = ctx.p);
+  do {
+    if (c === end) {
+      if (!state)
+        TomlError.x("unexpected end of key", ctx);
+      if (state === 1)
+        parsed2.push(ctx.s.slice(sliceStart, ctx.p));
+      return ctx.p++, parsed2;
+    } else if (c === 46) {
+      if (!state)
+        TomlError.x("illegal empty bare key", ctx);
+      if (state === 1)
+        parsed2.push(ctx.s.slice(sliceStart, ctx.p));
+      state = 0;
+    } else if (!state && (c === 34 || c === 39)) {
+      if (c === ctx.s.charCodeAt(ctx.p + 1) && c === ctx.s.charCodeAt(ctx.p + 2))
+        TomlError.x("illegal quoted key: multiline strings are not allowed", ctx);
+      parsed2.push(parseString(ctx));
+      state = 2;
+      ctx.p--;
+    } else if (c === 32 || c === 9) {
+      if (state === 1) {
+        parsed2.push(ctx.s.slice(sliceStart, ctx.p));
+        state = 2;
+      }
+    } else if (state === 2 || c < 48 && c !== 45 || c > 57 && c < 65 || c > 90 && c < 97 && c !== 95 || c > 122) {
+      TomlError.x("illegal character in key", ctx);
+    } else if (!state) {
+      state = 1;
+      sliceStart = ctx.p;
+    }
+  } while (c = ctx.s.charCodeAt(++ctx.p));
+  TomlError.x("incomplete key-value: cannot find end of key", ctx, startPtr);
+}
+function parseInlineTable(ctx) {
+  let startPtr = ctx.p++;
+  let res = /* @__PURE__ */ Object.create(null);
+  let seen2 = /* @__PURE__ */ new Set();
+  let c;
+  while (ctx.p < ctx.s.length) {
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p)) === 125) {
+      ctx.p++;
+      return res;
+    }
+    let k;
+    let t2 = res;
+    let hasOwn = false;
+    let errPtr = ctx.p;
+    let key = parseKey(ctx);
+    for (let i = 0; i < key.length; i++) {
+      if (i)
+        t2 = hasOwn ? t2[k] : t2[k] = /* @__PURE__ */ Object.create(null);
+      k = key[i];
+      if ((hasOwn = Object.hasOwn(t2, k)) && (typeof t2[k] !== "object" || seen2.has(t2[k]))) {
+        TomlError.x("trying to redefine an already defined value", ctx, errPtr);
+      }
+      let unsafe = k === "__proto__";
+      if (ctx.uk && (unsafe || k === "constructor")) {
+        t2 = ctx.uk !== 1 && TomlError.x("document contains an unsafe property", ctx, errPtr);
+        break;
+      }
+      if (!hasOwn && unsafe) {
+        Object.defineProperty(t2, k, { enumerable: true, configurable: true, writable: true });
+      }
+    }
+    if (hasOwn) {
+      TomlError.x("trying to redefine an already defined value", ctx, errPtr);
+    }
+    skipVoid(ctx, true, true);
+    let value = extractValue(
+      ctx,
+      125
+      /* } */
+    );
+    if (t2 && typeof (t2[k] = value) === "object")
+      seen2.add(value);
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p++)) === 125) {
+      return res;
+    }
+    if (c !== 44)
+      TomlError.x("expected comma or end of structure", ctx, ctx.p - 1);
+  }
+  TomlError.x("unfinished table", ctx, startPtr);
+}
+function parseArray(ctx) {
+  let startPtr = ctx.p++;
+  let res = [];
+  let c;
+  while (ctx.p < ctx.s.length) {
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p)) === 93) {
+      ctx.p++;
+      return res;
+    }
+    res.push(extractValue(
+      ctx,
+      93
+      /* ] */
+    ));
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p++)) === 93) {
+      return res;
+    }
+    if (c !== 44)
+      TomlError.x("expected comma or end of structure", ctx, ctx.p - 1);
+  }
+  TomlError.x("unfinished array", ctx, startPtr);
+}
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/parse.js
+function peekTable(ctx, key, table, meta, type3) {
+  let t2 = table;
+  let m = meta;
+  let k;
+  let hasOwn = false;
+  let state;
+  for (let i = 0; i < key.length; i++) {
+    if (i) {
+      t2 = hasOwn ? t2[k] : t2[k] = /* @__PURE__ */ Object.create(null);
+      m = (state = m[k]).c;
+      if (type3 === 0 && (state.t === 1 || state.t === 2)) {
+        return null;
+      }
+      if (state.t === 2) {
+        let l = t2.length - 1;
+        t2 = t2[l];
+        m = m[l].c;
+      }
+    }
+    k = key[i];
+    if ((hasOwn = Object.hasOwn(t2, k)) && m[k]?.t === 0 && m[k]?.d) {
+      return null;
+    }
+    if (!hasOwn) {
+      let unsafe = k === "__proto__";
+      if (ctx.uk && (unsafe || k === "constructor"))
+        return false;
+      if (unsafe) {
+        Object.defineProperty(t2, k, { enumerable: true, configurable: true, writable: true });
+        Object.defineProperty(m, k, { enumerable: true, configurable: true, writable: true });
+      }
+      m[k] = {
+        t: i < key.length - 1 && type3 === 2 ? 3 : type3,
+        d: false,
+        i: 0,
+        c: /* @__PURE__ */ Object.create(null)
+      };
+    }
+  }
+  state = m[k];
+  if (state.t !== type3 && !(type3 === 1 && state.t === 3)) {
+    return null;
+  }
+  if (type3 === 2) {
+    if (!state.d) {
+      state.d = true;
+      t2[k] = [];
+    }
+    t2[k].push(t2 = /* @__PURE__ */ Object.create(null));
+    state.c[state.i++] = state = { t: 1, d: false, i: 0, c: /* @__PURE__ */ Object.create(null) };
+  }
+  if (state.d) {
+    return null;
+  }
+  state.d = true;
+  if (type3 === 1) {
+    t2 = hasOwn ? t2[k] : t2[k] = /* @__PURE__ */ Object.create(null);
+  } else if (type3 === 0 && hasOwn) {
+    return null;
+  }
+  return [k, t2, state.c];
+}
+function validateTablePeek(ctx, peek, ptr) {
+  if (peek === null || ctx.uk === 2)
+    TomlError.x(peek === null ? "trying to redefine an already defined table or value" : "document contains an unsafe property", ctx, ptr);
+}
+function parse2(toml, options = {}) {
+  let ctx = {
+    s: toml,
+    p: 0,
+    d: options.maxDepth ?? 1e3,
+    bi: options.integersAsBigInt ?? false,
+    ld: options.useLegacyDate ?? true,
+    uk: options.unsafeKeyBehaviour === "throw" ? 2 : options.unsafeKeyBehaviour === "drop" ? 1 : 0
+  };
+  let res = /* @__PURE__ */ Object.create(null);
+  let meta = /* @__PURE__ */ Object.create(null);
+  let tmp;
+  let skipping = false;
+  let tbl = res;
+  let m = meta;
+  if (toml.charCodeAt(0) === 65279)
+    ctx.p++;
+  skipVoid(ctx);
+  while (ctx.p < toml.length) {
+    if (toml.charCodeAt(ctx.p) === 91) {
+      let isTableArray = toml.charCodeAt(++ctx.p) === 91;
+      tmp = ctx.p += +isTableArray;
+      skipping = false;
+      let k = parseKey(
+        ctx,
+        93
+        /* ] */
+      );
+      if (isTableArray) {
+        if (toml.charCodeAt(ctx.p) !== 93) {
+          TomlError.x("expected end of table array declaration", ctx);
+        }
+        ctx.p++;
+      }
+      let p2 = peekTable(
+        ctx,
+        k,
+        res,
+        meta,
+        isTableArray ? 2 : 1
+        /* Type.EXPLICIT */
+      );
+      if (!p2) {
+        validateTablePeek(ctx, p2, tmp);
+        skipping = true;
+      } else {
+        m = p2[2];
+        tbl = p2[1];
+      }
+    } else {
+      tmp = ctx.p;
+      let k = parseKey(ctx);
+      let p2 = peekTable(
+        ctx,
+        k,
+        tbl,
+        m,
+        0
+        /* Type.DOTTED */
+      );
+      if (!p2 && !skipping)
+        validateTablePeek(ctx, p2, tmp);
+      skipVoid(ctx, true, true);
+      let v = extractValue(ctx, void 0);
+      if (p2 && !skipping)
+        p2[1][p2[0]] = v;
+    }
+    skipVoid(ctx, true);
+    if (ctx.p < toml.length && (tmp = toml.charCodeAt(ctx.p)) !== 10 && (tmp !== 13 || toml.charCodeAt(ctx.p + 1) !== 10)) {
+      TomlError.x("each key-value declaration must be followed by an end-of-line", ctx);
+    }
+    skipVoid(ctx);
+  }
+  return res;
+}
+
+// node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/stringify.js
+init_globals();
+var HAS_WELLFORMED = !!"".isWellFormed;
+
+// src/doctor/font-edge.ts
+var hex = (glyph) => glyph.codePointAt(0).toString(16).toUpperCase();
+var JXA = String.raw`
+ObjC.import("AppKit");
+ObjC.import("CoreText");
+function lacksOf(font, points) {
+  if (font.isNil()) return null;
+  return points.filter((p) => {
+    const text = $.NSString.stringWithString(String.fromCodePoint(parseInt(p, 16)));
+    const drawn = $.CTFontCreateForString(font, text, $.CFRangeMake(0, text.length));
+    return ObjC.castRefToObject($.CTFontCopyPostScriptName(drawn)).js === "LastResort";
+  });
+}
+function resolve(kind, name) {
+  return kind === "postscript"
+    ? $.NSFont.fontWithNameSize(name, 12)
+    : $.NSFontManager.sharedFontManager.fontWithFamilyTraitsWeightSize(name, 0, 5, 12);
+}
+function iterm(name, points) {
+  const prefs = $.NSUserDefaults.alloc.initWithSuiteName("com.googlecode.iterm2");
+  const books = prefs.arrayForKey("New Bookmarks");
+  if (books.isNil()) return { error: "iTerm2 has no profiles in its preferences" };
+  const profiles = [];
+  for (let i = 0; i < books.count; i++) {
+    const b = books.objectAtIndex(i);
+    const get = (k) => ObjC.deepUnwrap(b.objectForKey(k));
+    if (name !== "" && get("Name") !== name) continue;
+    const nonAscii = get("Use Non-ASCII Font") === true;
+    const setting = get(nonAscii ? "Non Ascii Font" : "Normal Font");
+    const font = typeof setting === "string" ? setting.replace(/ [0-9.]+$/, "") : null;
+    profiles.push({
+      name: String(get("Name")),
+      font,
+      nonAscii,
+      powerline: get("Draw Powerline Glyphs") === true,
+      lacks: font === null ? null : lacksOf(resolve("postscript", font), points),
+    });
+  }
+  return { profiles };
+}
+function run(argv) {
+  const last = argv[argv.length - 1];
+  const points = last === "" ? [] : last.split(",");
+  return JSON.stringify(
+    argv[0] === "font"
+      ? { lacks: lacksOf(resolve(argv[1], argv[2]), points) }
+      : iterm(argv[1], points),
+  );
+}
+`;
+async function jxa(launcher, args) {
+  const run3 = await launcher.launch({
+    bin: "osascript",
+    args: ["-l", "JavaScript", "-e", JXA, ...args],
+    timeoutMs: 3e3,
+    category: "doctor.font"
+  });
+  if (!run3.ok) {
+    if (run3.reason === "rate-limited") return busy("the font");
+    const detail = failureText(run3);
+    return { kind: "failed", reason: `osascript failed (${detail})` };
+  }
+  let answer2;
+  try {
+    answer2 = JSON.parse(run3.stdout);
+  } catch {
+    return {
+      kind: "failed",
+      reason: `osascript answered ${JSON.stringify(run3.stdout.trim())}, not JSON`
     };
+  }
+  return typeof answer2 === "object" && answer2 !== null && "error" in answer2 ? { kind: "failed", reason: answer2.error } : { kind: "ok", value: answer2 };
+}
+var glyphsOf2 = (points) => points.map((p2) => String.fromCodePoint(parseInt(p2, 16)));
+var pointsArg = (glyphs) => [...glyphs].map(hex).join(",");
+async function macCoverage(launcher, ref, glyphs) {
+  const answer2 = await jxa(
+    launcher,
+    ["font", ref.kind, ref.name, pointsArg(glyphs)]
+  );
+  if (answer2.kind !== "ok") return answer2;
+  const { lacks } = answer2.value;
+  return {
+    kind: "ok",
+    value: { font: ref.name, lacks: lacks === null ? null : glyphsOf2(lacks) }
   };
 }
-function inProcessRenderers(parts) {
-  return (own2) => {
-    const storage = { ...parts.storage(own2.log), doctor: parts.doctorStores };
-    return (host, generation) => {
-      const renderer = loadMainRenderer({
-        generation,
-        clock: own2.clock,
-        now: own2.now,
-        storage,
-        linkSigner: parts.linkSigner,
-        stateDir: parts.stateDir,
-        locations: locations(own2.host),
-        env: own2.host.env,
-        home: own2.host.home,
-        gates: parts.gates,
-        bundle: own2.bundle.path,
-        memoryLimitBytes: own2.memoryLimitBytes
-      }).start(host);
-      let end;
-      const ended = new Promise((resolve) => end = resolve);
-      return {
-        answer: async (input) => {
-          const from = own2.clock.monotonic();
-          const output = await renderer.answer(input);
-          return { output, tookMs: own2.clock.monotonic() - from };
-        },
-        ended,
-        end: async () => end("ended with its daemon"),
-        // Its loop is the host's, which is turning if this runs.
-        alive: async () => {
-        }
-      };
+function profileReading(p2, version) {
+  if (p2.font === null) {
+    return {
+      kind: "failed",
+      reason: `iTerm2 profile ${JSON.stringify(p2.name)} names no font`
     };
+  }
+  const from = `iTerm2 profile ${JSON.stringify(p2.name)}` + (p2.nonAscii ? ", its non-ASCII font" : "") + (p2.powerline ? ", built-in Powerline glyphs on" : "");
+  const lacks = p2.lacks === null || !p2.powerline ? p2.lacks : p2.lacks.filter((g) => !itermDrawsItself(version, g));
+  return { kind: "ok", value: { font: p2.font, from, lacks } };
+}
+var drawsEvery = (r) => r.kind === "ok" && r.value.lacks !== null && r.value.lacks.length === 0;
+function itermFontInUse(profiles, wanted, version) {
+  if (profiles.length === 0) {
+    return {
+      kind: "failed",
+      reason: wanted === null ? "iTerm2 has no profiles in its preferences" : `iTerm2 has no profile named ${JSON.stringify(wanted)}`
+    };
+  }
+  const readings = profiles.map((p2) => profileReading(p2, version));
+  if (wanted !== null) return readings[0];
+  const short = readings.find((r) => !drawsEvery(r));
+  if (short !== void 0) {
+    return short.kind === "failed" ? short : {
+      kind: "ok",
+      value: {
+        ...short.value,
+        from: `${short.value.from}, one of its profiles, and the session does not say which draws the bar`
+      }
+    };
+  }
+  const fonts = [
+    ...new Set(
+      readings.flatMap((r) => r.kind === "ok" ? [r.value.font] : [])
+    )
+  ];
+  return {
+    kind: "ok",
+    value: {
+      font: fonts.join(", "),
+      from: "every iTerm2 profile, since the session does not say which draws the bar",
+      lacks: []
+    }
+  };
+}
+async function itermFont(launcher, version, env2, glyphs) {
+  if (process_default.platform !== "darwin") {
+    return { kind: "failed", reason: "iTerm2 runs only on macOS" };
+  }
+  const wanted = env2.ITERM_PROFILE ?? null;
+  const answer2 = await jxa(launcher, ["iterm", wanted ?? "", pointsArg(glyphs)]);
+  if (answer2.kind !== "ok") return answer2;
+  const profiles = answer2.value.profiles.map((p2) => ({
+    ...p2,
+    lacks: p2.lacks === null ? null : glyphsOf2(p2.lacks)
+  }));
+  return itermFontInUse(profiles, wanted, version);
+}
+function fcMatchCoverage(output, glyphs) {
+  const lines2 = output.split("\n").filter((l) => l !== "");
+  const fonts = lines2.map((line) => {
+    const tab = line.indexOf("	");
+    return tab <= 0 ? null : {
+      family: line.slice(0, tab),
+      ranges: line.slice(tab + 1).split(/\s+/).filter((r) => r !== "").map((range) => {
+        const [lo, hi = lo] = range.split("-").map((h) => parseInt(h, 16));
+        return [lo, hi];
+      })
+    };
+  });
+  if (fonts.length === 0 || fonts.some((f) => f === null)) {
+    return {
+      kind: "failed",
+      reason: `fc-match answered ${JSON.stringify(output.slice(0, 200))}, not families and their charsets`
+    };
+  }
+  const drawable3 = fonts.flatMap((f) => f.ranges);
+  const lacks = [...glyphs].filter((g) => {
+    const p2 = g.codePointAt(0);
+    return !drawable3.some(([lo, hi]) => lo <= p2 && p2 <= hi);
+  });
+  return { kind: "ok", value: { font: fonts[0].family, lacks } };
+}
+var fcEscape = (value) => value.replace(/[\\:,=-]/g, "\\$&");
+async function fcCoverage(launcher, family, glyphs) {
+  const run3 = await launcher.launch({
+    bin: "fc-match",
+    args: [
+      "--sort",
+      "--format",
+      "%{family[0]}	%{charset}\n",
+      `:family=${fcEscape(family)}`
+    ],
+    timeoutMs: 3e3,
+    category: "doctor.font"
+  });
+  if (!run3.ok) {
+    if (run3.reason === "rate-limited") return busy("the font");
+    const detail = failureText(run3);
+    return { kind: "failed", reason: `fc-match failed (${detail})` };
+  }
+  return fcMatchCoverage(run3.stdout, glyphs);
+}
+function coverage(launcher, ref, glyphs) {
+  return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
+}
+function alacrittyConfigPaths(home, xdgConfigHome) {
+  const xdg = xdgConfigHome || import_node_path40.default.join(home, ".config");
+  return [
+    import_node_path40.default.join(xdg, "alacritty", "alacritty.toml"),
+    import_node_path40.default.join(xdg, "alacritty.toml"),
+    import_node_path40.default.join(home, ".config", "alacritty", "alacritty.toml"),
+    import_node_path40.default.join(home, ".alacritty.toml")
+  ];
+}
+function alacrittyDefaultFamily(platform3) {
+  return platform3 === "darwin" ? "Menlo" : "monospace";
+}
+var isTable = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function alacrittyFile(doc) {
+  const font = isTable(doc.font) ? doc.font : {};
+  const normal = isTable(font.normal) ? font.normal : {};
+  const general = isTable(doc.general) ? doc.general : {};
+  const imports = general.import ?? doc.import ?? [];
+  return {
+    family: typeof normal.family === "string" ? normal.family : null,
+    imports: Array.isArray(imports) ? imports.filter((i) => typeof i === "string") : []
+  };
+}
+function alacrittyFamilyIn(file, home, depth) {
+  let text4;
+  try {
+    text4 = fs_default.readFileSync(file, "utf8");
+  } catch (e) {
+    return {
+      kind: "failed",
+      reason: `cannot read ${file}: ${e.message}`
+    };
+  }
+  let doc;
+  try {
+    doc = parse2(text4);
+  } catch (e) {
+    return {
+      kind: "failed",
+      reason: `cannot parse ${file}: ${e.message}`
+    };
+  }
+  const own2 = alacrittyFile(doc);
+  if (own2.family !== null)
+    return { kind: "ok", value: { family: own2.family, from: file } };
+  if (depth === 5) return { kind: "ok", value: null };
+  let found2 = null;
+  for (const imported of own2.imports) {
+    const target = imported.startsWith("~/") ? import_node_path40.default.join(home, imported.slice(2)) : import_node_path40.default.resolve(import_node_path40.default.dirname(file), imported);
+    if (!fs_default.existsSync(target)) continue;
+    const inner = alacrittyFamilyIn(target, home, depth + 1);
+    if (inner.kind === "failed") return inner;
+    found2 = inner.value ?? found2;
+  }
+  return { kind: "ok", value: found2 };
+}
+async function alacrittyFont(launcher, env2, glyphs, home) {
+  const config2 = alacrittyConfigPaths(home, env2.XDG_CONFIG_HOME).find(
+    (p2) => fs_default.existsSync(p2)
+  );
+  const named3 = config2 === void 0 ? { kind: "ok", value: null } : alacrittyFamilyIn(config2, home, 0);
+  if (named3.kind === "failed") return named3;
+  const family = named3.value?.family ?? alacrittyDefaultFamily(process_default.platform);
+  const from = named3.value?.from ?? (config2 === void 0 ? "Alacritty's default, no config file" : `Alacritty's default, ${config2} sets none`);
+  const drawn = await coverage(
+    launcher,
+    { kind: "family", name: family },
+    glyphs
+  );
+  if (drawn.kind !== "ok") return drawn;
+  const { font, lacks } = drawn.value;
+  return {
+    kind: "ok",
+    value: {
+      font,
+      from: font === family ? from : `${from}; ${family} as fontconfig matches it`,
+      lacks
+    }
+  };
+}
+var READERS = {
+  iterm2: itermFont,
+  alacritty: (launcher, _version, env2, glyphs, home) => alacrittyFont(launcher, env2, glyphs, home)
+};
+function fontInUse(launcher, terminal, env2, glyphs, home) {
+  return READERS[terminal.name](launcher, terminal.version, env2, glyphs, home);
+}
+
+// src/doctor/post-mortems-read.ts
+init_globals();
+function parsePostMortemsRead(doc) {
+  const through = doc?.through;
+  return typeof through === "string" || through === null ? { kind: "ok", value: { through } } : { kind: "failed", reason: "names no post-mortem read" };
+}
+var filePostMortemsRead = (dir) => stateFile(
+  dir,
+  "doctor-post-mortems-read.json",
+  { through: null },
+  parsePostMortemsRead
+);
+
+// src/doctor/edge.ts
+var productionInstallEdge = {
+  realpath: (p2) => asked(() => fs_default.realpathSync(p2)),
+  checkoutOf: sourceCheckoutOf,
+  digest: (crateDir) => asked(() => crateDigest(crateDir)),
+  nativeShipped: shipsNative(process_default.platform, process_default.arch)
+};
+function installFacts(edge, daemonBundle, clients) {
+  const bundle = edge.realpath(daemonBundle);
+  if (bundle.kind === "failed") {
+    return {
+      kind: "failed",
+      reason: `the daemon's bundle ${daemonBundle} cannot be resolved: ${bundle.reason}`
+    };
+  }
+  const root = edge.checkoutOf(bundle.value);
+  return {
+    kind: "ok",
+    value: {
+      daemon: {
+        bundle: bundle.value,
+        checkout: root === null ? null : {
+          root,
+          rustSource: edge.digest(import_node_path41.default.join(root, "rust-client"))
+        }
+      },
+      nativeShipped: edge.nativeShipped,
+      clients: clients.map(
+        (client) => client === null ? { kind: "unreported" } : {
+          kind: "reported",
+          client: client.kind,
+          bundle: edge.realpath(client.bundle),
+          source: client.source
+        }
+      )
+    }
+  };
+}
+var fileStores = (dir) => ({
+  marks: fileMarkBook(dir),
+  clicked: fileClickedTerminals(dir),
+  postMortemsRead: filePostMortemsRead(dir)
+});
+var TMUX_CLIENT_FORMAT = "#{client_termfeatures}	#{client_termtype}	#{client_termname}	#{client_pid}	#{client_utf8}";
+function parseTmuxClient(stdout2) {
+  const line = stdout2.replace(/\n$/, "");
+  if (line === "				") return { kind: "ok", value: null };
+  const fields2 = line.split("	");
+  const [features, termtype, termname, pid2, utf83] = fields2;
+  if (fields2.length !== 5 || !/^[1-9]\d*$/.test(pid2) || !/^[01]$/.test(utf83)) {
+    return {
+      kind: "failed",
+      reason: `tmux answered ${JSON.stringify(stdout2)}, not the five fields asked for`
+    };
+  }
+  return {
+    kind: "ok",
+    value: {
+      features: features.split(",").filter((f) => f !== ""),
+      termtype,
+      termname,
+      pid: Number(pid2),
+      utf8: utf83 === "1"
+    }
+  };
+}
+var REMOTE_LOGIN = /^(sshd|mosh-server)\b/;
+function descendsFromRemoteLogin(table, pid2) {
+  const procs = processTable(table);
+  if (!procs.has(pid2)) {
+    return { kind: "failed", reason: `process ${pid2} is not running` };
+  }
+  for (const p2 of lineage(procs, pid2)) {
+    if (REMOTE_LOGIN.test(p2.command.slice(p2.command.lastIndexOf("/") + 1))) {
+      return { kind: "ok", value: true };
+    }
+  }
+  return { kind: "ok", value: false };
+}
+async function remoteLogin(launcher, pid2) {
+  const run3 = await launcher.launch({
+    bin: "ps",
+    args: ["-A", "-o", "pid=,ppid=,comm="],
+    timeoutMs: 2e3,
+    category: "doctor.process"
+  });
+  if (!run3.ok) {
+    if (run3.reason === "rate-limited") return busy("the processes");
+    const detail = failureText(run3);
+    return { kind: "failed", reason: `ps failed (${detail})` };
+  }
+  return descendsFromRemoteLogin(run3.stdout, pid2);
+}
+var DAEMON_ENTRY = /^(.*)\/(?:dist\/index\.mjs|src\/index\.ts|bin\/cc-candybar)$/;
+function daemonProcesses(table, ownsEntry2) {
+  const found2 = [];
+  for (const line of table.split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\w{3} \w{3}\s+\d+ [\d:]{8} \d{4})\s+.* (\/.*) daemon$/.exec(
+      line
+    );
+    if (m === null || !ownsEntry2(m[5])) continue;
+    found2.push({
+      pid: Number(m[1]),
+      ppid: Number(m[2]),
+      rss: Number(m[3]) * 1024,
+      // The edge runs ps under TZ=UTC; the zone is said, so the time is
+      // not read as local.
+      started: `${m[4].replace(/\s+/g, " ")} UTC`
+    });
+  }
+  return found2.filter((p2) => !found2.some((child) => child.ppid === p2.pid));
+}
+function ownsEntry(entry) {
+  let real;
+  try {
+    real = fs_default.realpathSync(entry);
+  } catch {
+    return false;
+  }
+  const root = DAEMON_ENTRY.exec(real)?.[1];
+  return root !== void 0 && fs_default.existsSync(import_node_path41.default.join(root, "bin", "cc-candybar"));
+}
+async function daemons(launcher) {
+  const run3 = await launcher.launch({
+    bin: "ps",
+    args: [
+      "-U",
+      String(os_default.userInfo().uid),
+      "-ww",
+      "-o",
+      "pid=,ppid=,rss=,lstart=,args="
+    ],
+    timeoutMs: 2e3,
+    category: "doctor.daemons",
+    // The start time as the table writes it, in one format whatever the
+    // user's locale and zone (src/daemon/process-fingerprint.ts).
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
+  });
+  if (!run3.ok) {
+    const detail = failureText(run3);
+    return { kind: "failed", reason: `ps failed (${detail})` };
+  }
+  return { kind: "ok", value: daemonProcesses(run3.stdout, ownsEntry) };
+}
+async function probeTmux(launcher, hint) {
+  const run3 = await runTmuxAsync(launcher, hint, "doctor.tmux", [
+    "display",
+    "-p",
+    "-t",
+    hint.pane,
+    TMUX_CLIENT_FORMAT
+  ]);
+  if (run3.kind === "rate-limited") return busy("tmux");
+  if (run3.kind === "failed") return { kind: "failed", reason: run3.reason };
+  return parseTmuxClient(run3.stdout);
+}
+function productionMachineEdge(launcher, host) {
+  return {
+    probeTmux: (hint) => probeTmux(launcher, hint),
+    remoteLogin: (pid2) => remoteLogin(launcher, pid2),
+    fontInUse: (terminal, env2, glyphs) => fontInUse(launcher, terminal, env2, glyphs, host.home),
+    daemons: () => daemons(launcher),
+    forge: (cwd2) => forgeLogin(launcher, cwd2),
+    transcript: async (file) => readTranscriptWindow(file),
+    install: productionInstallEdge
+  };
+}
+function transcriptWindow(bytes, whole) {
+  const text4 = bytes.toString("utf-8");
+  const from = whole ? 0 : text4.indexOf("\n") + 1;
+  const to = text4.lastIndexOf("\n") + 1;
+  let lines2 = 0;
+  let unparsed = 0;
+  for (const line of text4.slice(from, to).split("\n")) {
+    const read2 = jsonLine(line);
+    if (read2.kind === "blank") continue;
+    lines2++;
+    if (read2.kind === "unparsed") unparsed++;
+  }
+  return { lines: lines2, unparsed, whole };
+}
+function readTranscriptWindow(file) {
+  const read2 = readTailSync(file, TRANSCRIPT_WINDOW_BYTES + 1);
+  return read2.kind === "ok" ? ok(transcriptWindow(read2.value.buf, read2.value.fromStart)) : read2;
+}
+var FORGE_PROBE = {
+  github: {
+    loginHost: () => "github.com",
+    args: (host) => ["auth", "token", "--hostname", host],
+    nonZero: "logged-out"
+  },
+  gitlab: {
+    loginHost: (host) => host,
+    args: () => ["--version"],
+    nonZero: "failed"
+  }
+};
+async function forgeLogin(launcher, cwd2) {
+  if (gitRootOf(cwd2) === void 0) return { kind: "ok", value: null };
+  const remotes = remotesOf(
+    await launcher.launch({
+      bin: "git",
+      args: [...REMOTES_ARGS],
+      cwd: cwd2,
+      envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
+      timeoutMs: 2e3,
+      category: "doctor.forge"
+    })
+  );
+  if (remotes.kind === "failed") return remotes;
+  const url = forgeRemoteUrl(remotes.value);
+  if (url === null) return { kind: "ok", value: null };
+  const forge = detectForge(url);
+  if (forge === null) return { kind: "ok", value: null };
+  const cli = FORGE_CLI[forge];
+  const probe2 = FORGE_PROBE[forge];
+  const host = probe2.loginHost(remoteHost(url));
+  const run3 = await launcher.launch({
+    bin: cli,
+    args: [...probe2.args(host)],
+    cwd: cwd2,
+    timeoutMs: 2e3,
+    category: "doctor.forge"
+  });
+  return forgeLoginOf(cli, host, probe2.nonZero, run3);
+}
+function forgeLoginOf(cli, host, nonZero, run3) {
+  const login = (status) => ({
+    kind: "ok",
+    value: { cli, host, status }
+  });
+  if (run3.ok) return login("ready");
+  if (isMissingCommand(run3)) return login("missing");
+  if (run3.reason === "non-zero" && nonZero === "logged-out") {
+    return login({ loggedOut: firstLine(run3.stderr) });
+  }
+  return { kind: "failed", reason: launchFailure(cli, run3) };
+}
+
+// src/daemon/clicks-in-flight.ts
+init_globals();
+var ClicksInFlight = class {
+  held = /* @__PURE__ */ new Map();
+  hold({ id: id2, gone }) {
+    this.held.set(id2, gone);
+    return { [Symbol.dispose]: () => void this.held.delete(id2) };
+  }
+  gone(click3) {
+    const gone = this.held.get(click3);
+    if (gone === void 0) throw new Error(`click ${click3} is not in flight`);
+    return gone();
+  }
+};
+
+// src/daemon/menu-idle.ts
+init_globals();
+async function closeByTurn(host, at, sessionId2, idle, latest) {
+  const delivered = await host.answer({
+    kind: "event",
+    at: at(),
+    event: { kind: "menu-idle", session: sessionId2, idle, latest }
+  });
+  return delivered.kind === "threw" ? delivered.failure : null;
+}
+var MAX_SESSIONS6 = 256;
+var MenuIdle = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  sessions = /* @__PURE__ */ new Map();
+  // Clicks in flight per session, entries deleted at zero. Apart from the
+  // records, which eviction drops under a click that is still in flight.
+  pending = /* @__PURE__ */ new Map();
+  disposed = false;
+  // A click in the session starts a new idle period.
+  clicked(sessionId2, at) {
+    const idle = this.record(sessionId2, at);
+    idle.since = at;
+    this.settle(sessionId2);
+  }
+  // A click of the session arrived: no deadline until it settles.
+  clickArrived(sessionId2) {
+    this.pending.set(sessionId2, (this.pending.get(sessionId2) ?? 0) + 1);
+    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
+  }
+  // A click of the session landed or was refused, after any landing stamp. A
+  // record evicted meanwhile has no timer left to follow it.
+  clickSettled(sessionId2) {
+    const left = this.pending.get(sessionId2) - 1;
+    if (left === 0) this.pending.delete(sessionId2);
+    else this.pending.set(sessionId2, left);
+    if (this.sessions.has(sessionId2)) this.settle(sessionId2);
+  }
+  // When the idle period of the menus the session's last frame drew began —
+  // its last click, or the first frame that drew them, whichever is later —
+  // or nothing, while it drew none: a menu that appears now has only begun.
+  // Nothing too while a click is in flight: no close is due to count down to.
+  since(sessionId2, at) {
+    const idle = this.record(sessionId2, at);
+    return idle.shown && !this.pending.has(sessionId2) ? idle.since : void 0;
+  }
+  // What the session's newest frame drew: whether a menu row, and the
+  // timeout its settings resolve to. Frames are taken by their instant, not
+  // by when their render finished, so a render that outlived a newer one
+  // tells nothing. A menu drawn where the last frame drew none begins its
+  // idle period here, so one nobody clicked open (a group open by default,
+  // from a reload) is not closed by a click from long ago.
+  observe(sessionId2, at, shown, timeoutS) {
+    const idle = this.record(sessionId2, at);
+    if (at < idle.drawnAt) return;
+    idle.drawnAt = at;
+    if (shown && !idle.shown && at > idle.since) idle.since = at;
+    idle.shown = shown;
+    idle.timeoutS = timeoutS;
+    this.settle(sessionId2);
+  }
+  // In the turn of the close the timer fired at `firedAt`: whether it goes
+  // ahead, the session still known idle since. A click arrived after the
+  // firing is queued behind the close, and a record evicted meanwhile stops
+  // counting, so neither is known idle: a record made since closes by its own
+  // firing, never by this one. Read without making a record, which would
+  // count as a session touched. When it goes ahead, the record follows it.
+  confirmClose(sessionId2, firedAt) {
+    const idle = this.sessions.get(sessionId2);
+    if (idle?.closing !== firedAt || this.pending.has(sessionId2)) return false;
+    this.shut(idle, firedAt);
+    return true;
+  }
+  // The sessions whose clocks are kept, those whose close timer is armed, and
+  // the clicks in flight.
+  getStats() {
+    let armed = 0;
+    for (const idle of this.sessions.values()) if (idle.timer !== null) armed++;
+    let pending2 = 0;
+    for (const count of this.pending.values()) pending2 += count;
+    return { sessions: this.sessions.size, armed, pending: pending2 };
+  }
+  dispose() {
+    this.disposed = true;
+    for (const idle of this.sessions.values()) this.disarm(idle);
+    this.sessions.clear();
+  }
+  record(sessionId2, at) {
+    const idle = this.sessions.get(sessionId2) ?? {
+      since: at,
+      timeoutS: 0,
+      shown: false,
+      drawnAt: at,
+      timer: null,
+      closing: null
+    };
+    this.sessions.delete(sessionId2);
+    this.sessions.set(sessionId2, idle);
+    for (const [evicted, gone] of this.sessions) {
+      if (this.sessions.size <= MAX_SESSIONS6) break;
+      this.disarm(gone);
+      this.sessions.delete(evicted);
+    }
+    return idle;
+  }
+  // [LAW:single-enforcer] The one place the timer follows the record.
+  settle(sessionId2) {
+    const idle = this.sessions.get(sessionId2);
+    const due = idle.shown && idle.closing === null && !this.disposed && !this.pending.has(sessionId2) ? closesAt(idle.since, idle.timeoutS) : null;
+    if (idle.timer?.at === due) return;
+    this.disarm(idle);
+    if (due === null) return;
+    const clear = this.deps.clock.after(
+      Math.max(0, (due - this.deps.now()) * 1e3),
+      () => this.fire(sessionId2),
+      { unref: true }
+    );
+    idle.timer = { at: due, clear };
+  }
+  // A close went ahead or failed: what the last frame drew no longer stands,
+  // and a new idle period begins when it fired.
+  shut(idle, at) {
+    idle.since = at;
+    idle.shown = false;
+  }
+  disarm(idle) {
+    idle.timer?.clear();
+    idle.timer = null;
+  }
+  // The deadline passed with no click: close the menus, and begin a new idle
+  // period now. What the last frame drew no longer stands — the close wrote
+  // every menu shut — so the timer waits for a render that draws a menu again
+  // (a group open by default, a close that failed) and closes it a timeout
+  // after this one: never at once, and never for a session that stopped
+  // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
+  // among the journals, so whether the session is still idle is read in that
+  // turn: a click since this firing keeps what it opened. The record follows
+  // that decision (`confirmClose`), and until the close settles no frame arms
+  // another. A close that failed waits a timeout too, so it is retried at that
+  // pace and not at every frame.
+  fire(sessionId2) {
+    const idle = this.sessions.get(sessionId2);
+    idle.timer = null;
+    const now2 = this.deps.now();
+    idle.closing = now2;
+    void this.deps.close(sessionId2, {
+      firedAt: now2,
+      idleS: now2 - idle.since,
+      timeoutS: idle.timeoutS
+    }).then((failure) => {
+      if (failure === null) return;
+      this.shut(idle, now2);
+      this.deps.failed(sessionId2, failure);
+    }).finally(() => {
+      idle.closing = null;
+      if (this.sessions.get(sessionId2) === idle) this.settle(sessionId2);
+    });
+  }
+};
+
+// src/daemon/daemon.ts
+function createDaemon(inputs) {
+  const {
+    bundle,
+    memoryLimitBytes: memoryLimitBytes2,
+    registryUrl,
+    clock,
+    exit: exit2,
+    paths: paths2,
+    gates,
+    host
+  } = inputs;
+  const locs = locations(host);
+  const instant = () => instantAt(clock);
+  const closing = new AbortController();
+  let closed = false;
+  const log = (level, msg) => inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
+  const stats = new RuntimeStats(clock);
+  const watcherRegistry = new WatcherRegistry({
+    clock,
+    counters: stats,
+    logger: log
+  });
+  const fileEvents = new FileEventDelivery({
+    watchers: watcherRegistry,
+    logger: log,
+    clock
+  });
+  const daemonFaults = observable.box(
+    { fileEvents: [], launcher: [], rendererEnded: null },
+    { deep: false, equals: compareStructural }
+  );
+  let rendererEnded = null;
+  function restateFaults() {
+    runInAction(
+      () => daemonFaults.set({
+        fileEvents: fileEventsWarnings(fileEvents.delivery()),
+        launcher: launcher.standing(),
+        rendererEnded
+      })
+    );
+  }
+  const launcher = inputs.launcher({
+    inherited: host.env,
+    stats: stats.launchStats,
+    signal: closing.signal,
+    // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
+    // hold them against.
+    now: instant,
+    // [LAW:no-silent-failure] Each change in whether what the daemon launches
+    // dies with it, and each pipe event, is said in daemon.log, and every
+    // session's world state carries it, so its warning comes on frames too.
+    observeWarnings: (change) => {
+      if (change.kind === "launch-pipes") log("warn", change.text);
+      else
+        log(
+          change.fault === null ? "info" : "warn",
+          change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
+        );
+      restateFaults();
+    }
+  });
+  const probe2 = inputs.probe(launcher);
+  const preparedRenderer = inputs.renderer({
+    load: () => loadMainRenderer({
+      clock,
+      now: instant,
+      storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
+      linkSigner: inputs.linkSigner,
+      stateDir: paths2.state,
+      locations: locs,
+      env: host.env,
+      home: host.home,
+      gates,
+      bundle: bundle.path,
+      memoryLimitBytes: memoryLimitBytes2
+    }),
+    boot: {
+      host: { ...host, env: bootEnv(host.env) },
+      bundle: bundle.path,
+      memoryLimitBytes: memoryLimitBytes2
+    },
+    node: bundle.node
+  });
+  const limits = makeLimits({
+    ...inputs.limits({
+      startedAtMs: stats.startedAt.getTime(),
+      exit: exit2,
+      launcher,
+      log
+    }),
+    limitBytes: memoryLimitBytes2,
+    // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
+    // renderer's process counts in it while one runs. Read only once armed,
+    // by when the link below exists.
+    renderer: () => link.process(),
+    writeRendererHeapSnapshot: (file) => link.heapSnapshot(file)
+  });
+  const handlerProbes = new ProbeArrivals();
+  const renderSightings = new RenderSightings();
+  const doctorStores = inputs.doctorStores;
+  const refreshLedger = new RefreshLedger(log);
+  restateFaults();
+  const sourceRuns = new SourceRuns({
+    launcher,
+    clock,
+    logger: log,
+    ledger: refreshLedger,
+    watchers: watcherRegistry,
+    fileEvents
+  });
+  const payloadProviders = createPayloadProviders({
+    launcher,
+    host,
+    watchers: watcherRegistry,
+    fileEvents,
+    clock,
+    logger: log,
+    ledger: refreshLedger,
+    sourceRuns
+  });
+  const {
+    gitProvider: gitService,
+    usageStore,
+    tmuxService,
+    hostService,
+    managedStorage
+  } = payloadProviders;
+  const menuIdle = new MenuIdle({
+    clock,
+    now: instant,
+    close: (sessionId2, idle) => closeByTurn(
+      parts.renderer,
+      instant,
+      sessionId2,
+      idle,
+      frameFeeds.latest(sessionId2)
+    ),
+    failed: (sessionId2, failure) => log(
+      LEVEL[failure.kind],
+      `menu-idle: close failed (session=${sessionId2}): ${failure.detail}`
+    )
+  });
+  const holdClickError2 = (sessionId2, text4, at) => parts.renderer.tell(
+    { kind: "hold-click-error", session: sessionId2, text: text4 },
+    at
+  );
+  const runs = new Runs({
+    supersede: (folder, sessionId2) => managedStorage.supersede(folder, sessionId2),
+    launch: launcher.launch,
+    holdClickError: holdClickError2,
+    log,
+    now: instant,
+    clock
+  });
+  const laneSetups = new LaneSetups({
+    edge: inputs.laneEdge(
+      launcher,
+      (sessionId2) => frameFeeds.following(sessionId2),
+      closing.signal,
+      probe2
+    ),
+    // A bar pane runs this bundle under the node running it now, with the
+    // flags it runs with (tsx's loader, under the test harness).
+    host: {
+      bundle: bundle.path,
+      node: bundle.node,
+      socket: paths2.socket,
+      preload: stableAttachPreload(bundle.path, host)
+    },
+    holdClickError: holdClickError2,
+    log,
+    now: instant,
+    defer: (run3) => void clock.defer(run3)
+  });
+  const tmuxStatusLines = new TmuxStatusLines({
+    edge: {
+      run: (socket, args, stdin) => runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin)
+    },
+    subscribe: (sessionId2, sub2) => frameFeeds.subscribe(sessionId2, sub2),
+    sessionInPane: (socket, pane) => frameFeeds.newestWhere(
+      ({ hints: { tmux: tmux3 } }) => tmux3 !== null && tmux3 !== void 0 && tmux3.socket === socket && tmux3.pane === pane
+    ),
+    handler: [
+      `CC_CANDYBAR_SOCKET=${shellWord(paths2.socket)}`,
+      ...[...bundle.node, bundle.path].map(shellWord),
+      "url-handle"
+    ].join(" "),
+    owner: paths2.socket,
+    log
+  });
+  const frameFeeds = new FrameFeeds({
+    frame: async (sessionId2, fps, at, following, feeds) => {
+      const { frame: frame2 } = await parts.renderer.ask(
+        {
+          kind: "frame",
+          session: sessionId2,
+          fps,
+          following,
+          feeds,
+          idleSince: menuIdle.since(sessionId2, at) ?? null
+        },
+        at
+      );
+      return frame2 === null ? null : { ...frame2, bar: parseFrame(frame2.bar) };
+    },
+    lanes: async (sessionId2) => (await parts.renderer.ask(
+      { kind: "lanes", session: sessionId2 },
+      instant()
+    )).lanes,
+    // [LAW:no-ambient-temporal-coupling] The pin's wake of the session's
+    // state only moves the feed's timer, which fires in a later turn. A click
+    // that awaits gives up the loop, so a frame may show its writes ahead of
+    // its commit; the step stays whole.
+    pin: (sessionId2) => parts.renderer.tell({ kind: "pin", session: sessionId2 }, instant()),
+    unpin: (sessionId2) => parts.renderer.tell({ kind: "unpin", session: sessionId2 }, instant()),
+    shown: (req) => paneVisibility.shown(req.hints.tmux),
+    watching: () => paneVisibility.follow(),
+    refreshes: () => refreshLedger.totals(),
+    periods: FEED_PERIODS,
+    clock,
+    instant,
+    log
+  });
+  const paneVisibility = new PaneVisibility({
+    clock,
+    listPanes: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
+      "list-panes",
+      "-a",
+      "-F",
+      LIST_PANES_FORMAT
+    ]),
+    listClients: (socket) => runTmuxAsync(launcher, { socket }, "frames.visibility", [
+      "list-clients",
+      "-F",
+      LIST_CLIENTS_FORMAT
+    ]),
+    // The servers of the sessions someone is watching.
+    sockets: () => new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
+    onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
+    // Only the sessions on a server whose view changed are drawn again.
+    onChange: (sockets) => frameFeeds.wakeWhere(
+      "visibility",
+      (req) => tmuxServersOf(req).some((socket) => sockets.has(socket))
+    ),
+    intervalMs: 1e3,
+    log
+  });
+  function tmuxServersOf({
+    hints: { tmux: tmux3 }
+  }) {
+    return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
+  }
+  const updateFact = newUpdateFact();
+  fileEvents.subscribe((notice) => {
+    switch (notice.kind) {
+      case "period":
+        watcherRegistry.judge();
+        return;
+      case "caught-up":
+        restateFaults();
+        parts.renderer.tell(
+          { kind: "reload-every", since: notice.since },
+          instant()
+        );
+        return;
+      case "moved":
+        restateFaults();
+        return;
+    }
+  });
+  const BIN_CHECK_INTERVAL_MS = 60 * 1e3;
+  const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1e3;
+  const binaryWatch = makeBinaryWatch({
+    clock,
+    targets: bundle.targets,
+    intervalMs: BIN_CHECK_INTERVAL_MS,
+    stat: inputs.stat,
+    // The update notice's act rewrites the bundle, and a restart in the middle
+    // would start the next daemon from a half-written one: a restart waits for
+    // it. A success samples again at once; after a failure the next tick does.
+    held: () => updateWatch.running(),
+    exit: () => exit2(0),
+    log
+  });
+  const updateWatch = makeUpdateWatch({
+    fact: updateFact,
+    clock,
+    launcher,
+    probe: probe2,
+    entryUrl: bundle.entryUrl,
+    digest: bundle.digest,
+    // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
+    // this daemon runs from.
+    actsDir: actsDir(paths2.state, bundle.path),
+    intervalMs: BIN_CHECK_INTERVAL_MS,
+    releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
+    registryUrl,
+    fetchImpl: inputs.fetch,
+    onApplied: () => binaryWatch.checkNow(),
+    log
+  });
+  const collector = new Collector({
+    owners: payloadProviders,
+    daemon: () => ({
+      update: { newer: updateFact.get(), ...updateWatch.acts() },
+      ...daemonFaults.get()
+    }),
+    clock,
+    watched: (sessionId2) => frameFeeds.feedOpen(sessionId2),
+    deliver: (event) => parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
+    log
+  });
+  const clicks = new ClicksInFlight();
+  const rendererWatches = /* @__PURE__ */ new Map();
+  const doctorEdge = inputs.doctorEdge(launcher, host);
+  const claudeInput = inputs.claudeInput(launcher);
+  const readings = readingsHost(payloadProviders);
+  const reaches = {
+    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
+    // the host's part in its crossing shape: a notice, or an awaited call.
+    wake: (sessionId2, cause) => frameFeeds.wake(sessionId2, cause),
+    log,
+    launch: clickLaunchVia(launcher),
+    typeSlash: typeInPane(claudeInput),
+    applyUpdate: () => updateWatch.act(),
+    runs: {
+      start: (run3) => runs.start(run3),
+      refused: (sessionId2, action2, reason) => runs.refused(sessionId2, action2, reason)
+    },
+    refresh: readings.refresh,
+    doctor: {
+      ...doctorEdge,
+      install: async (daemonBundle, clients) => installFacts(doctorEdge.install, daemonBundle, clients)
+    },
+    laneSetups: {
+      noted: (session, switches) => laneSetups.noted(session, switches),
+      clicked: (sessionId2, session, before, after) => laneSetups.clicked(sessionId2, session, before, after)
+    },
+    tmuxStatusLines: {
+      observe: ({ sessionId: sessionId2, tmux: tmux3, on: on2 }) => tmuxStatusLines.observe(sessionId2, tmux3, on2)
+    },
+    menuIdle: {
+      clicked: (sessionId2, at) => menuIdle.clicked(sessionId2, at),
+      clickArrived: (sessionId2) => menuIdle.clickArrived(sessionId2),
+      clickSettled: (sessionId2) => menuIdle.clickSettled(sessionId2),
+      observe: (sessionId2, at, shown, timeoutS) => menuIdle.observe(sessionId2, at, shown, timeoutS),
+      confirmClose: async (sessionId2, firedAt) => menuIdle.confirmClose(sessionId2, firedAt)
+    },
+    clicks: { gone: async (click3) => clicks.gone(click3) },
+    serving: async () => limits.serving(),
+    renderSightings: {
+      ofSession: async (sessionId2, now2) => renderSightings.ofSession(sessionId2, now2)
+    },
+    probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
+    eventAnswered: (event) => {
+      launcher.answeredPipeEvent(event);
+      if (rendererEnded !== null && answeredBy(rendererEnded, event))
+        rendererEnded = { ...rendererEnded, answered: true };
+      restateFaults();
+    },
+    watches: {
+      watch: (id2, key, targets) => {
+        const told = (heard) => parts.renderer.tell(
+          { kind: "watch", id: id2, heard, deaf: handle.deaf },
+          instant()
+        );
+        const handle = watcherRegistry.acquire(key, targets, told);
+        rendererWatches.set(id2, handle);
+        void clock.defer(() => {
+          if (rendererWatches.get(id2) === handle) told(null);
+        });
+      },
+      unwatch: (id2) => {
+        rendererWatches.get(id2)?.release();
+        rendererWatches.delete(id2);
+      }
+    },
+    storage: {
+      hold: (id2, folders) => managedStorage.hold(id2, folders),
+      release: (id2) => managedStorage.release(id2)
+    }
+  };
+  const link = preparedRenderer.start({
+    reaches,
+    log,
+    clock,
+    // [LAW:single-enforcer] A renderer that starts again is configured as a
+    // request would: every live session whose newest request the host holds
+    // gets its `config` with its latest stamp, and every open feed its `pin`,
+    // through the host's one path to the renderer.
+    start: async () => {
+      const at = instant();
+      for (const sessionId2 of frameFeeds.openFeeds())
+        parts.renderer.tell({ kind: "pin", session: sessionId2 }, at);
+      await Promise.all(
+        [...collector.liveDocuments()].flatMap(([sessionId2, worldState]) => {
+          const req = frameFeeds.latest(sessionId2);
+          return req === null ? [] : [
+            parts.renderer.answer({
+              kind: "event",
+              at,
+              event: { kind: "config", context: located(req), worldState }
+            })
+          ];
+        })
+      );
+    },
+    ended: (event) => {
+      rendererEnded = event;
+      restateFaults();
+    }
+  });
+  const parts = {
+    clicks,
+    home: host.home,
+    tmp: host.tmp,
+    launcher,
+    log,
+    clock,
+    bundle: bundle.path,
+    sourceDigest: bundle.digest,
+    doctorStores,
+    stats,
+    handlerProbes,
+    renderSightings,
+    watcherRegistry,
+    refreshLedger,
+    fileEvents,
+    payloadProviders,
+    menuIdle,
+    runs,
+    sourceRuns,
+    laneSetups,
+    tmuxStatusLines,
+    frameFeeds,
+    updateWatch,
+    limits,
+    collector,
+    renderer: rendererHost("main", clock, link.renderer, log, collector)
+  };
+  return {
+    stats,
+    launcher,
+    log,
+    memoryLimitBytes: memoryLimitBytes2,
+    clock,
+    exit: exit2,
+    // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
+    // the way in. A click that got in is gathering, or holds or waits for a journal's turn,
+    // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
+    // reached as the daemon closed is refused here and opens no feed.
+    handle: async (req, timedOut, accepted, clientLeft) => {
+      closing.signal.throwIfAborted();
+      return handleRequest(parts, req, timedOut, accepted, clientLeft);
+    },
+    reply: async (req, timedOut, accepted, clientLeft) => {
+      closing.signal.throwIfAborted();
+      return replyTo(parts, req, timedOut, accepted, clientLeft);
+    },
+    subscribe: (sessionId2, subscriber) => {
+      closing.signal.throwIfAborted();
+      return frameFeeds.subscribe(sessionId2, subscriber);
+    },
+    reloadConfig: (origin) => {
+      closing.signal.throwIfAborted();
+      parts.renderer.tell({ kind: "reload-config", origin }, instant());
+    },
+    arm() {
+      closing.signal.throwIfAborted();
+      fileEvents.start(paths2.watchProbe);
+      binaryWatch.arm();
+      updateWatch.arm();
+      limits.arm();
+      link.arm();
+    },
+    async close(atExit) {
+      const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
+      const teardown = [
+        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
+        // the journal in flight commits what landed; none opens after.
+        ["journalTurns close", rendererStep("close-journal")],
+        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
+        // back before it goes (src/daemon/tmux-status.ts).
+        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
+        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
+        // is in flight is terminated, whichever owner's work it was, and the
+        // launcher's lifeline goes.
+        ["launches abort", () => closing.abort(new Error("the daemon closed"))],
+        ["frameFeeds close", () => frameFeeds.close()],
+        ["menuIdle dispose", () => menuIdle.dispose()],
+        ["updateWatch close", () => updateWatch.close()],
+        ["binaryWatch close", () => binaryWatch.close()],
+        ["limits disarm", () => limits.disarm()],
+        // Before the sources and the storage its states hold.
+        ["collector close", () => collector.close()],
+        ["renderer views close", rendererStep("close-views")],
+        ["gitService close", () => gitService.close()],
+        ["usageStore close", () => usageStore.close()],
+        ["tmuxService close", () => tmuxService.close()],
+        ["hostService close", () => hostService.close()],
+        ["runs close", () => runs.close()],
+        // After the collector, which holds every session's runs: its close
+        // releases them first, so this close drops nothing still held.
+        ["sourceRuns close", () => sourceRuns.close()],
+        ["managedStorage close", () => managedStorage.close()],
+        ["fileEvents close", () => fileEvents.close()],
+        ["watcherRegistry close", () => watcherRegistry.closeAll()],
+        // Last: a run that ends in the teardown holds its click error first.
+        ["sessionState close", rendererStep("close-session-state")],
+        // After every step the renderer takes: its process, when it has one,
+        // ends with nothing left to flush.
+        ["renderer process close", () => link.close()]
+      ];
+      for (const [step4, run3] of teardown) {
+        try {
+          await run3();
+        } catch (e) {
+          log("warn", `${step4} failed: ${e.message}`);
+        }
+      }
+      closed = true;
+      return { settled: launcher.settled() };
+    }
+  };
+}
+
+// src/daemon/log.ts
+init_globals();
+var import_node_path42 = __toESM(require_path_browserify(), 1);
+var MAX_BYTES2 = 5 * 1024 * 1024;
+var KEEP_GENERATIONS = 3;
+var MAX_WAITING_BYTES = 4 * 1024 * 1024;
+var EXIT_WAIT_MS = 1e3;
+var BREACH_WAIT_MS = 2e3;
+function idOf3(st) {
+  return `${st.dev}:${st.ino}`;
+}
+function writeAt(fd, bytes) {
+  return new Promise(
+    (resolve, reject2) => fs_default.write(
+      fd,
+      bytes,
+      (err, written2) => err === null ? resolve(written2) : reject2(err)
+    )
+  );
+}
+async function rotate(filePath2) {
+  for (let i = KEEP_GENERATIONS - 1; i >= 1; i--) {
+    await fs_default.promises.rename(`${filePath2}.${i}`, `${filePath2}.${i + 1}`).catch(() => {
+    });
+  }
+  await fs_default.promises.rename(filePath2, `${filePath2}.1`).catch(() => {
+  });
+}
+function logLine(level, msg, at) {
+  return `${new Date(at).toISOString()} [${level}] ${msg}
+`;
+}
+function sizeOnceLanded(clock, fd, endsAt, waitMs) {
+  const until2 = clock.monotonic() + waitMs;
+  const nap = new Int32Array(new SharedArrayBuffer(4));
+  for (; ; ) {
+    const { size } = fs_default.fstatSync(fd);
+    if (size >= endsAt || clock.monotonic() >= until2) return size;
+    Atomics.wait(nap, 0, 0, 1);
+  }
+}
+function unwritable(lines2, e) {
+  try {
+    process_default.stderr.write(
+      `${lines2}cc-candybar: daemon.log unwritable: ${e.message}
+`
+    );
+  } catch {
+  }
+}
+var DaemonLog = class {
+  // [LAW:effects-at-boundaries] `clock` is the machine's: the stamp on each
+  // line, and the blocking wait for a write in flight, which a held clock
+  // would never end.
+  constructor(filePath2, clock) {
+    this.filePath = filePath2;
+    this.clock = clock;
+  }
+  filePath;
+  clock;
+  sink = null;
+  // Lines not yet taken and their bytes, the count of the oldest dropped to
+  // stay within what the log holds, and the batch taken and on its way.
+  waiting = [];
+  waitingBytes = 0;
+  dropped = 0;
+  droppedBytes = 0;
+  onItsWay = null;
+  // Set by the flush itself as it starts and cleared as it ends, so a flush
+  // that ends without ever yielding leaves the next line free to start another.
+  flushing = false;
+  drainedWaiters = [];
+  // Once the process is exiting, no flush will run again: a line logged then —
+  // by an exit listener after this one — is written as it is logged.
+  exiting = false;
+  exitListener = null;
+  // Set by dispose: nothing registers or holds a resource for this log again.
+  disposed = false;
+  // One line, to the log: the daemon's `DaemonLogger`.
+  log = (level, msg) => {
+    const line = logLine(level, msg, this.clock.now());
+    if (this.exitListener === null && !this.disposed) {
+      this.exitListener = () => {
+        this.exiting = true;
+        this.writeWaitingSync(true, EXIT_WAIT_MS);
+      };
+      process_default.on("exit", this.exitListener);
+    }
+    this.waiting.push(line);
+    this.waitingBytes += import_buffer.Buffer.byteLength(line);
+    if (this.waitingBytes > MAX_WAITING_BYTES) {
+      let cut = 0;
+      while (this.waitingBytes > MAX_WAITING_BYTES / 2 && cut < this.waiting.length - 1) {
+        const bytes = import_buffer.Buffer.byteLength(this.waiting[cut]);
+        this.waitingBytes -= bytes;
+        this.droppedBytes += bytes;
+        cut++;
+      }
+      this.waiting.splice(0, cut);
+      this.dropped += cut;
+    }
+    if (this.exiting) this.writeWaitingSync(true, EXIT_WAIT_MS);
+    else if (!this.flushing) void this.flush();
+  };
+  // Resolves once every line logged so far is in the file (or reported
+  // unwritable).
+  drained() {
+    if (!this.flushing) return Promise.resolve();
+    return new Promise((resolve) => this.drainedWaiters.push(resolve));
+  }
+  // What is waiting, written now, synchronously: for a caller about to block
+  // the loop on the way to a death that may come with no exit event (a heap
+  // snapshot, which can draw the OS's kill), so what explains it is on disk
+  // first. The wait for a write already out may be long here: a snapshot that
+  // holds the loop for seconds follows it anyway.
+  writeNow() {
+    this.writeWaitingSync(false, BREACH_WAIT_MS);
+  }
+  // The log of a daemon that is done with it: its descriptor and its exit
+  // listener go, so a process that builds many logs holds none of the ended
+  // ones. A line logged after still reaches the file, through an open its flush
+  // ends, and is not written at the process's exit. A flush under way ends the
+  // descriptor itself: closed from here, its number could go to the next file
+  // opened while a write still holds it.
+  dispose() {
+    this.disposed = true;
+    if (this.exitListener !== null) {
+      process_default.off("exit", this.exitListener);
+      this.exitListener = null;
+    }
+    if (!this.flushing) this.closeSink();
+  }
+  closeSink() {
+    if (this.sink === null) return;
+    try {
+      fs_default.closeSync(this.sink.fd);
+    } catch {
+    }
+    this.sink = null;
+  }
+  // The file now at the log's path, held open, and its size. The held
+  // descriptor is kept only while it is still that file: a state dir removed
+  // under the daemon, or a log another daemon rotated, puts a different file
+  // there (or none), and the next write goes to it, never into a file nobody
+  // reads. One stat a write, not a line: lines arriving while a write is out go
+  // in the next one together. Asked less often, the lines between a state
+  // dir's removal and the next ask would go into a file nobody can read.
+  async sinkAt() {
+    const st = await fs_default.promises.stat(this.filePath).catch(() => null);
+    if (this.sink !== null && st !== null && this.sink.id === idOf3(st)) {
+      return { held: this.sink, size: st.size };
+    }
+    this.closeSink();
+    await fs_default.promises.mkdir(import_node_path42.default.dirname(this.filePath), { recursive: true });
+    const fd = await new Promise(
+      (resolve, reject2) => fs_default.open(
+        this.filePath,
+        "a",
+        (err, opened2) => err === null ? resolve(opened2) : reject2(err)
+      )
+    );
+    const opened = await new Promise(
+      (resolve, reject2) => fs_default.fstat(
+        fd,
+        (err, stats) => err === null ? resolve(stats) : reject2(err)
+      )
+    );
+    this.sink = { path: this.filePath, fd, id: idOf3(opened) };
+    return { held: this.sink, size: opened.size };
+  }
+  // One write at a time until nothing waits.
+  async flush() {
+    this.flushing = true;
+    try {
+      while (this.waiting.length > 0) {
+        const lines2 = this.take();
+        const batch = {
+          bytes: import_buffer.Buffer.from(lines2),
+          state: { kind: "taken" }
+        };
+        this.onItsWay = batch;
+        try {
+          await this.append(batch);
+        } catch (e) {
+          this.closeSink();
+          if (batch.state.kind !== "landed") unwritable(lines2, e);
+        } finally {
+          this.onItsWay = null;
+        }
+      }
+    } finally {
+      this.flushing = false;
+      if (this.disposed) this.closeSink();
+      for (const resolve of this.drainedWaiters.splice(0)) resolve();
+    }
+  }
+  // Everything waiting, after the count of the lines dropped before it.
+  take() {
+    const lost = this.dropped === 0 ? "" : logLine(
+      "warn",
+      `log: ${this.dropped} earlier line(s) dropped (${this.droppedBytes} bytes): more than ${MAX_WAITING_BYTES} bytes were waiting for the disk`,
+      this.clock.now()
+    );
+    const lines2 = lost + this.waiting.join("");
+    this.waiting = [];
+    this.waitingBytes = 0;
+    this.dropped = 0;
+    this.droppedBytes = 0;
+    return lines2;
+  }
+  async append(batch) {
+    const { held, size } = await this.sinkAt();
+    if (batch.state.kind === "landed") return;
+    const { bytes } = batch;
+    const endsAt = size + bytes.length;
+    batch.state = { kind: "issued", fd: held.fd, endsAt };
+    for (let done2 = 0; done2 < bytes.length; ) {
+      const written2 = await writeAt(held.fd, bytes.subarray(done2));
+      if (written2 === 0) throw new Error("the disk took 0 bytes of a write");
+      done2 += written2;
+    }
+    batch.state = { kind: "landed" };
+    if (endsAt >= MAX_BYTES2) {
+      this.closeSink();
+      const now2 = await fs_default.promises.stat(held.path).catch(() => null);
+      if (now2 !== null && idOf3(now2) === held.id) await rotate(held.path);
+    }
+  }
+  // On the way out, after the event loop's last turn (or now, for a caller that
+  // cannot wait): a batch not yet written is written; one whose write is out is
+  // waited for, as the file's size says, so the lines after it follow it in
+  // order — and on the way out, one that has not landed by then is written
+  // again, since a write that never started never will. Every line still
+  // waiting follows.
+  // [LAW:no-silent-failure] exception: the size misleads in two ways, each
+  // costing that one batch: another process appending while it is out makes it
+  // look landed (lost), and a write that starts after the wait gave up lands
+  // beside its rewrite (doubled). A write at an offset of its own would answer
+  // exactly, and would overwrite the other daemon's lines at every handoff.
+  writeWaitingSync(finishing, waitMs) {
+    const out = this.onItsWay;
+    let first2 = import_buffer.Buffer.alloc(0);
+    if (out !== null && out.state.kind === "taken") {
+      first2 = out.bytes;
+      out.state = { kind: "landed" };
+    }
+    let stillOut = null;
+    if (out !== null && out.state.kind === "issued") {
+      const { fd, endsAt } = out.state;
+      try {
+        const size = sizeOnceLanded(this.clock, fd, endsAt, waitMs);
+        if (size < endsAt && finishing) {
+          first2 = out.bytes.subarray(
+            Math.max(0, size - (endsAt - out.bytes.length))
+          );
+          out.state = { kind: "landed" };
+        } else if (size < endsAt) {
+          stillOut = { fd, endsAt };
+        }
+      } catch (e) {
+        if (finishing) {
+          first2 = out.bytes;
+          out.state = { kind: "landed" };
+        }
+        unwritable(out.bytes.toString(), e);
+      }
+    }
+    if (first2.length === 0 && this.waiting.length === 0) return;
+    const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(this.take())]);
+    try {
+      fs_default.mkdirSync(import_node_path42.default.dirname(this.filePath), { recursive: true });
+      fs_default.appendFileSync(this.filePath, lines2);
+      if (stillOut !== null && out !== null && idOf3(fs_default.fstatSync(stillOut.fd)) === idOf3(fs_default.statSync(this.filePath))) {
+        out.state = {
+          kind: "issued",
+          fd: stillOut.fd,
+          endsAt: stillOut.endsAt + lines2.length
+        };
+      }
+    } catch (e) {
+      unwritable(lines2.toString(), e);
+    }
+  }
+};
+
+// src/daemon/production-adapters.ts
+init_globals();
+
+// src/claude-input/edge.ts
+init_globals();
+var THEN = ";";
+var BUFFER = "cc-candybar-slash";
+async function tmux(launcher, hint, category, args, stdinInput) {
+  const run3 = await runTmuxAsync(launcher, hint, category, args, stdinInput);
+  if (run3.kind === "failed") throw new Error(run3.reason);
+  return run3;
+}
+async function read(launcher, hint) {
+  const run3 = await tmux(launcher, hint, "claude-input.read", [
+    "display",
+    "-p",
+    "-t",
+    hint.pane,
+    "#{pane_in_mode}",
+    THEN,
+    "capture-pane",
+    "-p",
+    "-t",
+    hint.pane
+  ]);
+  if (run3.kind === "rate-limited") throw new Error(run3.reason);
+  const [mode = "", ...screen] = run3.stdout.split("\n");
+  return { inMode: mode !== "0", screen };
+}
+function pasteLineArgs(pane, buffer, before) {
+  return [
+    "load-buffer",
+    "-b",
+    buffer,
+    "-",
+    THEN,
+    ...before.length === 0 ? [] : ["send-keys", "-t", pane, ...before, THEN],
+    "paste-buffer",
+    "-p",
+    "-d",
+    "-b",
+    buffer,
+    "-t",
+    pane,
+    THEN,
+    "send-keys",
+    "-t",
+    pane,
+    "Enter"
+  ];
+}
+async function type2(launcher, hint, line) {
+  const run3 = await tmux(
+    launcher,
+    hint,
+    "claude-input.type",
+    pasteLineArgs(hint.pane, BUFFER, ["C-s"]),
+    line
+  );
+  return run3.kind === "ok" ? { kind: "typed" } : {
+    kind: "refused",
+    reason: `cc-candybar typed a command moments ago \u2014 click again in a second (${run3.reason})`
+  };
+}
+function productionClaudeInputEdge(launcher) {
+  return {
+    read: (hint) => read(launcher, hint),
+    type: (hint, line) => type2(launcher, hint, line)
+  };
+}
+
+// src/daemon/process-fingerprint.ts
+init_globals();
+async function readStartTime(pid2, launch) {
+  const res = await launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process_default.kill(pid2, 0);
+        return true;
+      } catch (e) {
+        return e.code === "EPERM";
+      }
+    },
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+
+// src/daemon/file-storage.ts
+init_globals();
+
+// src/daemon/session-state-file.ts
+init_globals();
+var import_node_path43 = __toESM(require_path_browserify(), 1);
+function isSnapshot(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  for (const kv of Object.values(value)) {
+    if (kv === null || typeof kv !== "object" || Array.isArray(kv))
+      return false;
+    for (const leaf of Object.values(kv)) {
+      if (typeof leaf !== "string") return false;
+    }
+  }
+  return true;
+}
+var FileSessionStorage = class {
+  constructor(filePath2, clock, debounceMs = 500, logger = quietLogger) {
+    this.filePath = filePath2;
+    this.clock = clock;
+    this.debounceMs = debounceMs;
+    this.logger = logger;
+    this.writingPath = `${filePath2}.writing`;
+  }
+  filePath;
+  clock;
+  debounceMs;
+  logger;
+  // What clears the debounce timer while one is armed.
+  clearTimer = null;
+  pending = null;
+  // Whether a debounced write is on its way to the disk.
+  writing = false;
+  // Counts synchronous flushes that landed: a debounced write begun before
+  // the latest one is older than what it wrote. A flush the disk refused
+  // counts for nothing, so the write it raced still publishes.
+  generation = 0;
+  // The debounced write's temp file: what a flush removes to supersede it.
+  writingPath;
+  load() {
+    const loaded = /* @__PURE__ */ new Map();
+    let raw;
+    try {
+      raw = fs_default.readFileSync(this.filePath, "utf8");
+    } catch (e) {
+      const code = e.code;
+      if (code !== "ENOENT") {
+        this.logger(
+          "warn",
+          `session-state read failed (${code}); starting empty`
+        );
+      }
+      return loaded;
+    }
+    try {
+      const parsed2 = JSON.parse(raw);
+      if (isSnapshot(parsed2)) {
+        return sessionKeyed(
+          parsed2,
+          (key, problem) => this.logger(
+            "warn",
+            `session-state load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
+          )
+        );
+      }
+      this.logger(
+        "warn",
+        `session-state load: unexpected shape, starting empty`
+      );
+      return loaded;
+    } catch {
+      this.logger("warn", `session-state load: corrupt JSON, starting empty`);
+      return loaded;
+    }
+  }
+  save(snapshot) {
+    this.pending = snapshot;
+    this.schedule();
+  }
+  // One debounced write at a time, so snapshots land in the order they were
+  // taken; a save that arrives while one is being written waits for it.
+  schedule() {
+    if (this.clearTimer !== null || this.writing) return;
+    this.clearTimer = this.clock.after(
+      this.debounceMs,
+      () => {
+        this.clearTimer = null;
+        void this.write();
+      },
+      { unref: true }
+    );
+  }
+  // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
+  // off the daemon's one thread: the bytes are written and synced through the
+  // thread pool, and so is the rename that publishes them. A rename is a
+  // journaled metadata op, and on a busy disk it waits on the journal like
+  // any write: run synchronously here it held every bar and click for 180 ms
+  // on a CI runner, past every client's reply budget.
+  async write() {
+    const snapshot = this.pending;
+    if (snapshot === null) return;
+    const generation = this.generation;
+    const started2 = this.clock.monotonic();
+    const body = JSON.stringify(snapshot);
+    const tmp = this.writingPath;
+    this.writing = true;
+    const heldMs = elapsedMs(this.clock, started2);
+    try {
+      await fs_default.promises.mkdir(import_node_path43.default.dirname(this.filePath), { recursive: true });
+      const file = await fs_default.promises.open(tmp, "w", 384);
+      try {
+        await file.writeFile(body);
+        await file.chmod(384);
+        await file.datasync();
+      } finally {
+        await file.close();
+      }
+      let landed = false;
+      if (generation === this.generation) {
+        try {
+          await fs_default.promises.rename(tmp, this.filePath);
+          landed = true;
+        } catch (e) {
+          if (e.code !== "ENOENT" || generation === this.generation)
+            throw e;
+        }
+      }
+      if (generation !== this.generation) {
+        if (!landed) await fs_default.promises.rm(tmp, { force: true });
+        this.logger(
+          "info",
+          `session-state write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
+        );
+        return;
+      }
+      this.saved(body, snapshot, started2, heldMs);
+      if (this.pending === snapshot) this.pending = null;
+    } catch (e) {
+      this.logger("warn", `session-state save failed: ${e.message}`);
+    } finally {
+      this.writing = false;
+      if (this.pending !== null && this.pending !== snapshot) this.schedule();
+    }
+  }
+  // The synchronous write, for shutdown and for callers that read the file
+  // back at once.
+  flush() {
+    this.clearTimer?.();
+    this.clearTimer = null;
+    if (this.pending === null) return;
+    const snapshot = this.pending;
+    const started2 = this.clock.monotonic();
+    try {
+      fs_default.mkdirSync(import_node_path43.default.dirname(this.filePath), { recursive: true });
+      const tmp = `${this.filePath}.tmp`;
+      const body = JSON.stringify(snapshot);
+      fs_default.writeFileSync(tmp, body, { mode: 384 });
+      fs_default.chmodSync(tmp, 384);
+      fs_default.rmSync(this.writingPath, { force: true });
+      fs_default.renameSync(tmp, this.filePath);
+      this.generation++;
+      this.saved(body, snapshot, started2, elapsedMs(this.clock, started2));
+      this.pending = null;
+    } catch (e) {
+      this.logger("warn", `session-state save failed: ${e.message}`);
+    }
+  }
+  // [LAW:nothing-unseen] Every write says what it wrote, how long it took, and
+  // how much of that it held the daemon's one thread.
+  saved(body, snapshot, started2, heldMs) {
+    this.logger(
+      "info",
+      `session-state saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
+    );
+  }
+};
+
+// src/daemon/history-file.ts
+init_globals();
+var import_node_path44 = __toESM(require_path_browserify(), 1);
+function isChange(v) {
+  if (v === null || typeof v !== "object") return false;
+  const o = v;
+  const state = (x) => x === null || typeof x === "string";
+  return (o.kind === "session" && typeof o.key === "string" || o.kind === "file" && typeof o.file === "string") && state(o.before) && state(o.after);
+}
+function isSteps(v) {
+  return Array.isArray(v) && v.every((step4) => Array.isArray(step4) && step4.every(isChange));
+}
+function isSavepoint(v) {
+  if (v === null || typeof v !== "object") return false;
+  const o = v;
+  return Number.isInteger(o.at) && o.at >= 0 && Array.isArray(o.net) && o.net.every(isChange) && isSteps(o.below);
+}
+function isSessionHistory(v) {
+  if (v === null || typeof v !== "object") return false;
+  const o = v;
+  return isSteps(o.past) && isSteps(o.future) && (o.savepoint === void 0 || isSavepoint(o.savepoint));
+}
+function withoutRetiredKeys(history, retired) {
+  const keep2 = (change) => {
+    if (change.kind === "file" || isSettingKey(change.key)) return true;
+    retired.add(change.key);
+    return false;
+  };
+  const steps2 = (list2) => list2.map((step4) => step4.filter(keep2)).filter((step4) => step4.length > 0);
+  const { savepoint } = history;
+  const past = steps2(history.past);
+  const future = steps2(history.future);
+  if (savepoint === void 0) return { past, future };
+  return {
+    past,
+    future,
+    savepoint: {
+      at: steps2(history.past.slice(0, savepoint.at)).length,
+      net: savepoint.net.filter(keep2),
+      below: steps2(savepoint.below)
+    }
+  };
+}
+function fileHistoryStorage(file, logger) {
+  return {
+    load: () => {
+      const loaded = /* @__PURE__ */ new Map();
+      let raw;
+      try {
+        raw = fs_default.readFileSync(file, "utf8");
+      } catch (e) {
+        const code = e.code;
+        if (code !== "ENOENT") {
+          logger(
+            "warn",
+            `settings-history read failed (${code}); starting empty`
+          );
+        }
+        return loaded;
+      }
+      try {
+        const parsed2 = JSON.parse(raw);
+        if (parsed2 !== null && typeof parsed2 === "object" && !Array.isArray(parsed2) && Object.values(parsed2).every(isSessionHistory)) {
+          const retired = /* @__PURE__ */ new Set();
+          const keyed = sessionKeyed(
+            parsed2,
+            (key, problem) => logger(
+              "warn",
+              `settings-history load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
+            )
+          );
+          for (const [id2, history] of keyed)
+            loaded.set(id2, withoutRetiredKeys(history, retired));
+          if (retired.size > 0) {
+            logger(
+              "warn",
+              `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`
+            );
+          }
+          return loaded;
+        }
+      } catch {
+      }
+      logger("warn", "settings-history load: unexpected shape, starting empty");
+      return loaded;
+    },
+    save: (state) => {
+      try {
+        fs_default.mkdirSync(import_node_path44.default.dirname(file), { recursive: true });
+        writeAtomic(file, JSON.stringify(state), 384);
+      } catch (e) {
+        const message = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
+        logger("error", message);
+        throw new Error(message);
+      }
+    }
+  };
+}
+
+// src/daemon/file-storage.ts
+function fileStorage(paths2, log, clock) {
+  return {
+    session: new FileSessionStorage(paths2.sessionState, clock, 500, log),
+    history: fileHistoryStorage(paths2.settingsHistory, log)
+  };
+}
+
+// src/daemon/lane-edge.ts
+init_globals();
+
+// src/path-search.ts
+init_globals();
+var import_node_path45 = __toESM(require_path_browserify(), 1);
+function executableOn(name, pathVariable, isExecutable) {
+  for (const dir of (pathVariable ?? "").split(import_node_path45.default.delimiter)) {
+    if (!import_node_path45.default.isAbsolute(dir)) continue;
+    const file = import_node_path45.default.join(dir, name);
+    if (isExecutable(file)) return file;
+  }
+  return null;
+}
+function regularFileWith(file, mode) {
+  try {
+    fs_default.accessSync(file, mode);
+    return fs_default.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+function canonical2(file) {
+  try {
+    return fs_default.realpathSync(file);
+  } catch {
+    return import_node_path45.default.resolve(file);
+  }
+}
+
+// src/attach-preload.ts
+init_globals();
+var import_node_path46 = __toESM(require_path_browserify(), 1);
+function launcherNode(pathVariable, isExecutable, canonical3) {
+  const node = executableOn("node", pathVariable, isExecutable);
+  if (node === null) {
+    return {
+      kind: "refused",
+      why: "no `node` on PATH to run the attach launcher"
+    };
+  }
+  return import_node_path46.default.basename(canonical3(node)) === "bun" ? {
+    kind: "refused",
+    why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`
+  } : { kind: "node", file: node };
+}
+
+// src/daemon/lane-edge.ts
+var SHELL_BUFFER = "cc-candybar-lane";
+var EXIT_POLL_MS = 100;
+var SHELL_PATIENCE_MS = 2e3;
+async function tmux2(launcher, hint, args, stdinInput) {
+  const run3 = await runTmuxAsync(launcher, hint, "lane.tmux", args, stdinInput);
+  if (run3.kind !== "ok") throw new Error(run3.reason);
+  return run3.stdout;
+}
+function ran(what, result) {
+  if (result.ok) return result.stdout;
+  const told = saidBy(result, result.stdout);
+  throw new Error(
+    `${what} failed (${failureText(result)}${told === "" ? "" : `: ${told}`})`
+  );
+}
+function refusalOf3(stdout2) {
+  try {
+    const said = JSON.parse(stdout2);
+    if (typeof said === "object" && said !== null && "ok" in said && said.ok === false && "reason" in said && typeof said.reason === "string") {
+      return "detail" in said && typeof said.detail === "string" ? `${said.reason}: ${said.detail}` : said.reason;
+    }
+  } catch {
+  }
+  return null;
+}
+var PANE_STARTS_FORMAT = "#{pane_id} #{pane_start_command}";
+var BAR_PANE_START = /(?:^|\s)bar-pane\s+["'\\]*(%\d+)["']*\s*$/;
+function barPanesOf(listPanes, pane) {
+  return listPanes.split("\n").flatMap((line) => {
+    const [id2, ...start] = line.trim().split(" ");
+    return BAR_PANE_START.exec(start.join(" "))?.[1] === pane ? [id2] : [];
+  });
+}
+var ATTACH = /(^|\/)(cc-attach|bun-attach\.js)(\s|$)/;
+function runsAttached(table, pid2, panePid) {
+  for (const p2 of lineage(processTable(table), pid2)) {
+    if (p2.command.split(" ").some((word) => ATTACH.test(word))) return true;
+    if (p2.pid === panePid) return false;
+  }
+  return false;
+}
+var PROCARGS2 = [
+  "import ctypes, json, struct, sys",
+  "libc = ctypes.CDLL(None)",
+  "mib = (ctypes.c_int * 3)(1, 49, int(sys.argv[1]))",
+  "size = ctypes.c_size_t(0)",
+  "if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0: sys.exit('sysctl KERN_PROCARGS2 refused')",
+  "buf = ctypes.create_string_buffer(size.value)",
+  "if libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) != 0: sys.exit('sysctl KERN_PROCARGS2 refused')",
+  "raw = buf.raw[:size.value]",
+  "argc = struct.unpack_from('i', raw)[0]",
+  "rest = raw[4:]",
+  "end = rest.index(b'\\0')",
+  "exe = rest[:end].decode('utf-8', 'surrogateescape')",
+  "rest = rest[end:].lstrip(b'\\0')",
+  "words = [w.decode('utf-8', 'surrogateescape') for w in rest.split(b'\\0')]",
+  "end = words.index('', argc) if '' in words[argc:] else len(words)",
+  "print(json.dumps({'executable': exe, 'argv': words[:argc], 'env': words[argc:end]}))"
+].join("\n");
+async function imageOf(launcher, pid2) {
+  if (process_default.platform === "linux") {
+    return {
+      executable: await fs_default.promises.readlink(`/proc/${pid2}/exe`),
+      argv: (await fs_default.promises.readFile(`/proc/${pid2}/cmdline`, "utf8")).split("\0").slice(0, -1),
+      env: (await fs_default.promises.readFile(`/proc/${pid2}/environ`, "utf8")).split("\0").slice(0, -1)
+    };
+  }
+  const out = ran(
+    `reading process ${pid2}'s arguments`,
+    await launcher.launch({
+      bin: "python3",
+      args: ["-c", PROCARGS2, String(pid2)],
+      timeoutMs: 5e3,
+      category: "lane.process"
+    })
+  );
+  return JSON.parse(out);
+}
+async function ps(launcher, what, args) {
+  return ran(
+    what,
+    await launcher.launch({
+      bin: "ps",
+      args,
+      timeoutMs: 2e3,
+      category: "lane.process"
+    })
+  );
+}
+async function paneForeground(launcher, hint) {
+  const display = await runTmuxAsync(launcher, hint, "lane.tmux", [
+    "display",
+    "-p",
+    "-t",
+    hint.pane,
+    "#{pane_pid}	#{pane_current_path}"
+  ]);
+  if (display.kind !== "ok") throw new Error(display.reason);
+  const [panePid = "", cwd2 = ""] = display.stdout.trimEnd().split("	");
+  const foreground = (await ps(launcher, `asking pane ${hint.pane}'s foreground job`, [
+    "-o",
+    "tpgid=",
+    "-p",
+    panePid
+  ])).trim();
+  return { panePid: Number(panePid), cwd: cwd2, foreground: Number(foreground) };
+}
+async function paneClaude(launcher, hint) {
+  const {
+    panePid,
+    cwd: cwd2,
+    foreground: pid2
+  } = await paneForeground(launcher, hint);
+  const table = await ps(launcher, "listing processes", [
+    "-A",
+    "-o",
+    "pid=,ppid=,args="
+  ]);
+  const image = await imageOf(launcher, pid2);
+  const parent = processTable(table).get(pid2)?.ppid;
+  if (parent === void 0) {
+    throw new Error(`pane ${hint.pane}'s foreground job ${pid2} is gone`);
+  }
+  return {
+    pid: pid2,
+    // The installed binary itself, as cc-extra's own `bin/cc-attach` hands it
+    // to the launcher (`readlink -f`): `~/.local/bin/claude` is a link to the
+    // release it runs.
+    executable: await fs_default.promises.realpath(image.executable),
+    argv: image.argv,
+    env: image.env,
+    cwd: cwd2,
+    parent,
+    fromShell: pid2 !== panePid,
+    attached: runsAttached(table, pid2, panePid)
+  };
+}
+var FOLLOW_POLL_MS = 200;
+function productionLaneEdge(launcher, following, closing, clock, probe2) {
+  const wait = (ms) => sleep(clock, ms, closing);
+  return {
+    claudeInput: productionClaudeInputEdge(launcher),
+    barPanes: async (hint) => barPanesOf(
+      await tmux2(launcher, hint, [
+        "list-panes",
+        "-a",
+        "-F",
+        PANE_STARTS_FORMAT
+      ]),
+      hint.pane
+    ),
+    // Two or more words after the options are run as they are, with no shell
+    // between (tmux ≥ 3.0), so no path in `argv` needs quoting for one.
+    // [LAW:no-ambient-temporal-coupling] One launch: the split records the
+    // pane's owner in its command (`barPanesOf`), so a daemon closing after it
+    // leaves no bar pane `pane off` cannot find. `-d` leaves focus untouched.
+    openBarPane: async (hint, argv2, env2) => (await tmux2(launcher, hint, [
+      "split-window",
+      "-d",
+      "-v",
+      "-l",
+      "1",
+      "-t",
+      hint.pane,
+      "-P",
+      "-F",
+      "#{pane_id}",
+      ...Object.entries(env2).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+      ...argv2
+    ])).trim(),
+    closePane: async (hint, pane) => void await tmux2(launcher, hint, ["kill-pane", "-t", pane]),
+    // [LAW:single-enforcer] The session's process environment: the
+    // session's facts, never those of whichever shell spawned this detached
+    // daemon.
+    claude: async (args, session) => void ran(
+      `claude ${args.join(" ")}`,
+      await launcher.launch({
+        bin: "claude",
+        args: [...args],
+        envOverlay: sessionEnv(session),
+        timeoutMs: 3e4,
+        category: "lane.claude"
+      })
+    ),
+    fileExists: (file) => fs_default.existsSync(file),
+    presence,
+    paneClaude: (hint) => paneClaude(launcher, hint),
+    // [LAW:no-ambient-temporal-coupling] The pane's directory is the
+    // shell's once the shell holds its terminal again: until it has reaped
+    // Claude Code and taken the foreground back, tmux reads the directory of
+    // the job that held it, or none. An interactive shell leads its own
+    // process group, so it holds the terminal when it is the foreground job
+    // — the shell that started Claude Code, which may itself be a job of the
+    // pane's first shell (`nix develop`, a nested `bash`).
+    paneDir: async (hint, shell) => {
+      const until2 = clock.monotonic() + SHELL_PATIENCE_MS;
+      for (; ; ) {
+        const pane = await paneForeground(launcher, hint);
+        if (pane.foreground === shell) {
+          if (pane.cwd === "") {
+            throw new Error(`tmux read no directory for pane ${hint.pane}`);
+          }
+          return pane.cwd;
+        }
+        if (clock.monotonic() > until2) {
+          throw new Error(
+            `the shell in pane ${hint.pane} (pid ${shell}) did not take its terminal back within ${SHELL_PATIENCE_MS / 1e3} s`
+          );
+        }
+        await wait(EXIT_POLL_MS);
+      }
+    },
+    launcherNode: (pathVariable) => launcherNode(
+      pathVariable,
+      (f) => regularFileWith(f, fs_default.constants.X_OK),
+      canonical2
+    ),
+    onPath: (name, pathVariable) => {
+      const file = executableOn(
+        name,
+        pathVariable,
+        (f) => regularFileWith(f, fs_default.constants.X_OK)
+      );
+      return file === null ? null : fs_default.realpathSync(file);
+    },
+    followed: async (sessionId2, lane, withinMs) => {
+      const until2 = clock.monotonic() + withinMs;
+      while (!following(sessionId2).has(lane)) {
+        if (clock.monotonic() > until2) return false;
+        await wait(FOLLOW_POLL_MS);
+      }
+      return true;
+    },
+    // In a child: the reader holds the whole binary (~200 MB) in memory.
+    moduleGraph: async (node, reader, executable) => {
+      const result = await launcher.launch({
+        bin: node,
+        args: [reader, executable],
+        timeoutMs: 2e4,
+        category: "lane.process"
+      });
+      const refused = !result.ok && result.reason === "non-zero" ? refusalOf3(result.stdout) : null;
+      if (refused !== null) return { ok: false, reason: refused };
+      ran(`reading ${executable}'s module graph`, result);
+      return { ok: true };
+    },
+    // [LAW:no-silent-failure] A kill the OS refuses says which process it was
+    // sent to, not a bare `kill ESRCH`.
+    terminate: (pid2) => {
+      closing.throwIfAborted();
+      try {
+        process_default.kill(pid2, "SIGTERM");
+      } catch (err) {
+        throw new Error(
+          `Claude Code (pid ${pid2}) could not be sent SIGTERM: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    },
+    exited: async (pid2, withinMs) => {
+      const until2 = clock.monotonic() + withinMs;
+      while (probe2.alive(pid2)) {
+        if (clock.monotonic() > until2) return false;
+        await wait(EXIT_POLL_MS);
+      }
+      return true;
+    },
+    // Typed as a slash command is, but with no ctrl+s first: in a shell that
+    // stops the terminal's output.
+    typeShellLine: async (hint, line) => void await tmux2(
+      launcher,
+      hint,
+      pasteLineArgs(hint.pane, SHELL_BUFFER, []),
+      line
+    )
+  };
+}
+
+// src/daemon/link-key.ts
+init_globals();
+var import_node_path47 = __toESM(require_path_browserify(), 1);
+
+// src/click/link-signer.ts
+init_globals();
+var LINK_KEY_BYTES = 32;
+var MAC_SPELLING = /^[0-9a-f]{64}$/;
+function digest(key, fields2) {
+  return createHmac("sha256", key).update(
+    JSON.stringify([
+      fields2.sessionId,
+      fields2.action,
+      fields2.declaration,
+      fields2.evaluated
+    ])
+  ).digest();
+}
+function linkSigner(key) {
+  if (key.length !== LINK_KEY_BYTES) {
+    throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
+  }
+  return {
+    sign: (fields2) => digest(key, fields2).toString("hex"),
+    verify: (fields2, mac) => {
+      if (!MAC_SPELLING.test(mac)) return false;
+      return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
+    }
+  };
+}
+
+// src/daemon/link-key.ts
+function linkKeyFile(dir) {
+  return import_node_path47.default.join(dir, "link.key");
+}
+function linkSignerFromKeyFile(file) {
+  let signer;
+  const loaded = () => signer ??= readOrCreate(file);
+  return {
+    sign: (fields2) => loaded().sign(fields2),
+    verify: (fields2, mac) => loaded().verify(fields2, mac)
+  };
+}
+function readOrCreate(file) {
+  let key;
+  try {
+    key = fs_default.readFileSync(file);
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+    create(file);
+    key = fs_default.readFileSync(file);
+  }
+  if (key.length !== LINK_KEY_BYTES) {
+    throw new Error(
+      `link key ${file} holds ${key.length} bytes, not ${LINK_KEY_BYTES}: remove it and a new one is made (links drawn before then stop working)`
+    );
+  }
+  return linkSigner(key);
+}
+function create(file) {
+  fs_default.mkdirSync(import_node_path47.default.dirname(file), { recursive: true });
+  const written2 = `${file}.${process_default.pid}.${randomBytes(6).toString("hex")}`;
+  fs_default.writeFileSync(written2, randomBytes(LINK_KEY_BYTES), {
+    mode: 384,
+    flag: "wx"
+  });
+  try {
+    fs_default.linkSync(written2, file);
+  } catch (e) {
+    if (e.code !== "EEXIST") throw e;
+  } finally {
+    fs_default.unlinkSync(written2);
+  }
+}
+
+// src/daemon/renderer-process.ts
+init_globals();
+var inProcessPort = ({ load }) => {
+  const loaded = load();
+  return { start: (own2) => inProcessRenderer(loaded, own2.reaches) };
+};
+function inProcessRenderer(loaded, reaches) {
+  const renderer = loaded.start(reaches);
+  return {
+    renderer,
+    arm: () => {
+    },
+    close: async () => {
+    },
+    process: () => null,
+    heapSnapshot: async () => {
+    }
   };
 }
 
@@ -87632,12 +87587,13 @@ function productionAdapters(paths2, daemonLog, machine) {
   return {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
-    renderers: processRenderers(paths2),
+    storage: (log) => fileStorage(paths2, log, machine),
     doctorStores: fileStores(paths2.state),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
     laneEdge: (launcher, following, closing, probe2) => productionLaneEdge(launcher, following, closing, machine, probe2),
+    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths2.state)),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
       log,
@@ -87645,6 +87601,9 @@ function productionAdapters(paths2, daemonLog, machine) {
       snapshotDir: paths2.state,
       writeLogNow: () => daemonLog.writeNow()
     }),
+    // [LAW:one-type-per-behavior] In this process: the daemon process's entry
+    // (server.ts) runs it in a process of its own.
+    renderer: inProcessPort,
     fetch,
     stat: fs_default.statSync
   };
@@ -87973,17 +87932,7 @@ var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
-  // The page has no process to start a renderer in: it draws in its own.
-  renderers: inProcessRenderers({
-    storage: () => ({
-      session: EPHEMERAL_SESSION_STORAGE,
-      history: EPHEMERAL_HISTORY_STORAGE
-    }),
-    doctorStores: fileStores(paths.state),
-    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
-    gates: daemonGates(),
-    stateDir: paths.state
-  }),
+  gates: daemonGates(),
   paths,
   host: HOST,
   bundle: {
@@ -87991,9 +87940,12 @@ var pageDaemon = createDaemon({
     digest: null,
     path: "/app/dist/index.mjs",
     node: [],
-    entry: "/app/dist/index.mjs",
     targets: []
   },
+  storage: () => ({
+    session: EPHEMERAL_SESSION_STORAGE,
+    history: EPHEMERAL_HISTORY_STORAGE
+  }),
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: WORLD.clock,
@@ -88001,7 +87953,7 @@ var pageDaemon = createDaemon({
     throw new Error(`the page's daemon asked to exit ${code}`);
   }
 });
-function lines2(entry, at) {
+function lines(entry, at) {
   const base = { timestamp: new Date(clockAt(at) * 1e3).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
   const usage = (output) => ({
     input_tokens: 4,
@@ -88039,7 +87991,7 @@ function lines2(entry, at) {
 function happen(step4) {
   moment = { ...moment, ...step4.hook };
   if (step4.repo) updateRepo(onClock(step4.repo));
-  appendTranscript(transcript, (step4.transcript ?? []).flatMap((e) => lines2(e, step4.at)));
+  appendTranscript(transcript, (step4.transcript ?? []).flatMap((e) => lines(e, step4.at)));
 }
 function startAt(seconds) {
   endedAt = null;
