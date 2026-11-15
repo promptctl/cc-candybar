@@ -4,15 +4,22 @@
     {
       "version": "pr-758",
       "ref": "refs/pull/758/merge",
-      "sha": "064377363b61fb7833ded7a69459b7f56c645916",
-      "timestamp": "2026-11-15T20:09:19.056Z",
+      "sha": "d27c4eb4bb5cdcdd476535fa34d282f7f2cc7bfc",
+      "timestamp": "2026-11-15T20:34:21.510Z",
       "commits": [
         {
-          "sha": "064377363b61fb7833ded7a69459b7f56c645916",
+          "sha": "d27c4eb4bb5cdcdd476535fa34d282f7f2cc7bfc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T13:08:19-07:00",
-          "message": "Merge ed73dc236e7783371d11432dc464690a3bdbf291 into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+          "timestamp": "2026-11-15T20:33:34Z",
+          "message": "Merge 5548e394f9d405c1536e9deb99943b119ac8ca5e into 2079879f1a0e087b16769463d6326609fb6ed589\n"
+        },
+        {
+          "sha": "5548e394f9d405c1536e9deb99943b119ac8ca5e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T13:33:19-07:00",
+          "message": "fix(click): an answer proves the question drew it, every client hears its click's outcome, and the daemon signs the doctor's probe (candybar-host-renderer-x96a.35o)\n\nHigh review of #758. The repository answer keeps a signature of its own, since a config can draw any link the bar then signs. The URL handler app is told each click's outcome as the CLI is, so a click no renderer took within the deadline, or one whose verb failed with no bar to hold it, is shown. A status-line range comes only from tmux's binding. The doctor opens a probe link the daemon signed with its own key. A link is signed in the form a URL parser keeps, each link once per signer, and a row is split into lines once.\n"
         },
         {
           "sha": "ed73dc236e7783371d11432dc464690a3bdbf291",

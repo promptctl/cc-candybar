@@ -22727,12 +22727,12 @@ function parseSessionId(raw) {
   const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
   return problem === null ? { ok: true, id: raw } : { ok: false, problem };
 }
-function sessionKeyed(record2, refused2) {
+function sessionKeyed(record2, refused) {
   const keyed = /* @__PURE__ */ new Map();
   for (const [key, value] of Object.entries(record2)) {
     const id2 = parseSessionId(key);
     if (id2.ok) keyed.set(id2.id, value);
-    else refused2(key, id2.problem);
+    else refused(key, id2.problem);
   }
   return keyed;
 }
@@ -22889,10 +22889,10 @@ function parseHandlerUrl(rawUrl) {
     return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
   }
 }
-var RANGE_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
+var STATUS_CLICK_URL = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
 function parseClick(url, links2) {
-  if (url.startsWith(RANGE_PREFIX))
-    return { kind: "range", value: url.slice(RANGE_PREFIX.length) };
+  if (url.startsWith(STATUS_CLICK_URL))
+    return { kind: "range", value: url.slice(STATUS_CLICK_URL.length) };
   const verified = links2.verifyLink(url);
   if (!verified.ok) return { kind: "refused", problem: verified.problem };
   const link = parseHandlerUrl(verified.link);
@@ -23420,8 +23420,8 @@ function launchWaited(state, opts) {
 }
 async function launchPiped(state, opts, pipes) {
   const { stats, clock } = state.scope;
-  const refused2 = admit(state, opts.category, opts.signal);
-  if (refused2 !== null) return refused2;
+  const refused = admit(state, opts.category, opts.signal);
+  if (refused !== null) return refused;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   return new Promise((resolve) => {
@@ -23605,8 +23605,8 @@ async function launchPiped(state, opts, pipes) {
 }
 function launchBlocking(state, opts) {
   const { stats, clock } = state.scope;
-  const refused2 = admit(state, opts.category);
-  if (refused2 !== null) return refused2;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   try {
@@ -23661,8 +23661,8 @@ function launchBlocking(state, opts) {
 }
 function launchOrphan(state, opts) {
   const { stats, clock } = state.scope;
-  const refused2 = admit(state, opts.category);
-  if (refused2 !== null) return refused2;
+  const refused = admit(state, opts.category);
+  if (refused !== null) return refused;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   const result = launchDetachedSyncInner(state, opts);
@@ -23709,9 +23709,9 @@ var formatJobEnd = (end) => end.kind === "exit" ? `exit ${end.code}` : "timeout"
 var JOB_SCRIPT = `out=$1 err=$2 status=$3; shift 3; read go || exit 0; "$@" >"$out" 2>"$err" </dev/null; echo "exit $?" >"$status.$$" && ln "$status.$$" "$status"; rm -f "$status.$$"`;
 function launchJob(state, opts, files) {
   const { stats, clock } = state.scope;
-  const refused2 = admit(state, opts.category);
-  if (refused2 !== null)
-    return { ok: false, reason: refused2.reason, error: refused2.error };
+  const refused = admit(state, opts.category);
+  if (refused !== null)
+    return { ok: false, reason: refused.reason, error: refused.error };
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
   let child;
@@ -24075,6 +24075,7 @@ var MAC_SPELLING = /^[0-9a-f]{64}$/;
 var LINK_MAC_MARK = "#";
 var LINK_MAC_BYTES = 16;
 var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
+var SIGNED_KEPT = 1024;
 function digest(key, signed) {
   return createHmac("sha256", key).update(JSON.stringify(signed)).digest();
 }
@@ -24087,6 +24088,8 @@ var fieldsOf = (fields2) => [
 var linkMac = (key, link) => import_buffer.Buffer.from(
   digest(key, link).subarray(0, LINK_MAC_BYTES).toString("base64").replace(/=+$/, "").replaceAll("+", "-").replaceAll("/", "_")
 );
+var OUTSIDE_TRANSIT = /[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu;
+var transitForm = (link) => link.replace(OUTSIDE_TRANSIT, (c) => encodeURIComponent(c));
 function unprovenLink(signed) {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
   return mark !== -1 && LINK_MAC_SPELLING.test(signed.slice(mark + 1)) ? signed.slice(0, mark) : signed;
@@ -24095,6 +24098,11 @@ function linkSigner(key) {
   if (key.length !== LINK_KEY_BYTES) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
+  const signed = /* @__PURE__ */ new Map();
+  const signOnce = (link) => {
+    const form = transitForm(link);
+    return `${form}${LINK_MAC_MARK}${linkMac(key, form)}`;
+  };
   return {
     sign: (fields2) => digest(key, fieldsOf(fields2)).toString("hex"),
     verify: (fields2, mac) => {
@@ -24104,17 +24112,24 @@ function linkSigner(key) {
         digest(key, fieldsOf(fields2))
       );
     },
-    signLink: (link) => `${link}${LINK_MAC_MARK}${linkMac(key, link)}`,
-    verifyLink: (signed) => {
-      const mark = signed.lastIndexOf(LINK_MAC_MARK);
-      const mac = signed.slice(mark + 1);
+    signLink: (link) => {
+      const known = signed.get(link);
+      if (known !== void 0) return known;
+      if (signed.size >= SIGNED_KEPT) signed.clear();
+      const fresh = signOnce(link);
+      signed.set(link, fresh);
+      return fresh;
+    },
+    verifyLink: (signed2) => {
+      const mark = signed2.lastIndexOf(LINK_MAC_MARK);
+      const mac = signed2.slice(mark + 1);
       if (mark === -1 || !LINK_MAC_SPELLING.test(mac)) {
         return {
           ok: false,
           problem: "the link carries no signature: it was not drawn by this bar, or was drawn before every link was signed"
         };
       }
-      const link = signed.slice(0, mark);
+      const link = signed2.slice(0, mark);
       return timingSafeEqual(import_buffer.Buffer.from(mac), linkMac(key, link)) ? { ok: true, link } : {
         ok: false,
         problem: "the link's signature does not match what it carries: it was not drawn by this bar, or has been changed since"
@@ -30496,8 +30511,8 @@ function refusedHints(req, hints) {
     (k) => req[k] !== void 0 && hints[k] === void 0
   ).map((hint) => ({ hint, sent: req[hint] }));
 }
-function refusedHintsError(refused2) {
-  return refused2.length === 0 ? null : `Client hints refused: ${refused2.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
+function refusedHintsError(refused) {
+  return refused.length === 0 ? null : `Client hints refused: ${refused.map(({ hint, sent }) => `${hint}=${JSON.stringify(sent)}`).join(
     ", "
   )} \u2014 is the statusline client older than the daemon? Reinstall it (\`cc-candybar install\`, or \`just install-rust\` in a checkout).`;
 }
@@ -30508,9 +30523,9 @@ var REFUSAL_LINES = {
   "no-value": (arg) => `${arg} names no file \u2014 the bar renders with no ${arg}`,
   positional: (args) => `Unexpected arguments: ${args}`
 };
-function refusedArgsError(refused2) {
+function refusedArgsError(refused) {
   const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused2.filter((r) => r.why === why2).map((r) => r.arg);
+    const args = refused.filter((r) => r.why === why2).map((r) => r.arg);
     return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
   });
   return lines2.length === 0 ? null : lines2.join("\n");
@@ -42868,15 +42883,9 @@ function writtenLines(segments) {
     segments.filter((s) => !s.isControl && s.text.length > 0)
   );
 }
-function runLines(segments, depth, links2) {
-  const signed = /* @__PURE__ */ new Map();
-  const link = (url) => {
-    if (!isBarLink(url)) return url;
-    const known = signed.get(url) ?? links2.signLink(url);
-    signed.set(url, known);
-    return known;
-  };
-  return writtenLines(segments).map(
+function runLines(lines2, depth, links2) {
+  const link = (url) => isBarLink(url) ? links2.signLink(url) : url;
+  return lines2.map(
     (line) => line.map((segment) => runOf(segment, depth, link))
   );
 }
@@ -43418,7 +43427,7 @@ function parseRenderArgs(args, cwd2, home) {
   const config2 = (tokens ?? []).filter(
     (t2) => t2.kind === "option" && t2.name === "config"
   ).at(-1);
-  const refused2 = (tokens ?? []).flatMap((t2) => {
+  const refused = (tokens ?? []).flatMap((t2) => {
     switch (t2.kind) {
       case "option":
         return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config2 && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
@@ -43432,8 +43441,8 @@ function parseRenderArgs(args, cwd2, home) {
   return {
     configFile: explicitConfigPath(cwd2, config2?.value, home),
     // In argv order, each refusal once.
-    refusedArgs: refused2.filter(
-      (r, i) => refused2.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
+    refusedArgs: refused.filter(
+      (r, i) => refused.findIndex((o) => o.arg === r.arg && o.why === r.why) === i
     )
   };
 }
@@ -53075,12 +53084,12 @@ function draw(renderable, options) {
     })
   ];
   return {
-    segments,
+    lines: writtenLines(segments),
     depth: destination.colorSystem,
     nextChange: Math.min(Segment.nextChange(segments), told)
   };
 }
-var textLines = ({ segments }) => writtenLines(segments).map((line) => line.map((s) => s.text).join(""));
+var textLines = ({ lines: lines2 }) => lines2.map((line) => line.map((s) => s.text).join(""));
 var DEFAULT_TERMINAL_WIDTH = 120;
 var separatorJoiners = /* @__PURE__ */ new Map();
 function plainWith(separator) {
@@ -53162,7 +53171,7 @@ function drawStripCells(cells, options, links2, motion = STILL3) {
   if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
   const drawn = drawStrip(cells, options, motion);
   return {
-    lines: runLines(drawn.segments, drawn.depth, links2),
+    lines: runLines(drawn.lines, drawn.depth, links2),
     nextChange: drawn.nextChange
   };
 }
@@ -53178,7 +53187,7 @@ function drawStrip(cells, options, motion) {
   };
   const strip = flex ? new FlexStrip([...cells], { joiner }) : new Strip([...cells], joiner);
   const row2 = motion.kind === "still" ? draw(strip, drawn) : draw(motion.wrap(strip), { ...drawn, time: motion.time });
-  if (writtenLines(row2.segments).length === 0) {
+  if (row2.lines.length === 0) {
     throw new Error("drawStripCells: rich-js strip drew no line");
   }
   return row2;
@@ -53645,6 +53654,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
+        handlerProbe: handlerProbes.offer(parts.links.signLink),
         clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest: sourceDigest2,
@@ -53751,8 +53761,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         accepted,
         timedOut,
         clientLeft,
-        (facts, click3) => clickOutcome(parts, req, facts, click3),
-        cliAnswer
+        (facts, click3) => clickOutcome(parts, req, facts, click3)
       )
     );
   }
@@ -53818,13 +53827,7 @@ function sourceSnapshots(parts, cache2) {
     }
   };
 }
-var refused = (failure) => ({ kind: "refused", failure });
-var handed = (outcome) => ({
-  kind: "handed",
-  outcome
-});
-var outcomeOf2 = (taken) => taken.kind === "refused" ? taken.failure : taken.outcome;
-async function clickEvent(parts, accepted, timedOut, clientLeft, run3, reply) {
+async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
   const { clock } = parts;
   const t0 = clock.monotonic();
   const facts = [
@@ -53835,7 +53838,7 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3, reply) {
     id: accepted.id,
     gone: () => timedOut() || clientLeft()
   };
-  const taken = await run3(facts, click3);
+  const outcome = await run3(facts, click3);
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -53843,27 +53846,21 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3, reply) {
   const { level, line } = requestEvent(
     "click",
     facts,
-    outcomeOf2(taken),
+    outcome,
     elapsedMs(clock, t0)
   );
   parts.log(level, line);
-  return reply(taken);
+  return clickReply(outcome);
 }
 async function clickOutcome(parts, req, facts, click3) {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string") {
-    return refused(
-      badRequest(`a click carries its link as a url string, got ${typeof url}`)
+    return badRequest(
+      `a click carries its link as a url string, got ${typeof url}`
     );
   }
-  return clickArrived(
-    parts,
-    url,
-    { via: "link", delivery: { kind: "cli" } },
-    facts,
-    click3
-  );
+  return clickArrived(parts, url, { kind: "cli" }, facts, click3);
 }
 async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
   return clickEvent(
@@ -53875,44 +53872,45 @@ async function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
       const { urlV, url } = frame2;
       noteFacts(facts, { via: "forwarder", urlV: String(urlV) });
       if (typeof urlV !== "number" || !URL_FRAME_VERSIONS.has(urlV)) {
-        return refused(
-          badRequest(
-            `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
-          )
+        return badRequest(
+          `the URL handler's frame version ${inspect(urlV)} is not one this daemon speaks (${[...URL_FRAME_VERSIONS].join(", ")})`
         );
       }
       if (typeof url !== "string") {
-        return refused(
-          badRequest(`the URL handler's frame carries no url string`)
-        );
+        return badRequest(`the URL handler's frame carries no url string`);
       }
       return clickArrived(
         parts,
         url,
-        { via: "link", delivery: { kind: "forwarder", urlV } },
+        { kind: "forwarder", urlV },
         facts,
         click3
       );
-    },
-    forwarderAnswer
+    }
   );
 }
-async function clickArrived(parts, url, arrival, facts, click3) {
+async function clickArrived(parts, url, delivery, facts, click3) {
   const parsed2 = parseClick(url, parts.links);
   switch (parsed2.kind) {
     case "refused":
-      return refused(badRequest(parsed2.problem));
+      return badRequest(parsed2.problem);
     case "range":
       noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
-      try {
-        return await statusLineClick(parts, parsed2.value, facts, click3);
-      } catch (error) {
-        return refused(failureOf(error));
+      if (delivery.kind !== "cli") {
+        return badRequest(
+          "a status-line range comes from tmux's click binding, never through the URL handler"
+        );
       }
+      return clickRan(() => statusLineClick(parts, parsed2.value, facts, click3));
     case "link":
-      return handed(
-        await clickRan(
-          () => handleClick(parts, parsed2.verb, parsed2.value, arrival, facts, click3)
+      return clickRan(
+        () => handleClick(
+          parts,
+          parsed2.verb,
+          parsed2.value,
+          { via: "link", delivery },
+          facts,
+          click3
         )
       );
   }
@@ -53984,64 +53982,44 @@ function clickReply(outcome) {
       return failedWith(outcome.message);
   }
 }
-var cliAnswer = (taken) => clickReply(outcomeOf2(taken));
-var UNTAKEN = /* @__PURE__ */ new Set([
-  "closing",
-  "abandoned",
-  "down"
-]);
-function forwarderAnswer(taken) {
-  const outcome = outcomeOf2(taken);
-  return taken.kind === "refused" || UNTAKEN.has(outcome.kind) ? clickReply(outcome) : { ok: true, output: "" };
-}
 async function statusLineClick(parts, value, facts, click3) {
   const { tmuxStatusLines } = parts;
   const link = tmuxStatusLines.linkAt(value);
-  if (link.kind === "refused") return refused(badRequest(link.reason));
+  if (link.kind === "refused") return badRequest(link.reason);
   noteFacts(facts, { link: link.url });
   if (isBarLink(link.url)) {
     const parsed2 = parseClick(link.url, parts.links);
     switch (parsed2.kind) {
       case "refused":
-        return refused(badRequest(parsed2.problem));
+        return badRequest(parsed2.problem);
       // [LAW:no-silent-failure] A link the bar draws never names a range;
       // one that did would be a click that only ever clicks another.
       case "range":
-        return refused(
-          badRequest("a status-line link names another status-line click")
-        );
+        return badRequest("a status-line link names another status-line click");
       case "link":
-        return handed(
-          await clickRan(
-            () => handleClick(
-              parts,
-              parsed2.verb,
-              parsed2.value,
-              { via: "tmux-status" },
-              facts,
-              click3
-            )
-          )
+        return handleClick(
+          parts,
+          parsed2.verb,
+          parsed2.value,
+          { via: "tmux-status" },
+          facts,
+          click3
         );
     }
   }
-  return handed(
-    await clickRan(async () => {
-      await clickHandoff(
-        parts.launcher,
-        {
-          bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-          args: [link.url],
-          category: "click.open"
-        },
-        `opening ${link.url}`,
-        parts.log,
-        CLICK_PROGRAM_TIMEOUT_MS,
-        parts.tmp
-      );
-      return { kind: "ok" };
-    })
+  await clickHandoff(
+    parts.launcher,
+    {
+      bin: process_default.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
+      args: [link.url],
+      category: "click.open"
+    },
+    `opening ${link.url}`,
+    parts.log,
+    CLICK_PROGRAM_TIMEOUT_MS,
+    parts.tmp
   );
+  return { kind: "ok" };
 }
 var refusedRender = (problems) => ({
   outcome: badRequest(...problems),
@@ -65908,6 +65886,7 @@ var RuntimeStats = class _RuntimeStats {
       watchersActive: 0,
       dirWatchesActive: 0,
       handlerProbes: [],
+      handlerProbe: { nonce: "", link: "" },
       clients: [],
       bundle: "/",
       sourceDigest: null,
@@ -65977,6 +65956,7 @@ var RuntimeStats = class _RuntimeStats {
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,
       handlerProbes: extras.handlerProbes,
+      handlerProbe: extras.handlerProbe,
       clients: extras.clients,
       bundle: extras.bundle,
       daemon: extras.daemon,
@@ -66001,6 +65981,16 @@ function buildLabel(version, digest2) {
 var ARRIVALS_KEPT = 16;
 var ProbeArrivals = class {
   arrivals = [];
+  // A probe link for the doctor to open, signed with the daemon's own key:
+  // the doctor's shell may keep its state elsewhere than the shell that
+  // spawned the daemon, so only the daemon can sign a link it will honour.
+  offer(signLink) {
+    const nonce = randomUUID();
+    return {
+      nonce,
+      link: signLink(`${URL_SCHEME}://${VERB_DOCTOR_PROBE}/${nonce}`)
+    };
+  }
   arrive(arrival) {
     this.arrivals = [...this.arrivals, arrival].slice(-ARRIVALS_KEPT);
   }
@@ -67208,10 +67198,10 @@ init_globals();
 
 // src/tmux-status/frames.ts
 init_globals();
-var RANGE_PREFIX2 = "ccb";
-var RANGE_HASH_HEX = 15 - RANGE_PREFIX2.length;
+var RANGE_PREFIX = "ccb";
+var RANGE_HASH_HEX = 15 - RANGE_PREFIX.length;
 function rangeOf2(url) {
-  return RANGE_PREFIX2 + createHash("sha256").update(url).digest("hex").slice(0, RANGE_HASH_HEX);
+  return RANGE_PREFIX + createHash("sha256").update(url).digest("hex").slice(0, RANGE_HASH_HEX);
 }
 var STANDARD_NAMES = [
   "black",
@@ -67499,9 +67489,8 @@ function boundOf2(listKeys) {
   const found2 = BOUND.exec(listKeys);
   return found2 === null ? null : { line: found2[0], command: found2[1] };
 }
-var CLICK_URL = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/`;
-var clickUrl = (socket) => `${CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
-var isClickBinding = (bound) => bound?.command.includes(CLICK_URL) ?? false;
+var clickUrl = (socket) => `${STATUS_CLICK_URL}${encodeSegments([socket])}/#{s/%//:pane_id}/#{q:mouse_status_range}`;
+var isClickBinding = (bound) => bound?.command.includes(STATUS_CLICK_URL) ?? false;
 function bindingRestorePlan(prior, listKeys) {
   const forget = {
     command: ["set-option", "-g", "-q", "-u", BINDING_OPTION]
@@ -67900,7 +67889,7 @@ var TmuxStatusLines = class {
         ...CLICK_KEY,
         "if-shell",
         "-F",
-        `#{m:${RANGE_PREFIX2}*,#{mouse_status_range}}`,
+        `#{m:${RANGE_PREFIX}*,#{mouse_status_range}}`,
         `run-shell -b ${tmuxQuoted(`${this.deps.handler} ${clickUrl(socket)}`)}`,
         ...prior === null ? [] : [prior.command]
       ],
@@ -69104,7 +69093,15 @@ function recordAnswer(store, dir, answer2) {
   });
   return filed.kind === "failed" ? filed : ok(recorded2);
 }
-function repoQuestions(gate2, sessionId2) {
+function repoAnswerFields(sessionId2, dir, answer2) {
+  return {
+    sessionId: sessionId2,
+    action: VERB_REPO_CONFIG,
+    declaration: dir,
+    evaluated: answer2
+  };
+}
+function repoQuestions(gate2, sessionId2, signer) {
   return gate2.awaiting.map((dir) => {
     const message = `a cc-candybar config for ${dir} \u2014 run it?`;
     const answers = REPO_ANSWERS.map(
@@ -69113,7 +69110,12 @@ function repoQuestions(gate2, sessionId2) {
         effectsUrl([
           {
             verb: VERB_REPO_CONFIG,
-            args: [sessionId2, dir, answer2]
+            args: [
+              sessionId2,
+              dir,
+              answer2,
+              signer.sign(repoAnswerFields(sessionId2, dir, answer2))
+            ]
           }
         ])
       )
@@ -72161,7 +72163,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     beneath,
     presence2
   );
-  const judge = (cells, refused2) => {
+  const judge = (cells, refused) => {
     const inserted = placeInserts(
       authoredConfig.config,
       cells,
@@ -72175,7 +72177,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       inserted.config,
       presence2,
       written2.dropped,
-      [...inserted.notices, ...refused2]
+      [...inserted.notices, ...refused]
     );
   };
   try {
@@ -72186,7 +72188,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     const own2 = new Set(
       bare.dropped.flatMap((d) => d.issues.map((i) => i.message))
     );
-    const { taken, refused: refused2 } = written2.cells.reduce(
+    const { taken, refused } = written2.cells.reduce(
       (acc, cell3) => {
         try {
           judge([...acc.taken, cell3], []);
@@ -72208,7 +72210,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       },
       { taken: [], refused: [] }
     );
-    return judge(taken, refused2);
+    return judge(taken, refused);
   }
 }
 function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
@@ -76348,7 +76350,7 @@ var run2 = async (value, ctx) => {
   ctx.runs.start(request2);
 };
 var repoConfig = async (value, ctx) => {
-  const [sessionId2 = "", dir = "", answer2 = ""] = decodeWire(
+  const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
     () => decodeSegments(value)
   );
   const sid = requireSessionId(sessionId2);
@@ -76356,6 +76358,11 @@ var repoConfig = async (value, ctx) => {
   if (answered === void 0) {
     throw new BadVerbArgs(
       `an answer is one of ${REPO_ANSWERS.join(", ")}, got ${JSON.stringify(answer2)}`
+    );
+  }
+  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: the bar's question did not draw it"
     );
   }
   const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);
@@ -81934,7 +81941,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
       enabled: effective.updateNotice
     }
   );
-  const questions = repoQuestions(entry.repos, sessionId2);
+  const questions = repoQuestions(entry.repos, sessionId2, linkSigner2);
   const sourced = (about, text4) => ({
     about,
     text: text4,
@@ -87620,8 +87627,8 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
         timeoutMs: 2e4,
         category: "lane.process"
       });
-      const refused2 = !result.ok && result.reason === "non-zero" ? refusalOf3(result.stdout) : null;
-      if (refused2 !== null) return { ok: false, reason: refused2 };
+      const refused = !result.ok && result.reason === "non-zero" ? refusalOf3(result.stdout) : null;
+      if (refused !== null) return { ok: false, reason: refused };
       ran(`reading ${executable}'s module graph`, result);
       return { ok: true };
     },
@@ -88175,16 +88182,16 @@ async function click2(url, size) {
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
-    return { ...await render2(size), refused: refused3 };
+    const refused2 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    return { ...await render2(size), refused: refused2 };
   }
-  let refused2 = null;
+  let refused = null;
   try {
     await daemon2({ v: PROTOCOL_VERSION, kind: "click", url });
   } catch (e) {
-    refused2 = e instanceof Error ? e.message : String(e);
+    refused = e instanceof Error ? e.message : String(e);
   }
-  return { ...await render2(size), refused: refused2 };
+  return { ...await render2(size), refused };
 }
 var listeners = [];
 var notify = () => {
