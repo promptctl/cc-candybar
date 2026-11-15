@@ -199,8 +199,8 @@ import {
 } from "../../doctor/gather";
 import {
   BadVerbArgs,
-  DaemonClosing,
   decodeWire,
+  failureOf,
 } from "../../daemon/foundations/verb-error";
 import {
   parseSessionId,
@@ -1983,12 +1983,15 @@ async function foldEffects(
       // [LAW:single-enforcer] The turn is over: no later effect runs, and the
       // journal holdClickError writes through is finished. What failed before
       // it has no bar left to reach, so the log has it.
-      if (e instanceof DaemonClosing) {
+      // [LAW:single-enforcer] Classified as `failureOf` classifies it, which
+      // knows a failure the host threw across the process from its kind.
+      const { kind } = failureOf(e);
+      if (kind === "closing") {
         if (errors.length > 0)
           ctx.log("warn", `dispatch: ${errors.join("; ")}`);
         throw e;
       }
-      if (!(e instanceof BadVerbArgs)) operational = true;
+      if (kind !== "bad-request") operational = true;
       errors.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }

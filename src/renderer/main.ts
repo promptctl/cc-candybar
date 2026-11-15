@@ -82,7 +82,8 @@ import {
   type Generation,
   type Renderer,
   type RendererOutput,
-  type Start,
+  type SessionSnapshot,
+  type StartCause,
 } from "../renderer-interface/interface.js";
 import { followDismissGate } from "./dismiss-gate.js";
 import { JournalTurns } from "./journal-turns.js";
@@ -96,9 +97,9 @@ export function mainRenderer(
   // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
   // in its own turn, synchronously.
   pushed: (push: AdapterPush, at: Instant) => AdapterReply,
-  // What a start does besides opening each session's view: the start's own
-  // acts on what the renderer holds (its pins, a restart's warnings).
-  started: (start: Start, at: Instant) => void,
+  // What a start does for each session besides opening its view: the start's
+  // own acts on what the renderer holds (its pin, a restart's warning).
+  started: (session: SessionSnapshot, cause: StartCause, at: Instant) => void,
 ): Renderer {
   // [LAW:single-enforcer] What each present's frame records once it reached
   // its client, held from the turn that returned it until its one
@@ -205,11 +206,31 @@ export function mainRenderer(
     // sources, and the host's set, whole, releases none.
     start: async (input) => {
       const record: RequestFacts = [];
+      const { cause, sessions } = input.start;
       return ended(
         (async () => {
-          for (const { context, worldState } of input.start.sessions)
-            configureSession(parts, context, worldState, input.at, record);
-          started(input.start, input.at);
+          // [LAW:no-silent-failure] Each session opens on its own: one that
+          // throws is said in the start's failure, and the rest still open.
+          const failed: string[] = [];
+          for (const session of sessions)
+            try {
+              configureSession(
+                parts,
+                session.context,
+                session.worldState,
+                input.at,
+                record,
+              );
+              started(session, cause, input.at);
+            } catch (thrown) {
+              failed.push(
+                `${session.worldState.session}: ${failureOf(thrown).detail}`,
+              );
+            }
+          if (failed.length > 0)
+            throw new Error(
+              `the start opened ${sessions.length - failed.length} of ${sessions.length} sessions; ${failed.join("; ")}`,
+            );
           return [];
         })(),
         record,
@@ -560,18 +581,20 @@ function startOver(
   // [LAW:no-silent-failure] A start after a renderer ended says so on every
   // session it carries, for the usual hold: the state that renderer's process
   // kept unsaved went with it.
-  const started = (start: Start, at: Instant): void => {
-    for (const { context, pinned } of start.sessions) {
-      const sessionId = context.hookData.session_id;
-      if (pinned) pin(sessionId);
-      if (start.cause.kind === "crashed")
-        holdClickError(
-          sessionState,
-          sessionId,
-          `the renderer restarted: its process ${start.cause.ended}; open menus and armed confirms were lost`,
-          at,
-        );
-    }
+  const started = (
+    { context, pinned }: SessionSnapshot,
+    cause: StartCause,
+    at: Instant,
+  ): void => {
+    const sessionId = context.hookData.session_id;
+    if (pinned) pin(sessionId);
+    if (cause.kind === "crashed")
+      holdClickError(
+        sessionState,
+        sessionId,
+        `the renderer restarted: its process ${cause.ended}; open menus and armed confirms were lost`,
+        at,
+      );
   };
   return mainRenderer(
     { ...parts, verbs: verbsOver(verbCtx, host.clicks) },

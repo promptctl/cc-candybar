@@ -322,13 +322,16 @@ export function wireRenderer(
           }
           return;
         }
-        void Promise.resolve()
-          .then(() => reachInto(host, path, args))
-          .then(
-            (value) => answerCall(id, { ok: true, value }),
-            (thrown: unknown) =>
-              answerCall(id, { ok: false, failure: failureOf(thrown) }),
-          );
+        // [LAW:no-ambient-temporal-coupling] Performed as its line arrives,
+        // as a notice is, so the host runs the renderer's reaches in the
+        // order it made them; a throw rejects the call.
+        void new Promise((resolve) =>
+          resolve(reachInto(host, path, args)),
+        ).then(
+          (value) => answerCall(id, { ok: true, value }),
+          (thrown: unknown) =>
+            answerCall(id, { ok: false, failure: failureOf(thrown) }),
+        );
       }
     }
   });

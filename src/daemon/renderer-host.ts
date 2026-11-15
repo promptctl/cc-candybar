@@ -7,13 +7,9 @@
 // taken by `deliver`, which writes the turn's own line.
 
 import {
-  type AdapterInput,
-  type AdapterOutput,
   type Effect,
   type Event,
-  type Renderer,
   type EventInput,
-  type RendererOutput,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
@@ -34,26 +30,6 @@ export type RendererName = "main";
 // A turn's outcome, with what crossing to the renderer cost beyond the turn
 // itself: the request's event reports it as `hop`.
 export type HostedTurn = TurnOutcome & { readonly hopMs: number };
-
-// A renderer the host reaches directly, with no crossing to cost: a test's.
-export function hosted(renderer: Renderer): HostedRenderer {
-  function answer(input: EventInput): Promise<{
-    output: RendererOutput;
-    hopMs: number;
-  }>;
-  function answer(input: AdapterInput): Promise<{
-    output: AdapterOutput;
-    hopMs: number;
-  }>;
-  async function answer(input: EventInput | AdapterInput) {
-    const output =
-      input.kind === "event"
-        ? await renderer.answer(input)
-        : await renderer.answer(input);
-    return { output, hopMs: 0 };
-  }
-  return { answer };
-}
 
 export interface RendererHost {
   readonly name: RendererName;

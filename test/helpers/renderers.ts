@@ -7,9 +7,11 @@ import type {
   AdapterOutput,
   EventInput,
   Renderer,
+  RendererInput,
   RendererOutput,
 } from "../../src/renderer-interface/interface";
 import { rendererOf } from "../../src/renderer-interface/interface";
+import type { HostedRenderer } from "../../src/daemon/renderer-supervisor";
 
 // A renderer whose events `answered` answers, and which no push reaches.
 export function eventRenderer(
@@ -54,6 +56,20 @@ export const NO_PUSHES = (): never => {
 export const NO_STARTED = (): never => {
   throw new Error("this rig starts its renderer by hand");
 };
+
+// A renderer the host reaches directly, with no crossing to cost.
+export function hosted(renderer: Renderer): HostedRenderer {
+  return {
+    // [LAW:types-are-the-program] exception: each input's output is its own
+    // kind's; one call cannot name it.
+    answer: (async (input: RendererInput) => ({
+      output: await (
+        renderer.answer as (input: RendererInput) => Promise<unknown>
+      )(input),
+      hopMs: 0,
+    })) as HostedRenderer["answer"],
+  };
+}
 
 // `renderer`, with `heard` told each event before it answers.
 export function hearingEvents(

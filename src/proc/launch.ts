@@ -70,6 +70,7 @@ import type {
   JobEnding,
   Launcher,
   LaunchChannel,
+  ChannelHearing,
 } from "./launcher";
 
 // [LAW:no-silent-failure] A spawn whose `cwd` is gone fails with the SAME
@@ -112,9 +113,6 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   // the typing is limited: a click the pane refused typed
   // nothing, so clicking again once the dialog is closed goes through.
   "claude-input.type": 1000,
-  // A renderer that ends as it starts is started again on the next input,
-  // which a feed sends at its frame rate.
-  renderer: 1000,
 };
 
 // [LAW:dataflow-not-control-flow] The rate-limit decision is a pure function
@@ -607,9 +605,9 @@ function hold(
   stats?.onDrainOpen(category);
 }
 
-// A child's stdout heard as lines, none captured: each whole line goes to
-// `heard`, and a line past the capture bound ends the launch as a capture
-// past it does.
+// A child's output stream heard as lines, none captured: each whole line goes
+// to `heard` as it completes, and a line past the capture bound ends the
+// launch as a capture past it does.
 function lines(
   state: LaunchState,
   category: LaunchCategory,
@@ -626,9 +624,19 @@ function lines(
   });
   stream?.on("data", (chunk: Buffer) => {
     if (!open) return;
-    const parts = (partial + decoder.write(chunk)).split("\n");
-    partial = parts.pop()!;
-    for (const line of parts) heard(line);
+    // Only the chunk is scanned, so a long line costs its length once.
+    const text = decoder.write(chunk);
+    let from = 0;
+    for (
+      let nl = text.indexOf("\n");
+      nl !== -1;
+      nl = text.indexOf("\n", from)
+    ) {
+      heard(partial + text.slice(from, nl));
+      partial = "";
+      from = nl + 1;
+    }
+    partial += text.slice(from);
     if (partial.length > MAX_CAPTURED_BYTES) ends.full();
   });
   return {
@@ -643,16 +651,20 @@ function lines(
   };
 }
 
-// What a waited launch does with the child's stdin and stdout: the plain
+// How a waited launch takes one of the child's output streams.
+type Take = (
+  state: LaunchState,
+  category: LaunchCategory,
+  stream: Readable | null,
+  ends: CaptureEnds,
+) => Captured;
+
+// What a waited launch does with the child's stdin and its output: the plain
 // launch feeds its input and captures what it writes; a channel launch hands
-// its caller the stdin and hears stdout as lines.
+// its caller the stdin and hears both streams as lines.
 interface WaitedIo {
-  readonly stdout: (
-    state: LaunchState,
-    category: LaunchCategory,
-    stream: Readable | null,
-    ends: CaptureEnds,
-  ) => Captured;
+  readonly stdout: Take;
+  readonly stderr: Take;
   readonly stdin: (input: Writable) => void;
 }
 
@@ -723,7 +735,7 @@ async function launchWaited(
       },
     };
     const stdout = io.stdout(state, opts.category, child.stdout, ends);
-    const stderr = capture(state, opts.category, child.stderr, ends);
+    const stderr = io.stderr(state, opts.category, child.stderr, ends);
     const output = () => ({ stdout: stdout.take(), stderr: stderr.take() });
     let settled = false;
     // What clears each timer the launch has armed.
@@ -913,14 +925,16 @@ async function launchWaited(
 function launchChannel(
   state: LaunchState,
   opts: Omit<AsyncLaunchOpts, "stdinInput">,
-  heard: (line: string) => void,
+  heard: ChannelHearing,
 ): LaunchChannel {
   let input: Writable | null = null;
   const result = track(
     state,
     launchWaited(state, opts, {
       stdout: (st, category, stream, ends) =>
-        lines(st, category, stream, ends, heard),
+        lines(st, category, stream, ends, heard.stdout),
+      stderr: (st, category, stream, ends) =>
+        lines(st, category, stream, ends, heard.stderr),
       stdin: (writable) => {
         // [LAW:no-silent-failure] exception: a write to a child that ended
         // fails with EPIPE, and the child's end is the result, which says why.
@@ -1292,6 +1306,7 @@ function launcherWithState(
         state,
         launchWaited(state, opts, {
           stdout: capture,
+          stderr: capture,
           stdin: (input) => feed(input, opts.stdinInput),
         }),
       ),

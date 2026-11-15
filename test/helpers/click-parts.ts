@@ -10,7 +10,8 @@ import type { Collector } from "../../src/daemon/collector";
 import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
 import type { MenuIdle } from "../../src/daemon/menu-idle";
-import { hosted, rendererHost } from "../../src/daemon/renderer-host";
+import { rendererHost } from "../../src/daemon/renderer-host";
+import { hosted } from "./renderers";
 import { mainRenderer } from "../../src/renderer/main";
 import { systemTimekeeper } from "../../src/time";
 import {

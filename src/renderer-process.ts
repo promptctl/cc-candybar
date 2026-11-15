@@ -7,11 +7,12 @@
 
 import readline from "node:readline";
 import type { World } from "./host";
-import { parseBoot } from "./renderer-interface/boot.js";
+import { parseBoot, sameBuild } from "./renderer-interface/boot.js";
 import type { AdapterToHost } from "./renderer-interface/adapter.js";
 import { serveRenderer } from "./renderer-interface/wire.js";
 import { loadMainRenderer } from "./renderer/main.js";
 import { daemonGates } from "./daemon/foundations/update-keys.js";
+import { bakedDigest } from "./daemon/build-currency";
 import { locations } from "./daemon/paths";
 import { makeLimits } from "./daemon/limits";
 import { rendererProcessAdapters } from "./daemon/production-adapters";
@@ -20,6 +21,7 @@ import type { DaemonLogger } from "./utils/logger";
 
 export function runRenderer(args: readonly string[], world: World): void {
   const boot = parseBoot(args[0]);
+  sameBuild(boot, bakedDigest());
   const { clock, host } = world;
   // [LAW:single-enforcer] The renderer writes no log of its own: its lines
   // reach the host's one log, once the host it reaches exists.
@@ -28,20 +30,24 @@ export function runRenderer(args: readonly string[], world: World): void {
     if (reached === null) process.stderr.write(`${level}: ${line}\n`);
     else reached.log(level, line);
   };
+  const adapters = rendererProcessAdapters(boot, log, clock, world.launcher);
+  // [LAW:single-enforcer] The process's one way out, however it ends: what
+  // the session state has pending is written first, so a breach or a crash
+  // loses no saved pick, and after the host's close there is nothing pending.
+  const end = (code: number): void => {
+    adapters.storage.session.flush();
+    process.stdout.end(() => process.exit(code));
+  };
   // [LAW:no-silent-failure] Anything thrown past a turn ends the renderer,
-  // said on the host's log, and its supervisor starts another on the next
-  // input.
+  // said on the host's log, and its supervisor starts another.
   process.on("uncaughtException", (err) => {
     log("error", `renderer uncaughtException: ${err.stack ?? err.message}`);
-    process.exitCode = 1;
-    process.stdout.end(() => process.exit(1));
+    end(1);
   });
   process.on("unhandledRejection", (reason) => {
     log("error", `renderer unhandledRejection: ${String(reason)}`);
-    process.exitCode = 1;
-    process.stdout.end(() => process.exit(1));
+    end(1);
   });
-  const adapters = rendererProcessAdapters(boot, log, clock, world.launcher);
   let answer: ((line: string) => void) | null = null;
   const input = readline.createInterface({ input: process.stdin });
   input.on("line", (line) => answer?.(line));
@@ -68,23 +74,21 @@ export function runRenderer(args: readonly string[], world: World): void {
         locations: locations(host),
         env: host.env,
         home: host.home,
+        // [LAW:no-shared-mutable-globals] What this renderer's loads accept:
+        // its own value (the update notice's links need the keys it holds).
         gates: daemonGates(),
         bundle: boot.bundle,
-        memoryLimitBytes: boot.memoryShareBytes,
+        memoryLimitBytes: boot.memoryLimitBytes,
       }).start(remote);
     },
     () => clock.monotonic(),
   );
   // [LAW:one-type-per-behavior] This process's backstop is the host's, over
-  // its own share: a breach writes its own post-mortems and ends it, and its
+  // the same limit: a breach writes its own post-mortems and ends it, and its
   // supervisor starts another.
   makeLimits({
-    ...adapters.limits((code) => process.stdout.end(() => process.exit(code))),
-    limitBytes: boot.memoryShareBytes,
+    ...adapters.limits(end),
+    limitBytes: boot.memoryLimitBytes,
   }).arm();
-  // [LAW:no-ambient-temporal-coupling] The host's close has taken the
-  // renderer's steps before it ends stdin; a host that died took none, and
-  // what the session state has pending is lost with it, as it is when the
-  // host's own process dies.
-  input.on("close", () => process.stdout.end(() => process.exit(0)));
+  input.on("close", () => end(0));
 }

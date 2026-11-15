@@ -2,7 +2,8 @@
 // back the reply of the push's own kind or rejects, and `tell` says a failure
 // on the log, since nothing awaits it.
 
-import { rendererHost, hosted } from "../../src/daemon/renderer-host";
+import { rendererHost } from "../../src/daemon/renderer-host";
+import { hosted } from "../helpers/renderers";
 import { failureOf } from "../../src/daemon/foundations/verb-error";
 import type { AdapterOutput } from "../../src/renderer-interface/interface";
 import { instantOf } from "../../src/utils/instant";

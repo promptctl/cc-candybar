@@ -14,7 +14,8 @@ import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { eventRenderer, hearingEvents } from "../helpers/renderers";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import { rendererHost, hosted } from "../../src/daemon/renderer-host";
+import { rendererHost } from "../../src/daemon/renderer-host";
+import { hosted } from "../helpers/renderers";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
 import type { RequestFacts } from "../../src/daemon/foundations/request-event";
 import {
@@ -128,16 +129,22 @@ async function answer(
   const facts: RequestFacts = [];
   const named = new Set<string>();
   const answered = await answerStatusline(
-    rendererHost("main", CLOCK, hosted(renderer), (_level, line) => logged.push(line), {
-      subscribed: (subscriptions) => void subscribed.push(subscriptions),
-      // Mirrors the collector: only a session a request has named is held.
-      holding: (session) => {
-        if (!named.has(session)) return () => {};
-        holds.count++;
-        holds.sessions.push(session);
-        return () => void holds.count--;
+    rendererHost(
+      "main",
+      CLOCK,
+      hosted(renderer),
+      (_level, line) => logged.push(line),
+      {
+        subscribed: (subscriptions) => void subscribed.push(subscriptions),
+        // Mirrors the collector: only a session a request has named is held.
+        holding: (session) => {
+          if (!named.has(session)) return () => {};
+          holds.count++;
+          holds.sessions.push(session);
+          return () => void holds.count--;
+        },
       },
-    }),
+    ),
     {
       requested: (req) => {
         named.add(req.hookData.session_id);
@@ -173,7 +180,12 @@ test("the request's present answers it, in the request's encoding, and its settl
   answered.settled(true);
   await drained();
   expect(heard).toEqual([
-    { kind: "effect-done", session: SESSION, of: "1.1", outcome: { kind: "ok" } },
+    {
+      kind: "effect-done",
+      session: SESSION,
+      of: "1.1",
+      outcome: { kind: "ok" },
+    },
   ]);
 });
 

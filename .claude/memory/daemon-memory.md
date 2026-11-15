@@ -6,7 +6,7 @@ The memory backstop measures what the OS charges the process: the physical footp
 
 On macOS the footprint comes from a subprocess. It is read asynchronously once a minute, and each reading is scheduled only after the previous one answers. When a reading fails, RSS stands in, minus the gap between RSS and the footprint at the last good reading. That gap holds steady from minute to minute, and judging a failed reading on raw RSS kills healthy daemons too. A host whose footprint has never been read has no gap and is judged on RSS.
 
-The one published limit is split between the host and its renderer's process, a quarter to the host and the rest to the renderer, and each process's backstop judges its own share, because each is charged separately and only the renderer holds the render cache. A renderer that breaches writes its own post-mortem and ends, and the next input starts another.
+The host and its renderer's process are each judged against the whole published limit by their own backstop. The limit catches a leak, and a leak lives in one process; a fixed split fails a lowered limit, where the host's share falls under a node process's own baseline. A renderer that breaches flushes its session state, writes its own post-mortem and ends, and its supervisor starts another.
 
 The env override for the limit keeps "RSS" in its name. It's a published contract, so don't rename it.
 

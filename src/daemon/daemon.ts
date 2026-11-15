@@ -34,7 +34,7 @@ import { RefreshLedger } from "../utils/refresh-ledger";
 import { SourceRuns } from "./source-runs";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
-import { makeLimits, memoryShares, type LimitsDeps } from "./limits";
+import { makeLimits, type LimitsDeps } from "./limits";
 import type { DoctorMachineEdge, DoctorStores } from "../doctor/ports";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
@@ -261,10 +261,26 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing(),
+        launcher: [...launcher.standing(), ...rendererLauncher.standing()],
       }),
     );
   }
+  // [LAW:no-silent-failure] Each change in whether what a launcher starts dies
+  // with it, and each pipe event, is said in daemon.log, and every session's
+  // world state carries it, so its warning comes on frames too.
+  const observeWarnings =
+    (whose: string): LaunchOwner["observeWarnings"] =>
+    (change) => {
+      if (change.kind === "launch-pipes") log("warn", `${whose}${change.text}`);
+      else
+        log(
+          change.fault === null ? "info" : "warn",
+          change.fault === null
+            ? `${whose}launch lifeline running again`
+            : `${whose}launch lifeline ${change.fault}; the next launch starts another`,
+        );
+      restateFaults();
+    };
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
   // The tmux restore at exit is the exception: it runs through the process's
@@ -278,28 +294,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
     // hold them against.
     now: instant,
-    // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it, and each pipe event, is said in daemon.log, and every
-    // session's world state carries it, so its warning comes on frames too.
-    observeWarnings: (change) => {
-      if (change.kind === "launch-pipes") log("warn", change.text);
-      else
-        log(
-          change.fault === null ? "info" : "warn",
-          change.fault === null
-            ? "launch lifeline running again"
-            : `launch lifeline ${change.fault}; the next launch starts another`,
-        );
-      restateFaults();
-    },
+    observeWarnings: observeWarnings(""),
   });
   // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
   // through this one probe, so a probe handed in reaches both. The process entry
   // (server.ts) asks its own before this daemon exists.
   const probe = inputs.probe(launcher);
-  // [LAW:one-source-of-truth] The published limit, split between this process
-  // and its renderer's, each judged by its own backstop.
-  const shares = memoryShares(memoryLimitBytes);
   // [LAW:no-ambient-temporal-coupling] The renderer's own launcher, aborted as
   // the teardown's last step: the renderer's steps of the close come after
   // the daemon's launches are aborted, and its process must outlive them.
@@ -309,7 +309,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     stats: stats.launchStats,
     signal: rendererClosing.signal,
     now: instant,
-    observeWarnings: () => restateFaults(),
+    observeWarnings: observeWarnings("renderer "),
   });
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
@@ -320,7 +320,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       launcher,
       log,
     }),
-    limitBytes: shares.host,
+    // [LAW:one-type-per-behavior] Each process the bars are served by is
+    // judged against the one published limit by its own backstop: a leak
+    // lives in one of them, and each is charged apart.
+    limitBytes: memoryLimitBytes,
   });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
@@ -626,9 +629,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const claudeInput = inputs.claudeInput(launcher);
   const readings = readingsHost(payloadProviders);
   // [LAW:single-enforcer] The daemon's one renderer, started and restarted by
-  // its supervisor, which hands each start the host's parts it reaches: the
-  // compiler checks each against its entry in `AdapterToHost` here, so no
-  // renderer file names a host type.
+  // its supervisor, which hands each start the host's parts it reaches.
+  // [LAW:one-way-deps] The compiler checks each against its entry in
+  // `AdapterToHost` here, so no renderer file names a host type.
   const renderer = superviseRenderer({
     start: inputs.renderers({
       launcher: rendererLauncher,
@@ -637,7 +640,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       clock,
       now: instant,
       host,
-      memoryShareBytes: shares.renderer,
+      memoryLimitBytes,
     }),
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice, or an awaited call.
@@ -707,6 +710,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     monotonic: () => clock.monotonic(),
     now: instant,
     defer: (run) => void clock.defer(run),
+    after: (ms, run) => clock.after(ms, run, { unref: true }),
     log,
   });
   const parts: DaemonParts = {
@@ -771,6 +775,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       binaryWatch.arm();
       updateWatch.arm();
       limits.arm();
+      // Off the first request's path: that request finds it starting.
+      renderer.arm();
     },
     async close(atExit) {
       // The renderer's three steps of the teardown, each awaited where it

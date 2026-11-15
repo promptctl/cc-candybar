@@ -8,8 +8,8 @@ import {
 import { until } from "../../helpers/until";
 
 // [LAW:verifiable-goals] The daemon's renderer is a process of its own: one
-// killed under it is started again on the next request, which it answers,
-// and one whose daemon ended goes with it, its stdin closed under it.
+// killed under it is started again, and answers the next request, and one
+// whose daemon ended goes with it, its stdin closed under it.
 
 // Each renderer's line as it came up, in the order they did.
 const ups = (lines: readonly string[]): string[] =>
@@ -29,7 +29,7 @@ const alive = (pid: number): boolean => {
 describe("the renderer's process", () => {
   jest.setTimeout(30_000);
 
-  test("one killed is started again by the next request, and none outlives its daemon", async () => {
+  test("one killed is started again and answers, and none outlives its daemon", async () => {
     const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-renderer",
     );
@@ -52,15 +52,14 @@ describe("the renderer's process", () => {
         "the first renderer's end",
       );
 
-      // [LAW:no-silent-failure] A restart inside the renderer's rate limit is
-      // refused, and the request it was for fails saying so; the next one
-      // after it starts one.
+      // [LAW:no-silent-failure] One that ended young starts again after its
+      // backoff, and a request meanwhile fails saying why.
       await until(
         () =>
           render(sockPath, "renderer-a", stateDir).then(
             () => true,
             (e: Error) => {
-              expect(e.message).toContain("rate-limited");
+              expect(e.message).toContain("no renderer runs");
               return false;
             },
           ),

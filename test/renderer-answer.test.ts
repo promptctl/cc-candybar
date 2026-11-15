@@ -40,7 +40,8 @@ import {
 } from "./helpers/session-rig";
 import { ok } from "../src/utils/outcome";
 import { fakeTmux } from "./helpers/payload-owners";
-import { rendererHost, hosted } from "../src/daemon/renderer-host";
+import { rendererHost } from "../src/daemon/renderer-host";
+import { hosted } from "./helpers/renderers";
 import type {
   MainRendererParts,
   RendererVerbs,
@@ -755,4 +756,39 @@ describe("the idle close", () => {
     expect(effects).toEqual([]);
     expect(closed).toEqual([SESSION]);
   });
+});
+
+test("a start opens every session it carries on its own: one that throws is said, and the rest still open", async () => {
+  const t = renderer();
+  const context = checked();
+  const worldState = t.rig.served.collector.requested(context);
+  const started: string[] = [];
+  const r = mainRenderer(t.parts, FIRST_GENERATION, NO_PUSHES, (session) =>
+    started.push(session.worldState.session),
+  );
+  const output = await r.answer({
+    kind: "start",
+    at: AT,
+    start: {
+      cause: { kind: "first" },
+      sessions: [
+        {
+          context: {} as never,
+          worldState: { ...worldState, session: "broken" as never },
+          pinned: false,
+        },
+        { context, worldState, pinned: false },
+      ],
+    },
+  });
+  expect(output).toMatchObject({
+    kind: "threw",
+    failure: {
+      message: expect.stringContaining(
+        "the start opened 1 of 2 sessions; broken:",
+      ),
+    },
+  });
+  expect(started).toEqual([SESSION]);
+  expect(t.parts.worldStates.of(SESSION).session).toBe(SESSION);
 });

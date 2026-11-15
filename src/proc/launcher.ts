@@ -107,9 +107,7 @@ export const LAUNCH_CATEGORIES = [
   // rate limit.
   "tmux-status",
   // The renderer's process (src/daemon/renderer-supervisor.ts): one long-lived
-  // child per renderer, started on its name's first input and again on the
-  // next input after it ended. Rate-limited, so a renderer that dies as it
-  // starts is not started again at the rate its feeds draw.
+  // child per renderer. No rate limit: its supervisor paces its restarts.
   "renderer",
 ] as const;
 
@@ -349,8 +347,14 @@ export interface JobEnding {
 // [LAW:one-type-per-behavior] One owner's launches. Each form is one lifetime
 // (the header), and all of them cross the owner's gate and report to its stats.
 // A waited launch its caller talks to: what it writes goes to the child's
-// stdin, and each line the child writes on stdout is heard. Its stdout is not
-// captured, so its result carries what stderr said and how it ended.
+// stdin, and each line the child writes is heard as it completes, none
+// captured, so a child that lives long holds nothing in its launcher. Its
+// result says how it ended.
+export interface ChannelHearing {
+  readonly stdout: (line: string) => void;
+  readonly stderr: (line: string) => void;
+}
+
 export interface LaunchChannel {
   // One line to the child's stdin. A line written after the child's end is
   // lost with it; the result says why.
@@ -368,7 +372,7 @@ export interface Launcher {
   // A refusal is the channel's result, with nothing started.
   launchChannel(
     opts: Omit<AsyncLaunchOpts, "stdinInput">,
-    heard: (line: string) => void,
+    heard: ChannelHearing,
   ): LaunchChannel;
   launchDetachedSync(opts: LaunchOpts): LaunchResult;
   launchJobSync(opts: LaunchOpts, files: JobFiles): JobLaunch;

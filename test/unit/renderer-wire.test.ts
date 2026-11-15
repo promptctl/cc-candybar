@@ -12,7 +12,10 @@ import {
   wireRenderer,
   type LineChannel,
 } from "../../src/renderer-interface/wire";
-import { failureOf } from "../../src/daemon/foundations/verb-error";
+import {
+  DaemonClosing,
+  failureOf,
+} from "../../src/daemon/foundations/verb-error";
 import type { Instant } from "../../src/utils/instant";
 
 const AT = 0 as unknown as Instant;
@@ -111,4 +114,38 @@ test("an input still out when the renderer's end is gone fails with why", async 
   wire.fail(new Error("the renderer's process exited with code 1"));
   await expect(out).rejects.toThrow("exited with code 1");
   await expect(wire.answer(START)).rejects.toThrow("exited with code 1");
+});
+
+test("the host performs the renderer's reaches in the order it made them, a call's body before the notice after it", async () => {
+  const order: string[] = [];
+  const { wire, reached } = wired({
+    menuIdle: {
+      confirmClose: async () => {
+        order.push("confirmClose");
+        return true;
+      },
+      clicked: () => void order.push("clicked"),
+    } as never,
+  });
+  await wire.answer(START);
+  const call = reached().menuIdle.confirmClose("s" as never, AT);
+  reached().menuIdle.clicked("s" as never, AT);
+  await call;
+  expect(order).toEqual(["confirmClose", "clicked"]);
+});
+
+test("a failure the host classified keeps its kind across, so the renderer routes a closing daemon as closing", async () => {
+  const { wire, reached } = wired({
+    serving: async () => {
+      throw new DaemonClosing("the daemon is closing");
+    },
+  });
+  await wire.answer(START);
+  const kind = await reached()
+    .serving()
+    .then(
+      () => null,
+      (e: unknown) => failureOf(e).kind,
+    );
+  expect(kind).toBe("closing");
 });

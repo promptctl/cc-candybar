@@ -35,8 +35,9 @@ export interface RendererOwner {
   readonly clock: Timekeeper;
   readonly now: () => Instant;
   readonly host: Host;
-  // The renderer's share of the memory limit (`memoryShares`).
-  readonly memoryShareBytes: number;
+  // The published memory limit, which the renderer's backstop judges it by
+  // as the host's judges the host.
+  readonly memoryLimitBytes: number;
 }
 
 export type Renderers = (own: RendererOwner) => StartRenderer;
@@ -44,6 +45,12 @@ export type Renderers = (own: RendererOwner) => StartRenderer;
 // How a renderer's process ended, said as the start after it says it.
 const endedOf = (result: LaunchResult): string =>
   result.ok ? `exited with code ${result.exitCode}` : whyFailed(result);
+
+// How long a renderer has to end once its stdin closed before it is
+// signalled: one that is well ends at once, having nothing left to write
+// after the host's close, and the whole close must fit under the process's
+// own kill backstop (src/daemon/server.ts).
+const END_GRACE_MS = 100;
 
 // [LAW:single-enforcer] A renderer in its own process: the bundle the daemon
 // runs, started again as its `renderer` subcommand, talking over its stdio.
@@ -56,32 +63,42 @@ export function processRenderers(
       stateDir: paths.state,
       sessionState: paths.sessionState,
       settingsHistory: paths.settingsHistory,
-      memoryShareBytes: own.memoryShareBytes,
+      memoryLimitBytes: own.memoryLimitBytes,
       bundle: own.bundle.path,
+      digest: own.bundle.digest,
     };
     const [bin, ...flags] = own.bundle.node;
+    const signal = new AbortController();
     let heard: (line: string) => void = () => {};
     const channel = own.launcher.launchChannel(
       {
         bin: bin!,
         args: [
           ...flags,
-          `--max-old-space-size=${heapCapOf(own.memoryShareBytes)}`,
+          `--max-old-space-size=${heapCapOf(own.memoryLimitBytes)}`,
           own.bundle.entry,
           "renderer",
           JSON.stringify(boot),
         ],
         category: "renderer",
+        signal: signal.signal,
       },
-      (line) => {
-        // [LAW:no-silent-failure] A line the renderer should not have sent
-        // is its bug: said, and the renderer is ended, as one that crashed.
-        try {
-          heard(line);
-        } catch (thrown) {
-          own.log("error", `renderer line refused: ${String(thrown)}`);
-          channel.close();
-        }
+      {
+        stdout: (line) => {
+          // [LAW:no-silent-failure] A line the renderer should not have
+          // sent is its bug: said, and the renderer is ended, as one that
+          // crashed.
+          try {
+            heard(line);
+          } catch (thrown) {
+            own.log("error", `renderer line refused: ${String(thrown)}`);
+            channel.close();
+          }
+        },
+        // [LAW:no-silent-failure] What it says before it reaches the host's
+        // log, or past it (node's own warnings, a crash's trace), is logged
+        // as it is said.
+        stderr: (line) => own.log("warn", `renderer stderr: ${line}`),
       },
     );
     const wire = wireRenderer(
@@ -96,8 +113,6 @@ export function processRenderers(
     const ended = channel.result.then((result) => {
       const words = endedOf(result);
       wire.fail(new Error(`the renderer's process ${words}`));
-      const said = result.stderr.trim();
-      if (said !== "") own.log("warn", `renderer stderr: ${said}`);
       return words;
     });
     return {
@@ -105,7 +120,17 @@ export function processRenderers(
       ended,
       end: async () => {
         channel.close();
+        // [LAW:no-ambient-temporal-coupling] One that does not end on its
+        // stdin's close is ended by its launcher's escalation.
+        const cancel = own.launcher.clock.after(END_GRACE_MS, () =>
+          signal.abort(
+            new Error(
+              `the renderer did not end ${END_GRACE_MS}ms after its stdin closed`,
+            ),
+          ),
+        );
         await ended;
+        cancel();
       },
     };
   };
@@ -117,44 +142,51 @@ export interface InProcessParts {
   readonly storage: (log: DaemonLogger) => DaemonStorage;
   readonly doctorStores: DoctorStores;
   readonly linkSigner: LinkSigner;
+  // [LAW:no-shared-mutable-globals] What this renderer's loads accept: its
+  // own value, so two daemons in one process share none.
   readonly gates: Gates;
   readonly stateDir: string;
 }
 
 // A renderer in this process, for what has no process to start it in. It
-// ends only with its daemon.
+// ends only with its daemon, so it starts once.
 export function inProcessRenderers(parts: InProcessParts): Renderers {
-  return (own) => (host, generation) => {
-    const renderer = loadMainRenderer({
-      generation,
-      clock: own.clock,
-      now: own.now,
-      storage: { ...parts.storage(own.log), doctor: parts.doctorStores },
-      linkSigner: parts.linkSigner,
-      stateDir: parts.stateDir,
-      locations: locations(own.host),
-      env: own.host.env,
-      home: own.host.home,
-      gates: parts.gates,
-      bundle: own.bundle.path,
-      memoryLimitBytes: own.memoryShareBytes,
-    }).start(host);
-    let end!: (words: string) => void;
-    const ended = new Promise<string>((resolve) => (end = resolve));
-    return {
-      answer: async (input: RendererInput) => {
-        const from = own.clock.monotonic();
-        // [LAW:types-are-the-program] exception: each input's output is its
-        // own kind's; one call cannot name it.
-        const output = await (
-          renderer.answer as (
-            input: RendererInput,
-          ) => Promise<RendererOutput | AdapterOutput>
-        )(input);
-        return { output, tookMs: own.clock.monotonic() - from };
-      },
-      ended,
-      end: async () => end("ended with its daemon"),
+  return (own) => {
+    // Loaded as the daemon is built: storage that cannot be read refuses the
+    // build with nothing running.
+    const storage = { ...parts.storage(own.log), doctor: parts.doctorStores };
+    return (host, generation) => {
+      const renderer = loadMainRenderer({
+        generation,
+        clock: own.clock,
+        now: own.now,
+        storage,
+        linkSigner: parts.linkSigner,
+        stateDir: parts.stateDir,
+        locations: locations(own.host),
+        env: own.host.env,
+        home: own.host.home,
+        gates: parts.gates,
+        bundle: own.bundle.path,
+        memoryLimitBytes: own.memoryLimitBytes,
+      }).start(host);
+      let end!: (words: string) => void;
+      const ended = new Promise<string>((resolve) => (end = resolve));
+      return {
+        answer: async (input: RendererInput) => {
+          const from = own.clock.monotonic();
+          // [LAW:types-are-the-program] exception: each input's output is
+          // its own kind's; one call cannot name it.
+          const output = await (
+            renderer.answer as (
+              input: RendererInput,
+            ) => Promise<RendererOutput | AdapterOutput>
+          )(input);
+          return { output, tookMs: own.clock.monotonic() - from };
+        },
+        ended,
+        end: async () => end("ended with its daemon"),
+      };
     };
   };
 }
