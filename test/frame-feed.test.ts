@@ -164,10 +164,9 @@ function harness(opts: {
       state.duringRender = null;
       during?.();
       if (state.frameThrows) throw new Error("the renderer broke");
-      // A frame that drew carries the lanes the session switches on as it
-      // drew; a failed one ends no lane.
-      const drawn = frameOf(req, at);
-      return drawn.lanes === null ? drawn : { ...drawn, lanes: state.lanes };
+      // Every frame carries the lanes the session switches on as it drew, a
+      // failed one included, as the renderer's do.
+      return { ...frameOf(req, at), lanes: state.lanes };
     },
     lanes: async (sessionId) => {
       if (state.gateThrows) throw new Error("the gate broke");
@@ -961,6 +960,55 @@ describe("a subscription's lane", () => {
       refused: 1,
     });
     expect(log).toContain('feed sid="s" refused lane=band switched-off');
+  });
+
+  test("unreadable, refuses the subscriber as a failed subscribe, and opens nothing", async () => {
+    const { feeds, note, state, log, clock } = harness({ motion: "still" });
+    state.gateThrows = true;
+    note(S, "bar");
+    const refusals: Refusal[] = [];
+    feeds.subscribe(
+      S,
+      sub(
+        () => {},
+        "band",
+        (r) => refusals.push(r),
+      ),
+    );
+    await clock.settle(30);
+    expect(refusals.map((r) => r.code)).toEqual(["RENDER_FAILED"]);
+    expect([state.opened, state.renders, state.pins.size]).toEqual([0, 0, 0]);
+    expect(log).toContainEqual(
+      expect.stringMatching(/^feed sid="s" admission threw: .*the gate broke/),
+    );
+  });
+
+  test("switched off while the render keeps failing still ends that subscriber", async () => {
+    const { feeds, note, state, changes, clock } = harness({
+      motion: "still",
+      fails: true,
+    });
+    note(S, "bar");
+    const refusals: Refusal[] = [];
+    feeds.subscribe(
+      S,
+      sub(
+        () => {},
+        "band",
+        (r) => refusals.push(r),
+      ),
+    );
+    await clock.settle(30);
+    expect(refusals).toEqual([]);
+    state.lanes = {
+      band: false,
+      statusline: true,
+      pane: true,
+      tmuxStatus: false,
+    };
+    changes.get("s")!();
+    await clock.settle(60);
+    expect(refusals.map((r) => r.code)).toEqual(["SWITCHED_OFF"]);
   });
 
   test("switched off while it streams ends that subscriber and leaves the other lanes' running", async () => {

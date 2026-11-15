@@ -319,27 +319,20 @@ export class FrameFeeds<Req> {
     let left = false;
     void this.deps
       .lanes(sessionId)
-      .catch((thrown: unknown) => {
-        // [LAW:no-silent-failure] A view the renderer could not read lanes
-        // from draws its failure: the subscriber is admitted as for a session
-        // with no view, and its first frame decides.
-        this.deps.log(
-          "error",
-          `feed sid=${JSON.stringify(sessionId)} lanes threw: ${inspect(thrown)}`,
-        );
-        return null;
-      })
       .then((lanes) => {
         if (!left) this.admit(sessionId, sub, lanes);
       })
-      // [LAW:no-silent-failure] An admission that threw is the subscribe's
-      // failure, as a subscribe's own throw is its connection's: said, and
-      // answered RENDER_FAILED, never an open socket nothing feeds.
+      // [LAW:no-silent-failure] A lanes read or an admission that threw is the
+      // subscribe's failure, as a subscribe's own throw is its connection's:
+      // said, the subscriber dropped wherever it got to, and answered
+      // RENDER_FAILED, never an open socket nothing feeds.
       .catch((thrown: unknown) => {
         this.deps.log(
           "error",
           `feed sid=${JSON.stringify(sessionId)} admission threw: ${inspect(thrown)}`,
         );
+        const feed = this.feeds.get(sessionId);
+        if (feed !== undefined) this.unsubscribe(feed, sub);
         sub.refused(renderFailed(thrown));
       });
     return () => {
@@ -591,12 +584,12 @@ export class FrameFeeds<Req> {
       [...this.following(feed.sessionId)],
       this.feedsOf(feed.sessionId, at),
     );
-    const woken = wokenWhileOut(feed);
     // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits,
     // with no timer, until the event that opens one wakes it.
     // A draw that found no view drew nothing, so it spaces nothing: the
     // frame the view's opening wakes is drawn at once.
     if (frame === null) {
+      const woken = wokenWhileOut(feed);
       feed.noView++;
       feed.phase = { kind: "waiting" };
       if (woken && this.feeds.get(feed.sessionId) === feed) this.hasten(feed);
@@ -617,6 +610,9 @@ export class FrameFeeds<Req> {
     if (this.feeds.get(feed.sessionId) !== feed) return;
     if (finished - feed.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize(feed, "running");
+    // Read as the phase is replaced, so a wake the push raised (a lane it
+    // ended, which redraws who follows) is owed as one while out is.
+    const woken = wokenWhileOut(feed);
     this.schedule(feed, frame, at);
     if (woken) this.hasten(feed);
   }

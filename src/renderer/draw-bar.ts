@@ -1073,10 +1073,10 @@ export async function answerRequest(
     budget,
     // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
     // it is a bug, said against the session, never one that ends the daemon.
-    (e) =>
+    (e, ended) =>
       log(
         "error",
-        `render wait failed after its deadline sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
+        `render wait failed after it ended ended=${ended} sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
       ),
     clock.after,
     parts.renderCache.closing,

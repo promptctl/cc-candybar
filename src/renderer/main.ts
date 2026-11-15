@@ -67,16 +67,12 @@ import {
 } from "./debug.js";
 import type { Instant } from "../utils/instant.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
-import type {
-  AdapterInput,
-  AdapterOutput,
-  Effect,
-  EffectId,
-  Event,
-  EventInput,
-  Renderer,
-  RendererInput,
-  RendererOutput,
+import {
+  rendererOf,
+  type Effect,
+  type EffectId,
+  type Event,
+  type Renderer,
 } from "../renderer-interface/interface.js";
 import { JournalTurns } from "./journal-turns.js";
 import { reaction } from "mobx";
@@ -190,23 +186,6 @@ export function mainRenderer(
       };
     },
   });
-}
-
-// [LAW:single-enforcer] The one dispatch from an input to the answer of its
-// kind. Each arm is typed by its own input and output, so an arm answering
-// the other kind's output fails the build, which an overload's body does not.
-export function rendererOf(arms: {
-  readonly event: (input: EventInput) => Promise<RendererOutput>;
-  readonly adapter: (input: AdapterInput) => Promise<AdapterOutput>;
-}): Renderer {
-  function answer(input: EventInput): Promise<RendererOutput>;
-  function answer(input: AdapterInput): Promise<AdapterOutput>;
-  function answer(
-    input: RendererInput,
-  ): Promise<RendererOutput | AdapterOutput> {
-    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
-  }
-  return { answer };
 }
 
 // What the main renderer is built from besides the host's parts: its clock and

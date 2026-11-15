@@ -43,6 +43,24 @@ export interface Renderer {
 
 export type RendererInput = EventInput | AdapterInput;
 
+// [LAW:single-enforcer] The one dispatch from an input to the answer of its
+// kind, which every renderer is built by. Each arm is typed by its own input
+// and output, so an arm answering the other kind's output fails the build,
+// which an overload's body does not.
+export function rendererOf(arms: {
+  readonly event: (input: EventInput) => Promise<RendererOutput>;
+  readonly adapter: (input: AdapterInput) => Promise<AdapterOutput>;
+}): Renderer {
+  function answer(input: EventInput): Promise<RendererOutput>;
+  function answer(input: AdapterInput): Promise<AdapterOutput>;
+  function answer(
+    input: RendererInput,
+  ): Promise<RendererOutput | AdapterOutput> {
+    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
+  }
+  return { answer };
+}
+
 export interface EventInput {
   readonly kind: "event";
   readonly event: Event;

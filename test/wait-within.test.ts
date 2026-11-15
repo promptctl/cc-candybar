@@ -85,13 +85,13 @@ test("a rejection after the deadline goes to its owner's report, never dropped",
       throw new Error("late bug");
     },
     5,
-    (e) => late.push(e),
+    (e, ended) => late.push([e, ended]),
     systemTimekeeper.after,
     OPEN,
   );
   expect(end).toBe("deadline");
   await after(60);
-  expect(late).toEqual([new Error("late bug")]);
+  expect(late).toEqual([[new Error("late bug"), "deadline"]]);
 });
 
 test("its owner closing ends the wait there, with its timer cleared and its work's signal aborted", async () => {

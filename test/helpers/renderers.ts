@@ -9,7 +9,7 @@ import type {
   Renderer,
   RendererOutput,
 } from "../../src/renderer-interface/interface";
-import { rendererOf } from "../../src/renderer/main";
+import { rendererOf } from "../../src/renderer-interface/interface";
 
 // A renderer whose events `answered` answers, and which no push reaches.
 export function eventRenderer(
