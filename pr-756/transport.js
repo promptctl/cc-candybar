@@ -23345,6 +23345,11 @@ function lines(state, category, stream, ends, heard) {
     partial += text4.slice(from);
     if (partial.length > MAX_CAPTURED_BYTES) ends.full();
   });
+  stream?.on("end", () => {
+    const rest2 = partial + decoder.end();
+    partial = "";
+    if (open2 && rest2 !== "") heard(rest2);
+  });
   return {
     take: () => {
       open2 = false;
@@ -58604,10 +58609,10 @@ function memoryLimitMb(env2) {
   }
   return mb2;
 }
+var heapCapOf = (limitBytes) => Math.ceil(limitBytes / BYTES_PER_MB) * HEAP_CAP_OVER_RSS;
 function memoryLimitBytes(env2) {
   return memoryLimitMb(env2) * BYTES_PER_MB;
 }
-var heapCapOf = (limitBytes) => Math.ceil(limitBytes / BYTES_PER_MB) * HEAP_CAP_OVER_RSS;
 var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
 var HEAP_SNAPSHOT_KEEP = 3;
 function readCharge(probed, previous) {
@@ -66510,6 +66515,7 @@ var FrameFeeds = class {
       drawn: 0,
       noted: 0,
       noView: 0,
+      fault: null,
       moving: 0,
       unseen: 0,
       failed: 0,
@@ -66572,13 +66578,24 @@ var FrameFeeds = class {
     const moment2 = started2 + (at - wall) * 1e3;
     try {
       await this.step(feed2, started2, moment2, at);
+      if (feed2.fault !== null)
+        this.deps.log(
+          "info",
+          `feed sid=${JSON.stringify(feed2.sessionId)} recovered faults=${feed2.fault.count}`
+        );
+      feed2.fault = null;
     } catch (error) {
       const woken = wokenWhileOut(feed2);
       feed2.lastStart = moment2;
-      this.deps.log(
-        "error",
-        `feed sid=${JSON.stringify(feed2.sessionId)} threw: ${inspect(error)}`
-      );
+      const text4 = error instanceof Error ? error.message : inspect(error);
+      if (feed2.fault?.text === text4) feed2.fault.count++;
+      else {
+        feed2.fault = { text: text4, count: 1 };
+        this.deps.log(
+          "error",
+          `feed sid=${JSON.stringify(feed2.sessionId)} threw: ${inspect(error)}`
+        );
+      }
       if (this.feeds.get(feed2.sessionId) !== feed2) return;
       this.schedule(feed2, null, at);
       if (woken) this.hasten(feed2);
@@ -68460,6 +68477,7 @@ var RESTART = {
   firstBackoffMs: 1e3,
   maxBackoffMs: 6e4
 };
+var LIVENESS_MS = 1e4;
 var restartDelayMs = (endedYoung) => endedYoung === 0 ? 0 : Math.min(
   RESTART.firstBackoffMs * 2 ** (endedYoung - 1),
   RESTART.maxBackoffMs
@@ -68476,6 +68494,8 @@ function superviseRenderer(deps) {
   let state = { kind: "idle" };
   let generations2 = 0;
   let endedYoung = 0;
+  let stopHeartbeat = () => {
+  };
   const pinned = /* @__PURE__ */ new Set();
   let ended = [];
   const push = (scope, push2) => {
@@ -68545,7 +68565,11 @@ function superviseRenderer(deps) {
     const startedAt = deps.monotonic();
     const sessions = deps.sessions().map((s) => ({ ...s, pinned: pinned.has(s.worldState.session) }));
     const ready = link.answer({ kind: "start", start: { cause, sessions }, at: deps.now() }).then(
-      ({ output }) => "kind" in output && output.kind === "threw" ? output.failure : null,
+      ({ output }) => {
+        const started2 = output;
+        deps.subscribed(started2.subscriptions);
+        return started2.kind === "threw" ? started2.failure : null;
+      },
       (thrown2) => failureOf(thrown2)
     ).then((failed3) => {
       log(
@@ -68558,8 +68582,10 @@ function superviseRenderer(deps) {
           ...failed3 === null ? [] : [["error", failed3.detail]]
         ])
       );
+      if (failed3 !== null) return;
       for (const gone of ended) gone.release();
       ended = [];
+      heartbeat(live);
     });
     void link.ended.then((words2) => {
       scope.dead = true;
@@ -68575,6 +68601,7 @@ function superviseRenderer(deps) {
         );
         return;
       }
+      stopHeartbeat();
       endedYoung = deps.monotonic() - startedAt < RESTART.youngMs ? endedYoung + 1 : 0;
       const delay = restartDelayMs(endedYoung);
       log(
@@ -68592,10 +68619,33 @@ function superviseRenderer(deps) {
         state = startOne({ kind: "crashed", ended: words2 });
       });
     });
-    return {
-      kind: "live",
-      live: { generation, link, scope, startedAt, ready }
+    const live = { generation, link, scope, startedAt, ready };
+    return { kind: "live", live };
+  };
+  const heartbeat = (live) => {
+    let answered = true;
+    const beat2 = () => {
+      if (state.kind !== "live" || state.live !== live) return;
+      if (!answered) {
+        log(
+          "error",
+          eventLine("renderer hung", [
+            ["generation", String(live.generation)],
+            ["unanswered", `${LIVENESS_MS}ms`]
+          ])
+        );
+        void live.link.end();
+        return;
+      }
+      answered = false;
+      void live.link.alive().then(
+        () => answered = true,
+        () => {
+        }
+      );
+      stopHeartbeat = deps.after(LIVENESS_MS, beat2);
     };
+    beat2();
   };
   const answer2 = async (input) => {
     if (input.kind === "event" && input.event.kind === "effect-done") {
@@ -68640,6 +68690,7 @@ function superviseRenderer(deps) {
     close: async () => {
       const was = state;
       state = { kind: "closed" };
+      stopHeartbeat();
       if (was.kind === "down") was.cancel();
       if (was.kind === "live") await was.live.link.end();
       for (const gone of ended) gone.release();
@@ -70293,7 +70344,6 @@ function createDaemon(inputs) {
     now: instant,
     observeWarnings: observeWarnings("")
   });
-  const probe2 = inputs.probe(launcher);
   const rendererClosing = new AbortController();
   const rendererLauncher = inputs.launcher({
     inherited: host.env,
@@ -70302,6 +70352,7 @@ function createDaemon(inputs) {
     now: instant,
     observeWarnings: observeWarnings("renderer ")
   });
+  const probe2 = inputs.probe(launcher);
   const limits = makeLimits({
     ...inputs.limits({
       startedAtMs: stats.startedAt.getTime(),
@@ -70598,6 +70649,7 @@ function createDaemon(inputs) {
       const latest = frameFeeds.latest(worldState.session);
       return latest === null ? [] : [{ context: located(latest), worldState }];
     }),
+    subscribed: (subscriptions) => collector.subscribed(subscriptions),
     monotonic: () => clock.monotonic(),
     now: instant,
     defer: (run3) => void clock.defer(run3),
@@ -71588,6 +71640,8 @@ function parseToHost(line) {
       };
     if (v.k === "reach" && (typeof v.id === "number" || v.id === null) && typeof v.path === "string" && Array.isArray(v.args))
       return { k: "reach", id: v.id, path: v.path, args: v.args };
+    if (v.k === "pong" && typeof v.id === "number")
+      return { k: "pong", id: v.id };
   }
   throw new Error(
     `not a line a renderer sends its host: ${line.slice(0, 200)}`
@@ -71607,6 +71661,7 @@ function reachInto(host, path43, args) {
 }
 function wireRenderer(channel, host) {
   const pending2 = /* @__PURE__ */ new Map();
+  const pings = /* @__PURE__ */ new Map();
   let lastInput = 0;
   let failed3 = null;
   const send = (message) => channel.send(lineOf(message));
@@ -71622,6 +71677,14 @@ function wireRenderer(channel, host) {
           throw new Error(`an output for input ${heard.id}, which is not out`);
         pending2.delete(heard.id);
         input.resolve({ output: heard.output, tookMs: heard.tookMs });
+        return;
+      }
+      case "pong": {
+        const ping = pings.get(heard.id);
+        if (ping === void 0)
+          throw new Error(`a pong for ping ${heard.id}, which is not out`);
+        pings.delete(heard.id);
+        ping.resolve();
         return;
       }
       case "reach": {
@@ -71655,10 +71718,20 @@ function wireRenderer(channel, host) {
         send({ k: "input", id: id2, input });
       });
     },
+    ping: () => {
+      if (failed3 !== null) return Promise.reject(failed3);
+      const id2 = ++lastInput;
+      return new Promise((resolve, reject2) => {
+        pings.set(id2, { resolve, reject: reject2 });
+        send({ k: "ping", id: id2 });
+      });
+    },
     fail: (reason) => {
       failed3 ??= reason;
-      for (const { reject: reject2 } of pending2.values()) reject2(reason);
+      for (const { reject: reject2 } of [...pending2.values(), ...pings.values()])
+        reject2(reason);
       pending2.clear();
+      pings.clear();
     }
   };
 }
@@ -85385,6 +85458,7 @@ var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 
 // src/renderer/world-states.ts
 init_globals();
+var later = (held, next) => next.kind === "pending" ? held ?? next : held === null || held.kind === "pending" || next.at >= held.at ? next : held;
 var WorldStates = class {
   // [LAW:one-source-of-truth] One document per session, the newest handed in.
   documents = observable.map(
@@ -85414,7 +85488,7 @@ var WorldStates = class {
     }
     runInAction(() => {
       this.documents.set(document.session, document);
-      this.update.set(document.daemon.update.newer);
+      this.update.set(later(this.update.get(), document.daemon.update.newer));
     });
   }
   // [LAW:no-defensive-null-guards] The host delivers a session's `config`,
@@ -87115,24 +87189,32 @@ function mainRenderer(parts, generation, pushed, started2) {
       return ended(
         (async () => {
           const failed3 = [];
-          for (const session of sessions)
+          const step4 = (session, what, run3) => {
             try {
-              configureSession(
+              run3();
+            } catch (thrown2) {
+              failed3.push(
+                `${session.worldState.session} ${what}: ${failureOf(thrown2).detail}`
+              );
+            }
+          };
+          for (const session of sessions) {
+            step4(
+              session,
+              "open",
+              () => configureSession(
                 parts,
                 session.context,
                 session.worldState,
                 input.at,
                 record2
-              );
-              started2(session, cause, input.at);
-            } catch (thrown2) {
-              failed3.push(
-                `${session.worldState.session}: ${failureOf(thrown2).detail}`
-              );
-            }
+              )
+            );
+            step4(session, "start", () => started2(session, cause, input.at));
+          }
           if (failed3.length > 0)
             throw new Error(
-              `the start opened ${sessions.length - failed3.length} of ${sessions.length} sessions; ${failed3.join("; ")}`
+              `the start of ${sessions.length} sessions failed ${failed3.length} steps; ${failed3.join("; ")}`
             );
           return [];
         })(),
@@ -87394,8 +87476,8 @@ function startOver(inputs, sessionState, history, host) {
         return { kind: "close-session-state" };
     }
   };
-  const started2 = ({ context, pinned }, cause, at) => {
-    const sessionId2 = context.hookData.session_id;
+  const started2 = ({ worldState, pinned }, cause, at) => {
+    const sessionId2 = worldState.session;
     if (pinned) pin(sessionId2);
     if (cause.kind === "crashed")
       holdClickError(
@@ -87431,6 +87513,7 @@ function debugOf(view, what) {
 // src/daemon/renderer-links.ts
 var endedOf = (result) => result.ok ? `exited with code ${result.exitCode}` : whyFailed(result);
 var END_GRACE_MS = 100;
+var ownFlag = (flag) => !flag.startsWith("--max-old-space-size") && !flag.startsWith("--inspect");
 function processRenderers(paths2) {
   return (own2) => (host, generation) => {
     const boot = {
@@ -87450,7 +87533,7 @@ function processRenderers(paths2) {
       {
         bin,
         args: [
-          ...flags,
+          ...flags.filter(ownFlag),
           `--max-old-space-size=${heapCapOf(own2.memoryLimitBytes)}`,
           own2.bundle.entry,
           "renderer",
@@ -87491,6 +87574,7 @@ function processRenderers(paths2) {
     return {
       answer: wire.answer,
       ended,
+      alive: wire.ping,
       end: async () => {
         channel.close();
         const cancel = own2.launcher.clock.after(
@@ -87534,7 +87618,10 @@ function inProcessRenderers(parts) {
           return { output, tookMs: own2.clock.monotonic() - from };
         },
         ended,
-        end: async () => end("ended with its daemon")
+        end: async () => end("ended with its daemon"),
+        // Its loop is the host's, which is turning if this runs.
+        alive: async () => {
+        }
       };
     };
   };

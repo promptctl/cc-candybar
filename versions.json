@@ -4,15 +4,22 @@
     {
       "version": "pr-756",
       "ref": "refs/pull/756/merge",
-      "sha": "5c60ce0f67e246573d22be06721043323d135344",
-      "timestamp": "2026-11-15T17:07:25.785Z",
+      "sha": "d025c7ed95cdbff46a1472a65231a11d541393ed",
+      "timestamp": "2026-11-15T17:27:12.229Z",
       "commits": [
         {
-          "sha": "5c60ce0f67e246573d22be06721043323d135344",
+          "sha": "d025c7ed95cdbff46a1472a65231a11d541393ed",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T17:06:32Z",
-          "message": "Merge 72d8782ef02f47367f4c1a0da11ef8d9490a107d into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+          "timestamp": "2026-11-15T17:26:08Z",
+          "message": "Merge 73e9961e6514cd90f2bdd1f710831b47de9d760c into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+        },
+        {
+          "sha": "73e9961e6514cd90f2bdd1f710831b47de9d760c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T10:25:51-07:00",
+          "message": "fix(renderer): a hung renderer is ended and restarted, and a start's subscriptions and pins hold (candybar-host-renderer-x96a.v58)\n\nAnswers the medium review:\n\n- The supervisor asks the live renderer on a timer whether its loop turns,\n  over a ping its event loop answers outside its turns; one that left the\n  last ask unanswered is said and ended, and the restart follows.\n- A start's subscriptions go to the collector, as every turn's do.\n- A dead renderer's watches and holds are released only once a start\n  succeeds, never on one that failed.\n- A start pins and warns every session it carries even when its view did\n  not open, so the host's pinned feed is pinned in the renderer too.\n- A feed whose frame step keeps throwing the same fault says it once and\n  says its recovery, so a renderer's restart is not a line per frame.\n- The renderer drops the host's heap cap and inspector flags, and the heap\n  cap has one formula.\n- A channel launch hears a last line that has no newline.\n- The renderer's launcher is built before anything can launch, as the\n  faults read both launchers.\n- World states hold the latest update fact any document carried, so a\n  document handed in late cannot move the dismiss gate back.\n"
         },
         {
           "sha": "72d8782ef02f47367f4c1a0da11ef8d9490a107d",
