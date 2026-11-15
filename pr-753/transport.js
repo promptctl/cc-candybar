@@ -28773,8 +28773,6 @@ function watchFault(label2, watch2, beyond) {
   ];
   return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
 }
-var sameDeafness = (a, b) => a.kind === b.kind && a.path === b.path && a.reason === b.reason;
-var sameDeafnesses = (a, b) => a.length === b.length && a.every((d, i) => sameDeafness(d, b[i]));
 function followWatch(held, spec, acquire) {
   if (held !== null && (held.key === spec.key || spec.unbound))
     return { watch: held, move: "kept" };
@@ -28932,7 +28930,7 @@ var WatcherRegistry = class {
     const now2 = this.open(dir, () => dir, cause, was);
     dir.state = now2;
     if (now2.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening" || !sameDeafness(was.deafness, now2.deafness))
+    else if (was.kind === "listening" || !compareStructural(was.deafness, now2.deafness))
       this.tell(dir, failedOf(now2.deafness));
   }
   // `dirOf` names the watch the handle belongs to; its callbacks run only
@@ -28970,7 +28968,7 @@ var WatcherRegistry = class {
     } catch (e) {
       const reason = e.message;
       const deafness = { kind: "refused", path: at, reason };
-      if (was?.kind !== "deaf" || !sameDeafness(was.deafness, deafness))
+      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
         this.logger("warn", `watch failed ${at}: ${reason}`);
       return { kind: "deaf", deafness };
     }
@@ -82272,7 +82270,7 @@ var Watches = class {
   pushed(id2, heard, deaf) {
     const watch2 = this.held.get(id2);
     if (watch2 === void 0) return;
-    const moved = !sameDeafnesses(watch2.deaf, deaf);
+    const moved = !compareStructural(watch2.deaf, deaf);
     watch2.deaf = deaf;
     const window2 = heard ?? (moved ? { kind: "unknown" } : null);
     if (window2 !== null) watch2.heard(window2);

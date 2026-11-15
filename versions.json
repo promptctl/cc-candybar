@@ -4,15 +4,22 @@
     {
       "version": "pr-753",
       "ref": "refs/pull/753/merge",
-      "sha": "d4b5e5dcafa8d5ebcdba9926a602e5d491a9af39",
-      "timestamp": "2026-11-15T14:14:57.329Z",
+      "sha": "84164c77a35ecb3758b823192037a0bf3601c8dc",
+      "timestamp": "2026-11-15T14:25:19.166Z",
       "commits": [
         {
-          "sha": "d4b5e5dcafa8d5ebcdba9926a602e5d491a9af39",
+          "sha": "84164c77a35ecb3758b823192037a0bf3601c8dc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T14:14:03Z",
-          "message": "Merge 97401fab65aa811c03fa49afea4cbd1ab63750fa into f6153274737f840e353302f669b6543916691714\n"
+          "timestamp": "2026-11-15T14:24:22Z",
+          "message": "Merge 4be20d22be0cd4b4e40ad3aecb676c2fb8754a37 into f6153274737f840e353302f669b6543916691714\n"
+        },
+        {
+          "sha": "4be20d22be0cd4b4e40ad3aecb676c2fb8754a37",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T07:24:11-07:00",
+          "message": "refactor(watch): a deafness moved is judged by structural equality, the one rule its other plain data already uses (candybar-host-renderer-x96a.gbw)\n"
         },
         {
           "sha": "97401fab65aa811c03fa49afea4cbd1ab63750fa",
