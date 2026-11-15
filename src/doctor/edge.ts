@@ -48,7 +48,7 @@ import {
   type TmuxClient,
 } from "./checks.js";
 import { fontInUse } from "./font-edge.js";
-import { DoctorBusy } from "./busy.js";
+import { busy, type Probed } from "./busy.js";
 import type { ClientHint } from "../client-hint.js";
 import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import { crateDigest } from "../source-digest.js";
@@ -196,7 +196,7 @@ export function descendsFromRemoteLogin(
 async function remoteLogin(
   launcher: Launcher,
   pid: number,
-): Promise<Asked<boolean>> {
+): Promise<Probed<boolean>> {
   const run = await launcher.launch({
     bin: "ps",
     args: ["-A", "-o", "pid=,ppid=,comm="],
@@ -204,7 +204,7 @@ async function remoteLogin(
     category: "doctor.process",
   });
   if (!run.ok) {
-    if (run.reason === "rate-limited") throw new DoctorBusy("the processes");
+    if (run.reason === "rate-limited") return busy("the processes");
     const detail = failureText(run);
     return { kind: "failed", reason: `ps failed (${detail})` };
   }
@@ -294,7 +294,7 @@ async function daemons(
 async function probeTmux(
   launcher: Launcher,
   hint: TmuxHint,
-): Promise<Asked<TmuxClient | null>> {
+): Promise<Probed<TmuxClient | null>> {
   const run = await runTmuxAsync(launcher, hint, "doctor.tmux", [
     "display",
     "-p",
@@ -302,7 +302,7 @@ async function probeTmux(
     hint.pane,
     TMUX_CLIENT_FORMAT,
   ]);
-  if (run.kind === "rate-limited") throw new DoctorBusy("tmux");
+  if (run.kind === "rate-limited") return busy("tmux");
   if (run.kind === "failed") return { kind: "failed", reason: run.reason };
   return parseTmuxClient(run.stdout);
 }

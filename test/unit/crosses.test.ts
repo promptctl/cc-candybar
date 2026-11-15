@@ -23,6 +23,12 @@ const anything: Crosses<{ readonly parsed: any }> = true;
 const push: Crosses<AdapterPush | { kind: "x"; run: () => void }> = true;
 // @ts-expect-error a record's undefined is a key JSON drops
 const unset: Crosses<Readonly<Record<string, string | undefined>>> = true;
+// @ts-expect-error a number-keyed record's undefined is a key JSON drops
+const numbered: Crosses<Readonly<Record<number, string | undefined>>> = true;
+// @ts-expect-error a template-keyed record's undefined is a key JSON drops
+const templated: Crosses<
+  Readonly<Record<`env-${string}`, string | undefined>>
+> = true;
 // A field left out arrives left out, so an optional one crosses.
 const plain: Crosses<{
   readonly name?: string;
@@ -42,6 +48,10 @@ const held: Reaches<{ readonly ask: () => Promise<Map<string, number>> }> =
   true;
 // @ts-expect-error a reach group that grew one in-place reach is found
 const grown: Reaches<HostCalls & { readonly x: { y: () => number } }> = true;
+// @ts-expect-error an answer of `any` holds whatever it was handed
+const untyped: Reaches<{ readonly read: () => any }> = true;
+// @ts-expect-error an awaited `any` holds whatever it was handed
+const awaitedAny: Reaches<{ readonly read: () => Promise<any> }> = true;
 // A notice and an awaited call, in a group, cross.
 const reaches: Reaches<{
   readonly told: (line: string) => void;
@@ -59,13 +69,24 @@ describe("Crosses", () => {
       anything,
       push,
       unset,
+      numbered,
+      templated,
       plain,
-    ]).toHaveLength(8);
+    ]).toHaveLength(10);
   });
 });
 
 describe("Reaches", () => {
   it("is a check the typecheck runs", () => {
-    expect([inPlace, handed, hole, held, grown, reaches]).toHaveLength(6);
+    expect([
+      inPlace,
+      handed,
+      hole,
+      held,
+      grown,
+      untyped,
+      awaitedAny,
+      reaches,
+    ]).toHaveLength(8);
   });
 });

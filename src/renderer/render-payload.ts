@@ -691,7 +691,8 @@ export function renderWidth(hints: ClientHints): number {
 
 // [LAW:nothing-unseen] The render event's `refreshed=`: each lane the
 // request's arrival refreshed, with how long it took, or `…` while the refresh
-// was still out when the answer was drawn.
+// was still out when the answer was drawn: its times then land on a
+// `refreshed` line of their own, which names the request.
 export function refreshedFact(refreshed: RefreshTimes | null): string {
   return refreshed === null
     ? "…"

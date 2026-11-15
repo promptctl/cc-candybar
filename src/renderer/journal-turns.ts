@@ -93,15 +93,17 @@ export class JournalTurns {
     this.queued++;
     return this.queue.run(DAEMON_WIDE, async () => {
       this.queued--;
-      this.refuseClosed(verb);
-      if (await gone()) throw new ClickAbandoned(verb);
-      // [LAW:no-ambient-temporal-coupling] The close may land while the
-      // answer is out.
-      this.refuseClosed(verb);
       const since = this.deps.monotonic();
       waited(spanMs(asked, since));
+      // [LAW:nothing-unseen] Held from the head of the queue: asking whether
+      // the client left is the turn's too, and its answer may be slow.
       this.holder = { verb, since };
       try {
+        this.refuseClosed(verb);
+        if (await gone()) throw new ClickAbandoned(verb);
+        // [LAW:no-ambient-temporal-coupling] The close may land while the
+        // answer is out.
+        this.refuseClosed(verb);
         return await body({
           holds: (commit) => {
             const held = { verb, commit };

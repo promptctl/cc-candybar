@@ -3,6 +3,7 @@
 // hands in.
 
 import type { Outcome } from "../utils/outcome.js";
+import type { Probed } from "./busy.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
 import type { DslConfig } from "../config/dsl-types.js";
@@ -41,10 +42,10 @@ export type DoctorStores = {
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.
-  readonly probeTmux: (hint: TmuxHint) => Promise<Asked<TmuxClient | null>>;
+  readonly probeTmux: (hint: TmuxHint) => Promise<Probed<TmuxClient | null>>;
   // Whether a process came in through a remote login (sshd, mosh-server) —
   // asked of the tmux client attached to the session's pane.
-  readonly remoteLogin: (pid: number) => Promise<Asked<boolean>>;
+  readonly remoteLogin: (pid: number) => Promise<Probed<boolean>>;
   // The font a configured terminal draws the bar's glyphs with, read where
   // the terminal reads it (src/doctor/font-edge.ts).
   readonly fontInUse: (
@@ -54,7 +55,7 @@ export interface DoctorEdge {
     },
     env: TerminalEnvHint,
     glyphs: string,
-  ) => Promise<Asked<FontInUse>>;
+  ) => Promise<Probed<FontInUse>>;
   // What loading the config at an origin finds now — the daemon reloads the
   // render-cache entry the session's bar is drawn from and answers from it
   // (so the doctor and the bar's strip report one load), the CLI runs one

@@ -108,6 +108,7 @@ export function mainRenderer(
       case "request": {
         const { frame, delivered } = await answerRequest(
           parts,
+          event.id,
           event.context,
           at,
           event.waitMs,
@@ -340,6 +341,8 @@ function startOver(
     renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
       kind: "write",
     });
+  // The doctor's reads of the machine, apart from the install check's.
+  const { install: installFacts, ...machineReads } = host.doctor;
   const verbCtx: DaemonVerbContext = {
     gates,
     sessionState,
@@ -352,12 +355,7 @@ function startOver(
     now,
     applyUpdate: host.applyUpdate,
     doctor: {
-      probeTmux: host.doctor.probeTmux,
-      remoteLogin: host.doctor.remoteLogin,
-      fontInUse: host.doctor.fontInUse,
-      daemons: host.doctor.daemons,
-      forge: host.doctor.forge,
-      transcript: host.doctor.transcript,
+      ...machineReads,
       // The load the session's bar is drawn from: its cache entry's load
       // outcome, and what the config that entry renders left unused.
       // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
@@ -378,7 +376,7 @@ function startOver(
       home: inputs.home,
       managedSettingsDir: claudeManagedSettingsDirIn(inputs.env),
     },
-    installFacts: host.doctor.install,
+    installFacts,
     doctorStores: inputs.storage.doctor,
     probes: host.probes,
     clients: host.renderSightings,

@@ -55,6 +55,7 @@ import {
 import type { SightedBar, SightingScope } from "./sightings.js";
 import type { StoresRead } from "../daemon/foundations/stats-snapshot.js";
 import type { DoctorStores, DoctorEdge, ConfigLoad } from "./ports.js";
+import { seen } from "./busy.js";
 
 // Every fs read here throws its own errno text; the facts carry it instead.
 export function asked<T>(read: () => T): Asked<T> {
@@ -197,7 +198,7 @@ async function tmuxFacts(
 ): Promise<TmuxFacts> {
   if (hint === undefined) return { kind: "unreported" };
   if (hint === null) return { kind: "outside" };
-  return { kind: "inside", hint, client: await edge.probeTmux(hint) };
+  return { kind: "inside", hint, client: await seen(edge.probeTmux(hint)) };
 }
 
 // [LAW:dataflow-not-control-flow] Which terminal draws the bar: inside tmux
@@ -257,7 +258,7 @@ async function terminalFacts(
   const remote: Asked<boolean> =
     client === null
       ? { kind: "ok", value: hints.ssh === true }
-      : await edge.remoteLogin(client.pid);
+      : await seen(edge.remoteLogin(client.pid));
   return {
     kind: "configured",
     name,
@@ -276,10 +277,12 @@ async function terminalFacts(
               reason:
                 "the terminal is on the far side of a remote login, so its font is on the machine it runs on",
             }
-          : await edge.fontInUse(
-              { name, version },
-              client === null ? (env ?? {}) : unattached,
-              glyphs,
+          : await seen(
+              edge.fontInUse(
+                { name, version },
+                client === null ? (env ?? {}) : unattached,
+                glyphs,
+              ),
             ),
   };
 }

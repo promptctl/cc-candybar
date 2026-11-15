@@ -30,7 +30,7 @@ import {
 import type { Launcher, LaunchResult } from "../src/proc/launcher";
 import { instantOf } from "../src/utils/instant";
 import { systemLauncher } from "../src/proc/system-launcher";
-import { DoctorBusy } from "../src/doctor/busy";
+import { busy } from "../src/doctor/busy";
 import type { DoctorEdge } from "../src/doctor/ports";
 import {
   emptyStores,
@@ -506,18 +506,20 @@ describe("a doctor click", () => {
 
   test("a probe the rate limit refused stays the click's BAD_REQUEST", async () => {
     const { sessionState, ctx } = setup();
-    sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, "{}");
+    sessionState.set(
+      SID,
+      SESSION_CLIENT_HINTS_KEY,
+      JSON.stringify({
+        tmux: { pane: "%1", socket: "/tmp/tmux-busy", truecolor: null },
+      }),
+    );
     await expect(
       VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(SID), {
         ...ctx,
         doctorStores: emptyStores(),
-        doctor: edge({
-          daemons: async () => {
-            throw new DoctorBusy("the processes");
-          },
-        }),
+        doctor: edge({ probeTmux: async () => busy("tmux") }),
       }),
-    ).rejects.toThrow(/processes/);
+    ).rejects.toThrow(/tmux less than a second ago/);
   });
 });
 

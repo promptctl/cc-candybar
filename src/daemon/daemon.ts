@@ -627,12 +627,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     refresh: readings.refresh,
     doctor: {
-      probeTmux: doctorEdge.probeTmux,
-      remoteLogin: doctorEdge.remoteLogin,
-      fontInUse: doctorEdge.fontInUse,
-      daemons: doctorEdge.daemons,
-      forge: doctorEdge.forge,
-      transcript: doctorEdge.transcript,
+      ...doctorEdge,
       install: async (daemonBundle, clients) =>
         installFacts(doctorEdge.install, daemonBundle, clients),
     },

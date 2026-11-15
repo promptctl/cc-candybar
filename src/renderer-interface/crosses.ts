@@ -58,9 +58,14 @@ type Each<T, D extends readonly unknown[]> = T extends unknown
   ? Part<T, D>
   : never;
 
-type Fields<T, D extends readonly unknown[]> = string extends keyof T
-  ? Each<T[string & keyof T], D>
-  : { [K in keyof T]-?: Each<Exclude<T[K], undefined>, D> }[keyof T];
+// A key an empty object has is an index signature's (`string`, `number`, a
+// template), so its `undefined` is a key JSON drops; a named key's is one it
+// leaves out.
+type Fields<T, D extends readonly unknown[]> = {
+  [K in keyof T]-?: {} extends Record<K, 1>
+    ? Each<T[K], D>
+    : Each<Exclude<T[K], undefined>, D>;
+}[keyof T];
 
 export type Crosses<T> = [Exclude<Each<T, DEPTH>, true>] extends [never]
   ? true
@@ -73,13 +78,18 @@ export interface CannotReach<Reach> {
   readonly cannotReach: Reach;
 }
 
-type Answer<R> = [R] extends [void]
-  ? true
-  : [R] extends [Promise<infer V>]
-    ? [V] extends [void]
-      ? true
-      : Crosses<V>
-    : CannotReach<R>;
+// `any` passes for `void` unread, so it is named first, as `Part` names it.
+type Answer<R> = 0 extends 1 & R
+  ? CannotReach<R>
+  : [R] extends [void]
+    ? true
+    : [R] extends [Promise<infer V>]
+      ? 0 extends 1 & V
+        ? CannotReach<R>
+        : [V] extends [void]
+          ? true
+          : Crosses<V>
+      : CannotReach<R>;
 
 type Reach<T> = [T] extends [(...args: infer A) => infer R]
   ? [Exclude<Crosses<A> | Answer<R>, true>] extends [never]

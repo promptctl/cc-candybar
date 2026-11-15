@@ -158,6 +158,7 @@ import {
   describeFix,
   runDoctor,
   type DoctorFacts,
+  type InstallFacts,
   type GlyphMark,
 } from "../../doctor/checks";
 import { sightingOf } from "../../doctor/terminal";
@@ -1413,35 +1414,41 @@ async function clickGather(
     sessionId: sid,
     via: ctx.arrival.via,
   } as const;
-  const said = await ctx.clients.ofSession(sid, ctx.now());
-  const serving = await ctx.serving();
+  const [said, serving] = await Promise.all([
+    ctx.clients.ofSession(sid, ctx.now()),
+    ctx.serving(),
+  ]);
   let facts: ClickGather["facts"];
+  let install: InstallFacts;
   try {
-    facts = await gatherFacts(
-      { ...doctor, loadConfig: () => load },
-      sessionHints(ctx, sid),
-      sessionOrigin(ctx, sid),
-      (key) => ctx.sessionState.get(sid, key),
-      { kind: "ok", value: serving },
-      { kind: "ok", value: said.map((s) => s.rateLimits) },
-      { kind: "ok", value: said.map((s) => s.transcript) },
-      scope,
-      { kind: "ok", value: barsOf(scope, said) },
-      sessionWidth(sid, said),
-      readStores(ctx.doctorStores),
-    );
+    [facts, install] = await Promise.all([
+      gatherFacts(
+        { ...doctor, loadConfig: () => load },
+        sessionHints(ctx, sid),
+        sessionOrigin(ctx, sid),
+        (key) => ctx.sessionState.get(sid, key),
+        { kind: "ok", value: serving },
+        { kind: "ok", value: said.map((s) => s.rateLimits) },
+        { kind: "ok", value: said.map((s) => s.transcript) },
+        scope,
+        { kind: "ok", value: barsOf(scope, said) },
+        sessionWidth(sid, said),
+        readStores(ctx.doctorStores),
+      ),
+      // The client that drew the bar this click came from, and the daemon the
+      // click reached — this process.
+      ctx.installFacts(
+        ctx.bundle,
+        said.map((s) => s.client),
+      ),
+    ]);
   } catch (e) {
     if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
     throw e;
   }
   const gathered: ClickGather = {
     facts,
-    // The client that drew the bar this click came from, and the daemon the
-    // click reached — this process.
-    install: await ctx.installFacts(
-      ctx.bundle,
-      said.map((s) => s.client),
-    ),
+    install,
     current: async (now) => {
       const stands = doctor.loadConfig(sessionOrigin(now, sid));
       // A reload that failed keeps the config it had, so its error is the news.

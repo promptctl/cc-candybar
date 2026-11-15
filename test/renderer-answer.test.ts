@@ -39,7 +39,10 @@ import {
 import { ok } from "../src/utils/outcome";
 import { fakeTmux } from "./helpers/payload-owners";
 import { rendererHost } from "../src/daemon/renderer-host";
-import type { RendererVerbs } from "../src/renderer/verbs/port";
+import type {
+  MainRendererParts,
+  RendererVerbs,
+} from "../src/renderer/verbs/port";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { WorldState } from "../src/facts/world-state";
 import { hearingEvents, NO_PUSHES } from "./helpers/renderers";
@@ -62,7 +65,7 @@ const NO_STATS = { size: 0, hits: 0, misses: 0 };
 // and every line the daemon's log was handed.
 function renderer(verbs?: RendererVerbs): {
   readonly r: Renderer;
-  readonly parts: RendererParts;
+  readonly parts: MainRendererParts;
   readonly recorded: string[][];
   // Each session whose view told the cache its data moved, in order.
   readonly changed: string[];
@@ -253,6 +256,55 @@ describe("a statusline request", () => {
     );
     expect(presentOf(effects)).toMatchObject({ request: REQUEST });
     expect(viewOf(t.rig)?.facts()).toBe(context);
+  });
+
+  test("whose refresh outlasts its wait says so on its record, and its refresh's times land on a line naming it", async () => {
+    const t = renderer();
+    const took = {
+      session: 1,
+      today: 2,
+      context: 3,
+      metrics: 4,
+      activity: 5,
+      cache: 6,
+      speed: 7,
+      autocompact: 8,
+    };
+    let land!: () => void;
+    const lines: string[] = [];
+    const r = mainRenderer(
+      {
+        ...t.parts,
+        refresh: () =>
+          new Promise((resolve) => {
+            land = () => resolve(took);
+          }),
+        log: (level, line) => lines.push(`${level} ${line}`),
+      },
+      NO_PUSHES,
+    );
+    const context = checked();
+    await configure({ r, rig: t.rig }, context);
+    const { record } = answered(
+      await r.answer({
+        kind: "event",
+        at: AT,
+        event: {
+          kind: "request",
+          id: REQUEST,
+          context,
+          waitMs: 0,
+          idleSince: null,
+        },
+      }),
+    );
+    expect(new Map(record).get("refreshed")).toBe("…");
+    expect(lines.filter((l) => l.includes("refreshed"))).toEqual([]);
+    land();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(lines.filter((l) => l.startsWith("info refreshed "))).toEqual([
+      `info refreshed req=${REQUEST} sid=${SESSION} refreshed=session:1ms,today:2ms,context:3ms,metrics:4ms,activity:5ms,cache:6ms,speed:7ms,autocompact:8ms`,
+    ]);
   });
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {

@@ -26,7 +26,7 @@ import {
   BUNDLED_GLYPHS_LOGGED,
   BUNDLED_GLYPHS_NAMED,
 } from "./helpers/bundled-glyphs";
-import { DoctorBusy } from "../src/doctor/busy";
+import { busy } from "../src/doctor/busy";
 import { memoryStateFile } from "./helpers/state-file";
 import { fileMarkBook } from "../src/doctor/mark-book";
 import fs from "node:fs";
@@ -637,13 +637,11 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     });
 
     test("a probe the rate limit refused refuses the click, and the report stands", async () => {
-      const busy: TerminalFixture = {
+      const limited: TerminalFixture = {
         ...ITERM_MENLO,
-        fontInUse: async () => {
-          throw new DoctorBusy("the font");
-        },
+        fontInUse: async () => busy("the font"),
       };
-      const rt = doctorBar(null, CLEAN_LOAD, busy);
+      const rt = doctorBar(null, CLEAN_LOAD, limited);
       await rt.openTools();
       await expect(VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).rejects.toThrow(
         new BadVerbArgs(

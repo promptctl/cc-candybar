@@ -73,6 +73,7 @@ import {
   type FeedFrame,
   type LaneSession,
 } from "../renderer-interface/adapter.js";
+import type { RequestId } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -94,6 +95,7 @@ import {
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { type Instant } from "../utils/instant.js";
 import { waitWithin } from "../utils/reading.js";
+import { eventLine } from "../utils/logfmt.js";
 import {
   noteFacts,
   requestEvent,
@@ -1047,6 +1049,7 @@ export function laneClicked(
 
 export async function answerRequest(
   parts: RendererParts,
+  id: RequestId,
   req: CheckedRenderRequest,
   at: Instant,
   waitMs: number,
@@ -1077,14 +1080,26 @@ export async function answerRequest(
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
   });
-  // What the refresh took, lane by lane, once it has landed.
+  // What the refresh took, lane by lane, once it has landed: a fact of the
+  // render event, or, landing after the answer, a line of its own that names
+  // the request, so a lane slower than the deadline is seen with its time.
   let refreshed: RefreshTimes | null = null;
+  let answered = false;
   const ended = await waitWithin(
     (signal) =>
       settleWorld(
         () =>
           parts.refresh(setup.viewFacts, at).then((took) => {
-            refreshed = took;
+            if (answered)
+              log(
+                "info",
+                eventLine("refreshed", [
+                  ["req", String(id)],
+                  ["sid", setup.sessionId],
+                  ["refreshed", refreshedFact(took)],
+                ]),
+              );
+            else refreshed = took;
           }),
         () => parts.worldStates.of(setup.sessionId),
         () => setup.view.registry.namedRuns().values(),
@@ -1104,6 +1119,7 @@ export async function answerRequest(
   // [LAW:nothing-unseen] How the wait went, on the render event: an answer
   // drawn with values pending says so by name.
   const drawFrom = clock.monotonic();
+  answered = true;
   noteFacts(facts, {
     waited: `${Math.round(drawFrom - waitFrom)}ms`,
     ended,
