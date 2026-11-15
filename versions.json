@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-756",
+      "ref": "refs/pull/756/merge",
+      "sha": "f260d7d80f0b77135425de242786310ce1065e98",
+      "timestamp": "2026-11-15T16:43:30.060Z",
+      "commits": [
+        {
+          "sha": "f260d7d80f0b77135425de242786310ce1065e98",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T09:42:32-07:00",
+          "message": "Merge 5448d64185a932d240b331130037c0a6dcf1e5e7 into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+        },
+        {
+          "sha": "5448d64185a932d240b331130037c0a6dcf1e5e7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T09:42:07-07:00",
+          "message": "feat(renderer): the renderer runs in its own process, supervised and restarted by the host (candybar-host-renderer-x96a.v58)\n\nThe daemon's renderer is the bundle started again as its `renderer`\nsubcommand, talking one JSON value per line over its stdio. The host's\nsupervisor starts it on the first input and again on the next input after\nit ends. Each start carries every live session with its pin, so a restarted\nrenderer answers as the last did.\n\nEvery id a renderer mints carries its generation. The host scopes each\nrenderer's watches and storage holds, releases a dead one's once the next\nhas started, and refuses an effect-done of an ended generation. The\nrenderer ends with its stdin, has its own launcher aborted last in the\nteardown, and runs its own backstop over its share of the memory limit.\nThe update dismiss gate follows the published fact in the renderer. A\ntest's worker and the site page run the renderer in process over the same\ninterface.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "3d01afd006325c4b6298b3fd91cf2b77b5fae42b",
