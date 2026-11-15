@@ -23379,24 +23379,16 @@ function relay(state, category, stream, ends, heard) {
 function launchChannel(state, opts) {
   let input = null;
   let pid2 = null;
-  const streams = [];
   const ended = track(
     state,
     launchPiped(state, opts, {
-      read: (s, category, stream, ends, which) => {
-        if (stream !== null)
-          streams.push(new Promise((closed) => stream.once("close", closed)));
-        return relay(s, category, stream, ends, opts.heard[which]);
-      },
+      read: (s, category, stream, ends, which) => relay(s, category, stream, ends, opts.heard[which]),
       opened: (opened, spawned) => {
         input = opened;
         pid2 = spawned;
         opened?.on("error", () => {
         });
       }
-    }).then(async (result) => {
-      await Promise.all(streams);
-      return result;
     })
   );
   return {
@@ -66695,7 +66687,7 @@ var FrameFeeds = class {
     const moment2 = started2 + (at - wall) * 1e3;
     try {
       await this.step(feed2, started2, moment2, at);
-      if (feed2.fault !== null) {
+      if (feed2.fault !== null && this.feeds.get(feed2.sessionId) === feed2) {
         this.deps.log(
           "info",
           `feed sid=${JSON.stringify(feed2.sessionId)} recovered after ${feed2.fault}`
@@ -86013,15 +86005,15 @@ function createDaemon(inputs) {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: [...launcher.standing(), ...rendererLauncher.standing()],
+        launcher: launcher.standing(),
         rendererEnded
       })
     );
   }
-  const launchOwner = (signal) => ({
+  const launcher = inputs.launcher({
     inherited: host.env,
     stats: stats.launchStats,
-    signal,
+    signal: closing.signal,
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
     // hold them against.
     now: instant,
@@ -86038,9 +86030,6 @@ function createDaemon(inputs) {
       restateFaults();
     }
   });
-  const launcher = inputs.launcher(launchOwner(closing.signal));
-  const rendererClosing = new AbortController();
-  const rendererLauncher = inputs.launcher(launchOwner(rendererClosing.signal));
   const probe2 = inputs.probe(launcher);
   const preparedRenderer = inputs.renderer({
     load: () => loadMainRenderer({
@@ -86336,7 +86325,6 @@ function createDaemon(inputs) {
     probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
-      rendererLauncher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
         rendererEnded = { ...rendererEnded, answered: true };
       restateFaults();
@@ -86367,7 +86355,6 @@ function createDaemon(inputs) {
     reaches,
     log,
     clock,
-    launcher: rendererLauncher,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
     // gets its `config` with its latest stamp, and every open feed its `pin`,
@@ -86500,11 +86487,7 @@ function createDaemon(inputs) {
         ["sessionState close", rendererStep("close-session-state")],
         // After every step the renderer takes: its process, when it has one,
         // ends with nothing left to flush.
-        ["renderer process close", () => link.close()],
-        [
-          "renderer launches abort",
-          () => rendererClosing.abort(new Error("the daemon closed"))
-        ]
+        ["renderer process close", () => link.close()]
       ];
       for (const [step4, run3] of teardown) {
         try {
@@ -86514,14 +86497,7 @@ function createDaemon(inputs) {
         }
       }
       closed = true;
-      return {
-        settled: Promise.all([
-          launcher.settled(),
-          rendererLauncher.settled()
-        ]).then(([own2, renderer]) => ({
-          unreaped: [...own2.unreaped, ...renderer.unreaped]
-        }))
-      };
+      return { settled: launcher.settled() };
     }
   };
 }

@@ -4,15 +4,22 @@
     {
       "version": "pr-757",
       "ref": "refs/pull/757/merge",
-      "sha": "3ca7a9f5d79b802f77e5893f8a0bd594557b3e26",
-      "timestamp": "2026-11-15T18:56:16.832Z",
+      "sha": "842a1ef28ef48c0272f8bcbb77abd9d554ca3a4a",
+      "timestamp": "2026-11-15T19:04:33.159Z",
       "commits": [
         {
-          "sha": "3ca7a9f5d79b802f77e5893f8a0bd594557b3e26",
+          "sha": "842a1ef28ef48c0272f8bcbb77abd9d554ca3a4a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T18:55:12Z",
-          "message": "Merge 3a16c8f205e1c7123fdd110571103747aef8faa2 into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+          "timestamp": "2026-11-15T19:03:31Z",
+          "message": "Merge cdfcfa8e70bc12ffc8e35aa2509ef450c58eb040 into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+        },
+        {
+          "sha": "cdfcfa8e70bc12ffc8e35aa2509ef450c58eb040",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T12:03:20-07:00",
+          "message": "fix(renderer): a gone renderer's holds go only once the next has started and taken its start; the renderer keeps the process's launcher (candybar-host-renderer-x96a.v58)\n\nThe start runs at spawn, so one with nothing to await released the old\nrenderer's watches before the new one booted; the release now waits for\nboth. A second launcher for the renderer doubled every lifeline warning and\nput a launcher into every in-process daemon, for faults the renderer's end\nalready reports, so the renderer runs under the process's launcher again. A\nchannel's end waiting for its pipes could hang a restart and the close on a\ndescendant holding them, so it resolves on the child's end, and its contract\nsays a last line may follow. An input naming an ended renderer's effect or\nwatch fails as its own logged failure rather than as an uncounted down. A\nfeed closed while it drew logs no recovery.\n"
         },
         {
           "sha": "3a16c8f205e1c7123fdd110571103747aef8faa2",
