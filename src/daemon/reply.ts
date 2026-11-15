@@ -670,6 +670,7 @@ async function ranClick(
       noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
       return statusLineClick(parts, read.value, facts, click);
     case "link":
+      noteFacts(facts, { link: read.link });
       return handleClick(
         parts,
         read.verb,

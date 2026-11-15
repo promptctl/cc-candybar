@@ -429,6 +429,13 @@ describe("the daemon's side of the round trip", () => {
     });
   });
 
+  test("a link of another scheme is refused as one, not as unsigned", () => {
+    expect(parseClick("https://example.com/#top", CLI, KEYLESS)).toEqual({
+      kind: "refused",
+      problem: "expected a cc-candybar:// link, got: https://example.com/#top",
+    });
+  });
+
   test("a probe link that carries no probe nonce is refused", () => {
     expect(
       parseClick(`cc-candybar://${VERB_DOCTOR_PROBE}/../../etc`, CLI, KEYLESS),

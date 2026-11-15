@@ -271,7 +271,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
       / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1, 2\)"/,
     );
     expect(events[3]).toMatch(
-      / via=forwarder urlV=1 .* outcome=bad-request problems="the link carries no signature: /,
+      / via=forwarder urlV=1 .* outcome=bad-request problems="expected a cc-candybar:\/\/ link, got: https:\/\/example.com\/"/,
     );
     expect(events[4]).toMatch(
       / via=forwarder urlV=1 .* outcome=bad-request problems="the URL handler's frame carries no url string"/,

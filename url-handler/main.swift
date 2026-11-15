@@ -204,7 +204,10 @@ func verdict(_ fd: Int32) -> Forward {
     let ok = said["ok"] as? Bool
   else { return .unconfirmed("the daemon's verdict is not one this app reads") }
   if ok { return .delivered }
-  return .refused(said["error"] as? String ?? "the daemon gave no reason")
+  let why = said["error"] as? String ?? "the daemon gave no reason"
+  // A refusal of the link is a bad request; any other failure is the daemon's
+  // own (it was closing), which lost the click.
+  return said["code"] as? String == "BAD_REQUEST" ? .refused(why) : .failed(why)
 }
 
 // Tells the user a click was lost or refused, in a form that needs no bar to

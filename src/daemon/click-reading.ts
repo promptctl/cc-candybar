@@ -9,8 +9,10 @@
 import type { LinkSigner } from "../click/link-signer.js";
 import {
   DOCTOR_PROBE_PREFIX,
+  isBarLink,
   parseHandlerUrl,
   STATUS_LINE_CLICK_PREFIX,
+  URL_SCHEME,
 } from "../click/wire.js";
 import { parseProbeNonce, type Delivery } from "../doctor/sightings.js";
 
@@ -67,6 +69,11 @@ export function parseClick(
           problem: "a status-line click comes only from tmux's own binding",
         };
   }
+  if (!isBarLink(url))
+    return {
+      kind: "refused",
+      problem: `expected a ${URL_SCHEME}:// link, got: ${url}`,
+    };
   const opened = openClick(url, links);
   return opened.kind === "link" ? { ...opened, delivery } : opened;
 }

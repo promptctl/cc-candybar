@@ -139,19 +139,10 @@ describe("a draw's frames", () => {
     pending: [],
   });
 
-  test("sign each bar link once however many cells repeat it, and leave other schemes as they are", () => {
-    const signedLinks: string[] = [];
-    const counting: LinkSigner = {
-      ...TEST_SIGNER,
-      signLink: (link) => {
-        signedLinks.push(link);
-        return TEST_SIGNER.signLink(link);
-      },
-    };
-    const sign = signingFrames(counting);
+  test("sign every bar link however many cells repeat it, and leave other schemes as they are", () => {
+    const sign = signingFrames(TEST_SIGNER);
     const pr = "https://github.com/o/r/pull/1";
     const drawn = [sign(frame([COPY, COPY, pr, undefined])), sign(frame([COPY]))];
-    expect(signedLinks).toEqual([COPY]);
     expect(drawn[0]!.rows[0]!.runs.map((r) => r.link)).toEqual([
       TEST_SIGNER.signLink(COPY),
       TEST_SIGNER.signLink(COPY),

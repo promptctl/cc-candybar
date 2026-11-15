@@ -138,6 +138,11 @@ export function linkSigner(key: Buffer): LinkSigner {
   if (key.length !== LINK_KEY_BYTES) {
     throw new Error(`a link key is ${LINK_KEY_BYTES} bytes, got ${key.length}`);
   }
+  // [LAW:carrying-cost] A link's signature is a pure function of its text,
+  // and a bar draws the same links frame after frame at its lanes' fps, so
+  // each is signed once and kept. The memo empties when it reaches its bound,
+  // so links a config mints from changing values never grow it without end.
+  const signed = new Map<string, string>();
   return {
     sign: (fields) => digest(key, fields).toString("hex"),
     verify: (fields, mac) => {
@@ -147,10 +152,21 @@ export function linkSigner(key: Buffer): LinkSigner {
       if (!MAC_SPELLING.test(mac)) return false;
       return timingSafeEqual(Buffer.from(mac, "hex"), digest(key, fields));
     },
-    signLink: (link) => signLinkWith(key, link),
-    openLink: (signed) => openLinkWith(key, signed),
+    signLink: (link) => {
+      let done = signed.get(link);
+      if (done === undefined) {
+        if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
+        done = signLinkWith(key, link);
+        signed.set(link, done);
+      }
+      return done;
+    },
+    openLink: (link) => openLinkWith(key, link),
   };
 }
+
+// More than the settings menu draws at once, and a few hundred kilobytes.
+const SIGNED_LINKS_HELD = 1024;
 
 // The signer over a key that may not be had yet, asked for at each use.
 // [LAW:no-silent-failure] A key it cannot have refuses the click that needed
@@ -189,20 +205,12 @@ export function previewSigner(): LinkSigner {
   return (preview ??= linkSigner(randomBytes(LINK_KEY_BYTES)));
 }
 
-// The frames one draw hands out, each bar link signed. A link a row repeats in
-// every word cell is signed once, and the memo ends with the draw.
+// The frames one draw hands out, each bar link signed.
 // [LAW:dataflow-not-control-flow] A link of another scheme is the terminal's
 // to open, and passes as it is.
 export function signingFrames(signer: LinkSigner): (frame: Frame) => Frame {
-  const signed = new Map<string, string>();
-  const sign = (link: string): string => {
-    let done = signed.get(link);
-    if (done === undefined) {
-      done = isBarLink(link) ? signer.signLink(link) : link;
-      signed.set(link, done);
-    }
-    return done;
-  };
+  const sign = (link: string): string =>
+    isBarLink(link) ? signer.signLink(link) : link;
   return (frame) => ({
     ...frame,
     rows: frame.rows.map((row) => ({
