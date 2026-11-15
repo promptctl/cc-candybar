@@ -7,14 +7,18 @@
 // taken by `deliver`, which writes the turn's own line.
 
 import {
+  type AdapterInput,
+  type AdapterOutput,
   type Effect,
   type Event,
   type Renderer,
   type EventInput,
+  type RendererOutput,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
 } from "../renderer-interface/interface.js";
+import type { HostedRenderer } from "./renderer-supervisor.js";
 import { eventLine } from "../utils/logfmt.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
@@ -24,17 +28,41 @@ import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import { failureOf } from "./foundations/verb-error.js";
 
-// The only renderer there is yet: the main one, in process.
+// The only renderer there is yet: the main one.
 export type RendererName = "main";
+
+// A turn's outcome, with what crossing to the renderer cost beyond the turn
+// itself: the request's event reports it as `hop`.
+export type HostedTurn = TurnOutcome & { readonly hopMs: number };
+
+// A renderer the host reaches directly, with no crossing to cost: a test's.
+export function hosted(renderer: Renderer): HostedRenderer {
+  function answer(input: EventInput): Promise<{
+    output: RendererOutput;
+    hopMs: number;
+  }>;
+  function answer(input: AdapterInput): Promise<{
+    output: AdapterOutput;
+    hopMs: number;
+  }>;
+  async function answer(input: EventInput | AdapterInput) {
+    const output =
+      input.kind === "event"
+        ? await renderer.answer(input)
+        : await renderer.answer(input);
+    return { output, hopMs: 0 };
+  }
+  return { answer };
+}
 
 export interface RendererHost {
   readonly name: RendererName;
   // One turn, recorded by the caller: a request's answer writes both its
   // turns on the request's render event.
-  answer(input: EventInput): Promise<TurnOutcome>;
+  answer(input: EventInput): Promise<HostedTurn>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
-  deliver(input: EventInput, about: TurnRecord): Promise<TurnOutcome>;
+  deliver(input: EventInput, about: TurnRecord): Promise<HostedTurn>;
   // One push, at `at`, answered by its reply. A push that threw or rejected,
   // or one answered by another push's reply, rejects with an Error naming the
   // renderer and the push: the caller that awaits it owns the failure.
@@ -47,7 +75,7 @@ export function rendererHost(
   name: RendererName,
   // The clock a refusal's `effect-done` is stamped by, when it is made.
   clock: Pick<Timekeeper, "now">,
-  renderer: Renderer,
+  renderer: HostedRenderer,
   log: DaemonLogger,
   collector: {
     // [LAW:single-enforcer] Where every output's subscriptions go: the
@@ -59,11 +87,14 @@ export function rendererHost(
     readonly holding: (session: SessionId) => () => void;
   },
 ): RendererHost {
-  const held = async (input: EventInput): Promise<TurnOutcome> => {
+  const held = async (input: EventInput): Promise<HostedTurn> => {
     const session = sessionOf(input.event);
     const release = session === null ? () => {} : collector.holding(session);
     try {
-      const { subscriptions, ...output } = await renderer.answer(input);
+      const {
+        output: { subscriptions, ...output },
+        hopMs,
+      } = await renderer.answer(input);
       collector.subscribed(subscriptions);
       // [LAW:single-enforcer] A present answers the request whose turn
       // returned it, so every effect another turn returns is refused here,
@@ -71,7 +102,7 @@ export function rendererHost(
       if (output.kind === "answered" && input.event.kind !== "request")
         for (const effect of output.effects)
           refuse(effect, `a ${input.event.kind} turn answers no request`);
-      return output;
+      return { ...output, hopMs };
     } finally {
       release();
     }
@@ -80,12 +111,13 @@ export function rendererHost(
   // hears how the whole turn ended as a value: a hold that failed, a renderer
   // that rejected, or an output the host could not take, is the turn's
   // failure. Nothing of it was taken, so the subscriptions last taken stand.
-  const turn = (input: EventInput): Promise<TurnOutcome> =>
+  const turn = (input: EventInput): Promise<HostedTurn> =>
     held(input).catch(
-      (thrown: unknown): TurnOutcome => ({
+      (thrown: unknown): HostedTurn => ({
         kind: "threw",
         failure: failureOf(thrown),
         record: [],
+        hopMs: 0,
       }),
     );
   const refuse = (effect: Effect, reason: string): void =>
@@ -137,7 +169,7 @@ export function rendererHost(
   const deliver = async (
     input: EventInput,
     about: TurnRecord,
-  ): Promise<TurnOutcome> => {
+  ): Promise<HostedTurn> => {
     const delivered = await turn(input);
     record(input, about, delivered);
     return delivered;
@@ -152,6 +184,7 @@ export function rendererHost(
     // every failure is said with the renderer and the push it failed.
     const output = await renderer
       .answer({ kind: "adapter", push, at })
+      .then(({ output }) => output)
       .catch(
         (thrown: unknown) =>
           ({ kind: "threw", failure: failureOf(thrown) }) as const,

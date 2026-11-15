@@ -1,4 +1,5 @@
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
+import type { Generation } from "../../src/renderer-interface/interface";
 
 // The storage a render cache is handed in a test whose configs declare no
 // plugin source: every load holds its state's folders, and with none declared
@@ -13,3 +14,6 @@ export const NO_PLUGIN_STORAGE: AdapterToHost["storage"] = {
   },
   release: () => {},
 };
+
+// The generation a renderer a test builds mints its ids under: its first.
+export const FIRST_GENERATION = 1 as Generation;

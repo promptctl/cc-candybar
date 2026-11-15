@@ -295,9 +295,11 @@ const HOST_NAMED_IMPORTS = [
 // unlisted file is rest, so a new module is the host's until it is placed.
 // The roots build the renderer side in process, so they may import any zone:
 // an exception owned by candybar-host-renderer-x96a.9a7, which draws them
-// through `Renderer.answer`. The list may shrink, and no file joins it. The
-// entry is a root because it dispatches to them; no other host module may
-// import a root, so none reaches the renderer through one.
+// through `Renderer.answer`. The list may shrink, and no file joins it but a
+// process's entry: the CLI's, which dispatches to them, and the renderer
+// process's, which assembles the renderer over the real files and launcher
+// its boot names, as the daemon's adapters do for the host. No other host
+// module may import a root, so none reaches the renderer through one.
 const ZONE_ROWS = {
   "src/renderer/": "renderer",
   "src/renderer/main.ts": "start",
@@ -347,6 +349,7 @@ const ZONE_ROWS = {
   "src/doctor/gather.ts": "shared",
   "src/claude-settings-read.ts": "shared",
   "src/index.ts": "root",
+  "src/renderer-process.ts": "root",
   "src/check.ts": "root",
   "src/check-runs.ts": "root",
   "src/demo/": "root",

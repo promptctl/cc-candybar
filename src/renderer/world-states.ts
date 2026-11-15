@@ -6,7 +6,8 @@
 
 import { compareStructural, observable, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
-import type { WorldState } from "../facts/world-state";
+import type { Fact } from "../facts/fact";
+import type { Update, WorldState } from "../facts/world-state";
 
 export class WorldStates {
   // [LAW:one-source-of-truth] One document per session, the newest handed in.
@@ -14,6 +15,12 @@ export class WorldStates {
     undefined,
     { deep: false },
   );
+  // [LAW:one-source-of-truth] The update the newest document handed in says:
+  // the daemon's facts are one value every session's document carries, so the
+  // newest one is current for all of them. Null before the first.
+  private readonly update = observable.box<Fact<Update> | null>(null, {
+    deep: false,
+  });
 
   // [LAW:no-ambient-temporal-coupling] The host hands each session's documents
   // in `seq` order, from its collector alone; a document older than the one
@@ -30,7 +37,10 @@ export class WorldStates {
         `world state seq ${document.seq} for session ${JSON.stringify(document.session)} does not follow the held seq ${held.seq}`,
       );
     }
-    runInAction(() => this.documents.set(document.session, document));
+    runInAction(() => {
+      this.documents.set(document.session, document);
+      this.update.set(document.daemon.update.newer);
+    });
   }
 
   // [LAW:no-defensive-null-guards] The host delivers a session's `config`,
@@ -44,6 +54,10 @@ export class WorldStates {
         `no world state for session ${JSON.stringify(session)}: the host hands one in with the config ahead of every request`,
       );
     return document;
+  }
+
+  newestUpdate(): Fact<Update> | null {
+    return this.update.get();
   }
 
   drop(session: SessionId): void {

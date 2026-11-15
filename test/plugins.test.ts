@@ -34,7 +34,7 @@ import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
 import { textOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { NO_PLUGIN_STORAGE, FIRST_GENERATION } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import { repoGateAt } from "../src/renderer/repo-configs";
 import { installFromRepo } from "../src/plugin-install";
@@ -988,6 +988,7 @@ describe("an installed plugin", () => {
         locations: locations(host),
         env: host.env,
         storage: NO_PLUGIN_STORAGE,
+        generation: FIRST_GENERATION,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1670,6 +1671,7 @@ describe("an installed plugin", () => {
         locations: locations(host),
         env: host.env,
         storage: NO_PLUGIN_STORAGE,
+        generation: FIRST_GENERATION,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),

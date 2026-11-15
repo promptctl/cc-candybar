@@ -1,7 +1,7 @@
 // The daemon as a value: what it holds, built from its inputs, and its one close.
 
 import { Runs } from "./runs.js";
-import { locations, type DaemonPaths } from "./paths";
+import type { DaemonPaths } from "./paths";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
@@ -20,7 +20,6 @@ import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
-import type { Gates } from "./foundations/gates";
 import { makeUpdateWatch } from "./update-notice";
 import { newUpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
@@ -35,7 +34,7 @@ import { RefreshLedger } from "../utils/refresh-ledger";
 import { SourceRuns } from "./source-runs";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
-import { makeLimits, type LimitsDeps } from "./limits";
+import { makeLimits, memoryShares, type LimitsDeps } from "./limits";
 import type { DoctorMachineEdge, DoctorStores } from "../doctor/ports";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
@@ -53,22 +52,18 @@ import { shellWord } from "../shell-word.js";
 import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
-import type { LinkSigner } from "../click/link-signer.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { parseFrame } from "../render/frame.js";
 import { rendererHost } from "./renderer-host.js";
-import { loadMainRenderer } from "../renderer/main.js";
+import { superviseRenderer } from "./renderer-supervisor.js";
+import type { Renderers } from "./renderer-links.js";
+import { located } from "./statusline-answer.js";
 import { readingsHost } from "./readings.js";
 import { installFacts } from "../doctor/edge.js";
 import { ClicksInFlight } from "./clicks-in-flight.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
-import type { WatchId } from "../renderer-interface/adapter.js";
-import type {
-  Invalidation,
-  WatcherHandle,
-} from "./foundations/watch-targets.js";
 import { closeByTurn, MenuIdle } from "./menu-idle.js";
 import type { SessionId } from "./foundations/session-id.js";
 
@@ -87,6 +82,9 @@ export interface RunningBundle {
   // What a bar pane runs, and what a click in a tmux status line runs to hand
   // the click back.
   readonly node: readonly string[];
+  // The script the daemon was started as, which dispatches the bundle's
+  // subcommands: what a renderer's process runs, as `renderer`.
+  readonly entry: string;
   // The files the binary watch stats: a change to any of them restarts the
   // daemon.
   readonly targets: readonly string[];
@@ -108,11 +106,10 @@ export interface DaemonAdapters {
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
   readonly launcher: (own: LaunchOwner) => TestableLauncher;
-  // Their files, for a daemon that won the socket, which makes it their sole
-  // writer. Built over the daemon's log: a write in flight at the close finishes
-  // after it, and what it logs says so like any other line of the daemon's work.
-  readonly storage: (log: DaemonLogger) => DaemonStorage;
-  // The doctor's stores, which this daemon files.
+  // How this daemon's renderer starts: in a process of its own, or in this
+  // one where no process can be started (a test's worker, the page in site/).
+  readonly renderers: Renderers;
+  // The doctor's stores, which the stats reply reads.
   readonly doctorStores: DoctorStores;
   // The doctor's reads of the machine.
   readonly doctorEdge: (launcher: Launcher, host: Host) => DoctorMachineEdge;
@@ -128,8 +125,6 @@ export interface DaemonAdapters {
     closing: AbortSignal,
     probe: ProcessProbe,
   ) => LaneEdge;
-  // The one signer of every `run` link this daemon draws.
-  readonly linkSigner: LinkSigner;
   // What the memory backstop reads and writes on the machine.
   readonly limits: (own: {
     readonly startedAtMs: number;
@@ -162,10 +157,6 @@ export interface DaemonInputs extends DaemonAdapters {
   // [LAW:one-source-of-truth] `after` runs a request's wait and its backstop on
   // the same clock its budget is figured from, so a held clock holds all three.
   readonly clock: Timekeeper;
-  // [LAW:no-shared-mutable-globals] What this daemon's loads accept: its own
-  // value, built by the root with `daemonGates` (the update notice's links need
-  // the keys it holds), so two daemons in one process share none.
-  readonly gates: Gates;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
   readonly exit: (code: number) => void;
@@ -220,18 +211,8 @@ export interface Daemon {
 }
 
 export function createDaemon(inputs: DaemonInputs): Daemon {
-  const {
-    bundle,
-    memoryLimitBytes,
-    registryUrl,
-    clock,
-    exit,
-    paths,
-    gates,
-    host,
-  } = inputs;
-  // Parsed once, here, and handed to everything that loads a config.
-  const locs = locations(host);
+  const { bundle, memoryLimitBytes, registryUrl, clock, exit, paths, host } =
+    inputs;
   const instant = (): Instant => instantAt(clock);
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
   // launcher, and the lane edge's waits.
@@ -316,21 +297,19 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // through this one probe, so a probe handed in reaches both. The process entry
   // (server.ts) asks its own before this daemon exists.
   const probe = inputs.probe(launcher);
-  // Before every owner that arms a timer: storage that cannot be read refuses
-  // the build with nothing running.
-  const storage = inputs.storage(log);
-  const loadedRenderer = loadMainRenderer({
-    clock,
+  // [LAW:one-source-of-truth] The published limit, split between this process
+  // and its renderer's, each judged by its own backstop.
+  const shares = memoryShares(memoryLimitBytes);
+  // [LAW:no-ambient-temporal-coupling] The renderer's own launcher, aborted as
+  // the teardown's last step: the renderer's steps of the close come after
+  // the daemon's launches are aborted, and its process must outlive them.
+  const rendererClosing = new AbortController();
+  const rendererLauncher = inputs.launcher({
+    inherited: host.env,
+    stats: stats.launchStats,
+    signal: rendererClosing.signal,
     now: instant,
-    storage: { ...storage, doctor: inputs.doctorStores },
-    linkSigner: inputs.linkSigner,
-    stateDir: paths.state,
-    locations: locs,
-    env: host.env,
-    home: host.home,
-    gates,
-    bundle: bundle.path,
-    memoryLimitBytes,
+    observeWarnings: () => restateFaults(),
   });
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
@@ -341,7 +320,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       launcher,
       log,
     }),
-    limitBytes: memoryLimitBytes,
+    limitBytes: shares.host,
   });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
@@ -621,7 +600,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
     registryUrl,
     fetchImpl: inputs.fetch,
-    gates,
     onApplied: () => binaryWatch.checkNow(),
     log,
   });
@@ -644,91 +622,92 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
 
   const clicks = new ClicksInFlight();
-  // [LAW:single-enforcer] Each watch the renderer holds, by the id it minted,
-  // from its `watch` to its `unwatch`.
-  const rendererWatches = new Map<WatchId, WatcherHandle>();
   const doctorEdge = inputs.doctorEdge(launcher, host);
   const claudeInput = inputs.claudeInput(launcher);
   const readings = readingsHost(payloadProviders);
-  // [LAW:one-way-deps] The main renderer's start, handed the host's parts it
-  // reaches: the compiler checks each against its entry in `AdapterToHost`
-  // here, so no renderer file names a host type.
-  const renderer = loadedRenderer.start({
+  // [LAW:single-enforcer] The daemon's one renderer, started and restarted by
+  // its supervisor, which hands each start the host's parts it reaches: the
+  // compiler checks each against its entry in `AdapterToHost` here, so no
+  // renderer file names a host type.
+  const renderer = superviseRenderer({
+    start: inputs.renderers({
+      launcher: rendererLauncher,
+      bundle,
+      log,
+      clock,
+      now: instant,
+      host,
+      memoryShareBytes: shares.renderer,
+    }),
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice, or an awaited call.
-    wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
-    log,
-    launch: clickLaunchVia(launcher),
-    typeSlash: typeInPane(claudeInput),
-    applyUpdate: () => updateWatch.act(),
-    runs: {
-      start: (run) => runs.start(run),
-      refused: (sessionId, action, reason) =>
-        runs.refused(sessionId, action, reason),
-    },
-    refresh: readings.refresh,
-    doctor: {
-      ...doctorEdge,
-      install: async (daemonBundle, clients) =>
-        installFacts(doctorEdge.install, daemonBundle, clients),
-    },
-    laneSetups: {
-      noted: (session, switches) => laneSetups.noted(session, switches),
-      clicked: (sessionId, session, before, after) =>
-        laneSetups.clicked(sessionId, session, before, after),
-    },
-    tmuxStatusLines: {
-      observe: ({ sessionId, tmux, on }) =>
-        tmuxStatusLines.observe(sessionId, tmux, on),
-    },
-    menuIdle: {
-      clicked: (sessionId, at) => menuIdle.clicked(sessionId, at),
-      clickArrived: (sessionId) => menuIdle.clickArrived(sessionId),
-      clickSettled: (sessionId) => menuIdle.clickSettled(sessionId),
-      observe: (sessionId, at, shown, timeoutS) =>
-        menuIdle.observe(sessionId, at, shown, timeoutS),
-      confirmClose: async (sessionId, firedAt) =>
-        menuIdle.confirmClose(sessionId, firedAt),
-    },
-    clicks: { gone: async (click) => clicks.gone(click) },
-    serving: async () => limits.serving(),
-    renderSightings: {
-      ofSession: async (sessionId, now) =>
-        renderSightings.ofSession(sessionId, now),
-    },
-    probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
-    pipeEventAnswered: (event) => {
-      launcher.answeredPipeEvent(event);
-      restateFaults();
-    },
-    watches: {
-      watch: (id, key, targets) => {
-        // Each window the registry hears goes back to the renderer with
-        // the watch's deafness as it stands then.
-        const told = (heard: Invalidation | null): void =>
-          parts.renderer.tell(
-            { kind: "watch", id, heard, deaf: handle.deaf },
-            instant(),
-          );
-        const handle = watcherRegistry.acquire(key, targets, told);
-        rendererWatches.set(id, handle);
-        // [LAW:no-ambient-temporal-coupling] The acquire's own push goes
-        // after the notice that asked for it, as it would from another
-        // process: a renderer's start acquires watches before the host holds
-        // the renderer it builds.
-        void clock.defer(() => {
-          if (rendererWatches.get(id) === handle) told(null);
-        });
+    host: {
+      wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
+      log,
+      launch: clickLaunchVia(launcher),
+      typeSlash: typeInPane(claudeInput),
+      applyUpdate: () => updateWatch.act(),
+      runs: {
+        start: (run) => runs.start(run),
+        refused: (sessionId, action, reason) =>
+          runs.refused(sessionId, action, reason),
       },
-      unwatch: (id) => {
-        rendererWatches.get(id)?.release();
-        rendererWatches.delete(id);
+      refresh: readings.refresh,
+      doctor: {
+        ...doctorEdge,
+        install: async (daemonBundle, clients) =>
+          installFacts(doctorEdge.install, daemonBundle, clients),
+      },
+      laneSetups: {
+        noted: (session, switches) => laneSetups.noted(session, switches),
+        clicked: (sessionId, session, before, after) =>
+          laneSetups.clicked(sessionId, session, before, after),
+      },
+      tmuxStatusLines: {
+        observe: ({ sessionId, tmux, on }) =>
+          tmuxStatusLines.observe(sessionId, tmux, on),
+      },
+      menuIdle: {
+        clicked: (sessionId, at) => menuIdle.clicked(sessionId, at),
+        clickArrived: (sessionId) => menuIdle.clickArrived(sessionId),
+        clickSettled: (sessionId) => menuIdle.clickSettled(sessionId),
+        observe: (sessionId, at, shown, timeoutS) =>
+          menuIdle.observe(sessionId, at, shown, timeoutS),
+        confirmClose: async (sessionId, firedAt) =>
+          menuIdle.confirmClose(sessionId, firedAt),
+      },
+      clicks: { gone: async (click) => clicks.gone(click) },
+      serving: async () => limits.serving(),
+      renderSightings: {
+        ofSession: async (sessionId, now) =>
+          renderSightings.ofSession(sessionId, now),
+      },
+      probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
+      pipeEventAnswered: (event) => {
+        launcher.answeredPipeEvent(event);
+        restateFaults();
       },
     },
+    watches: watcherRegistry,
     storage: {
       hold: (id, folders) => managedStorage.hold(id, folders),
       release: (id) => managedStorage.release(id),
     },
+    // [LAW:one-source-of-truth] A start carries every live session the
+    // collector reads, at its latest request as the frame feeds hold it,
+    // located as a request's turns take it. A session whose request the feeds
+    // no longer hold is left out, and its next request declares it again.
+    sessions: () =>
+      collector.documents().flatMap((worldState) => {
+        const latest = frameFeeds.latest(worldState.session);
+        return latest === null
+          ? []
+          : [{ context: located(latest), worldState }];
+      }),
+    monotonic: () => clock.monotonic(),
+    now: instant,
+    defer: (run) => void clock.defer(run),
+    log,
   });
   const parts: DaemonParts = {
     clicks,
@@ -837,6 +816,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.
         ["sessionState close", rendererStep("close-session-state")],
+        // [LAW:no-ambient-temporal-coupling] The renderer finishes once its
+        // steps are taken, and its launcher goes after it.
+        ["renderer end", () => renderer.close()],
+        [
+          "renderer launches abort",
+          () => rendererClosing.abort(new Error("the daemon closed")),
+        ],
       ];
       for (const [step, run] of teardown) {
         try {
@@ -846,7 +832,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         }
       }
       closed = true;
-      return { settled: launcher.settled() };
+      return {
+        settled: Promise.all([
+          launcher.settled(),
+          rendererLauncher.settled(),
+        ]).then(([own, renderer]) => ({
+          unreaped: [...own.unreaped, ...renderer.unreaped],
+        })),
+      };
     },
   };
 }

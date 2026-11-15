@@ -10,10 +10,15 @@ import { systemLauncher } from "../proc/system-launcher";
 import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
-import { fileStorage } from "./file-storage";
 import { productionLaneEdge } from "./lane-edge.js";
+import { realLimitsDeps, type LimitsDeps } from "./limits";
+import { fileStorage } from "./file-storage";
 import { linkKeyFile, linkSignerFromKeyFile } from "./link-key.js";
-import { realLimitsDeps } from "./limits";
+import type { RendererBoot } from "../renderer-interface/boot.js";
+import type { MainRendererInputs } from "../renderer/main.js";
+import type { Launcher } from "../proc/launcher";
+import type { DaemonLogger } from "../utils/logger";
+import { processRenderers } from "./renderer-links.js";
 import type { DaemonLog } from "./log";
 import type { DaemonPaths } from "./paths";
 
@@ -30,14 +35,13 @@ export function productionAdapters(
   return {
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
-    storage: (log) => fileStorage(paths, log, machine),
+    renderers: processRenderers(paths),
     doctorStores: fileStores(paths.state),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
     laneEdge: (launcher, following, closing, probe) =>
       productionLaneEdge(launcher, following, closing, machine, probe),
-    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {
         launcher,
@@ -48,5 +52,34 @@ export function productionAdapters(
       }),
     fetch,
     stat: fs.statSync,
+  };
+}
+
+// [LAW:effects-at-boundaries] The real adapters a renderer's process is built
+// over, at the paths its boot names: the files it keeps, the signer of its
+// links, and what its memory backstop reads and writes.
+export function rendererProcessAdapters(
+  boot: RendererBoot,
+  log: DaemonLogger,
+  machine: Timekeeper,
+  launcher: Launcher,
+): Pick<MainRendererInputs, "storage" | "linkSigner"> & {
+  readonly limits: (exit: (code: number) => void) => LimitsDeps;
+} {
+  return {
+    storage: {
+      ...fileStorage(boot, log, machine),
+      doctor: fileStores(boot.stateDir),
+    },
+    linkSigner: linkSignerFromKeyFile(linkKeyFile(boot.stateDir)),
+    limits: (exit) =>
+      realLimitsDeps(machine.now(), exit, {
+        launcher,
+        log,
+        clock: machine,
+        snapshotDir: boot.stateDir,
+        // The renderer writes no log of its own: its lines are the host's.
+        writeLogNow: () => {},
+      }),
   };
 }

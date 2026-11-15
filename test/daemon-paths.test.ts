@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { fileStorage } from "../src/daemon/file-storage";
+import { linkKeyFile, linkSignerFromKeyFile } from "../src/daemon/link-key";
 import { hostOf } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
@@ -72,12 +74,13 @@ describe("a daemon aimed by its paths value", () => {
       daemonLog.log("info", "a line");
       await daemonLog.drained();
 
-      const storage = adapters.storage(() => {});
+      // What a renderer's process opens at the paths its boot names.
+      const storage = fileStorage(aimed, () => {}, systemTimekeeper);
       storage.session.save({ s1: { theme: "x" } });
       storage.session.flush();
       storage.history.save({});
       adapters.doctorStores.clicked.update((seen) => [...seen, "kitty"]);
-      adapters.linkSigner.sign({
+      linkSignerFromKeyFile(linkKeyFile(aimed.state)).sign({
         sessionId: "s1",
         action: "a",
         declaration: "[]",

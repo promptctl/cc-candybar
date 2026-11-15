@@ -264,7 +264,10 @@ describe("the daemon is a value", () => {
     await close(second);
   });
 
-  test("a build that throws stands in the way of no next build", async () => {
+  // [LAW:no-silent-failure] Storage is the renderer's, opened as it starts:
+  // a renderer that cannot start fails the request that asked for it, saying
+  // why, and the daemon goes on to the next.
+  test("a renderer that cannot start fails its request, and the daemon answers the next", async () => {
     writeConfig(PADDED);
     const unreadable: SessionStorage = {
       load: () => {
@@ -273,11 +276,11 @@ describe("the daemon is a value", () => {
       save: () => {},
       flush: () => {},
     };
-    const settled = [...live.keys()];
-    expect(() => construct({ session: unreadable })).toThrow(
-      "the session file cannot be read",
-    );
-    expect([...live.keys()].filter((id) => !settled.includes(id))).toEqual([]);
+    const unstartable = construct({ session: unreadable });
+    await expect(
+      answer(unstartable, renderRequest("value-unread")),
+    ).rejects.toThrow("the session file cannot be read");
+    await close(unstartable);
 
     const daemon = construct();
     await answer(daemon, renderRequest("value-rebuilt"));

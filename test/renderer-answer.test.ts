@@ -10,6 +10,7 @@
 // parts its side still reaches; no daemon is built.
 
 import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
+import { FIRST_GENERATION } from "./helpers/plugin-storage";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -39,7 +40,7 @@ import {
 } from "./helpers/session-rig";
 import { ok } from "../src/utils/outcome";
 import { fakeTmux } from "./helpers/payload-owners";
-import { rendererHost } from "../src/daemon/renderer-host";
+import { rendererHost, hosted } from "../src/daemon/renderer-host";
 import type {
   MainRendererParts,
   RendererVerbs,
@@ -47,7 +48,7 @@ import type {
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { HeldEvent } from "../src/utils/event-hold";
-import { hearingEvents, NO_PUSHES } from "./helpers/renderers";
+import { hearingEvents, NO_PUSHES, NO_STARTED } from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
@@ -104,7 +105,7 @@ function renderer(
     record(sessionId, by, copies);
   };
   return {
-    r: mainRenderer(parts, NO_PUSHES),
+    r: mainRenderer(parts, FIRST_GENERATION, NO_PUSHES, NO_STARTED),
     parts,
     recorded,
     changed,
@@ -292,7 +293,9 @@ describe("a statusline request", () => {
           }),
         log: (level, line) => lines.push(`${level} ${line}`),
       },
+      FIRST_GENERATION,
       NO_PUSHES,
+      NO_STARTED,
     );
     const context = checked();
     await configure({ r, rig: t.rig }, context);
@@ -513,7 +516,7 @@ describe("the session's config, ahead of its request", () => {
     const host = rendererHost(
       "main",
       systemTimekeeper,
-      hearingEvents(t.r, (input) => kinds.push(input.event.kind)),
+      hosted(hearingEvents(t.r, (input) => kinds.push(input.event.kind))),
       () => {},
       t.rig.served.collector,
     );
@@ -593,10 +596,12 @@ describe("two requests of one session at different keys", () => {
     const host = rendererHost(
       "main",
       systemTimekeeper,
-      hearingEvents(t.r, (input) => {
-        if (input.event.kind === "config")
-          requests.push(input.event.worldState);
-      }),
+      hosted(
+        hearingEvents(t.r, (input) => {
+          if (input.event.kind === "config")
+            requests.push(input.event.worldState);
+        }),
+      ),
       () => {},
       t.rig.served.collector,
     );

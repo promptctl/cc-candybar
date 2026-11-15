@@ -9,6 +9,7 @@
 
 import { compareStructural } from "mobx";
 import type { AdapterToHost, WatchId } from "../renderer-interface/adapter.js";
+import { minter, type Generation } from "../renderer-interface/interface.js";
 import {
   followWatch,
   type Deafness,
@@ -26,10 +27,15 @@ interface Held {
 }
 
 export class Watches {
-  private minted = 0;
   private readonly held = new Map<WatchId, Held>();
+  private readonly mint: () => WatchId;
 
-  constructor(private readonly host: AdapterToHost["watches"]) {}
+  constructor(
+    private readonly host: AdapterToHost["watches"],
+    generation: Generation,
+  ) {
+    this.mint = minter(generation);
+  }
 
   // A watch of `targets` under `key`, whose every window `heard` hears.
   acquire(
@@ -37,7 +43,7 @@ export class Watches {
     targets: WatchTargets,
     heard: (invalidation: Invalidation) => void,
   ): WatcherHandle {
-    const id = ++this.minted as WatchId;
+    const id = this.mint();
     // Held before the host is told, so a push the notice answers at once
     // finds it.
     const watch: Held = { deaf: [], heard };

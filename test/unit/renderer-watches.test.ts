@@ -3,6 +3,7 @@
 // the watch hears and how deaf it is.
 
 import { Watches } from "../../src/renderer/watches";
+import { FIRST_GENERATION } from "../helpers/plugin-storage";
 import type { WatchId } from "../../src/renderer-interface/adapter";
 import type {
   Deafness,
@@ -21,7 +22,7 @@ function hostOf() {
   const watches = new Watches({
     watch: (id, key) => told.push(`watch ${id} ${key}`),
     unwatch: (id) => told.push(`unwatch ${id}`),
-  });
+  }, FIRST_GENERATION);
   return { told, watches };
 }
 
@@ -31,7 +32,7 @@ test("a watch is told to the host by an id of its own, and its release is told o
   const second = watches.acquire("k", TARGETS, () => {});
   first.release();
   first.release();
-  expect(told).toEqual(["watch 1 k", "watch 2 k", "unwatch 1"]);
+  expect(told).toEqual(["watch 1.1 k", "watch 1.2 k", "unwatch 1.1"]);
   second.release();
 });
 
@@ -41,10 +42,10 @@ test("a push is what its watch hears, and its deafness stands until the next pus
   const handle = watches.acquire("k", TARGETS, (h) => heard.push(h));
   expect(handle.deaf).toEqual([]);
   // The acquire's own push of a watch that listens hears nothing.
-  watches.pushed(1 as WatchId, null, []);
+  watches.pushed("1.1" as WatchId, null, []);
   expect(heard).toEqual([]);
   // A window is heard as the registry told it.
-  watches.pushed(1 as WatchId, { kind: "changed", paths: ["/w/a"] }, []);
+  watches.pushed("1.1" as WatchId, { kind: "changed", paths: ["/w/a"] }, []);
   expect(heard).toEqual([{ kind: "changed", paths: ["/w/a"] }]);
 });
 
@@ -54,17 +55,17 @@ test("a push that moves the watch's deafness wakes its holder, so what it says o
   const handle = watches.acquire("k", TARGETS, (h) => heard.push(h));
   // A watch deaf at its acquire: the acquire's own push says so, and the
   // holder hears it.
-  watches.pushed(1 as WatchId, null, DEAF);
+  watches.pushed("1.1" as WatchId, null, DEAF);
   expect(handle.deaf).toEqual(DEAF);
   expect(heard).toEqual([{ kind: "unknown" }]);
   // The same deafness again moves nothing.
-  watches.pushed(1 as WatchId, null, [{ ...DEAF[0]! }]);
+  watches.pushed("1.1" as WatchId, null, [{ ...DEAF[0]! }]);
   expect(heard).toHaveLength(1);
   // Deaf for another reason is a move.
   const other: readonly Deafness[] = [
     { kind: "refused", path: "/w", reason: "ENOENT" },
   ];
-  watches.pushed(1 as WatchId, null, other);
+  watches.pushed("1.1" as WatchId, null, other);
   expect(handle.deaf).toEqual(other);
   expect(heard).toHaveLength(2);
 });
@@ -74,7 +75,7 @@ test("a push for a watch released since it was sent reaches nothing", () => {
   const heard: Invalidation[] = [];
   const handle = watches.acquire("k", TARGETS, (h) => heard.push(h));
   handle.release();
-  watches.pushed(1 as WatchId, { kind: "changed", paths: ["/w/a"] }, DEAF);
+  watches.pushed("1.1" as WatchId, { kind: "changed", paths: ["/w/a"] }, DEAF);
   expect(heard).toEqual([]);
   expect(handle.deaf).toEqual([]);
 });
@@ -87,6 +88,6 @@ test("following a spec keeps the watch under the same key, and rebinds under ano
   const moved = watches.follow(watch, spec("b"), () => {});
   expect(moved.move).toBe("rebound");
   // The new key's watch is told before the old one is released.
-  expect(told).toEqual(["watch 1 a", "watch 2 b", "unwatch 1"]);
+  expect(told).toEqual(["watch 1.1 a", "watch 1.2 b", "unwatch 1.1"]);
   moved.watch.handle.release();
 });

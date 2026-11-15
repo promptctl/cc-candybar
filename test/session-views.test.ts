@@ -17,7 +17,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT } from "../src/utils/outcome";
 import { viewFacts } from "./helpers/view-facts";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { NO_PLUGIN_STORAGE, FIRST_GENERATION } from "./helpers/plugin-storage";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { type Launcher } from "../src/proc/launcher";
 import { answerRepo } from "./helpers/repo-approval";
@@ -97,6 +97,7 @@ function makeCache(
       locations: locs(),
       env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
+      generation: FIRST_GENERATION,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),

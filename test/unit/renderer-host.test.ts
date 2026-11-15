@@ -2,7 +2,7 @@
 // back the reply of the push's own kind or rejects, and `tell` says a failure
 // on the log, since nothing awaits it.
 
-import { rendererHost } from "../../src/daemon/renderer-host";
+import { rendererHost, hosted } from "../../src/daemon/renderer-host";
 import { failureOf } from "../../src/daemon/foundations/verb-error";
 import type { AdapterOutput } from "../../src/renderer-interface/interface";
 import { instantOf } from "../../src/utils/instant";
@@ -18,7 +18,7 @@ function hostOver(output: AdapterOutput) {
   const host = rendererHost(
     "main",
     { now: () => 0 },
-    pushRenderer(async () => output),
+    hosted(pushRenderer(async () => output)),
     (level, line) => say(`${level} ${line}`),
     {
       subscribed: () => {

@@ -9,9 +9,11 @@ import type {
   DeclaredSources,
   ViewFacts,
 } from "../renderer-interface/request-context.js";
-import type {
-  Subscription,
-  Subscriptions,
+import {
+  minter,
+  type Generation,
+  type Subscription,
+  type Subscriptions,
 } from "../renderer-interface/interface.js";
 import type {
   AdapterToHost,
@@ -177,6 +179,8 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The host's storage owner, which holds the folders each served state's
   // latest load named (`holdFolders`), from its first load to its reclaim.
   storage: AdapterToHost["storage"];
+  // The renderer generation the storage holds are minted under.
+  generation: Generation;
   // What signs the `run` links its compiles draw (StateDeps).
   signer: LinkSigner;
   // The gates a load builds against (StateDeps).
@@ -1327,8 +1331,8 @@ export class RenderCache<
   private walk: (() => void) | null = null;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
-  // The last storage hold id minted.
-  private storageHolds = 0;
+  // What names each served state's storage hold.
+  private readonly mintHold: () => StorageHoldId;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = new Map<SessionId, SessionView<S, F>>();
@@ -1382,6 +1386,7 @@ export class RenderCache<
       compile: (key, input) => this.compileOf(key, input),
     };
     this.log = deps.log ?? quietLogger;
+    this.mintHold = minter(deps.generation);
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
@@ -1867,7 +1872,7 @@ export class RenderCache<
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
       );
     this.holds.set(state, {
-      id: ++this.storageHolds as StorageHoldId,
+      id: this.mintHold(),
       holders: 0,
       retired: null,
     });

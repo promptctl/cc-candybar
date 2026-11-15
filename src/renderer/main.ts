@@ -74,28 +74,38 @@ import {
 import type { Instant } from "../utils/instant.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
 import {
+  minter,
   rendererOf,
   type Effect,
   type EffectId,
   type Event,
+  type Generation,
   type Renderer,
+  type RendererOutput,
+  type Start,
 } from "../renderer-interface/interface.js";
+import { followDismissGate } from "./dismiss-gate.js";
 import { JournalTurns } from "./journal-turns.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
 export function mainRenderer(
   parts: MainRendererParts,
+  // The generation this renderer mints its effects' ids under.
+  generation: Generation,
   // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
   // in its own turn, synchronously.
   pushed: (push: AdapterPush, at: Instant) => AdapterReply,
+  // What a start does besides opening each session's view: the start's own
+  // acts on what the renderer holds (its pins, a restart's warnings).
+  started: (start: Start, at: Instant) => void,
 ): Renderer {
   // [LAW:single-enforcer] What each present's frame records once it reached
   // its client, held from the turn that returned it until its one
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, () => void>();
-  let minted = 0;
+  const mintEffect = minter<EffectId>(generation);
 
   const turn = async (
     event: Event,
@@ -120,7 +130,7 @@ export function mainRenderer(
           },
           record,
         );
-        const id = ++minted as EffectId;
+        const id = mintEffect();
         deliveries.set(id, delivered);
         return [
           {
@@ -169,7 +179,42 @@ export function mainRenderer(
     }
   };
 
+  // [LAW:one-source-of-truth] What the open views need read, as they stand
+  // when a turn ends, however it ended.
+  const ended = async (
+    turned: Promise<readonly Effect[]>,
+    record: RequestFacts,
+  ): Promise<RendererOutput> => {
+    const outcome = await turned.then(
+      (effects) => ({ kind: "answered", effects }) as const,
+      // [LAW:single-enforcer] Classified here, where it was thrown: a
+      // class crosses no process.
+      (thrown: unknown) =>
+        ({ kind: "threw", failure: failureOf(thrown) }) as const,
+    );
+    return {
+      ...outcome,
+      record,
+      subscriptions: parts.renderCache.subscriptions(),
+    };
+  };
+
   return rendererOf({
+    // [LAW:one-source-of-truth] A start opens every session it carries as
+    // that session's `config` does, so its output names every session's
+    // sources, and the host's set, whole, releases none.
+    start: async (input) => {
+      const record: RequestFacts = [];
+      return ended(
+        (async () => {
+          for (const { context, worldState } of input.start.sessions)
+            configureSession(parts, context, worldState, input.at, record);
+          started(input.start, input.at);
+          return [];
+        })(),
+        record,
+      );
+    },
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
     adapter: async (input) => {
@@ -181,21 +226,7 @@ export function mainRenderer(
     },
     event: async (input) => {
       const record: RequestFacts = [];
-      const ended = await turn(input.event, input.at, record).then(
-        (effects) => ({ kind: "answered", effects }) as const,
-        // [LAW:single-enforcer] Classified here, where it was thrown: a
-        // class crosses no process.
-        (thrown: unknown) =>
-          ({ kind: "threw", failure: failureOf(thrown) }) as const,
-      );
-      // [LAW:one-source-of-truth] What the renderer needs read: the open
-      // views' subscriptions as they stand when the turn ends, however it
-      // ended.
-      return {
-        ...ended,
-        record,
-        subscriptions: parts.renderCache.subscriptions(),
-      };
+      return ended(turn(input.event, input.at, record), record);
     },
   });
 }
@@ -204,6 +235,9 @@ export function mainRenderer(
 // the storage its session state, history and doctor load from, the signer its
 // links are drawn with, and the facts of the machine its loads resolve under.
 export interface MainRendererInputs {
+  // [LAW:one-source-of-truth] Which start of the renderer this is, which every
+  // id it mints carries.
+  readonly generation: Generation;
   readonly clock: Timekeeper;
   readonly now: () => Instant;
   readonly storage: {
@@ -282,9 +316,10 @@ function startOver(
   const renderWarnings = new RenderWarningRecords();
   // The world states the host hands the renderer, which its views read.
   const worldStates = new WorldStates();
+  const stopDismissGate = followDismissGate(gates, worldStates);
   // [LAW:single-enforcer] Every watch this renderer holds, each held by the
   // host's registry under an id minted here.
-  const watches = new Watches(host.watches);
+  const watches = new Watches(host.watches, inputs.generation);
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock,
@@ -295,6 +330,7 @@ function startOver(
       watchers: watches,
       log,
       storage: host.storage,
+      generation: inputs.generation,
       signer: linkSigner,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
@@ -513,6 +549,7 @@ function startOver(
         journalTurns.close();
         return { kind: "close-journal" };
       case "close-views":
+        stopDismissGate();
         renderCache.close();
         return { kind: "close-views" };
       case "close-session-state":
@@ -520,9 +557,27 @@ function startOver(
         return { kind: "close-session-state" };
     }
   };
+  // [LAW:no-silent-failure] A start after a renderer ended says so on every
+  // session it carries, for the usual hold: the state that renderer's process
+  // kept unsaved went with it.
+  const started = (start: Start, at: Instant): void => {
+    for (const { context, pinned } of start.sessions) {
+      const sessionId = context.hookData.session_id;
+      if (pinned) pin(sessionId);
+      if (start.cause.kind === "crashed")
+        holdClickError(
+          sessionState,
+          sessionId,
+          `the renderer restarted: its process ${start.cause.ended}; open menus and armed confirms were lost`,
+          at,
+        );
+    }
+  };
   return mainRenderer(
     { ...parts, verbs: verbsOver(verbCtx, host.clicks) },
+    inputs.generation,
     pushed,
+    started,
   );
 }
 

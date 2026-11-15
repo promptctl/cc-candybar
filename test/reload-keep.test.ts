@@ -12,7 +12,7 @@ import {
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { NO_PLUGIN_STORAGE, FIRST_GENERATION } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
@@ -74,6 +74,7 @@ function rig(
       locations: locations(host),
       env: host.env,
       storage: NO_PLUGIN_STORAGE,
+      generation: FIRST_GENERATION,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),

@@ -16,6 +16,7 @@ export function eventRenderer(
   answered: (input: EventInput) => Promise<RendererOutput>,
 ): Renderer {
   return rendererOf({
+    start: NO_START,
     event: answered,
     adapter: async (input) => {
       throw new Error(`this renderer takes no push (${input.push.kind})`);
@@ -28,6 +29,7 @@ export function pushRenderer(
   replied: (input: AdapterInput) => Promise<AdapterOutput>,
 ): Renderer {
   return rendererOf({
+    start: NO_START,
     event: async (input) => {
       throw new Error(`this renderer takes no event (${input.event.kind})`);
     },
@@ -35,10 +37,22 @@ export function pushRenderer(
   });
 }
 
+// The start of a rig that starts its renderer by hand: one would be the
+// rig's bug, said.
+const NO_START = async (): Promise<never> => {
+  throw new Error("this renderer is started by its test, not by a start");
+};
+
 // The pushes of a rig that hands its renderer none: one would be the rig's
 // bug, said.
 export const NO_PUSHES = (): never => {
   throw new Error("this rig hands the renderer no push");
+};
+
+// What a rig's renderer does at a start beside opening its sessions: the rig
+// starts none.
+export const NO_STARTED = (): never => {
+  throw new Error("this rig starts its renderer by hand");
 };
 
 // `renderer`, with `heard` told each event before it answers.
@@ -47,6 +61,7 @@ export function hearingEvents(
   heard: (input: EventInput) => void,
 ): Renderer {
   return rendererOf({
+    start: (input) => renderer.answer(input),
     event: (input) => {
       heard(input);
       return renderer.answer(input);

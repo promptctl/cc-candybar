@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug, setDebug } from "./utils/logger";
 import { processWorld } from "./host";
+import { runRenderer } from "./renderer-process.js";
 import {
   runInstall,
   runInstallUrlHandler,
@@ -95,6 +96,10 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   // The daemon owns its own lifecycle.
   daemon: async () => {
     runDaemon(world);
+  },
+  // A daemon's renderer, started by the daemon: it ends with its stdin.
+  renderer: async (args) => {
+    runRenderer(args, world);
   },
   "daemon-stats": async (args) => {
     await exitWith(await daemonStatsPlan(world, args));

@@ -7,6 +7,7 @@
 // `sessionSource`.
 
 import { holdClickError } from "../src/daemon/foundations/click-error";
+import { FIRST_GENERATION } from "./helpers/plugin-storage";
 import { linkUrls } from "./helpers/frame";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
@@ -234,6 +235,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       sessionState,
       watchers,
       storage: providers.managedStorage,
+      generation: FIRST_GENERATION,
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,

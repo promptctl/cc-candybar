@@ -41,7 +41,7 @@ import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { viewFacts } from "./helpers/view-facts";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
+import { NO_PLUGIN_STORAGE, FIRST_GENERATION } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
@@ -87,6 +87,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       locations: locs(),
       env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
+      generation: FIRST_GENERATION,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,

@@ -25,6 +25,12 @@ import { fileStorage } from "../../src/daemon/file-storage";
 import { DaemonLog } from "../../src/daemon/log";
 import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
+import { inProcessRenderers } from "../../src/daemon/renderer-links";
+import { fileStores } from "../../src/doctor/edge";
+import {
+  linkKeyFile,
+  linkSignerFromKeyFile,
+} from "../../src/daemon/link-key";
 import {
   PROTOCOL_VERSION,
   sendOne,
@@ -38,9 +44,7 @@ import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
 
-export type DaemonOverrides = Partial<
-  Omit<DaemonInputs, "storage" | "paths">
-> & {
+export type DaemonOverrides = Partial<Omit<DaemonInputs, "paths">> & {
   readonly paths?: DaemonPaths;
   readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
 };
@@ -57,6 +61,7 @@ export function bundleAt(
     digest,
     path: file,
     node: [process.execPath],
+    entry: file,
     targets: [file],
   };
 }
@@ -92,8 +97,19 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       // test/setup.ts points it at a closed port.
       registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
       clock: systemTimekeeper,
-      // A daemon's gates are its own: none is shared with another built here.
-      gates: daemonGates(),
+      // [LAW:one-source-of-truth] The renderer in this worker, over the
+      // files a renderer's process would open at these paths. A daemon's
+      // gates are its own: none is shared with another built here.
+      renderers: inProcessRenderers({
+        storage: (log) => ({
+          ...fileStorage(paths, log, systemTimekeeper),
+          ...overrides.storage?.(log),
+        }),
+        doctorStores: fileStores(paths.state),
+        linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
+        gates: daemonGates(),
+        stateDir: paths.state,
+      }),
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {
@@ -102,10 +118,6 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       ...overrides,
       paths,
       daemonLog,
-      storage: (log) => ({
-        ...fileStorage(paths, log, systemTimekeeper),
-        ...overrides.storage?.(log),
-      }),
     });
     return { daemon, daemonLog, paths };
   } catch (e) {

@@ -8,7 +8,7 @@ import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { ClientHints, Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { Answered } from "../daemon/foundations/sighting-roles.js";
-import type { RequestId } from "./interface.js";
+import type { MintedId, RequestId } from "./interface.js";
 import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
@@ -41,12 +41,14 @@ import type { DoctorMachineEdge } from "../doctor/ports.js";
 
 // A watch the renderer holds, named by the id it minted.
 declare const WATCH_ID: unique symbol;
-export type WatchId = number & { readonly [WATCH_ID]: true };
+export type WatchId = MintedId & { readonly [WATCH_ID]: true };
 
 // A render state's hold on its storage folders, named by the id the renderer
 // minted.
 declare const STORAGE_HOLD_ID: unique symbol;
-export type StorageHoldId = number & { readonly [STORAGE_HOLD_ID]: true };
+export type StorageHoldId = MintedId & {
+  readonly [STORAGE_HOLD_ID]: true;
+};
 
 export interface LaneSession {
   readonly sessionId: SessionId;

@@ -96,8 +96,8 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
       fs.renameSync(tmp, path.join(folder, `${sessionId}.json`));
     },
     hold(id = 1) {
-      storage.hold(id as StorageHoldId, [folder]);
-      return () => storage.release(id as StorageHoldId);
+      storage.hold(`1.${id}` as StorageHoldId, [folder]);
+      return () => storage.release(`1.${id}` as StorageHoldId);
     },
     generation() {
       const moved = lines.filter((l) =>
@@ -352,7 +352,7 @@ describe("ManagedStorage watches", () => {
   test("a load that no longer names a folder closes its watch", () => {
     const r = rig();
     r.hold();
-    r.storage.hold(1 as StorageHoldId, []);
+    r.storage.hold("1.1" as StorageHoldId, []);
     expect(r.counters.watchersClosed).toBe(1);
     expect(r.storage.stats().folders).toBe(0);
   });

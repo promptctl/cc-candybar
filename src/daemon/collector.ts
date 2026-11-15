@@ -326,6 +326,15 @@ export class Collector {
     }
   }
 
+  // [LAW:one-source-of-truth] Every live session's document as last stamped:
+  // what a renderer's start carries of the world, so the renderer that
+  // answers it reads what the one before it read.
+  documents(): readonly WorldState[] {
+    return [...this.records.values()].flatMap((r) =>
+      r.phase.kind === "live" ? [r.stamped.document] : [],
+    );
+  }
+
   stats(): CollectorStats {
     const all = [...this.records.values()];
     return {

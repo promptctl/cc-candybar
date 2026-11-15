@@ -29,37 +29,94 @@ import type { Lane, LaneFeeds } from "../config/lanes";
 declare const REQUEST_ID: unique symbol;
 export type RequestId = number & { readonly [REQUEST_ID]: true };
 
+// [LAW:one-source-of-truth] Which start of a renderer this is: its
+// supervisor's count of starts, from 1. Every id a renderer mints carries it,
+// so no id repeats across a restart, and the host tells a dead renderer's id
+// by its generation alone.
+declare const GENERATION: unique symbol;
+export type Generation = number & { readonly [GENERATION]: true };
+
+// An id a renderer minted: its generation, then its count within it.
+export type MintedId = `${number}.${number}`;
+
+// [LAW:single-enforcer] The one way a renderer mints an id: each site counts
+// its own, under the generation it was built in.
+export function minter<Id extends MintedId>(generation: Generation): () => Id {
+  let minted = 0;
+  // [LAW:types-are-the-program] exception: the brand is what this mints.
+  return () => `${generation}.${++minted}` as Id;
+}
+
+export const generationOf = (id: MintedId): Generation =>
+  Number(id.slice(0, id.indexOf("."))) as Generation;
+
 // An effect's name, minted by the renderer that returned it, which its
 // `effect-done` carries back.
 declare const EFFECT_ID: unique symbol;
-export type EffectId = number & { readonly [EFFECT_ID]: true };
+export type EffectId = MintedId & { readonly [EFFECT_ID]: true };
 
-// [LAW:one-type-per-behavior] One interface over every transport: in process
-// for now, a socket to the renderer's own process later. Each kind of input
-// answers with its own output, so an input pays only for what it is.
+// [LAW:one-type-per-behavior] One interface over every transport: in process,
+// and over its own process's stdio. Each kind of input answers with its own
+// output, so an input pays only for what it is.
 export interface Renderer {
-  answer(input: EventInput): Promise<RendererOutput>;
+  answer(input: StartInput | EventInput): Promise<RendererOutput>;
   answer(input: AdapterInput): Promise<AdapterOutput>;
 }
 
-export type RendererInput = EventInput | AdapterInput;
+export type RendererInput = StartInput | EventInput | AdapterInput;
 
 // [LAW:single-enforcer] The one dispatch from an input to the answer of its
 // kind, which every renderer is built by. Each arm is typed by its own input
 // and output, so an arm answering the other kind's output fails the build,
 // which an overload's body does not.
 export function rendererOf(arms: {
+  readonly start: (input: StartInput) => Promise<RendererOutput>;
   readonly event: (input: EventInput) => Promise<RendererOutput>;
   readonly adapter: (input: AdapterInput) => Promise<AdapterOutput>;
 }): Renderer {
-  function answer(input: EventInput): Promise<RendererOutput>;
+  function answer(input: StartInput | EventInput): Promise<RendererOutput>;
   function answer(input: AdapterInput): Promise<AdapterOutput>;
   function answer(
     input: RendererInput,
   ): Promise<RendererOutput | AdapterOutput> {
-    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
+    switch (input.kind) {
+      case "start":
+        return arms.start(input);
+      case "event":
+        return arms.event(input);
+      case "adapter":
+        return arms.adapter(input);
+    }
   }
   return { answer };
+}
+
+// [LAW:one-source-of-truth] A renderer's first input, complete: it holds,
+// once answered, every session it would hold had it never stopped, but the
+// unsaved state its own process kept (open menus, armed confirms).
+export interface StartInput {
+  readonly kind: "start";
+  readonly start: Start;
+  readonly at: Instant;
+}
+
+export interface Start {
+  readonly cause: StartCause;
+  readonly sessions: readonly SessionSnapshot[];
+}
+
+// Why this renderer started: the first of its name, or the one after a
+// renderer that ended, whose end it says in words ("exited with code 1").
+export type StartCause =
+  | { readonly kind: "first" }
+  | { readonly kind: "crashed"; readonly ended: string };
+
+// A session the host holds live: its latest request's context with the world
+// state last stamped for it, and whether a feed draws it.
+export interface SessionSnapshot {
+  readonly context: CheckedRenderRequest;
+  readonly worldState: WorldState;
+  readonly pinned: boolean;
 }
 
 export interface EventInput {

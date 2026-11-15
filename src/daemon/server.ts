@@ -41,7 +41,6 @@ import { runTmuxAtExit } from "../proc/tmux";
 import type { TmuxAtExit } from "./tmux-status";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { productionAdapters } from "./production-adapters.js";
-import { daemonGates } from "./foundations/update-keys.js";
 import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
@@ -102,6 +101,7 @@ function runningBundle(): RunningBundle {
     digest: bakedDigest(),
     path,
     node: [process.execPath, ...process.execArgv],
+    entry: daemonEntry(),
     // Watch the resolved entry point, not the bin shim — a build updates
     // dist/index.mjs but the bin/cc-candybar shim never changes — and argv[1]
     // beside it (global installs, symlinks). One target per path: run as
@@ -110,6 +110,15 @@ function runningBundle(): RunningBundle {
       ...new Set([path, ...(process.argv[1] ? [process.argv[1]] : [])]),
     ],
   };
+}
+
+// The script this process was started as: `<entry> daemon`, so it dispatches
+// the bundle's subcommands, which `path` does not under tsx.
+function daemonEntry(): string {
+  const script = process.argv[1];
+  if (script === undefined)
+    throw new Error("the daemon was started with no script to name");
+  return script;
 }
 
 export function runDaemon(world: World): void {
@@ -195,8 +204,9 @@ async function boot(): Promise<void> {
   // as a daemon exit; the client falls back to the last cached render.
   ensureSocketParentSafe(paths.socket);
 
-  // The daemon is built now that we know we are the daemon process: it loads
-  // prior session state and becomes the sole writer of the state file.
+  // The daemon is built now that we know we are the daemon process: its
+  // renderer, started on the first request, loads prior session state and is
+  // the sole writer of the state file.
   const daemon = createDaemon({
     ...productionAdapters(paths, daemonLog, world.clock),
     bundle: runningBundle(),
@@ -205,7 +215,6 @@ async function boot(): Promise<void> {
     memoryLimitBytes: memoryLimit,
     registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: world.clock,
-    gates: daemonGates(),
     exit: shutdown,
   });
   serving = daemon;

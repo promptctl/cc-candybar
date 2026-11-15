@@ -65,7 +65,7 @@ function failed(
 // [LAW:effects-at-boundaries] The request's context as both its turns take
 // it: the checkout its directory is in, read from the disk by the host, so
 // the renderer reads no file for it and the two turns read one location.
-function located(req: CheckedRenderRequest): CheckedRenderRequest {
+export function located(req: CheckedRenderRequest): CheckedRenderRequest {
   const dir = req.hookData.workspace?.current_dir ?? req.cwd;
   return {
     ...req,
@@ -122,9 +122,11 @@ export async function answerStatusline(
   // its output's subscriptions reach the collector as the turn answers. A set
   // that moved is declared and its stamp handed in before the request is
   // delivered, so the request's wait covers every source the view reads.
-  // In process the config turn answers at once, so nothing that opens or
-  // closes a view runs between it and the request; out of process, the
-  // router's mailbox is what keeps the two adjacent.
+  // The renderer takes its inputs in the order the host sends them and
+  // answers each as it arrives, in process or over its process's stdio, so
+  // the two stay in order, and another session's turns may come between
+  // them, as they may in process. The mailbox is what will keep them
+  // adjacent.
   const configured = await host.answer({
     kind: "event",
     at,
@@ -139,7 +141,7 @@ export async function answerStatusline(
   // the context was, whether or not a request turn runs after it.
   recorded(facts, configured);
   if (configured.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
+    noteFacts(facts, { renderer: host.name, hop: `${configured.hopMs}ms` });
     return failed(host, configured.failure, "its config turn: ");
   }
   const delivered = await host.answer({
@@ -158,13 +160,17 @@ export async function answerStatusline(
     },
   });
   recorded(facts, delivered);
+  // [LAW:nothing-unseen] What crossing to the renderer cost the request,
+  // beside its `took`: both its turns' hops.
+  const hop = `${configured.hopMs + delivered.hopMs}ms`;
   if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
+    noteFacts(facts, { renderer: host.name, hop });
     return failed(host, delivered.failure);
   }
   const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
+    hop,
     effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
   });
   // [LAW:types-are-the-program] Every effect the turn returned, in its order,

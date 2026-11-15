@@ -252,7 +252,7 @@ describe("the close as a renderer turn", () => {
       host: {
         answer: async (input: RendererInput) => {
           inputs.push(input);
-          return delivered;
+          return { ...delivered, hopMs: 0 };
         },
       },
     };

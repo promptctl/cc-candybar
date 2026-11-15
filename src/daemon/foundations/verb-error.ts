@@ -53,9 +53,19 @@ const KINDS: ReadonlyArray<
   [ClickAbandoned, "abandoned"],
 ];
 
+// A failure classified in another process, thrown again in this one: it keeps
+// the kind and detail it was classified with where it was thrown.
+export class CrossedFailure extends Error {
+  constructor(readonly failure: Failure) {
+    super(failure.message);
+    this.name = "CrossedFailure";
+  }
+}
+
 // [LAW:single-enforcer] The one classification of a thrown value. `inspect` is
 // total over anything a handler can throw and carries an Error's stack.
 export function failureOf(thrown: unknown): Failure {
+  if (thrown instanceof CrossedFailure) return thrown.failure;
   return {
     kind: KINDS.find(([as]) => thrown instanceof as)?.[1] ?? "threw",
     message: thrown instanceof Error ? thrown.message : inspect(thrown),

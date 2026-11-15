@@ -5,7 +5,8 @@
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
 import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
-import { eventRenderer, NO_PUSHES } from "./helpers/renderers";
+import { FIRST_GENERATION } from "./helpers/plugin-storage";
+import { eventRenderer, NO_PUSHES, NO_STARTED } from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
@@ -69,7 +70,7 @@ import type { WorldStates } from "../src/renderer/world-states";
 import { UNREAD_RUN } from "../src/facts/world-state";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
-import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
+import { rendererHost, type RendererHost, hosted } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
@@ -240,6 +241,7 @@ function rig(): Rig {
           providers.managedStorage.release(id);
         },
       },
+      generation: FIRST_GENERATION,
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
@@ -826,18 +828,22 @@ function statusline(r: Rig, configFile: string) {
       worldStates: r.worldStates,
       providers: r.providers,
     }),
+    FIRST_GENERATION,
     NO_PUSHES,
+    NO_STARTED,
   );
   const rendered = rendererHost(
     "main",
     systemTimekeeper,
-    eventRenderer(async (input) => {
-      const output = await renderer.answer(input);
-      if (output.kind === "answered")
-        for (const effect of output.effects)
-          presented.push(parseFrame(effect.frame));
-      return output;
-    }),
+    hosted(
+      eventRenderer(async (input) => {
+        const output = await renderer.answer(input);
+        if (output.kind === "answered")
+          for (const effect of output.effects)
+            presented.push(parseFrame(effect.frame));
+        return output;
+      }),
+    ),
     () => {},
     r.collector,
   );
@@ -1193,14 +1199,14 @@ describe("a storage folder's watch", () => {
     await answered(held.view);
     held[Symbol.dispose]();
     const entry = r.cache.getOrCreate(dir, dir, file);
-    expect(r.storageCalls).toEqual(["hold 1"]);
+    expect(r.storageCalls).toEqual(["hold 1.1"]);
     r.cache.reload(dir, dir, file, { kind: "doctor" });
-    expect(r.storageCalls).toEqual(["hold 1", "hold 1"]);
+    expect(r.storageCalls).toEqual(["hold 1.1", "hold 1.1"]);
     const edited = fs
       .readFileSync(file, "utf8")
       .replace(`template: "mine"`, `template: "mine, edited"`);
     await r.reloads.after(entry, () => fs.writeFileSync(file, edited));
-    expect(r.storageCalls.slice(2, 4)).toEqual(["hold 2", "release 1"]);
+    expect(r.storageCalls.slice(2, 4)).toEqual(["hold 1.2", "release 1.1"]);
   });
 
   test("a refused watch's fault clears at the config's reload", async () => {

@@ -111,6 +111,25 @@ export function memoryLimitBytes(env: NodeJS.ProcessEnv): number {
   return memoryLimitMb(env) * BYTES_PER_MB;
 }
 
+// [LAW:one-source-of-truth] The one published limit, split between the two
+// processes that serve the bars, so together they stay under it: the host
+// holds every session's world but no render state, and the renderer holds the
+// render cache, whose budget is a share of the renderer's. Each process's
+// backstop judges its own share.
+export function memoryShares(limitBytes: number): {
+  readonly host: number;
+  readonly renderer: number;
+} {
+  const host = Math.floor(limitBytes / 4);
+  return { host, renderer: limitBytes - host };
+}
+
+// The heap cap a process is started with over its share, as the client starts
+// the host over the whole limit: V8's own cap stays above the share, so the
+// backstop, not a V8 abort, is what ends a process that grows.
+export const heapCapOf = (shareBytes: number): number =>
+  Math.ceil(shareBytes / BYTES_PER_MB) * HEAP_CAP_OVER_RSS;
+
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;
 

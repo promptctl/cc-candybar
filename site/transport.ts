@@ -15,6 +15,9 @@ import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
+import { inProcessRenderers } from "../src/daemon/renderer-links";
+import { fileStores } from "../src/doctor/edge";
+import { linkKeyFile, linkSignerFromKeyFile } from "../src/daemon/link-key";
 import { EPHEMERAL_SESSION_STORAGE } from "../src/renderer/session-state";
 import { EPHEMERAL_HISTORY_STORAGE } from "../src/renderer/settings-history";
 import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/foundations/protocol";
@@ -73,7 +76,17 @@ const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
 const pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
-  gates: daemonGates(),
+  // The page has no process to start a renderer in: it draws in its own.
+  renderers: inProcessRenderers({
+    storage: () => ({
+      session: EPHEMERAL_SESSION_STORAGE,
+      history: EPHEMERAL_HISTORY_STORAGE,
+    }),
+    doctorStores: fileStores(paths.state),
+    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
+    gates: daemonGates(),
+    stateDir: paths.state,
+  }),
   paths,
   host: HOST,
   bundle: {
@@ -81,12 +94,9 @@ const pageDaemon = createDaemon({
     digest: null,
     path: "/app/dist/index.mjs",
     node: [],
+    entry: "/app/dist/index.mjs",
     targets: [],
   },
-  storage: () => ({
-    session: EPHEMERAL_SESSION_STORAGE,
-    history: EPHEMERAL_HISTORY_STORAGE,
-  }),
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: WORLD.clock,

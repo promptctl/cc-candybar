@@ -69,6 +69,7 @@ import type {
   JobLaunch,
   JobEnding,
   Launcher,
+  LaunchChannel,
 } from "./launcher";
 
 // [LAW:no-silent-failure] A spawn whose `cwd` is gone fails with the SAME
@@ -111,6 +112,9 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   // the typing is limited: a click the pane refused typed
   // nothing, so clicking again once the dialog is closed goes through.
   "claude-input.type": 1000,
+  // A renderer that ends as it starts is started again on the next input,
+  // which a feed sends at its frame rate.
+  renderer: 1000,
 };
 
 // [LAW:dataflow-not-control-flow] The rate-limit decision is a pure function
@@ -603,6 +607,55 @@ function hold(
   stats?.onDrainOpen(category);
 }
 
+// A child's stdout heard as lines, none captured: each whole line goes to
+// `heard`, and a line past the capture bound ends the launch as a capture
+// past it does.
+function lines(
+  state: LaunchState,
+  category: LaunchCategory,
+  stream: Readable | null,
+  ends: CaptureEnds,
+  heard: (line: string) => void,
+): Captured {
+  const decoder = new StringDecoder("utf8");
+  let partial = "";
+  let open = true;
+  stream?.on("error", (err) => {
+    state.scope.stats?.onPipeError(category);
+    if (open) ends.failed(err);
+  });
+  stream?.on("data", (chunk: Buffer) => {
+    if (!open) return;
+    const parts = (partial + decoder.write(chunk)).split("\n");
+    partial = parts.pop()!;
+    for (const line of parts) heard(line);
+    if (partial.length > MAX_CAPTURED_BYTES) ends.full();
+  });
+  return {
+    take: () => {
+      open = false;
+      return "";
+    },
+    drain: () => {
+      if (stream === null || stream.destroyed || stream.readableEnded) return;
+      hold(state, category, stream, () => "closed");
+    },
+  };
+}
+
+// What a waited launch does with the child's stdin and stdout: the plain
+// launch feeds its input and captures what it writes; a channel launch hands
+// its caller the stdin and hears stdout as lines.
+interface WaitedIo {
+  readonly stdout: (
+    state: LaunchState,
+    category: LaunchCategory,
+    stream: Readable | null,
+    ends: CaptureEnds,
+  ) => Captured;
+  readonly stdin: (input: Writable) => void;
+}
+
 // An input is written, never cut, so it always ends "closed".
 const inputEnd = (): DrainEnd => "closed";
 
@@ -618,6 +671,7 @@ function feed(input: Writable, text: string | Buffer | undefined): void {
 async function launchWaited(
   state: LaunchState,
   opts: AsyncLaunchOpts,
+  io: WaitedIo,
 ): Promise<LaunchResult> {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category, opts.signal);
@@ -668,7 +722,7 @@ async function launchWaited(
         terminate("pipe-error");
       },
     };
-    const stdout = capture(state, opts.category, child.stdout, ends);
+    const stdout = io.stdout(state, opts.category, child.stdout, ends);
     const stderr = capture(state, opts.category, child.stderr, ends);
     const output = () => ({ stdout: stdout.take(), stderr: stderr.take() });
     let settled = false;
@@ -850,8 +904,36 @@ async function launchWaited(
     opts.signal?.addEventListener("abort", onAbort, { once: true });
     state.inFlight.add(onAbort);
 
-    if (input !== null) feed(input, opts.stdinInput);
+    if (input !== null) io.stdin(input);
   });
+}
+
+// [LAW:one-type-per-behavior] A channel launch is the waited launch with the
+// caller holding its stdin: one body, one lifetime, and only its io differs.
+function launchChannel(
+  state: LaunchState,
+  opts: Omit<AsyncLaunchOpts, "stdinInput">,
+  heard: (line: string) => void,
+): LaunchChannel {
+  let input: Writable | null = null;
+  const result = track(
+    state,
+    launchWaited(state, opts, {
+      stdout: (st, category, stream, ends) =>
+        lines(st, category, stream, ends, heard),
+      stdin: (writable) => {
+        // [LAW:no-silent-failure] exception: a write to a child that ended
+        // fails with EPIPE, and the child's end is the result, which says why.
+        writable.on("error", () => {});
+        input = writable;
+      },
+    }),
+  );
+  return {
+    send: (line) => void input?.write(`${line}\n`),
+    close: () => void input?.end(),
+    result,
+  };
 }
 
 // Sync variant. For callers that genuinely cannot be async — the spawn
@@ -1205,7 +1287,15 @@ function launcherWithState(
 } {
   const launcher: TestableLauncher = {
     clock,
-    launch: (opts) => track(state, launchWaited(state, opts)),
+    launch: (opts) =>
+      track(
+        state,
+        launchWaited(state, opts, {
+          stdout: capture,
+          stdin: (input) => feed(input, opts.stdinInput),
+        }),
+      ),
+    launchChannel: (opts, heard) => launchChannel(state, opts, heard),
     launchDetachedSync: (opts) => launchOrphan(state, opts),
     launchJobSync: (opts, files) => launchJob(state, opts, files),
     jobGroupAlive: (pid) => spawner.signalJob(pid, 0),

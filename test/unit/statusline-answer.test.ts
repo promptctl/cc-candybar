@@ -14,7 +14,7 @@ import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { eventRenderer, hearingEvents } from "../helpers/renderers";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import { rendererHost } from "../../src/daemon/renderer-host";
+import { rendererHost, hosted } from "../../src/daemon/renderer-host";
 import { answerStatusline } from "../../src/daemon/statusline-answer";
 import type { RequestFacts } from "../../src/daemon/foundations/request-event";
 import {
@@ -55,7 +55,7 @@ const CLOCK = {
 
 const present = (id: number, request = REQUEST): Effect => ({
   kind: "present",
-  id: id as EffectId,
+  id: `1.${id}` as EffectId,
   session: SESSION,
   surface: "statusline",
   request,
@@ -128,7 +128,7 @@ async function answer(
   const facts: RequestFacts = [];
   const named = new Set<string>();
   const answered = await answerStatusline(
-    rendererHost("main", CLOCK, renderer, (_level, line) => logged.push(line), {
+    rendererHost("main", CLOCK, hosted(renderer), (_level, line) => logged.push(line), {
       subscribed: (subscriptions) => void subscribed.push(subscriptions),
       // Mirrors the collector: only a session a request has named is held.
       holding: (session) => {
@@ -173,7 +173,7 @@ test("the request's present answers it, in the request's encoding, and its settl
   answered.settled(true);
   await drained();
   expect(heard).toEqual([
-    { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "ok" } },
+    { kind: "effect-done", session: SESSION, of: "1.1", outcome: { kind: "ok" } },
   ]);
 });
 
@@ -195,7 +195,7 @@ test("a present its client never took settles failed", async () => {
     {
       kind: "effect-done",
       session: SESSION,
-      of: 1,
+      of: "1.1",
       outcome: { kind: "failed" },
     },
   ]);
@@ -217,7 +217,7 @@ test("a turn that presents no frame for the request is a failure naming the rend
     {
       kind: "effect-done",
       session: SESSION,
-      of: 1,
+      of: "1.1",
       outcome: { kind: "failed" },
     },
   ]);
@@ -232,7 +232,7 @@ test("a second frame for the request is refused, and the first answers it", asyn
     {
       kind: "effect-done",
       session: SESSION,
-      of: 2,
+      of: "1.2",
       outcome: { kind: "failed" },
     },
   ]);
@@ -250,7 +250,7 @@ test("a config turn's effects are refused, each owed its effect-done, and the re
   expect(heard).toMatchObject([
     {
       kind: "effect-done",
-      of: 2,
+      of: "1.2",
       outcome: { kind: "failed", reason: "a config turn answers no request" },
     },
   ]);
@@ -296,7 +296,7 @@ test("a renderer that rejects is the turn's failure, said on its line, and the s
   await drained();
   expect(logged).toEqual([
     expect.stringMatching(
-      /^turn renderer=main input=effect-done sid=a-session effect=1 error=.*the renderer went away/,
+      /^turn renderer=main input=effect-done sid=a-session effect=1\.1 error=.*the renderer went away/,
     ),
   ]);
   expect(subscribed).toEqual([NO_SUBSCRIPTIONS, NO_SUBSCRIPTIONS]);
@@ -324,7 +324,7 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
   await drained();
   expect(logged).toEqual([
     expect.stringMatching(
-      /^turn renderer=main input=effect-done sid=a-session effect=1 error=.*no such present/,
+      /^turn renderer=main input=effect-done sid=a-session effect=1\.1 error=.*no such present/,
     ),
   ]);
 });
