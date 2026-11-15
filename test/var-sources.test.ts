@@ -1326,7 +1326,9 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
     }
   });
 
-  it("a watch the OS refuses is the source's error, not a throw", async () => {
+  // A file is watched by its name, which no OS refuses: a folder the daemon
+  // may not enter is the read's failure, never a silent default.
+  it("a file under a folder the daemon cannot enter is the source's error, not a throw", async () => {
     const { dir, cleanup } = makeTmpDir();
     const locked = path.join(dir, "locked");
     fs.mkdirSync(locked);
@@ -1338,14 +1340,8 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
         parse: text("(none)"),
         cache: { kind: "watch_file", path: f },
       });
-      expect(registry.getLastError("val")?.message).toMatch(
-        /watch_file .*cannot watch/,
-      );
-      // The first read's outcome lands later and does not clear the fault.
       await ran(registry);
-      expect(registry.getLastError("val")?.message).toMatch(
-        /watch_file .*cannot watch/,
-      );
+      expect(registry.getLastError("val")?.message).toMatch(/EACCES/);
     } finally {
       fs.chmodSync(locked, 0o700);
       cleanup();
@@ -1944,8 +1940,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
   });
 
   // A stall is the delivery owner's one fact, so every watch_file variable
-  // reads it there. The watched file is never written in these: only the
-  // owner's word can move them, and no OS watcher has to break.
+  // whose watch rides the OS's stream reads it there. The rig watches a
+  // directory, which is watched whole and so rides it. The watched path is
+  // never written in these: only the owner's word can move them, and no OS
+  // watcher has to break.
   describe("while file events are stalled", () => {
     const STALL = "file events stopped at 2026-10-27T04:00:00.000Z";
     const stalled: Delivery = { kind: "stalled", missedSince: STALLED_AT };
@@ -1958,7 +1956,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
     function rig(dir: string) {
       const watched = path.join(dir, "watched");
       const data = path.join(dir, "data");
-      fs.writeFileSync(watched, "w");
+      fs.mkdirSync(watched);
       fs.writeFileSync(data, "before");
       const events = handDelivery();
       const store = new VariableStore(systemTimekeeper);
@@ -2006,6 +2004,24 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         }
         // What wakes a session's feed, so the bar draws it without a request.
         expect(registry.published()).not.toEqual(before);
+      } finally {
+        cleanup();
+      }
+    });
+
+    // A file watched by name is read by path, which rides no stream.
+    it("a variable watching a file by name carries no stall fault", async () => {
+      const { dir, cleanup } = makeTmpDir();
+      try {
+        const { data, events, registry } = rig(dir);
+        registry.declareFile("val", data, {
+          parse: TEXT,
+          cache: { kind: "watch_file", path: data },
+        });
+        await ran(registry);
+        events.set(stalled, { kind: "moved" });
+        await ran(registry);
+        expect(registry.cachePolicyFaults().size).toBe(0);
       } finally {
         cleanup();
       }
@@ -2114,9 +2130,9 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
   // A linked path changes wherever any link in its chain is re-pointed, and
   // where the file at its end is replaced or first appears; each lives in a
   // directory of its own here, so only the watch on that directory can hear it.
-  // One owner opens, counts and logs every directory watch in the daemon:
-  // a directory home and its session's view watching one path hold one slot
-  // on one handle, which closes with the last of them.
+  // One owner holds, counts and logs every watch in the daemon: a directory
+  // home and its session's view watching one file hold one slot reading one
+  // path, and no OS watch, which goes with the last of them.
   it("a watch_file watch is the watcher registry's, shared by a directory home and its view", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {
@@ -2155,18 +2171,17 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       await ran(home);
       await ran(view);
       expect(watchers.size()).toBe(1);
+      expect(watchers.polledNames()).toBe(1);
       expect(counters).toMatchObject({
         watchersOpened: 1,
-        dirWatchesOpened: 1,
+        dirWatchesOpened: 0,
       });
       // A run nobody holds is dropped, and its watch closed with it.
       heldOf(view).held.close();
       heldOf(home).held.close();
-      expect(counters).toMatchObject({
-        watchersClosed: 1,
-        dirWatchesClosed: 1,
-      });
+      expect(counters).toMatchObject({ watchersClosed: 1 });
       expect(watchers.size()).toBe(0);
+      expect(watchers.polledNames()).toBe(0);
     } finally {
       cleanup();
     }
@@ -2296,114 +2311,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       }
     });
 
-    // No real directory can be made to fail its watch on demand, so each
-    // directory's handle is a stand-in the test can make fail. A failed
-    // directory is the watcher registry's period to open again: an event on
-    // another directory of the watch re-derives and re-reads, and keeps the
-    // failed one as it is.
-    it("a directory whose watch fails is the variable's fault and a re-read, and is opened again only by the period's judgment", async () => {
+    // A file is read by path, so a directory under it removed and made again
+    // (`rm -rf one && mkdir one`) is heard through whatever is there now.
+    it("a file whose directory is removed and made again is heard through the new one", async () => {
       const { dir, cleanup } = makeTmpDir();
-      const opened: Array<{
-        dir: string;
-        handle: EventEmitter;
-        listener: (event: string, changed: string | null) => void;
-      }> = [];
-      const watch = jest.spyOn(fs, "watch").mockImplementation(((
-        d: string,
-        _opts: unknown,
-        listener: (event: string, changed: string | null) => void,
-      ) => {
-        const handle = Object.assign(new EventEmitter(), { close: () => {} });
-        opened.push({ dir: d, handle, listener });
-        return handle;
-      }) as unknown as typeof fs.watch);
-      try {
-        const real = fs.realpathSync(dir);
-        fs.mkdirSync(path.join(dir, "one"));
-        const state = path.join(dir, "one", "state");
-        const a = path.join(dir, "a");
-        fs.writeFileSync(state, "v1");
-        fs.symlinkSync(state, a);
-        const watchers = new WatcherRegistry({
-          clock: systemTimekeeper,
-          logger: () => {},
-        });
-        const store = new VariableStore(systemTimekeeper);
-        const registry = registryOver(
-          store,
-          undefined,
-          undefined,
-          null,
-          undefined,
-          runsOver({ watchers }),
-        );
-        registry.declareFile("val", a, {
-          parse: TEXT,
-          cache: { kind: "watch_file", path: a },
-        });
-        await ran(registry);
-        expect(store.read("val")).toBe("v1");
-        const opensOf = (d: string) => opened.filter((o) => o.dir === d);
-        const one = path.join(real, "one");
-        expect(opensOf(one)).toHaveLength(1);
-        expect(registry.cachePolicyFaults().has("val")).toBe(false);
-
-        fs.writeFileSync(state, "v2");
-        opensOf(one)[0]!.handle.emit(
-          "error",
-          new Error("EMFILE: too many open files"),
-        );
-        await until(() => store.read("val") === "v2", "the store reading v2");
-        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(
-          /watching .*one failed — EMFILE/,
-        );
-        expect(opensOf(one)).toHaveLength(1);
-
-        // An event on the link's own directory re-derives and re-reads, and
-        // the failed directory stays as it is.
-        fs.writeFileSync(state, "v3");
-        opensOf(real)[0]!.listener("rename", "a");
-        await until(() => store.read("val") === "v3", "the store reading v3");
-        expect(opensOf(one)).toHaveLength(1);
-        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(
-          /watching .*one failed — EMFILE/,
-        );
-
-        // The period's judgment opens it again, and the fault clears.
-        watchers.judge();
-        expect(opensOf(one)).toHaveLength(2);
-        await until(
-          () => !registry.cachePolicyFaults().has("val"),
-          "the fault cleared",
-        );
-      } finally {
-        watch.mockRestore();
-        cleanup();
-      }
-    });
-
-    // Linux's inotify follows the inode, so a handle on a directory removed
-    // and made again at its path hears nothing more, with no error to say so;
-    // the stand-in handles let every platform see that the watch moves to the
-    // new directory, and hears the file through it.
-    it("a watched directory removed and made again is watched again", async () => {
-      const { dir, cleanup } = makeTmpDir();
-      const opened: Array<{
-        dir: string;
-        closed: boolean;
-        listener: (event: string, changed: string | null) => void;
-      }> = [];
-      const watch = jest.spyOn(fs, "watch").mockImplementation(((
-        d: string,
-        _opts: unknown,
-        listener: (event: string, changed: string | null) => void,
-      ) => {
-        const record = { dir: d, closed: false, listener };
-        opened.push(record);
-        return Object.assign(new EventEmitter(), {
-          close: () => void (record.closed = true),
-        });
-      }) as unknown as typeof fs.watch);
       try {
         const one = path.join(fs.realpathSync(dir), "one");
         fs.mkdirSync(one);
@@ -2416,29 +2327,79 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
-        const opensOf = (d: string) => opened.filter((o) => o.dir === d);
-        expect(opensOf(one)).toHaveLength(1);
-
-        // `rm -rf one && mkdir one`: the handle reports its own directory's name.
         fs.rmSync(one, { recursive: true });
         fs.mkdirSync(one);
-        opensOf(one)[0]!.listener("rename", "one");
-        await until(
-          () => opensOf(one).length === 2,
-          "the directory watched again",
-        );
-        expect(opensOf(one)).toHaveLength(2);
-        expect(opensOf(one)[0]!.closed).toBe(true);
-
         fs.writeFileSync(state, "v2");
-        opensOf(one)[1]!.listener("rename", "state");
         await until(() => store.read("val") === "v2", "the store reading v2");
-        expect(store.read("val")).toBe("v2");
       } finally {
-        watch.mockRestore();
         cleanup();
       }
     });
+  });
+
+  // No real directory can be made to fail its watch on demand, so the
+  // directory's handle is a stand-in the test can make fail. A directory
+  // watched whole is an OS watch, and a failed one is the watcher registry's
+  // period to open again: the variable re-reads and says so meanwhile.
+  it("a directory watched whole whose watch fails is the variable's fault and a re-read, and is opened again only by the period's judgment", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    const opened: Array<{ dir: string; handle: EventEmitter }> = [];
+    const watch = jest.spyOn(fs, "watch").mockImplementation(((d: string) => {
+      const handle = Object.assign(new EventEmitter(), { close: () => {} });
+      opened.push({ dir: d, handle });
+      return handle;
+    }) as unknown as typeof fs.watch);
+    try {
+      const one = path.join(fs.realpathSync(dir), "one");
+      fs.mkdirSync(one);
+      const state = path.join(one, "state");
+      fs.writeFileSync(state, "v1");
+      const watchers = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
+      const store = new VariableStore(systemTimekeeper);
+      const registry = registryOver(
+        store,
+        undefined,
+        undefined,
+        null,
+        undefined,
+        runsOver({ watchers }),
+      );
+      registry.declareFile("val", state, {
+        parse: TEXT,
+        cache: { kind: "watch_file", path: one },
+      });
+      await ran(registry);
+      expect(store.read("val")).toBe("v1");
+      const opensOf = (d: string) => opened.filter((o) => o.dir === d);
+      expect(opensOf(one)).toHaveLength(1);
+      expect(registry.cachePolicyFaults().has("val")).toBe(false);
+
+      fs.writeFileSync(state, "v2");
+      opensOf(one)[0]!.handle.emit(
+        "error",
+        new Error("EMFILE: too many open files"),
+      );
+      await until(() => store.read("val") === "v2", "the store reading v2");
+      expect(registry.cachePolicyFaults().get("val")?.message).toMatch(
+        /watching .*one failed — EMFILE/,
+      );
+      expect(opensOf(one)).toHaveLength(1);
+
+      // The period's judgment opens it again, and the fault clears.
+      watchers.judge();
+      expect(opensOf(one)).toHaveLength(2);
+      await until(
+        () => !registry.cachePolicyFaults().has("val"),
+        "the fault cleared",
+      );
+      watchers.closeAll();
+    } finally {
+      watch.mockRestore();
+      cleanup();
+    }
   });
 });
 

@@ -135,6 +135,8 @@ export interface StatsSnapshot {
     refused: number;
     errors: number;
     dirs: { active: number; opened: number; closed: number };
+    // The paths read by the names' sweep now: each one is no OS watch.
+    polled: number;
   };
   subprocesses: {
     total: number;

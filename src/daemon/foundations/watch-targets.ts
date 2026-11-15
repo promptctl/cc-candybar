@@ -9,17 +9,18 @@ import {
   nearestWatchTarget,
 } from "../../utils/watch-target";
 
-// Absolute directories the consumer wants invalidation for. A directory is
-// watched one level deep, optionally restricted to the child basenames that
-// should fire (config case: avoids noise from sibling files in ~/.claude/), or
-// as a whole tree (git's refs: a branch name's slashes are directories).
+// Absolute directories the consumer wants invalidation for: named children of
+// a directory (config case: avoids noise from sibling files in ~/.claude/), a
+// directory's every child, or a whole tree (git's refs: a branch name's
+// slashes are directories).
 //
-// [LAW:types-are-the-program] A file is watched through its directory, by
-// name, never by its own inode: a watch on the file binds the inode it finds,
-// and a write-then-rename (the safe way to rewrite a file, and `writeAtomic`'s
-// way) replaces that inode, leaving the watch deaf with no event to say so. A
-// directory watch reports a child's in-place write and its rename alike, so
-// the contract offers nothing a consumer could go deaf on.
+// [LAW:types-are-the-program] A file is watched by its name in its directory,
+// never by its own inode: a watch on the file binds the inode it finds, and a
+// write-then-rename (the safe way to rewrite a file, and `writeAtomic`'s way)
+// replaces that inode, leaving the watch deaf with no event to say so. A read
+// of the path sees a child's in-place write and its rename alike, as a
+// directory watch does, so the contract offers nothing a consumer could go
+// deaf on.
 //
 // [LAW:types-are-the-program] A tree watch reports paths relative to its
 // root, so a basename filter has nothing to match against; the two shapes are
@@ -27,8 +28,7 @@ import {
 export type DirTarget =
   | {
       path: string;
-      // If set, only fire when fs.watch reports a filename in this list.
-      // Filenames are basenames (not paths) — that's what fs.watch supplies.
+      // If set, the basenames heard here, and nothing else in the directory.
       filenames?: readonly string[];
       recursive?: false;
     }
@@ -37,6 +37,19 @@ export type DirTarget =
 export interface WatchTargets {
   dirs: readonly DirTarget[];
 }
+
+// [LAW:single-enforcer] The one rule for how a target is heard. A target that
+// names its entries is polled: each named path is lstat'd by path, which opens
+// no OS watch. On macOS a directory watch is an FSEvents stream over the
+// directory's whole tree (libuv drops all but direct children only after
+// fseventsd has routed each event here), so a name watched at a repository's
+// root or in `$HOME` would pull every build beneath it through fseventsd. A
+// target watched for every child, or as a tree, is an OS watch, and only an OS
+// watch rides the event stream a stall can stop.
+export const polled = (
+  target: DirTarget,
+): target is DirTarget & { readonly filenames: readonly string[] } =>
+  target.filenames !== undefined;
 
 // [LAW:types-are-the-program] What one debounce window of a slot's watches
 // says: the paths that fired, each the watched directory joined with the name
@@ -55,14 +68,11 @@ export interface Refusal {
   readonly reason: string;
 }
 
-// What watching a set of paths takes: a spec whose key spells the targets and
-// the folder each binds now (`bound`, by path: `null` while there is nothing
-// there to bind), whether every hop reached its own directory (`reached`: none
-// waits on a missing directory to appear, so an event can be about the path
-// itself), and the paths whose link chain the kernel stopped walking, with
-// why.
+// What watching a set of paths takes: its spec (`specOf`), whether every hop
+// reached its own directory (`reached`: none waits on a missing directory to
+// appear, so an event can be about the path itself), and the paths whose link
+// chain the kernel stopped walking, with why.
 export interface PathsWatch extends WatchSpec {
-  readonly bound: ReadonlyMap<string, string | null>;
   readonly reached: boolean;
   readonly unresolved: readonly Refusal[];
 }
@@ -108,21 +118,26 @@ export function watchTargetsOf(paths: {
           : { path: dirPath, filenames: [...names].sort() },
       ),
   };
-  // [LAW:one-source-of-truth] The folder identity every watch owner judges
-  // by, read once here for every consumer of the rule.
-  const bound = new Map(
-    targets.dirs.map((d) => {
+  return { ...specOf(targets), reached, unresolved };
+}
+
+// [LAW:one-source-of-truth] The one derivation of a spec from its targets, for
+// every consumer that watches. The key spells the targets and the identity of
+// the folder at each OS-watched one, read now: inotify follows a folder's
+// inode, so a folder made again at its path is a new key the held watch
+// rebinds to. A polled name is read by path, and a folder replaced under it is
+// a change that read already reports, so its folder is in no key.
+export function specOf(targets: WatchTargets): WatchSpec {
+  const bound = targets.dirs
+    .filter((d) => !polled(d))
+    .map((d) => {
       const at = boundOf(d.path);
       return [d.path, bindsFolder(at) ? boundKey(at) : null] as const;
-    }),
-  );
+    });
   return {
-    key: JSON.stringify([targets, [...bound]]),
+    key: JSON.stringify([targets, bound]),
     targets,
-    unbound: [...bound.values()].includes(null),
-    bound,
-    reached,
-    unresolved,
+    unbound: bound.some(([, b]) => b === null),
   };
 }
 
@@ -169,19 +184,22 @@ export interface Deafness {
 
 // [LAW:no-silent-failure] A handle says, live, which of its targets the OS is
 // not listening to, so a consumer whose only refresh is the watch can show
-// the fault.
+// the fault. `ridesStream`: one of its targets is an OS watch (`polled`), so a
+// stall of the OS's event delivery deafens it.
 export interface WatcherHandle {
   release(): void;
   readonly deaf: readonly Deafness[];
+  readonly ridesStream: boolean;
 }
 
 // What a consumer asks to watch, under the key naming it. [LAW:one-source-of-truth]
 // The registry keeps the FIRST acquire's targets under a key, so the key must
-// name the target set and the folders it binds: a different set, or a
-// directory made again at its path (Linux's inotify follows the inode, so the
-// held watch hears the one before), is a different key, and "the watch moved"
-// and "the key changed" are one fact. `unbound`: a directory the spec names is
-// gone or cannot be stat'd right now, so there is nothing to bind yet.
+// name the target set and the folders its OS watches bind: a different set, or
+// an OS-watched directory made again at its path (Linux's inotify follows the
+// inode, so the held watch hears the one before), is a different key, and "the
+// watch moved" and "the key changed" are one fact. `unbound`: an OS-watched
+// directory the spec names is gone or cannot be stat'd right now, so there is
+// nothing to bind yet.
 export interface WatchSpec {
   readonly key: string;
   readonly targets: WatchTargets;

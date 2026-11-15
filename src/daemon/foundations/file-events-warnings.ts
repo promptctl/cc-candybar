@@ -21,15 +21,19 @@ export interface FileEventsWarning {
   readonly message: string;
 }
 
+// [LAW:one-source-of-truth] The row states the watch rule, not a consumer: a
+// file watched by name is read by path and rides no file event, and what is
+// watched whole or as a tree rides them (`polled`). Which consumer watches
+// which shape is each consumer's own.
 export function fileEventsWarnings(d: Delivery): FileEventsWarning[] {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
   const message = (): string => {
     switch (d.kind) {
       case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so a change made since in a folder watched whole may not have been seen; a file watched by name still is`;
       case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+        return `${stopped(d.missedSince)}, so a folder watched whole won't refresh until they resume; a file watched by name still does`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }

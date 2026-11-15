@@ -5,7 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import {
+  DEBOUNCE_MS,
+  NAMES_POLL_MS,
+  WatcherRegistry,
+} from "../src/daemon/cache/watchers";
+import { heldClock, type HeldClock } from "./helpers/held-clock";
 import {
   watchFault,
   watchTargetsOf,
@@ -376,110 +381,6 @@ describe("WatcherRegistry", () => {
     dirWatchesClosed: 0,
   });
 
-  // The OS reports a watched directory's own removal or rename under its own
-  // name, which no name filter lists; without it, a watch bound to a removed
-  // directory never tells its consumer to derive the watch again. The same
-  // name with the folder still there (macOS reporting a child that came or
-  // went) is not the directory's removal.
-  test("a name-filtered directory hears its own removal, and not its own name while it is still there", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "watch-self-"));
-    const conf = path.join(root, "conf");
-    fs.mkdirSync(conf);
-    const fake = standIn();
-    try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
-        logger: () => {},
-      });
-      const seen: Invalidation[] = [];
-      reg.acquire(
-        "k",
-        { dirs: [{ path: conf, filenames: ["config.json5"] }] },
-        (inv) => seen.push(inv),
-      );
-      const { listener } = fake.opensOf(conf)[0]!;
-      listener("change", "conf");
-      listener("rename", "config.json5");
-      await until(() => seen.length === 1, "the watched name's invalidation");
-      // macOS reports the removal as a change.
-      fs.rmSync(conf, { recursive: true });
-      listener("change", "conf");
-      await until(() => seen.length === 2, "the removal's invalidation");
-      expect(seen).toEqual([
-        { kind: "changed", paths: new Set([path.join(conf, "config.json5")]) },
-        { kind: "changed", paths: new Set([path.join(conf, "conf")]) },
-      ]);
-      reg.closeAll();
-    } finally {
-      fake.restore();
-      rmrf(root);
-    }
-  });
-
-  // The handle moves onto the folder made again, so a later event naming the
-  // directory (macOS: a child came or went) is judged against that folder and
-  // passes no filter; every slot on it re-reads what went unheard.
-  test("a name-filtered directory hears its own name when the folder at its path is replaced, moves onto the new folder, and not after a chmod", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "watch-self-"));
-    const conf = path.join(root, "conf");
-    fs.mkdirSync(conf);
-    const fake = standIn();
-    try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
-        logger: () => {},
-      });
-      const seen: Invalidation[] = [];
-      reg.acquire(
-        "k",
-        { dirs: [{ path: conf, filenames: ["config.json5"] }] },
-        (inv) => seen.push(inv),
-      );
-      const { listener } = fake.opensOf(conf)[0]!;
-      fs.chmodSync(conf, 0o755);
-      listener("change", "conf");
-      fs.renameSync(conf, path.join(root, "old"));
-      fs.mkdirSync(conf);
-      listener("rename", "conf");
-      await until(() => seen.length === 1, "the replacement's invalidation");
-      expect(seen).toEqual([{ kind: "unknown" }]);
-      expect(fake.opensOf(conf)).toHaveLength(2);
-      expect(fake.opensOf(conf)[0]!.closed).toBe(true);
-      fake.opensOf(conf)[1]!.listener("change", "conf");
-      fake.opensOf(conf)[1]!.listener("rename", "config.json5");
-      await until(() => seen.length === 2, "the watched name's invalidation");
-      expect(seen[1]).toEqual({
-        kind: "changed",
-        paths: new Set([path.join(conf, "config.json5")]),
-      });
-      reg.closeAll();
-    } finally {
-      fake.restore();
-      rmrf(root);
-    }
-  });
-
-  // A platform that names nothing may be reporting the filtered child.
-  test("an unnamed event under a name filter is unknown", async () => {
-    const fake = standIn();
-    try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
-        logger: () => {},
-      });
-      const seen: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: "/w", filenames: ["a"] }] }, (inv) =>
-        seen.push(inv),
-      );
-      fake.opensOf("/w")[0]!.listener("rename", null);
-      await until(() => seen.length === 1, "the unnamed event's invalidation");
-      expect(seen).toEqual([{ kind: "unknown" }]);
-      reg.closeAll();
-    } finally {
-      fake.restore();
-    }
-  });
-
   test("every holder of a key hears each window", async () => {
     const fake = standIn();
     try {
@@ -515,16 +416,8 @@ describe("WatcherRegistry", () => {
         counters,
         logger: () => {},
       });
-      const a = reg.acquire(
-        "a",
-        { dirs: [{ path: "/w", filenames: ["x"] }] },
-        () => {},
-      );
-      const b = reg.acquire(
-        "b",
-        { dirs: [{ path: "/w", filenames: ["y"] }] },
-        () => {},
-      );
+      const a = reg.acquire("a", { dirs: [{ path: "/w" }] }, () => {});
+      const b = reg.acquire("b", { dirs: [{ path: "/w" }] }, () => {});
       expect(fake.opened).toHaveLength(1);
       expect(reg.dirWatches()).toBe(1);
       a.release();
@@ -539,36 +432,6 @@ describe("WatcherRegistry", () => {
         dirWatchesClosed: 1,
       });
       expect(reg.dirWatches()).toBe(0);
-    } finally {
-      fake.restore();
-    }
-  });
-
-  // A link re-pointed to a new name beside the old one moves the key (it
-  // spells the name filters) and nothing the OS holds.
-  test("following to a key that changes only a name filter opens and closes no handle, and hears the new name", async () => {
-    const fake = standIn();
-    try {
-      const reg = new WatcherRegistry({
-        clock: systemTimekeeper,
-        logger: () => {},
-      });
-      const seen: Invalidation[] = [];
-      const spec = (name: string) => ({
-        key: `k:${name}`,
-        targets: { dirs: [{ path: "/w", filenames: [name] }] },
-        unbound: false,
-      });
-      const first = reg.follow(null, spec("a"), (inv) => seen.push(inv));
-      const moved = reg.follow(first.watch, spec("b"), (inv) => seen.push(inv));
-      expect(moved.move).toBe("rebound");
-      expect(fake.opened).toHaveLength(1);
-      expect(fake.opened[0]!.closed).toBe(false);
-      fake.opened[0]!.listener("rename", "a");
-      fake.opened[0]!.listener("rename", "b");
-      await until(() => seen.length === 1, "the new name's invalidation");
-      expect(seen).toEqual([{ kind: "changed", paths: new Set(["/w/b"]) }]);
-      reg.closeAll();
     } finally {
       fake.restore();
     }
@@ -622,11 +485,7 @@ describe("WatcherRegistry", () => {
         logger: () => {},
       });
       const seen: Invalidation[] = [];
-      reg.acquire(
-        "k",
-        { dirs: [{ path: conf, filenames: ["config.json5"] }] },
-        (inv) => seen.push(inv),
-      );
+      reg.acquire("k", { dirs: [{ path: conf }] }, (inv) => seen.push(inv));
       reg.judge();
       fs.renameSync(path.join(root, "proj"), path.join(root, "old"));
       reg.judge();
@@ -742,10 +601,8 @@ describe("WatcherRegistry", () => {
         logger: () => {},
       });
       const seen: Invalidation[] = [];
-      const a = reg.acquire(
-        "a",
-        { dirs: [{ path: dir, filenames: ["x"] }] },
-        (inv) => seen.push(inv),
+      const a = reg.acquire("a", { dirs: [{ path: dir }] }, (inv) =>
+        seen.push(inv),
       );
       fs.rmSync(dir, { recursive: true });
       fs.mkdirSync(dir);
@@ -789,6 +646,188 @@ describe("WatcherRegistry", () => {
     } finally {
       fake.restore();
     }
+  });
+
+  // A target that names its entries opens no OS watch: each named path is read
+  // on the names' sweep, so these cases run on a held clock and real files,
+  // and one sweep plus the debounce delivers what changed.
+  describe("polled names", () => {
+    let d: string;
+    let clock: HeldClock;
+    let reg: WatcherRegistry;
+    let counters: ReturnType<typeof zeroCounters>;
+    const sweep = () => clock.advance(NAMES_POLL_MS + DEBOUNCE_MS);
+    const changed = (...paths: string[]): Invalidation => ({
+      kind: "changed",
+      paths: new Set(paths),
+    });
+    beforeEach(() => {
+      d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "polled-")));
+      clock = heldClock(new Date());
+      counters = zeroCounters();
+      reg = new WatcherRegistry({ clock, counters, logger: () => {} });
+    });
+    afterEach(() => {
+      reg.closeAll();
+      fs.chmodSync(d, 0o755);
+      rmrf(d);
+    });
+
+    test("a named path opens no OS watch and rides no stream", () => {
+      const fake = standIn();
+      try {
+        const handle = reg.acquire(
+          "k",
+          { dirs: [{ path: d, filenames: ["f", "g"] }] },
+          () => {},
+        );
+        expect(fake.opened).toEqual([]);
+        expect(handle.ridesStream).toBe(false);
+        expect(handle.deaf).toEqual([]);
+        expect(reg.polledNames()).toBe(2);
+        expect(reg.dirWatches()).toBe(0);
+        expect(counters).toEqual({ ...zeroCounters(), watchersOpened: 1 });
+      } finally {
+        fake.restore();
+      }
+    });
+
+    test("a folder watched whole beside a name is an OS watch, and its handle rides the stream", () => {
+      const fake = standIn();
+      try {
+        const handle = reg.acquire(
+          "k",
+          { dirs: [{ path: d, filenames: ["f"] }, { path: "/w" }] },
+          () => {},
+        );
+        expect(fake.opened.map((o) => o.dir)).toEqual(["/w"]);
+        expect(handle.ridesStream).toBe(true);
+        expect(reg.polledNames()).toBe(1);
+      } finally {
+        fake.restore();
+      }
+    });
+
+    test("creating, writing, renaming over and removing a named path each fire it, by its path", () => {
+      const f = path.join(d, "f");
+      const seen: Invalidation[] = [];
+      reg.acquire("k", { dirs: [{ path: d, filenames: ["f"] }] }, (inv) =>
+        seen.push(inv),
+      );
+      const steps: Array<() => void> = [
+        () => fs.writeFileSync(f, "a"),
+        () => fs.writeFileSync(f, "bb"),
+        () => {
+          fs.writeFileSync(`${f}.tmp`, "cc");
+          fs.renameSync(`${f}.tmp`, f);
+        },
+        () => fs.rmSync(f),
+      ];
+      for (const step of steps) {
+        step();
+        sweep();
+      }
+      // The temporary file is a sibling, which nothing names.
+      expect(seen).toEqual(steps.map(() => changed(f)));
+    });
+
+    test("nothing fires while the named entries stay as they are: a sibling written, a child added to a named directory", () => {
+      fs.mkdirSync(path.join(d, "sub"));
+      const seen: Invalidation[] = [];
+      reg.acquire(
+        "k",
+        { dirs: [{ path: d, filenames: ["f", "sub"] }] },
+        (inv) => seen.push(inv),
+      );
+      fs.writeFileSync(path.join(d, "g"), "x");
+      fs.writeFileSync(path.join(d, "sub", "child"), "x");
+      sweep();
+      sweep();
+      expect(seen).toEqual([]);
+    });
+
+    test("a folder replaced under a named path fires it", () => {
+      const conf = path.join(d, "conf");
+      const f = path.join(conf, "f");
+      fs.mkdirSync(conf);
+      fs.writeFileSync(f, "same");
+      const seen: Invalidation[] = [];
+      reg.acquire("k", { dirs: [{ path: conf, filenames: ["f"] }] }, (inv) =>
+        seen.push(inv),
+      );
+      fs.renameSync(conf, path.join(d, "old"));
+      fs.mkdirSync(conf);
+      fs.writeFileSync(f, "same");
+      sweep();
+      expect(seen).toEqual([changed(f)]);
+    });
+
+    // A read the disk refuses is the name's change, not the watch's
+    // deafness: the holder's own read of it fails loudly in between.
+    test("a named path the disk stops letting the daemon read fires as it starts and as it stops, and its watch is never deaf", () => {
+      const f = path.join(d, "f");
+      fs.writeFileSync(f, "x");
+      const seen: Invalidation[] = [];
+      const handle = reg.acquire(
+        "k",
+        { dirs: [{ path: d, filenames: ["f"] }] },
+        (inv) => seen.push(inv),
+      );
+      fs.chmodSync(d, 0o000);
+      sweep();
+      expect(handle.deaf).toEqual([]);
+      fs.chmodSync(d, 0o755);
+      sweep();
+      expect(seen).toEqual([changed(f), changed(f)]);
+    });
+
+    test("slots naming one path share its read, and the last release leaves no timer armed", () => {
+      const f = path.join(d, "f");
+      const a: Invalidation[] = [];
+      const b: Invalidation[] = [];
+      const first = reg.acquire(
+        "a",
+        { dirs: [{ path: d, filenames: ["f"] }] },
+        (inv) => a.push(inv),
+      );
+      const second = reg.acquire(
+        "b",
+        { dirs: [{ path: d, filenames: ["f", "g"] }] },
+        (inv) => b.push(inv),
+      );
+      expect(reg.polledNames()).toBe(2);
+      fs.writeFileSync(f, "x");
+      sweep();
+      expect(a).toEqual([changed(f)]);
+      expect(b).toEqual([changed(f)]);
+      first.release();
+      expect(reg.polledNames()).toBe(2);
+      second.release();
+      expect(reg.polledNames()).toBe(0);
+      expect(clock.pending()).toBe(0);
+    });
+
+    // A name forgotten with its last slot starts again from what is there.
+    test("a path named again after its last release reports only what changes after the new acquire", () => {
+      const f = path.join(d, "f");
+      reg
+        .acquire("a", { dirs: [{ path: d, filenames: ["f"] }] }, () => {})
+        .release();
+      fs.writeFileSync(f, "x");
+      const seen: Invalidation[] = [];
+      reg.acquire("b", { dirs: [{ path: d, filenames: ["f"] }] }, (inv) =>
+        seen.push(inv),
+      );
+      sweep();
+      expect(seen).toEqual([]);
+    });
+
+    test("closeAll leaves no sweep armed", () => {
+      reg.acquire("k", { dirs: [{ path: d, filenames: ["f"] }] }, () => {});
+      expect(clock.pending()).toBe(1);
+      reg.closeAll();
+      expect(clock.pending()).toBe(0);
+    });
   });
 
   test("closeAll closes every watcher", () => {
@@ -939,20 +978,23 @@ describe("watchTargetsOf", () => {
     ]);
   });
 
-  // A held watch binds the inode it opened on (Linux's inotify), so the same
-  // directories by the same names are a different watch once one is made
-  // again at its path: a consumer following the key rebinds onto it.
-  test("a directory removed and made again at its path is a different watch", () => {
+  // An OS watch binds the inode it opened on (Linux's inotify), so a directory
+  // watched whole is a different watch once it is made again at its path: a
+  // consumer following the key rebinds onto it. A named path is read by path,
+  // so the same names in a folder made again are the same watch.
+  test("a directory watched whole and made again at its path is a different watch; one watched for names is the same", () => {
     const d = path.join(dir, "d");
     fs.mkdirSync(d);
     const f = path.join(d, "f");
-    const before = watchTargetsOf({ named: [f], whole: [] });
-    expect(watchTargetsOf({ named: [f], whole: [] }).key).toBe(before.key);
+    const whole = () => watchTargetsOf({ named: [], whole: [d] });
+    const named = () => watchTargetsOf({ named: [f], whole: [] });
+    const [wholeBefore, namedBefore] = [whole(), named()];
+    expect(whole().key).toBe(wholeBefore.key);
     rmrf(d);
     fs.mkdirSync(d);
-    const after = watchTargetsOf({ named: [f], whole: [] });
-    expect(after.targets).toEqual(before.targets);
-    expect(after.key).not.toBe(before.key);
+    expect(whole().targets).toEqual(wholeBefore.targets);
+    expect(whole().key).not.toBe(wholeBefore.key);
+    expect(named().key).toBe(namedBefore.key);
   });
 
   test("a directory watched whole hears every child, whatever names are watched in it", () => {
@@ -991,7 +1033,7 @@ describe("watchFault", () => {
 
   const held = (deaf: readonly Deafness[]) => ({
     key: "k",
-    handle: { release: () => {}, deaf },
+    handle: { release: () => {}, deaf, ridesStream: true },
   });
 
   test("a watch that hears every place its paths can change has no fault", () => {

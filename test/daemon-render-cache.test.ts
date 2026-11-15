@@ -650,51 +650,15 @@ describe("RenderCache", () => {
     });
   });
 
-  // A reload that keeps its watch retries nothing: a config folder the OS
-  // refused waits for the registry's period or a new slot on it, so the fault
-  // the bar shows stands while the OS still refuses and clears within one
-  // period of the OS watching it again.
-  test("a refused config directory stays deaf through a refused retry, is heard again on the period's judgment, and a reload leaves it as it is", () => {
-    const { dir, cleanup } = mkConfigDir();
-    const at = realpathSync(dir);
-    const watch = fs.watch.bind(fs);
-    let refuse = true;
-    const spy = jest.spyOn(fs, "watch").mockImplementation(((
-      ...args: Parameters<typeof fs.watch>
-    ) => {
-      if (refuse && args[0] === at)
-        throw new Error("EMFILE: too many open files");
-      return watch(...args);
-    }) as typeof fs.watch);
-    const { cache, cleanups, watchers } = makeCache();
-    try {
-      const entry = cache.getOrCreate(dir, dir, undefined);
-      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
-      watchers.judge();
-      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
-      refuse = false;
-      cache.reload(dir, dir, undefined, { kind: "doctor" });
-      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
-      watchers.judge();
-      expect(entry.watch!.held.handle.deaf).toEqual([]);
-    } finally {
-      for (const fn of cleanups) fn();
-      spy.mockRestore();
-      cleanup();
-    }
-  });
-
-  // On Linux a directory watch binds an inode, and a strict ancestor renamed
-  // away reports nothing to it, so an entry whose project directory's parent
-  // is swapped (a project re-cloned beside the old one and moved into place)
-  // keeps a handle on the old tree, listening and deaf to the new one. The
-  // period's judgment rebinds it, and the edit after that is heard.
-  test("an entry whose project directory's parent is replaced by rename reads the new tree on the period's judgment, and hears the edit after it", async () => {
+  // A project re-cloned beside the old one and moved into place swaps a
+  // strict ancestor of its config. The config's name is read by path, so the
+  // read that follows sees the new tree's file, and the edit after it.
+  test("an entry whose project directory's parent is replaced by rename reads the new tree, and hears the edit after it", async () => {
     const root = realpathSync(
       mkdtempSync(join(tmpdir(), "cc-candybar-cache-swap-")),
     );
     const proj = join(root, "proj", "app");
-    const { cache, cleanups, reloads, watchers, counters } = makeCache();
+    const { cache, cleanups, reloads } = makeCache();
     try {
       mkdirSync(proj, { recursive: true });
       answerRepo(proj);
@@ -721,12 +685,6 @@ describe("RenderCache", () => {
       renameSync(join(root, "proj"), join(root, "old"));
       mkdirSync(proj, { recursive: true });
       writeFileSync(cfg, config("new"));
-      // On macOS the watch follows the path and would hear the write on its
-      // own, so what proves the judgment on both platforms is the handle it
-      // closes, before any window can land.
-      const closed = counters.dirWatchesClosed;
-      watchers.judge();
-      expect(counters.dirWatchesClosed).toBe(closed + 1);
       await until(
         () => x() === "new",
         "the entry read the tree now at its path",
@@ -1029,16 +987,18 @@ describe("RenderCache", () => {
     }
   });
 
-  // The book's folder, never the state directory, whose log writes on every
-  // request.
-  test("the cache watches the answers' folder, not the state directory", () => {
+  // The book is heard by its name, which opens no OS watch: neither the state
+  // directory, whose log writes on every request, nor the book's folder holds
+  // one.
+  test("the cache holds no OS watch on the state directory or the answers' folder", () => {
     const { cleanups, watchers } = makeCache();
     try {
       const dirs = watchers.watchedDirs();
-      expect(dirs).toContain(
+      expect(dirs).not.toContain(
         realpathSync.native(repoConfigsDir(stateDir(host))),
       );
       expect(dirs).not.toContain(realpathSync.native(stateDir(host)));
+      expect(watchers.polledNames()).toBeGreaterThan(0);
     } finally {
       for (const fn of cleanups) fn();
     }

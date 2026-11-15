@@ -479,12 +479,17 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // after the last one started, nor for the session's next request.
   test("a file source rewritten between requests is pushed within the feed's spacing, woken by its data", async () => {
     const sid = "feed-source-wake";
-    const statusFile = path.join(projectDir, "source-wake.txt");
+    // The file's folder is watched whole, so the wake is an OS event's: a
+    // file watched by name is heard on the names' sweep, whose period is the
+    // still bar's own and would hide which frame the data woke.
+    const statusDir = path.join(projectDir, "source-wake");
+    mkdirSync(statusDir);
+    const statusFile = path.join(statusDir, "status.txt");
     writeFileSync(statusFile, "green");
     const config = path.join(projectDir, "source-wake.json5");
     writeFileSync(
       config,
-      `{ globals: { experimentalBand: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalBand: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusDir)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
     );
     await render(sockPath, sid, projectDir, {}, [
       "cc-candybar",

@@ -151,6 +151,7 @@ describe("RuntimeStats.snapshot", () => {
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 2,
       dirWatchesActive: 5,
+      polledNames: 7,
       handlerProbes: [{ nonce: "n", delivery: { kind: "forwarder", urlV: 1 } }],
       clients: [
         {
@@ -226,6 +227,7 @@ describe("RuntimeStats.snapshot", () => {
       refused: 1,
       errors: 2,
       dirs: { active: 5, opened: 9, closed: 4 },
+      polled: 7,
     });
     expect(snap.uptimeSec).toBeGreaterThanOrEqual(0);
     expect(snap.pid).toBe(process.pid);
@@ -366,6 +368,7 @@ describe("formatStats", () => {
         refused: 1,
         errors: 3,
         dirs: { active: 4, opened: 6, closed: 2 },
+        polled: 12,
       },
       subprocesses: {
         total: 0,
@@ -399,6 +402,7 @@ describe("formatStats", () => {
     expect(out).toContain("uptime        2m5s");
     expect(out).toContain("rss           50.0MB");
     expect(out).toContain("held          2");
+    expect(out).toContain("polled        12 names");
     expect(out).toContain("hit rate      80.0%");
     expect(out).toContain(
       "pane/tmux                 failures=1 last=3ms refreshes first:2 period:7 change:0 supersede:0",
@@ -517,6 +521,7 @@ describe("formatStats", () => {
         refused: 0,
         errors: 0,
         dirs: { active: 0, opened: 0, closed: 0 },
+        polled: 0,
       },
       subprocesses: {
         total: 0,

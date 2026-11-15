@@ -158,10 +158,14 @@ export class FileEventDelivery {
       folder,
       identity,
       stopPeriod,
-      // [LAW:single-enforcer] The only acquirer of this registry key.
+      // [LAW:single-enforcer] The only acquirer of this registry key. The
+      // folder is watched for every child, never for the probe's name: a
+      // named target is polled (`polled`), and what the probe measures is the
+      // OS's event stream. The folder is the probe's own, so nothing else
+      // lands in it.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        { dirs: [{ path: folder }] },
         (heard) => this.heard(probing, heard),
       ),
     };

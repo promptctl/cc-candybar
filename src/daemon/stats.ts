@@ -314,6 +314,7 @@ export class RuntimeStats {
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 0,
       dirWatchesActive: 0,
+      polledNames: 0,
       handlerProbes: [],
       clients: [],
       bundle: "/",
@@ -350,6 +351,7 @@ export class RuntimeStats {
     tmuxStatus: TmuxStatusStats;
     watchersActive: number;
     dirWatchesActive: number;
+    polledNames: number;
     nextRestartReason?: string | null;
     handlerProbes: readonly ProbeArrival[];
     clients: readonly RenderSighting[];
@@ -406,6 +408,7 @@ export class RuntimeStats {
           opened: this.dirWatchesOpened,
           closed: this.dirWatchesClosed,
         },
+        polled: extras.polledNames,
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,

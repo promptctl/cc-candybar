@@ -58,7 +58,7 @@ Each source logs what its failures say, once per refresh, and the payload repeat
 
 The log never writes on the event loop. A synchronous write held every waiting client past its budget whenever the disk was slow, and each client that gave up was one more line. Lines still waiting when the process exits are written synchronously, so the death line lands. Anything reading the log, tests included, waits for the lines it expects rather than reading once.
 
-Nothing watches the state directory itself, because the log writes there on every request and on macOS every write to a watched directory is a file event the OS has to deliver. A file the daemon must see edited (the repository answers, which a user may edit by hand) gets a folder of its own under it.
+No OS watch sits on the state directory, because the log writes there on every request and on macOS every write to a watched directory is a file event the OS has to deliver. A file the daemon must see edited there (the repository answers, which a user may edit by hand) is watched by name, which is read by path and opens no OS watch (data-sources.md).
 
 ## Packaging and install
 

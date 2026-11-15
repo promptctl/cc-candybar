@@ -16,12 +16,11 @@ import {
 } from "../../utils/refresh-ledger";
 import { WatcherRegistry } from "./watchers";
 import {
-  type DirTarget,
+  specOf,
   type HeldWatch,
   type WatchMove,
   type WatchSpec,
 } from "../foundations/watch-targets";
-import { boundKey, boundOf } from "../../utils/folder-identity";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../../time";
 import { TrailingEdge } from "../../utils/trailing-edge";
 import { Limiter } from "../../utils/limiter";
@@ -232,27 +231,23 @@ function holdKey(root: string): string {
 // cannot throw. A tree that cannot be opened is a refusal the registry logs
 // and counts, and the period is what refreshes a repo whose watch is refused.
 //
-// A directory watch binds the inode at its path when it opens, not the path:
-// a git directory deleted and recreated at its path (`worktree remove` then
-// `worktree add` of the same name, `rm -rf` then a re-clone) is a new
-// directory the old watch never hears (Linux; FSEvents follows paths). So the
-// spec's key names what the watch binds — each target's path and the identity
-// of the directory there now — and the registry's `follow` rebinds on a new
+// HEAD and the index are named, so they are read by path (`polled`), and a git
+// directory deleted and recreated at its path (`worktree remove` then
+// `worktree add` of the same name, `rm -rf` then a re-clone) is a change those
+// reads report. The refs tree is an OS watch, which binds the inode at its
+// path when it opens (Linux; FSEvents follows paths), so the spec's key names
+// the folder there now (`specOf`) and the registry's `follow` rebinds on a new
 // key. Every pass derives the spec again, so a recreated repo is heard within
 // one period, and a layout change at the same path (a clone replaced by a
 // worktree) is the same case.
-function watchSpec(root: string, gitDir: string, commonDir: string): WatchSpec {
-  const dirs: DirTarget[] = [
-    { path: gitDir, filenames: ["HEAD", "index"] },
-    { path: path.join(commonDir, "refs", "heads"), recursive: true },
-  ];
-  const bounds = dirs.map((d) => boundOf(d.path));
-  const named = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i]!)}`);
-  return {
-    key: `git:${root}:${named.join("|")}`,
-    targets: { dirs },
-    unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b),
-  };
+// [LAW:one-source-of-truth] The key and `unbound` are the shared derivation's.
+function watchSpec(gitDir: string, commonDir: string): WatchSpec {
+  return specOf({
+    dirs: [
+      { path: gitDir, filenames: ["HEAD", "index"] },
+      { path: path.join(commonDir, "refs", "heads"), recursive: true },
+    ],
+  });
 }
 
 // [LAW:one-source-of-truth] The branch one pass read — never the stored one,
@@ -544,11 +539,7 @@ export class GitDataProvider {
     held: HeldWatch | null,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const gitDir = this.inner.resolveGitDir(root);
-    const spec = watchSpec(
-      root,
-      gitDir,
-      this.inner.resolveCommonGitDir(gitDir),
-    );
+    const spec = watchSpec(gitDir, this.inner.resolveCommonGitDir(gitDir));
     // A pass between a worktree's removal and its re-add keeps the watch it
     // holds (`follow`), and the period rebinds once the path names a
     // directory again. The build holds nothing, and a slot the OS refused is
