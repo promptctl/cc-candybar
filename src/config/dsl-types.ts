@@ -802,7 +802,7 @@ export interface SegmentDecl {
   // What this segment SHOWS, for an author choosing between them — authoring
   // metadata, never rendered. A segment owes none; the bundled standard library
   // carries one for every name it declares (pinned in
-  // test/default-dsl-config.test.ts) because that config merges into every user
+  // test/integration/default-dsl-config.test.ts) because that config merges into every user
   // file, which makes it the catalogue `cc-candybar segments` and the published
   // schema answer out of.
   //
@@ -818,7 +818,7 @@ export interface SegmentDecl {
   // What this segment is ABOUT, for the add menu's library to group it by
   // (`SEGMENT_GROUPS`). Absent, the library files it under `other`. The
   // bundled standard library declares one for every name it carries (pinned in
-  // test/default-dsl-config.test.ts); like `description`, a file's delta under a
+  // test/integration/default-dsl-config.test.ts); like `description`, a file's delta under a
   // bundled name sets it per field.
   readonly group?: SegmentGroup;
   // "auto" → content-sized; a positive integer → that many columns; "fill" →

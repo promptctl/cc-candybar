@@ -10,7 +10,7 @@
 // (the set of keys, what each validator accepts/rejects), not the
 // implementation (Map vs object, internal helper structure). A revert
 // from ReadonlyMap to a plain object would not fail these tests on its
-// own — that contract is pinned in test/daemon-click.test.ts's
+// own — that contract is pinned in test/integration/daemon-click.test.ts's
 // prototype-pollution regression. Different invariants, different test
 // homes.
 

@@ -55,7 +55,7 @@ JSON is a strict subset of JSON5, so the same parser handles both — `.json5` i
 
 The file **merges onto the bundled default**, so it declares only what differs. `globals` merge per field; the named sections (`variables`, `segments`, `actions`, `helpers`, …) merge by name, your entry winning; `root` merges per named row (`identity` and `status` in the bundled default; a whole tree at `root` replaces every row). The bundled default is `src/config/default-dsl-config.ts`, and fuller starting points live under `examples/`. Run `cc-candybar check <path>` to load a file exactly as the daemon will: exit 0 means it renders, exit 1 prints the error with the path and line to fix. Add `--render` and it prints the bar it rendered, so you can read a config's result without installing it.
 
-<!-- The check:pass fence below is loaded by test/doc-snippets.test.ts through
+<!-- The check:pass fence below is loaded by test/integration/doc-snippets.test.ts through
      `cc-candybar check` — edit it and run that test, so the README example
      cannot drift from the loader. -->
 

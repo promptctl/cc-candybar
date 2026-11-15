@@ -390,7 +390,7 @@ export interface Decor {
 export type SemanticRole = "error" | "success" | "warning";
 
 // [LAW:types-are-the-program] Checked by the compiler rather than a review: no
-// semantic role is a decorative hue. (test/decor.test.ts asserts it at runtime
+// semantic role is a decorative hue. (test/unit/decor.test.ts asserts it at runtime
 // too.)
 const _decorHuesAreNonSemantic: Extract<DecorHue, SemanticRole> extends never
   ? true

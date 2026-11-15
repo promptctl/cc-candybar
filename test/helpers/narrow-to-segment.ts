@@ -53,7 +53,7 @@ export const oneSegmentRoot = (
 // `root` — so an orphaned reference to a domain only the now-discarded
 // "compact"/"verbose" presets registered throws `unknown option domain`. None
 // of this per-preset edit-chrome machinery is what these single-segment tests
-// exercise (test/dsl-edit-mode.test.ts and test/dsl-layout-edit.test.ts own
+// exercise (test/integration/dsl-edit-mode.test.ts and test/integration/dsl-layout-edit.test.ts own
 // that surface), so the clean narrowing drops every synthesized per-preset
 // `edit.*` chrome artifact too — EXCEPT the bare, preset-independent names the
 // settings menu mints once (its `✎ arrange` fires the toggle, over the two

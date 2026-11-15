@@ -193,7 +193,7 @@ function bindPass(
 // payload's `*.effective` fields and BuildLineOptions/basePalette below)
 // [LAW:one-source-of-truth].
 //
-// test/example-configs.test.ts asserts rendered content against these literal
+// test/integration/example-configs.test.ts asserts rendered content against these literal
 // values (780s → "◷ 13m", cost $0.39, version 1.15.0, …); changing one here
 // fails that suite loudly rather than drifting silently.
 //

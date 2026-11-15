@@ -746,7 +746,7 @@ export class SessionUsageStore {
     // covering exactly [0, cursor), the next refold folds each byte once.
     // `foldFile` is pure (fresh FileFold, prior never mutated), so the shared
     // prior can't corrupt. Pinned by the concurrency test in
-    // test/transcript-incremental.test.ts.
+    // test/integration/transcript-incremental.test.ts.
     // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
     // `.kind`, so a rejected promise (e.g. PricingService.calculateCostForEntry
     // throwing on a bad rate table or network hiccup inside foldFile) would

@@ -7,10 +7,9 @@ const path = require("node:path");
 const { EXPIRY_DAYS, ageDays, expired, markedTicket } = require("./quarantine.cjs");
 
 // A file's layer is the first directory under test/ that holds it, and `root`
-// for a file directly in test/, the transitional layer the layered plan empties.
-// The names are not listed here: which directories are layers is the plan's to
-// say, and a directory nobody named shows in the report as a layer of its own
-// rather than reading as root.
+// for a file directly in test/, which is in no layer. The names are not listed
+// here: a directory that is no laws:testing layer, and a file at the root,
+// each show in the report as a row of their own.
 const ROOT_LAYER = "root";
 
 // [LAW:one-source-of-truth] exception: jest builds this failure for a file with

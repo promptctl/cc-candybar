@@ -671,7 +671,7 @@ fn detect_terminal_env() -> serde_json::Value {
 
 // [LAW:dataflow-not-control-flow] Total by construction, like tmux_hint:
 // always an object, an unset-or-empty variable left out of it —
-// detectTerminalEnv's rule. Pure over the lookup so test/terminal-hint.test.ts's
+// detectTerminalEnv's rule. Pure over the lookup so test/unit/terminal-hint.test.ts's
 // table can be run against it.
 fn terminal_env_hint(raw: impl Fn(&str) -> Option<String>) -> serde_json::Value {
     TERMINAL_ENV_VARS
@@ -695,7 +695,7 @@ fn detect_tmux() -> serde_json::Value {
 // (the value is `socket,server-pid,session-id`); `truecolor` is the switch's
 // value, or `null` for unset-or-empty — both falsy to Claude Code's own
 // truthiness test. Pure over the three raw env values so the table in
-// test/doctor-checks.test.ts can be run against it.
+// test/unit/doctor-checks.test.ts can be run against it.
 fn tmux_hint(
     tmux: Option<String>,
     pane: Option<String>,
@@ -1219,7 +1219,7 @@ mod tests {
     use super::*;
     use std::io;
 
-    // The same table as test/term-extent.test.ts: both runtimes must read
+    // The same table as test/unit/term-extent.test.ts: both runtimes must read
     // the same COLUMNS/LINES value from the same shell, or neither.
     #[test]
     fn claude_config_dir_hint_resolves_the_first_entry_against_cwd() {
@@ -1236,7 +1236,7 @@ mod tests {
         assert_eq!(hint(Some("/m/../../..")), Some("/".into()));
     }
 
-    // The same table as test/config-hint.test.ts.
+    // The same table as test/unit/config-hint.test.ts.
     #[test]
     fn config_env_hint_resolves_against_cwd_and_home() {
         let cwd = std::path::Path::new("/work/proj");
@@ -1279,7 +1279,7 @@ mod tests {
         assert_eq!(client_hint(None, Some("abc")), None);
     }
 
-    // The same table as test/terminal-hint.test.ts.
+    // The same table as test/unit/terminal-hint.test.ts.
     #[test]
     fn terminal_env_hint_reports_exactly_what_the_ts_client_reports() {
         let hint = |program: Option<&str>, term: Option<&str>| {
@@ -1316,7 +1316,7 @@ mod tests {
         assert_eq!(detect_term_extent(None, 0), None);
     }
 
-    // The same table as test/doctor-checks.test.ts (detectTmuxHint): in tmux
+    // The same table as test/unit/doctor-checks.test.ts (detectTmuxHint): in tmux
     // iff TMUX and TMUX_PANE are both non-empty; socket is TMUX up to its
     // first comma; truecolor is the raw value or null.
     #[test]

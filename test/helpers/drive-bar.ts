@@ -1,7 +1,7 @@
 // A bar driven the way a user drives one: render it, click what it drew,
 // render again — against an isolated daemon, a real one unless a test hands in
 // another start. `pnpm bar` (scripts/drive-bar.ts) is its command line;
-// test/drive-bar.test.ts holds it to its promises.
+// test/integration/drive-bar.test.ts holds it to its promises.
 //
 // [LAW:effects-at-boundaries] The daemon is the subject and a black box: an
 // isolated daemon (its own socket, XDG dirs, Claude config dir, parent

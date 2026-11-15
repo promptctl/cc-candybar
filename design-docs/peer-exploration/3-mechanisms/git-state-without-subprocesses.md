@@ -287,8 +287,8 @@ accept/reject table worth writing down first — `.git` as a directory, `.git` a
 repo (no work tree, so it must stay `absent` the way `--show-toplevel` does), a symlinked path, a
 permission error mid-ascent, a filesystem boundary. Each of the other three is a cache or a file
 read, and all four keep `Outcome`'s three states, so no caller or consumer changes shape. Test
-cost is honest: the existing `findGitRoot` overrides in `test/daemon-git-cache.test.ts` and
-`test/daemon-watchers.test.ts` stay valid, and each new behaviour wants a fixture repo rather
+cost is honest: the existing `findGitRoot` overrides in `test/integration/daemon-git-cache.test.ts` and
+`test/integration/daemon-watchers.test.ts` stay valid, and each new behaviour wants a fixture repo rather
 than a mock.
 
 What breaks. The ascent is the only one with real behavioural risk, and it is git-fidelity risk:

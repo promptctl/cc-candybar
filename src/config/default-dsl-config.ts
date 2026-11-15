@@ -906,7 +906,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       // is `ramp`'s decision with a text result, so the thresholds are visible as
       // numbers here the way the block/weekly `bg:` cascades are. The bands are the
       // chain's own: <= 8 error, <= 20 warning, above that foreground
-      // (test/cascade.test.ts pins the two against each other at every boundary).
+      // (test/unit/cascade.test.ts pins the two against each other at every boundary).
       // The cascade picks the role; the floor keeps it legible on this cell's
       // tint, exactly as a git accent is (`accent` above).
       fg:
@@ -1183,7 +1183,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   //
   // [LAW:verifiable-goals] Every entry here is asserted error-cell-free at
   // 80/120/200 columns against a RICH payload in
-  // test/default-dsl-config.test.ts (the same checkPayload fixture check.ts
+  // test/integration/default-dsl-config.test.ts (the same checkPayload fixture check.ts
   // uses) — curated by actually rendering each arrangement, not by reading
   // the segment names off the page.
   // Each bundled theme's default look — data in its own file
@@ -1690,7 +1690,7 @@ const AUTHORED_PALETTE_NAMES = new Set(
 // and src/config/loader/merge.ts) would ship an UNSYNTHESIZED default: a
 // synthesis that only ever ran over TEXT a user typed, never over this TS
 // literal. Round-tripping through JSON is exactly what
-// test/default-dsl-config.test.ts's SERIALIZED-based tests already exercise,
+// test/integration/default-dsl-config.test.ts's SERIALIZED-based tests already exercise,
 // so this is the same well-tested path, run once here instead of skipped.
 export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(
   parseDslConfig(

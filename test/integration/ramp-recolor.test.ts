@@ -1,0 +1,104 @@
+// A ramp over palette-NAME stops is a colour decision that stays inside the
+// theme system (brandon-custom-segments-g5z.2): its stops resolve through the
+// same live palette an authored `bg: "panel"` does, so a theme click and a
+// style change recolour it with no config change. The contract is stated as
+// EQUALITY with a sibling cell that names the stop directly — one
+// resolution, not a parallel one — under every state, and as the three
+// states painting three different colours.
+//
+// Same rig as test/integration/dsl-theme-picker-recolor.test.ts: drawDsl with the
+// base palette resolved per render the way the daemon does
+// (resolveThemeSelection, whose decided arm carries the palette), the style the same way
+// (resolveStyleSelection), the clicks driven through the real
+// wire (effectsUrl → clickUrl → VERBS). No parallel rig.
+
+import { runUnder } from "../helpers/frame";
+import type { Frame } from "../../src/render/frame";
+import { buildRig, type Rig } from "../helpers/rig";
+import { effectsUrl, VERB_SET_STATE } from "../../src/click/wire";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+
+const SID = sessionIdOf("s-ramp-recolor");
+const BASE_THEME = "textual-dark";
+// A light theme whose panel/warning/error all differ from textual-dark's —
+// textual-light shares warning and error with it byte-for-byte, so a click
+// between those two could not show the hot stops recolouring.
+const PICKED_THEME = "catppuccin-latte";
+const PICKED_STYLE = "vivid";
+
+// `viaRamp` colours a number through named stops; `viaName` names the stop
+// the number lands on. The two cells must agree in every state.
+const SRC = `{
+  globals: { palette: '${BASE_THEME}' },
+  styles: { none: {}, ${PICKED_STYLE}: { chromaScale: 1.6, lightnessShift: 0.08 } },
+  variables: {
+    themePick: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
+    look: { kind: 'state', key: 'style', default: 'none' },
+    pct: { kind: 'input', path: 'pct', type: 'number', default: 0 },
+    stop: { kind: 'input', path: 'stop', default: 'panel' },
+  },
+  actions: {
+    applyTheme: { set: 'theme', from: 'themes' },
+    applyStyle: { set: 'style', from: 'styles' },
+  },
+  segments: {
+    viaRamp: { template: ' R ', bg: '{{ ramp .pct "step" 0 "panel" 50 "warning" 80 "error" }}', fg: 'foreground' },
+    viaName: { template: ' N ', bg: '{{ .stop }}', fg: 'foreground' },
+  },
+  root: { v: ['viaRamp', 'viaName'] },
+}`;
+
+const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
+
+// Each bar's source registry, released after the test that built it.
+const rigs: Rig[] = [];
+afterEach(() => {
+  for (const rig of rigs.splice(0)) rig.dispose();
+});
+
+function rampBar() {
+  // The click gate is the config this session renders, so the theme and style
+  // clicks travel the road a real click travels.
+  const rig = buildRig({ source: SRC, label: "<ramp-recolor>", palettes: ALLOWED, sessionId: SID });
+  rigs.push(rig);
+  const render = (payload: { pct: number; stop: string }): Frame =>
+    rig.draw({ payload: { session_id: SID, ...payload } }).frame;
+  const click = (key: "theme" | "style", value: string): Promise<void> =>
+    rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]));
+  return { render, click };
+}
+
+// The bg of the run that paints a cell's text.
+function bgOf(frame: Frame, cell: string): string {
+  const run = runUnder(frame, cell);
+  expect(run?.bg).toBeDefined();
+  return run!.bg!;
+}
+
+describe("ramp over palette-name stops follows the live theme", () => {
+  test.each([
+    [10, "panel"],
+    [70, "warning"],
+    [95, "error"],
+  ])(
+    "at %i the ramp paints `%s` — equal to the named cell under the base theme, a theme click, and a look click",
+    async (pct, stop) => {
+      const { render, click } = rampBar();
+      const agree = (): string => {
+        const line = render({ pct, stop });
+        const ramp = bgOf(line, " R ");
+        expect(ramp).toBe(bgOf(line, " N "));
+        return ramp;
+      };
+
+      const base = agree();
+      await click("theme", PICKED_THEME);
+      const themed = agree();
+      await click("style", PICKED_STYLE);
+      const looked = agree();
+
+      // Three states, three colours: the ramp did not freeze at first render.
+      expect(new Set([base, themed, looked]).size).toBe(3);
+    },
+  );
+});

@@ -11,7 +11,7 @@
 // AND in rich-js's `ColorRamp` constructor. Sharing it would mean extracting a
 // generic ladder across a package boundary for twenty lines, against that module's
 // own stated boundary ("nothing here knows what a palette is"). Instead the two are
-// held to the same behaviour by an EQUIVALENCE TEST — test/cascade.test.ts asserts
+// held to the same behaviour by an EQUIVALENCE TEST — test/unit/cascade.test.ts asserts
 // both refuse the same three cases on the same inputs — which is the honest form of
 // one-source when one source would cost more than it buys.
 

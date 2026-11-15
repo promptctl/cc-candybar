@@ -27,4 +27,4 @@ Each row went through JSON as runs, was rebuilt, and was encoded by rich-js's ow
 
 ## To probe
 
-- **The other three depths.** `test/default-menu-bytes.test.ts` runs at truecolor only, so the design's check across all four depths hasn't been run.
+- **The other three depths.** `test/integration/default-menu-bytes.test.ts` runs at truecolor only, so the design's check across all four depths hasn't been run.

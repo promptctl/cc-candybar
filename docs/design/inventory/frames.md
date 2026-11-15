@@ -20,8 +20,8 @@ Scanned at `10f26ceb`. Root for everything below: `/Users/bmf/code/cc-candybar/.
 ## (b) Decoders that must move to the Frame
 
 **In `src/` (runs in the daemon or in-process)**
-- `src/band/frames.ts`: `bandFrame` decodes with `new AnsiDecoder()`, reading `line.plain` and `line.spans`, to build `BandRun`s. `bandResponse` gets its ANSI from `planOutcome(renderOutcomeOf(resp)).output`. It must take Frame rows. Called from `lane-frames.ts`; asserted by `test/band-frames.test.ts`.
-- `src/tmux-status/frames.ts`: `tmuxStatusFrame` does the same decode to build `#[...]` directives and the range-to-link map. Called from `src/daemon/tmux-status.ts` (`entry.frame = tmuxStatusResponse(resp)`) and `lane-frames.ts`; asserted by `test/tmux-status-frames.test.ts`.
+- `src/band/frames.ts`: `bandFrame` decodes with `new AnsiDecoder()`, reading `line.plain` and `line.spans`, to build `BandRun`s. `bandResponse` gets its ANSI from `planOutcome(renderOutcomeOf(resp)).output`. It must take Frame rows. Called from `lane-frames.ts`; asserted by `test/unit/band-frames.test.ts`.
+- `src/tmux-status/frames.ts`: `tmuxStatusFrame` does the same decode to build `#[...]` directives and the range-to-link map. Called from `src/daemon/tmux-status.ts` (`entry.frame = tmuxStatusResponse(resp)`) and `lane-frames.ts`; asserted by `test/unit/tmux-status-frames.test.ts`.
 - `src/click/read.ts`: `links()` uses `osc8Sequences`, `drawnLinks()` builds on it, and `stripAnsi` uses `INVISIBLE`. The non-ANSI half (`effectsOf`, `describeLink`, `isBarLink`, `HOST_VERBS`) stays.
 - `src/render/diagnostic-style.ts`: `hexOfSgr` regexes the hex out of SGR literals. It is a small decoder and should be inverted, so colours are the source and SGR is derived. `scripts/check-protocol.mjs` diffs these literals against Rust, so it must change too.
 
@@ -107,7 +107,7 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
 | `planOutcome` | 2 |
 | `formatPermanentGlyph` | 1 |
 
-`test/default-menu-bytes.test.ts` pins exact bytes through the ANSI helpers. It is the guard for keeping the encoder byte-identical.
+`test/integration/default-menu-bytes.test.ts` pins exact bytes through the ANSI helpers. It is the guard for keeping the encoder byte-identical.
 
 ---
 
@@ -231,7 +231,7 @@ All in `node_modules/@promptctl/rich-js/dist/core/` (`segment.d.ts`, `style.d.ts
 - **Destination.** Depth, `hyperlinks` (true for an explicit spec), and `reducedMotion` (not passed by `draw`, so false).
 - **Not needed for bytes:** `meta`, `anchor`, `hold`. The trailing `\n` comes off in `drawStripCells`, and one `DrawnRow` can hold several lines from FlexStrip wrap, so Frame rows must split at newline segments.
 
-`AnsiDecoder` merges equal-style cells today, and `test/band-frames.test.ts` asserts that shape. So band and tmux must merge runs by look, while the ANSI encoder keeps boundaries. Anchors make `equals` false, so compare looks.
+`AnsiDecoder` merges equal-style cells today, and `test/unit/band-frames.test.ts` asserts that shape. So band and tmux must merge runs by look, while the ANSI encoder keeps boundaries. Anchors make `equals` false, so compare looks.
 
 **Does `ColorSpec.name` round-trip?** It does for colour identity in every kind reachable here, with caveats:
 

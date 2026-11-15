@@ -62,7 +62,7 @@ Everything that searched for a colour or measured a floor between cells. By the 
 - `BAND_FLOORS` and `PLANE_STEPS`: the plane blend toward `background` or `foreground`, `computeUnroundedBand`, the nested-plane floor.
 - `Band.shortfalls`, the `band-floor` warning kind and its producer in the render, and the cases over it in `check.ts` and the daemon.
 - The imports that exist for the floors: `ensureDrawn`, `blendRgb`, `Oklch`, `SEAM_MIN_DELTA_E`. `contrastFor`, `contrastRatio` and `ensureContrast` stay: text is chosen with them, and `ensureContrast` is the one search left, for a readable `fg` at the depth. `drawnColour` stays for one use, policy 3's identity test of rungs at a depth; rounding a named colour to ask whether the depth draws two of them alike predicts no decision.
-- `plainWith` and `stripPrivateGlyphs` in `src/render/strip.ts` follow the new `SeamForm`; the glyph probe draws two cells. `test/helpers/powerline.ts` loses `divider`. `test/doctor-nerd-font.test.ts` asserts the probe's output inline and changes with it. The two snapshot files regenerate with U+E0B0 where U+E0B1 was.
+- `plainWith` and `stripPrivateGlyphs` in `src/render/strip.ts` follow the new `SeamForm`; the glyph probe draws two cells. `test/helpers/powerline.ts` loses `divider`. `test/integration/doctor-nerd-font.test.ts` asserts the probe's output inline and changes with it. The two snapshot files regenerate with U+E0B0 where U+E0B1 was.
 - The lines in `.claude/memory/colour.md` on the state search, the floors, the band item repair, and "its cells parted by the joiner's divider" in the shade table's comment. The sentence in `docs/interaction-authoring.md` about cells parted by the divider.
 
 Text contrast stays: `textOn`, `readableOn`, `ensureContrast` for `fg` on `bg`, `keptOn` for the door's ✖. Those are about reading, not about neighbours.
@@ -112,7 +112,7 @@ Two lanes, built in parallel. cc-candybar publishes a 1.x on every merge, and a 
 rich-js lane:
 1. The lift, the divider deleted, tests and docs. Release 0.25.0.
 2. Join cells re-derived from effected edges. Release 0.25.1.
-3. cc-candybar: bump the dependency, land the reversed tests and snapshots, and in the same PR `plainWith` and the glyph probe in `src/render/strip.ts`, `test/helpers/powerline.ts` and `test/doctor-nerd-font.test.ts`, which read the field 0.25.0 removes, plus the two doc lines. Waits on 1.
+3. cc-candybar: bump the dependency, land the reversed tests and snapshots, and in the same PR `plainWith` and the glyph probe in `src/render/strip.ts`, `test/helpers/powerline.ts` and `test/integration/doctor-nerd-font.test.ts`, which read the field 0.25.0 removes, plus the two doc lines. Waits on 1.
 
 policy lane, cc-candybar:
 4. Delete the floor apparatus; the activated state and the plane select named shades; the named-colour test covers every background the bar draws. Merges after 3.

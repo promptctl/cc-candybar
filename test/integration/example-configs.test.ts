@@ -1,0 +1,155 @@
+import type { Frame } from "../../src/render/frame";
+import { WORLD } from "../helpers/host";
+// [LAW:verifiable-goals] Every shipped example config under examples/ must
+// survive the full production pipeline: parse → merge-on-default → validate →
+// register → render. A template parse error in an inline override, a dangling
+// segment/action reference, or a palette name the registry can't resolve would
+// otherwise rot silently until a user copies the file onto their bar.
+//
+// [LAW:single-enforcer] The pipeline driven here IS `cc-candybar check`
+// (checkConfig in src/check.ts) — the same entry function the CLI runs, which
+// itself calls the same functions the daemon runs. So this suite is literally
+// the ticket-level guarantee "check exits 0 on every shipped example", and the
+// examples, the check command, and the daemon can never disagree about what
+// loads. The rich representative payload (checkPayload) lives with the command;
+// the content assertions below read the values it declares.
+//
+// [LAW:behavior-not-structure] The assertion is the contract a user relies on —
+// "this documented config loads and renders" — not any internal shape. The test
+// discovers files by globbing the directory, so a new example is covered the
+// moment it lands (no per-file edit).
+
+import { textOf } from "../../src/render/frame";
+import { linkUrls } from "../helpers/frame";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { checkConfig } from "../../src/check";
+import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import { presetNames } from "../../src/config/presets";
+import { checkText, expectClean, withTempConfig } from "../helpers/check-config";
+import { daemonGates } from "../../src/daemon/foundations/update-keys";
+
+const examplesDir = path.join(__dirname, "..", "..", "examples");
+
+const exampleFiles = fs
+  .readdirSync(examplesDir)
+  .filter((f) => f.endsWith(".json5"))
+  .sort();
+
+// Run one example through the shipped check pipeline; the rendered line for
+// content assertions.
+async function renderExample(file: string): Promise<Frame> {
+  return expectClean(file, await checkConfig(WORLD, daemonGates(), path.join(examplesDir, file)))
+    .rendered;
+}
+
+describe("shipped example configs (examples/*.json5)", () => {
+  // Guard against the glob silently matching nothing (a moved directory would
+  // make every it.each below vanish and the suite pass vacuously).
+  test("at least the known examples are present", () => {
+    expect(exampleFiles).toEqual(
+      expect.arrayContaining([
+        "showcase.json5",
+        "demo-actions.json5",
+        "demo-variables.json5",
+      ]),
+    );
+  });
+
+  test.each(exampleFiles)(
+    "%s is clean under `cc-candybar check` (exit 0) and renders",
+    async (file) => {
+      expectClean(file, await checkConfig(WORLD, daemonGates(), path.join(examplesDir, file)));
+    },
+  );
+
+  // [LAW:verifiable-goals] The shipped demonstration of `parse: { json: true }`
+  // must prove the scan completed: `demoPkg` reads the document's fields by
+  // dotted path, and its `default` (`? · 0 deps`) is what a scan that never
+  // landed would render.
+  test("demo-variables renders the json document's scanned fields, never its default", async () => {
+    const out = textOf(await renderExample("demo-variables.json5"));
+    expect(out).toContain("📦 cc-candybar · 3 deps");
+  });
+
+  // brandon-demo-0iy4: the switcher's load-config links name the demo files
+  // beside the one this session loaded, so a copy of examples/ anywhere — a
+  // second worktree, a checkout outside ~/code — switches between ITS files.
+  test.each(["demo-variables.json5", "demo-actions.json5"])(
+    "%s's switcher links load its siblings wherever the directory is",
+    async (file) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "demo-switcher-"));
+      try {
+        for (const f of ["demo-variables.json5", "demo-actions.json5"]) {
+          fs.copyFileSync(path.join(examplesDir, f), path.join(dir, f));
+        }
+        const target = path.join(dir, file);
+        const loads = linkUrls(
+          expectClean(file, await checkConfig(WORLD, daemonGates(), target)).rendered,
+        )
+          .filter((url) => url.startsWith("cc-candybar://load-config/"))
+          .map((url) => decodeURIComponent(url.split("/").pop() ?? ""));
+        expect(loads).toEqual([
+          "",
+          path.join(dir, "demo-variables.json5"),
+          path.join(dir, "demo-actions.json5"),
+        ]);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+});
+
+// [LAW:verifiable-goals] brandon-presets-0yk.3's own done-gate: "the examples/
+// load test covers the bundled library the way it covers example configs" —
+// the same `cc-candybar check` guarantee the suite above gives every shipped
+// examples/*.json5 file, given here to every NAME in the bundled `presets`
+// library, via the one-line config a real user would write to pick one
+// (`globals: { preset: "<name>" }`) — not a hand-built render rig, the actual
+// CLI entry point, on a real temp file on disk.
+describe("bundled preset library is clean under `cc-candybar check`", () => {
+  const withPresetConfig = <T,>(
+    preset: string,
+    fn: (configPath: string) => Promise<T> | T,
+  ): Promise<T> => withTempConfig(JSON.stringify({ globals: { preset } }), fn);
+
+  // Guard against the domain silently shrinking to just the floor — a preset
+  // this suite never iterates would be a preset never `check`-tested.
+  test("the bundled library declares more than just the floor", () => {
+    expect(presetNames(DEFAULT_DSL_CONFIG.presets).length).toBeGreaterThan(1);
+  });
+
+  test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
+    'a config picking preset "%s" is clean under check (exit 0) and renders',
+    async (preset) => {
+      await withPresetConfig(preset, async (p) =>
+        expectClean(`preset "${preset}"`, await checkConfig(WORLD, daemonGates(), p)),
+      );
+    },
+  );
+});
+
+// [LAW:verifiable-goals] brandon-config-merge-uk3's done-when: a user file
+// declaring ONLY one named row merges that row by name over the bundled
+// default's rows, so the bundled identity row renders unchanged above it —
+// through the same `cc-candybar check` entry as everything above.
+describe("a `{ rows }` root merges by name over the bundled default", () => {
+  test("declaring only the status row keeps the bundled identity row above it", async () => {
+    const outcome = await checkText(
+      "rows-merge",
+      `{ root: { rows: { status: { h: ["model", "context"] } } } }`,
+    );
+    const [identity, status, ...rest] = textOf(outcome.rendered).split("\n");
+    expect(rest).toEqual([]);
+    // The bundled identity row, untouched: the fish-abbreviated directory
+    // the check payload's cwd renders to.
+    expect(identity).toContain("~/c/c/src");
+    // The user's status row: model and context, and none of the bundled
+    // status row's other segments (block/weekly quota).
+    expect(status).toContain("Opus 4.8");
+    expect(status).not.toContain("21%");
+  });
+});

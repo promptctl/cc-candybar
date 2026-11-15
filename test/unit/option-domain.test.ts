@@ -4,7 +4,7 @@
 // (inline arrays are self-resolving, named domains check per-config overrides
 // before the global registry, unknown names throw naming what IS known,
 // built-ins can never be reclaimed) is pinned here rather than only exercised
-// incidentally through the config pipeline (test/dsl-actions.test.ts covers
+// incidentally through the config pipeline (test/integration/dsl-actions.test.ts covers
 // that end-to-end acceptance).
 
 import { resolveColorSystem } from "@promptctl/rich-js";

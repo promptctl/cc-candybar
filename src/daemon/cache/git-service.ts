@@ -115,7 +115,7 @@ export class GitService {
   // [LAW:locality-or-seam] `protected`, not private: the per-fetch spawn COUNT
   // is a property this class is now accountable for (brandon-git-cache-y9h), and
   // the only way to assert it is to be able to see every invocation go past. A
-  // counting subclass in test/git-spawn-budget.test.ts is that seam; the
+  // counting subclass in test/integration/git-spawn-budget.test.ts is that seam; the
   // daemon's own GitDataProvider already extends this class.
   protected async execGitAsync(
     args: readonly string[],

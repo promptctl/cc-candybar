@@ -344,7 +344,7 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
-    // [LAW:one-source-of-truth] The same cases test/frame-follow-cases.test.ts
+    // [LAW:one-source-of-truth] The same cases test/unit/frame-follow-cases.test.ts
     // asserts against the Node follower.
     const CASES: &str = include_str!("../../test/fixtures/frame-follow-cases.json");
 

@@ -168,7 +168,7 @@ const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
 const PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
 // A default emoji (Emoji_Presentation), so rich-js measures it the two cells a
 // terminal draws: the wastebasket U+1F5D1 is text-default, measured one cell,
-// and its VS16 form is honoured unevenly (kgr; test/glyph-width.test.ts).
+// and its VS16 form is honoured unevenly (kgr; test/unit/glyph-width.test.ts).
 export const PRESET_DELETE_GLYPH = "🚮";
 
 // [LAW:one-source-of-truth] A control's names, derived from its setting's

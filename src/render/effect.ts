@@ -286,7 +286,7 @@ function together(parts: readonly RowPart[]): Effect {
 // is the one rich-js assumes when a terminal names none — the assumption every
 // contrast floor in this repo makes, because the detached daemon cannot see the
 // client's terminal. `DEFAULT_TERMINAL_THEME` is that terminal's exported face
-// (black ground, white text, the VGA sixteen); test/row-effect.test.ts holds it
+// (black ground, white text, the VGA sixteen); test/integration/row-effect.test.ts holds it
 // to the colours rich-js resolves for an unnamed terminal.
 const ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
 

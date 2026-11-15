@@ -1,0 +1,138 @@
+// brandon-colour-depth-64q — colour depth governs colour, never the controls.
+//
+// [LAW:verifiable-goals] With `colorCompatibility: 'none'` in the config file
+// the bar draws no SGR yet keeps every link it draws in colour, and the open
+// tab still reads as open.
+
+import { drawPayload } from "../helpers/draw-payload";
+import { unscriptedRuns } from "../helpers/fake-launcher";
+import { ansiOf, textOf } from "../../src/render/frame";
+import type { Frame } from "../../src/render/frame";
+import { linkUrls } from "../helpers/frame";
+import { TEST_SIGNER } from "../helpers/link-signer";
+import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import { SETTINGS_ANCHOR } from "../../src/config/settings-menu";
+import { DISCLOSURE_CLOSED } from "../../src/config/disclosure";
+import { VERB_SET_STATE } from "../../src/click/wire";
+import { SessionState } from "../../src/renderer/session-state";
+import { VariableStore } from "../../src/var-system/store";
+import { SourceRegistry } from "../../src/var-system/sources";
+import { registerDslConfig } from "../../src/dsl/render";
+import {
+  effectiveInputs,
+} from "../../src/renderer/render-payload";
+import { resolveEffectiveGlobals } from "../../src/config/effective-globals";
+import {
+  listResolvablePaletteNames,
+  type ColorCompatibility,
+} from "../../src/themes/policy";
+import { parseAndValidate } from "../helpers/parse-and-validate";
+import {
+  clickUrl,
+  effectsOf,
+  recordRender,
+  testVerbContext,
+} from "../helpers/click";
+import { instantOf } from "../../src/utils/instant";
+import { systemTimekeeper } from "../../src/time";
+
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+
+const S1 = sessionIdOf("s1");
+
+const SGR = /\x1b\[[0-9;]*m/g;
+
+test("colour depth none keeps every link the bar draws in colour", async () => {
+  const config = parseAndValidate(
+    "<test>",
+    "{ globals: { colorCompatibility: 'none' } }",
+    new Set(listResolvablePaletteNames()),
+    DEFAULT_DSL_CONFIG,
+  );
+  const sessionState = new SessionState();
+  const store = new VariableStore(systemTimekeeper);
+  const registry = new SourceRegistry(store, "", sessionState);
+  recordRender(sessionState, S1);
+  try {
+    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+    const ctx = testVerbContext(sessionState, undefined, config);
+    // [LAW:one-source-of-truth] The daemon's own resolution: session picks fold
+    // into the effective globals, which feed both the payload's `.effective`
+    // read-backs and the depth the bytes are drawn at. `drawnAt` overrides only
+    // the latter, to draw one state at two depths.
+    const effective = () =>
+      resolveEffectiveGlobals(
+        config,
+        (key) => sessionState.get(S1, key),
+        () => false,
+      );
+    const effectiveDepth = (): ColorCompatibility =>
+      effective().colorCompatibility;
+    const render = (drawnAt: ColorCompatibility = effectiveDepth()): Frame =>
+      drawPayload(
+        config,
+        compiled,
+        store,
+        registry,
+        {
+          session_id: "s1",
+          cwd: "/tmp/proj",
+          workspace: {
+            current_dir: "/tmp/proj",
+            project_dir: "/tmp/proj",
+            added_dirs: [],
+          },
+          model: { id: "claude-opus-4-7", display_name: "Opus" },
+          ...effectiveInputs(effective()),
+        },
+        instantOf(new Date()),
+        {
+          endcaps: "powerline",
+          wrap: true,
+          padding: 1,
+          width: 200,
+          colorCompatibility: drawnAt,
+        },
+      ).frame;
+    // The links on `rendered` that write `key` a value `member` accepts.
+    const writers = (
+      rendered: Frame,
+      key: string,
+      member: (v: string) => boolean,
+    ): string[] =>
+      linkUrls(rendered).filter((url) =>
+        effectsOf(url).some(
+          (e) =>
+            e.verb === VERB_SET_STATE &&
+            e.args[1] === key &&
+            member(e.args[2] ?? ""),
+        ),
+      );
+    const click = async (
+      rendered: Frame,
+      key: string,
+      member: (v: string) => boolean,
+    ): Promise<void> => {
+      const [url] = writers(rendered, key, member);
+      if (url === undefined)
+        throw new Error(`nothing on the bar writes ${key}`);
+      await clickUrl(url, ctx);
+    };
+    // Open the 🍫 door, then ⚙ config — the clicks a user makes.
+    const opened = (v: string) => v !== DISCLOSURE_CLOSED;
+    await click(render(), SETTINGS_ANCHOR, opened);
+    await click(render(), "candybar.tab", (v) => v === "config");
+
+    expect(effectiveDepth()).toBe("none");
+    const none = render();
+    expect(ansiOf(none).match(SGR)).toBeNull();
+    // With no colour, the open tab is still marked: it alone leads with ▾.
+    expect(textOf(none)).toContain("▾ ⚙ config");
+    expect(textOf(none).match(/▾ (⚡ session|🎨 look|📐 layout|🧰 tools)/)).toBeNull();
+    // The same state drawn in colour carries exactly the same links.
+    expect(linkUrls(none)).toEqual(linkUrls(render("truecolor")));
+
+  } finally {
+    registry.dispose();
+  }
+});

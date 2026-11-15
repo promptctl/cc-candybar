@@ -13,7 +13,7 @@
 // client's `str::parse::<u32>` accepts it — an optional `+`, then digits
 // only, within u32 — so both runtimes read the same value from the same
 // shell or neither does. Both suites pin the same table
-// (test/term-extent.test.ts, rust-client/src/main.rs).
+// (test/unit/term-extent.test.ts, rust-client/src/main.rs).
 export function detectTermExtent(
   envValue: string | undefined,
   ttyExtent: number | undefined,

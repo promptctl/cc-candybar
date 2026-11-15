@@ -31,47 +31,52 @@ export const ENV_WRITES = [
 // [LAW:effects-at-boundaries] [LAW:single-enforcer] A test that is not testing
 // the launcher's adapter does not start a real program: it scripts its programs
 // on a fake (test/helpers/fake-launcher.ts) and holds a clock. The machine's
-// launcher is imported only by the adapter tiers (integration, the launcher's
-// own tests, the process tier), by the harness that builds it, and by the files
-// below. Each exception is owned by the ticket that gives its program a port or
-// a script; the list may shrink and no file joins it.
+// launcher is imported only by the launcher's adapter tests, the process tier,
+// the harness that builds it, and the files below. The integration layer holds
+// every test that touches a real dependency, so it is named file by file: a
+// test there that reaches only the disk or the clock has no program to start.
+// Each exception is owned by the ticket that gives its program a port or a
+// script; the list may shrink and no file joins it.
 //   the repository tools   candybar-testing-ihvy.31f, candybar-testing-ihvy.xp7
 //   tmux                   candybar-testing-ihvy.dcv
 //   shell sources, verbs, jobs, ps   candybar-testing-ihvy.fvw.1dl
 const REAL_LAUNCHER_ADAPTERS = [
-  "test/integration/**",
-  "test/proc/**",
-  "test/daemon-boots/process/**",
+  "test/integration/launch.test.ts",
+  "test/integration/launch-group-end.test.ts",
+  "test/integration/launcher-settled.test.ts",
+  "test/integration/system-probe.test.ts",
+  "test/integration/system-spawner.test.ts",
+  "test/integration/process/**",
   "test/helpers/host.ts",
   "test/helpers/daemon-pool.ts",
-  "test/daemon-pool.test.ts",
+  "test/integration/daemon-pool.test.ts",
 ];
 const REAL_LAUNCHER_EXCEPTIONS = [
   // the repository tools
-  "test/git-root-ascent.test.ts",
-  "test/git-service-outcomes.test.ts",
-  "test/git-spawn-budget.test.ts",
-  "test/git-stash-count.test.ts",
-  "test/git-worktree.test.ts",
-  "test/daemon-watchers.test.ts",
-  "test/doctor-segment-data.test.ts",
+  "test/integration/git-root-ascent.test.ts",
+  "test/integration/git-service-outcomes.test.ts",
+  "test/integration/git-spawn-budget.test.ts",
+  "test/integration/git-stash-count.test.ts",
+  "test/integration/git-worktree.test.ts",
+  "test/integration/daemon-watchers.test.ts",
+  "test/integration/doctor-segment-data.test.ts",
   // tmux
-  "test/claude-input.test.ts",
-  "test/click-order.test.ts",
-  "test/segments-tmux-cache.test.ts",
-  "test/lane-edge-bar-pane.process.test.ts",
+  "test/integration/claude-input.test.ts",
+  "test/integration/click-order.test.ts",
+  "test/integration/segments-tmux-cache.test.ts",
+  "test/integration/lane-edge-bar-pane.test.ts",
   // shell sources, verbs, jobs, ps
-  "test/click-launch.test.ts",
-  "test/daemon-process-fingerprint.test.ts",
-  "test/derived-payload.test.ts",
-  "test/journal-turns.test.ts",
-  "test/memory-report.test.ts",
-  "test/plugin-sources.test.ts",
-  "test/plugins.test.ts",
-  "test/run-action.test.ts",
-  "test/session-views.test.ts",
-  "test/update-act.test.ts",
-  "test/var-sources.test.ts",
+  "test/integration/click-launch.test.ts",
+  "test/integration/daemon-process-fingerprint.test.ts",
+  "test/integration/derived-payload.test.ts",
+  "test/integration/journal-turns.test.ts",
+  "test/integration/memory-report.test.ts",
+  "test/integration/plugin-sources.test.ts",
+  "test/integration/plugins.test.ts",
+  "test/integration/run-action.test.ts",
+  "test/integration/session-views.test.ts",
+  "test/integration/update-act.test.ts",
+  "test/integration/var-sources.test.ts",
 ];
 const REAL_LAUNCHER_MESSAGE =
   "Script the program on a fake launcher (test/helpers/fake-launcher.ts), or test the adapter under test/integration. [LAW:effects-at-boundaries]";

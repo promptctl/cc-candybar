@@ -5,7 +5,7 @@
 
 const UNIT_DIR = "test/unit";
 // A test whose subject is the daemon as a real process.
-const PROCESS_TIER_DIR = "test/daemon-boots/process";
+const PROCESS_TIER_DIR = "test/integration/process";
 const E2E_DIR = "test/e2e";
 
 // jest's testPathIgnorePatterns is a regex over absolute paths, so a bare

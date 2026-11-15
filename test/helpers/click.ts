@@ -193,7 +193,7 @@ export function testVerbContext(
     // A reload rebuilds the render cache's entry from the file. This context
     // holds no render cache, so there is nothing to rebuild: the file a click
     // wrote is the whole outcome, and it is what these tests read. A rig with a
-    // cache hands in its own — test/settings-config-menu.test.ts records each
+    // cache hands in its own — test/integration/settings-config-menu.test.ts records each
     // reload to pin write → reload → release.
     reloadConfig: () => {},
     // A test that drives a run click hands in its own run owner and the

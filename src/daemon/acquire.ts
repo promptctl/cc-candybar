@@ -340,7 +340,7 @@ function safeSpawn(spawnFn: () => boolean): void {
 // ATTEMPT; both runtimes consult it. The constant and filename are mirrored TS↔
 // Rust (scripts/check-protocol.mjs). Worst case with the bound: ~20 spawns/min
 // globally, each of which exits cleanly via the sibling socket-lease defenses.
-// Exported for the boundary unit tests (test/daemon-acquire.test.ts), which pin
+// Exported for the boundary unit tests (test/integration/daemon-acquire.test.ts), which pin
 // the window arithmetic against the exact constant the same way the Rust unit
 // tests do — so a TS↔Rust decision divergence at a boundary is caught even
 // though check-protocol only diffs the constant's value.

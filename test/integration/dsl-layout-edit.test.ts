@@ -1,0 +1,1883 @@
+import { textOf } from "../../src/render/frame";
+import { locations } from "../../src/daemon/paths";
+import { HOST, locs } from "../helpers/host";
+import { unscriptedLauncher, unscriptedRuns } from "../helpers/fake-launcher";
+// [LAW:verifiable-goals] brandon-layout-edit-2gc.1 done-gates, driven through
+// the real spine (mirroring dsl-persist-actions.test.ts's model one arm
+// over), re-aimed at the config FILE as the one durable store
+// (candybar-config-dqe):
+//
+//   1. The loader proves the `removeSegment`/`insertSegment` ActionDecl
+//      shapes: persist-only, literal at author time, rejects `:`/`/` in any
+//      name, rejects a bad `relation`.
+//   2. Cross-ref catches an undeclared preset name, an undeclared segment
+//      name, and the wrong ARM paired with a "presets.<name>.root" target
+//      (to/from/cycle/bounded have no meaning as a tree op) — all load-time,
+//      never a click-time surprise.
+//   3. deriveConfigActionValidators derives a ONE-MEMBER allow-list per
+//      declared layout action (the op token IS the gate) — a click carrying
+//      any other token is a loud rejection, never silently applied
+//      (satisfies the ticket's "a template CANNOT write a layout position
+//      the declarations do not name").
+//   4. A click on a compiled layout-op action fires VERB_APPLY_LAYOUT_OP
+//      through the REAL daemon handler, which validates the token and then
+//      rewrites the tree IN THE SESSION'S CONFIG FILE, in place, in the
+//      authoring grammar (bare names inside `{ h: [...] }` / `{ v: [...] }`)
+//      — every byte outside the edited span survives, the edit is one
+//      whole-file history entry, and a target/anchor the tree no longer
+//      holds is a LOUD error from the store (the bar clicked was stale),
+//      never a silent no-op.
+//   5. RenderCache reads the edited tree back through the SAME watcher-driven
+//      reload path a hand edit to the config file takes (bundled default <
+//      CONFIG FILE < ACTIVE PRESET), and the edit survives a real restart
+//      because the file IS the edit. A first-ever edit on a bundled root
+//      row materializes `root.rows.<row>` alone (rows merge by name); one
+//      under a bundled preset's name materializes `presets.<name>.root`
+//      alone (presets merge by name then by field), and a reset of that
+//      root prunes the emptied preset so it tracks the bundled one again.
+//   6. brandon-layout-edit-2gc.5's own done-gate: "customized" is now the
+//      fact that the config FILE authors a root at the path presetRoot()
+//      reports for the active preset (`root` for a preset staging the
+//      config root, `presets.<n>.root` otherwise) — hand-written or
+//      click-written, indistinguishable by design — projected as
+//      `entry.state.authoredRoots` and `.preset.customized`. Edit mode
+//      synthesizes a `reset`-backed banner for it per preset for free, and
+//      firing that reset through the real daemon handler DELETES the
+//      authored root from the file, so the next reload falls back to the
+//      bundled tree — never a silent drift between screen and disk.
+
+import { drawPayload } from "../helpers/draw-payload";
+import type { Frame } from "../../src/render/frame";
+import { linkUrls } from "../helpers/frame";
+import { TEST_SIGNER } from "../helpers/link-signer";
+import { picked, selectionFor } from "../helpers/selection";
+import { ownLinks } from "../helpers/ambient-chrome";
+import { SETTINGS_NS } from "../../src/config/reserved-names";
+import { writeFileSync } from "node:fs";
+import { getThemePalette } from "@promptctl/rich-js";
+import { parseAndValidate } from "../helpers/parse-and-validate";
+import { VariableStore } from "../../src/var-system/store";
+import { SourceRegistry } from "../../src/var-system/sources";
+import { registerDslConfig } from "../../src/dsl/render";
+import { SessionState } from "../../src/renderer/session-state";
+import { listResolvablePaletteNames } from "../../src/themes/policy";
+import { ConfigError, parseDslConfig } from "../../src/config/dsl-loader";
+import { authoredFragment } from "../../src/renderer/config-file-store";
+import { testVerbContext, effectsOf } from "../helpers/click";
+import { linkClick } from "../helpers/click";
+import {
+  encodeSegments,
+  parseEffects,
+  URL_SCHEME,
+  VERB_DISPATCH,
+  VERB_RESET_CONFIG,
+} from "../../src/click/wire";
+import { VERBS } from "../../src/renderer/verbs";
+import type { VerbContext } from "../../src/renderer/verbs";
+import { deriveConfigActionValidators } from "../../src/daemon/foundations/config-validators";
+import { configGate } from "../helpers/gates";
+import { memoryLimitBytes } from "../../src/daemon/limits";
+import {
+  SOURCES_NOTHING,
+  RenderCache,
+  renderCacheBudget,
+} from "../../src/renderer/render-cache";
+import type { CacheEntry } from "../../src/renderer/render-cache";
+import {
+  EDIT_MODE_KEY,
+  EDIT_MODE_ARRANGE,
+} from "../../src/config/loader/edit-mode";
+import { EDIT_LIVE_KEY } from "../../src/config/edit-chrome";
+import { EDIT_NS } from "../../src/config/reserved-names";
+import {
+  addableSegmentDomains,
+  ADDABLE_DOMAIN,
+} from "../../src/config/edit-chrome";
+import { WatcherRegistry } from "../../src/daemon/cache/watchers";
+import { encodeLayoutOp, type LayoutOp } from "../../src/config/layout-ops";
+import {
+  walkNodes,
+  type LayoutNode,
+  type Root,
+  type RootFragment,
+} from "../../src/config/dsl-types";
+import { presetRoot } from "../../src/config/presets";
+import { DOOR_GLYPH } from "../../src/config/disclosure";
+import { durableConfig, type DurableConfig } from "../helpers/durable-config";
+import { ReloadSignal, untilHeard } from "../helpers/reload-signal";
+import { viewFacts } from "../helpers/view-facts";
+import { instantOf } from "../../src/utils/instant";
+import { NO_PLUGIN_STORAGE } from "../helpers/plugin-storage";
+import { stateDir } from "../../src/daemon/paths";
+import { bareGates } from "../helpers/gates";
+import { systemTimekeeper } from "../../src/time";
+import { SourceRuns } from "../../src/daemon/source-runs";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+
+const S1 = sessionIdOf("s1");
+
+const ALLOWED = new Set(listResolvablePaletteNames());
+
+function opts(width = Number.POSITIVE_INFINITY) {
+  return {
+    endcaps: "powerline" as const,
+    colorCompatibility: "truecolor" as const,
+    wrap: true,
+    padding: 0,
+    width,
+  };
+}
+
+function ownUrls(rendered: Frame): string[] {
+  const urls = linkUrls(rendered);
+  // The global settings menu and the edit toggle it reaches are on every bar;
+  // this file's assertions are about the fixture's OWN clickable regions.
+  return ownLinks(urls);
+}
+
+// ─── loader: the removeSegment/insertSegment ActionDecl arms ─────────────────
+
+describe("removeSegment/insertSegment loader shape", () => {
+  const base = (actions: string, presets = "{}") => `{
+    globals: {},
+    actions: ${actions},
+    segments: {
+      directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+      git: { template: 'g', bg: 'surface', fg: 'foreground' },
+    },
+    root: { h: ['directory', 'git'] },
+    presets: ${presets},
+  }`;
+
+  test("removeSegment parses", () => {
+    const config = parseAndValidate(
+      "<test>",
+      base(
+        `{ rm: { persist: 'presets.default.root', removeSegment: 'directory' } }`,
+      ),
+      ALLOWED,
+    );
+    expect(config.actions.rm).toEqual({
+      persist: "presets.default.root",
+      removeSegment: "directory",
+    });
+  });
+
+  test("insertSegment + anchor + relation parses", () => {
+    const config = parseAndValidate(
+      "<test>",
+      base(
+        `{ ins: { persist: 'presets.default.root', insertSegment: 'directory', anchor: 'git', relation: 'before' } }`,
+      ),
+      ALLOWED,
+    );
+    expect(config.actions.ins).toEqual({
+      persist: "presets.default.root",
+      insertSegment: "directory",
+      anchor: "git",
+      relation: "before",
+    });
+  });
+
+  test("insertSegment without anchor is rejected", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ ins: { persist: 'presets.default.root', insertSegment: 'directory' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(ConfigError);
+  });
+
+  test("relation must be before/after, not an arbitrary string", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ ins: { persist: 'presets.default.root', insertSegment: 'directory', anchor: 'git', relation: 'sideways' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(ConfigError);
+  });
+
+  test("a name containing ':' is rejected — layout-ops.ts's own token delimiter", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ rm: { persist: 'presets.default.root', removeSegment: 'a:b' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(ConfigError);
+  });
+
+  test("a name containing '/' is rejected — the click wire's own delimiter", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ rm: { persist: 'presets.default.root', removeSegment: 'a/b' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(ConfigError);
+  });
+
+  test("removeSegment has no `set` counterpart — persist only", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ rm: { set: 'presets.default.root', removeSegment: 'directory' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(ConfigError);
+  });
+});
+
+describe("cross-ref: presets.<name>.root target", () => {
+  const base = (actions: string) => `{
+    globals: {},
+    actions: ${actions},
+    segments: {
+      directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+      git: { template: 'g', bg: 'surface', fg: 'foreground' },
+    },
+    root: { h: ['directory', 'git'] },
+    presets: { compact: {} },
+  }`;
+
+  test("a tree op on a non-preset-root target is a load error, not a click-time one", () => {
+    for (const key of ["padding", "segments.git.palette"]) {
+      expect(() =>
+        parseAndValidate(
+          "<test>",
+          base(`{ rm: { persist: '${key}', removeSegment: 'directory' } }`),
+          ALLOWED,
+        ),
+      ).toThrow(
+        /is not a "presets\.<name>\.root" target — "removeSegment" is a tree op/,
+      );
+    }
+  });
+
+  test("an undeclared preset name is a load error", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ rm: { persist: 'presets.bogus.root', removeSegment: 'directory' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(/names preset "bogus" which is not declared/);
+  });
+
+  // A target and an anchor are placement ids in a tree the op rewrites, so
+  // the load does not check them — an authored removal would refuse the
+  // config its own click wrote. The click refuses a missing id instead (the
+  // stale-target test below).
+  test("removeSegment naming a placement the tree no longer holds still loads", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ rm: { persist: 'presets.compact.root', removeSegment: 'nope' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).not.toThrow();
+  });
+
+  test("insertSegment naming an undeclared segment is a load error", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ ins: { persist: 'presets.compact.root', insertSegment: 'nope', anchor: 'directory', relation: 'after' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(/insertSegment "nope" is not a declared segment/);
+  });
+
+  test("a 'to' literal targeting a preset-root key is a load error — only removeSegment/insertSegment apply", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ bad: { persist: 'presets.compact.root', to: 'remove:directory' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(
+      /can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"/,
+    );
+  });
+
+  test("a 'reset' over a preset-root key is legal — deleting the authored root needs no arm check", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(`{ undo: { reset: 'presets.compact.root' } }`),
+        ALLOWED,
+      ),
+    ).not.toThrow();
+  });
+});
+
+// ─── authoredFragment: the authoring spelling of a canonical root ────────────
+
+// [LAW:one-source-of-truth] A materialized layout is written in the grammar a
+// user writes and read back by the one loader; the spelling is lossless, own
+// fields included, or a click-written row would reload as something the user
+// never configured.
+describe("authoredFragment — lossless over every own field", () => {
+  const readBack = (fragment: RootFragment): RootFragment =>
+    parseDslConfig(
+      "<authored>",
+      JSON.stringify({ root: authoredFragment(fragment) }),
+      ALLOWED,
+    ).root!;
+
+  test("a tree keeps the root's `when`/`distribution` and a row's `distribution`", () => {
+    const tree: LayoutNode = {
+      kind: "container",
+      direction: "vertical",
+      when: "{{ .x }}",
+      distribution: "monotonic",
+      children: [
+        {
+          kind: "container",
+          direction: "horizontal",
+          distribution: "golden-angle",
+          children: [
+            { kind: "segment", name: "directory" },
+            { kind: "segment", name: "git", when: "{{ .y }}" },
+          ],
+        },
+        { kind: "segment", name: "bar" },
+      ],
+    };
+    expect(authoredFragment(tree)).toEqual({
+      v: [
+        {
+          h: ["directory", { seg: "git", when: "{{ .y }}" }],
+          distribution: "golden-angle",
+        },
+        "bar",
+      ],
+      when: "{{ .x }}",
+      distribution: "monotonic",
+    });
+    expect(readBack(tree)).toEqual(tree);
+  });
+
+  test("a rows map keeps its own fields beside its rows", () => {
+    const root: Root = {
+      rows: {
+        main: {
+          kind: "container",
+          direction: "horizontal",
+          distribution: "uniform",
+          children: [{ kind: "segment", name: "directory" }],
+        },
+      },
+      when: "{{ .x }}",
+      distribution: "ends-interleaved",
+    };
+    expect(readBack(root)).toEqual(root);
+  });
+});
+
+// ─── config-validators: the derived gate is a one-member allow-list ──────────
+
+// The members one derived contribution gates, by key — the shape assertions
+// about "did MY action contribute its token" read, now that edit chrome unions
+// its own tokens onto the same per-preset key.
+function allowedFor(
+  contributions: readonly { key: string; spec: { kind: string } }[],
+  key: string,
+): readonly string[] {
+  const entry = contributions.find((c) => c.key === key);
+  if (entry === undefined) throw new Error(`no contribution for "${key}"`);
+  const spec = entry.spec as { kind: string; allowed?: readonly string[] };
+  if (spec.kind !== "allow-list" || spec.allowed === undefined) {
+    throw new Error(`contribution for "${key}" is not an allow-list`);
+  }
+  return spec.allowed;
+}
+
+describe("deriveConfigActionValidators over layout-op actions", () => {
+  test("derives a one-member allow-list keyed by the op's own encoded token", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        actions: { rm: { persist: 'presets.default.root', removeSegment: 'directory' } },
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          git: { template: 'g', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory', 'git'] },
+        presets: {},
+      }`,
+      ALLOWED,
+    );
+    const contributions = deriveConfigActionValidators(config);
+    // [LAW:behavior-not-structure] The contract is "this action contributes ITS
+    // token to that preset's root gate". The same key also carries the tokens
+    // edit chrome mints for every content segment — now on every bar, since the
+    // global settings menu makes edit mode reachable — so membership, not the
+    // whole list, is what this action's declaration decides.
+    expect(allowedFor(contributions, "presets.default.root")).toContain(
+      encodeLayoutOp({ op: "remove", target: "directory" }),
+    );
+  });
+
+  test("two layout actions on the same preset union into a two-member allow-list", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        actions: {
+          rm: { persist: 'presets.default.root', removeSegment: 'directory' },
+          ins: { persist: 'presets.default.root', insertSegment: 'git', anchor: 'directory', relation: 'after' },
+        },
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          git: { template: 'g', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory'] },
+        presets: {},
+      }`,
+      ALLOWED,
+    );
+    const contributions = deriveConfigActionValidators(config);
+    // Both actions land on ONE key (the union is the point); membership rather
+    // than exact contents, since edit chrome contributes to the same key.
+    const allowed = new Set(allowedFor(contributions, "presets.default.root"));
+    for (const token of [
+      encodeLayoutOp({ op: "remove", target: "directory" }),
+      encodeLayoutOp({
+        op: "insert",
+        segment: "git",
+        anchor: "directory",
+        relation: "after",
+      }),
+    ]) {
+      expect(allowed).toContain(token);
+    }
+  });
+
+  test("a token no action declares is rejected by the derived gate", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        actions: { rm: { persist: 'presets.default.root', removeSegment: 'directory' } },
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory'] },
+        presets: {},
+      }`,
+      ALLOWED,
+    );
+    const gate = configGate(config);
+    // The declared op passes, so the rejection below is the token's, not the
+    // key's.
+    expect(
+      gate.validate(
+        "presets.default.root",
+        encodeLayoutOp({ op: "remove", target: "directory" }),
+      ).ok,
+    ).toBe(true);
+    const result = gate.validate(
+      "presets.default.root",
+      encodeLayoutOp({ op: "remove", target: "git" }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  // brandon-layout-edit-2gc.5 PR review: a preset that declares NO
+  // removeSegment/insertSegment/insertSegmentFrom action at all (e.g. one
+  // edited down to zero non-exempt segments, so spliceContainer's loop never
+  // ran) must still derive `presets.<name>.root` — otherwise its OWN
+  // synthesized `reset` action's target is unknown to the gate the moment
+  // it's needed most.
+  test("a preset's root key is derived even with zero layout-op actions targeting it", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        actions: { undoIt: { reset: 'presets.empty.root' } },
+        segments: { directory: { template: 'd', bg: 'surface', fg: 'foreground' } },
+        root: { h: ['directory'] },
+        presets: { empty: {} },
+      }`,
+      ALLOWED,
+    );
+    const contributions = deriveConfigActionValidators(config);
+    const rootEntry = contributions.find((c) => c.key === "presets.empty.root");
+    // The contribution is the contract: a preset with no layout-op action of
+    // its own still gets its root key, so its reset click is never orphaned.
+    // Its members are whatever edit chrome minted for that preset's tree.
+    expect(rootEntry).toBeDefined();
+    expect(rootEntry!.spec.kind).toBe("allow-list");
+  });
+});
+
+// ─── end-to-end: click → the config FILE, through the real daemon handler ────
+
+let durable: DurableConfig;
+
+// [LAW:one-source-of-truth] The runtime parses `src` for the render AND
+// writes the same text as the session's config file, so the tree a click
+// edits is the tree the bar rendered — exactly the daemon's own situation.
+function buildLayoutRuntime(src: string, sessionId = S1) {
+  if (durable.text() === null) durable.write(src);
+  const config = parseAndValidate("<test>", src, ALLOWED);
+  // What the daemon's cache entry holds: the config, re-read from the file
+  // each time a click reloads it.
+  let current = config;
+  const log: string[] = [];
+  const sessionState = new SessionState();
+  durable.seedOrigin(sessionState, sessionId);
+  const store = new VariableStore(systemTimekeeper);
+  const registry = new SourceRegistry(store, "", sessionState);
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: process.cwd(),
+  });
+  const basePalette = getThemePalette("textual-dark"!);
+  const render = (): Frame =>
+    drawPayload(
+      config,
+      compiled,
+      store,
+      registry,
+      { session_id: sessionId, project_dir: "/tmp/proj" },
+      instantOf(new Date()),
+      opts(),
+    ).frame;
+  const ctx: VerbContext = {
+    ...testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      undefined,
+      durable.host,
+    ),
+    // The daemon's own lookup and reload: a click is gated by the config as
+    // the last click left it, and an insertion mints its id against it.
+    configFor: () => current,
+    // A file that no longer loads keeps the last config that did, as the
+    // render cache's reload does.
+    reloadConfig: () => {
+      try {
+        current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+      } catch (err) {
+        if (!(err instanceof ConfigError)) throw err;
+      }
+    },
+    log: (_level, message) => log.push(message),
+  };
+  const click = async (url: string): Promise<void> => {
+    const { verb, value } = linkClick(url);
+    const effects =
+      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    for (const e of effects) {
+      const handler = VERBS.get(e.verb);
+      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
+      await handler(e.value, ctx);
+    }
+  };
+  return { config, store, render, click, log };
+}
+
+describe("apply-layout-op click → the config file", () => {
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-layout-click-");
+  });
+  afterEach(() => {
+    durable.dispose();
+  });
+
+  // The comment beside `root` is the canary: a click edits ONE span of the
+  // tree, and everything else in the file — this comment included — is
+  // preserved verbatim.
+  const ROOT_COMMENT = "// identity row over the edit bar";
+  const SRC = `{
+    globals: {},
+    actions: {
+      removeDirectory: { persist: 'presets.default.root', removeSegment: 'directory' },
+      insertGitPrAfterGit: { persist: 'presets.default.root', insertSegment: 'gitPr', anchor: 'git', relation: 'after' },
+      removeGit: { persist: 'presets.default.root', removeSegment: 'git' },
+    },
+    segments: {
+      directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+      git: { template: 'g', bg: 'surface', fg: 'foreground' },
+      gitPr: { template: 'p', bg: 'surface', fg: 'foreground' },
+      bar: { template: '{{ action "removeDirectory" "-" }} {{ action "insertGitPrAfterGit" "+" }} {{ action "removeGit" "x" }}', bg: 'surface', fg: 'foreground' },
+    },
+    ${ROOT_COMMENT}
+    root: { v: [ { h: ['directory', 'git'] }, 'bar' ] },
+    presets: {},
+  }`;
+
+  test("a click fires apply-layout-op and removes the segment from the file's root", async () => {
+    const { render, click } = buildLayoutRuntime(SRC);
+    const original = durable.text()!;
+    const urls = ownUrls(render());
+    expect(effectsOf(urls[0]!)[0]!.verb).toBe("apply-layout-op");
+    await click(urls[0]!);
+    // The file's own root is the edited tree, in the authoring grammar.
+    expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "bar"] });
+    // One span changed; the rest of the file is the author's, byte for byte.
+    const written = durable.text()!;
+    expect(written).toContain(ROOT_COMMENT);
+    expect(written).toContain(
+      "removeDirectory: { persist: 'presets.default.root'",
+    );
+    expect(written).not.toBe(original);
+    // And the edit is ONE whole-file history entry — the same shape a
+    // persist/reset records, so undo needs no layout-specific path.
+    expect(durable.history().past).toEqual([
+      durable.fileStep(original, written),
+    ]);
+  });
+
+  test("two clicks COMPOSE — the second edits the tree the first left behind", async () => {
+    const { render, click } = buildLayoutRuntime(SRC);
+    const urls = ownUrls(render());
+    await click(urls[0]!); // remove directory
+    await click(urls[1]!); // insert gitPr after git
+    expect(durable.parsed().root).toEqual({
+      v: [{ h: ["git", "gitPr"] }, "bar"],
+    });
+    expect(durable.history().past).toHaveLength(2);
+  });
+
+  // A placement is an instance, so inserting a segment already on the bar
+  // places a second one — under the next free id, minted against the tree the
+  // previous click left, and named on the click's log line.
+  test("inserting a segment already placed writes a second placement with a fresh id", async () => {
+    const { render, click, log } = buildLayoutRuntime(
+      SRC.replace(
+        "removeGit: {",
+        "insertGitAgain: { persist: 'presets.default.root', insertSegment: 'git', anchor: 'git', relation: 'after' },\n      removeGit: {",
+      ).replace(
+        `{{ action "removeGit" "x" }}`,
+        `{{ action "removeGit" "x" }} {{ action "insertGitAgain" "g" }}`,
+      ),
+    );
+    const again = ownUrls(render())[3]!;
+    await click(again);
+    await click(again);
+    expect(durable.parsed().root).toEqual({
+      v: [
+        {
+          h: [
+            "directory",
+            "git",
+            { seg: "git", id: "git-3" },
+            { seg: "git", id: "git-2" },
+          ],
+        },
+        "bar",
+      ],
+    });
+    expect(log.filter((l) => l.startsWith("apply-layout-op:"))).toEqual([
+      expect.stringContaining(`placed={"seg":"git","id":"git-2"}`),
+      expect.stringContaining(`placed={"seg":"git","id":"git-3"}`),
+    ]);
+  });
+
+  // [LAW:no-silent-failure] The bar that emitted the click was rendered
+  // before the tree changed. There is no op log to "replay past" a stale
+  // entry any more — the store refuses the edit, names the missing segment,
+  // and touches neither the file nor the history.
+  test("a stale target/anchor is a LOUD error from the store, and the file is untouched", async () => {
+    const { render, click } = buildLayoutRuntime(SRC);
+    const urls = ownUrls(render());
+    await click(urls[0]!); // remove directory
+    const afterFirst = durable.text()!;
+
+    // The same `-` again: "directory" is already gone.
+    await expect(click(urls[0]!)).rejects.toThrow(
+      /holds no placement "directory".*stale/,
+    );
+    expect(durable.text()).toBe(afterFirst);
+    expect(durable.history().past).toHaveLength(1);
+
+    // An insert whose anchor was removed since the render, likewise.
+    await click(urls[2]!); // remove git
+    await expect(click(urls[1]!)).rejects.toThrow(
+      /holds no placement "git".*stale/,
+    );
+    expect(durable.parsed().root).toEqual({ v: [{ h: [] }, "bar"] });
+    expect(durable.history().past).toHaveLength(2);
+  });
+
+  // [LAW:no-silent-failure] A custom preset the file declared at render time
+  // and no longer does (deleted by hand before the reload landed) is declared
+  // NOWHERE — not "a preset declaring no root", which stages the shared
+  // `root`. Both the structural edit and the reset must refuse, and the
+  // file's own top-level root must survive untouched.
+  test("a click on a preset the file no longer declares is refused — never redirected onto the file's root", async () => {
+    const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
+    const SRC_CUSTOM = `{
+      globals: {},
+      actions: {
+        removeDirectory: { persist: 'presets.mine.root', removeSegment: 'directory' },
+        resetMine: { reset: 'presets.mine.root' },
+      },
+      segments: {
+        directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+        git: { template: 'g', bg: 'surface', fg: 'foreground' },
+        bar: { template: '{{ action "removeDirectory" "-" }} {{ action "resetMine" "r" }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: ${ROOT},
+      presets: { mine: { root: { h: ['git', 'bar'] } } },
+    }`;
+    const { render, click } = buildLayoutRuntime(SRC_CUSTOM);
+    const urls = ownUrls(render());
+    // The hand edit: the preset declaration vanishes; everything else stays.
+    durable.write(
+      SRC_CUSTOM.replace(/presets: \{ mine: [^\n]*\},/, "presets: {},"),
+    );
+    expect(durable.parsed().presets).toEqual({});
+
+    const undeclared =
+      /neither the config file nor the bundled default declares presets\.mine/;
+    await expect(click(urls[0]!)).rejects.toThrow(undeclared);
+    // The reset link is hand-built: the harness filters rendered preset-root
+    // resets as edit chrome's own banner, and the verb is what is under test.
+    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
+    await expect(click(resetUrl)).rejects.toThrow(undeclared);
+    expect(durable.parsed().root).toEqual({
+      v: [{ h: ["directory", "git"] }, "bar"],
+    });
+    expect(durable.history().past).toHaveLength(0);
+  });
+
+  // [LAW:one-source-of-truth] `restagesFragment` (the document) and
+  // `restages` (the loader) must classify one fragment alike: a preset whose
+  // root is an empty rows map carrying only a `distribution` IS staged, so its
+  // reset deletes `presets.<p>.root` — never the file's own top-level root —
+  // and with it the `mine: {}` that root alone made up (deleteValue prunes
+  // what it empties).
+  test("a reset on a preset authored as `{ rows: {}, distribution }` deletes the preset's root, not the file's", async () => {
+    const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
+    const SRC_PLACED = `{
+      globals: {},
+      actions: {
+        resetMine: { reset: 'presets.mine.root' },
+      },
+      segments: {
+        directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+        git: { template: 'g', bg: 'surface', fg: 'foreground' },
+        bar: { template: '{{ action "resetMine" "r" }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: ${ROOT},
+      presets: { mine: { root: { rows: {}, distribution: 'monotonic' } } },
+    }`;
+    const { render, click } = buildLayoutRuntime(SRC_PLACED);
+    render();
+    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
+    await click(resetUrl);
+    // The preset the user authored keeps its name: the action still targets it.
+    expect(durable.parsed().presets).toEqual({ mine: {} });
+    expect(durable.parsed().root).toEqual({
+      v: [{ h: ["directory", "git"] }, "bar"],
+    });
+    expect(durable.history().past).toHaveLength(1);
+  });
+
+  test("a hand-crafted click carrying an undeclared op token is rejected loudly", async () => {
+    const { config } = buildLayoutRuntime(SRC);
+    const sessionState = new SessionState();
+    durable.seedOrigin(sessionState, S1);
+    const ctx: VerbContext = testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      config,
+      durable.host,
+    );
+    const applyLayoutOp = VERBS.get("apply-layout-op")!;
+    const before = durable.text();
+    await expect(
+      applyLayoutOp(
+        `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
+          encodeLayoutOp({ op: "remove", target: "noSuchSegmentAnywhere" }),
+        )}`,
+        ctx,
+      ),
+    ).rejects.toThrow(/apply-layout-op/);
+    expect(durable.text()).toBe(before);
+  });
+
+  // [LAW:no-silent-failure] A click carries only a session id; WHICH file it
+  // edits comes from the origin the render recorded. A session that never
+  // rendered has none — the verb refuses rather than guessing the daemon's
+  // own XDG path.
+  test("a click on a session with no recorded render origin is refused — no file to write", async () => {
+    const { config } = buildLayoutRuntime(SRC);
+    const ctx: VerbContext = testVerbContext(
+      new SessionState(),
+      undefined,
+      config,
+      durable.host,
+    );
+    const applyLayoutOp = VERBS.get("apply-layout-op")!;
+    await expect(
+      applyLayoutOp(
+        `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
+          encodeLayoutOp({ op: "remove", target: "directory" }),
+        )}`,
+        ctx,
+      ),
+    ).rejects.toThrow(/has not rendered yet/);
+    expect(durable.parsed().root).toEqual({
+      v: [{ h: ["directory", "git"] }, "bar"],
+    });
+  });
+});
+
+// ─── the reset-layout banner and quote/backslash preset names ──────────────
+
+// brandon-layout-edit-2gc.5 PR review: quotes and backslashes are LEGAL in a
+// preset name (only empty/slash/newline are rejected — see loader/
+// presets.ts). The banner's label used to splice the preset name into a
+// synthesized Go-template string literal and had to escape it; it is the fixed
+// text `↺ reset layout` now, but the preset name still reaches the chrome's
+// action names and root key, so this keeps proving such a preset compiles and
+// renders its banner through real parseAndValidate + registerDslConfig +
+// drawDsl.
+describe("the reset-layout banner survives quote/backslash preset names", () => {
+  test('a preset named with a " and a \\ compiles and still renders the banner', () => {
+    const presetName = 'foo"bar\\baz';
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory', 'editControl'] },
+        presets: { ${JSON.stringify(presetName)}: {} },
+      }`,
+      ALLOWED,
+    );
+    // The compile itself (parse every synthesized template) must not throw —
+    // an unescaped quote would break the Go-template source.
+    const store = new VariableStore(systemTimekeeper);
+    // The banner is edit chrome: visible only with edit mode open AND the
+    // preset customized, so the render below opens edit mode for "s1".
+    const sessionState = new SessionState();
+    sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    const registry = new SourceRegistry(store,
+      "",
+      sessionState,
+    );
+    let compiled: ReturnType<typeof registerDslConfig>;
+    expect(() => {
+      compiled = registerDslConfig(config, registry, {
+        signer: TEST_SIGNER,
+        cwd: process.cwd(),
+      });
+    }).not.toThrow();
+    const basePalette = getThemePalette("textual-dark"!);
+    const rendered = drawPayload(
+      config,
+      compiled!,
+      store,
+      registry,
+      {
+        session_id: "s1",
+        project_dir: "/tmp/proj",
+        preset: { effective: presetName, customized: true },
+      },
+      instantOf(new Date()),
+      opts(),
+      undefined,
+      selectionFor(config, {}, picked({ preset: presetName })),
+    ).frame;
+    expect(textOf(rendered)).toContain("↺ reset layout");
+    registry.dispose();
+  });
+});
+
+// A preset root's own `when` gates the author's content, never the settings
+// menu that leads it nor the edit-mode reset banner reached through it.
+describe("a preset root's own top-level `when` hides content, not the menu or banner", () => {
+  function buildConfig(rootWhen: string) {
+    return parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        segments: {
+          directory: { template: 'GATED_CONTENT', bg: 'surface', fg: 'foreground' },
+          editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory', 'editControl'] },
+        presets: { gated: { root: { seg: 'directory', when: ${JSON.stringify(rootWhen)} } } },
+      }`,
+      ALLOWED,
+    );
+  }
+
+  function renderGated(config: ReturnType<typeof buildConfig>): string {
+    const store = new VariableStore(systemTimekeeper);
+    const sessionState = new SessionState();
+    sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    // Live output, not names: the subject is whether the CONTENT follows the gate.
+    sessionState.set(S1, EDIT_LIVE_KEY, "open");
+    const registry = new SourceRegistry(store,
+      "",
+      sessionState,
+    );
+    try {
+      const compiled = registerDslConfig(config, registry, {
+        signer: TEST_SIGNER,
+        cwd: process.cwd(),
+      });
+      const basePalette = getThemePalette("textual-dark"!);
+      return textOf(
+        drawPayload(
+          config,
+          compiled,
+          store,
+          registry,
+          {
+            session_id: "s1",
+            project_dir: "/tmp/proj",
+            preset: { effective: "gated", customized: true },
+          },
+          instantOf(new Date()),
+          opts(),
+          undefined,
+          selectionFor(config, {}, picked({ preset: "gated" })),
+        ).frame,
+      );
+    } finally {
+      registry.dispose();
+    }
+  }
+
+  test.each([
+    ["{{ false }}", false],
+    ["{{ true }}", true],
+  ])(
+    "under a root gate of %s the content follows the gate; the door and banner show",
+    (gate, contentShown) => {
+      const rendered = renderGated(buildConfig(gate));
+      expect(rendered.includes("GATED_CONTENT")).toBe(contentShown);
+      expect(rendered).toContain(DOOR_GLYPH);
+      expect(rendered).toContain("↺ reset layout");
+    },
+  );
+});
+
+// ─── RenderCache integration: the file's tree, reload, restart, reset ───────
+
+function makeCache(reloads?: ReloadSignal): {
+  cache: RenderCache;
+  sessionState: SessionState;
+  cleanups: Array<() => void>;
+} {
+  const cleanups: Array<() => void> = [];
+  const watchers = new WatcherRegistry({
+    clock: systemTimekeeper,
+    counters: {
+      watchersOpened: 0,
+      watchersClosed: 0,
+      watchRefusals: 0,
+      watchErrors: 0,
+      dirWatchesOpened: 0,
+      dirWatchesClosed: 0,
+    },
+    logger: () => {},
+  });
+  cleanups.push(() => watchers.closeAll());
+  const sessionState = new SessionState();
+  const cache = new RenderCache(
+    {
+      clock: systemTimekeeper,
+      stateDir: stateDir(durable.host),
+      locations: locations(durable.host),
+      env: durable.host.env,
+      storage: NO_PLUGIN_STORAGE,
+      signer: TEST_SIGNER,
+      gates: bareGates(),
+      sessionState,
+      watchers,
+      source: SOURCES_NOTHING,
+    },
+    {
+      budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
+      ...(reloads === undefined ? {} : { observers: reloads.observers }),
+    },
+  );
+  cleanups.unshift(() => cache.close());
+  return { cache, sessionState, cleanups };
+}
+
+// [LAW:locality-or-seam] The settings menu's `✎ arrange` references
+// `edit.toggle`, and every config `RenderCache` resolves hosts the menu — so `edit.mode`/`edit.toggle`
+// (and, once validateConfig runs, per-preset `-`/`+` chrome) are now present
+// in EVERY resolved preset root this suite builds, `when`-gated shut but
+// structurally always there. This describe block asserts what a layout edit
+// does to a preset's ORDINARY content, so chrome nodes — recognizable purely
+// by the reserved `edit.` namespace their synthesis mints them under — are
+// filtered out here rather than at every call site.
+function segmentNamesOf(root: LayoutNode): string[] {
+  const out: string[] = [];
+  const walk = (node: LayoutNode): void => {
+    if (node.kind === "segment") {
+      // Synthesized chrome, not content: edit mode's +/- affordances and the
+      // global settings menu (candybar-settings-ui-aok.1) both ride every
+      // resolved preset root. These assertions are about the CONTENT tree.
+      if (!node.name.startsWith(EDIT_NS) && !node.name.startsWith(SETTINGS_NS))
+        out.push(node.name);
+    } else {
+      for (const c of node.children) walk(c);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+// The content names of the tree a preset renders, read the way the render
+// does (presetRoot — a preset staging the config root reads `root`).
+function presetNamesOf(entry: CacheEntry, preset: string): string[] {
+  return segmentNamesOf(presetRoot(entry.state.config, preset).node);
+}
+
+// Fire one leaf verb through the REAL handler, with the wire's own encoding
+// — exactly what a hand click sends, no key discovered from an action name.
+async function fireVerb(
+  verb: string,
+  ctx: VerbContext,
+  ...args: string[]
+): Promise<void> {
+  await VERBS.get(verb)!(args.map(encodeURIComponent).join("/"), ctx);
+}
+
+// A session that has rendered from the fixture's file — the origin a durable
+// verb resolves the file from. The cache's own SessionState, so the click
+// reads the same store the render published into.
+function originCtx(
+  cache: RenderCache,
+  sessionState: SessionState,
+  sessionId = S1,
+): VerbContext {
+  durable.seedOrigin(sessionState, sessionId);
+  return {
+    ...testVerbContext(
+      sessionState,
+      durable.historyFor(sessionState),
+      undefined,
+      durable.host,
+    ),
+    // The daemon's own wiring (daemon.ts): the config a session renders with
+    // is its cache entry's, and a click that must not act on the old config
+    // reloads that entry from the file it just wrote.
+    configFor: (origin) =>
+      cache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state
+        .config,
+    reloadConfig: (origin) =>
+      cache.reload(origin.projectDir, origin.cwd, origin.target.path, {
+        kind: "write",
+      }),
+  };
+}
+
+describe("RenderCache: authoredRoots — the file authors a root at the preset's path", () => {
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-layout-authored-");
+  });
+  afterEach(() => {
+    durable.dispose();
+  });
+
+  function authoredRootsOf(): ReadonlySet<string> {
+    const { cache, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      return entry.state.authoredRoots;
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  }
+
+  test("a file declaring neither `root` nor any `presets.<n>.root` customizes nothing — the bundled presets' own roots are not the file's", () => {
+    durable.write(`{ globals: {}, segments: {} }`);
+    expect([...authoredRootsOf()]).toEqual([]);
+  });
+
+  test("a file declaring `root` customizes the floor preset — it stages the config root, so `root` IS its tree", () => {
+    durable.write(`{
+      segments: { directory: { template: 'd', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['directory'] },
+    }`);
+    const authored = authoredRootsOf();
+    expect(authored.has("default")).toBe(true);
+    expect(authored.has("compact")).toBe(false);
+  });
+
+  test("a file declaring `presets.compact.root` customizes compact, not the floor", () => {
+    durable.write(`{
+      segments: { directory: { template: 'd', bg: 'surface', fg: 'foreground' } },
+      presets: { compact: { root: { h: ['directory'] } } },
+    }`);
+    const authored = authoredRootsOf();
+    expect(authored.has("compact")).toBe(true);
+    expect(authored.has("default")).toBe(false);
+  });
+
+  // [LAW:one-source-of-truth] "Where does this preset's tree live" is ONE
+  // decision (presetRoot): a declared preset with no root of its own stages
+  // the config root, so the file's `root` customizes it exactly as it does
+  // the floor — the same fact read at the same path.
+  test("a declared preset with no root of its own is customized by the file's `root`, like the floor", () => {
+    durable.write(`{
+      segments: { directory: { template: 'd', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['directory'] },
+      presets: { mine: {} },
+    }`);
+    const authored = authoredRootsOf();
+    expect(authored.has("default")).toBe(true);
+    expect(authored.has("mine")).toBe(true);
+  });
+});
+
+describe("RenderCache: layout edits land in the file and reload from it", () => {
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-layout-rc-");
+  });
+  afterEach(() => {
+    durable.dispose();
+  });
+
+  const ROOT_COMMENT = "// the hand-authored row";
+  // Declares its own `rm`/`ins` actions so the cache's derived gate admits
+  // exactly the tokens the tests fire — the same gate a rendered `-`/`+`
+  // click passes through.
+  const userConfigBody = `{
+  globals: {},
+  segments: {
+    directory: { template: "d", bg: "surface", fg: "foreground" },
+    git: { template: "g", bg: "surface", fg: "foreground" },
+    gitPr: { template: "p", bg: "surface", fg: "foreground" },
+  },
+  actions: {
+    rm: { persist: "presets.default.root", removeSegment: "directory" },
+    ins: { persist: "presets.default.root", insertSegment: "gitPr", anchor: "git", relation: "after" },
+  },
+  ${ROOT_COMMENT}
+  root: { h: ["directory", "git"] },
+  presets: {},
+}
+`;
+
+  const REMOVE_DIRECTORY = encodeLayoutOp({
+    op: "remove",
+    target: "directory",
+  });
+  const INSERT_GITPR_AFTER_GIT = encodeLayoutOp({
+    op: "insert",
+    segment: "gitPr",
+    anchor: "git",
+    relation: "after",
+  });
+
+  // [LAW:one-source-of-truth] The click's write reaches the LIVE cache through
+  // the SAME watcher a hand edit to the file fires — there is no second
+  // "overrides changed" channel. The first application is the click itself;
+  // a retry (fs.watch has no ready signal — see reload-signal.ts) re-touches
+  // the file with the bytes the click left, so every application ends in the
+  // same on-disk state and emits an event.
+  // [LAW:verifiable-goals] A save reloads its config explicitly, and the
+  // config's watch then hears the same write. The watch's reload resolves
+  // the bytes the save loaded and keeps the state, so each session view
+  // drawing from the entry reopens exactly once. The retries rewrite the
+  // bytes the click left, so each is a kept reload too, and the count below
+  // covers them.
+  test("a save reopens each session view drawing from its entry exactly once", async () => {
+    durable.write(userConfigBody);
+    const loads: string[] = [];
+    const lines: string[] = [];
+    const watchers = new WatcherRegistry({
+      clock: systemTimekeeper,
+      logger: () => {},
+    });
+    const sessionState = new SessionState();
+    const cache = new RenderCache(
+      {
+        clock: systemTimekeeper,
+        stateDir: stateDir(durable.host),
+        locations: locations(durable.host),
+        env: durable.host.env,
+        storage: NO_PLUGIN_STORAGE,
+        signer: TEST_SIGNER,
+        gates: bareGates(),
+        sessionState,
+        watchers,
+        source: SOURCES_NOTHING,
+        log: (_level, line) => lines.push(line),
+      },
+      {
+        budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
+        observers: {
+          onReload: (_entry, _sessions, cause, settled) =>
+            loads.push(`${cause.kind}:${settled}`),
+        },
+      },
+    );
+    try {
+      const dir = durable.projectDir;
+      for (const sid of ["s1", "s2"])
+        cache
+          .holdSession(dir, dir, undefined, viewFacts(dir, sid))
+          [Symbol.dispose]();
+      const ctx = originCtx(cache, sessionState);
+      let clicked = false;
+      await untilHeard(
+        async () => {
+          if (clicked) {
+            writeFileSync(durable.configPath, durable.text()!);
+            return;
+          }
+          clicked = true;
+          await fireVerb(
+            "apply-layout-op",
+            ctx,
+            "s1",
+            "presets.default.root",
+            REMOVE_DIRECTORY,
+          );
+        },
+        () => loads.includes("config-watch:kept"),
+        "the watch's reload of the saved bytes",
+      );
+      expect(loads.slice(0, 2)).toEqual(["open:built", "write:built"]);
+      expect(loads.slice(2).filter((l) => !l.endsWith(":kept"))).toEqual([]);
+      const reopened = lines
+        .filter((l) => / by=reload /.test(l))
+        .map((l) => /sid="(\w+)"/.exec(l)?.[1]);
+      expect(reopened.sort()).toEqual(["s1", "s2"]);
+    } finally {
+      cache.close();
+      watchers.closeAll();
+    }
+  });
+
+  test("a `-` click rewrites the file's root, and the live cache reloads it through the config-file watcher", async () => {
+    durable.write(userConfigBody);
+    const reloads = new ReloadSignal();
+    const { cache, sessionState, cleanups } = makeCache(reloads);
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "default")).toEqual(["directory", "git"]);
+      // Hand-authored `root` → already "customized" before any click: the
+      // banner's fact is "the file authors this tree", by whichever hand.
+      expect(entry.state.authoredRoots.has("default")).toBe(true);
+
+      const ctx = originCtx(cache, sessionState);
+      let clicked = false;
+      await reloads.after(entry, async () => {
+        if (clicked) {
+          writeFileSync(durable.configPath, durable.text()!);
+          return;
+        }
+        clicked = true;
+        await fireVerb(
+          "apply-layout-op",
+          ctx,
+          "s1",
+          "presets.default.root",
+          REMOVE_DIRECTORY,
+        );
+      });
+
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "default")).toEqual(["git"]);
+      expect(durable.parsed().root).toEqual({ h: ["git"] });
+      expect(durable.text()).toContain(ROOT_COMMENT);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // A preset whose root is a bare segment ref (`root: "sidebar"`) gets the
+  // same `-`/`+` chrome as a container root, so its clicks must land: the
+  // editor addresses it as the one-child container it abbreviates, and the
+  // tree edited down to nothing still loads.
+  test("layout edits land on a bare-segment preset root, down to an empty container that still loads", async () => {
+    durable.write(`{
+  globals: {},
+  segments: {
+    sidebar: { template: "s", bg: "surface", fg: "foreground" },
+    clock: { template: "c", bg: "surface", fg: "foreground" },
+  },
+  actions: {
+    add: { persist: "presets.compact.root", insertSegment: "clock", anchor: "sidebar", relation: "after" },
+    rmSidebar: { persist: "presets.compact.root", removeSegment: "sidebar" },
+    rmClock: { persist: "presets.compact.root", removeSegment: "clock" },
+  },
+  root: { h: ["sidebar"] },
+  presets: { compact: { root: "sidebar" } },
+}
+`);
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "compact")).toEqual(["sidebar"]);
+      const ctx = originCtx(cache, sessionState);
+      const fire = async (op: LayoutOp): Promise<void> =>
+        await fireVerb(
+          "apply-layout-op",
+          ctx,
+          "s1",
+          "presets.compact.root",
+          encodeLayoutOp(op),
+        );
+      await fire({
+        op: "insert",
+        segment: "clock",
+        anchor: "sidebar",
+        relation: "after",
+      });
+      expect(durable.parsed().presets).toEqual({
+        compact: { root: { h: ["sidebar", "clock"] } },
+      });
+      await fire({ op: "remove", target: "sidebar" });
+      await fire({ op: "remove", target: "clock" });
+      expect(durable.parsed().presets).toEqual({
+        compact: { root: { h: [] } },
+      });
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+
+    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
+    try {
+      const entry = restarted.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "compact")).toEqual([]);
+    } finally {
+      for (const fn of restartedCleanups) fn();
+    }
+  });
+
+  test("a remove and an insert compose, in order, onto the same preset", async () => {
+    durable.write(userConfigBody);
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      cache.getOrCreate(durable.projectDir, durable.projectDir, undefined);
+      const ctx = originCtx(cache, sessionState);
+      await fireVerb(
+        "apply-layout-op",
+        ctx,
+        "s1",
+        "presets.default.root",
+        REMOVE_DIRECTORY,
+      );
+      await fireVerb(
+        "apply-layout-op",
+        ctx,
+        "s1",
+        "presets.default.root",
+        INSERT_GITPR_AFTER_GIT,
+      );
+      expect(durable.parsed().root).toEqual({ h: ["git", "gitPr"] });
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+
+    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
+    try {
+      const entry = restarted.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "default")).toEqual(["git", "gitPr"]);
+    } finally {
+      for (const fn of restartedCleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] "The change survives a daemon restart" — a fresh
+  // RenderCache/WatcherRegistry (exactly what a real restart
+  // rebuilds), reading nothing but the config file on disk.
+  test("the edit survives a restart", async () => {
+    durable.write(userConfigBody);
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      cache.getOrCreate(durable.projectDir, durable.projectDir, undefined);
+      await fireVerb(
+        "apply-layout-op",
+        originCtx(cache, sessionState),
+        "s1",
+        "presets.default.root",
+        REMOVE_DIRECTORY,
+      );
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+
+    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
+    try {
+      const entry = restarted.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "default")).toEqual(["git"]);
+    } finally {
+      for (const fn of restartedCleanups) fn();
+    }
+  });
+
+  // [LAW:one-source-of-truth] The cascade resolves a click to the ONE row
+  // holding the placement — a bundled row or the file's own — and the splice
+  // edits THAT row. Here the segment `directory` is placed in the bundled
+  // identity row AND, as `dir2`, in the file's own `extra` row, which the
+  // file authors first: each id's removal lands on its own row.
+  test("one segment placed in an inherited row and a file row: each removal lands on the row holding that id", async () => {
+    durable.write(
+      `{ globals: {}, segments: {}, root: { rows: { extra: { h: [{ seg: 'directory', id: 'dir2' }] } } } }`,
+    );
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      await fireVerb(
+        "apply-layout-op",
+        originCtx(cache, sessionState),
+        "s1",
+        "presets.default.root",
+        encodeLayoutOp({ op: "remove", target: "directory" }),
+      );
+      const parsed = durable.parsed() as {
+        root: { rows: Record<string, { h: unknown[] }> };
+      };
+      expect(Object.keys(parsed.root.rows)).toEqual(["extra", "identity"]);
+      expect(parsed.root.rows.extra!.h).toEqual([
+        { seg: "directory", id: "dir2" },
+      ]);
+      expect(parsed.root.rows.identity!.h).not.toContain("directory");
+      await fireVerb(
+        "apply-layout-op",
+        originCtx(cache, sessionState),
+        "s1",
+        "presets.default.root",
+        encodeLayoutOp({ op: "remove", target: "dir2" }),
+      );
+      expect(
+        (
+          durable.parsed() as {
+            root: { rows: Record<string, { h: unknown[] }> };
+          }
+        ).root.rows.extra!.h,
+      ).toEqual([]);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:one-source-of-truth] `presets.default.root: { rows: {} }` is the
+  // merge identity: presetRoot reports the preset authored at `root`, so the
+  // store must edit `root` too — and name it when the click is stale. The
+  // file declares the removal as an action of its own, so the reloaded
+  // config's gate still admits the token once `directory` is gone (edit
+  // chrome mints one only per placement still in the tree) and the stale
+  // click reaches the store.
+  test("a preset declaring the identity fragment stages the config's root: the edit and the stale error both name `root`", async () => {
+    durable.write(
+      `{ globals: {}, segments: {}, actions: { rm: { persist: 'presets.default.root', removeSegment: 'directory' } }, presets: { default: { root: { rows: {} } } } }`,
+    );
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(entry.state.authoredRoots.has("default")).toBe(false);
+      const removeDirectory = async (): Promise<void> =>
+        await fireVerb(
+          "apply-layout-op",
+          originCtx(cache, sessionState),
+          "s1",
+          "presets.default.root",
+          encodeLayoutOp({ op: "remove", target: "directory" }),
+        );
+      await removeDirectory();
+      const parsed = durable.parsed() as {
+        root: { rows: Record<string, { h: string[] }> };
+        presets: { default: { root: unknown } };
+      };
+      expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
+      expect(parsed.root.rows.identity!.h).not.toContain("directory");
+      expect(parsed.presets.default.root).toEqual({ rows: {} });
+      // The same click again is stale, and names the root it stages.
+      await expect(removeDirectory).rejects.toThrow(
+        /^root holds no placement "directory"/,
+      );
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  test("gitaculous removed via edit mode is offered back by every remaining `+`, and a real reload restores it", async () => {
+    const bareUserConfig = `{ globals: {}, segments: {} }`;
+    durable.write(bareUserConfig);
+
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      // Before any click: gitaculous is in the resolved tree, the file authors
+      // no root of its own, and the `+` picker's addable domain does NOT yet
+      // offer gitaculous (it's already placed).
+      const before = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(before.lastError).toBeNull();
+      expect(presetNamesOf(before, "default")).toContain("gitaculous");
+      expect(before.state.authoredRoots.has("default")).toBe(false);
+
+      // Edit mode's own `-` beside gitaculous: the token its synthesized action
+      // declares, through the gate this cache entry's config derives.
+      await fireVerb(
+        "apply-layout-op",
+        originCtx(cache, sessionState),
+        "s1",
+        "presets.default.root",
+        encodeLayoutOp({ op: "remove", target: "gitaculous" }),
+      );
+      // MATERIALIZATION: the file never authored a root, so ONLY the
+      // bundled row holding `gitaculous` was copied in (`root.rows.identity`,
+      // authoring grammar) and then edited — the status row stays inherited,
+      // and every other section is untouched.
+      const parsed = durable.parsed() as {
+        root: { rows: Record<string, { h: string[] }> };
+        globals: unknown;
+        segments: unknown;
+      };
+      expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
+      expect(parsed.root.rows.identity!.h).not.toContain("gitaculous");
+      expect(parsed.root.rows.identity!.h).toContain("directory");
+      expect(parsed.globals).toEqual({});
+      expect(parsed.segments).toEqual({});
+
+      // A fresh cache — a real restart, not an in-process cache rebuild —
+      // reloading against the SAME project dir (same config file).
+      const {
+        cache: cache2,
+        sessionState: sessionState2,
+        cleanups: cleanups2,
+      } = makeCache();
+      try {
+        const afterRemove = cache2.getOrCreate(
+          durable.projectDir,
+          durable.projectDir,
+          undefined,
+        );
+        expect(afterRemove.lastError).toBeNull();
+        expect(presetNamesOf(afterRemove, "default")).not.toContain(
+          "gitaculous",
+        );
+        expect(afterRemove.state.authoredRoots.has("default")).toBe(true);
+        // The segment is gone, but the REST of the preset's chrome is still
+        // there — other `-`/`+` affordances remain, so the bar isn't a dead
+        // end (only the render's own `when` gate hides them until a session
+        // sets edit.mode open, which this test doesn't need to drive to
+        // confirm the STRUCTURE is intact).
+        const allNames: string[] = [];
+        for (const node of walkNodes(
+          presetRoot(afterRemove.state.config, "default").node,
+        )) {
+          if (node.kind === "segment") allNames.push(node.name);
+        }
+        const remainingChrome = allNames.filter((n) => n.startsWith(EDIT_NS));
+        expect(remainingChrome.length).toBeGreaterThan(0);
+        // And "gitaculous" is now a legal target of an insertSegmentFrom pick —
+        // every `+` ranges the SAME addable domain,
+        // fresh from the tree above, so any of them offers it back.
+        expect(
+          addableSegmentDomains(afterRemove.state.config).get(ADDABLE_DOMAIN)
+            ?.members,
+        ).toContain("gitaculous");
+
+        // Click that `+` and pick "gitaculous": the exact token
+        // insertSegmentFrom's real click writes, through the gate this
+        // reload derived from that domain.
+        await fireVerb(
+          "apply-layout-op",
+          originCtx(cache2, sessionState2),
+          "s1",
+          "presets.default.root",
+          encodeLayoutOp({
+            op: "insert",
+            segment: "gitaculous",
+            anchor: "directory",
+            relation: "after",
+          }),
+        );
+
+        const { cache: cache3, cleanups: cleanups3 } = makeCache();
+        try {
+          const restored = cache3.getOrCreate(
+            durable.projectDir,
+            durable.projectDir,
+            undefined,
+          );
+          expect(restored.lastError).toBeNull();
+          // Fully recovered — through clicks the bar itself offered, no
+          // hand edit, surviving two full "restarts" along the way.
+          expect(presetNamesOf(restored, "default")).toContain("gitaculous");
+        } finally {
+          for (const fn of cleanups3) fn();
+        }
+      } finally {
+        for (const fn of cleanups2) fn();
+      }
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] brandon-layout-edit-2gc.5's own done-gate: the
+  // visible diagnostic and its reset affordance, driven through the REAL
+  // RenderCache (authoredRoots is a fact of THIS reload, never re-read), the
+  // REAL synthesized reset action (edit-chrome.ts's wrapWithPresetRows,
+  // reached through the settings menu's edit.toggle —
+  // exactly the merged-default path every other test in this describe block
+  // already exercises), and the REAL daemon reset-config handler — never a
+  // synthetic stand-in for any of the three.
+  test("a customized preset shows the diagnostic; resetting deletes the authored root and restores the bundled tree", async () => {
+    durable.write(`{ globals: {}, segments: {} }`);
+
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      // Before any edit: not customized — the file authors no root — and
+      // the tree is the bundled default's own.
+      const before = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(before.lastError).toBeNull();
+      expect(before.state.authoredRoots.has("default")).toBe(false);
+      const namesBefore = presetNamesOf(before, "default");
+      expect(namesBefore).toContain("directory");
+
+      await fireVerb(
+        "apply-layout-op",
+        originCtx(cache, sessionState),
+        "s1",
+        "presets.default.root",
+        REMOVE_DIRECTORY,
+      );
+
+      const {
+        cache: cache2,
+        sessionState: sessionState2,
+        cleanups: cleanups2,
+      } = makeCache();
+      try {
+        const customized = cache2.getOrCreate(
+          durable.projectDir,
+          durable.projectDir,
+          undefined,
+        );
+        expect(customized.lastError).toBeNull();
+        expect(customized.state.authoredRoots.has("default")).toBe(true);
+        expect(presetNamesOf(customized, "default")).toEqual(
+          namesBefore.filter((n) => n !== "directory"),
+        );
+        // The synthesized reset action targets the SAME key the +/-
+        // affordances already write — no second gate to derive.
+        const resetActionNames = Object.entries(customized.state.config.actions)
+          .filter(([, a]) => "reset" in a && a.reset === "presets.default.root")
+          .map(([name]) => name);
+        expect(resetActionNames.length).toBe(1);
+
+        // Fire the reset click through the REAL daemon handler — no key
+        // to discover from the action name; reset-config only ever needs
+        // the target key, exactly like a hand click would send.
+        await fireVerb(
+          "reset-config",
+          originCtx(cache2, sessionState2),
+          "s1",
+          "presets.default.root",
+        );
+        // The authored root is DELETED from the file; its siblings stay.
+        expect(durable.parsed()).toEqual({ globals: {}, segments: {} });
+
+        const { cache: cache3, cleanups: cleanups3 } = makeCache();
+        try {
+          const restored = cache3.getOrCreate(
+            durable.projectDir,
+            durable.projectDir,
+            undefined,
+          );
+          expect(restored.lastError).toBeNull();
+          expect(restored.state.authoredRoots.has("default")).toBe(false);
+          expect(presetNamesOf(restored, "default")).toEqual(namesBefore);
+        } finally {
+          for (const fn of cleanups3) fn();
+        }
+      } finally {
+        for (const fn of cleanups2) fn();
+      }
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // brandon-layout-edit-2gc.5 PR review: the bundled default's OWN
+  // "compact" preset has exactly 3 non-exempt segments (directory/git/
+  // context — candybar-settings-ui-aok.3 dropped its standalone preset
+  // control, since the settings menu is spliced into every preset root and
+  // carries one) — removing all 3 via the synthesized `-` chrome
+  // leaves spliceContainer with zero children, so removeTerm/insertTerm
+  // contribute NOTHING for "compact" on the next reload. Proves the reset
+  // banner's own click still works in exactly that state, through the REAL
+  // RenderCache and the REAL daemon reset-config handler — not just that
+  // the key is derived (the narrower unit test above).
+  //
+  // Also brandon-config-ph5's acceptance: the file never declared `compact`,
+  // and `presets` merge by name then by FIELD, so the first `-` materializes
+  // `presets.compact.root` alone (the bundled root in authoring grammar, no
+  // `globals`), and the reset of that root prunes the emptied `compact` —
+  // the file is byte-identical to the start and compact renders the bundled
+  // compact layout again.
+  test("a preset emptied of every segment can still be reset through a real click", async () => {
+    const INITIAL = `{ globals: {}, segments: {} }`;
+    durable.write(INITIAL);
+
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "compact")).toEqual([
+        "directory",
+        "gitaculous",
+        "context",
+      ]);
+      expect(entry.state.authoredRoots.has("compact")).toBe(false);
+
+      const ctx = originCtx(cache, sessionState);
+      const compactRemove = async (target: string): Promise<void> =>
+        await fireVerb(
+          "apply-layout-op",
+          ctx,
+          "s1",
+          "presets.compact.root",
+          encodeLayoutOp({ op: "remove", target }),
+        );
+      await compactRemove("directory");
+      expect(durable.parsed().presets).toEqual({
+        compact: { root: { h: ["gitaculous", "context"] } },
+      });
+      await compactRemove("gitaculous");
+      await compactRemove("context");
+      expect(durable.parsed().presets).toEqual({
+        compact: { root: { h: [] } },
+      });
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+
+    const {
+      cache: cache2,
+      sessionState: sessionState2,
+      cleanups: cleanups2,
+    } = makeCache();
+    try {
+      const emptied = cache2.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(emptied.lastError).toBeNull();
+      expect(emptied.state.authoredRoots.has("compact")).toBe(true);
+      expect(presetNamesOf(emptied, "compact")).toEqual([]);
+
+      // Would throw BadVerbArgs("unknown config key") before the
+      // always-derived preset-root contribution.
+      await expect(
+        fireVerb(
+          "reset-config",
+          originCtx(cache2, sessionState2),
+          "s1",
+          "presets.compact.root",
+        ),
+      ).resolves.toBeUndefined();
+      // reset = DELETE that path, pruning the `compact` it empties: the
+      // file is what it was before the first click.
+      expect(durable.text()).toBe(INITIAL);
+    } finally {
+      for (const fn of cleanups2) fn();
+    }
+
+    const { cache: cache3, cleanups: cleanups3 } = makeCache();
+    try {
+      const restored = cache3.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(restored.lastError).toBeNull();
+      expect(restored.state.authoredRoots.has("compact")).toBe(false);
+      expect(presetNamesOf(restored, "compact")).toEqual([
+        "directory",
+        "gitaculous",
+        "context",
+      ]);
+    } finally {
+      for (const fn of cleanups3) fn();
+    }
+  });
+});

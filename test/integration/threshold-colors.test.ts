@@ -1,0 +1,333 @@
+import { textOf } from "../../src/render/frame";
+import { unscriptedRuns } from "../helpers/fake-launcher";
+// The bundled default's threshold colours, pinned as a CONTRACT over palette
+// names — not opaque bytes. block/weekly heat as utilization passes the
+// placement's `warnAt` and `errorAt` settings; burnrate heats as the projected
+// minutes-to-cap fall under the warn/error minutes, with the -1 "cannot
+// project" sentinel calm; context heats as the integer percentage left drops
+// through 40 and 20. Each row says which palette NAME the cell's background
+// wears, and the expectation reads the live palette, so the pin holds across
+// themes. The text is not a palette name: it is chosen for the background the
+// ramp resolves to, so its contract is legibility — it clears the renderer's
+// text floor on that background at every stop (brandon-theme-picker-bgw.b2g,
+// which removed the hand-paired `button-color-foreground` that measured
+// 1.79:1 on textual-dark's warning).
+//
+// Written against the `if ge … else …` helper cascades BEFORE they became one
+// `ramp` call each (brandon-custom-segments-g5z.2): the ramp is proven
+// equivalent by this file passing unchanged on both sides of that
+// change. [LAW:behavior-not-structure] — the contract is the colour at each
+// value, whichever spelling computes it.
+
+import { drawPayload } from "../helpers/draw-payload";
+import { runUnder } from "../helpers/frame";
+import type { Frame } from "../../src/render/frame";
+import { TEST_SIGNER } from "../helpers/link-signer";
+import { picked, selectionFor } from "../helpers/selection";
+import {
+  contrastRatio,
+  getThemePalette,
+  parseRgbHex,
+  type Palette,
+} from "@promptctl/rich-js";
+import { TEXT_MIN_CONTRAST } from "../../src/themes/decor";
+import { RAW_DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import { parseAndValidate } from "../helpers/parse-and-validate";
+import { narrowToSegment } from "../helpers/narrow-to-segment";
+import { registerDslConfig } from "../../src/dsl/render";
+import { VariableStore } from "../../src/var-system/store";
+import { SourceRegistry } from "../../src/var-system/sources";
+import { SessionState } from "../../src/renderer/session-state";
+import { instantOf } from "../../src/utils/instant";
+import { systemTimekeeper } from "../../src/time";
+
+const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG);
+const PALETTES = ["textual-dark", "textual-light"] as const;
+const RESETS_AT = 4_102_444_800; // 2100-01-01 — `when: gt .resetsAt 0` fires
+// The instant every case is drawn at.
+const AT_SEC = 1_700_000_000;
+
+// A 5 h window an hour old whose use reaches its cap in `eta` minutes at the
+// rate it has run (`etaMinutes`), drawn at AT_SEC; -1 is a window with no use,
+// which projects nothing.
+function blockWithEta(eta: number): {
+  nativeUtilization: number;
+  resetsAt: number;
+} {
+  const elapsed = 60;
+  return {
+    nativeUtilization: eta < 0 ? 0 : (100 * elapsed) / (eta + elapsed),
+    resetsAt: AT_SEC + (300 - elapsed) * 60,
+  };
+}
+
+const OPTS = {
+  endcaps: "powerline" as const,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 1,
+  width: Number.POSITIVE_INFINITY,
+};
+
+// One row: the payload a segment reads, the placement settings it thresholds
+// against, and the palette name its cell's background must wear.
+interface Row {
+  readonly value: number;
+  readonly bg: string;
+}
+interface Case {
+  readonly segment: string;
+  readonly glyph: string;
+  readonly settings: Readonly<Record<string, number>>;
+  readonly payload: (value: number) => Record<string, unknown>;
+  readonly rows: readonly Row[];
+}
+
+// Fuller-is-hotter over the displayed (rounded) percentage: the fractional
+// rows pin that the colour agrees with the integer the cell prints.
+const BLOCK_LIKE = (threshold: number): readonly Row[] =>
+  threshold === 80
+    ? [
+        { value: 0, bg: "tint" },
+        { value: 49, bg: "tint" },
+        { value: 49.6, bg: "warning" },
+        { value: 50, bg: "warning" },
+        { value: 79, bg: "warning" },
+        { value: 79.6, bg: "error" },
+        { value: 80, bg: "error" },
+        { value: 100, bg: "error" },
+      ]
+    : [
+        // threshold 50: the warning band collapses — 50 is already error.
+        { value: 0, bg: "tint" },
+        { value: 49, bg: "tint" },
+        { value: 50, bg: "error" },
+        { value: 79, bg: "error" },
+        { value: 100, bg: "error" },
+      ];
+
+// Nearer-is-hotter over minutes-to-cap; -1 is "cannot project" and calm.
+const ETA_HEAT: readonly Row[] = [
+  { value: -1, bg: "tint" },
+  { value: 0, bg: "error" },
+  { value: 29, bg: "error" },
+  { value: 30, bg: "warning" },
+  { value: 59, bg: "warning" },
+  { value: 60, bg: "tint" },
+  { value: 120, bg: "tint" },
+];
+
+// Less-left-is-hotter over an integer percentage (src/segments/context.ts
+// rounds it), so 20/21 and 40/41 are the exact edges.
+const CONTEXT_LEFT: readonly Row[] = [
+  { value: 0, bg: "error" },
+  { value: 20, bg: "error" },
+  { value: 21, bg: "warning" },
+  { value: 40, bg: "warning" },
+  { value: 41, bg: "tint" },
+  { value: 100, bg: "tint" },
+];
+
+// A lowered heat threshold moves the first warm colour, and the text follows
+// the background it lands on.
+const HEAT_LOW: readonly Row[] = [
+  { value: 19, bg: "tint" },
+  { value: 20, bg: "warning" },
+  { value: 79, bg: "warning" },
+  { value: 80, bg: "error" },
+];
+
+const CASES: readonly Case[] = [
+  ...(["block", "weekly"] as const).map((segment) => ({
+    segment,
+    glyph: segment === "block" ? "◱" : "◑",
+    settings: { warnAt: 20 },
+    payload: (v: number) =>
+      segment === "block"
+        ? { block: { nativeUtilization: v, resetsAt: RESETS_AT } }
+        : { weekly: { percentage: v, resetsAt: RESETS_AT } },
+    rows: HEAT_LOW,
+  })),
+  ...([80, 50] as const).map((threshold) => ({
+    segment: "block",
+    glyph: "◱",
+    settings: { errorAt: threshold },
+    payload: (v: number) => ({
+      block: { nativeUtilization: v, resetsAt: RESETS_AT },
+    }),
+    rows: BLOCK_LIKE(threshold),
+  })),
+  ...([80, 50] as const).map((threshold) => ({
+    segment: "weekly",
+    glyph: "◑",
+    settings: { errorAt: threshold },
+    payload: (v: number) => ({
+      weekly: { percentage: v, resetsAt: RESETS_AT },
+    }),
+    rows: BLOCK_LIKE(threshold),
+  })),
+  {
+    segment: "burnrate",
+    glyph: "⚡",
+    settings: { warnWithin: 60, errorWithin: 30 },
+    payload: (v: number) => ({
+      burn: { costPerHour: 1 },
+      block: blockWithEta(v),
+    }),
+    rows: ETA_HEAT,
+  },
+  {
+    segment: "context",
+    glyph: "◔",
+    settings: {},
+    payload: (v: number) => ({
+      context: { totalTokens: 1000, contextLeft: v },
+    }),
+    rows: CONTEXT_LEFT,
+  },
+];
+
+const HOOK = {
+  hook_event_name: "Status",
+  session_id: "x",
+  cwd: "/tmp",
+  model: { id: "x", display_name: "x" },
+  workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+};
+
+// The theme is named rather than handed over as a Palette: drawDsl resolves it
+// from the SELECTION now (brandon-themes-dzl), so a name is the whole input and
+// the palette the expectations read is built from that same name.
+function renderOne(
+  c: Case,
+  value: number,
+  themeName: string,
+  onSegmentError?: (segName: string, message: string) => void,
+  undecorated = false,
+): Frame {
+  const narrowed = narrowToSegment(
+    parseAndValidate("<default>", SERIALIZED),
+    c.segment,
+    c.settings,
+  );
+  // `undecorated` renders the same cell with its `bg:` removed — the colour an
+  // absent `bg:` resolves to at this address, which a calm arm names as `(tint)`.
+  const segments = undecorated
+    ? {
+        ...narrowed.segments,
+        [c.segment]: { ...narrowed.segments[c.segment]!, bg: undefined },
+      }
+    : narrowed.segments;
+  const one = { ...narrowed, segments };
+  const store = new VariableStore(systemTimekeeper);
+  const registry = new SourceRegistry(store, "", new SessionState());
+  try {
+    const compiled = registerDslConfig(one, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+    return drawPayload(
+      one,
+      compiled,
+      store,
+      registry,
+      { ...HOOK, ...c.payload(value) },
+      instantOf(new Date(AT_SEC * 1000)),
+      OPTS,
+      { onSegmentError },
+      selectionFor(one, {}, picked({ theme: themeName })),
+    ).frame;
+  } finally {
+    registry.dispose();
+  }
+}
+
+// The fg/bg pair of the run that paints the cell's glyph.
+function cellColors(
+  frame: Frame,
+  glyph: string,
+): { fg: string; bg: string } {
+  const run = runUnder(frame, glyph);
+  expect(run?.fg).toBeDefined();
+  expect(run?.bg).toBeDefined();
+  return { fg: run!.fg!, bg: run!.bg! };
+}
+
+// A calm row wears the cell's own decoration: what the same cell renders with
+// no `bg:` at all. Every other row names the palette role it heats to.
+function expectedBg(palette: Palette, row: Row, c: Case, paletteName: string): string {
+  if (row.bg === "tint") {
+    return cellColors(renderOne(c, row.value, paletteName, undefined, true), c.glyph).bg;
+  }
+  const bg = palette.get(row.bg);
+  expect(bg).toBeDefined();
+  return bg!.hex;
+}
+
+describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
+  const palette = getThemePalette(paletteName)!;
+  for (const c of CASES) {
+    const varLabel = Object.entries(c.settings)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(" ");
+    test.each(c.rows)(
+      `${c.segment} ${varLabel} at $value wears bg=$bg, text legible on it`,
+      (row) => {
+        const { fg, bg } = cellColors(renderOne(c, row.value, paletteName), c.glyph);
+        expect(bg).toBe(expectedBg(palette, row, c, paletteName));
+        expect(
+          contrastRatio(parseRgbHex(fg.slice(1)), parseRgbHex(bg.slice(1))),
+        ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
+      },
+    );
+  }
+});
+
+// [LAW:no-silent-failure] An error threshold set below the warning threshold
+// is a descending pair. The loader refuses such a placement and configure mode
+// refuses such a pick (test/integration/threshold-settings.test.ts), so this is the
+// render's own last line — a pick left standing when the file under it
+// changes: a hand edit, or another session's (or another preset's) save.
+// The old `if ge …` cascade rendered it by silently dropping the warning
+// band; the ramp refuses to sort and names both positions.
+describe("a threshold below its neighbour is a loud render error", () => {
+  const palette = getThemePalette("textual-dark")!;
+  const INVERTED: readonly {
+    segment: string;
+    settings: Readonly<Record<string, number>>;
+    pair: string;
+  }[] = [
+    {
+      segment: "block",
+      settings: { errorAt: 30 },
+      pair: "stop 2 at 30 follows stop 1 at 50",
+    },
+    {
+      segment: "weekly",
+      settings: { errorAt: 30 },
+      pair: "stop 2 at 30 follows stop 1 at 50",
+    },
+    {
+      segment: "burnrate",
+      settings: { warnWithin: 60, errorWithin: 90 },
+      pair: "stop 3 at 60 follows stop 2 at 90",
+    },
+  ];
+  test.each(INVERTED)(
+    "$segment $settings names both positions",
+    ({ segment, settings, pair }) => {
+      // The found case lends its payload and glyph; `settings` are this row's
+      // own, over the bundled defaults, so the pair inverts exactly as stated.
+      const c = CASES.find((x) => x.segment === segment)!;
+      const errors: string[] = [];
+      const rendered = renderOne(
+        { ...c, settings },
+        60,
+        "textual-dark",
+        (name, message) => errors.push(`${name}: ${message}`),
+      );
+      expect(textOf(rendered)).toContain("⚠");
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatch(
+        new RegExp(`^${segment}: .*ascending position order; ${pair}`),
+      );
+    },
+  );
+});

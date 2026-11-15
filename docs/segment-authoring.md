@@ -1,7 +1,7 @@
 <!--
   Segment authoring reference — written for an AGENT config author.
 
-  Snippet contract (enforced by test/doc-snippets.test.ts):
+  Snippet contract (enforced by test/integration/doc-snippets.test.ts):
     ```json5 check:pass   — a COMPLETE config file; must exit 0 under `cc-candybar check`.
     ```json5 check:fail   — a COMPLETE config file; must exit 1, and the next
     ```error              — block must quote a substring of check's actual stderr.

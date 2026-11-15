@@ -1,0 +1,387 @@
+// [LAW:behavior-not-structure] A session's facts document, as the daemon's
+// owners hold them: what each fact says against the owners read directly, what
+// a turn in which nothing moved leaves untouched, and what the stamp says when
+// one answer does.
+
+import { restamp, type Fact } from "../../src/facts/fact";
+import type { BuiltinFacts } from "../../src/facts/world-state";
+import type { GitRead } from "../../src/segments/git";
+import {
+  assembleFacts,
+  failedStamp,
+  FACTS_VERSION,
+} from "../../src/daemon/facts-assembly";
+import { stampFailureOf } from "../../src/facts/world-state";
+import type { Update } from "../../src/facts/world-state";
+import { readingsOf, type RenderPayloadDeps } from "../../src/daemon/readings";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { oneDay } from "../../src/daemon/foundations/today-facts";
+import { sumsOf } from "../helpers/today";
+import { claudeConfigDir, claudeSettingsPath } from "../../src/claude-settings";
+import type { CheckedHookData } from "../../src/renderer-interface/request-context";
+import type { ClientHints } from "../../src/daemon/foundations/protocol";
+import { instantOf, type Instant } from "../../src/utils/instant";
+import {
+  ABSENT,
+  failed,
+  ok,
+  pendingOf,
+  type Outcome,
+} from "../../src/utils/outcome";
+import { settledLane } from "../../src/utils/reading";
+import {
+  absentOwners,
+  declaredLanes,
+  settleLanes,
+  type LanedInputs,
+  fakeActivity,
+  fakeAutoCompact,
+  fakeCacheExpiry,
+  fakeContext,
+  fakeGit,
+  fakeMetrics,
+  fakeTmux,
+  fakeUsage,
+} from "../helpers/payload-owners";
+
+const SID = sessionIdOf("facts-assembly");
+const PANE = { socket: "/tmp/tmux.sock", pane: "%7", truecolor: null };
+const HINTS: ClientHints = { tmux: PANE };
+const HOOK: CheckedHookData = {
+  hook_event_name: "Status",
+  session_id: SID,
+  transcript_path: "/no/such/transcript.jsonl",
+  cwd: "/tmp",
+  model: { id: "claude-opus-4-7", display_name: "Opus" },
+  workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+};
+
+const at = (seconds: number): Instant =>
+  instantOf(new Date(1_700_000_000_000 + seconds * 1000));
+const T0 = at(0);
+
+const GIT: GitRead = {
+  branch: "main",
+  status: "clean",
+  aheadBehind: ok({ ahead: 0, behind: 0 }),
+  head: ok("c0ffee"),
+  workingTree: { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 },
+  sha: ok("abc1234"),
+  operation: ABSENT,
+  committedAt: ok(1_699_996_400),
+  stashCount: ok(0),
+  upstream: ABSENT,
+  repoName: ok("project"),
+  repoUrl: ABSENT,
+};
+const PR = {
+  number: 7,
+  state: "open",
+  url: "https://example.test/pr/7",
+  head: "c0ffee",
+};
+
+// Every lane over the value it is given; the git lane answers `git`.
+function owners(git: Outcome<unknown> = ok({ ...GIT, pullRequest: ok(PR) })) {
+  return {
+    ...absentOwners(),
+    gitProvider: fakeGit(() => git),
+    tmuxService: fakeTmux(() => ok("work")),
+    usageStore: fakeUsage({
+      usage: () => ok({ calculatedCost: 2, tokens: 10, tokenBreakdown: null }),
+      today: () => ok(sumsOf(T0, 5, 50)),
+      speed: () => ABSENT,
+    }),
+    contextProvider: fakeContext(() => ok(1_200)),
+    metricsProvider: fakeMetrics(() => ABSENT),
+    activityProvider: fakeActivity(() => failed("no transcript", "read")),
+    cacheExpiry: fakeCacheExpiry(() => ok(1_700_003_600)),
+    autoCompact: fakeAutoCompact(() => ok(400_000)),
+  };
+}
+
+const cleanups: Array<() => void> = [];
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0)) cleanup();
+});
+
+function rig(git?: Outcome<unknown>) {
+  const held = owners(git);
+  const deps = held as unknown as RenderPayloadDeps;
+  const inputs: LanedInputs = {
+    hookData: HOOK,
+    deps,
+    cwd: undefined,
+    hints: HINTS,
+    lanes: declaredLanes(
+      held,
+      { hookData: HOOK, cwd: undefined, hints: HINTS },
+      cleanups,
+    ),
+  };
+  return { held, deps, inputs };
+}
+
+const sampled = async (r: ReturnType<typeof rig>) => {
+  await settleLanes(r.inputs, T0);
+  return r;
+};
+
+const PENDING = pendingOf("unread");
+const BUILTIN_KEYS = [
+  "activity",
+  "autocompact",
+  "cache",
+  "context",
+  "git",
+  "hostName",
+  "hostUser",
+  "metrics",
+  "pr",
+  "session",
+  "speed",
+  "tmux",
+  "today",
+] as const;
+
+describe("a session's facts document", () => {
+  test("says, for every built-in, what its owner holds", async () => {
+    const r = await sampled(rig());
+    const doc = assembleFacts(
+      undefined,
+      SID,
+      readingsOf(r.inputs, r.inputs.lanes()),
+      PENDING,
+      T0,
+    );
+    // The expected document is read from the owners, never from the readings.
+    const lanes = r.inputs.lanes();
+    const { pullRequest, ...gitRead } = (
+      lanes.git.current() as unknown as { value: Record<string, unknown> }
+    ).value;
+    const settings = claudeSettingsPath(
+      claudeConfigDir(undefined, r.deps.home),
+    );
+    const expected: Record<keyof BuiltinFacts, Fact<unknown>> = {
+      session: restamp(undefined, r.held.usageStore.usageOf(SID), T0),
+      // The fixture's one day, and the session with no days of its own.
+      today: restamp(undefined, ok({ sums: oneDay(T0, 5, 50), own: {} }), T0),
+      speed: restamp(undefined, r.held.usageStore.speedOf(SID), T0),
+      context: restamp(undefined, r.held.contextProvider.tokensOf(SID), T0),
+      metrics: restamp(undefined, r.held.metricsProvider.foldOf(SID), T0),
+      activity: restamp(undefined, r.held.activityProvider.activityOf(SID), T0),
+      cache: restamp(undefined, r.held.cacheExpiry.expiryOf(SID), T0),
+      autocompact: restamp(undefined, r.held.autoCompact.stored(settings), T0),
+      git: restamp(undefined, ok(gitRead), T0),
+      pr: restamp(undefined, pullRequest as Outcome<unknown>, T0),
+      tmux: restamp(undefined, ok({ session: "work" }), T0),
+      hostName: restamp(undefined, lanes.hostName.current(), T0),
+      hostUser: restamp(undefined, lanes.hostUser.current(), T0),
+    };
+    expect(Object.keys(doc.builtins).sort()).toEqual([...BUILTIN_KEYS]);
+    expect(doc.builtins).toEqual(expected);
+    expect(doc.v).toBe(FACTS_VERSION);
+    expect(doc.session).toBe(SID);
+    expect(doc.seq).toBe(1);
+  });
+
+  test("is total before any owner has answered, every fact pending", () => {
+    const r = rig();
+    const doc = assembleFacts(
+      undefined,
+      SID,
+      readingsOf(r.inputs, r.inputs.lanes()),
+      PENDING,
+      T0,
+    );
+    expect(Object.keys(doc.builtins).sort()).toEqual([...BUILTIN_KEYS]);
+    for (const key of ["session", "git", "pr", "tmux", "context"] as const) {
+      expect(doc.builtins[key]).toEqual(PENDING);
+    }
+  });
+
+  describe("the PR", () => {
+    const prOf = async (git: Outcome<unknown>) => {
+      const r = await sampled(rig(git));
+      return assembleFacts(
+        undefined,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        T0,
+      ).builtins.pr;
+    };
+
+    test("is the lane the repository read carries", async () => {
+      expect(await prOf(ok({ ...GIT, pullRequest: ok(PR) }))).toEqual({
+        kind: "ok",
+        value: PR,
+        at: T0,
+      });
+      expect(await prOf(ok({ ...GIT, pullRequest: ABSENT }))).toEqual({
+        kind: "absent",
+        at: T0,
+      });
+    });
+
+    test("is absent when there is no repository", async () => {
+      expect(await prOf(ABSENT)).toEqual({ kind: "absent", at: T0 });
+    });
+
+    test("is the repository's failure when it could not be read, since the forge cannot be asked", async () => {
+      expect(await prOf(failed("not a worktree", "read"))).toEqual({
+        kind: "failed",
+        reason: "not a worktree",
+        failedAt: "read",
+        at: T0,
+      });
+    });
+  });
+
+  describe("the declared sources", () => {
+    test("every one has a key carrying its lane's reading", async () => {
+      const r = await sampled(rig());
+      const lanes = {
+        ...r.inputs.lanes(),
+        sources: new Map([
+          ["written", settledLane(ok({ home: "/h" }))],
+          ["unwritten", settledLane(ABSENT)],
+        ]),
+      };
+      const doc = assembleFacts(
+        undefined,
+        SID,
+        readingsOf(r.inputs, lanes),
+        PENDING,
+        T0,
+      );
+      expect(doc.sources).toEqual({
+        written: { kind: "ok", value: { home: "/h" }, at: T0 },
+        unwritten: { kind: "absent", at: T0 },
+      });
+    });
+  });
+
+  describe("restamped against the document it replaces", () => {
+    test("a turn in which nothing moved is the same document", async () => {
+      const r = await sampled(rig());
+      const first = assembleFacts(
+        undefined,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        T0,
+      );
+      const again = assembleFacts(
+        first,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        at(60),
+      );
+      expect(again).toBe(first);
+    });
+
+    test("one answer moving moves its instant and the sequence, and nothing else", async () => {
+      const r = await sampled(rig());
+      const first = assembleFacts(
+        undefined,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        T0,
+      );
+      r.deps.faults.refreshed(SID, "cache", "refresh threw");
+      const second = assembleFacts(
+        first,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        at(60),
+      );
+      expect(second.seq).toBe(2);
+      expect(second.builtins.cache).toEqual({
+        kind: "failed",
+        reason: "refresh threw",
+        failedAt: "read",
+        at: at(60),
+      });
+      // Every other fact is the very object it was, its instant untouched.
+      for (const key of BUILTIN_KEYS.filter((k) => k !== "cache")) {
+        expect(second.builtins[key]).toBe(first.builtins[key]);
+      }
+      expect(second.diagnostics).toEqual([
+        { kind: "lane", lane: "cache", reason: "refresh threw" },
+      ]);
+
+      // The refresh running clean again is a change too: stamped when it came.
+      r.deps.faults.refreshed(SID, "cache", null);
+      const third = assembleFacts(
+        second,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        at(120),
+      );
+      expect(third.seq).toBe(3);
+      expect(third.builtins.cache).toEqual({
+        kind: "ok",
+        value: 1_700_003_600,
+        at: at(120),
+      });
+      expect(third.diagnostics).toEqual([]);
+    });
+
+    test("the update is the fact it is handed, by reference", async () => {
+      const r = await sampled(rig());
+      const readings = readingsOf(r.inputs, r.inputs.lanes());
+      const none = restamp(undefined, ABSENT, T0);
+      const first = assembleFacts(undefined, SID, readings, none, T0);
+      expect(first.update).toBe(none);
+      expect(assembleFacts(first, SID, readings, none, at(5))).toBe(first);
+      const newer = restamp(
+        none,
+        ok<Update>({ kind: "release", newer: [2, 0, 0], running: [1, 0, 0] }),
+        at(10),
+      );
+      const second = assembleFacts(first, SID, readings, newer, at(10));
+      expect(second.update).toBe(newer);
+      expect(second.seq).toBe(2);
+      for (const key of BUILTIN_KEYS) {
+        expect(second.builtins[key]).toBe(first.builtins[key]);
+      }
+    });
+  });
+
+  describe("a stamp that threw", () => {
+    test("is the prior document with the failure among its diagnostics and the next seq; the same failure again is that document", async () => {
+      const r = await sampled(rig());
+      const first = assembleFacts(
+        undefined,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        T0,
+      );
+      const failedOnce = failedStamp(first, "the read broke");
+      expect(failedOnce.seq).toBe(first.seq + 1);
+      expect(failedOnce.builtins).toBe(first.builtins);
+      expect(stampFailureOf(failedOnce)).toBe("the read broke");
+      expect(failedStamp(failedOnce, "the read broke")).toBe(failedOnce);
+      expect(stampFailureOf(failedStamp(failedOnce, "another"))).toBe(
+        "another",
+      );
+      expect(stampFailureOf(first)).toBeNull();
+      // The next clean stamp is a document without it.
+      const clean = assembleFacts(
+        failedOnce,
+        SID,
+        readingsOf(r.inputs, r.inputs.lanes()),
+        PENDING,
+        at(60),
+      );
+      expect(clean.seq).toBe(failedOnce.seq + 1);
+      expect(stampFailureOf(clean)).toBeNull();
+    });
+  });
+});

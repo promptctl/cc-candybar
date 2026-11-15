@@ -107,7 +107,7 @@ import type { RenderCacheStats } from "../daemon/foundations/stats-snapshot";
 // states) let the memory backstop trip long before anything was evicted
 // (brandon-unfiled-3248.8yp). The heap a state holds beside its compile, and
 // the heap one compile holds — measured, and held to by
-// test/render-cache-sharing.test.ts, which fails when either is exceeded.
+// test/integration/render-cache-sharing.test.ts, which fails when either is exceeded.
 // Measured 2026-10-20 over the bundled default: a rendered entry 1.8 MB (2.4
 // MB in a daemon serving a full user config from forty real worktree
 // directories); a compile 7.1 MB, counted as an evicted builder leaves it —
@@ -1129,7 +1129,7 @@ export function fallbackState(
   const built =
     resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
   // [LAW:no-silent-failure] The default validates by program invariant
-  // (test/default-dsl-config.test.ts); a throw is a daemon bug.
+  // (test/integration/default-dsl-config.test.ts); a throw is a daemon bug.
   if (built.kind === "failed")
     throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
       cause: built.cause,
@@ -1456,7 +1456,7 @@ export class RenderCache<
     // a bar: the bundled default, built exactly here and only then — the error
     // is counted by the indicator beside its settings door, loud, and the
     // settings menu is the door back to the file. The default validates by program invariant
-    // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
+    // (test/integration/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
     // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
       projectDir,

@@ -1,0 +1,485 @@
+// [LAW:verifiable-goals] vhi.1 acceptance: a click verb mutates SessionState;
+// the next DSL render reflects the change without re-reading disk. This test
+// drives the cascade end-to-end through the bzh.7 spine — registerDslConfig
+// + drawDsl — so the verification matches the live render path the
+// daemon uses, not a parallel test rig.
+//
+// [LAW:single-enforcer] The verb dispatch goes through the registry in
+// src/renderer/verbs/index.ts directly. That is the same handler the daemon
+// invokes for a wire-level click; no duplication.
+
+import { textOf } from "../../src/render/frame";
+import { feedInputs } from "../helpers/inputs";
+import { autorun } from "mobx";
+import { VERBS } from "../../src/renderer/verbs";
+import { PAYLOAD_INPUTS } from "../../src/config/payload-inputs";
+import { buildRig } from "../helpers/rig";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+
+const ALLOWED_PALETTES = new Set(["textual-dark"]);
+
+// Minimal config — one input (session.id), one state-kind var bound to
+// SessionState's "theme" key, one segment that prints the state value.
+const CONFIG_SRC = `{
+  globals: {},
+  variables: {
+    themePick: { kind: 'state', key: 'theme', default: '(unset)' },
+  },
+  segments: {
+    themeSeg: {
+      template: ' theme={{ .themePick }} ',
+      bg: 'surface',
+      fg: 'foreground',
+    },
+  },
+  root: 'themeSeg',
+}`;
+
+describe("DSL state cascade (vhi.1 acceptance)", () => {
+  const SESSION_ID = sessionIdOf("s-cascade");
+  const HOOK_DATA = { session_id: SESSION_ID };
+
+  // A click is gated by the config its session renders: the rig records that
+  // render, and `ctx` hands this config to every verb below.
+  function cascadeBar(source: string = CONFIG_SRC) {
+    const rig = buildRig({ source, palettes: ALLOWED_PALETTES, sessionId: SESSION_ID });
+    const render = () => textOf(rig.draw().frame);
+    return { ...rig, render };
+  }
+
+  test("initial render shows default when SessionState has no entry", () => {
+    const { render } = cascadeBar();
+    expect(render()).toContain("theme=(unset)");
+  });
+
+  test("direct SessionState.set is visible on next render", () => {
+    const { sessionState, render } = cascadeBar();
+    expect(render()).toContain("theme=(unset)");
+    sessionState.set(SESSION_ID, "theme", "ocean");
+    expect(render()).toContain("theme=ocean");
+  });
+
+  test("set-state theme write changes the rendered COLORS on next render (k5a.4)", async () => {
+    // [LAW:verifiable-goals] The k5a.4 contract: a theme click recolors the
+    // bar. The drawDsl-level tests above prove the TEXT cascade; this proves
+    // the COLOR cascade by resolving basePalette per render from the session
+    // theme exactly as the daemon does (resolveThemeSelection over
+    // SessionState, whose decided arm carries the palette) — no frozen entry
+    // palette.
+    // globals.palette is SET (as in the bundled default) — the regression this
+    // pins: a config-default base theme must NOT be frozen per-segment, or the
+    // session theme could never override it. A segment with no explicit
+    // `palette:` follows the live base theme.
+    const { draw, ctx } = cascadeBar(`{
+      globals: { palette: 'textual-dark' },
+      segments: {
+        seg: { template: ' x ', bg: 'primary', fg: 'foreground' },
+      },
+      root: 'seg',
+    }`);
+    // Mirror the daemon's per-render theme resolution. Without this the two
+    // renders below would BOTH be the floor theme and the test would assert
+    // that two identical strings differ — vacuous rather than merely weaker.
+    // (The rig's draw resolves the selection over the session's picks.)
+    const render = () => draw().frame;
+
+    const before = render(); // effective theme = textual-dark (globals default)
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+    const after = render(); // effective theme = nord
+
+    // Same text, different colours — the palette switched live.
+    expect(textOf(after)).toBe(textOf(before));
+    expect(after.rows).not.toEqual(before.rows);
+  });
+
+  test("set-state click verb propagates to the next render", async () => {
+    // The actual ticket verification: dispatch the verb through the same
+    // registry the daemon uses; assert the next render reflects the change.
+    const { ctx, render } = cascadeBar();
+    expect(render()).toContain("theme=(unset)");
+
+    // set-state value shape: "<sessionId>/<key>/<value>" — key must be
+    // one the session's config gates and value must satisfy its validator.
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+    expect(render()).toContain("theme=nord");
+
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/dracula`, ctx);
+    expect(render()).toContain("theme=dracula");
+  });
+
+  test("cascade triggers a reactive observer, not just a fresh render-time read", async () => {
+    // [LAW:behavior-not-structure] The "set-state click verb propagates"
+    // test above asserts the rendered string carries the new value — true
+    // whenever drawDsl sees the new value at next read, which can
+    // happen via two different mechanisms:
+    //   (a) atom.reportChanged() invalidated the computed; the next read
+    //       re-derives through the dep graph (the intended contract); or
+    //   (b) the computed's keepAlive cache was bypassed for some other
+    //       reason (e.g. an unobserved-computed re-derive on access).
+    // Wrapping store.read("themePick") in an `autorun` forces (a) to be the
+    // only path that can produce a second observation: autoruns fire only
+    // when a tracked dep invalidates. If SessionState.set ever stops
+    // calling atom.reportChanged(), this test stalls at one observation.
+    const { store, registry, ctx } = cascadeBar();
+    feedInputs(registry, HOOK_DATA);
+
+    const observed: string[] = [];
+    const dispose = autorun(() => {
+      observed.push(String(store.read("themePick")));
+    });
+    // [LAW:no-defensive-null-guards] try/finally is not defensive — it is
+    // the type-level guarantee that the autorun cannot outlive this test
+    // even when the assertions throw (which is the *point* of a regression
+    // test: when a fault is reintroduced, expectations fail here, and a
+    // dangling reaction in the global MobX scheduler would then leak into
+    // subsequent tests). Same shape as a using-block / RAII guard.
+    try {
+      expect(observed).toEqual(["(unset)"]);
+
+      await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+
+      // Exactly one additional fire — proves the dep graph propagated the
+      // change rather than the autorun being scheduled for an unrelated
+      // reason or the observation count drifting.
+      expect(observed).toEqual(["(unset)", "nord"]);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("two state vars: mutation propagates only to its dependent observer", async () => {
+    // [LAW:behavior-not-structure] Pins both directions of the coarse-atom
+    // trade-off documented in session-state.ts:
+    //   - cascade reach: a mutation to one key must still reach computeds
+    //     that read that key (the atom can't be too narrow).
+    //   - memo suppression: a mutation to one key must NOT re-fire
+    //     observers of unrelated computeds whose derived value is unchanged
+    //     (MobX's value-equality comparer on computed results is what makes
+    //     the coarse atom acceptable in the first place).
+    // The single-segment / single-state-var fixture above can't separate
+    // those: it has no second observer to misbehave. This test adds one.
+    const { store, registry, sessionState, ctx } = cascadeBar(`{
+      globals: {},
+      variables: {
+        themePick: { kind: 'state', key: 'theme', default: '(unset)' },
+        expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
+      },
+      segments: {
+        themeSeg: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
+        tbSeg: { template: '{{ .expanded }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: { h: ['themeSeg', 'tbSeg'] },
+    }`);
+    feedInputs(registry, HOOK_DATA);
+
+    const themeObs: string[] = [];
+    const expandedObs: string[] = [];
+    const disposeTheme = autorun(() => {
+      themeObs.push(String(store.read("themePick")));
+    });
+    const disposeExp = autorun(() => {
+      expandedObs.push(String(store.read("expanded")));
+    });
+    // [LAW:no-defensive-null-guards] try/finally is the type-level
+    // guarantee that both autoruns are disposed even when the
+    // assertions throw — see the same note on the test above.
+    try {
+      expect(themeObs).toEqual(["(unset)"]);
+      expect(expandedObs).toEqual([""]);
+
+      await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+
+      // Watched key advanced — cascade reached the right computed.
+      expect(themeObs).toEqual(["(unset)", "nord"]);
+      // Unrelated key: the atom invalidated the `expanded` computed too
+      // (coarse-grained reactivity), but it re-derived to the same fallback
+      // "" — MobX's value comparer suppresses propagation to this observer.
+      expect(expandedObs).toEqual([""]);
+
+      // Sanity: a mutation to the OTHER state key fires the expanded
+      // observer (cascade is not over-suppressed).
+      sessionState.set(SESSION_ID, "toolbar-expanded", "1");
+      expect(expandedObs).toEqual(["", "1"]);
+      expect(themeObs).toEqual(["(unset)", "nord"]);
+    } finally {
+      disposeTheme();
+      disposeExp();
+    }
+  });
+
+  test("set-state rejects an unknown theme value (BadVerbArgs)", async () => {
+    // Pinning the [LAW:no-silent-failure] contract on the verb itself.
+    // An unknown theme cannot quietly persist — the daemon's dispatcher
+    // converts BadVerbArgs into a BAD_REQUEST wire response.
+    const { ctx } = cascadeBar();
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
+    ).rejects.toThrow(/unknown theme/);
+  });
+
+  test('set-state rejects the "custom" theme sentinel (not a renderable theme)', async () => {
+    // [LAW:one-source-of-truth] The theme validator runs against
+    // listResolvablePaletteNames — the set of names that actually resolve
+    // to a Palette. "custom" is a sentinel that instructs the cascade to
+    // read inline colors; persisting it as a session theme would render
+    // empty/broken at the next refresh.
+    const { ctx } = cascadeBar();
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
+    ).rejects.toThrow(/unknown theme/);
+  });
+
+  test("set-state rejects an unknown key with the registered-key list", async () => {
+    // [LAW:no-silent-failure] An unknown key is the session's gate telling
+    // the operator "this is not a writable surface" — the BAD_REQUEST surfaces
+    // exactly which keys ARE writable, so a typo or stale wire spec is
+    // self-diagnosing.
+    const { ctx } = cascadeBar();
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
+    ).rejects.toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
+  });
+
+  test("set-state writes the endcaps key when given a registered endcaps shape", async () => {
+    // The set-state verb covers every registered key; the endcaps key was a
+    // separate named verb before this epic.
+    const { sessionState, ctx } = cascadeBar();
+    await VERBS.get("set-state")!(`${SESSION_ID}/endcaps/capsule`, ctx);
+    expect(sessionState.get(SESSION_ID, "endcaps")).toBe("capsule");
+  });
+
+  test("set-state rejects an unknown endcaps value with the allowed-list", async () => {
+    const { ctx } = cascadeBar();
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/endcaps/not-a-shape`, ctx),
+    ).rejects.toThrow(/unknown endcaps "not-a-shape" \(have: .*capsule.*\)/);
+  });
+
+  test("set-state normalizes boolean-ish toolbar-expanded values", async () => {
+    // [LAW:one-source-of-truth] The canonical truthy/falsy strings are
+    // owned by the boolean validator, not by each callsite. "1"/"true"
+    // collapse to "1"; "0"/"false" collapse to "" — the same sentinel
+    // the toolbar-toggle verb produces via clear() for the next render.
+    const { sessionState, ctx } = cascadeBar();
+
+    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/true`, ctx);
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
+
+    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/false`, ctx);
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
+
+    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/1`, ctx);
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
+
+    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/0`, ctx);
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
+  });
+
+  test("set-state rejects non-boolean-ish toolbar-expanded values", async () => {
+    const { ctx } = cascadeBar();
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
+    ).rejects.toThrow(/expected boolean-ish/);
+  });
+
+  test("set-state rejects malformed wire input (missing tail or odd count)", async () => {
+    // [LAW:types-are-the-program] The wire shape after <sessionId> is a
+    // sequence of even-count <key>/<value> pairs. Each structural
+    // defect — empty tail, odd count, empty key segment — surfaces its
+    // own diagnostic so the operator sees which slash they forgot.
+    const { ctx } = cascadeBar();
+
+    // Just the session id (no key/value).
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).rejects.toThrow(
+      /<key>\/<value> is required/,
+    );
+    // Key but no value separator (odd-count: one segment).
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).rejects.toThrow(
+      /expected even-count.*got 1 segment/,
+    );
+    // Empty key segment at pair 1 — structurally distinct from the
+    // unknown-key validator rejection.
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).rejects.toThrow(
+      /empty key at pair 1/,
+    );
+  });
+
+  test("set-state rejects prototype-poison keys with a clean BAD_REQUEST", async () => {
+    // [LAW:types-are-the-program] A gate's validators are a Map, not a
+    // plain object — so wire-level `__proto__` / `constructor` are
+    // ordinary non-members, not truthy hits on Object.prototype. The
+    // verb's "unknown state key" path catches them; the alternative
+    // (validators as Record<string, T>) would let the gate's `validate`
+    // find Object.prototype as a truthy "validator", which then throws
+    // a TypeError on invocation — RENDER_FAILED instead of BAD_REQUEST.
+    // [LAW:behavior-not-structure] This test asserts the rejection
+    // behavior, so a future revert from Map to a plain object regresses
+    // here loudly even though the type alone makes the bad state
+    // unrepresentable today.
+    const { ctx } = cascadeBar();
+    for (const poison of ["__proto__", "constructor", "toString"]) {
+      await expect(VERBS.get("set-state")!(`${SESSION_ID}/${poison}/whatever`, ctx),
+      ).rejects.toThrow(
+        new RegExp(`unknown state key "${poison.replace(/\$/g, "\\$")}"`),
+      );
+    }
+  });
+
+  test("set-state writes a multi-pair batch atomically (Menu action contract)", async () => {
+    // [LAW:dataflow-not-control-flow] The N=2 batched form IS the same
+    // dispatch path as N=1 — the parser walks even-count pairs. The
+    // Menu primitive (chunk 11 .3) uses this to atomically write the
+    // chosen value AND collapse the menu in one click.
+    const { sessionState, ctx } = cascadeBar();
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/toolbar-expanded/0`, ctx);
+    expect(sessionState.get(SESSION_ID, "theme")).toBe("nord");
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
+  });
+
+  test("multi-pair batch fires reactive observers exactly once", async () => {
+    // [LAW:single-enforcer] SessionState owns the reactive atomicity
+    // contract — observers see the post-batch snapshot, never an
+    // intermediate "first write applied, second pending" state. A
+    // previous shape (loop and call sessionState.set N times) fired
+    // reportChanged() per pair, scheduling autoruns between writes; an
+    // observer correlating theme and toolbar-expanded would have seen
+    // (nord, "1") momentarily before reaching (nord, ""). The setBatch
+    // seam collapses N notifications into one.
+    //
+    // [LAW:behavior-not-structure] We don't assert "setBatch was
+    // called" — we assert the user-observable contract: one autorun
+    // tick per click, regardless of pair count.
+    const { store, registry, sessionState, ctx } = cascadeBar(`{
+      globals: {},
+      variables: {
+        themePick: { kind: 'state', key: 'theme', default: '(unset)' },
+        expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
+      },
+      segments: {
+        s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: 's',
+    }`);
+    sessionState.set(SESSION_ID, "toolbar-expanded", "1");
+    feedInputs(registry, HOOK_DATA);
+
+    // Observer reads BOTH state vars in one tracked frame — the kind
+    // of cross-key correlation a Menu rendering would do.
+    const snapshots: Array<{ theme: string; expanded: string }> = [];
+    const dispose = autorun(() => {
+      snapshots.push({
+        theme: String(store.read("themePick")),
+        expanded: String(store.read("expanded")),
+      });
+    });
+    try {
+      expect(snapshots).toEqual([{ theme: "(unset)", expanded: "1" }]);
+
+      await VERBS.get("set-state")!(
+        `${SESSION_ID}/theme/nord/toolbar-expanded/0`,
+        ctx,
+      );
+
+      // Exactly one new snapshot AND it shows BOTH writes applied.
+      // An intermediate fire would have inserted a `(nord, "1")` row.
+      expect(snapshots).toEqual([
+        { theme: "(unset)", expanded: "1" },
+        { theme: "nord", expanded: "" },
+      ]);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("set-state rejects whole batch if any pair fails (no partial writes)", async () => {
+    // [LAW:no-silent-failure] A batch is one transactional click.
+    // First pair valid, second pair invalid — the whole batch rejects.
+    // Asserting the FIRST pair did NOT land is the load-bearing
+    // guarantee: a future widget author can write a two-pair URL
+    // without worrying that half of it might apply on failure.
+    const { sessionState, ctx } = cascadeBar();
+    // Seed a known prior state so we can prove the failing batch did
+    // not overwrite it.
+    sessionState.set(SESSION_ID, "theme", "dracula");
+    await expect(VERBS.get("set-state")!(
+        `${SESSION_ID}/theme/nord/toolbar-expanded/maybe`,
+        ctx,
+      ),
+    ).rejects.toThrow(/pair 2.*expected boolean-ish/);
+    // The failing batch did NOT advance the prior theme value.
+    expect(sessionState.get(SESSION_ID, "theme")).toBe("dracula");
+  });
+
+  test("set-state rejects odd-count pair tail with a localizing diagnostic", async () => {
+    // [LAW:types-are-the-program] The wire shape is structurally
+    // even-count pairs after the session id. Three segments is a
+    // missing-value structural error — caught with its own message
+    // rather than routed through a validator's unknown-key path.
+    const { ctx } = cascadeBar();
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/leftover`, ctx),
+    ).rejects.toThrow(/expected even-count.*got 3 segment/);
+  });
+
+  test("set-state names the failing pair index for batched diagnostics", async () => {
+    // [LAW:no-silent-failure] The operator clicked a Menu URL
+    // with N pairs; the diagnostic tells them WHICH pair the validator
+    // rejected (1-based) so they can localize their config bug. A
+    // generic "set-state: unknown state key" without an index would
+    // leave them counting slashes by hand.
+    const { ctx } = cascadeBar();
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/nonsense-key/foo`, ctx),
+    ).rejects.toThrow(/pair 2: unknown state key "nonsense-key"/);
+  });
+
+  test("set-state rejects an empty key at any pair position", async () => {
+    // [LAW:types-are-the-program] An empty key segment is structurally
+    // distinct from a typo'd key — the operator's mistake is a wrong
+    // count of slashes, not a wrong key name. Catching it in the pair
+    // loop (rather than letting it fall to the validator's unknown-key
+    // path which would report `unknown state key ""`) names the
+    // structural defect at the pair index.
+    const { ctx } = cascadeBar();
+    // Empty key at pair 1.
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx)).rejects.toThrow(
+      /empty key at pair 1/,
+    );
+    // Empty key at pair 2 (theme valid, then empty key).
+    await expect(VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
+    ).rejects.toThrow(/empty key at pair 2/);
+  });
+
+  test("a state-kind var needs no session.id of the author's — the menu ensures it", () => {
+    // [LAW:verifiable-goals] declareState reads the global session.id box. The
+    // settings menu, synthesized into every config, ensures that input from
+    // PAYLOAD_INPUTS (brandon-settings-menu-d6f), so a config that reads state
+    // without declaring it loads AND renders the state it reads.
+    const { config, render } = cascadeBar(`{
+      globals: {},
+      variables: {
+        themePick: { kind: 'state', key: 'theme', default: 'calm' },
+      },
+      segments: {
+        s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: 's',
+    }`);
+    expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
+    expect(render()).toContain("calm");
+  });
+
+  test("toolbar-toggle click verb cascades through state binding", async () => {
+    // Same pattern with a different verb / key — exercises the toggle
+    // semantics (set on first click, clear on second).
+    const { render, ctx } = cascadeBar(`{
+      globals: {},
+      variables: {
+        expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
+      },
+      segments: {
+        tb: { template: ' tb=[{{ .expanded }}] ', bg: 'surface', fg: 'foreground' },
+      },
+      root: 'tb',
+    }`);
+
+    expect(render()).toContain("tb=[]");
+    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
+    expect(render()).toContain("tb=[1]");
+    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
+    expect(render()).toContain("tb=[]");
+  });
+});

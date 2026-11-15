@@ -188,7 +188,7 @@ mod tests {
     }
 
     // [LAW:one-source-of-truth] [LAW:one-type-per-behavior] The pass's
-    // behaviour, from the one table test/diagnostic-text-cases.test.ts asserts
+    // behaviour, from the one table test/unit/diagnostic-text-cases.test.ts asserts
     // against the TS sanitizeText, sanitizeAndTruncate and formatPermanentGlyph,
     // so a collapse, neutralize, clip or label rule changed in one runtime fails
     // the other's test.

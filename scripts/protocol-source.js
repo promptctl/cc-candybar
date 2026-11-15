@@ -1,6 +1,6 @@
 // How scripts/check-protocol.mjs reads a runtime's source text: what counts
 // as code, and how each kind of mirrored fact reads as one canonical string.
-// Pure text → value functions, so test/protocol-source.test.ts pins them
+// Pure text → value functions, so test/unit/protocol-source.test.ts pins them
 // directly.
 
 // Source with its comment lines removed, so an anchor read through it matches
@@ -53,7 +53,7 @@ export const lit = overCode((code, regex) => {
 // A colour as the 24-bit SGR the TS source derives from it: group 1 of `regex`
 // is its `#rrggbb`, `layer` is 38 or 48. One runtime states the hex and the
 // other the escape, so the row still compares the bytes a terminal receives.
-// test/protocol-source.test.ts holds this spelling to the TS derivation.
+// test/unit/protocol-source.test.ts holds this spelling to the TS derivation.
 export const sgrOfHex = overCode((code, regex, layer) => {
   const m = code.match(regex);
   if (!m) return null;

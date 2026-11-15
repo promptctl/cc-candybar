@@ -206,7 +206,7 @@ export class Kept<T> implements Derived<T> {
   // settled when the outermost batch ends.
   // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
   // `suspend_`) are reached here and nowhere else; the constructor refuses a
-  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
+  // MobX without them, and test/integration/var-store-dispose.test.ts pins the effect.
   release(): void {
     this.cell.keepAlive_ = false;
     this.cell.suspend_();

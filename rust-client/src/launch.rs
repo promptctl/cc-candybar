@@ -158,7 +158,7 @@ mod tests {
     // silently defaulted. The exact numbers are pinned TS↔Rust by
     // scripts/check-protocol.mjs, not here.
     //
-    // ACCEPT and REJECT are the SAME tables test/daemon-limits.test.ts runs
+    // ACCEPT and REJECT are the SAME tables test/integration/daemon-limits.test.ts runs
     // against rssLimitMb/heapCapMb — one grammar, pinned from both sides by
     // scripts/check-protocol.mjs, which diffs the two lists.
     const ACCEPT: &[(&str, u64)] = &[("1024", 1024), ("007", 7)];

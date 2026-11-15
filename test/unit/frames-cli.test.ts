@@ -1,7 +1,7 @@
 // `cc-candybar frames` (src/frames-cli.ts): what a stream the daemon ended
 // says, and a lane it cannot serve refused rather than ignored. Which end
 // calls for what, what is said, and the backoff are the shared cases
-// (test/frame-follow-cases.test.ts).
+// (test/unit/frame-follow-cases.test.ts).
 
 import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 import { WORLD } from "../helpers/host";

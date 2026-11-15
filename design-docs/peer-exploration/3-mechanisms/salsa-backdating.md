@@ -128,7 +128,7 @@ whether an existing memo may keep its old stamp; with no memo, it has nothing to
 the node's value does", and for a document it is `JSON.stringify(node.read())` over a
 sorted-key form. The `depends_on` cache policy compares the joined `changeKey`s through a MobX
 `reaction` (`sources.ts:1092-1103`), so a re-scan producing identical content in a different key
-order is not a change. `test/var-sources.test.ts:1192` pins the same-value case as a no-re-run.
+order is not a change. `test/integration/var-sources.test.ts:1192` pins the same-value case as a no-re-run.
 This is exactly the right shape and the right comment.
 
 **Two places where the short-circuit is genuinely absent.** First, documents. `DocumentCell` puts
@@ -216,7 +216,7 @@ counter. Separate ticket.
 
 Build cost is small and contained: two edits in `src/var-system/store.ts`, plus tests. The
 document-equality edit needs one test that re-scans identical JSON and asserts a downstream
-`template` variable did not recompute — the natural home is `test/var-sources.test.ts`, beside the
+`template` variable did not recompute — the natural home is `test/integration/var-sources.test.ts`, beside the
 `depends_on` same-value test at line 1192 that already pins the sibling behaviour. The timestamp
 edit needs one test that sets the same value twice and asserts `lastUpdatedMs()` did not move.
 

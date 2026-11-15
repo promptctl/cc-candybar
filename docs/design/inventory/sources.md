@@ -254,7 +254,7 @@ Also, a config's first request compiles in its arrival turn, which the memory sa
 - `openView`'s preset reaction, and `ViewDeclared.preset`, exist to redeclare on a preset move.
 - `src/doctor/data-needs.ts` uses `segmentInputPaths`, `anyPathStartsWith`, `gitOptionsFromClosure`.
 - `src/demo/dsl.ts`, `session-source.ts`, `setUpDraw` pass it through.
-- Tests: `test/render-payload-gating.test.ts`, `test/frame-payload.test.ts`, `test/one-fold.test.ts`, `test/slash-gate.test.ts`, `test/helpers/payload-owners.ts`.
+- Tests: `test/render-payload-gating.test.ts`, `test/integration/frame-payload.test.ts`, `test/unit/one-fold.test.ts`, `test/integration/slash-gate.test.ts`, `test/helpers/payload-owners.ts`.
 
 **Delete:**
 - `buildNeededPrefixes`, `neededPrefixesByPreset`, `wanted`, `wantedOf`, `wantsOf`, `sourcesRead`

@@ -10,7 +10,7 @@
 //
 // The cost/token/budget (bdi.3) and duration/time-remaining (bdi.4) families
 // moved to DSL helper templates; their byte-parity is pinned in
-// test/dsl-formatters-cost-token.test.ts and test/dsl-formatters-duration-time.test.ts.
+// test/integration/dsl-formatters-cost-token.test.ts and test/integration/dsl-formatters-duration-time.test.ts.
 // What remains here are the JS-func primitives with no template-native
 // expression yet (locale grouping, regex model-name parsing) plus the
 // clock-reading numeric primitive minutesUntilReset.

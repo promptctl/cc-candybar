@@ -7,5 +7,5 @@ export const ADD_GLYPH = "✚";
 // A default emoji (Emoji_Presentation): two cells with no selector. A
 // text-default glyph made two cells by VS16 (the gear, U+2699 U+FE0F) is drawn
 // one cell by a terminal that ignores the selector, a column narrower than the
-// bar measured it (`test/glyph-width.test.ts`).
+// bar measured it (`test/unit/glyph-width.test.ts`).
 export const CONFIGURE_GLYPH = "🔧";

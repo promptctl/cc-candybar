@@ -242,7 +242,7 @@ loses two fields and a loop and gains one call. `sources.ts` loses a guard and a
 genuinely new piece of design is `settled()`'s idle promise, and it is a handful of lines.
 
 **What it breaks.** Any test asserting that a second trigger during a run produces no second run.
-`test/var-sources.test.ts` is the place to look, and per the repo's own note on this bug ("make the
+`test/integration/var-sources.test.ts` is the place to look, and per the repo's own note on this bug ("make the
 dependency the slow one in chained tests") at least one test is already written around the drop.
 `settled()`'s widened contract also changes `cc-candybar check` timing under a burst: a source whose
 trigger keeps firing now keeps the registry non-idle until the deadline, where before it settled

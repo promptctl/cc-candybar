@@ -1,0 +1,93 @@
+// [LAW:behavior-not-structure] Asserts what the engine evaluates, never how the
+// FuncMap is assembled. The substrate (bdi.1) is the math/datetime/conversion
+// primitives + an injectable clock that later formatter migrations (bdi.3/.4)
+// compile against; these tests are the contract those tickets build on.
+
+import { drawingAt, TEST_ENGINE } from "../helpers/test-engine";
+import { createCcCandybarEngine } from "../../src/template-engine/engine";
+
+// Evaluate a source against an empty scope inside a draw at `at`, return
+// joined plain text.
+function evalText(source: string, at: Date = new Date()): string {
+  using _draw = drawingAt(at);
+  return createCcCandybarEngine(TEST_ENGINE)
+    .parse(source)
+    .evaluate({})
+    .map((rt) => rt.plain)
+    .join("");
+}
+
+describe("sprigMath primitives are registered", () => {
+  // The exact cases the ticket enumerates as acceptance, plus the neighbors a
+  // K/M-style formatter will lean on (sub/min/max).
+  test.each([
+    ["{{ div 1000000 1000 }}", "1000"],
+    ["{{ floor (div 125 60) }}", "2"],
+    ["{{ mod 125 60 }}", "5"],
+    ["{{ sub 10 3 }}", "7"],
+    ["{{ min 5 2 }}", "2"],
+    ["{{ max 5 2 }}", "5"],
+  ])("%s → %s", (src, expected) => {
+    expect(evalText(src)).toBe(expected);
+  });
+});
+
+describe("printf (Go builtin) handles the formatter cases", () => {
+  test.each([
+    ['{{ printf "%.2f" 1.5 }}', "1.50"],
+    ['{{ printf "$%.2f" 0.005 }}', "$0.01"],
+  ])("%s → %s", (src, expected) => {
+    expect(evalText(src)).toBe(expected);
+  });
+});
+
+describe("sprigConversions primitives are registered", () => {
+  test.each([
+    ['{{ atoi "42" }}', "42"],
+    ['{{ float64 "1.5" }}', "1.5"],
+    ["{{ toString 42 }}", "42"],
+  ])("%s → %s", (src, expected) => {
+    expect(evalText(src)).toBe(expected);
+  });
+});
+
+describe("the clock is the draw in progress", () => {
+  // [LAW:single-enforcer] One clock feeds every datetime function: the instant
+  // of the draw bound around the evaluation, never the wall clock.
+  test("now / unixEpoch read the draw's instant, not the wall clock", () => {
+    const fixed = new Date("2026-06-04T12:00:00.000Z");
+    const epoch = String(Math.floor(fixed.getTime() / 1000));
+    expect(evalText("{{ unixEpoch (now) }}", fixed)).toBe(epoch);
+  });
+
+  // [LAW:no-silent-failure] Only a draw evaluates a projection, so a clock
+  // read with none bound is a read outside any frame.
+  test("a clock read outside a draw throws", () => {
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse("{{ now }}");
+    expect(() => tpl.evaluate({})).toThrow(/clock was read outside a draw/);
+  });
+
+  test("draws do not nest", () => {
+    using _draw = drawingAt();
+    expect(() => drawingAt()).toThrow(/draws do not nest/);
+  });
+});
+
+describe("domain funcs win the registration-order collisions", () => {
+  // [LAW:one-source-of-truth] sprigConversions also defines `int`, but the
+  // var-system cast (registered last) must win — it refuses a string that is
+  // not a number where sprig's quietly returns 0. It truncates as sprig's does:
+  // an int parameter refuses a fractional, so the cast is how one is dropped.
+  test("int is the var-system cast (loud on a non-number), truncating toward zero", () => {
+    expect(() => evalText('{{ int "abc" }}')).toThrow(/Cannot cast "abc" to number/);
+    expect(evalText("{{ int 3.9 }}")).toBe("3");
+    expect(evalText("{{ int true }}")).toBe("1");
+  });
+
+  // [LAW:one-source-of-truth] sprigMath also defines `round`; the domain
+  // Math.round (registered last) wins until the bdi cleanup ticket.
+  test("round is Math.round (half rounds toward +∞)", () => {
+    expect(evalText("{{ round 0.5 }}")).toBe("1");
+    expect(evalText("{{ round -2.5 }}")).toBe("-2");
+  });
+});

@@ -375,7 +375,7 @@ describe("the repo's name and its link never disagree", () => {
   );
 
   // The no-remote case is the directory-basename policy, asserted against real
-  // git in test/git-service-outcomes.test.ts where the working dir is real.
+  // git in test/integration/git-service-outcomes.test.ts where the working dir is real.
 });
 
 describe("forgeRemoteUrl — identity and forge dispatch are different questions", () => {

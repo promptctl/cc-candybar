@@ -67,7 +67,7 @@ Two sides, one in each library.
 
 **go-template-js 0.8.0** (promptctl/go-template-js PR #28): `engine.parse(src, inherit?: Defines)` and `Template.defines(): Defines`. A parse can inherit a define set by parent link, not by copying source. `Defines` is opaque; its public surface is `has` and `EMPTY`.
 
-**cc-candybar** (PR #198, lit ticket brandon-daemon-memory-ir9): `compileHelpers` folds each helper from `Defines.EMPTY` into one shared `Defines`, each helper still parsed in isolation so a malformed helper gets a per-helper diagnostic, and the config's single parse closure becomes `engine.parse(src, helpers)`. Template calls resolve by name at evaluation against the executing template's full inherited set, so declaration order is irrelevant; `test/dsl-helpers.test.ts` pins this with a forward-reference test. `test/dsl-helpers-shared.test.ts` pins per-config heap under 4 MB (measured 1.22 to 1.24 MB across five runs).
+**cc-candybar** (PR #198, lit ticket brandon-daemon-memory-ir9): `compileHelpers` folds each helper from `Defines.EMPTY` into one shared `Defines`, each helper still parsed in isolation so a malformed helper gets a per-helper diagnostic, and the config's single parse closure becomes `engine.parse(src, helpers)`. Template calls resolve by name at evaluation against the executing template's full inherited set, so declaration order is irrelevant; `test/integration/dsl-helpers.test.ts` pins this with a forward-reference test. `test/integration/dsl-helpers-shared.test.ts` pins per-config heap under 4 MB (measured 1.22 to 1.24 MB across five runs).
 
 The RSS budget returns to 512 MB (`DEFAULT_RSS_LIMIT_MB` in `src/daemon/limits.ts` and `rust-client/src/launch.rs`, and the README). The heap cap the spawner passes is 2× that, and the daemon logs both at boot:
 
@@ -95,6 +95,6 @@ Live production daemon, same machine, same ~20 sessions, `usageCache.size` = 0 i
 
 ## How to re-measure
 
-In process: follow the recipe in `test/dsl-helpers-shared.test.ts`. Expose gc with `v8.setFlagsFromString`, invoke it with `vm.runInNewContext("gc")`, do one warm-up registration, double-gc, register N configs, double-gc again, divide the delta by N.
+In process: follow the recipe in `test/integration/dsl-helpers-shared.test.ts`. Expose gc with `v8.setFlagsFromString`, invoke it with `vm.runInNewContext("gc")`, do one warm-up registration, double-gc, register N configs, double-gc again, divide the delta by N.
 
 Live: `node dist/index.mjs daemon-stats --json` reports `rssBytes`, `heapUsedBytes`, `usageCache.size` and `renderCache.size`. `grep "daemon up" ~/.local/state/cc-candybar/daemon.log | tail -1` shows the budget and cap the running daemon booted with. For a heap snapshot, send the daemon SIGUSR1 and connect a script to the inspector websocket; the memory backstop also writes one automatically on breach and keeps the newest 3 under `~/.local/state/cc-candybar/`.

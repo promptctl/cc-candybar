@@ -1,5 +1,5 @@
 {
-  "//": "The frame follower's four decisions, asserted by both runtimes: test/frame-follow-cases.test.ts (src/daemon/frame-follow.ts, src/daemon/client-frames.ts, src/frames-cli.ts) and rust-client/src/follow.rs. A daemonV of \"older\" or \"newer\" is the runtime's own PROTOCOL_VERSION minus or plus one.",
+  "//": "The frame follower's four decisions, asserted by both runtimes: test/unit/frame-follow-cases.test.ts (src/daemon/frame-follow.ts, src/daemon/client-frames.ts, src/frames-cli.ts) and rust-client/src/follow.rs. A daemonV of \"older\" or \"newer\" is the runtime's own PROTOCOL_VERSION minus or plus one.",
   "message": [
     { "resp": { "ok": true, "output": "bar\n" }, "refusal": false },
     { "resp": { "ok": true, "band": [] }, "refusal": false },

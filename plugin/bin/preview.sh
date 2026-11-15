@@ -5,7 +5,7 @@
 # The config rendered here IS the template the wizard writes — templates/config.json
 # with its three placeholders filled by the same substitution the wizard performs —
 # so the preview cannot drift from what the wizard installs.
-# (test/plugin-templates.test.ts drives every name below through `cc-candybar check`.)
+# (test/integration/plugin-templates.test.ts drives every name below through `cc-candybar check`.)
 
 set -euo pipefail
 
@@ -147,7 +147,7 @@ main() {
     ensure_daemon
     # The flag values are checked once, as the wizard's user would see them
     # (exit 1 names the error). A compare varies one axis over its array, whose
-    # members test/plugin-templates.test.ts pins to the loader's own domain.
+    # members test/integration/plugin-templates.test.ts pins to the loader's own domain.
     "${CLIENT[@]}" check "$(fill_template "${THEME}" "${ENDCAPS}" "${PRESET}")" >/dev/null
 
     local name

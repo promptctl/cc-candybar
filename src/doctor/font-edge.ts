@@ -7,7 +7,7 @@
 // elsewhere. A verdict never sees any of it: the reads land in a `FontInUse`
 // (src/doctor/checks.ts), and the functions that read the answers
 // (`alacrittyFile`, `fcMatchCoverage`, `itermFontInUse`) are pure and tested
-// over fixtures (test/doctor-nerd-font.test.ts).
+// over fixtures (test/integration/doctor-nerd-font.test.ts).
 //
 // [LAW:one-source-of-truth] A terminal cannot be asked its font, so the font
 // is read where the terminal itself reads it, and whether it HAS a glyph is

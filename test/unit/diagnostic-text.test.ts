@@ -2,7 +2,7 @@
 // the sanitize-and-truncate primitive used by BOTH src/render/error-glyph.ts
 // (permanent client glyph) AND src/render/diagnostics.ts diagnosticSpan (every
 // message the diagnostics viewer shows). What the pass does to a string is the
-// fixture both runtimes assert (test/diagnostic-text-cases.test.ts).
+// fixture both runtimes assert (test/unit/diagnostic-text-cases.test.ts).
 
 import { isControlChar } from "../../src/render/diagnostic-text";
 

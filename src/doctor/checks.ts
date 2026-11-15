@@ -5,7 +5,7 @@
 // record. The edge (src/doctor/edge.ts) assembles the facts (the recorded
 // client hint, the tmux query, the settings.json read) and performs a `Fix`;
 // a probe only decides, so every verdict is unit-testable over a fixture with
-// no mocks (test/doctor-checks.test.ts).
+// no mocks (test/unit/doctor-checks.test.ts).
 //
 // [LAW:one-type-per-behavior] Checks are DATA in one `CHECKS` list and the
 // doctor is a fold over it: the second check is one more row here (and one

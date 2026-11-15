@@ -16,7 +16,7 @@
 // Flooring at WCAG's 3:1 large-text threshold lands every theme at 3.00–3.10
 // against full-strength foregrounds of 5.8–10.9 — as quiet as each theme can
 // afford, and never quieter. Verified across the bundled themes in
-// test/default-dsl-config.test.ts rather than eyeballed on one.
+// test/integration/default-dsl-config.test.ts rather than eyeballed on one.
 // [LAW:verifiable-goals]
 const QUIET_PCT = 60;
 export const QUIET_MIN_CONTRAST = 3;

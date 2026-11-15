@@ -1,6 +1,6 @@
 // `cc-candybar bar-pane` (src/bar-pane): what it paints, where it stands in
 // tmux, and the arguments it takes. The frames themselves are the daemon's push,
-// covered by test/frame-feed.test.ts and test/daemon-frame-feed-e2e.test.ts.
+// covered by test/unit/frame-feed.test.ts and test/integration/daemon-frame-feed-e2e.test.ts.
 
 import { parseArgs, placementFrom } from "../../src/bar-pane";
 import { paint } from "../../src/bar-pane/paint";

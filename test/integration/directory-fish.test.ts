@@ -1,0 +1,275 @@
+// [LAW:verifiable-goals] brandon-directory-781 makes fish-style path
+// abbreviation the DEFAULT directory rendering. `directory` draws the
+// worktree-aware location (`checkoutLocation`'s main/worktree/subpath/noRepo,
+// see test/integration/git-location.test.ts): COLLAPSE the main checkout (or, outside a
+// repo, the session directory) to `~` under home, then ABBREVIATE the
+// survivor fish-style (every segment but the leaf → its leading char),
+// append the subpath whole, and name a linked worktree in a parenthetical.
+// Rendered through the real spine (registerDslConfig + drawDsl), the same
+// two functions the daemon and demo call — not a synthetic in-process
+// transform.
+
+import { drawPayload } from "../helpers/draw-payload";
+import { unscriptedRuns } from "../helpers/fake-launcher";
+import { textOf } from "../../src/render/frame";
+import type { Frame } from "../../src/render/frame";
+import { TEST_SIGNER } from "../helpers/link-signer";
+import { RAW_DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
+import { parseAndValidate } from "../helpers/parse-and-validate";
+import { registerDslConfig } from "../../src/dsl/render";
+import { VariableStore } from "../../src/var-system/store";
+import { SourceRegistry } from "../../src/var-system/sources";
+import { SessionState } from "../../src/renderer/session-state";
+import { getThemePalette } from "@promptctl/rich-js";
+import { abbreviatePath } from "../../src/utils/formatters";
+import { dropEditChrome } from "../helpers/narrow-to-segment";
+import { linksOf, effectsOf } from "../../src/click/read";
+import { VERB_COPY } from "../../src/click/wire";
+import { instantOf } from "../../src/utils/instant";
+import { systemTimekeeper } from "../../src/time";
+
+// Reparse the AUTHORED literal (pre-synthesis) — see
+// test/integration/default-dsl-config.test.ts for why this must be the raw form, not the
+// already-synthesized DEFAULT_DSL_CONFIG.
+const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
+
+// Narrow the root to just the directory segment so the rendered line is exactly
+// that segment's text. One plain cell + padding 0 draws no chrome, so the
+// frame's text IS the directory string.
+const dirOnlyRoot = {
+  rows: {
+    main: {
+      kind: "container" as const,
+      direction: "horizontal" as const,
+      children: [{ kind: "segment" as const, name: "directory" }],
+    },
+  },
+};
+
+
+// [LAW:locality-or-seam] The settings menu references `edit.toggle`, so `synthesizeEditChrome` (inside
+// `parseAndValidate`, before any call site here narrows the layout) has
+// already baked a spliced copy of the full root into `presets.default.root`
+// — `registerDslConfig`'s per-preset compile prefers that over a plain
+// top-level `root:` override (`presetRoot`/`presets.ts`). Every narrowing
+// below must also reset `presets` and drop the synthesized `edit.*` entries
+// (`directory`'s own template never references `edit.toggle`, so none of
+// that machinery is needed in this file) or the baked-in full root shadows
+// the narrowed one.
+const dropEditNs = dropEditChrome;
+
+type DirPaths = {
+  home: string;
+  current_dir: string;
+  main?: string;
+  worktree?: string;
+  subpath?: string;
+  noRepo?: boolean;
+};
+
+function renderDir(paths: DirPaths): string {
+  return textOf(renderDirRaw(paths)).trim();
+}
+
+function renderDirRaw(paths: DirPaths): Frame {
+  const base = parseAndValidate("<default>", SERIALIZED);
+  const parsed = {
+    ...base,
+    presets: {},
+    variables: dropEditNs(base.variables),
+    actions: dropEditNs(base.actions),
+    segments: dropEditNs(base.segments),
+    root: dirOnlyRoot,
+  };
+  const store = new VariableStore(systemTimekeeper);
+  const registry = new SourceRegistry(store, "", new SessionState());
+  try {
+    const compiled = registerDslConfig(parsed, registry, {
+      signer: TEST_SIGNER,
+      cwd: paths.current_dir,
+    });
+    const basePalette = getThemePalette("textual-dark"!);
+    const payload = {
+      hook_event_name: "Status",
+      session_id: "dir-fish-test-0000-0000-000000000000",
+      cwd: paths.current_dir,
+      home: paths.home,
+      model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+      workspace: {
+        current_dir: paths.current_dir,
+        added_dirs: [],
+      },
+      location: {
+        main: paths.main ?? "",
+        worktree: paths.worktree ?? "",
+        subpath: paths.subpath ?? "",
+        noRepo: paths.noRepo ?? false,
+      },
+    };
+    return drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
+      endcaps: "plain",
+      colorCompatibility: "none",
+      wrap: true,
+      padding: 0,
+      width: Number.POSITIVE_INFINITY,
+    }).frame;
+  } finally {
+    registry.dispose();
+  }
+}
+
+describe("abbreviatePath (pure helper)", () => {
+  test.each([
+    ["~/code/cc-candybar", "~/c/cc-candybar"],
+    ["~", "~"],
+    ["src/deep/leaf", "s/d/leaf"],
+    ["my-app", "my-app"],
+    ["/var/log/nginx", "/v/l/nginx"], // leading slash preserved
+    ["~/.config/nvim", "~/.c/nvim"], // dotfile keeps its dot
+    ["", ""],
+  ])("%s → %s", (input, expected) => {
+    expect(abbreviatePath(input)).toBe(expected);
+  });
+});
+
+describe("default directory segment renders the worktree-aware location, fish-abbreviated", () => {
+  test("main checkout under home: ~-collapse then abbreviate ancestors, keep leaf", () => {
+    expect(
+      renderDir({
+        home: "/Users/bmf",
+        main: "/Users/bmf/code/cc-candybar",
+        current_dir: "/Users/bmf/code/cc-candybar",
+      }),
+    ).toBe("~/c/cc-candybar");
+  });
+
+  test("home === main checkout collapses to a bare ~", () => {
+    expect(
+      renderDir({
+        home: "/Users/bmf",
+        main: "/Users/bmf",
+        current_dir: "/Users/bmf",
+      }),
+    ).toBe("~");
+  });
+
+  test("a linked worktree is named in a parenthetical after the main checkout's path", () => {
+    expect(
+      renderDir({
+        home: "/Users/bmf",
+        main: "/Users/bmf/code/cc-candybar",
+        worktree: "composed-knitting-cake",
+        current_dir: "/Users/bmf/code/cc-candybar/.claude/worktrees/composed-knitting-cake",
+      }),
+    ).toBe("~/c/cc-candybar (⊫ composed-knitting-cake)");
+  });
+
+  test("a worktree subdirectory keeps the subpath whole, ahead of the worktree name", () => {
+    expect(
+      renderDir({
+        home: "/Users/bmf",
+        main: "/Users/bmf/code/cc-candybar",
+        worktree: "composed-knitting-cake",
+        subpath: "/src",
+        current_dir: "/Users/bmf/code/cc-candybar/.claude/worktrees/composed-knitting-cake/src",
+      }),
+    ).toBe("~/c/cc-candybar/src (⊫ composed-knitting-cake)");
+  });
+
+  test("outside home: the main checkout's absolute path abbreviated, leaf full", () => {
+    expect(
+      renderDir({
+        home: "/root",
+        main: "/srv/app",
+        current_dir: "/srv/app",
+      }),
+    ).toBe("/s/app");
+  });
+
+  test("outside a repo: falls back to the session directory", () => {
+    expect(
+      renderDir({
+        home: "/Users/bmf",
+        current_dir: "/Users/bmf/scratch/notes",
+        noRepo: true,
+      }),
+    ).toBe("~/s/notes");
+  });
+});
+
+describe("clicking the directory copies the full path", () => {
+  // brandon-menu-ia-q30.fuh: the abbreviation hides the path, so the whole
+  // cell is one link whose click copies `.current_dir` — not the shown text.
+  test("the cell is one copy link carrying the unabbreviated cwd", () => {
+    const current_dir = "/Users/bmf/code/cc-candybar/src/deep dir/leaf";
+    const rendered = renderDirRaw({
+      home: "/Users/bmf",
+      main: "/Users/bmf/code/cc-candybar/src/deep dir/leaf",
+      current_dir,
+    });
+    const cellLinks = linksOf(rendered);
+    expect(cellLinks.map((l) => l.text)).toEqual(["~/c/c/s/d/leaf"]);
+    expect(effectsOf(cellLinks[0]!.url)).toEqual([
+      { verb: VERB_COPY, args: [current_dir] },
+    ]);
+  });
+});
+
+describe("configurability seam: user template override restores full path", () => {
+  // [LAW:no-mode-explosion] There is no `style` enum — the full path is the
+  // existing merge-by-name seam: a user config redefines segments.directory
+  // and it wins per-name over the bundled default. Here we render that override
+  // through the same spine and confirm the full, unabbreviated path comes back.
+  test("overriding segments.directory.template yields the unabbreviated path", () => {
+    const parsed = parseAndValidate("<default>", SERIALIZED);
+    const overridden = {
+      ...parsed,
+      root: dirOnlyRoot,
+      presets: {},
+      variables: dropEditNs(parsed.variables),
+      actions: dropEditNs(parsed.actions),
+      segments: dropEditNs({
+        ...parsed.segments,
+        directory: { ...parsed.segments.directory, template: "{{ .current_dir }}" },
+      }),
+    };
+    const store = new VariableStore(systemTimekeeper);
+    const registry = new SourceRegistry(store, "", new SessionState());
+    try {
+      const compiled = registerDslConfig(overridden, registry, {
+        signer: TEST_SIGNER,
+        cwd: "/Users/bmf/code/cc-candybar",
+      });
+      const basePalette = getThemePalette("textual-dark"!);
+      const line = textOf(drawPayload(
+        overridden,
+        compiled,
+        store,
+        registry,
+        {
+          hook_event_name: "Status",
+          session_id: "dir-fish-override-0000-0000-000000000000",
+          cwd: "/Users/bmf/code/cc-candybar",
+          home: "/Users/bmf",
+          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+          workspace: {
+            current_dir: "/Users/bmf/code/cc-candybar",
+            added_dirs: [],
+          },
+          location: { main: "/Users/bmf/code/cc-candybar", worktree: "", subpath: "", noRepo: false },
+        },
+        instantOf(new Date()),
+        {
+          endcaps: "plain",
+          colorCompatibility: "none",
+          wrap: true,
+          padding: 0,
+          width: Number.POSITIVE_INFINITY,
+        },
+      ).frame).trim();
+      expect(line).toBe("/Users/bmf/code/cc-candybar");
+    } finally {
+      registry.dispose();
+    }
+  });
+});

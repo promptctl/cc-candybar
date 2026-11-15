@@ -1,7 +1,7 @@
 // The vocabulary the colour-model tests and the nightly colour audits state
 // their facts in: the bundled registry, the depths a terminal draws at, an
 // address step, and a cell as the SGR writer draws it.
-// [LAW:one-source-of-truth] Spelled once, so test/decor.test.ts and
+// [LAW:one-source-of-truth] Spelled once, so test/unit/decor.test.ts and
 // audits/decor-registry.audit.ts measure the same thing by the same words.
 
 import { ColorDepth, drawnColour, type Palette } from "@promptctl/rich-js";

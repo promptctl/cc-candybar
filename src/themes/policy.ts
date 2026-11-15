@@ -128,7 +128,7 @@ export function listResolvablePaletteNames(): readonly string[] {
 // "Follow the bar" is a MEMBER of the domain, not the absence of a value, so
 // a placement always holds a theme and nothing downstream asks whether it has
 // one. No installed theme is named `bar` (pinned in
-// test/placement-theme.test.ts), so the two can never be confused.
+// test/integration/placement-theme.test.ts), so the two can never be confused.
 export const FOLLOW_BAR = "bar";
 
 export function placementThemeNames(): readonly string[] {
@@ -519,7 +519,7 @@ export function isStyleEraEndcaps(value: string): value is Endcaps {
 // render layer both derive from one literal without a config↔render cycle
 // [LAW:one-way-deps]. Every member is a name rich-js's `resolveColorSystem`
 // accepts; it takes a bare `string` and throws on a name it does not know, so
-// test/option-domain.test.ts runs each member through it rather than the
+// test/unit/option-domain.test.ts runs each member through it rather than the
 // compiler holding the two vocabularies together.
 //
 // Deliberately NARROWER than rich-js's vocabulary: "auto" is excluded.

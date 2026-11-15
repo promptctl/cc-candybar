@@ -81,7 +81,7 @@ export const RETIRED_INPUT_PATHS: ReadonlyMap<string, string> = new Map([
 // six-field subset into boxes, resolving the repo without the session's
 // project directory — so it could name a different repo than the bar's own
 // git cells did. Each field carries the read and the declaration that give the
-// value it gave, typed as it was; `test/dsl-loader.test.ts` holds each input
+// value it gave, typed as it was; `test/integration/dsl-loader.test.ts` holds each input
 // declaration to the bundled default's (the loader cannot import it: the
 // default is built on the loader).
 interface RetiredGitField {
