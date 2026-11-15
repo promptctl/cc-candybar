@@ -48,6 +48,7 @@ import {
   renderBody,
   renderRequest,
   urlWriting,
+  drawnLink,
 } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
@@ -571,7 +572,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const pick = async (file: string): Promise<void> =>
       await click(
         sockPath,
-        `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(file)}`,
+        drawnLink(sockPath, `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(file)}`),
       );
     const frames = await framesOf(sid, async ({ received, waitFor }) => {
       await waitFor(() => received.length > 0, "the bar before the pick");
@@ -751,7 +752,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   ): Promise<void> =>
     await click(
       sockPath,
-      effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
+      drawnLink(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }])),
     );
 
   // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
@@ -1090,7 +1091,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // revision is read: every frame after it draws the warned config.
     await click(
       sockPath,
-      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(path.join(projectDir, "warned.json5"))}`,
+      drawnLink(sockPath, `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(path.join(projectDir, "warned.json5"))}`),
     );
     const before = await revision();
     const drawnBefore = (await feedStats()).drawn;
@@ -1111,9 +1112,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a failed click's error shows on Claude Code's bar", async () => {
     const sid = "feed-click-error-bar";
     await render(sockPath, sid, projectDir, {}, args("toggle"));
-    const bad = effectsUrl([
-      { verb: VERB_SET_STATE, args: [sid, "face", "bogus"] },
-    ]);
+    // Drawn by the bar, so its verb refuses it: a value no option offers.
+    const bad = drawnLink(
+      sockPath,
+      effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "face", "bogus"] }]),
+    );
     // The statusline lane draws the bar where Claude Code does, so with it
     // followed a render answers the bar, where a lane that draws it elsewhere
     // would answer the handoff row.
@@ -1131,9 +1134,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
 
   test("a failed click's error shows on the pushed frames for the hold, and leaves by time alone", async () => {
     await render(sockPath, "feed-click-error", projectDir, {}, args("toggle"));
-    const bad = effectsUrl([
-      { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
-    ]);
+    const bad = drawnLink(
+      sockPath,
+      effectsUrl([
+        { verb: VERB_SET_STATE, args: ["feed-click-error", "face", "bogus"] },
+      ]),
+    );
     // The error is the one message the bar holds, so the indicator counts it.
     const shows = (text: string): boolean => text.includes("⚠ 1");
     // The bar, the bar with the error for the hold, the bar: where the error

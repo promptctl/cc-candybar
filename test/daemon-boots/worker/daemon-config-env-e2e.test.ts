@@ -17,7 +17,7 @@ import {
   VERB_SET_CONFIG,
 } from "../../../src/click/wire";
 import { renderLines } from "../../helpers/daemon-log";
-import { click, configFlag, hookData, render as renderBar, renderRequest } from "../../helpers/daemon-e2e";
+import { click, configFlag, hookData, render as renderBar, renderRequest, drawnLink } from "../../helpers/daemon-e2e";
 import type { DaemonTarget } from "../../helpers/daemon-wire";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
@@ -134,13 +134,13 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     await render(daemon, sid, projectDir, {}, configFlag(named));
     await click(
       daemon,
-      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`,
+      drawnLink(daemon, `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`),
     );
     await click(
       daemon,
-      effectsUrl([
+      drawnLink(daemon, effectsUrl([
         { verb: VERB_SET_CONFIG, args: [sid, "updateNotice", "false"] },
-      ]),
+      ])),
     );
     expect(readFileSync(picked, "utf8")).toMatch(/updateNotice: false/);
     expect(readFileSync(named, "utf8")).toBe(plain);
@@ -180,7 +180,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
 
     await click(
       daemon,
-      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(override)}`,
+      drawnLink(daemon, `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(override)}`),
     );
     const pickOverBoth = await render(
       daemon,

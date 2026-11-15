@@ -55,6 +55,17 @@ const replyWith = (over: Partial<Reply> = {}): HandledRequest => ({
   ...over,
 });
 
+// A url frame's answer: its verdict, and when its click lands.
+const urlAnswer = (
+  landed: Promise<void> = Promise.resolve(),
+  awaitsVerdict = false,
+): HandledRequest => ({
+  kind: "url",
+  awaitsVerdict,
+  verdict: { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 },
+  land: () => landed,
+});
+
 // A memory stream runs on process ticks and microtasks, which all drain before
 // a macrotask: one later, everything sent has landed.
 const settled = (): Promise<void> =>
@@ -208,7 +219,7 @@ describe("a connection over a stream", () => {
   // goes to no one, and the daemon says nothing about it above info, since
   // this is the forwarder's design and not a peer that vanished.
   test("a frame whose writer hung up at once is handled, answered to no one, and not a warning", async () => {
-    const handle = jest.fn(async () => replyWith());
+    const handle = jest.fn(async () => urlAnswer());
     const log = jest.fn();
     const daemon = standIn({ handle, log });
     const { client, received } = open(daemon);
@@ -242,7 +253,32 @@ describe("a connection over a stream", () => {
     expect(daemon.stats.requestsTimedOut).toBe(1);
     expect(daemon.stats.inFlight).toBe(1);
 
-    request.answer(replyWith());
+    request.answer(urlAnswer());
+    await settled();
+    expect(daemon.stats.inFlight).toBe(0);
+  });
+
+  // The app is told at once whether its link opened, and the click it carries
+  // runs on under the deadline: a slow click that lands is never told failed.
+  test("a url frame whose writer reads the verdict is told it at once, and stays in flight until its click lands", async () => {
+    let land = () => {};
+    const landed = new Promise<void>((done) => (land = done));
+    const request = held();
+    const daemon = standIn({ handle: request.handle });
+    const { client, received } = open(daemon);
+    client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
+    await settled();
+    request.answer(urlAnswer(landed, true));
+    await settled();
+    expect(received).toEqual([
+      { ok: false, error: "forged", code: "BAD_REQUEST", daemonV: 3 },
+    ]);
+    expect(daemon.stats.inFlight).toBe(1);
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+    expect(request.timedOut()).toBe(true);
+    expect(received).toHaveLength(1);
+    land();
     await settled();
     expect(daemon.stats.inFlight).toBe(0);
   });

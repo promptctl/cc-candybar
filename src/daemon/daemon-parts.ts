@@ -1,4 +1,5 @@
 import type { Collector } from "./collector.js";
+import type { LinkSigner } from "../click/link-signer.js";
 import type { Timekeeper } from "../time.js";
 import type { FileEventDelivery } from "./cache/file-events";
 import type { WatcherRegistry } from "./cache/watchers";
@@ -38,6 +39,8 @@ export interface DaemonParts {
   readonly doctorStores: DoctorStores;
   readonly stats: RuntimeStats;
   readonly handlerProbes: ProbeArrivals;
+  // What every click is opened with before any renderer sees it.
+  readonly linkSigner: LinkSigner;
   readonly renderSightings: RenderSightings;
   readonly watcherRegistry: WatcherRegistry;
   readonly refreshLedger: RefreshLedger;

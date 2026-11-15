@@ -140,16 +140,23 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   });
 
   // [LAW:dataflow-not-control-flow] Whether a client waits for the answer is a
-  // fact of what it sent. The URL handler app writes its frame and hangs up by
-  // design, so for a url frame the socket's close is not a peer leaving: the
-  // frame stays in flight, under the same deadline every request has, until
-  // its click is handled (a click past the deadline is refused, so a repeat
-  // click cannot revert it, src/renderer/journal-turns.ts), and no one is said
-  // to have left. Every other client holds the socket until answered.
+  // fact of what it sent. The URL handler app waits for no outcome: it reads
+  // the verdict on its link at most, and hangs up. So for a url frame the
+  // socket's close is not a peer leaving: the frame stays in flight, under the
+  // same deadline every request has, until its click is handled (a click past
+  // the deadline is refused, so a repeat click cannot revert it,
+  // src/renderer/journal-turns.ts), and no one is said to have left. Every
+  // other client holds the socket until answered.
   const reader = makeFrameReader(
     (frame) => {
       const inbound = classifyInbound(frame);
       waits = inbound.kind === "request";
+      // In flight until the url frame's click has landed, or until its
+      // handling threw.
+      const landed = (): void => {
+        clearBackstop();
+        leaveInFlight();
+      };
       void daemon
         .handle(
           inbound,
@@ -158,24 +165,30 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
           () => waits && sock.destroyed,
         )
         .then((r) => {
-          // A url frame's answer goes to no one: its writer closed, and a
-          // write to that socket is only an error event. The click's event
-          // (src/daemon/reply.ts) is where its outcome is seen.
-          if (!waits) {
-            if (r.kind === "reply") r.settled(false);
-            return;
-          }
-          if (r.kind === "reply") respond(r.resp, r.exitAfterFlush, r.settled);
+          if (r.kind === "url") {
+            // A plain write rather than `respond`, which would clear the
+            // deadline the click still runs under, yet the socket's one
+            // answer all the same. A version 1 writer has closed, and a write
+            // to its socket is only an error event.
+            responded = true;
+            if (r.awaitsVerdict) sock.end(encodeFrame(r.verdict));
+            void r
+              .land()
+              .catch((err: unknown) =>
+                daemon.log("error", `url click threw: ${inspect(err)}`),
+              )
+              .finally(landed);
+          } else if (r.kind === "reply")
+            respond(r.resp, r.exitAfterFlush, r.settled);
           else stream(r.sessionId, r.lane);
         })
+        // [LAW:no-silent-failure] Answered with the failure whoever sent the
+        // frame: a request's client, or a URL handler that reads its verdict.
+        // A version 1 writer has closed, and the write is only an error event.
         .catch((err: unknown) => {
           daemon.log("error", `handler threw: ${inspect(err)}`);
-          if (waits) respond(renderFailed(err), null, NOTHING_TO_SETTLE);
-        })
-        .finally(() => {
-          if (waits) return;
-          clearBackstop();
-          leaveInFlight();
+          respond(renderFailed(err), null, NOTHING_TO_SETTLE);
+          if (!waits) landed();
         });
     },
     (err) => {

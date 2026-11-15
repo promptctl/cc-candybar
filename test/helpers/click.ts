@@ -27,7 +27,6 @@ import type { SessionStateRW } from "../../src/renderer-interface/session-state"
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { ProbeArrivals } from "../../src/doctor/handler-probe";
 import { RenderSightings } from "../../src/daemon/render-sightings";
 import { instantOf } from "../../src/utils/instant";
 import {
@@ -157,10 +156,8 @@ export function testVerbContext(
         },
       },
     },
-    // A click from the handler this build would stage, and nowhere of the
-    // daemon's for a probe to land: a test that reads arrivals hands in its own.
-    arrival: { via: "link", delivery: { kind: "forwarder", urlV: 1 } },
-    probes: new ProbeArrivals(),
+    // A click from the handler this build would stage.
+    arrival: { via: "link", delivery: { kind: "forwarder", urlV: 2 } },
     clients: asyncSightings(new RenderSightings()),
     bundle: HEALTHY_BUNDLE,
     serving: async () => HEALTHY_SERVING,

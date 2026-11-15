@@ -20,7 +20,6 @@ import type { SlashLine } from "../claude-input/slash-line.js";
 import type { TypeResult } from "../claude-input/typing.js";
 import type { RefreshTimes, ViewFacts } from "./request-context.js";
 import type {
-  ProbeArrival,
   RenderCacheStats,
   StatsSnapshot,
 } from "../daemon/foundations/stats-snapshot.js";
@@ -224,8 +223,6 @@ export interface AdapterToHost {
       now: Instant,
     ) => Promise<readonly RenderSighting[]>;
   };
-  // Where a `doctor-probe` link records that it arrived.
-  readonly probes: { readonly arrive: (arrival: ProbeArrival) => void };
   // An answer carrying a daemon-wide held event (the launcher's pipe event,
   // the last renderer's end) reached its client.
   readonly eventAnswered: (event: HeldEvent) => void;

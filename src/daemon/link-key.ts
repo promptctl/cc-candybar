@@ -1,29 +1,33 @@
-// [LAW:effects-at-boundaries] The link key on disk: what the daemon, `check`
-// and the demo build their one LinkSigner from. The key is stable across
+// [LAW:effects-at-boundaries] The link key on disk: what the host opens every
+// click with and hands each renderer it starts. The key is stable across
 // restarts, so a link still in a terminal's scrollback verifies after the
 // daemon that drew it is gone.
 
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import {
-  LINK_KEY_BYTES,
-  linkSigner,
-  type LinkSigner,
-} from "../click/link-signer.js";
+import { LINK_KEY_BYTES } from "../click/link-signer.js";
+import type { Asked } from "../utils/outcome.js";
 
 export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
 }
 
-// The signer over the key file, read on first use: importing the daemon, or
-// running a CLI that never draws a `run` link, touches no disk for it.
-export function linkSignerFromKeyFile(file: string): LinkSigner {
-  let signer: LinkSigner | undefined;
-  const loaded = (): LinkSigner => (signer ??= readOrCreate(file));
-  return {
-    sign: (fields) => loaded().sign(fields),
-    verify: (fields, mac) => loaded().verify(fields, mac),
+// [LAW:one-source-of-truth] The key in the file, read on first use and kept
+// once a read succeeds: the host opens every click with what this returns and
+// starts every renderer with it, so the two never hold different keys.
+// Importing the daemon touches no disk for it, and a key that could not be
+// read is read again at the next ask, so removing a broken file (its error's
+// own remedy) recovers with no restart.
+export function linkKeyFromFile(file: string): () => Asked<Buffer> {
+  let key: Buffer | undefined;
+  return () => {
+    try {
+      key ??= readOrCreate(file);
+      return { kind: "ok", value: key };
+    } catch (e) {
+      return { kind: "failed", reason: (e as Error).message };
+    }
   };
 }
 
@@ -32,7 +36,7 @@ export function linkSignerFromKeyFile(file: string): LinkSigner {
 // [LAW:no-silent-failure] A key file of the wrong length is refused loudly,
 // naming the file, never replaced: a replaced key silently voids every link
 // already drawn.
-function readOrCreate(file: string): LinkSigner {
+function readOrCreate(file: string): Buffer {
   let key: Buffer;
   try {
     key = fs.readFileSync(file);
@@ -46,7 +50,7 @@ function readOrCreate(file: string): LinkSigner {
       `link key ${file} holds ${key.length} bytes, not ${LINK_KEY_BYTES}: remove it and a new one is made (links drawn before then stop working)`,
     );
   }
-  return linkSigner(key);
+  return key;
 }
 
 // [LAW:no-ambient-temporal-coupling] The key is written whole to a file of the

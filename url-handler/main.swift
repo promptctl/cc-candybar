@@ -1,30 +1,36 @@
 // The cc-candybar URL handler: a resident macOS background-only app that
 // forwards every `cc-candybar://` link Launch Services hands it to the daemon,
-// as one frame, and does nothing else. The daemon parses the link; this app
-// never reads it. Background-only (the Info.plist install writes) is what
+// as one frame, and reads back the daemon's verdict on it. The daemon parses
+// the link and opens its signature; this app never reads it. Background-only (the Info.plist install writes) is what
 // keeps a click from taking the terminal's keyboard focus: Launch Services
 // never activates such an app.
 //
 // [LAW:one-source-of-truth] The app knows two wire facts, both mirrored from
 // src/daemon/foundations/protocol.ts and src/daemon/paths.ts and pinned by
 // scripts/check-protocol.mjs: the frame (a 4-byte big-endian length, then the
-// JSON `{"kind":"url","urlV":1,"url":…}`) and the socket path, derived from
+// JSON `{"kind":"url","urlV":2,"url":…}`) and the socket path, derived from
 // the uid because Launch Services starts the app with no shell's environment.
 // A handler goes stale through what it knows, and this one knows nothing a
 // release changes: not a bundle path, not a node binary, not a verb.
 //
 // [LAW:carrying-cost] No thread, no retry. The socket is non-blocking: a
 // connect either completes at once (a unix socket with room in its backlog
-// needs no round trip) or fails. The one wait is for a frame longer than the
-// socket buffer, which lands only as the daemon reads it, and it is bounded
-// (WRITE_WAIT_MS) so a daemon that reads nothing cannot hold this app's main
-// thread, which is the thread Launch Services delivers the next click on.
+// needs no round trip) or fails. The two waits are bounded, so a daemon that
+// reads nothing cannot hold this app's main thread, which is the thread Launch
+// Services delivers the next click on: one for a frame longer than the socket
+// buffer, which lands only as the daemon reads it (WRITE_WAIT_MS), and one for
+// the verdict (VERDICT_WAIT_MS), which the daemon writes as soon as it has
+// read the frame, before the click runs.
 //
-// [LAW:no-silent-failure] A frame that could not be written is the one failure
-// this app can see. It is written to the unified log under the app's subsystem
-// (`log stream --predicate 'subsystem == "com.cccandybar.url-handler"'`) and
-// told to the user as a macOS user notification carrying what was observed,
-// never a diagnosis. The click is lost by design: the app never starts a
+// [LAW:no-silent-failure] The app sees three failures: a frame that could not
+// be written, a frame written that got no verdict it could read (the click may
+// still land, so it is told as unconfirmed, never as lost), and a link the
+// daemon refused (one the bar never drew, or one changed since). Each is written to the unified log under the
+// app's subsystem (`log stream --predicate 'subsystem ==
+// "com.cccandybar.url-handler"'`) and told to the user as a macOS user
+// notification carrying what was observed or the daemon's reason, never a
+// diagnosis. A click whose verb fails is not one of them: the bar holds that
+// failure. A lost click is lost by design: the app never starts a
 // daemon, because that would need the paths that age, and a launcher the
 // daemon left beside its socket would make this app a second enforcer
 // [LAW:single-enforcer] of that directory's trust check and of the daemon's
@@ -42,12 +48,18 @@ import os
 // URL_FRAME_VERSION.
 let FRAME_HEADER_BYTES = 4
 let URL_FRAME_KIND = "url"
-let URL_FRAME_VERSION = 1
+let URL_FRAME_VERSION = 2
 
 // How long a write waits for the daemon to make room in the socket buffer.
 // A daemon that is up reads a frame as soon as its loop turns; a bound this
 // long is only ever reached by one that is wedged.
 let WRITE_WAIT_MS: Int32 = 1000
+
+// How long the app waits for the daemon's verdict on the link it wrote.
+let VERDICT_WAIT_MS: Int32 = 1000
+
+// The longest verdict the app reads: a reason, never a frame of the bar.
+let VERDICT_MAX_BYTES = 65536
 
 // Mirrored: src/daemon/paths.ts defaultSocketPath.
 func socketPath() -> String {
@@ -59,6 +71,10 @@ let log = Logger(subsystem: "com.cccandybar.url-handler", category: "forward")
 
 enum Forward {
   case delivered
+  // The daemon refused the link, for the reason it gave.
+  case refused(String)
+  // The frame was written, and no verdict on it could be read.
+  case unconfirmed(String)
   case failed(String)
 }
 
@@ -112,7 +128,7 @@ func forward(_ url: String) -> Forward {
   if connected < 0 { return .failed(errnoText("connect \(path)")) }
 
   let bytes = frame(url)
-  return bytes.withUnsafeBytes { buffer in
+  let written: String? = bytes.withUnsafeBytes { buffer in
     var sent = 0
     while sent < bytes.count {
       let n = write(fd, buffer.baseAddress! + sent, bytes.count - sent)
@@ -120,37 +136,98 @@ func forward(_ url: String) -> Forward {
         sent += n
         continue
       }
-      if errno != EAGAIN { return .failed(errnoText("write")) }
+      if errno != EAGAIN { return errnoText("write") }
       // The socket buffer is full: a frame longer than it (a long link) lands
       // only as the daemon reads. Wait for room, bounded, and no longer.
       var ready = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
       let polled = poll(&ready, 1, WRITE_WAIT_MS)
-      if polled < 0 { return .failed(errnoText("poll")) }
+      if polled < 0 { return errnoText("poll") }
       if polled == 0 {
-        return .failed("the daemon read nothing for \(WRITE_WAIT_MS)ms: \(sent) of \(bytes.count) bytes sent")
+        return "the daemon read nothing for \(WRITE_WAIT_MS)ms: \(sent) of \(bytes.count) bytes sent"
       }
     }
-    return .delivered
+    return nil
   }
+  if let why = written { return .failed(why) }
+  return verdict(fd)
 }
 
-// Tells the user a click was lost, in a form that needs no daemon. The body is
-// the observed failure as the forward reported it; the user reads it as the
-// fact it is. Authorization is asked for on every lost click: the request
+// Exactly `count` bytes from the socket by `deadline` (a monotonic ms count),
+// or what stopped them.
+func readExactly(_ fd: Int32, _ count: Int, by deadline: UInt64) -> Result<Data, ForwardError> {
+  var data = Data(count: count)
+  var got = 0
+  while got < count {
+    let n = data.withUnsafeMutableBytes { read(fd, $0.baseAddress! + got, count - got) }
+    if n > 0 {
+      got += n
+      continue
+    }
+    if n == 0 { return .failure(ForwardError("the daemon hung up before its verdict")) }
+    if errno != EAGAIN { return .failure(ForwardError(errnoText("read"))) }
+    let left = Int64(deadline) - Int64(monotonicMs())
+    if left <= 0 {
+      return .failure(ForwardError("the daemon sent no verdict within \(VERDICT_WAIT_MS)ms"))
+    }
+    var ready = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+    if poll(&ready, 1, Int32(left)) < 0 { return .failure(ForwardError(errnoText("poll"))) }
+  }
+  return .success(data)
+}
+
+struct ForwardError: Error {
+  let why: String
+  init(_ why: String) { self.why = why }
+}
+
+func monotonicMs() -> UInt64 { clock_gettime_nsec_np(CLOCK_MONOTONIC) / 1_000_000 }
+
+// The daemon's verdict on the link: one frame, `{"ok":true,…}` when its
+// signature opened, or `{"ok":false,"error":…}` saying why it did not.
+func verdict(_ fd: Int32) -> Forward {
+  let deadline = monotonicMs() + UInt64(VERDICT_WAIT_MS)
+  let header: Data
+  switch readExactly(fd, FRAME_HEADER_BYTES, by: deadline) {
+  case .success(let d): header = d
+  case .failure(let e): return .unconfirmed(e.why)
+  }
+  let length = header.reduce(0) { ($0 << 8) | Int($1) }
+  if length > VERDICT_MAX_BYTES {
+    return .unconfirmed("the daemon's verdict is \(length) bytes, past \(VERDICT_MAX_BYTES)")
+  }
+  let body: Data
+  switch readExactly(fd, length, by: deadline) {
+  case .success(let d): body = d
+  case .failure(let e): return .unconfirmed(e.why)
+  }
+  guard let said = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+    let ok = said["ok"] as? Bool
+  else { return .unconfirmed("the daemon's verdict is not one this app reads") }
+  if ok { return .delivered }
+  let why = said["error"] as? String ?? "the daemon gave no reason"
+  // A refusal of the link is a bad request; any other failure is the daemon's
+  // own (it was closing), which lost the click.
+  return said["code"] as? String == "BAD_REQUEST" ? .refused(why) : .failed(why)
+}
+
+// Tells the user a click was lost or refused, in a form that needs no bar to
+// land on. The body is the observed failure as the forward reported it, or the
+// daemon's reason; the user reads it as the fact it is. Authorization is asked for on every lost click: the request
 // completes without a prompt once the user has answered, so the app keeps no
 // state about it, and a user who never loses a click never sees the prompt.
 // The banner shows only because this app is never frontmost: macOS hides a
 // frontmost app's notifications unless its delegate asks for them, and a
 // background-only app is never activated, so no delegate is needed. An app
 // that Launch Services can activate again loses its banner silently.
-// One fixed identifier, because there is one condition: a run of lost clicks
-// is one notice carrying the latest observation, not a stack of copies.
+// One fixed identifier per condition: a run of lost clicks is one notice
+// carrying the latest observation, not a stack of copies.
 // [LAW:no-silent-failure] A post the center refuses (notifications denied for
 // the app, or an OS error) is logged under the subsystem; the user who denied
 // them chose not to be told this way, and there is no second channel.
 let lostClickNotice = "lost-click"
+let refusedClickNotice = "refused-click"
 
-func notifyLost(_ why: String) {
+func notify(_ title: String, _ why: String, _ identifier: String) {
   let center = UNUserNotificationCenter.current()
   center.requestAuthorization(options: [.alert]) { granted, error in
     if let error = error {
@@ -164,10 +241,10 @@ func notifyLost(_ why: String) {
     }
     let content = UNMutableNotificationContent()
     // The product's name is the banner's header, from the bundle's display name.
-    content.title = "Click not delivered"
+    content.title = title
     content.body = why
     let request = UNNotificationRequest(
-      identifier: lostClickNotice, content: content, trigger: nil)
+      identifier: identifier, content: content, trigger: nil)
     center.add(request) { error in
       if let error = error {
         log.error("notification not shown: \(error.localizedDescription, privacy: .public)")
@@ -189,9 +266,15 @@ final class Handler: NSObject, NSApplicationDelegate {
       // [LAW:nothing-unseen]
       case .delivered:
         log.notice("forwarded \(link, privacy: .private)")
+      case .refused(let why):
+        log.error("refused \(link, privacy: .private): \(why, privacy: .public)")
+        notify("Click refused", why, refusedClickNotice)
+      case .unconfirmed(let why):
+        log.error("unconfirmed \(link, privacy: .private): \(why, privacy: .public)")
+        notify("Click unconfirmed", why, lostClickNotice)
       case .failed(let why):
         log.error("lost \(link, privacy: .private): \(why, privacy: .public)")
-        notifyLost(why)
+        notify("Click not delivered", why, lostClickNotice)
       }
     }
   }

@@ -1,3 +1,4 @@
+import { unprovenLink } from "../../../src/click/link-signer";
 import type { Frame } from "../../../src/render/frame";
 // What a lane runs follows the session's own clicks, measured at the click,
 // and the tmux status line follows a request's arrival and a click's commit:
@@ -29,7 +30,7 @@ import { rangeOf } from "../../../src/tmux-status/frames";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
-import { click, clickAnswer, render, saidOf, toldOf } from "../../helpers/daemon-e2e";
+import { click, clickAnswer, render, saidOf, toldOf, drawnLink } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
@@ -95,7 +96,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   const switchLanes = async (sid: string, on: boolean, ...lanes: Lane[]) =>
     await click(
       daemon,
-      effectsUrl(
+      drawnLink(daemon, effectsUrl(
         lanes.map((lane) => {
           const { setting, on: value } = LANES[lane].switch;
           return {
@@ -107,7 +108,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
             ],
           };
         }),
-      ),
+      )),
     );
   const laneLines = (sid: string): string[] =>
     logLines(env).filter(
@@ -194,7 +195,8 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await until(() => ran().length > 0, "the status-line click's event");
     const [event, ...more] = ran();
     expect(more).toEqual([]);
-    expect(event).toContain(` link=${JSON.stringify(link)} `);
+    // Logged with its signature off: a mac in a log is a link to send.
+    expect(event).toContain(` link=${JSON.stringify(unprovenLink(link!))} `);
     expect(event).toContain(` linkVerb=dispatch sid=${sid} `);
     expect(event).toContain(" outcome=ok");
   });
@@ -287,7 +289,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     );
     await click(
       daemon,
-      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`,
+      drawnLink(daemon, `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`),
     );
     await until(() => laneLines(sid).length > 0, "the pick's setup");
     expect(laneLines(sid)).toEqual([

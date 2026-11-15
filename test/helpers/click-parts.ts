@@ -5,6 +5,7 @@
 // these in.
 
 import { NO_PUSHES } from "./renderers";
+import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
 import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
@@ -25,7 +26,7 @@ export function clickParts(
     holding: () => () => {},
     clicked: () => {},
   },
-): Pick<DaemonParts, "renderer" | "clicks"> & {
+): Pick<DaemonParts, "renderer" | "clicks" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
 } {
   // A click's turn reads the verbs, the idle clock and, for its output, the
@@ -48,5 +49,6 @@ export function clickParts(
     ),
     clicks,
     collector,
+    linkSigner: TEST_SIGNER,
   };
 }

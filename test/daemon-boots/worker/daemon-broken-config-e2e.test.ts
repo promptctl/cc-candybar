@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { RichText } from "@promptctl/rich-js";
-import { click, render, urlWriting } from "../../helpers/daemon-e2e";
+import { click, render, urlWriting, drawnLink } from "../../helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -232,7 +232,13 @@ describe("a config that cannot be drawn as written", () => {
     expect(textOf(shown)).not.toContain("Fix my cc-candybar");
     // A key no draw lists (the message fixed since) is refused loudly.
     await expect(
-      click(daemon, copyUrls[0]!.replace(String(copies[0]!.args[2]), "1")),
+      click(
+        daemon,
+        drawnLink(
+          daemon,
+          copyUrls[0]!.replace(String(copies[0]!.args[2]), "1"),
+        ),
+      ),
     ).rejects.toThrow(/no longer listed/);
     await click(daemon, viewerLink(shown, "✕")!.url);
   });

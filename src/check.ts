@@ -26,7 +26,7 @@
 // window for the whole verdict; the daemon's first cold render does not (its
 // next render shows what check showed).
 
-import { linkKeyFile, linkSignerFromKeyFile } from "./daemon/link-key.js";
+import { previewSigner } from "./click/link-signer.js";
 import { locations, stateDir } from "./daemon/paths.js";
 import { repoConfigs } from "./renderer/repo-configs.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
@@ -659,11 +659,11 @@ export async function prepareConfig(
     sourceRuns.close();
   };
   try {
-    // [LAW:single-enforcer] check draws `run` links as the daemon does,
-    // signed with the one key.
+    // [LAW:single-enforcer] check draws `run` links as the daemon does, and
+    // signs them as the preview it is: it opens no key file.
     const compiled = registerDslConfig(config, registry, {
       cwd,
-      signer: linkSignerFromKeyFile(linkKeyFile(stateDir(world.host))),
+      signer: previewSigner(),
     });
     warnings.push(...compiled.loadWarnings);
     // A view's inputs are pending until its source answers, and a source

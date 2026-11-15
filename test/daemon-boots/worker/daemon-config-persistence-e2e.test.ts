@@ -42,7 +42,7 @@ const showsTheme = (out: Frame, theme: string): boolean =>
 // Opening the theme picker: the write its label's click makes.
 const OPEN_THEME_PICKER = ["menus.candybar_pickers", "candybar.apply.theme"];
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
-import { click, findUrl, render, renderUntil } from "../../helpers/daemon-e2e";
+import { click, findUrl, render, renderUntil, drawnLink } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
@@ -99,9 +99,9 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       // rather than depending on extracting it.
       await click(
         daemon,
-        effectsUrl([
+        drawnLink(daemon, effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
-        ]),
+        ])),
       );
 
       const menuOpen = await render(daemon, SID, projectDir);
@@ -188,10 +188,10 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       await render(daemon, OTHER_SID, projectDir);
       await click(
         daemon,
-        effectsUrl([
+        drawnLink(daemon, effectsUrl([
           { verb: VERB_SET_STATE, args: [OTHER_SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [OTHER_SID, ...OPEN_THEME_PICKER] },
-        ]),
+        ])),
       );
       const otherBar = await render(daemon, OTHER_SID, projectDir);
       expect(showsTheme(otherBar, "tokyo-night")).toBe(true); // its own default, shown
@@ -215,9 +215,9 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       // The padding stepper sits in the ⚙ config tab.
       await click(
         daemon,
-        effectsUrl([
+        drawnLink(daemon, effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "candybar.tab", "config"] },
-        ]),
+        ])),
       );
       const configTab = await render(daemon, SID, projectDir);
       // The padding stepper's ▶: a relative step on the session key (the
@@ -298,10 +298,10 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       await render(daemon, FRESH_SID, projectDir);
       await click(
         daemon,
-        effectsUrl([
+        drawnLink(daemon, effectsUrl([
           { verb: VERB_SET_STATE, args: [FRESH_SID, "candybar.menu", "open"] },
           { verb: VERB_SET_STATE, args: [FRESH_SID, ...OPEN_THEME_PICKER] },
-        ]),
+        ])),
       );
       const freshOut = await renderUntil(
         daemon,

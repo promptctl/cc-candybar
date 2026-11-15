@@ -43,8 +43,8 @@ import { Runs } from "../src/daemon/runs";
 import { type RunRequest } from "../src/renderer-interface/adapter";
 import { sessionEnv } from "../src/daemon/foundations/session-env";
 import { lastClickError } from "../src/daemon/foundations/click-error";
-import { linkSigner } from "../src/click/link-signer";
-import { linkSignerFromKeyFile } from "../src/daemon/link-key";
+import { linkSigner, linkSignerOver } from "../src/click/link-signer";
+import { linkKeyFromFile } from "../src/daemon/link-key";
 import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
 import { BadVerbArgs, type VerbContext } from "../src/renderer/verbs";
@@ -1069,11 +1069,11 @@ describe("the link key", () => {
       declaration: "[]",
       evaluated: "{}",
     };
-    const mac = linkSignerFromKeyFile(file).sign(fields);
+    const mac = linkSignerOver(linkKeyFromFile(file)).sign(fields);
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     expect(fs.readFileSync(file)).toHaveLength(32);
     // Another process over the same file verifies the first one's links.
-    expect(linkSignerFromKeyFile(file).verify(fields, mac)).toBe(true);
+    expect(linkSignerOver(linkKeyFromFile(file)).verify(fields, mac)).toBe(true);
     expect(linkSigner(TEST_LINK_KEY).verify(fields, mac)).toBe(false);
     // Each maker's own file is gone once the key landed.
     expect(fs.readdirSync(path.dirname(file))).toEqual(["link.key"]);
@@ -1098,12 +1098,12 @@ describe("the link key", () => {
         );
         throw new Error("killed mid-write");
       });
-    expect(() => linkSignerFromKeyFile(file).sign(fields)).toThrow(
+    expect(() => linkSignerOver(linkKeyFromFile(file)).sign(fields)).toThrow(
       "killed mid-write",
     );
     expect(fs.existsSync(file)).toBe(false);
     jest.restoreAllMocks();
-    linkSignerFromKeyFile(file).sign(fields);
+    linkSignerOver(linkKeyFromFile(file)).sign(fields);
     expect(fs.readFileSync(file)).toHaveLength(32);
   });
 
@@ -1115,10 +1115,10 @@ describe("the link key", () => {
       declaration: "[]",
       evaluated: "{}",
     };
-    const mac = linkSignerFromKeyFile(file).sign(fields);
+    const mac = linkSignerOver(linkKeyFromFile(file)).sign(fields);
     fs.chmodSync(path.dirname(file), 0o500);
     try {
-      expect(linkSignerFromKeyFile(file).verify(fields, mac)).toBe(true);
+      expect(linkSignerOver(linkKeyFromFile(file)).verify(fields, mac)).toBe(true);
     } finally {
       fs.chmodSync(path.dirname(file), 0o700);
     }
@@ -1127,12 +1127,54 @@ describe("the link key", () => {
   test("a key file of the wrong length is refused, naming it", () => {
     const file = write("state/link.key", "short");
     expect(() =>
-      linkSignerFromKeyFile(file).sign({
+      linkSignerOver(linkKeyFromFile(file)).sign({
         sessionId: SID,
         action: "a",
         declaration: "[]",
         evaluated: "{}",
       }),
     ).toThrow(`link key ${file} holds 5 bytes, not 32`);
+  });
+
+  // The error's own remedy, removing the file, works with no restart: the
+  // key is read again at the next click and the next renderer start.
+  test("a broken key refuses a click and a renderer's start with the reason, and removing it recovers both", () => {
+    const file = write("state/link.key", "short");
+    const key = linkKeyFromFile(file);
+    const host = linkSignerOver(key);
+    const why = `link key ${file} holds 5 bytes, not 32`;
+    expect(host.openLink("cc-candybar://copy/x#AAAAAAAAAAAAAAAAAAAAAA")).toEqual(
+      { kind: "failed", reason: expect.stringContaining(why) },
+    );
+    expect(key()).toEqual({
+      kind: "failed",
+      reason: expect.stringContaining(why),
+    });
+    fs.rmSync(file);
+    const started = key();
+    if (started.kind !== "ok") throw new Error(started.reason);
+    const drawn = linkSigner(started.value).signLink("cc-candybar://copy/x");
+    expect(host.openLink(drawn)).toEqual({
+      kind: "ok",
+      value: "cc-candybar://copy/x",
+    });
+  });
+
+  // A key file removed and made again while the daemon runs does not split
+  // them: a renderer started after still draws links the host opens.
+  test("the host and every renderer start hold the one key the daemon read", () => {
+    const file = path.join(dir, "state", "link.key");
+    const key = linkKeyFromFile(file);
+    const host = linkSignerOver(key);
+    host.signLink("cc-candybar://copy/x");
+    fs.rmSync(file);
+    fs.writeFileSync(file, Buffer.alloc(32, 3));
+    const started = key();
+    if (started.kind !== "ok") throw new Error(started.reason);
+    const drawn = linkSigner(started.value).signLink("cc-candybar://copy/x");
+    expect(host.openLink(drawn)).toEqual({
+      kind: "ok",
+      value: "cc-candybar://copy/x",
+    });
   });
 });

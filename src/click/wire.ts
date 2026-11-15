@@ -47,6 +47,11 @@ import {
 // emits it; install/ (Launch Services registration) imports it.
 export const URL_SCHEME = "cc-candybar";
 
+// A link outside the cc-candybar scheme (a repo page, a PR) is the
+// terminal's to open; the daemon never sees a click on it.
+export const isBarLink = (url: string): boolean =>
+  url.startsWith(`${URL_SCHEME}://`);
+
 // The app Launch Services starts for the scheme: its bundle, binary and
 // process all carry this name. Beside the scheme because it is the same fact,
 // which app a click reaches, and a reader of it (the bench) wants nothing of
@@ -203,6 +208,12 @@ export interface EvaluatedRun {
 // up in the frame it drew there and runs the link it marks, so no link rides
 // the URL. Not a leaf verb: the link's own verb is the click's.
 export const VERB_TMUX_STATUS_CLICK = "tmux-status-click";
+// [LAW:one-source-of-truth] How every status-line click starts: the binding
+// writes it, and the host reads a click that starts so as a range, never a
+// link, which carries no signature because tmux expands it.
+export const STATUS_LINE_CLICK_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
+// How every probe link starts, which the host reads as a probe's arrival.
+export const DOCTOR_PROBE_PREFIX = `${URL_SCHEME}://${VERB_DOCTOR_PROBE}/`;
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.

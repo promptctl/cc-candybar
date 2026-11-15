@@ -1,10 +1,5 @@
-import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
-import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/foundations/protocol";
-import type { Response } from "../src/daemon/foundations/protocol";
-import { socketPath } from "../src/daemon/paths";
 import { SessionState } from "../src/renderer/session-state";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
@@ -80,40 +75,7 @@ describe("SessionState", () => {
   });
 });
 
-// --- Protocol-level click tests ---
-// These test the daemon handles click requests over the wire. We spin up a
-// minimal daemon echo server that mimics the daemon's click dispatch.
-
 describe("click protocol", () => {
-  test("ClickRequest serializes with correct kind", () => {
-    const req = {
-      v: PROTOCOL_VERSION,
-      kind: "click" as const,
-      verb: "toolbar-toggle",
-      value: "test-session",
-    };
-    const encoded = encodeFrame(req);
-    const len = encoded.readUInt32BE(0);
-    const body = JSON.parse(encoded.subarray(4, 4 + len).toString("utf8"));
-    expect(body.kind).toBe("click");
-    expect(body.verb).toBe("toolbar-toggle");
-    expect(body.value).toBe("test-session");
-  });
-
-  test("unknown click verb returns BAD_REQUEST", async () => {
-    const resp = await sendToTestServer({
-      v: PROTOCOL_VERSION,
-      kind: "click",
-      verb: "nonexistent-verb",
-      value: "test",
-    });
-    expect(resp.ok).toBe(false);
-    if (!resp.ok) {
-      expect(resp.code).toBe("BAD_REQUEST");
-      expect(resp.error).toContain("unknown click verb");
-    }
-  });
-
   test("VERBS lookup is prototype-pollution-safe", () => {
     // [LAW:types-are-the-program] VERBS is a ReadonlyMap, not a plain
     // object — wire-level untrusted verb names like `__proto__` and
@@ -354,55 +316,3 @@ describe("step-state handler", () => {
     expect(VERB_NAMES).toContain(VERB_STEP_STATE);
   });
 });
-
-// --- Helper: minimal daemon-like server for protocol tests ---
-
-function sendToTestServer(req: unknown): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer((sock) => {
-      const reader = makeFrameReader(
-        (frame) => {
-          const parsed = frame as { kind: string; verb?: string; v: number };
-          // Mimic daemon's click dispatch logic for test purposes.
-          if (parsed.kind === "click") {
-            // [LAW:one-source-of-truth] Use the registry directly so the test
-            // and the daemon cannot disagree about which verbs are valid.
-            if (!VERB_NAMES.includes(parsed.verb ?? "")) {
-              sock.write(
-                encodeFrame({
-                  ok: false,
-                  error: `unknown click verb: ${parsed.verb}`,
-                  code: "BAD_REQUEST",
-                }),
-              );
-            } else {
-              sock.write(encodeFrame({ ok: true, output: "" }));
-            }
-          } else {
-            sock.write(encodeFrame({ ok: true, output: "" }));
-          }
-          sock.end();
-          server.close();
-        },
-        (err) => reject(err),
-      );
-      sock.on("data", reader);
-    });
-
-    const testSocket = path.join(os.tmpdir(), `cpwl-test-${Date.now()}.sock`);
-    server.listen(testSocket, () => {
-      const client = net.createConnection({ path: testSocket }, () => {
-        client.write(encodeFrame(req));
-      });
-      const respReader = makeFrameReader(
-        (frame) => {
-          resolve(frame as Response);
-          client.end();
-        },
-        (err) => reject(err),
-      );
-      client.on("data", respReader);
-      client.on("error", reject);
-    });
-  });
-}

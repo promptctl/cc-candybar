@@ -11,6 +11,7 @@ import type { Failure } from "../daemon/foundations/verb-error.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { Host } from "../host-facts.js";
+import type { Asked } from "../utils/outcome.js";
 import type { AdapterToHost } from "./adapter.js";
 import type { Crosses } from "./crosses.js";
 import {
@@ -41,6 +42,10 @@ export interface RendererBoot {
   };
   readonly bundle: string;
   readonly memoryLimitBytes: number;
+  // The host's link key in base64, read as this renderer spawned, which it
+  // signs every link with; or why it could not be read, which the renderer
+  // refuses its boot with.
+  readonly linkKey: Asked<string>;
 }
 
 // The host's environment as a boot carries it: its set variables.
@@ -165,7 +170,6 @@ export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   clicks: { gone: "call" },
   serving: "call",
   renderSightings: { ofSession: "call" },
-  probes: { arrive: "notice" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" },
