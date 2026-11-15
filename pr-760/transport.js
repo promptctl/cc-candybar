@@ -53764,6 +53764,7 @@ var PAYLOAD_INPUTS = {
 };
 var DRAW_PROJECTIONS = {
   today: "the day the draw is at",
+  speed: "a rate ends once the draw is a sample window past its last sample",
   feeds: "the frames a lane was sent up to the draw's instant",
   drawing: "who the draw is for",
   diagnostics: "the errors and warnings the draw owes its reader"
@@ -81469,7 +81470,6 @@ function composePayload(facts, inputs, draw2) {
     metrics: metricsOver(unstamped(built.metrics), hookData2),
     activity: unstamped(built.activity),
     cache: unstamped(built.cache),
-    speed: unstamped(built.speed),
     autoCompact: unstamped(built.autocompact),
     git: unstamped(built.git),
     pr: unstamped(built.pr),
@@ -81498,7 +81498,6 @@ function composePayload(facts, inputs, draw2) {
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
   const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(valueOf3(lanes.usage)?.cost, valueOf3(lanes.metrics)?.sessionDuration);
-  const speedPayload = over2(lanes.speed, speedPayloadOf);
   const sessionPayload = over2(
     lanes.usage,
     (usage) => pickNonNull({ cost: usage.cost, tokens: usage.tokens })
@@ -81574,7 +81573,6 @@ function composePayload(facts, inputs, draw2) {
     resumeCommand: resumeCommand(workspace, sessionId2, hints.claudeConfigDir),
     ...sessionPayload !== void 0 && { session: sessionPayload },
     ...burn !== void 0 && { burn },
-    ...speedPayload !== void 0 && { speed: speedPayload },
     ...fiveHour !== void 0 && {
       block: {
         // [LAW:one-source-of-truth] Both fields read straight from the
@@ -81643,8 +81641,12 @@ function burnOf(cost, duration2) {
   const costPerHour = cost != null && duration2 != null ? projectCostPerHour(cost, duration2) : void 0;
   return costPerHour === void 0 ? void 0 : { costPerHour };
 }
-function speedPayloadOf(obs) {
-  const rates = projectSpeed(obs);
+function speedOf(fact, at) {
+  if (fact.kind === "pending") return pendingOf(fact.why);
+  if (fact.kind !== "ok") return void 0;
+  const obs = fact.value;
+  const current2 = dateOf(at).getTime() - obs.cur.atMs <= MAX_SPEED_SAMPLE_MS;
+  const rates = current2 ? projectSpeed(obs) : void 0;
   const history = projectSpeedHistory(obs);
   return rates !== void 0 || history !== void 0 ? { ...rates, ...history !== void 0 && { history } } : void 0;
 }
@@ -82095,7 +82097,8 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing: drawing2,
     feeds,
-    today: todayOf(document.builtins.today, at)
+    today: todayOf(document.builtins.today, at),
+    speed: speedOf(document.builtins.speed, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
   noteFacts(
