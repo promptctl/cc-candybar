@@ -21,10 +21,6 @@ import {
   type Readable,
 } from "./reading";
 
-// What asks a keyed source to read: every trigger but a request, which only a
-// session's own lanes take.
-export type KeyedTrigger = Exclude<RefreshTrigger, "request">;
-
 // A source whose entries arm no watch of their own.
 export const NO_WATCH = (): Release => () => {};
 
@@ -59,7 +55,13 @@ export interface KeyedSourceSpec<I, T> {
   // [LAW:no-ambient-temporal-coupling] The read is handed its flight's
   // signal, aborted when the flight is abandoned (a supersede, a drop), so
   // a program a read started does not outlive the entry that asked for it.
-  readonly read: (input: I, signal: AbortSignal) => Promise<Outcome<T>>;
+  // It is handed what asked for it too, for a read whose owners each record
+  // their own refresh under that trigger.
+  readonly read: (
+    input: I,
+    signal: AbortSignal,
+    by: RefreshTrigger,
+  ) => Promise<Outcome<T>>;
   // [LAW:types-are-the-program] The entry's refresh, as data of its input: a
   // period, on which a held entry is read again and which a hold's return
   // resumes; or none (`null`), when only a change reads an entry again, and
@@ -113,7 +115,7 @@ interface Entry<I, T> extends Readable<T> {
 // supersede of it has resumed.
 export class KeyedSource<I, T> {
   private readonly entries = new Map<string, Entry<I, T>>();
-  private readonly refreshes: Refreshes<KeyedTrigger>;
+  private readonly refreshes: Refreshes<RefreshTrigger>;
   private closed = false;
 
   constructor(private readonly spec: KeyedSourceSpec<I, T>) {
@@ -259,7 +261,7 @@ export class KeyedSource<I, T> {
     return entry;
   }
 
-  private refresh(entry: Entry<I, T>, by: KeyedTrigger): void {
+  private refresh(entry: Entry<I, T>, by: RefreshTrigger): void {
     // [LAW:no-ambient-temporal-coupling] Held back while a supersede is out:
     // its last resume starts the one read that answers this trigger too.
     if (entry.superseding > 0) return;
@@ -272,7 +274,7 @@ export class KeyedSource<I, T> {
     const flight = new AbortController();
     entry.flight = flight;
     const startedAt = this.spec.clock.monotonic();
-    void attempt(() => this.spec.read(entry.input, flight.signal))
+    void attempt(() => this.spec.read(entry.input, flight.signal, by))
       .then((outcome) => {
         const fields = this.spec.fields(entry.input, entry.holders);
         const ms = elapsedMs(this.spec.clock, startedAt);

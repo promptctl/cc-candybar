@@ -35,7 +35,7 @@ const SOURCES: SourceSnapshots = {
     {
       name: "cache",
       scope: "session",
-      refreshes: { request: 3 },
+      refreshes: { first: 1, period: 0, change: 2 },
       failures: 1,
       abandoned: 0,
       lastMs: 0,
@@ -404,7 +404,7 @@ describe("formatStats", () => {
       "pane/tmux                 failures=1 last=3ms refreshes first:2 period:7 change:0 supersede:0",
     );
     expect(out).toContain(
-      "session/cache             failures=1 last=0ms refreshes request:3",
+      "session/cache             failures=1 last=0ms refreshes first:1 period:0 change:2",
     );
     expect(out).toContain(
       "homes         daemon:1 configDir:1 repo:4 directory:3 session:10 view:2 pane:2",

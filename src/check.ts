@@ -724,7 +724,7 @@ export async function prepareConfig(
 // (a source keyed on an input the payload moved) awaited under the prepared
 // config's window, and the draw over what they yielded
 // [LAW:no-ambient-temporal-coupling] — the daemon's request order, where a
-// request awaits the refreshes its arrival triggered before it answers. A
+// request awaits its world state's first readings before it answers. A
 // source still out at the deadline is this pass's advisory, so the verdict
 // names the preset that drew without it.
 export async function renderEffective(

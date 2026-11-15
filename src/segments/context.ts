@@ -9,7 +9,7 @@ import {
 } from "../utils/outcome";
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
-import { RefreshLedger } from "../utils/refresh-ledger";
+import { RefreshLedger, type RefreshTrigger } from "../utils/refresh-ledger";
 import type { Timekeeper } from "../time";
 import type { SessionId } from "../daemon/foundations/session-id";
 
@@ -62,10 +62,10 @@ export class ContextProvider {
     this.fold = new TranscriptFold<ContextState>(
       undefined,
       step,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
+      (opts.ledger ?? new RefreshLedger(logger)).declare<RefreshTrigger>({
         name: "context",
         scope: "session",
-        refresh: ["request"],
+        refresh: ["first", "period", "change"],
       }),
       opts.clock,
       logger,
@@ -79,8 +79,9 @@ export class ContextProvider {
   async refresh(
     sessionId: SessionId,
     transcriptPath: string,
+    by: RefreshTrigger,
   ): Promise<Outcome<number>> {
-    return tokensFrom(await this.fold.read(sessionId, transcriptPath));
+    return tokensFrom(await this.fold.read(sessionId, transcriptPath, by));
   }
 
   // The session's context tokens as its last refresh left them, for a draw.

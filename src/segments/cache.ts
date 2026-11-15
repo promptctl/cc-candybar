@@ -29,7 +29,11 @@ import {
   type Outcome,
   type Reading,
 } from "../utils/outcome.js";
-import { RefreshLedger, type Refreshes } from "../utils/refresh-ledger.js";
+import {
+  RefreshLedger,
+  type RefreshTrigger,
+  type Refreshes,
+} from "../utils/refresh-ledger.js";
 import type { SourceStats } from "../utils/keyed-source.js";
 import { valueOf } from "../utils/logfmt.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
@@ -94,17 +98,17 @@ interface Known {
 }
 
 // [LAW:single-enforcer] The one owner of each session's cache expiry
-// (brandon-unfiled-3248.8ro6, step 3): a statusline request re-reads the
-// transcript's tail only when its stamp moved — a frame between requests, or
-// a request over an unchanged transcript, reads nothing — and a draw takes
-// the expiry as the last request left it.
+// (brandon-unfiled-3248.8ro6, step 3): the session's transcript lanes
+// re-read the transcript's tail only when its stamp moved — a frame, or a
+// period over an unchanged transcript, reads nothing — and a draw takes the
+// expiry as the last refresh left it.
 export class CacheExpiryProvider {
   // Observable, so a view's payload over an expiry is recomputed in the turn
   // a new one is stored.
   private readonly known = new ObservableLru<string, Known>(MAX_SESSIONS);
   // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
   // warn; an answer believed under its stamp reads nothing, and logs nothing.
-  private readonly refreshes: Refreshes<"request">;
+  private readonly refreshes: Refreshes<RefreshTrigger>;
 
   constructor(
     // [LAW:effects-at-boundaries] Times each read of the tail.
@@ -112,17 +116,18 @@ export class CacheExpiryProvider {
     logger: DaemonLogger = quietLogger,
     ledger: RefreshLedger = new RefreshLedger(logger),
   ) {
-    this.refreshes = ledger.declare({
+    this.refreshes = ledger.declare<RefreshTrigger>({
       name: "cache",
       scope: "session",
-      refresh: ["request"],
+      refresh: ["first", "period", "change"],
     });
   }
 
-  // The session's refresh, which its statusline request makes.
+  // The session's refresh, which its transcript's watch and period make.
   async refresh(
     sessionId: string,
     transcriptPath: string,
+    by: RefreshTrigger,
   ): Promise<Outcome<number>> {
     const stamp = statStamp(transcriptPath);
     const prior = this.known.get(sessionId);
@@ -139,7 +144,7 @@ export class CacheExpiryProvider {
       this.known.touch(sessionId);
       return prior.outcome;
     }
-    const outcome = await this.read(sessionId, transcriptPath, stamp);
+    const outcome = await this.read(sessionId, transcriptPath, stamp, by);
     this.known.set(sessionId, { stamp, outcome });
     return outcome;
   }
@@ -158,12 +163,13 @@ export class CacheExpiryProvider {
     sessionId: string,
     transcriptPath: string,
     stamp: string,
+    by: RefreshTrigger,
   ): Promise<Outcome<number>> {
     const startedAt = this.clock.monotonic();
     const outcome = await cacheExpiresAt(transcriptPath);
     this.refreshes.recorded(
       `sid=${valueOf(sessionId)} stamp=${valueOf(stamp)}`,
-      "request",
+      by,
       outcome,
       elapsedMs(this.clock, startedAt),
     );

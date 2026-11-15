@@ -52,7 +52,14 @@ import {
 } from "../src/utils/outcome";
 import { settledLane, type Current, type Lane } from "../src/utils/reading";
 import { systemTimekeeper } from "../src/time";
-import { absentOwners } from "./helpers/payload-owners";
+import {
+  absentOwners,
+  fakeCacheExpiry,
+  fakeMetrics,
+  withTranscriptLanes,
+} from "./helpers/payload-owners";
+import { awaitsReading } from "../src/renderer/render-payload";
+import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 
 const SID = sessionIdOf("s1");
@@ -133,7 +140,7 @@ function collectorOver(
   const handedIn: HandedIn[] = [];
   const logged: string[] = [];
   const collector = new Collector({
-    owners,
+    owners: withTranscriptLanes(owners, clock),
     daemon: () => daemonFactsOf(update()),
     clock,
     watched: (session) => watched.has(session),
@@ -208,6 +215,72 @@ describe("a request", () => {
     expect(held.has("git:/b")).toBe(true);
     expect(held.has("git:/a")).toBe(false);
     expect(handedIn).toEqual([]);
+  });
+});
+
+// [LAW:behavior-not-structure] A session's transcript lanes are read on the
+// collector's own trigger, never on a request: the world state carries what
+// the transcript says once its read lands, whoever asked.
+describe("a session's transcript", () => {
+  // Owners whose metrics lane reads how many entries the transcript holds,
+  // whose other transcript lanes answer at once, and every other key the
+  // request names landed.
+  function followed() {
+    const { owners, land } = handLanded();
+    const transcript = { entries: 1 };
+    for (const key of ["git:/a", "host.name", "host.user", "today"])
+      land(key, ABSENT);
+    return {
+      owners: {
+        ...owners,
+        metricsProvider: fakeMetrics(() =>
+          ok({ lastResponseTime: null, messageCount: transcript.entries }),
+        ),
+        cacheExpiry: fakeCacheExpiry(() => ABSENT),
+      } as unknown as RenderPayloadDeps,
+      append: () => transcript.entries++,
+    };
+  }
+  const messagesOf = (state: WorldState | undefined) =>
+    state?.builtins.metrics.kind === "ok"
+      ? state.builtins.metrics.value.messageCount
+      : state?.builtins.metrics.kind;
+  const lastHandedIn = (handedIn: HandedIn[]) =>
+    handedIn.findLast((e) => e.kind === "world-state")?.worldState;
+
+  test("a first request waits for the lanes' first read, which hands in the world state that answers it", async () => {
+    const { owners } = followed();
+    const { collector, clock, handedIn } = collectorOver(owners);
+    const first = collector.requested(requestAt("/a"));
+    expect(first.builtins.metrics).toMatchObject(pendingOf("unread"));
+    expect(awaitsReading(first, [])).toBe(true);
+    await clock.settle(0);
+    const landed = lastHandedIn(handedIn)!;
+    expect(messagesOf(landed)).toBe(1);
+    expect(awaitsReading(landed, [])).toBe(false);
+  });
+
+  test("an append lands in the world state on the collector's trigger, with no request", async () => {
+    const { owners, append } = followed();
+    const { collector, clock, handedIn } = collectorOver(owners);
+    collector.requested(requestAt("/a"));
+    await clock.settle(0);
+    append();
+    await clock.settle(TRANSCRIPT_PERIOD.okMs);
+    expect(messagesOf(lastHandedIn(handedIn))).toBe(2);
+  });
+
+  test("a request on a warm session waits on nothing, and reads nothing", async () => {
+    const { owners, append } = followed();
+    const { collector, clock } = collectorOver(owners);
+    collector.requested(requestAt("/a"));
+    await clock.settle(0);
+    append();
+    const warm = collector.requested(requestAt("/a"));
+    expect(awaitsReading(warm, [])).toBe(false);
+    // What the transcript said when the trigger last read it, not the append
+    // this request arrived after: the trigger reads it, not the request.
+    expect(messagesOf(warm)).toBe(1);
   });
 });
 
@@ -616,6 +689,8 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
       declareUser: () => take("host.user"),
     },
     usageStore: { declareToday: () => take("today") },
+    transcriptLanes: { declare: () => take("transcript") },
+    home: "/home/tester",
   } as unknown as KeyedOwners;
   const facts: ViewFacts = {
     ...requestAt("/w"),
@@ -636,9 +711,16 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
     failed("git: Error: resolver bug", "read"),
   );
   expect(declared.result.lanes.tmux.current()).toEqual(ABSENT);
-  expect(taken).toEqual(["git", "tmux", "host.name", "host.user", "today"]);
+  expect(taken).toEqual([
+    "git",
+    "tmux",
+    "host.name",
+    "host.user",
+    "today",
+    "transcript",
+  ]);
   expect(released).toEqual(["git"]);
-  expect(declared).toMatchObject({ acquired: 4, released: 1 });
+  expect(declared).toMatchObject({ acquired: 5, released: 1 });
 });
 
 test("a run whose declaration throws answers its failure, and every other run and lane declares", () => {
@@ -652,7 +734,7 @@ test("a run whose declaration throws answers its failure, and every other run an
   const broken = runAt("broken");
   const fine = runAt("fine");
   const owners = {
-    ...absentOwners(),
+    ...withTranscriptLanes(absentOwners()),
     sourceRuns: {
       declare: (_: Holds, run: Judged) => {
         if (run.digest === broken.digest) throw new Error("watch bug");

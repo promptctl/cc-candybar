@@ -38,7 +38,7 @@ const line = (text: string): string =>
 const REFRESHES = new RefreshLedger().declare({
   name: "count",
   scope: "session",
-  refresh: ["request"],
+  refresh: ["change"],
 });
 
 // Every fold here counts entries: the smallest projection that makes "how much
@@ -70,7 +70,7 @@ const valueOf = async (
   id: string,
   path: string,
 ) => {
-  const out = await fold.read(sessionIdOf(id), path);
+  const out = await fold.read(sessionIdOf(id), path, "change");
   if (out.kind !== "ok") throw new Error(`expected ok, got ${out.reason}`);
   return out.value;
 };
@@ -152,7 +152,7 @@ test("a session with no transcript is a real zero, never a failure", async () =>
     chmodSync(sub, 0o000);
     try {
       for (const fold of [warm, counting()]) {
-        const out = await fold.read(sessionIdOf("s"), path);
+        const out = await fold.read(sessionIdOf("s"), path, "change");
         expect(out.kind).toBe("failed");
         // The open is what classifies, so the reason names it.
         if (out.kind === "failed")

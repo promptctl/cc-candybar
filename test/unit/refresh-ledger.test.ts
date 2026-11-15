@@ -87,42 +87,41 @@ describe("RefreshLedger", () => {
     const usage = ledger.declare({
       name: "usage",
       scope: "session",
-      refresh: ["request"],
+      refresh: ["change"],
     });
     tmux.recorded("", "period", ok(null), 1);
     tmux.recorded("", "period", ok(null), 1);
-    usage.recorded("", "request", ok(null), 1);
+    usage.recorded("", "change", ok(null), 1);
 
     expect(ledger.totals()).toEqual({
       first: 0,
       period: 2,
-      change: 0,
-      request: 1,
+      change: 1,
       supersede: 0,
     });
   });
 
-  // [LAW:nothing-unseen] A request's refreshes are facts of its render event,
-  // the one event of that unit of work; every other refresh is its own event,
-  // and a failure is always logged, once, by the refresh that met it.
-  test("a request's refresh writes no line unless it failed; every other refresh writes one", () => {
+  // [LAW:nothing-unseen] Every refresh is its own event, a failure at warn,
+  // logged once by the refresh that met it.
+  test("every refresh writes one line, a failed one at warn", () => {
     const { ledger, lines } = ledgerWithLog();
     const usage = ledger.declare({
       name: "usage",
       scope: "session",
-      refresh: ["request"],
+      refresh: ["change"],
     });
     const tmux = ledger.declare({
       name: "tmux",
       scope: "pane",
       refresh: ["period"],
     });
-    usage.recorded("sid=s", "request", ok(null), 2);
-    usage.recorded("sid=s", "request", failed("parse error", "read"), 3);
+    usage.recorded("sid=s", "change", ok(null), 2);
+    usage.recorded("sid=s", "change", failed("parse error", "read"), 3);
     tmux.recorded("pane=%1", "period", ok(null), 5);
 
     expect(lines).toEqual([
-      'warn usage refresh sid=s by=request outcome=failed reason="parse error" took=3ms',
+      "info usage refresh sid=s by=change outcome=ok took=2ms",
+      'warn usage refresh sid=s by=change outcome=failed reason="parse error" took=3ms',
       "info tmux refresh pane=%1 by=period outcome=ok took=5ms",
     ]);
   });

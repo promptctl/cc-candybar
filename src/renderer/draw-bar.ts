@@ -11,11 +11,7 @@ import {
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { updateNotice } from "../daemon/foundations/update-offer.js";
-import {
-  type CheckedRenderRequest,
-  type RefreshTimes,
-  type ViewFacts,
-} from "../renderer-interface/request-context.js";
+import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import { UPDATE_DISMISSED_KEY } from "../daemon/foundations/update-keys";
 import { type RenderOrigin } from "../config-hint";
 import {
@@ -47,7 +43,6 @@ import {
   prFactOf,
   sourcesFactOf,
   settleWorld,
-  refreshedFact,
   todayOf,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
@@ -76,7 +71,6 @@ import {
   type FeedFrame,
   type LaneSession,
 } from "../renderer-interface/adapter.js";
-import type { RequestId } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -98,7 +92,6 @@ import {
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { type Instant } from "../utils/instant.js";
 import { waitWithin } from "../utils/reading.js";
-import { eventLine } from "../utils/logfmt.js";
 import {
   noteFacts,
   requestEvent,
@@ -146,7 +139,7 @@ export type RendererParts = RendererState & AdapterToHost;
 // feed summarizes the frames that render.
 // [LAW:effects-at-boundaries] Synchronous by type: a frame reads every value
 // as its owner stored it (the view's payload), so it performs no I/O and
-// refreshes no source — the request it is drawn from made those refreshes,
+// refreshes no source — the collector's triggers made those refreshes,
 // and an event, never a frame, opened the view it draws.
 export function renderFrame(
   parts: RendererParts,
@@ -303,8 +296,6 @@ interface RenderSetup extends Disposable {
   readonly state: DslRenderState;
   readonly view: SessionView<SessionSource>;
   readonly hintsError: string | null;
-  // What the request's refresh reads (settleWorld).
-  readonly viewFacts: ViewFacts;
 }
 
 // What a render notes of the context it draws by.
@@ -482,16 +473,10 @@ function setUpDraw(
 ): RenderSetup {
   try {
     const { entry, state, view } = hold;
-    const { hints } = req;
     // [LAW:dataflow-not-control-flow] One composition every render: the
     // entry always holds a renderable state (the bundled default until a
     // config loads — src/renderer/render-cache.ts), so body = drawDsl(state)
     // and output = diagnostics + body, with no "did the config load" branch.
-    const viewFacts: ViewFacts = {
-      hookData: req.hookData,
-      cwd: req.cwd,
-      hints,
-    };
     return {
       req,
       at,
@@ -501,7 +486,6 @@ function setUpDraw(
       state,
       view,
       hintsError,
-      viewFacts,
       [Symbol.dispose]: () => hold[Symbol.dispose](),
     };
   } catch (e) {
@@ -1083,7 +1067,6 @@ export function laneClicked(
 
 export async function answerRequest(
   parts: RendererParts,
-  id: RequestId,
   req: CheckedRenderRequest,
   at: Instant,
   waitMs: number,
@@ -1108,10 +1091,11 @@ export async function answerRequest(
     laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
   );
   // Rules 1 and 2 of the model: the answer shows what this request carried,
-  // so it waits for the refreshes its arrival triggers and the first value of
-  // every fact of its world state it waits on (`awaitedReading`), its view's
-  // runs among them, until its client's deadline. What has not answered by
-  // then draws as pending, and lands for the next frame.
+  // so it waits for the first value of every fact of its world state it
+  // waits on (`awaitedReading`), its view's runs among them, until its
+  // client's deadline. It triggers no read: a warm session's world state is
+  // current already, so it draws at once. What has not answered by then draws
+  // as pending, and lands for the next frame.
   const waitFrom = clock.monotonic();
   // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
   // reading. Setup has spent part of what the request arrived with, and below
@@ -1120,27 +1104,9 @@ export async function answerRequest(
   noteFacts(facts, {
     deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
   });
-  // What the refresh took, lane by lane, once it has landed: a fact of the
-  // render event, or, landing after the answer, a line of its own that names
-  // the request, so a lane slower than the deadline is seen with its time.
-  let refreshed: RefreshTimes | null = null;
-  let answered = false;
   const ended = await waitWithin(
     (signal) =>
       settleWorld(
-        () =>
-          parts.refresh(setup.viewFacts, at).then((took) => {
-            if (answered)
-              log(
-                "info",
-                eventLine("refreshed", [
-                  ["req", String(id)],
-                  ["sid", setup.sessionId],
-                  ["refreshed", refreshedFact(took)],
-                ]),
-              );
-            else refreshed = took;
-          }),
         () => parts.worldStates.of(setup.sessionId),
         () => setup.view.registry.namedRuns().values(),
         signal,
@@ -1159,11 +1125,9 @@ export async function answerRequest(
   // [LAW:nothing-unseen] How the wait went, on the render event: an answer
   // drawn with values pending says so by name.
   const drawFrom = clock.monotonic();
-  answered = true;
   noteFacts(facts, {
     waited: `${Math.round(drawFrom - waitFrom)}ms`,
     ended,
-    refreshed: refreshedFact(refreshed),
   });
   const sessionId = req.hookData.session_id;
   const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(

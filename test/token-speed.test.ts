@@ -58,6 +58,7 @@ const S_2 = sessionIdOf("S");
 const C_2 = sessionIdOf("C");
 const R_2 = sessionIdOf("R");
 const O_2 = sessionIdOf("O");
+const U_2 = sessionIdOf("U");
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -117,7 +118,7 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
       sweepIntervalMs: 0,
     });
     try {
-      const first = await store.request(S_2, t).speed(1_000);
+      const first = await store.refresh(S_2, t, "change").speed(1_000);
       expect(first.kind).toBe("ok");
       if (first.kind !== "ok") return;
       expect(first.value.prev).toBeUndefined();
@@ -131,7 +132,7 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
       // Transcript grows by one more turn; bump mtime so the store re-parses.
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
       utimesSync(t, new Date(2000), new Date(2000));
-      const second = await store.request(S_2, t).speed(2_000);
+      const second = await store.refresh(S_2, t, "change").speed(2_000);
       expect(second.kind).toBe("ok");
       if (second.kind !== "ok") return;
       expect(second.value.prev).toMatchObject({
@@ -157,6 +158,30 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
     }
   });
 
+  // The backstop period reads a quiet transcript again and again; a sample
+  // per read would fill the ring with idle pairs and push the turn that did
+  // work out of the burn-rate history.
+  test("a read over an unchanged transcript takes no sample: it answers the standing observation", async () => {
+    const t = join(dir, "U.jsonl");
+    writeFileSync(t, usageLine("a", 10, 5));
+    utimesSync(t, new Date(1000), new Date(1000));
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const first = await store.refresh(U_2, t, "first").speed(1_000);
+      const again = await store.refresh(U_2, t, "period").speed(11_000);
+      expect(again).toBe(first);
+      if (again.kind !== "ok") throw new Error("no observation");
+      expect(again.value.samples).toHaveLength(1);
+      expect(again.value.cur.atMs).toBe(1_000);
+    } finally {
+      store.close();
+    }
+  });
+
   test("concurrent same-state observations coalesce to ONE baseline transition", async () => {
     const t = join(dir, "C.jsonl");
     writeFileSync(t, usageLine("a", 10, 5));
@@ -168,7 +193,7 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
     });
     try {
       // Establish a baseline (output 5) at the first transcript state.
-      await store.request(C_2, t).speed(1_000);
+      await store.refresh(C_2, t, "change").speed(1_000);
 
       // Output grows to 25; bump mtime to the new state.
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 20));
@@ -179,8 +204,8 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
       // (output 25) as its prev and degrade to a zero delta. Coalesced, both
       // share ONE observation: prev = the baseline (5), cur = the new state (25).
       const [a, b] = await Promise.all([
-        store.request(C_2, t).speed(2_000),
-        store.request(C_2, t).speed(2_000),
+        store.refresh(C_2, t, "change").speed(2_000),
+        store.refresh(C_2, t, "change").speed(2_000),
       ]);
       expect(a.kind).toBe("ok");
       expect(b.kind).toBe("ok");
@@ -214,7 +239,7 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
         const ms = (i + 1) * 1000;
         writeFileSync(t, lines);
         utimesSync(t, new Date(ms), new Date(ms));
-        const r = await store.request(R_2, t).speed(ms);
+        const r = await store.refresh(R_2, t, "change").speed(ms);
         expect(r.kind).toBe("ok");
         if (r.kind !== "ok") return;
         results.push(r.value);
@@ -247,12 +272,12 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
     try {
       writeFileSync(t, usageLine("a", 10, 5));
       utimesSync(t, new Date(1000), new Date(1000));
-      const first = await store.request(O_2, t).speed(3_000); // inserted first, atMs 3000
+      const first = await store.refresh(O_2, t, "change").speed(3_000); // inserted first, atMs 3000
       expect(first.kind).toBe("ok");
 
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
       utimesSync(t, new Date(2000), new Date(2000));
-      const second = await store.request(O_2, t).speed(1_000); // inserted second, atMs 1000
+      const second = await store.refresh(O_2, t, "change").speed(1_000); // inserted second, atMs 1000
       expect(second.kind).toBe("ok");
       if (second.kind !== "ok") return;
 

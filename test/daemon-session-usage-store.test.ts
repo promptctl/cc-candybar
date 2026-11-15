@@ -143,10 +143,10 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  // [LAW:single-enforcer] One request's session, speed and today lanes read
-  // one record: they share its refresh, which is recorded once, and a failed
-  // one is logged once.
-  test("a request's lanes share one refresh of the session, logged once", async () => {
+  // [LAW:single-enforcer] One refresh.s session and speed lanes read one
+  // record: they share its ingest, which is recorded once, and a failed one is
+  // logged once.
+  test("a refresh.s lanes share one ingest of the session, logged once", async () => {
     const lines: string[] = [];
     const ledger = new RefreshLedger((level, msg) =>
       lines.push(`${level} ${msg}`),
@@ -164,9 +164,9 @@ describe("SessionUsageStore — session projection", () => {
       const hd = hook("A", t);
       await Promise.all([
         usageFold(store, SID_A, hd.transcript_path),
-        store.request(SID_A, t).speed(Date.now()),
+        store.refresh(SID_A, t, "change").speed(Date.now()),
       ]);
-      expect(usage()).toMatchObject({ refreshes: { request: 1 }, failures: 0 });
+      expect(usage()).toMatchObject({ refreshes: { change: 1 }, failures: 0 });
 
       // A transcript path that is a directory: the read fails.
       const broken = join(dir, "B.jsonl");
@@ -174,23 +174,22 @@ describe("SessionUsageStore — session projection", () => {
       const hb = hook("B", broken);
       await Promise.all([
         usageFold(store, SID_B, hb.transcript_path),
-        store.request(SID_B, broken).speed(Date.now()),
+        store.refresh(SID_B, broken, "change").speed(Date.now()),
       ]);
-      expect(usage()).toMatchObject({ refreshes: { request: 2 }, failures: 1 });
+      expect(usage()).toMatchObject({ refreshes: { change: 2 }, failures: 1 });
       expect(lines.filter((l) => l.startsWith("warn usage refresh"))).toEqual([
         expect.stringContaining("sid=B "),
       ]);
 
-      // Today's lane reads the request's one refresh, never its own.
+      // Both lanes of one refresh read its one ingest.
       const late = join(dir, "C.jsonl");
       mkdirSync(late);
-      const request = store.request(SID_C, late);
+      const request = store.refresh(SID_C, late, "change");
       await Promise.all([
         request.usage(),
         request.speed(Date.now()),
-        request.today(),
       ]);
-      expect(usage()).toMatchObject({ refreshes: { request: 3 }, failures: 2 });
+      expect(usage()).toMatchObject({ refreshes: { change: 3 }, failures: 2 });
       expect(
         lines.filter((l) => l.startsWith("warn usage refresh sid=C ")),
       ).toHaveLength(1);
@@ -367,14 +366,14 @@ describe("SessionUsageStore — session projection", () => {
       logger: (_level, msg) => lines.push(msg),
     });
     try {
-      await store.request(SID_R, undefined).speed(1_000);
+      await store.refresh(SID_R, undefined, "change").speed(1_000);
       expect(store.getStats()).toMatchObject({ size: 1 });
       now += 2;
       expect(store.sweepStale()).toBe(1);
       expect(store.getStats()).toMatchObject({ size: 0 });
       expect(lines).toContain("usageStore sweep dropped=1 noRecord=1 held=0");
       // The ring went with it: the next observation starts a new baseline.
-      const next = await store.request(SID_R, undefined).speed(2_000);
+      const next = await store.refresh(SID_R, undefined, "change").speed(2_000);
       expect(next.kind).toBe("ok");
       if (next.kind !== "ok") return;
       expect(next.value.prev).toBeUndefined();

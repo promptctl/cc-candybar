@@ -138,9 +138,9 @@ function counted(pr: unknown = ABSENT) {
     hints: HINTS,
     lanes,
   });
-  // A request: its refresh and wait, then the view's payload it draws.
+  // A request: its wait, then the view's payload it draws.
   const request = async () => {
-    await settleLanes(inputs(), AT);
+    await settleLanes(inputs());
     return payloadOf(inputs(), DRAW);
   };
   // `today` as a draw at `at` projects it.
@@ -228,12 +228,16 @@ describe("a frame's payload", () => {
     );
   });
 
-  test("a `today` whose refresh threw is that failure, before the lane is read", async () => {
+  test("a `today` whose session lane's refresh threw is that failure, before the lane is read", async () => {
     const { inputs, reads, request, deps } = counted();
     await request();
     const before = reads["today"];
-    deps.faults.refreshed(sessionIdOf(HOOK.session_id), "today", "scan threw");
-    expect(todayReadingOf(inputs())).toEqual(failed("scan threw", "read"));
+    deps.faults.refreshed(
+      sessionIdOf(HOOK.session_id),
+      "session",
+      "ingest threw",
+    );
+    expect(todayReadingOf(inputs())).toEqual(failed("ingest threw", "read"));
     expect(reads["today"]).toBe(before);
   });
 

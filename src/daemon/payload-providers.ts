@@ -31,6 +31,7 @@ import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
 import { ManagedStorage } from "./cache/managed-storage.js";
 import type { SourceRuns } from "./source-runs.js";
+import { TranscriptLanes, type LaneOwners } from "./cache/transcript-lanes.js";
 
 // [LAW:single-enforcer] Every provider records its refreshes in the caller's
 // one ledger, so its stats read every source in one place.
@@ -53,16 +54,9 @@ export function createPayloadProviders(opts: {
   readonly sourceRuns: SourceRuns;
 }): RenderPayloadDeps {
   const { launcher, clock, logger, ledger } = opts;
-  return {
-    home: opts.host.home,
-    hostService: new HostService({ clock, logger, ledger }),
-    gitProvider: new GitDataProvider({
-      inner: new GitService(launcher),
-      watchers: opts.watchers,
-      clock,
-      logger,
-      ledger,
-    }),
+  // [LAW:one-source-of-truth] The owners the transcript lanes refresh are the
+  // ones the payload reads.
+  const lanes = {
     usageStore: new SessionUsageStore({
       host: opts.host,
       clock,
@@ -72,9 +66,29 @@ export function createPayloadProviders(opts: {
     contextProvider: new ContextProvider({ clock, logger, ledger }),
     metricsProvider: new MetricsProvider({ clock, logger, ledger }),
     activityProvider: new ActivityProvider({ clock, logger, ledger }),
-    tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
     autoCompact: new AutoCompactProvider(clock, logger, ledger),
     cacheExpiry: new CacheExpiryProvider(clock, logger, ledger),
+    faults: new RefreshFaults(),
+  } satisfies LaneOwners;
+  return {
+    ...lanes,
+    home: opts.host.home,
+    hostService: new HostService({ clock, logger, ledger }),
+    gitProvider: new GitDataProvider({
+      inner: new GitService(launcher),
+      watchers: opts.watchers,
+      clock,
+      logger,
+      ledger,
+    }),
+    tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
+    transcriptLanes: new TranscriptLanes({
+      owners: lanes,
+      watchers: opts.watchers,
+      clock,
+      logger,
+      ledger,
+    }),
     managedStorage: new ManagedStorage({
       watchers: opts.watchers,
       fileEvents: opts.fileEvents,
@@ -83,8 +97,6 @@ export function createPayloadProviders(opts: {
       ledger,
     }),
     sourceRuns: opts.sourceRuns,
-    faults: new RefreshFaults(),
     log: opts.logger,
-    clock,
   };
 }

@@ -18,7 +18,8 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { presetNames } from "../src/config/presets";
 import { assembleFacts } from "../src/daemon/facts-assembly";
 import { composePayload, settleWorld } from "../src/renderer/render-payload";
-import { refreshPayload, type Readings } from "../src/daemon/readings";
+import type { Readings } from "../src/daemon/readings";
+import { readTranscriptLanes } from "./helpers/payload-owners";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
 import { ok, pendingOf } from "../src/utils/outcome";
@@ -240,19 +241,13 @@ describe("what wakes a view", () => {
     const document = view.source.facts();
     const payload = view.source.payload();
     const settled = changed.length;
-    // The same request refreshes every lane again: each owner stores an equal
-    // answer in a new object.
+    // The transcript lanes are read again: each owner stores an equal answer
+    // in a new object.
+    await readTranscriptLanes(rig.providers, {
+      ...requestOf(dir),
+      cwd: PROJECT,
+    });
     await settleWorld(
-      () =>
-        refreshPayload(
-          {
-            hookData: requestOf(dir).hookData,
-            deps: rig.providers as never,
-            cwd: PROJECT,
-            hints: requestOf(dir).hints,
-          },
-          AT,
-        ),
       () => rig.served.worldStates.of(SID),
       () => view.registry.namedRuns().values(),
       new AbortController().signal,

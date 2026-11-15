@@ -12,10 +12,6 @@ import type {
 } from "../../src/renderer/verbs/port";
 import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
-import {
-  readingsHost,
-  type RenderPayloadDeps,
-} from "../../src/daemon/readings";
 import { systemTimekeeper } from "../../src/time";
 import { TEST_SIGNER } from "./link-signer";
 
@@ -35,8 +31,8 @@ const unhosted = (what: string) => (): never => {
 
 // The host a renderer test draws against: no feed follows a session, no
 // update is offered, file events are heard, nothing is idle and nothing is
-// set up; a request's refresh and the cache tallies are the test's owners'.
-export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
+// set up.
+export function inertHost(): AdapterToHost {
   return {
     wake: () => {},
     log: () => {},
@@ -45,7 +41,6 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
     applyUpdate: () =>
       Promise.reject(new Error("apply-update: no update watch in this rig")),
     runs: { start: unhosted("runs"), refused: unhosted("runs") },
-    ...readingsHost(providers),
     doctor: {
       probeTmux: unhosted("doctor"),
       remoteLogin: unhosted("doctor"),
@@ -77,18 +72,15 @@ export function rendererParts({
   cache,
   sessionState,
   worldStates,
-  providers,
   verbs = NO_VERBS,
 }: {
   readonly cache: unknown;
   readonly sessionState: SessionState;
   readonly worldStates: WorldStates;
-  // The rig's owners, as loosely typed as the rig's fakes are.
-  readonly providers: unknown;
   readonly verbs?: RendererVerbs;
 }): MainRendererParts {
   return {
-    ...inertHost(providers as RenderPayloadDeps),
+    ...inertHost(),
     clock: systemTimekeeper,
     linkSigner: TEST_SIGNER,
     sessionState,

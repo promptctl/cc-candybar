@@ -148,7 +148,6 @@ export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   typeSlash: "call",
   applyUpdate: "call",
   runs: { start: "notice", refused: "notice" },
-  refresh: "call",
   doctor: {
     probeTmux: "call",
     remoteLogin: "call",

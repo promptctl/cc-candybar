@@ -169,7 +169,7 @@ async function activityOf(...lines: string[]) {
   const { path, session } = transcript(...lines);
   const outcome = await new ActivityProvider({
     clock: systemTimekeeper,
-  }).getActivityInfo(session, hook(path, session));
+  }).refresh(session, path, "change");
   if (outcome.kind !== "ok")
     throw new Error(`expected ok, got ${outcome.kind}`);
   return outcome.value;
@@ -481,7 +481,7 @@ describe("the fold reports what is happening now", () => {
       toolUse({ id: "a", name: "Bash" }),
     );
     const provider = new ActivityProvider({ clock: systemTimekeeper });
-    const first = await provider.getActivityInfo(session, hook(path, session));
+    const first = await provider.refresh(session, path, "change");
     expect(first.kind === "ok" && first.value.running).toEqual([
       { name: "Bash", count: 1 },
     ]);
@@ -494,7 +494,7 @@ describe("the fold reports what is happening now", () => {
     const future = new Date(Date.now() + 2000);
     utimesSync(path, future, future);
 
-    const second = await provider.getActivityInfo(session, hook(path, session));
+    const second = await provider.refresh(session, path, "change");
     expect(second.kind === "ok" && second.value).toMatchObject({
       running: [{ name: "Read", count: 1 }],
       done: [{ name: "Bash", count: 1 }],
@@ -502,7 +502,7 @@ describe("the fold reports what is happening now", () => {
 
     const whole = await new ActivityProvider({
       clock: systemTimekeeper,
-    }).getActivityInfo(session, hook(path, session));
+    }).refresh(session, path, "change");
     expect(whole.kind === "ok" && whole.value).toEqual(
       second.kind === "ok" && second.value,
     );
@@ -512,7 +512,7 @@ describe("the fold reports what is happening now", () => {
     const session = sessionIdOf("missing");
     const outcome = await new ActivityProvider({
       clock: systemTimekeeper,
-    }).getActivityInfo(session, hook(join(dir, "nope.jsonl"), session));
+    }).refresh(session, join(dir, "nope.jsonl"), "change");
     expect(outcome).toEqual({
       kind: "ok",
       value: { command: null, todos: [], running: [], done: [] },

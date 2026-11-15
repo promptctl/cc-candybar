@@ -46,7 +46,11 @@ import {
   NO_WATCH,
   type KeyedSourceStats,
 } from "../../utils/keyed-source";
-import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger";
+import {
+  RefreshLedger,
+  type RefreshTrigger,
+  type Refreshes,
+} from "../../utils/refresh-ledger";
 import type { Every } from "../../utils/period";
 import { elapsedMs, type Timekeeper } from "../../time";
 import { Kept } from "../../var-system/store";
@@ -130,31 +134,33 @@ interface SessionSlot {
   // (oldest→newest). tok/s is a derivative of the SAME token totals the record
   // owns; the baseline (prior counts + time) is the ring's last element, not a
   // parallel counter. The burn-rate sparkline folds over the whole ring; tok/s
-  // folds over its final pair. One request's speed sample appends; the pure delta
-  // math is render-payload's.
+  // folds over its final pair. A refresh that sees a new stamp appends one
+  // sample; the pure delta math is render-payload's.
   readonly ring: SpeedSample[];
-  // What the session's last request's refreshes answered, which a draw reads
-  // as they stand: the record's ingest — `null` when it worked, else why it
-  // failed — and the speed observation it took. Observable, so a view's
-  // payload over them is recomputed in the turn they land, and boxes of their
-  // own, so a request's answer moves no day sum.
+  // The transcript stamp the ring's last sample was taken at: one sample per
+  // stamp, so a period over an unchanged transcript moves no rate.
+  sampledAt: string | null;
+  // What the session's last refresh answered, which a draw reads as they
+  // stand: the record's ingest — `null` when it worked, else why it failed —
+  // and the speed observation it took. Observable, so a view's payload over
+  // them is recomputed in the turn they land, and boxes of their own, so a
+  // refresh's answer moves no day sum.
   readonly failure: IObservableValue<string | null>;
   readonly speed: IObservableValue<Outcome<SpeedObservation> | undefined>;
 }
 
-// A request's one refresh of its session: the stamp it observed, and the
-// record that refresh answered.
+// One refresh of a session: the stamp it observed, and the record that
+// refresh answered.
 interface SessionRefresh {
   readonly stamp: string;
   readonly record: Promise<Outcome<SessionRecord>>;
 }
 
-// What one statusline request reads of its session's record: each lane over
-// the request's one refresh of it.
-export interface SessionRequest {
+// What one refresh of a session reads of its record: each lane over the one
+// ingest it makes.
+export interface SessionLanes {
   usage(): Promise<Outcome<TranscriptUsage>>;
   speed(nowMs: number): Promise<Outcome<SpeedObservation>>;
-  today(): Promise<void>;
 }
 
 // What one caller's ingests did. Renders share the store's running tally — the
@@ -414,10 +420,10 @@ export class SessionUsageStore {
   // exactly once — so they return the same prev+cur and render identical,
   // deterministic throughput instead of the second clobbering the first.
   private readonly speedFlight = new SingleFlight();
-  // [LAW:single-enforcer] A request's refresh of a session is one unit of
-  // work per (session, observed stamp): the lanes of one request that read
-  // the record (session, speed, today) share it, so it records and logs once.
-  private readonly requestFlight = new SingleFlight();
+  // [LAW:single-enforcer] A refresh of a session is one unit of work per
+  // (session, observed stamp): the lanes that read the record (session,
+  // speed) share it, so it records and logs once.
+  private readonly refreshFlight = new SingleFlight();
   private readonly staleAgeMs: number;
   // The machine the store reads: where transcripts live, and where the
   // pricing table is cached.
@@ -425,9 +431,9 @@ export class SessionUsageStore {
   private readonly log: DaemonLogger;
   private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
   private readonly ledger: RefreshLedger;
-  // The session record's refresh, which its statusline request makes; a
+  // The session record's refresh, which its transcript lanes make; a
   // rescan's reads are its `today` scan's.
-  private readonly usage: Refreshes<"request">;
+  private readonly usage: Refreshes<RefreshTrigger>;
   private sweeps = 0;
   private stopSweep: (() => void) | null = null;
   private closed = false;
@@ -454,10 +460,10 @@ export class SessionUsageStore {
     this.clock = opts.clock;
     this.log = opts.logger ?? quietLogger;
     this.ledger = opts.ledger ?? new RefreshLedger(this.log);
-    this.usage = this.ledger.declare({
+    this.usage = this.ledger.declare<RefreshTrigger>({
       name: "usage",
       scope: "session",
-      refresh: ["request"],
+      refresh: ["first", "period", "change"],
     });
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     this.scans = new KeyedSource({
@@ -501,21 +507,22 @@ export class SessionUsageStore {
     return this.scans.stats();
   }
 
-  // [LAW:no-ambient-temporal-coupling] One statusline request's refresh of
-  // its session, as a value: the request's session, speed and today lanes
-  // read the one refresh it starts, whichever asks first and whenever the
-  // others land, so it reads, records and logs once per request.
-  request(
+  // [LAW:no-ambient-temporal-coupling] One refresh of a session, as a value:
+  // its session and speed lanes read the one ingest it starts, whichever asks
+  // first and whenever the other lands, so it reads, records and logs once.
+  // `by` is what asked for it (src/daemon/cache/transcript-lanes.ts).
+  refresh(
     sessionId: SessionId,
     transcriptPath: string | undefined,
-  ): SessionRequest {
+    by: RefreshTrigger,
+  ): SessionLanes {
     let refresh: SessionRefresh | null = null;
     const once = (): SessionRefresh => {
       if (refresh !== null) return refresh;
       const stamp = statStamp(transcriptPath);
       refresh = {
         stamp,
-        record: this.refreshed(sessionId, transcriptPath, stamp),
+        record: this.refreshed(sessionId, transcriptPath, stamp, by),
       };
       return refresh;
     };
@@ -530,14 +537,6 @@ export class SessionUsageStore {
         return ok(record.kind === "ok" ? record.value.usage : EMPTY_USAGE);
       },
       speed: (nowMs) => this.observed(sessionId, once, nowMs),
-      // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
-      // record, so it waits for the request's one refresh of it and for
-      // nothing else: the directory set's scan is no part of the request,
-      // since the day sums are pending until it lands and land through the
-      // observable they are read from.
-      today: async () => {
-        await once().record;
-      },
     };
   }
 
@@ -553,14 +552,15 @@ export class SessionUsageStore {
     return ok(slot.record?.usage ?? EMPTY_USAGE);
   }
 
-  // A request's ingest of its own session, whose outcome the session's slot
-  // keeps for the draws until the next one.
+  // A refresh's ingest of its session, whose outcome the session's slot keeps
+  // for the draws until the next one.
   private refreshed(
     sessionId: SessionId,
     transcriptPath: string | undefined,
     stamp: string,
+    by: RefreshTrigger,
   ): Promise<Outcome<SessionRecord>> {
-    return this.requestFlight.run(`${sessionId}:${stamp}`, async () => {
+    return this.refreshFlight.run(`${sessionId}:${stamp}`, async () => {
       // [LAW:no-ambient-temporal-coupling] This refresh's own tally, so
       // whether IT read is its own fact, never another session's refresh
       // landing in the same await.
@@ -572,7 +572,7 @@ export class SessionUsageStore {
       if (tally.misses > 0) {
         this.usage.recorded(
           `sid=${valueOf(sessionId)}`,
-          "request",
+          by,
           record,
           elapsedMs(this.clock, startedAt),
         );
@@ -647,9 +647,10 @@ export class SessionUsageStore {
     return ok(Object.fromEntries(record.days));
   }
 
-  // A request's speed sample, over its one refresh of the session: ingest its current
-  // cumulative counts, return the prior sample alongside, and record this one as
-  // the new baseline. [LAW:no-silent-failure] A failed transcript parse flows out
+  // A refresh's speed sample, over its one ingest of the session: its current
+  // cumulative counts, the prior sample alongside, and this one recorded as the
+  // new baseline — taken only at a stamp no sample was taken at, so a period
+  // over an unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
   // as `failed` (the boundary logs it and the segment reads "—"); an unknown
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
@@ -672,10 +673,13 @@ export class SessionUsageStore {
         answer(this.hold(sessionId).speed, record);
         return record;
       }
+      const slot = this.hold(sessionId);
+      const standing = slot.speed.get();
+      if (slot.sampledAt === stamp && standing?.kind === "ok") return standing;
       const breakdown =
         record.kind === "ok" ? record.value.usage.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
-      const { ring } = this.hold(sessionId);
+      const { ring } = slot;
       // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
       // clock) owns ring order — NOT ingest-completion order. Two concurrent
       // observes with different stamps don't coalesce in speedFlight and each
@@ -696,17 +700,18 @@ export class SessionUsageStore {
       // Drop oldest (smallest atMs ⇒ ring[0]) beyond the cap — a tail window,
       // not an archive.
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
+      slot.sampledAt = stamp;
       const observed = ok({
         ...(prev !== undefined && { prev }),
         cur,
         samples: [...ring],
       });
-      answer(this.hold(sessionId).speed, observed);
+      answer(slot.speed, observed);
       return observed;
     });
   }
 
-  // The session's speed as its last request observed it, for a draw: a frame
+  // The session's speed as its last refresh observed it, for a draw: a frame
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId: SessionId): Reading<SpeedObservation> {
     return this.sessions.get(sessionId)?.speed.get() ?? pendingOf("unread");
@@ -824,6 +829,7 @@ export class SessionUsageStore {
       lastSeenAt: this.clock.now(),
       record: undefined,
       ring: [],
+      sampledAt: null,
       failure: observable.box<string | null>(null),
       speed: observable.box<Outcome<SpeedObservation> | undefined>(undefined, {
         deep: false,

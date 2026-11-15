@@ -80,6 +80,7 @@ const DEPS = {
 const HOOK = {
   hook_event_name: "Status",
   session_id: "host-seg-test",
+  transcript_path: "/tmp/host-seg-test.jsonl",
   cwd: "/tmp",
   model: { id: "m", display_name: "M" },
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },

@@ -14,7 +14,6 @@ import type { ClientDeadline } from "../daemon/foundations/request-deadline";
 import type { RateLimitsSeen } from "../daemon/foundations/sightings";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { ClaudeHookData } from "../utils/claude";
-import type { RefreshLane } from "../facts/world-state.js";
 import type { Judged } from "../daemon/foundations/judge-run.js";
 
 // A render request that crossed the checkpoint: its hookData carries every
@@ -46,9 +45,6 @@ export type CheckedRenderRequest = Omit<
   readonly refusedArgs: readonly RefusedArg[];
   readonly [CHECKED]: true;
 };
-
-// The lanes a request's arrival refreshed: how long each took, in ms.
-export type RefreshTimes = Readonly<Record<RefreshLane, number>>;
 
 // What a session's declaration reads of its newest request: the keys every
 // keyed lane is read at, the session among them.

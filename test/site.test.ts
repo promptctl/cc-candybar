@@ -63,7 +63,12 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     const copy = clicked.links.find((l) => l.does.startsWith("copy "));
     const copied = await transport.click(copy.url, size); // bare Node has no clipboard
     transport.scenario.seek(27 / 90);
-    const working = await transport.frame(size);
+    // A seek rewrites the transcript, and the daemon reads it when its watch
+    // hears the write, not when a request arrives: the page's redraws show it
+    // a moment later, as Claude Code's ticks do.
+    let working = await transport.frame(size);
+    for (const end = Date.now() + 5_000; !JSON.stringify(working).includes("Finding the race") && Date.now() < end; )
+      working = await new Promise((r) => setTimeout(r, 50)).then(() => transport.frame(size));
     const painted = await transport.render(size);
     const tools = await transport.click(painted.links.find((l) => l.text.includes("tools")).url, size);
     const doctored = await transport.click(tools.links.find((l) => l.text.includes("🩺")).url, size);

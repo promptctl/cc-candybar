@@ -17,8 +17,6 @@ import type { DaemonFacts } from "../../src/facts/world-state";
 import { daemonFactsOf } from "./daemon-facts";
 import { collected } from "./collected";
 import { settleWorld } from "../../src/renderer/render-payload";
-import { refreshPayload } from "../../src/daemon/readings";
-import { type RefreshTimes } from "../../src/renderer-interface/request-context";
 import {
   sessionSource,
   type SessionSource,
@@ -36,6 +34,7 @@ import { TEST_SIGNER } from "./link-signer";
 import { NO_PLUGIN_STORAGE } from "./plugin-storage";
 import {
   absentOwners,
+  withTranscriptLanes,
   fakeActivity,
   fakeAutoCompact,
   fakeCacheExpiry,
@@ -152,7 +151,7 @@ export function sessionRig(
     readonly observers?: RenderCacheObservers;
   } = {},
 ) {
-  const providers = { ...fixedOwners(log), ...owners };
+  const providers = withTranscriptLanes({ ...fixedOwners(log), ...owners });
   const sessionState = new SessionState();
   const served = collected(
     { owners: providers as never, daemon, log },
@@ -238,13 +237,11 @@ export function requestOf(dir: string) {
 // A request of the session over `configFile`, as the daemon makes one: the
 // request and the world state read at its keys taken as the daemon's renderer
 // takes them, the view held, and its wait settled as the daemon settles one.
-// `refreshed` hears what its arrival refreshed.
 export async function settledRequest(
   rig: SessionRig,
   dir: string,
   configFile: string,
   cleanups: Array<() => void>,
-  refreshed: (took: RefreshTimes) => void = () => {},
 ): Promise<SessionView<SessionSource>> {
   const request = requestOf(dir);
   const held = rig.served.config(request, () =>
@@ -252,16 +249,6 @@ export async function settledRequest(
   );
   cleanups.push(() => held[Symbol.dispose]());
   await settleWorld(
-    () =>
-      refreshPayload(
-        {
-          hookData: request.hookData,
-          deps: rig.providers as never,
-          cwd: PROJECT,
-          hints: request.hints,
-        },
-        AT,
-      ).then(refreshed),
     () => rig.served.worldStates.of(request.hookData.session_id),
     () => held.view.registry.namedRuns().values(),
     new AbortController().signal,

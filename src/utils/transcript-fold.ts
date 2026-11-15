@@ -31,7 +31,7 @@ import { quietLogger, type DaemonLogger } from "./logger";
 import { pendingOf, type FailedAt, type Pending } from "./outcome";
 import { ObservableLru } from "./observable-lru";
 import { valueOf } from "./logfmt";
-import type { Refreshes } from "./refresh-ledger";
+import type { RefreshTrigger, Refreshes } from "./refresh-ledger";
 import { elapsedMs, type Timekeeper } from "../time";
 import type { SessionId } from "../daemon/foundations/session-id";
 
@@ -67,8 +67,9 @@ export class TranscriptFold<S> {
   constructor(
     private readonly empty: S,
     private readonly step: (state: S, entry: ParsedEntry) => S,
-    // The projection's source: a session's fold, refreshed by its request.
-    private readonly refreshes: Refreshes<"request">,
+    // The projection's source: a session's fold, refreshed by its
+    // transcript's watch and period.
+    private readonly refreshes: Refreshes<RefreshTrigger>,
     // [LAW:effects-at-boundaries] Times each fold, so a test holds the clock.
     private readonly clock: Pick<Timekeeper, "monotonic">,
     private readonly log: DaemonLogger = quietLogger,
@@ -82,6 +83,7 @@ export class TranscriptFold<S> {
   async read(
     sessionId: SessionId,
     transcriptPath: string,
+    by: RefreshTrigger,
   ): Promise<FoldOutcome<S>> {
     const held = this.sessions.get(sessionId);
     const prior = held?.folded;
@@ -109,7 +111,7 @@ export class TranscriptFold<S> {
     );
     this.refreshes.recorded(
       `sid=${valueOf(sessionId)}`,
-      "request",
+      by,
       read,
       elapsedMs(this.clock, startedAt),
     );

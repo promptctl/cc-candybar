@@ -52,7 +52,6 @@ import {
 import {
   declareLanes,
   readingsOf,
-  refreshPayload,
   type DeclaredLanes,
   type KeyedOwners,
   type PayloadInputs,
@@ -68,6 +67,12 @@ import { RefreshFaults } from "../../src/daemon/refresh-faults";
 import { systemTimekeeper } from "../../src/time";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { unscriptedRuns } from "./fake-launcher";
+import {
+  TranscriptLanes,
+  type LaneOwners,
+} from "../../src/daemon/cache/transcript-lanes";
+import { RefreshLedger } from "../../src/utils/refresh-ledger";
+import type { DaemonLogger } from "../../src/utils/logger";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -160,15 +165,11 @@ export function todayReadingOf(inputs: LanedInputs) {
   return readingsOf(inputs, inputs.lanes()).today;
 }
 
-// A request's refresh and wait over the inputs' lanes, as the daemon settles
-// one over its world state (settleWorld): the document is stamped again on
-// every owner landing the wait hears.
-export async function settleLanes(
-  inputs: LanedInputs,
-  at: Instant,
-): Promise<void> {
+// A request's wait over the inputs' lanes, as the daemon settles one over its
+// world state (settleWorld): the document is stamped again on every owner
+// landing the wait hears.
+export async function settleLanes(inputs: LanedInputs): Promise<void> {
   await settleWorld(
-    () => refreshPayload(inputs, at),
     () => documentOf(inputs),
     () => [],
     new AbortController().signal,
@@ -206,8 +207,8 @@ export function fakeTmux(read: (holds: Holds, hint: TmuxHint) => Loose) {
 export function fakeUsage(
   readers: {
     readonly usage?: (sessionId: string) => Loose;
-    // The day sums of the directory set declared at `claudeConfigDir`, read
-    // once, when the first request has refreshed `today`.
+    // The day sums of the directory set declared at `claudeConfigDir`, as its
+    // scan answered them.
     readonly today?: (claudeConfigDir: string | undefined) => Outcome<DaySums>;
     readonly speed?: (
       sessionId: string,
@@ -217,50 +218,33 @@ export function fakeUsage(
   } = {},
 ): Pick<
   SessionUsageStore,
-  "request" | "usageOf" | "declareToday" | "daysOutside" | "speedOf"
+  "refresh" | "usageOf" | "declareToday" | "daysOutside" | "speedOf"
 > {
   const usage = refreshed<TranscriptUsage>();
-  // The sessions whose request refreshed `today`: before one has, a draw
-  // reads it as not answered yet.
-  const todayRefreshed = observable.set<string>();
   const speed = refreshed<SpeedObservation>();
-  const refreshUsage = (sessionId: string) =>
-    usage.store(sessionId, readers.usage?.(sessionId) ?? ABSENT);
+  // A directory set's scans: not answered until the first lands.
+  const scans = keyed<[string | undefined], DaySums>(
+    (_holds, claudeConfigDir) => readers.today?.(claudeConfigDir) ?? ABSENT,
+  );
   return {
-    // A request's lanes over its session, as the real store's `request`.
-    request: (sessionId: string, transcriptPath: string | undefined) => ({
-      usage: () => refreshUsage(sessionId),
+    // A refresh's lanes over its session, as the real store's `refresh`.
+    refresh: (sessionId: string, transcriptPath: string | undefined) => ({
+      usage: () => usage.store(sessionId, readers.usage?.(sessionId) ?? ABSENT),
       speed: (nowMs: number) =>
         speed.store(
           sessionId,
           readers.speed?.(sessionId, transcriptPath, nowMs) ?? ABSENT,
         ),
-      today: async () => {
-        runInAction(() => todayRefreshed.add(sessionId));
-      },
     }),
     usageOf: (sessionId: string): Reading<TranscriptUsage> =>
       usage.read(sessionId),
-    // Not answered yet until some request has refreshed `today`, then what
-    // the reader gave for the set, as the real lane's first scan lands.
+    // What the reader gave for the set, once its first scan lands.
     declareToday: (
-      _holds: Holds,
+      holds: Holds,
       claudeConfigDir: string | undefined,
     ): Lane<DaySums> => {
-      let answered: Outcome<DaySums> | undefined;
-      return {
-        current: (): Current<DaySums> => {
-          if (todayRefreshed.size === 0) {
-            return {
-              kind: "pending",
-              why: "unread",
-              landed: new Promise<void>(() => {}),
-            };
-          }
-          answered ??= readers.today?.(claudeConfigDir) ?? ABSENT;
-          return answered;
-        },
-      };
+      scans(holds, claudeConfigDir);
+      return { current: () => scans(holds, claudeConfigDir) };
     },
     daysOutside: (): Outcome<never> => ABSENT,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
@@ -295,12 +279,12 @@ export function fakeMetrics(
 }
 
 export function fakeActivity(
-  read: (sessionId: string, hookData: ClaudeHookData) => Loose,
+  read: (sessionId: string, transcriptPath: string) => Loose,
 ) {
   const lane = refreshed<ActivityInfo>();
   return {
-    getActivityInfo: (sessionId: string, hookData: ClaudeHookData) =>
-      lane.store(sessionId, read(sessionId, hookData)),
+    refresh: (sessionId: string, transcriptPath: string) =>
+      lane.store(sessionId, read(sessionId, transcriptPath)),
     activityOf: (sessionId: string): Reading<ActivityInfo> =>
       lane.read(sessionId),
   };
@@ -335,6 +319,35 @@ export function fakeAutoCompact(
   };
 }
 
+// `owners` with the trigger of their transcript lanes built over them, as the
+// daemon builds its own over its providers (createPayloadProviders): built
+// where a test composes its owners, so it reads the owners the test chose, and
+// logs to their log, as the daemon's both log to one. No watch hears anything
+// here, and its period runs on the real clock, so a declaration's first read
+// is what lands a lane.
+// The clock the trigger reads: it arms the period and stamps the speed sample.
+type TranscriptClock = ConstructorParameters<
+  typeof TranscriptLanes
+>[0]["clock"];
+
+export function withTranscriptLanes<O>(
+  owners: O,
+  clock: TranscriptClock = systemTimekeeper,
+): O & { readonly transcriptLanes: TranscriptLanes } {
+  const { log = () => {} } = owners as { readonly log?: DaemonLogger };
+  // The trigger reads the owners of the object it returns, so a case that
+  // swaps an owner on it after composing swaps the one the trigger reads.
+  const laned = { ...owners } as O & { transcriptLanes: TranscriptLanes };
+  laned.transcriptLanes = new TranscriptLanes({
+    owners: laned as unknown as LaneOwners,
+    watchers: { acquire: () => ({ release: () => {}, deaf: [] }) },
+    clock,
+    logger: log,
+    ledger: new RefreshLedger(),
+  });
+  return laned;
+}
+
 // Every lane answering ABSENT: a payload whose sources have nothing.
 export function absentOwners() {
   return {
@@ -354,7 +367,6 @@ export function absentOwners() {
     sourceRuns: unscriptedRuns(),
     autoCompact: fakeAutoCompact(() => ABSENT),
     faults: new RefreshFaults(),
-    clock: systemTimekeeper,
     // The machine's identity, read as the daemon reads it.
     hostService: new HostService({ clock: systemTimekeeper }),
   };
@@ -362,7 +374,7 @@ export function absentOwners() {
 
 // A request's payload as the daemon draws one: the lanes declared over the
 // owners at the request's facts, as the collector declares a session's, the
-// request's refresh and wait (settleLanes), then the view's payload as it
+// request's wait (settleLanes), then the view's payload as it
 // stands (payloadOf) with the
 // draw's own projections beside it — `today` at `at`, no feeds. The failures
 // it projected are logged as the daemon's request logs them. The home lives
@@ -394,7 +406,7 @@ export async function requestPayload(
     deps,
     lanes: home.lanes,
   };
-  await settleLanes(inputs, at);
+  await settleLanes(inputs);
   const payload = payloadOf(inputs, {
     effective,
     configFacts,
@@ -415,14 +427,17 @@ export function settled<T extends PayloadNode>(value: T | Pending): T {
   return value;
 }
 
-// The lanes a view declared at `facts` over `owners`; disposing it closes the
-// view's home.
+// The lanes a view declared at `facts` over `owners`, the transcript lanes'
+// trigger built over them here as the daemon builds its own over its
+// providers; disposing it closes the view's home.
 function openHome(
   owners: unknown,
   facts: Parameters<typeof declareLanes>[2],
+  clock: TranscriptClock = systemTimekeeper,
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
   const holds = new HoldsClass();
-  const { lanes, faults } = declareLanes(owners as KeyedOwners, holds, facts, {
+  const keyed = withTranscriptLanes(owners as KeyedOwners, clock);
+  const { lanes, faults } = declareLanes(keyed, holds, facts, {
     plugins: new Map(),
     runs: new Map(),
   });
@@ -436,6 +451,18 @@ function openHome(
     lanes: () => lanes,
     [Symbol.dispose]: () => void holds.close(),
   };
+}
+
+// One read of every transcript lane over `owners` at a request's facts, as the
+// transcript's watch or period makes one, landed.
+export async function readTranscriptLanes(
+  owners: unknown,
+  facts: Parameters<typeof declareLanes>[2],
+  clock: TranscriptClock = systemTimekeeper,
+): Promise<void> {
+  using home = openHome(owners, facts, clock);
+  const read = home.lanes().transcript.current();
+  if (read.kind === "pending") await read.landed;
 }
 
 // The lanes a view declared at `facts` over `owners`, for a test that draws

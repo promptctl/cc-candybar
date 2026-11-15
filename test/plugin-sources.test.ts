@@ -7,6 +7,7 @@
 import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
 import { eventRenderer, NO_PUSHES } from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
+import { withTranscriptLanes } from "./helpers/payload-owners";
 import { reaction, runInAction } from "mobx";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
@@ -193,7 +194,11 @@ function rig(): Rig {
     counters,
     logger: log,
   });
-  const providers = createPayloadProviders({
+  // Every file here lives in one folder, so the sessions' transcript watches
+  // would share it with the storage folders these cases count: the trigger
+  // hears nothing here, as in every rig.
+  const providers = withTranscriptLanes(
+    createPayloadProviders({
     clock: systemTimekeeper,
     launcher: world.launcher,
     host,
@@ -205,11 +210,12 @@ function rig(): Rig {
     }),
     logger: log,
     ledger: new RefreshLedger(log),
-    sourceRuns: new SourceRuns({
-      launcher: world.launcher,
-      clock: systemTimekeeper,
+      sourceRuns: new SourceRuns({
+        launcher: world.launcher,
+        clock: systemTimekeeper,
+      }),
     }),
-  });
+  );
   const sessionState = new SessionState();
   const updateFact = newUpdateFact();
   const reloads = new ReloadSignal();
@@ -824,7 +830,6 @@ function statusline(r: Rig, configFile: string) {
       cache: r.cache,
       sessionState: r.sessionState,
       worldStates: r.worldStates,
-      providers: r.providers,
     }),
     NO_PUSHES,
   );

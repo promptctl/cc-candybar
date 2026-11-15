@@ -4,13 +4,13 @@ import { quietLogger, type DaemonLogger } from "./logger";
 // What asks a source to read, one vocabulary for every source
 // (design-docs/SOURCES-AND-FRAMES.md, "Refresh"): a key's first read, its
 // period's tick, a change (a watched file, a key's input, a hold returning to
-// an entry of a source with no period), a session's statusline request, or a
-// supersede's resume (the daemon itself changed what the key reads).
+// an entry of a source with no period), or a supersede's resume (the daemon
+// itself changed what the key reads). A request is none of them: reads follow
+// the world, so how often a client ticks never decides what is read.
 export const REFRESH_TRIGGERS = [
   "first",
   "period",
   "change",
-  "request",
   "supersede",
 ] as const;
 export type RefreshTrigger = (typeof REFRESH_TRIGGERS)[number];
@@ -109,18 +109,6 @@ export class RefreshLedger {
   }
 }
 
-// [LAW:nothing-unseen] Which refreshes are an event of their own. A request's
-// are facts of its render event (`refreshed=`), the one event of that unit of
-// work, so they write no line beside it; every other trigger's refresh is its
-// own unit of work. A failed refresh writes its line whatever asked for it.
-const OWN_EVENT: Readonly<Record<RefreshTrigger, boolean>> = {
-  first: true,
-  period: true,
-  change: true,
-  request: false,
-  supersede: true,
-};
-
 // [LAW:one-source-of-truth] The one spelling of a source's refresh event and
 // of the counts its record reports, whatever schedules its reads: a failed
 // refresh logs at warn, once, so a read of the stored value never logs it
@@ -147,8 +135,9 @@ export class Refreshes<Trigger extends RefreshTrigger> {
     this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
+    // [LAW:nothing-unseen] Every refresh is a unit of work of its own, so
+    // each writes its line.
     const failure = outcome.kind === "failed";
-    if (!failure && !OWN_EVENT[by]) return;
     const why = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure ? "warn" : "info",

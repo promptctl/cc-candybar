@@ -9,7 +9,6 @@ import os from "node:os";
 import path from "node:path";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
-import type { RefreshTimes } from "../src/renderer-interface/request-context";
 import { REFRESH_LANES } from "../src/facts/world-state";
 import { sessionRig, settledRequest } from "./helpers/session-rig";
 import { until } from "./helpers/until";
@@ -38,7 +37,7 @@ function naming<A extends unknown[], R>(
 }
 
 // The rig's view of a config placing no segment, its keyed owners naming each
-// lane they declare, and a request's refresh of it, as the daemon makes one.
+// lane they declare, and a request of it, as the daemon makes one.
 async function bare() {
   const rig = sessionRig(dir, cleanups);
   const declared: string[] = [];
@@ -58,11 +57,8 @@ async function bare() {
   usageStore.declareToday = naming(declared, "today", usageStore.declareToday);
   const configFile = path.join(dir, "config.json5");
   fs.writeFileSync(configFile, "{ root: { h: [] } }");
-  let refreshed: RefreshTimes | null = null;
-  const view = await settledRequest(rig, dir, configFile, cleanups, (took) => {
-    refreshed = took;
-  });
-  return { view, declared, refreshed: refreshed as RefreshTimes | null };
+  const view = await settledRequest(rig, dir, configFile, cleanups);
+  return { view, declared };
 }
 
 describe("totality: a layout placing no segment still gathers every built-in", () => {
@@ -84,13 +80,6 @@ describe("totality: a layout placing no segment still gathers every built-in", (
     const { declared } = await bare();
     expect(declared.sort()).toEqual(
       ["git", "host.name", "host.user", "tmux", "today"].sort(),
-    );
-  });
-
-  test("a request refreshes every stamp-gated lane", async () => {
-    const { refreshed } = await bare();
-    expect(Object.keys(refreshed ?? {}).sort()).toEqual(
-      [...REFRESH_LANES].sort(),
     );
   });
 
