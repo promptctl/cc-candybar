@@ -1,5 +1,6 @@
 import { RichText, StyleSyntaxError } from "@promptctl/rich-js";
 import { renderStripCells } from "../../src/render/strip";
+import { TEST_SIGNER } from "../helpers/link-signer";
 
 // A style name the render's theme does not define is a broken config. rich-js
 // would draw it as no style at all; the one draw path refuses it instead, so an
@@ -15,7 +16,7 @@ describe("strip draw: an unresolvable style is loud", () => {
         wrap: false,
         padding: 1,
         width: 80,
-      }),
+      }, TEST_SIGNER),
     ).toThrow(StyleSyntaxError);
   });
 });

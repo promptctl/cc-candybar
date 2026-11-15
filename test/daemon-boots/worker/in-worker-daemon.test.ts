@@ -44,6 +44,8 @@ import {
 import { heldClock } from "../../helpers/held-clock";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { throughout, until } from "../../helpers/until";
+import { linksOf } from "../../../src/click/read";
+import { TEST_SIGNER } from "../../helpers/link-signer";
 
 jest.setTimeout(30_000);
 
@@ -88,7 +90,7 @@ describe("a daemon in this worker", () => {
     const before = await render(daemon, sid, projectDir);
     expect(textOf(before)).toContain("[wide]");
 
-    await click(daemon, linkUrls(before)[0]!);
+    await click(daemon, linksOf(before)[0]!.url);
 
     await renderUntil(
       daemon,
@@ -112,7 +114,9 @@ describe("a daemon in this worker", () => {
     await render(daemon, sid, projectDir);
     await refusedClick(
       daemon,
-      effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }]),
+      TEST_SIGNER.signLink(
+        effectsUrl([{ verb: VERB_SET_STATE, args: [sid, "no-such-key", "x"] }]),
+      ),
       "bad-request",
     );
     await render(daemon, sid, projectDir);
@@ -187,7 +191,7 @@ describe("a daemon in this worker", () => {
     const sid = "in-worker-restart";
     daemon = startDaemon(env);
     const before = await render(daemon, sid, projectDir);
-    await click(daemon, linkUrls(before)[0]!);
+    await click(daemon, linksOf(before)[0]!.url);
     await daemon.stop();
 
     daemon = startDaemon(env);

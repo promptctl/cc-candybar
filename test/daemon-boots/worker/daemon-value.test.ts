@@ -45,6 +45,7 @@ import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
 import { until } from "../../helpers/until";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
+import { TEST_SIGNER } from "../../helpers/link-signer";
 
 const VALUE_REFUSED = sessionIdOf("value-refused");
 const VALUE_CLOSE = sessionIdOf("value-close");
@@ -232,9 +233,11 @@ describe("the daemon is a value", () => {
     await expect(
       clickLink(
         daemon,
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
-        ]),
+        TEST_SIGNER.signLink(
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
+          ]),
+        ),
       ),
     ).rejects.toThrow(closed);
     expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
@@ -365,12 +368,14 @@ describe("the daemon is a value", () => {
     const { setting, on } = LANES.band.switch;
     await clickLink(
       daemon,
-      effectsUrl([
-        {
-          verb: VERB_SET_STATE,
-          args: ["value-close", setting, String(on)],
-        },
-      ]),
+      TEST_SIGNER.signLink(
+        effectsUrl([
+          {
+            verb: VERB_SET_STATE,
+            args: ["value-close", setting, String(on)],
+          },
+        ]),
+      ),
     );
     // A feed on the lane the click turned on: a refused subscription is no
     // feed, and would leave nothing here for the close to end.

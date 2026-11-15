@@ -180,6 +180,7 @@ export function renderFrame(
       sessionId,
       drawn,
       handedOffTo(lanes, feed.following),
+      parts.linkSigner,
     );
     // [LAW:one-source-of-truth] What the frame's copy clicks copy, recorded
     // as it is handed to the feed: a frame whose bytes match the last shows
@@ -595,7 +596,7 @@ export function drawRender(
   );
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
-  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
+  const questions = repoQuestions(entry.repos, sessionId);
   // What a load or a request could not honour: each its own message, named by
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open
@@ -808,7 +809,14 @@ export function drawRender(
       ? frame
       : standIn(
           frame,
-          viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
+          viewerRows(
+            diagnostics,
+            viewing,
+            sessionId,
+            drawing.by,
+            geometry,
+            linkSigner,
+          ),
         );
   const fx = effects.lastFrame();
   // Each placement wearing its own effect, on its own clock; `-` for none.
@@ -1172,7 +1180,7 @@ export async function answerRequest(
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
   const frame = toStatusline
-    ? statuslineOf(sessionId, drawn, elsewhere)
+    ? statuslineOf(sessionId, drawn, elsewhere, parts.linkSigner)
     : drawn.body;
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
   // how long the turn after the wait took to make the frame: with the host's
@@ -1227,6 +1235,7 @@ function statuslineOf(
   sessionId: SessionId,
   drawn: DrawnBar,
   elsewhere: readonly Lane[],
+  links: LinkSigner,
 ): Frame {
   const [first, ...rest] = elsewhere;
   return first === undefined || drawn.viewerOpen
@@ -1238,6 +1247,7 @@ function statuslineOf(
           drawn.diagnostics,
           sessionId,
           drawn.geometry,
+          links,
         ),
       );
 }

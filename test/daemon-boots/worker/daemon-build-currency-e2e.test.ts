@@ -12,18 +12,15 @@ import path from "node:path";
 
 import { sourceDigest } from "../../../src/source-digest";
 import { PACKAGE_VERSION } from "../../../src/version";
-import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD, UPDATE_NOTICE_SESSION_KEY } from "../../../src/daemon/foundations/update-keys";
 import {
-  effectsUrl,
-  VERB_SET_STATE,
-} from "../../../src/click/wire";
-import {
-  click,
-} from "../../helpers/daemon-e2e";
+  UPDATE_DISMISSED_KEY,
+  UPDATE_NOTICE_FIELD,
+  UPDATE_NOTICE_SESSION_KEY,
+} from "../../../src/daemon/foundations/update-keys";
+import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
+import { click } from "../../helpers/daemon-e2e";
 import { keptRenders, loggedLines } from "../../helpers/daemon-log";
-import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import {
   bundleAt,
   startArmedDaemon,
@@ -40,6 +37,7 @@ import {
   scratchLayout,
   type Scratch,
 } from "../../helpers/update-notice-case";
+import { TEST_SIGNER } from "../../helpers/link-signer";
 
 const REPO_ROOT = process.cwd();
 const REPO_SRC = path.join(REPO_ROOT, "src");
@@ -149,12 +147,14 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
       )!;
       await click(
         sock,
-        effectsUrl([
-          {
-            verb: VERB_SET_STATE,
-            args: ["bc-disable-pick", UPDATE_NOTICE_SESSION_KEY, "true"],
-          },
-        ]),
+        TEST_SIGNER.signLink(
+          effectsUrl([
+            {
+              verb: VERB_SET_STATE,
+              args: ["bc-disable-pick", UPDATE_NOTICE_SESSION_KEY, "true"],
+            },
+          ]),
+        ),
       );
       await click(
         sock,

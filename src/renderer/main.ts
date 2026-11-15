@@ -563,6 +563,7 @@ function debugOf(
                   view.lastRenderCellsBySegment,
                   view.state.config.globals.colorCompatibility ??
                     floorOf("colorCompatibility"),
+                  view.state.compiled.runtime.signer,
                 )
               : EMPTY_RENDER_MAP,
         },

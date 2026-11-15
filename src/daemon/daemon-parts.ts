@@ -21,6 +21,7 @@ import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
 import type { Launcher } from "../proc/launcher";
+import type { LinkSigner } from "../click/link-signer";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
@@ -31,6 +32,8 @@ export interface DaemonParts {
   // The temporary directory a click's handoff writes under.
   readonly tmp: string;
   readonly clock: Timekeeper;
+  // [LAW:single-enforcer] The one verifier of every click's link.
+  readonly links: LinkSigner;
   readonly launcher: Launcher;
   readonly log: DaemonLogger;
   readonly bundle: string;

@@ -80,6 +80,7 @@ function serialize(
   return drawStripCells(
     fitRow(cells, options).map((item) => item.owner),
     options,
+    TEST_SIGNER,
   ).lines.map(plainOf);
 }
 

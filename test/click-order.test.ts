@@ -55,6 +55,7 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
+import { TEST_SIGNER } from "./helpers/link-signer";
 const SESSION_C = sessionIdOf("session-c");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -606,8 +607,9 @@ test("the click path counts a click pending from arrival, through a refusal, and
       parts,
       {
         kind: "click",
-        verb: VERB_DOCTOR_RUN,
-        value: encodeURIComponent(A),
+        url: TEST_SIGNER.signLink(
+          `cc-candybar://${VERB_DOCTOR_RUN}/${encodeURIComponent(A)}`,
+        ),
       } as Parameters<typeof replyTo>[1],
       () => false,
       new RuntimeStats(systemTimekeeper).accept(),
@@ -664,8 +666,9 @@ test("a click's turn holds its session in the collector while it runs, with noth
       parts,
       {
         kind: "click",
-        verb: VERB_DOCTOR_RUN,
-        value: encodeURIComponent(A),
+        url: TEST_SIGNER.signLink(
+          `cc-candybar://${VERB_DOCTOR_RUN}/${encodeURIComponent(A)}`,
+        ),
       } as Parameters<typeof replyTo>[1],
       () => false,
       new RuntimeStats(systemTimekeeper).accept(),
@@ -703,9 +706,10 @@ test("a click whose session will not decode is a bad request whose event still n
   } as unknown as DaemonParts;
   const { resp } = await replyTo(
     parts,
-    { kind: "click", verb: VERB_DOCTOR_RUN, value: "%ZZ" } as Parameters<
-      typeof replyTo
-    >[1],
+    {
+      kind: "click",
+      url: TEST_SIGNER.signLink(`cc-candybar://${VERB_DOCTOR_RUN}/%ZZ`),
+    } as Parameters<typeof replyTo>[1],
     () => false,
     new RuntimeStats(systemTimekeeper).accept(),
     () => false,

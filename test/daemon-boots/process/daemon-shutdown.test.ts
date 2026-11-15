@@ -14,6 +14,7 @@ import {
   type RunningDaemon,
 } from "../../helpers/spawn-isolated-daemon";
 import { sendDaemonRequest, waitForExit } from "../../helpers/daemon-wire";
+import { TEST_SIGNER } from "../../helpers/link-signer";
 
 // [LAW:verifiable-goals] Contract: a daemon that receives a `shutdown` request
 // MUST exit within a bounded wall-clock budget. The bound has to be tight
@@ -140,13 +141,17 @@ describe("daemon shutdown contract", () => {
       await render(sockPath, sessionId, stateDir);
       await click(
         sockPath,
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
-        ]),
+        TEST_SIGNER.signLink(
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
+          ]),
+        ),
       );
       await killAndWait(daemon, "SIGTERM");
 
-      const saved = JSON.parse(readFileSync(sessionStatePath(hostOf(env)), "utf8"));
+      const saved = JSON.parse(
+        readFileSync(sessionStatePath(hostOf(env)), "utf8"),
+      );
       expect(saved[sessionId]).toMatchObject({ padding: "4" });
     } finally {
       daemon?.killTree();

@@ -15,7 +15,7 @@ import { tryClickViaDaemon } from "../daemon/client";
 import type { FailureOutcome } from "../daemon/client-transport";
 import type { PermanentOutcome } from "../daemon/foundations/protocol";
 import { obtainDaemonKick } from "../daemon/acquire";
-import { APP_NAME, parseHandlerUrl, URL_SCHEME } from "../click/wire";
+import { APP_NAME, URL_SCHEME } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
 import { shellWord, singleQuoted } from "../shell-word";
@@ -455,8 +455,8 @@ export function runInstallUrlHandler(bundle: string, world: World): void {
   installUrlHandler(forwarder, world);
 }
 
-// [LAW:single-enforcer] url-handle is a thin IPC shim: parse the URL, send
-// the click request to the daemon, exit. There is NO in-process verb
+// [LAW:single-enforcer] url-handle is a thin IPC shim: send the link to the
+// daemon raw, which parses and verifies it, then exit. There is NO in-process verb
 // dispatch and NO direct disk mutation. The daemon is the only writer of
 // click-side state ([LAW:one-source-of-truth] for SessionState); kicking a
 // daemon on a transient failure is the only recovery, and it's
@@ -479,13 +479,7 @@ export async function runUrlHandle(
     process.exit(1);
   }
 
-  const parsed = parseHandlerUrl(rawUrl);
-  if (!parsed.ok) {
-    process.stderr.write(`url-handle: ${parsed.problem}\n`);
-    process.exit(1);
-  }
-
-  const outcome = await tryClickViaDaemon(world, parsed.verb, parsed.value);
+  const outcome = await tryClickViaDaemon(world, rawUrl);
   if (outcome.kind === "ok") {
     process.exit(0);
   }

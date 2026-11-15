@@ -8,7 +8,7 @@
 
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
-import { clickOf, describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
+import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
@@ -23,6 +23,8 @@ import { composeBar, parseFrame, type Frame } from "../src/render/frame";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
 import { CLAUDE_DIR, REPO, appendTranscript, forgetWrites, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
+import { randomBytes } from "node:crypto";
+import { LINK_KEY_BYTES } from "../src/click/link-signer";
 
 // Where the deploy publishes the landscape explorer, relative to this page; null outside the deploy.
 declare const __LANDSCAPE__: string | null;
@@ -73,6 +75,8 @@ const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
 const pageDaemon = createDaemon({
   ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
+  // Its links are clicked on the page alone, so its key is the page's own.
+  linkKey: randomBytes(LINK_KEY_BYTES),
   gates: daemonGates(),
   paths,
   host: HOST,
@@ -236,10 +240,9 @@ async function click(url: string, size: Size) {
       : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...(await render(size)), refused };
   }
-  const { verb, value } = clickOf(url);
   let refused: string | null = null;
   try {
-    await daemon({ v: PROTOCOL_VERSION, kind: "click", verb, value });
+    await daemon({ v: PROTOCOL_VERSION, kind: "click", url });
   } catch (e) {
     refused = e instanceof Error ? e.message : String(e);
   }

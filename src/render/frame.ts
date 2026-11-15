@@ -12,6 +12,8 @@ import {
   type ColorSpec,
 } from "@promptctl/rich-js";
 import type { ColorCompatibility } from "../themes/policy.js";
+import type { LinkSigner } from "../click/link-signer.js";
+import { isBarLink } from "../click/wire.js";
 import {
   DIAGNOSTIC_ERROR_COLORS,
   type DiagnosticColors,
@@ -166,25 +168,48 @@ function lookOf(style: Style, depth: ColorDepth): Omit<Run, "text" | "link"> {
   };
 }
 
-function runOf({ text, style }: Segment, depth: ColorDepth | null): Run {
+function runOf(
+  { text, style }: Segment,
+  depth: ColorDepth | null,
+  link: (url: string) => string,
+): Run {
   return {
     text,
     ...(style !== undefined && depth !== null && lookOf(style, depth)),
-    ...(style?.link !== undefined && { link: style.link }),
+    ...(style?.link !== undefined && { link: link(style.link) }),
   };
 }
 
-// Rich-js segments as the runs of each line they draw. Control segments and
-// empty text go first, since the encoder writes nothing for either and
-// `Segment.splitLines` would turn one trailing a final newline into a blank
-// line of its own. A line ended by a newline is one line: nothing follows it.
+// The written segments of each line. Control segments and empty text go
+// first, since the encoder writes nothing for either and `Segment.splitLines`
+// would turn one trailing a final newline into a blank line of its own. A line
+// ended by a newline is one line: nothing follows it.
+export function writtenLines(segments: readonly Segment[]): Segment[][] {
+  return Segment.splitLines(
+    segments.filter((s) => !s.isControl && s.text.length > 0),
+  );
+}
+
+// Rich-js segments as the runs of each line they draw.
+// [LAW:single-enforcer] Every link enters a frame here, so here every
+// `cc-candybar://` link is signed: one the bar draws proves the bar drew it
+// (src/click/link-signer.ts). A link of any other scheme is the terminal's to
+// open and carries no mac. Every word cell of a line repeats its link, so each
+// is signed once per draw.
 export function runLines(
   segments: readonly Segment[],
   depth: ColorDepth | null,
+  links: LinkSigner,
 ): Run[][] {
-  const written = segments.filter((s) => !s.isControl && s.text.length > 0);
-  return Segment.splitLines(written).map((line) =>
-    line.map((segment) => runOf(segment, depth)),
+  const signed = new Map<string, string>();
+  const link = (url: string): string => {
+    if (!isBarLink(url)) return url;
+    const known = signed.get(url) ?? links.signLink(url);
+    signed.set(url, known);
+    return known;
+  };
+  return writtenLines(segments).map((line) =>
+    line.map((segment) => runOf(segment, depth, link)),
   );
 }
 

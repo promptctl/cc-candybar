@@ -99,14 +99,14 @@ export function trySessionInPane(
 // [LAW:single-enforcer] Same outcome translator for click as for render —
 // click failures decompose into the same transient/permanent split, so the
 // caller's "ok? done : kick + fallback" logic gets the same typed input.
+// The link goes raw: the daemon verifies the bytes the bar signed.
 export function tryClickViaDaemon(
   world: ClientWorld,
-  verb: string,
-  value: string,
+  url: string,
 ): Promise<ClientOutcome> {
   return requestOutcome(
     world,
-    () => ({ kind: "click", verb, value }),
+    () => ({ kind: "click", url }),
     CLICK_BUDGETS,
     projectOutput,
   );

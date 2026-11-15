@@ -9,6 +9,7 @@ import { fragmentsToCells } from "../../src/template-engine/cells";
 import { drawStripCells } from "../../src/render/strip";
 import { RichText, Style } from "@promptctl/rich-js";
 import { resolvedStyle } from "../../src/render/rich-theme.js";
+import { TEST_SIGNER } from "../helpers/link-signer";
 // edgeStyle resolves a style name against the render's theme; none is named here.
 const EDGE_OPTS = { maxWidth: 80 };
 
@@ -19,7 +20,7 @@ function renderCells(cells: readonly RichText[]): readonly Run[] {
     endcaps: "plain",
     colorCompatibility: "truecolor", wrap: true, padding: 0,
     width: Number.POSITIVE_INFINITY,
-  }).lines.flat();
+  }, TEST_SIGNER).lines.flat();
 }
 
 

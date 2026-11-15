@@ -17,6 +17,7 @@ import {
   type DaemonVerbContext,
   type MainRendererParts,
 } from "../../src/renderer/verbs/port";
+import { TEST_SIGNER } from "./link-signer";
 
 export function clickParts(
   verbCtx: DaemonVerbContext,
@@ -25,7 +26,7 @@ export function clickParts(
     holding: () => () => {},
     clicked: () => {},
   },
-): Pick<DaemonParts, "renderer" | "clicks"> & {
+): Pick<DaemonParts, "renderer" | "clicks" | "links"> & {
   collector: Pick<Collector, "holding" | "clicked">;
 } {
   // A click's turn reads the verbs, the idle clock and, for its output, the
@@ -48,5 +49,7 @@ export function clickParts(
     ),
     clicks,
     collector,
+    // The host verifies every click's link with the key a test draws with.
+    links: TEST_SIGNER,
   };
 }

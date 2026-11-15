@@ -8,6 +8,7 @@ import {
 import { ENDCAPS_SHAPES, type Endcaps } from "../../src/themes/policy";
 import { resolveOptionDomain } from "../../src/config/option-domain";
 import { stripCell } from "../helpers/strip-cell";
+import { TEST_SIGNER } from "../helpers/link-signer";
 
 // candybar-joiners-la5z: endcaps choose among rich-js's named joiners.
 
@@ -27,6 +28,7 @@ const row = (endcaps: Endcaps, separator?: string): readonly Run[] =>
       padding: PADDING,
       width: Number.POSITIVE_INFINITY,
     },
+    TEST_SIGNER,
   ).lines.flat();
 
 describe("endcaps are rich-js's named joiners", () => {

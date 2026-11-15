@@ -160,6 +160,7 @@ function fakeEdge(
     sockets: { own: "/tmp/s", handler: "/tmp/s" },
     monotonic: () => clock as Monotonic,
     nonce: () => NONCE,
+    signLink: (link) => `${link}#signed`,
     daemon: async () => {
       const read = reads++;
       calls.push("daemon");
@@ -222,7 +223,7 @@ describe("probeUrlHandler", () => {
     });
     expect(calls).toEqual([
       "daemon",
-      `open cc-candybar://${VERB_DOCTOR_PROBE}/${NONCE}`,
+      `open cc-candybar://${VERB_DOCTOR_PROBE}/${NONCE}#signed`,
       "pause",
       "daemon",
       "pause",

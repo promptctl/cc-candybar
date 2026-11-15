@@ -138,8 +138,8 @@ import {
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
 import type { JournalTurn, JournalTurns } from "../journal-turns";
-import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
-import type { RepoAnswer } from "../../config/loader/repo-gate";
+import { recordAnswer, repoConfigs } from "../repo-configs";
+import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   RunRequest,
   AdapterToHost,
@@ -1793,21 +1793,20 @@ const run: VerbHandler = async (value, ctx) => {
 
 // ─── Repository configs (brandon-unfiled-3248.kezw) ─────────────────────────
 
-// [LAW:parse-dont-validate] An answer is recorded only when its mac verifies:
-// the bar drew it, for this session, for this directory and this answer. The
-// book lives beside the link key, and the render cache watches it, so every
-// bar reloads; the clicking session's reloads before the click answers, as
-// save's does.
+// An answer reaches its verb only from a link the bar drew, whose mac the
+// host proved, so it is the answer the bar offered for this session and this
+// directory. The book lives beside the link key, and the render cache watches
+// it, so every bar reloads; the clicking session's reloads before the click
+// answers, as save's does.
 const repoConfig: VerbHandler = async (value, ctx) => {
-  const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
+  const [sessionId = "", dir = "", answer = ""] = decodeWire(() =>
     decodeSegments(value),
   );
   const sid = requireSessionId(sessionId);
-  // Signed, so it is an answer the bar offered.
-  const answered = answer as RepoAnswer;
-  if (!ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+  const answered = REPO_ANSWERS.find((a) => a === answer);
+  if (answered === undefined) {
     throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: it was not drawn by this daemon",
+      `an answer is one of ${REPO_ANSWERS.join(", ")}, got ${JSON.stringify(answer)}`,
     );
   }
   const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);

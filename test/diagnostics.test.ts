@@ -54,6 +54,7 @@ import {
 } from "../src/themes/policy";
 import { DIAGNOSTICS_VIEWING } from "../src/config/door";
 import { effectsOf } from "./helpers/click";
+import { TEST_SIGNER } from "./helpers/link-signer";
 
 const SID = "sid-1";
 // Messages each about their own text, unless a test says otherwise.
@@ -94,8 +95,10 @@ const encoded = (rows: readonly Row[], depth: ColorCompatibility): string =>
     rows.map((row) => row.runs),
     depth,
   );
-const viewer = (...args: Parameters<typeof viewerRows>): Pick<Frame, "rows"> => ({
-  rows: viewerRows(...args),
+const viewer = (
+  ...args: Parameters<typeof viewerRows> extends [...infer A, unknown] ? A : never
+): Pick<Frame, "rows"> => ({
+  rows: viewerRows(...args, TEST_SIGNER),
 });
 
 const rowsOf = ({ rows }: Pick<Frame, "rows">): string[] =>
@@ -431,7 +434,7 @@ describe("the viewer and the handoff line at every colour depth", () => {
 
   test.each(COLOR_COMPATIBILITIES)("the viewer at %s", (depth) => {
     const list = collectDiagnostics([ERROR, "second"], [], []);
-    const rows = viewerRows(list, at(1), SID, "request", at40(depth));
+    const rows = viewerRows(list, at(1), SID, "request", at40(depth), TEST_SIGNER);
     expect(encoded(rows, depth)).toBe(
       written(rows, DIAGNOSTIC_ERROR_COLORS, depth),
     );
@@ -441,7 +444,7 @@ describe("the viewer and the handoff line at every colour depth", () => {
   });
 
   test.each(COLOR_COMPATIBILITIES)("the handoff line at %s", (depth) => {
-    const rows = handoffRows(handoff, offered, SID, at40(depth));
+    const rows = handoffRows(handoff, offered, SID, at40(depth), TEST_SIGNER);
     expect(encoded(rows, depth)).toBe(
       written(rows, DIAGNOSTIC_INFO_COLORS, depth),
     );
@@ -452,7 +455,7 @@ describe("the viewer and the handoff line at every colour depth", () => {
     const list = collectDiagnostics([ERROR], [], []);
     const drawn = COLOR_COMPATIBILITIES.map((depth) => ({
       depth,
-      rows: viewerRows(list, at(1), SID, "request", at40(depth)),
+      rows: viewerRows(list, at(1), SID, "request", at40(depth), TEST_SIGNER),
     }));
     const unstyled = ({ rows }: (typeof drawn)[number]) =>
       rows.map(({ kind, runs }) => ({

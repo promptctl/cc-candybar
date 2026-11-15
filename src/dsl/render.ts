@@ -1614,6 +1614,7 @@ export function drawDsl(
         ...drawStripCells(
           items.map((item) => item.owner),
           drawOpts,
+          compiled.runtime.signer,
           motion.row(row, kind, items),
         ),
       };

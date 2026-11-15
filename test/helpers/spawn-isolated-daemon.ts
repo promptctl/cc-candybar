@@ -29,6 +29,7 @@ import { daemonPool } from "./daemon-pool";
 import { sendDaemonRequest, type ExitResult } from "./daemon-wire";
 import { logPath } from "../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
+import { seedTestLinkKey } from "./link-signer";
 
 export interface IsolatedDaemonEnv {
   env: NodeJS.ProcessEnv;
@@ -82,6 +83,7 @@ export function prepareIsolatedDaemonEnv(tmpPrefix: string): IsolatedDaemonEnv {
   // Socket parent must satisfy ensureSocketParentSafe (uid==me + mode 0700).
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const sockPath = path.join(stateDir, "socket");
+  seedTestLinkKey(stateDir);
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,

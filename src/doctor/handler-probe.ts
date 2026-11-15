@@ -57,6 +57,9 @@ export interface HandlerProbeEdge {
   // app delivers to. They differ under `CC_CANDYBAR_SOCKET`.
   readonly sockets: { readonly own: string; readonly handler: string };
   readonly nonce: () => string;
+  // The link with the daemon's mac, which the daemon verifies as it does every
+  // link the bar draws (src/click/link-signer.ts).
+  readonly signLink: (link: string) => string;
   readonly daemon: () => Promise<Asked<DaemonView>>;
   // Hand a URL to Launch Services. The reason it refused, or null.
   readonly open: (url: string) => string | null;
@@ -127,7 +130,9 @@ export async function probeUrlHandler(
     };
   }
   const nonce = edge.nonce();
-  const unopened = edge.open(`${URL_SCHEME}://${VERB_DOCTOR_PROBE}/${nonce}`);
+  const unopened = edge.open(
+    edge.signLink(`${URL_SCHEME}://${VERB_DOCTOR_PROBE}/${nonce}`),
+  );
   const arrived = unopened === null ? await awaitArrival(edge, nonce) : null;
   return arrived ?? { kind: "lost", unopened, opener: handlerApp(edge) };
 }
@@ -203,6 +208,7 @@ export function parseArrival(raw: unknown): ProbeArrival | null {
 export function productionHandlerProbeEdge(
   launcher: OneShotLauncher,
   world: ClientWorld,
+  signLink: (link: string) => string,
 ): HandlerProbeEdge {
   const { host, clock } = world;
   return {
@@ -210,6 +216,7 @@ export function productionHandlerProbeEdge(
     sockets: { own: socketPath(host), handler: defaultSocketPath() },
     monotonic: () => clock.monotonic(),
     nonce: randomUUID,
+    signLink,
     daemon: () => daemonView(world),
     open: (url) => {
       // -g: the handler app must not take focus from the terminal.

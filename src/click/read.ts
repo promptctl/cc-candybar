@@ -4,11 +4,12 @@
 // browser (site/) read links through here, the one same way.
 
 import type { Frame } from "../render/frame";
+import { unprovenLink } from "./link-signer";
 import {
   decodeSegments,
+  isBarLink,
   parseEffects,
   parseHandlerUrl,
-  URL_SCHEME,
   VERB_APPLY_UPDATE,
   VERB_RUN,
   VERB_COPY,
@@ -47,11 +48,6 @@ export function linksOf({ rows }: Pick<Frame, "rows">): DrawnLink[] {
   });
 }
 
-// A link outside the cc-candybar scheme (a repo page, a PR) is the
-// terminal's to open; the daemon never sees a click on it.
-export const isBarLink = (url: string): boolean =>
-  url.startsWith(`${URL_SCHEME}://`);
-
 export interface DecodedEffect {
   readonly verb: string;
   readonly args: string[];
@@ -79,7 +75,7 @@ function decodeArgs(verb: string, value: string): string[] {
 // of drawn links holds links the renderer wrote, so one the daemon would refuse
 // is a bug in the draw, thrown here rather than carried as a refusal.
 export function clickOf(url: string): { verb: string; value: string } {
-  const link = parseHandlerUrl(url);
+  const link = parseHandlerUrl(unprovenLink(url));
   if (!link.ok) throw new Error(link.problem);
   return { verb: link.verb, value: link.value };
 }

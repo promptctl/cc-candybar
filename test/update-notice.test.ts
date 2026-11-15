@@ -35,6 +35,7 @@ import type { SourceStamp } from "../src/facts/world-state";
 import type { Currency } from "../src/install/currency";
 import { effectsOf as decode } from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { TEST_SIGNER } from "./helpers/link-signer";
 
 // A span's click, decoded; a plain span has none.
 const clicksOf = (link: string | null) => (link === null ? [] : decode(link));
@@ -284,6 +285,7 @@ describe("updateNotice", () => {
         rows: 20,
         colorCompatibility: "truecolor",
       },
+      TEST_SIGNER,
     );
     expect(rows.map((row) => plainOf(row.runs))).toEqual([
       "⬆ Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456]. [rebuild] [dismiss] [disable] ",

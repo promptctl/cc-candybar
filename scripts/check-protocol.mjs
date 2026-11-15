@@ -191,6 +191,26 @@ const CHECKS = [
     ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+):/gm),
     swift: memberSet(SWIFT_HANDLER, /withJSONObject: \[[^\]]+\]/, /"(\w+)":/g),
   },
+  // The answer a version-2 frame is told: a Response, of which the app reads
+  // whether it is ok, and a failure's reason and code.
+  {
+    label: "the answer fields the URL handler reads",
+    ts: markers(
+      TS_PROTOCOL,
+      [/ok: false;\s+error: string;\s+code: Exclude<ErrorCode, "TIMEOUT">;/],
+      "ok, error, code",
+    ),
+    swift: markers(
+      SWIFT_HANDLER,
+      [/reply\["ok"\]/, /reply\["error"\]/, /reply\["code"\]/],
+      "ok, error, code",
+    ),
+  },
+  {
+    label: "the code of an answer that is not the click's own",
+    ts: lit(TS_PROTOCOL, /^ {6}code: "(TIMEOUT)";$/m),
+    swift: lit(SWIFT_HANDLER, /^let TIMEOUT_CODE = "([A-Z_]+)"$/m),
+  },
   // The default socket path: under /tmp, by uid, as src/daemon/paths.ts
   // derives it. The app starts with no shell's environment, so it has no
   // override to honour.

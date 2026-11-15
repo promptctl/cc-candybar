@@ -44,6 +44,7 @@ import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { TEST_SIGNER } from "./helpers/link-signer";
 
 const SID = sessionIdOf("s1");
 const IDLE = {
@@ -358,7 +359,10 @@ describe("the click path", () => {
     const send = (verb: string, value: string, gone = () => false) =>
       replyTo(
         given,
-        { kind: "click", verb, value } as Parameters<typeof replyTo>[1],
+        {
+          kind: "click",
+          url: TEST_SIGNER.signLink(`cc-candybar://${verb}/${value}`),
+        } as Parameters<typeof replyTo>[1],
         () => false,
         stats.accept(),
         gone,

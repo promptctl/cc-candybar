@@ -16,7 +16,8 @@ import {
 import type { ColorCompatibility, Endcaps } from "../themes/policy.js";
 import { RENDER_THEME } from "./rich-theme.js";
 import { STILL, type RowMotion } from "./effect.js";
-import { encodeAnsi, plainOf, runLines, type Run } from "./frame.js";
+import { encodeAnsi, runLines, writtenLines, type Run } from "./frame.js";
+import type { LinkSigner } from "../click/link-signer.js";
 
 // rich-js `renderToString`'s width when it is handed none: what an unbounded
 // Strip is drawn at, so a row drawn here is the bytes it always was.
@@ -44,7 +45,8 @@ export interface DrawnRow {
 // with `RENDER_THEME` — the theme the cell splitter resolves a fragment's style
 // through before the render — so the two agree by construction rather than by
 // each call site remembering the option. The segments are drawn once and read
-// twice: as lines of runs, and asked when they next change. A row drawn under
+// as lines (of runs for a row, of text for a measure), and asked when they
+// next change. A row drawn under
 // motion is drawn for its frame's `time`, the one moment rich-js hands every
 // animation placed in it; a still row is drawn for none.
 // [LAW:one-source-of-truth] rich-js's hold of a frame is its cells' holds and
@@ -57,7 +59,7 @@ function draw(
     readonly width?: number;
     readonly time?: number;
   },
-): DrawnRow {
+): Drawn {
   const destination = resolveDestination(options.colorSystem);
   const { time } = options;
   let told = Infinity;
@@ -81,10 +83,22 @@ function draw(
     }),
   ];
   return {
-    lines: runLines(segments, destination.colorSystem),
+    segments,
+    depth: destination.colorSystem,
     nextChange: Math.min(Segment.nextChange(segments), told),
   };
 }
+
+interface Drawn {
+  readonly segments: readonly Segment[];
+  readonly depth: ReturnType<typeof resolveDestination>["colorSystem"];
+  readonly nextChange: number;
+}
+
+// The text of each line a draw wrote: what a measure reads, which no link
+// reaches.
+const textLines = ({ segments }: Drawn): string[] =>
+  writtenLines(segments).map((line) => line.map((s) => s.text).join(""));
 
 // [LAW:one-source-of-truth] `Endcaps`/`ColorCompatibility` and their value lists live
 // in themes/policy.ts (the render-identifier policy module, importable by the
@@ -188,8 +202,10 @@ function stripGeometry(options: StripShape): { chrome: number; seam: number } {
       style: new Style({ bgcolor }),
     });
   const width = (cells: RichText[]): number => {
-    const { lines } = draw(new Strip(cells, joiner), { colorSystem: null });
-    return new RichText(plainOf(lines.flat())).cellLength;
+    const lines = textLines(
+      draw(new Strip(cells, joiner), { colorSystem: null }),
+    );
+    return new RichText(lines.join("")).cellLength;
   };
   const one = width([cell("#101010")]);
   const geometry = {
@@ -237,8 +253,10 @@ export function stripPrivateGlyphs(options: StripShape): string {
   const cell = (bgcolor: string): RichText =>
     new RichText("x", { end: "", style: new Style({ bgcolor }) });
   const cells = [cell("#101010"), cell("#202020")];
-  const { lines } = draw(new Strip(cells, joiner), { colorSystem: null });
-  return privateGlyphsIn(plainOf(lines.flat()));
+  const lines = textLines(
+    draw(new Strip(cells, joiner), { colorSystem: null }),
+  );
+  return privateGlyphsIn(lines.join(""));
 }
 
 // The widest a glyph draws. A row narrower than this holds no glyph at all, so a
@@ -260,7 +278,7 @@ export function lineWidth(
 // styles and justification stay out of the draw.
 export function wrappedLines(plain: string, width: number): readonly string[] {
   const wrapping = new RichText(plain, { overflow: "fold", end: "" });
-  return draw(wrapping, { colorSystem: null, width }).lines.map(plainOf);
+  return textLines(draw(wrapping, { colorSystem: null, width }));
 }
 
 /**
@@ -280,9 +298,33 @@ export function wrappedLines(plain: string, width: number): readonly string[] {
 export function drawStripCells(
   cells: readonly RichText[],
   options: BuildLineOptions,
+  links: LinkSigner,
   motion: RowMotion = STILL,
 ): DrawnRow {
   if (cells.length === 0) return { lines: [[]], nextChange: Infinity };
+  const drawn = drawStrip(cells, options, motion);
+  return {
+    lines: runLines(drawn.segments, drawn.depth, links),
+    nextChange: drawn.nextChange,
+  };
+}
+
+// A row's text, a string per line, as `drawStripCells` would draw it: what a
+// fit measures.
+export function stripCellsText(
+  cells: readonly RichText[],
+  options: BuildLineOptions,
+): string[] {
+  return cells.length === 0
+    ? [""]
+    : textLines(drawStrip(cells, options, STILL));
+}
+
+function drawStrip(
+  cells: readonly RichText[],
+  options: BuildLineOptions,
+  motion: RowMotion,
+): Drawn {
   const joiner = pickJoiner(options.endcaps, options.separator);
   const flex = Number.isFinite(lineWidth(options));
   const drawn = {
@@ -303,7 +345,7 @@ export function drawStripCells(
   // block renderable's contract in rich-js), which `runLines` reads as that
   // line's end, so a row is its lines' content and no more. A strip that drew
   // no line broke that contract, and would drop its row from the frame.
-  if (row.lines.length === 0) {
+  if (writtenLines(row.segments).length === 0) {
     throw new Error("drawStripCells: rich-js strip drew no line");
   }
   return row;
@@ -313,9 +355,10 @@ export function drawStripCells(
 export function renderStripCells(
   cells: readonly RichText[],
   options: BuildLineOptions,
+  links: LinkSigner,
 ): string {
   return encodeAnsi(
-    drawStripCells(cells, options).lines,
+    drawStripCells(cells, options, links).lines,
     options.colorCompatibility,
   );
 }

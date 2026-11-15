@@ -23,6 +23,7 @@
 // snapshots are empty in production. When bzh.2 wires the store, the
 // snapshots populate without any change to this module or the protocol.
 
+import type { LinkSigner } from "../click/link-signer.js";
 import type { StoreNode, VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
 import {
@@ -367,15 +368,17 @@ export const EMPTY_RENDER_MAP = new Map<string, string>();
 export function serializeSegmentCells(
   cells: ReadonlyMap<string, readonly RichText[]>,
   colorCompatibility: ColorCompatibility,
+  links: LinkSigner,
 ): Map<string, string> {
   const out = new Map<string, string>();
   for (const [name, segCells] of cells) {
     out.set(
       name,
-      renderStripCells(segCells, {
-        ...DEBUG_RENDER_OPTS,
-        colorCompatibility,
-      }),
+      renderStripCells(
+        segCells,
+        { ...DEBUG_RENDER_OPTS, colorCompatibility },
+        links,
+      ),
     );
   }
   return out;

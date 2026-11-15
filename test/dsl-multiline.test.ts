@@ -13,7 +13,7 @@
 
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { linkUrls } from "./helpers/frame";
+import { linkTexts } from "./helpers/frame";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DOOR_GLYPH } from "../src/config/disclosure";
@@ -201,7 +201,7 @@ describe("drawDsl — multi-line layout", () => {
     expect(out.rows).toHaveLength(2);
     // Each visual line carries a link to the same URL.
     for (const row of out.rows) {
-      expect(linkUrls({ rows: [row] })).toContain("cc-candybar://x/1");
+      expect(linkTexts({ rows: [row] })).toContain("cc-candybar://x/1");
     }
   });
 

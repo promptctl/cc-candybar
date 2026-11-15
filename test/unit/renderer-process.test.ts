@@ -128,6 +128,7 @@ function rig(start: () => Promise<void> = async () => {}) {
       host: { env: {}, home: "/home", tmp: "/tmp" },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
+      linkKey: "a2V5",
     },
   });
   // The inputs the host sent the child, in order.
@@ -173,6 +174,7 @@ describe("a renderer process's start", () => {
           host: { env: {}, home: "/home", tmp: "/tmp" },
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
+          linkKey: "a2V5",
         },
       },
     ]);

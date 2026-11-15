@@ -353,13 +353,16 @@ export interface ShutdownRequest {
   kind: "shutdown";
 }
 
-// A click as `cc-candybar url-handle` sends it: the verb and value already
-// split. The tmux status line's click binding runs that command.
+// A click as `cc-candybar url-handle` sends it: the link raw, as the URL
+// handler app forwards one, so the host verifies the bytes the bar signed.
+// The tmux status line's click binding runs that command. A click that splits
+// its link first carries nothing a signature can prove, and is refused like
+// any unsigned link; PROTOCOL_VERSION does not move for it, since only the
+// bundle's own CLI sends one and a bump would blank every running bar.
 export interface ClickRequest {
   v: number;
   kind: "click";
-  verb: string;
-  value: string;
+  url: string;
 }
 
 // [LAW:types-are-the-program] A link as the URL handler app forwards it: the
@@ -367,14 +370,20 @@ export interface ClickRequest {
 // versioned by itself (`urlV`), never by PROTOCOL_VERSION: the app is resident
 // and knows nothing a release changes, so a daemon upgrade must not refuse it,
 // and the daemon accepts every `urlV` it has shipped (URL_FRAME_VERSIONS).
+// From version 2 the app reads one answer, a Response: a click the host
+// refused is `ok: false` with the reason in `error`, which the app shows as a
+// notification, since a refused click has no bar to land on; a TIMEOUT is a
+// click still in flight. Version 1 hangs up at once and is answered nothing.
 // Not a member of `Request`, which is what the `v` gate admits. Mirrored by
 // url-handler/main.swift, the one frame that app spells, and pinned by
 // scripts/check-protocol.mjs.
 export const URL_FRAME_KIND = "url";
-export const URL_FRAME_VERSION = 1;
+export const URL_FRAME_VERSION = 2;
 // Every version a shipped forwarder has written: the ones before the current,
 // then the current itself, so a bump cannot refuse the frame it ships.
-const EARLIER_URL_FRAME_VERSIONS: readonly number[] = [];
+const EARLIER_URL_FRAME_VERSIONS: readonly number[] = [1];
+// The versions whose writer hangs up without reading an answer.
+const UNANSWERED_URL_FRAME_VERSIONS: ReadonlySet<unknown> = new Set([1]);
 export const URL_FRAME_VERSIONS: ReadonlySet<number> = new Set([
   ...EARLIER_URL_FRAME_VERSIONS,
   URL_FRAME_VERSION,
@@ -393,16 +402,30 @@ export interface UrlFrame {
 // click. A url frame's fields stay untrusted JSON here (not a Partial that
 // claims their types): the click path reads them, and refuses what it cannot
 // read with the click event that says so.
+// `waits` is whether its writer reads the answer: every request's does, and
+// a url frame's from version 2 (one whose version is unreadable is answered,
+// so a writer that waits hears the refusal).
 export type Inbound =
-  | { readonly kind: "url"; readonly frame: Record<string, unknown> }
-  | { readonly kind: "request"; readonly req: Request };
+  | {
+      readonly kind: "url";
+      readonly frame: Record<string, unknown>;
+      readonly waits: boolean;
+    }
+  | { readonly kind: "request"; readonly req: Request; readonly waits: true };
 
 export function classifyInbound(raw: unknown): Inbound {
-  return typeof raw === "object" &&
-    raw !== null &&
-    (raw as { kind?: unknown }).kind === URL_FRAME_KIND
-    ? { kind: "url", frame: raw as Record<string, unknown> }
-    : { kind: "request", req: raw as Request };
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    (raw as { kind?: unknown }).kind !== URL_FRAME_KIND
+  )
+    return { kind: "request", req: raw as Request, waits: true };
+  const frame = raw as Record<string, unknown>;
+  return {
+    kind: "url",
+    frame,
+    waits: !UNANSWERED_URL_FRAME_VERSIONS.has(frame.urlV),
+  };
 }
 
 export interface StatsRequest {

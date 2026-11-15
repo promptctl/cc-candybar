@@ -29,16 +29,24 @@ import { rangeOf } from "../../../src/tmux-status/frames";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
-import { click, clickAnswer, render, saidOf, toldOf } from "../../helpers/daemon-e2e";
-import { logLines, renderLines } from "../../helpers/daemon-log";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  click,
+  clickAnswer,
+  render,
+  saidOf,
+  toldOf,
+} from "../../helpers/daemon-e2e";
+import { logLines, renderLines } from "../../helpers/daemon-log";
+import {
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { untilHeard } from "../../helpers/reload-signal";
 import { writeAtomic } from "../../../src/utils/atomic-write";
 import { valueOf } from "../../../src/utils/logfmt";
 import { until } from "../../helpers/until";
+import { TEST_SIGNER } from "../../helpers/link-signer";
 
 jest.setTimeout(30_000);
 
@@ -95,18 +103,20 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   const switchLanes = async (sid: string, on: boolean, ...lanes: Lane[]) =>
     await click(
       daemon,
-      effectsUrl(
-        lanes.map((lane) => {
-          const { setting, on: value } = LANES[lane].switch;
-          return {
-            verb: VERB_SET_STATE,
-            args: [
-              sid,
-              setting,
-              on ? String(value) : String(GLOBAL_FIELDS[setting].floor),
-            ],
-          };
-        }),
+      TEST_SIGNER.signLink(
+        effectsUrl(
+          lanes.map((lane) => {
+            const { setting, on: value } = LANES[lane].switch;
+            return {
+              verb: VERB_SET_STATE,
+              args: [
+                sid,
+                setting,
+                on ? String(value) : String(GLOBAL_FIELDS[setting].floor),
+              ],
+            };
+          }),
+        ),
       ),
     );
   const laneLines = (sid: string): string[] =>
@@ -287,7 +297,9 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     );
     await click(
       daemon,
-      `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`,
+      TEST_SIGNER.signLink(
+        `cc-candybar://${VERB_LOAD_CONFIG}/${encodeURIComponent(sid)}/${encodeURIComponent(picked)}`,
+      ),
     );
     await until(() => laneLines(sid).length > 0, "the pick's setup");
     expect(laneLines(sid)).toEqual([

@@ -30,6 +30,7 @@ import {
   type DiagnosticColors,
 } from "./diagnostic-style.js";
 import type { Row } from "./frame.js";
+import type { LinkSigner } from "../click/link-signer.js";
 import {
   drawStripCells,
   WIDEST_GLYPH_COLS,
@@ -389,11 +390,12 @@ export function viewerRows(
   sessionId: string,
   by: Drawing["by"],
   geometry: DiagnosticGeometry,
+  links: LinkSigner,
 ): readonly Row[] {
   const { index } = at;
   const shown = list[index - 1]!;
   const opts = viewerOptions(geometry);
-  const body = channelRows(shown, opts, []);
+  const body = channelRows(shown, opts, [], links);
   const colors = colorsOf(shown.severity);
   const style = new Style({ bgcolor: colors.bg, color: colors.fg });
   const button = (text: string, link: string | null): RichText =>
@@ -442,6 +444,7 @@ export function viewerRows(
         ),
       ],
       opts,
+      links,
     );
   };
   // [LAW:one-source-of-truth] The page is what the rows left by the header
@@ -471,6 +474,7 @@ export function viewerRows(
             ...drawnRows(
               [button(`… ${left + 1} more rows: ⧉ copy has them all`, null)],
               { ...opts, wrap: false },
+              links,
             ),
           ]
         : rows;
@@ -489,6 +493,7 @@ export function handoffRows(
   list: DiagnosticList,
   sessionId: string,
   geometry: DiagnosticGeometry,
+  links: LinkSigner,
 ): readonly Row[] {
   const { label, fg, bg, open } = diagnosticsProjection(list);
   const indicator =
@@ -502,7 +507,7 @@ export function handoffRows(
             ),
           ),
         ];
-  return channelRows(handoff, viewerOptions(geometry), indicator);
+  return channelRows(handoff, viewerOptions(geometry), indicator, links);
 }
 
 // The click that shows the message whose key is `key`, or closes the viewer.
@@ -536,8 +541,9 @@ const cell = (word: string, style: Style): RichText =>
 const drawnRows = (
   cells: readonly RichText[],
   opts: BuildLineOptions,
+  links: LinkSigner,
 ): readonly Row[] =>
-  drawStripCells(cells, opts).lines.map((runs) => ({
+  drawStripCells(cells, opts, links).lines.map((runs) => ({
     kind: "diagnostic",
     runs,
   }));
@@ -556,6 +562,7 @@ function channelRows(
   message: ChannelMessage,
   opts: BuildLineOptions,
   trailing: readonly RichText[],
+  links: LinkSigner,
 ): readonly Row[] {
   const colors = colorsOf(message.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
@@ -574,6 +581,6 @@ function channelRows(
         .map((w) => cell(w, styled(span.link))),
     );
     const after = i === 0 ? trailing : [];
-    return drawnRows([prefix, ...cells, ...after], opts);
+    return drawnRows([prefix, ...cells, ...after], opts, links);
   });
 }

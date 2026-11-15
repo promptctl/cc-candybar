@@ -23,6 +23,7 @@ import { menuPageKey } from "../src/config/menu-keys";
 import { buildRig } from "./helpers/rig";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { TEST_SIGNER } from "./helpers/link-signer";
 
 const S1 = sessionIdOf("s1");
 
@@ -102,7 +103,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
           wrap: true,
           padding: 0,
           width: 60,
-        }).lines.flat(),
+        }, TEST_SIGNER).lines.flat(),
       );
       expect(cw(out) - cw(content)).toBe(stripChromeCols({ endcaps: style }));
     },

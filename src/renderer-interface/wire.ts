@@ -41,6 +41,9 @@ export interface RendererBoot {
   };
   readonly bundle: string;
   readonly memoryLimitBytes: number;
+  // The host's link key in base64: the renderer signs every link it draws
+  // with it, and opens no key file.
+  readonly linkKey: string;
 }
 
 // The host's environment as a boot carries it: its set variables.

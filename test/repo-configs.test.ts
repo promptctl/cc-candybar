@@ -27,7 +27,6 @@ import {
 } from "../src/renderer/render-cache";
 import {
   recordAnswer,
-  repoAnswerFields,
   repoConfigs,
   repoConfigsPath,
   repoQuestions,
@@ -337,8 +336,7 @@ test("the config loaded event names the repositories left waiting and declined, 
   );
 });
 
-test("the question offers each answer as a link signed for its session, directory and answer", () => {
-  const signer = linkSigner(Buffer.alloc(32, 7));
+test("the question offers each answer as a link for its session, directory and answer", () => {
   const [channel, ...rest] = repoQuestions(
     {
       plugins: null,
@@ -349,7 +347,6 @@ test("the question offers each answer as a link signed for its session, director
       unread: null,
     },
     SID_1,
-    signer,
   );
   expect(rest).toEqual([]);
   expect(channel!.message).toBe(
@@ -358,26 +355,10 @@ test("the question offers each answer as a link signed for its session, director
   const answers = channel!.lines[0]
     .flatMap((span) => (span.link === null ? [] : effectsOf(span.link)))
     .filter((e) => e.verb === VERB_REPO_CONFIG);
-  expect(answers.map((e) => e.args.slice(0, 3))).toEqual([
+  expect(answers.map((e) => e.args)).toEqual([
     ["sid-1", project, "approved"],
     ["sid-1", project, "declined"],
   ]);
-  for (const e of answers) {
-    const [sid, dir, answer, mac] = e.args as [
-      string,
-      string,
-      "approved",
-      string,
-    ];
-    expect(
-      signer.verify(repoAnswerFields(sessionIdOf(sid), dir, answer), mac),
-    ).toBe(true);
-    // The mac answers for this answer only.
-    const other = answer === "approved" ? "declined" : "approved";
-    expect(
-      signer.verify(repoAnswerFields(sessionIdOf(sid), dir, other), mac),
-    ).toBe(false);
-  }
 });
 
 // An answer kept where the book used to live, directly in the state

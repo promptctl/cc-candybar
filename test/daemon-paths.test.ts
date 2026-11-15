@@ -8,6 +8,7 @@ import { DaemonLog, logLines } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
 import { systemTimekeeper } from "../src/time";
+import { linkKey, linkKeyFile } from "../src/daemon/link-key";
 
 // [LAW:effects-at-boundaries] A daemon is aimed by the paths value it is built
 // over (candybar-testing-ihvy.yfv), so one aimed at a temporary directory
@@ -77,12 +78,7 @@ describe("a daemon aimed by its paths value", () => {
       storage.session.flush();
       storage.history.save({});
       adapters.doctorStores.clicked.update((seen) => [...seen, "kitty"]);
-      adapters.linkSigner.sign({
-        sessionId: "s1",
-        action: "a",
-        declaration: "[]",
-        evaluated: "{}",
-      });
+      expect(linkKey(linkKeyFile(aimed.state))).toHaveLength(32);
       const limits = adapters.limits({
         startedAtMs: 0,
         exit: () => {},

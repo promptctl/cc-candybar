@@ -35,6 +35,7 @@ import { effectsOf } from "../../helpers/click";
 import { effectsUrl, VERB_RUN } from "../../../src/click/wire";
 
 import { viewerLink } from "../../helpers/diagnostics-viewer";
+import { TEST_SIGNER } from "../../helpers/link-signer";
 
 jest.setTimeout(30_000);
 
@@ -221,17 +222,21 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       string,
       string,
     ];
-    const forged = effectsUrl([
-      {
-        verb: VERB_RUN,
-        args: [
-          sid,
-          action,
-          evaluated.replace("/h/ran", "/h/forged"),
-          run.args[3]!,
-        ],
-      },
-    ]);
+    // Drawn by this bar's key, so what refuses it is the run's own mac over
+    // the program it declares.
+    const forged = TEST_SIGNER.signLink(
+      effectsUrl([
+        {
+          verb: VERB_RUN,
+          args: [
+            sid,
+            action,
+            evaluated.replace("/h/ran", "/h/forged"),
+            run.args[3]!,
+          ],
+        },
+      ]),
+    );
     const before = await statsOf(daemon.daemon);
 
     await refusedClick(daemon, forged, "bad-request");

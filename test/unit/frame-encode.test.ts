@@ -45,9 +45,12 @@ import {
   COLOR_COMPATIBILITIES,
   type ColorCompatibility,
 } from "../../src/themes/policy";
+import { TEST_SIGNER } from "../helpers/link-signer";
 
 const DEPTHS = COLOR_COMPATIBILITIES;
-const LINK = "cc-candybar://dispatch/e=x";
+// A link of a scheme the bar does not sign, so these runs hold what rich-js
+// admitted; a bar link's mac is its own test, below.
+const LINK = "https://example.com/e=x";
 
 // A blend's mix with an end only the terminal's theme fixes: two fixed ends
 // collapse to plain RGB, so this is what a ColorBlend is.
@@ -218,7 +221,7 @@ describe("encodeAnsi over runLines writes what rich-js's encoder writes", () => 
       const segments = grid();
       const ansi = segmentsToString(segments, destination);
       expect(ansi.endsWith("\n")).toBe(true);
-      const lines = runLines(segments, destination.colorSystem);
+      const lines = runLines(segments, destination.colorSystem, TEST_SIGNER);
       expect(encodeAnsi(lines, depth)).toBe(ansi.slice(0, -1));
       expectDrawnAt(lines, depth);
       expect(
@@ -229,7 +232,7 @@ describe("encodeAnsi over runLines writes what rich-js's encoder writes", () => 
     test.each(LOOPS)("every moment of %s over a wrapped strip", (loop) => {
       for (const { segments, ansi } of underMotion(loop, depth)) {
         expect(ansi.endsWith("\n")).toBe(true);
-        const lines = runLines(segments, destination.colorSystem);
+        const lines = runLines(segments, destination.colorSystem, TEST_SIGNER);
         expect(encodeAnsi(lines, depth)).toBe(ansi.slice(0, -1));
         expectDrawnAt(lines, depth);
       }
@@ -255,7 +258,7 @@ describe("the reach of those comparisons", () => {
   test("a wrapped strip is several lines", () => {
     const { colorSystem } = resolveDestination("truecolor");
     for (const { segments } of underMotion("wheel", "truecolor")) {
-      expect(runLines(segments, colorSystem).length).toBeGreaterThan(1);
+      expect(runLines(segments, colorSystem, TEST_SIGNER).length).toBeGreaterThan(1);
     }
   });
 });
@@ -265,7 +268,7 @@ describe("a run", () => {
 
   test("holds a flattened translucent colour as the hex it draws", () => {
     const ink = new Segment("x", new Style({ color: "#ffffff80" }));
-    expect(runLines([ink], truecolor)).toEqual([
+    expect(runLines([ink], truecolor, TEST_SIGNER)).toEqual([
       [{ text: "x", fg: "#808080" }],
     ]);
   });
@@ -275,13 +278,14 @@ describe("a run", () => {
     const [[run]] = runLines(
       [new Segment("x", new Style({ bgcolor: mix }))],
       truecolor,
+      TEST_SIGNER,
     ) as [[Run]];
     expect(run.bg).toMatch(/^#[0-9a-f]{6}$/);
   });
 
   test("holds a standard colour as the terminal's at truecolor", () => {
     const named = new Segment("x", new Style({ color: "red" }));
-    expect(runLines([named], truecolor)).toEqual([
+    expect(runLines([named], truecolor, TEST_SIGNER)).toEqual([
       [{ text: "x", fg: "color(1)" }],
     ]);
   });
@@ -293,6 +297,7 @@ describe("a run", () => {
         (color) => new Segment("x", new Style({ color, link: LINK })),
       ),
       ansi,
+      TEST_SIGNER,
     )[0] as Run[];
     expect(mergedRuns({ kind: "diagnostic", runs })).toEqual([
       { text: "xxx", fg: "color(1)", link: LINK },
@@ -304,13 +309,13 @@ describe("a run", () => {
       style: new Style({ link: `${LINK}\x1b]0;evil\x07` }),
     });
     const segments = drawn(cell, resolveDestination("truecolor"), 0, 10);
-    const [[run]] = runLines(segments, truecolor) as [[Run]];
+    const [[run]] = runLines(segments, truecolor, TEST_SIGNER) as [[Run]];
     expect(run.link).toBe(`${LINK}]0;evil`);
   });
 
   test("holds only the attributes that are on", () => {
     const style = new Style({ bold: false, italic: true, underline: true });
-    expect(runLines([new Segment("x", style)], truecolor)).toEqual([
+    expect(runLines([new Segment("x", style)], truecolor, TEST_SIGNER)).toEqual([
       [{ text: "x", attrs: ["italic", "underline"] }],
     ]);
   });
@@ -318,9 +323,26 @@ describe("a run", () => {
   test("keeps its link and no look at depth none", () => {
     const style = new Style({ color: "red", bold: true, link: LINK });
     const { colorSystem: none } = resolveDestination("none");
-    expect(runLines([new Segment("x", style)], none)).toEqual([
+    expect(runLines([new Segment("x", style)], none, TEST_SIGNER)).toEqual([
       [{ text: "x", link: LINK }],
     ]);
+  });
+});
+
+describe("a link in a run", () => {
+  const { colorSystem: truecolor } = resolveDestination("truecolor");
+  const linked = (link: string): string | undefined =>
+    runLines([new Segment("x", new Style({ link }))], truecolor, TEST_SIGNER)[0]![0]!
+      .link;
+
+  test("is signed when it is the bar's, so the host can prove the bar drew it", () => {
+    const bar = "cc-candybar://dispatch/e=x";
+    const drawn = linked(bar)!;
+    expect(TEST_SIGNER.verifyLink(drawn)).toEqual({ ok: true, link: bar });
+  });
+
+  test("of any other scheme is the terminal's to open, and carries no mac", () => {
+    expect(linked(LINK)).toBe(LINK);
   });
 });
 
@@ -332,7 +354,7 @@ describe("a row of no cells", () => {
       wrap: true,
       padding: 0,
       width: 80,
-    });
+    }, TEST_SIGNER);
     expect(lines).toEqual([[]]);
     const stacked = [[{ text: "a" }], ...lines, [{ text: "b" }]];
     expect(encodeAnsi(stacked, colorCompatibility)).toBe("a\n\nb");
@@ -349,7 +371,7 @@ test("a strip that draws no line is loud, not a row gone from the frame", () => 
     padding: 0,
     width: 80,
   } as const;
-  expect(() => drawStripCells([cell], options, nothing)).toThrow(
+  expect(() => drawStripCells([cell], options, TEST_SIGNER, nothing)).toThrow(
     "drew no line",
   );
 });

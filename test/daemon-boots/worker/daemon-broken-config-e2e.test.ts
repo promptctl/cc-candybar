@@ -13,10 +13,11 @@ import path from "node:path";
 
 import { RichText } from "@promptctl/rich-js";
 import { click, render, urlWriting } from "../../helpers/daemon-e2e";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import {
   indicatorOf,
   pageOf,
@@ -27,6 +28,8 @@ import { effectsOf } from "../../helpers/click";
 import { renderLines } from "../../helpers/daemon-log";
 import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
+import { TEST_SIGNER } from "../../helpers/link-signer";
+import { unprovenLink } from "../../../src/click/link-signer";
 
 jest.setTimeout(30_000);
 
@@ -94,8 +97,7 @@ describe("a config that cannot be drawn as written", () => {
     );
     // An unknown flag is this request's own error, ahead of the file's warning.
     const flagged = [...a, "--no-such-flag"];
-    const draw = (argv: string[]) =>
-      render(daemon, sid, projectDir, {}, argv);
+    const draw = (argv: string[]) => render(daemon, sid, projectDir, {}, argv);
     const bar = await draw(a);
     expect(indicatorOf(bar)).toBe("⚠ 1");
     await click(daemon, viewerLink(bar, "open")!.url);
@@ -187,14 +189,7 @@ describe("a config that cannot be drawn as written", () => {
     // red, since one is an error. The cell of a plugin absent here adds
     // nothing to either.
     expect(indicatorOf(bar)).toBe("⚠ 2");
-    const pages = await readDiagnostics(
-      daemon,
-      sid,
-      projectDir,
-      bar,
-      hints,
-      a,
-    );
+    const pages = await readDiagnostics(daemon, sid, projectDir, bar, hints, a);
     expect(pages.map((p) => p.position)).toEqual(["1/2", "2/2"]);
     expect(pages[0]!.text).toContain("first-missing-segment");
     expect(pages[0]!.text).toContain("second-missing");
@@ -230,10 +225,12 @@ describe("a config that cannot be drawn as written", () => {
     for (const c of copies) expect(c.args).toEqual(copies[0]!.args);
     for (const u of copyUrls) expect(u.length).toBeLessThan(200);
     expect(textOf(shown)).not.toContain("Fix my cc-candybar");
-    // A key no draw lists (the message fixed since) is refused loudly.
-    await expect(
-      click(daemon, copyUrls[0]!.replace(String(copies[0]!.args[2]), "1")),
-    ).rejects.toThrow(/no longer listed/);
+    // A key no draw lists (the message fixed since, its link still drawn) is
+    // refused loudly.
+    const stale = TEST_SIGNER.signLink(
+      unprovenLink(copyUrls[0]!).replace(String(copies[0]!.args[2]), "1"),
+    );
+    await expect(click(daemon, stale)).rejects.toThrow(/no longer listed/);
     await click(daemon, viewerLink(shown, "✕")!.url);
   });
 });

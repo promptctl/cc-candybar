@@ -6,7 +6,6 @@
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import fs from "node:fs";
 import path from "node:path";
-import type { LinkSigner, SignedFields } from "../click/link-signer.js";
 import { effectsUrl, VERB_REPO_CONFIG } from "../click/wire.js";
 import { repoProject } from "../config/loader/discovery.js";
 import {
@@ -126,32 +125,14 @@ export function repoGateAt(stateDir: string, cwd: string): RepoGate {
   return gateRepos(repoConfigs(stateDir).read(), [], repoProject(cwd));
 }
 
-// [LAW:single-enforcer] What an answer link signs: the session it was drawn
-// for, the directory and the answer. Any web page can open a
-// `cc-candybar://` link, so only an answer the bar drew is recorded. A `run`
-// link's declaration is a JSON array and an answer's a directory, so neither
-// verifies as the other under the one key.
-export function repoAnswerFields(
-  sessionId: SessionId,
-  dir: string,
-  answer: RepoAnswer,
-): SignedFields {
-  return {
-    sessionId,
-    action: VERB_REPO_CONFIG,
-    declaration: dir,
-    evaluated: answer,
-  };
-}
-
 // [LAW:dataflow-not-control-flow] One channel per directory awaiting an
 // answer — the list is the answer, so the diagnostics fold it beside the
 // update notice with no "is there a question" branch. The sentence is plain
-// text (the viewer's ⧉ copies it); each answer is its own signed click.
+// text (the viewer's ⧉ copies it); each answer is its own click, signed as
+// every link the bar draws is.
 export function repoQuestions(
   gate: RepoGate,
   sessionId: SessionId,
-  signer: LinkSigner,
 ): DiagnosticMessage[] {
   return gate.awaiting.map((dir) => {
     const message = `a cc-candybar config for ${dir} — run it?`;
@@ -161,12 +142,7 @@ export function repoQuestions(
         effectsUrl([
           {
             verb: VERB_REPO_CONFIG,
-            args: [
-              sessionId,
-              dir,
-              answer,
-              signer.sign(repoAnswerFields(sessionId, dir, answer)),
-            ],
+            args: [sessionId, dir, answer],
           },
         ]),
       ),

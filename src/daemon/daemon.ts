@@ -53,7 +53,7 @@ import { shellWord } from "../shell-word.js";
 import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
-import type { LinkSigner } from "../click/link-signer.js";
+import { linkSigner } from "../click/link-signer.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { parseFrame } from "../render/frame.js";
 import { rendererHost } from "./renderer-host.js";
@@ -133,8 +133,9 @@ export interface DaemonAdapters {
     closing: AbortSignal,
     probe: ProcessProbe,
   ) => LaneEdge;
-  // The one signer of every `run` link this daemon draws.
-  readonly linkSigner: LinkSigner;
+  // The link key (src/daemon/link-key.ts): the host verifies every click
+  // with it, and hands it to its renderer, which signs every link it draws.
+  readonly linkKey: Buffer;
   // What the memory backstop reads and writes on the machine.
   readonly limits: (own: {
     readonly startedAtMs: number;
@@ -332,13 +333,16 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // storage it cannot read refuses the build with nothing running. One in a
   // process of its own loads there, and refuses its boot with the reason on
   // the bar's ⚠.
+  // [LAW:single-enforcer] The host's one signer: it verifies every click, and
+  // a renderer in process draws with it.
+  const links = linkSigner(inputs.linkKey);
   const preparedRenderer = inputs.renderer({
     load: () =>
       loadMainRenderer({
         clock,
         now: instant,
         storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
-        linkSigner: inputs.linkSigner,
+        linkSigner: links,
         stateDir: paths.state,
         locations: locs,
         env: host.env,
@@ -352,6 +356,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       host: { ...host, env: bootEnv(host.env) },
       bundle: bundle.path,
       memoryLimitBytes,
+      linkKey: inputs.linkKey.toString("base64"),
     },
     node: bundle.node,
   });
@@ -798,6 +803,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
   });
   const parts: DaemonParts = {
+    links,
     clicks,
     home: host.home,
     tmp: host.tmp,

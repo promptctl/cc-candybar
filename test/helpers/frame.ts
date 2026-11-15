@@ -3,11 +3,16 @@
 import { isDeepStrictEqual } from "node:util";
 import { ColorSpec, type ColorRgba } from "@promptctl/rich-js";
 import { linksOf } from "../../src/click/read";
+import { unprovenLink } from "../../src/click/link-signer";
 import { plainOf, type Frame, type Run } from "../../src/render/frame";
 
-/** The URL of every link the frame draws, in order. */
+/** The URL of every link the frame draws, in order, signed as it is drawn. */
 export const linkUrls = (frame: Pick<Frame, "rows">): string[] =>
   linksOf(frame).map(({ url }) => url);
+
+/** What every link the frame draws says, its mac removed. */
+export const linkTexts = (frame: Pick<Frame, "rows">): string[] =>
+  linkUrls(frame).map(unprovenLink);
 
 /**
  * The URL of every link drawn bold — the renderer's "current selection"

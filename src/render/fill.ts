@@ -23,7 +23,7 @@ import {
   type LaidCell,
 } from "../template-engine/layout.js";
 import {
-  drawStripCells,
+  stripCellsText,
   lineWidth,
   stripChromeCols,
   stripSeamCols,
@@ -31,7 +31,6 @@ import {
   wrappedLines,
   type BuildLineOptions,
 } from "./strip.js";
-import { plainOf } from "./frame.js";
 import type { RowItem } from "./effect.js";
 
 // The offsets `plain` wraps to `line` at, its first line starting `indent` cells
@@ -66,11 +65,11 @@ function takenOnLine(
   options: BuildLineOptions,
 ): number {
   if (before.length === 0) return 0;
-  const { lines } = drawStripCells(
+  const lines = stripCellsText(
     before.map(({ owner }) => owner),
     options,
   );
-  const last = cellLen(plainOf(lines[lines.length - 1]!));
+  const last = cellLen(lines[lines.length - 1]!);
   return Math.max(0, last - stripChromeCols(options) + stripSeamCols(options));
 }
 
@@ -83,8 +82,8 @@ function fits(
   options: BuildLineOptions,
 ): boolean {
   if (cell.cellLength <= line) return true;
-  const { lines } = drawStripCells([cell], { ...options, width: Infinity });
-  return cellLen(plainOf(lines.flat())) <= options.width;
+  const lines = stripCellsText([cell], { ...options, width: Infinity });
+  return cellLen(lines.join("")) <= options.width;
 }
 
 // A strip item as the items it takes to fit `line`, each keeping the item's
@@ -193,14 +192,14 @@ function filled(
   // measurement would have caught: FlexStrip FOLDS THE LINE at a zero-width cell,
   // so the probe row wrapped and reported the width of its first fragment (4
   // columns instead of 9), and every fill came out five columns too wide.
-  const natural = drawStripCells(row.map(stripItem), options).lines;
+  const natural = stripCellsText(row.map(stripItem), options);
   // Already wrapping at its natural width: the row has no leftover to give, and
   // line 0 would under-report it anyway. The clamp case, reached honestly.
   if (natural.length > 1) return items();
 
   // `cellLen` is the measure the strip wraps by, so this is the row's own
   // arithmetic rather than a second opinion about character widths.
-  const deficit = Math.max(0, options.width - cellLen(plainOf(natural.flat())));
+  const deficit = Math.max(0, options.width - cellLen(natural.join("")));
   // Even shares of the deficit, remainder to the last demand so the row lands on
   // the width exactly rather than one column short per fill. Each fill GROWS from
   // its natural width, because that width is already inside the measurement above.

@@ -24,6 +24,8 @@
 import { ansiOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf, type DrawnLink } from "../src/click/read";
+import { isBarLink } from "../src/click/wire";
+import { TEST_SIGNER } from "./helpers/link-signer";
 import { createEngine } from "@promptctl/go-template-js";
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -162,6 +164,26 @@ describe("every {{ menu }} the bundled default renders", () => {
     return rig;
   };
 
+  // [LAW:verifiable-goals] Every link the bundled default draws, through each
+  // tab of its settings menu, is one the host takes: it verifies under the
+  // bar's key, and the mac leaves it short enough for a terminal to keep
+  // (a mac adds 23 characters to every link).
+  test("every link the default's settings menu draws verifies, and is short", async () => {
+    const rig = menuBar(`{ h: ['directory', 'model'] }`);
+    const drawn: DrawnLink[] = [];
+    const seen = (out: Frame): Frame => (drawn.push(...linksOf(out)), out);
+    await rig.clickLabel(seen(rig.render()), "🍫");
+    for (const tab of ["session", "look", "layout", "config", "tools"]) {
+      await rig.clickLabel(seen(rig.render()), tab);
+      seen(rig.render());
+    }
+    const bar = drawn.filter(({ url }) => isBarLink(url));
+    expect(bar.length).toBeGreaterThan(20);
+    for (const { url } of bar)
+      expect(TEST_SIGNER.verifyLink(url).ok).toBe(true);
+    expect(Math.max(...bar.map(({ url }) => url.length))).toBeLessThan(512);
+  });
+
   test("the config menu with every picker closed: exact bytes", async () => {
     const rig = await openConfigMenu();
     const out = rig.render();
@@ -175,7 +197,11 @@ describe("every {{ menu }} the bundled default renders", () => {
     const rig = await openConfigMenu();
     await rig.clickLabel(rig.render(), "🧪 toggles");
     const out = rig.render();
-    for (const label of ["🧪 band (A)", "🧪 statusline (B)", "🧪 tmux pane (C)"]) {
+    for (const label of [
+      "🧪 band (A)",
+      "🧪 statusline (B)",
+      "🧪 tmux pane (C)",
+    ]) {
       expect(textOf(out)).toContain(`☐ ${label}`);
     }
     expect(ansiOf(out)).toMatchSnapshot("toggles open");

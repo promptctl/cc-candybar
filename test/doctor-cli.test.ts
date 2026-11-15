@@ -102,6 +102,7 @@ const NO_HANDLER: HandlerProbeEdge = {
   sockets: { own: "/s", handler: "/s" },
   monotonic: refuse,
   nonce: refuse,
+  signLink: refuse,
   daemon: refuse,
   open: refuse,
   pause: refuse,

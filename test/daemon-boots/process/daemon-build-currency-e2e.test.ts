@@ -31,6 +31,7 @@ import {
   scratchLayout,
   type Scratch,
 } from "../../helpers/update-notice-case";
+import { TEST_SIGNER } from "../../helpers/link-signer";
 
 const REPO_BUNDLE = path.join(process.cwd(), "dist", "index.mjs");
 const REPO_DIGEST = sourceDigest(path.join(process.cwd(), "src"));
@@ -219,7 +220,9 @@ describe("a daemon spawned from the built bundle", () => {
         await expect(
           click(
             sockPath,
-            effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
+            TEST_SIGNER.signLink(
+              effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
+            ),
           ),
         ).rejects.toThrow(/already rebuilding/);
         fs.writeFileSync(stub.gate, "");

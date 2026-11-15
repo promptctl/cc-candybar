@@ -140,8 +140,9 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   });
 
   // [LAW:dataflow-not-control-flow] Whether a client waits for the answer is a
-  // fact of what it sent. The URL handler app writes its frame and hangs up by
-  // design, so for a url frame the socket's close is not a peer leaving: the
+  // fact of what it sent (classifyInbound). A version-1 URL handler app writes
+  // its frame and hangs up by design, so for its frame the socket's close is
+  // not a peer leaving: the
   // frame stays in flight, under the same deadline every request has, until
   // its click is handled (a click past the deadline is refused, so a repeat
   // click cannot revert it, src/renderer/journal-turns.ts), and no one is said
@@ -149,7 +150,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   const reader = makeFrameReader(
     (frame) => {
       const inbound = classifyInbound(frame);
-      waits = inbound.kind === "request";
+      waits = inbound.waits;
       void daemon
         .handle(
           inbound,
@@ -158,9 +159,9 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
           () => waits && sock.destroyed,
         )
         .then((r) => {
-          // A url frame's answer goes to no one: its writer closed, and a
-          // write to that socket is only an error event. The click's event
-          // (src/daemon/reply.ts) is where its outcome is seen.
+          // A version-1 url frame's answer goes to no one: its writer closed,
+          // and a write to that socket is only an error event. The click's
+          // event (src/daemon/reply.ts) is where its outcome is seen.
           if (!waits) {
             if (r.kind === "reply") r.settled(false);
             return;

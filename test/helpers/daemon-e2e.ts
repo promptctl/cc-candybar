@@ -22,7 +22,6 @@ import {
 } from "../../src/daemon/foundations/protocol";
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
-import { linkClick } from "./click";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
@@ -243,15 +242,12 @@ export function render(
   return frameRequest(target, renderBody(sessionId, cwd, hints, args));
 }
 
-// A click, decoded the same way `cc-candybar url-handle` decodes it, as the
-// wire request the URL handler app sends.
+// A click as `cc-candybar url-handle` sends it: the link raw.
 export function clickBody(url: string) {
-  const { verb, value } = linkClick(url);
   return {
     v: PROTOCOL_VERSION,
     kind: "click",
-    verb,
-    value,
+    url,
   } as const satisfies ClickRequest;
 }
 

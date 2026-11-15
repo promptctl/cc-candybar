@@ -19,6 +19,7 @@ import { daemonGates } from "./daemon/foundations/update-keys.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
 import { instantAt } from "./utils/instant.js";
 import { loadMainRenderer } from "./renderer/main.js";
+import { linkSigner } from "./click/link-signer.js";
 import type { Renderer } from "./renderer-interface/interface.js";
 import type { AdapterToHost } from "./renderer-interface/adapter.js";
 import { bakedDigest } from "./daemon/build-currency.js";
@@ -137,7 +138,7 @@ function booted(
       ...adapters.storage(reaches.log),
       doctor: adapters.doctorStores,
     },
-    linkSigner: adapters.linkSigner,
+    linkSigner: linkSigner(Buffer.from(boot.linkKey, "base64")),
     stateDir: paths.state,
     locations: locations(host),
     env: host.env,

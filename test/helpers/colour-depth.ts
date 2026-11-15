@@ -31,6 +31,7 @@ import { type ColorCompatibility } from "../../src/themes/policy";
 import { TEXT_MIN_CONTRAST } from "../../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../../src/config/quiet-text";
 import { SWATCH_GLYPH } from "../../src/render/swatch";
+import { TEST_SIGNER } from "./link-signer";
 
 const luminance = ([r, g, b]: Rgb): number => {
   const ch = (v: number) => {
@@ -95,6 +96,7 @@ function joinerInk(
           ),
         ],
         destination.colorSystem,
+        TEST_SIGNER,
       ),
     ),
   );

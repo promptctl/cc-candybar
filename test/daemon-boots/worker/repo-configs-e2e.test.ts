@@ -14,16 +14,28 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { click, findUrl, render, renderUntil, refusedClick } from "../../helpers/daemon-e2e";
+import {
+  click,
+  findUrl,
+  render,
+  renderUntil,
+  refusedClick,
+} from "../../helpers/daemon-e2e";
 import type { DaemonTarget } from "../../helpers/daemon-wire";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
+import {
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
   type IsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
 import { VERB_REPO_CONFIG } from "../../../src/click/wire";
 import { logPath } from "../../../src/daemon/paths";
-import { repoConfigs, repoConfigsPath } from "../../../src/renderer/repo-configs";
+import {
+  repoConfigs,
+  repoConfigsPath,
+} from "../../../src/renderer/repo-configs";
 import { stateDir } from "../../../src/daemon/paths";
 import {
   indicatorOf,
@@ -86,7 +98,8 @@ function answerUrl(rendered: Frame, answer: string): string {
   const url = findUrl(linkUrls(rendered), (effects) =>
     effects.some((e) => e.verb === VERB_REPO_CONFIG && e.args[2] === answer),
   );
-  if (url === undefined) throw new Error(`no ${answer} link in:\n${textOf(rendered)}`);
+  if (url === undefined)
+    throw new Error(`no ${answer} link in:\n${textOf(rendered)}`);
   return url;
 }
 
@@ -122,8 +135,7 @@ describe("a repository's config waits for the user's one answer", () => {
   const start = (): void => {
     daemon = startDaemon(isolated.env);
   };
-  const draw = (sid: string): Promise<Frame> =>
-    render(daemon, sid, project);
+  const draw = (sid: string): Promise<Frame> => render(daemon, sid, project);
 
   test("unanswered: nothing runs, the user's config draws, and the bar asks", async () => {
     start();
@@ -149,10 +161,12 @@ describe("a repository's config waits for the user's one answer", () => {
 
     // A link whose signature is not the bar's is refused, and records nothing.
     const approve = answerUrl(rendered, "approved");
-    const forged = approve.replace(/[0-9a-f]{64}/, "0".repeat(64));
+    const forged = `${approve.slice(0, -1)}${approve.endsWith("A") ? "B" : "A"}`;
     expect(forged).not.toBe(approve);
     await refusedClick(daemon, forged, "bad-request");
-    expect(fs.existsSync(repoConfigsPath(stateDir(hostOf(isolated.env))))).toBe(false);
+    expect(fs.existsSync(repoConfigsPath(stateDir(hostOf(isolated.env))))).toBe(
+      false,
+    );
     expect(fs.existsSync(marker)).toBe(false);
   });
 

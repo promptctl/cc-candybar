@@ -17,22 +17,25 @@ export function linkKeyFile(dir: string): string {
 }
 
 // The signer over the key file, read on first use: importing the daemon, or
-// running a CLI that never draws a `run` link, touches no disk for it.
+// running a CLI that draws nothing, touches no disk for it.
 export function linkSignerFromKeyFile(file: string): LinkSigner {
   let signer: LinkSigner | undefined;
-  const loaded = (): LinkSigner => (signer ??= readOrCreate(file));
+  const loaded = (): LinkSigner => (signer ??= linkSigner(linkKey(file)));
   return {
     sign: (fields) => loaded().sign(fields),
     verify: (fields, mac) => loaded().verify(fields, mac),
+    signLink: (link) => loaded().signLink(link),
+    verifyLink: (signed) => loaded().verifyLink(signed),
   };
 }
 
 // The key on disk, made first when there is none: a state directory that
-// cannot be written still serves the key it holds.
+// cannot be written still serves the key it holds. The host hands these bytes
+// to its renderer in the boot, so the renderer opens no key file.
 // [LAW:no-silent-failure] A key file of the wrong length is refused loudly,
 // naming the file, never replaced: a replaced key silently voids every link
 // already drawn.
-function readOrCreate(file: string): LinkSigner {
+export function linkKey(file: string): Buffer {
   let key: Buffer;
   try {
     key = fs.readFileSync(file);
@@ -46,7 +49,7 @@ function readOrCreate(file: string): LinkSigner {
       `link key ${file} holds ${key.length} bytes, not ${LINK_KEY_BYTES}: remove it and a new one is made (links drawn before then stop working)`,
     );
   }
-  return linkSigner(key);
+  return key;
 }
 
 // [LAW:no-ambient-temporal-coupling] The key is written whole to a file of the
@@ -54,7 +57,7 @@ function readOrCreate(file: string): LinkSigner {
 // key already did, so a racer never reads a key half written, and a crash
 // mid-write leaves only its own temporary file. Every racer ends on the key
 // that landed. Readable by this user alone: whoever holds it can forge a link
-// that runs a program.
+// that the bar honours.
 function create(file: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const written = `${file}.${process.pid}.${randomBytes(6).toString("hex")}`;

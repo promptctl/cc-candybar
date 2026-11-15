@@ -30,6 +30,8 @@
 
 import { URLSearchParams } from "node:url";
 
+import type { LinkSigner } from "./link-signer.js";
+
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
 import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
 import {
@@ -46,6 +48,11 @@ import {
 // [LAW:one-source-of-truth] The scheme string lives here, with the codec that
 // emits it; install/ (Launch Services registration) imports it.
 export const URL_SCHEME = "cc-candybar";
+
+// A link outside the cc-candybar scheme (a repo page, a PR) is the
+// terminal's to open; the daemon never sees a click on it.
+export const isBarLink = (url: string): boolean =>
+  url.startsWith(`${URL_SCHEME}://`);
 
 // The app Launch Services starts for the scheme: its bundle, binary and
 // process all carry this name. Beside the scheme because it is the same fact,
@@ -438,7 +445,7 @@ export type HandlerUrl =
 // made compound clicks unrepresentable — so it is deliberately absent.
 export function parseHandlerUrl(rawUrl: string): HandlerUrl {
   const prefix = `${URL_SCHEME}://`;
-  if (!rawUrl.startsWith(prefix)) {
+  if (!isBarLink(rawUrl)) {
     return { ok: false, problem: `expected a ${prefix} link, got: ${rawUrl}` };
   }
   const rest = rawUrl.slice(prefix.length);
@@ -456,6 +463,31 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
   } catch {
     return { ok: false, problem: `the link's verb is malformed: ${encoded}` };
   }
+}
+
+// [LAW:parse-dont-validate] A clicked link as the host takes it: a link the
+// bar drew, its mac proven, as its verb and raw value; a tmux status range,
+// which tmux expands from the binding at the click and so carries no mac, and
+// which stands for the link the frame drew there; or why it is neither. The
+// URL is untrusted: any web page can open one, so nothing in it reaches a
+// renderer until its mac is proven.
+export type Click =
+  | { readonly kind: "link"; readonly verb: string; readonly value: string }
+  | { readonly kind: "range"; readonly value: string }
+  | { readonly kind: "refused"; readonly problem: string };
+
+const RANGE_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
+
+// [LAW:single-enforcer] The host's one reading of a clicked URL.
+export function parseClick(url: string, links: LinkSigner): Click {
+  if (url.startsWith(RANGE_PREFIX))
+    return { kind: "range", value: url.slice(RANGE_PREFIX.length) };
+  const verified = links.verifyLink(url);
+  if (!verified.ok) return { kind: "refused", problem: verified.problem };
+  const link = parseHandlerUrl(verified.link);
+  return link.ok
+    ? { kind: "link", verb: link.verb, value: link.value }
+    : { kind: "refused", problem: link.problem };
 }
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into

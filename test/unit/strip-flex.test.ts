@@ -1,6 +1,7 @@
 import { POWERLINE } from "../helpers/powerline";
 import { stripCell, type PlainSegment } from "../helpers/strip-cell";
 import { renderStripCells, type BuildLineOptions } from "../../src/render/strip";
+import { TEST_SIGNER } from "../helpers/link-signer";
 
 const seg = (text: string): PlainSegment => ({ text });
 
@@ -11,6 +12,7 @@ const stripOf = (
   renderStripCells(
     segments.map((segment) => stripCell(segment, options.padding)),
     options,
+    TEST_SIGNER,
   );
 
 describe("renderStripCells wrap behavior", () => {

@@ -69,6 +69,11 @@ import {
 } from "../../../src/claude-settings";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import { answerRepo } from "../../helpers/repo-approval";
+import { TEST_SIGNER } from "../../helpers/link-signer";
+import {
+  linkKeyFile,
+  linkSignerFromKeyFile,
+} from "../../../src/daemon/link-key";
 
 jest.setTimeout(30_000);
 
@@ -190,7 +195,9 @@ test("the doctor's config row says what named the session's file", async () => {
 
     await click(
       daemon,
-      `cc-candybar://${VERB_LOAD_CONFIG}/source-pick/${encodeURIComponent(picked)}`,
+      TEST_SIGNER.signLink(
+        `cc-candybar://${VERB_LOAD_CONFIG}/source-pick/${encodeURIComponent(picked)}`,
+      ),
     );
     expect(await row("source-pick", { configEnv: named }, flag)).toContain(
       squeezed(`✓ config — ${picked} (load-config pick)`),
@@ -236,20 +243,28 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     };
 
     const nonce = "123e4567-e89b-42d3-a456-426614174000";
-    await click(daemon, `cc-candybar://${VERB_DOCTOR_PROBE}/${nonce}`);
+    await click(
+      daemon,
+      TEST_SIGNER.signLink(`cc-candybar://${VERB_DOCTOR_PROBE}/${nonce}`),
+    );
     clicks += 1;
     const forwardedNonce = "223e4567-e89b-42d3-a456-426614174000";
     await forwarded({
       urlV: URL_FRAME_VERSION,
-      url: `cc-candybar://${VERB_DOCTOR_PROBE}/${forwardedNonce}`,
+      url: TEST_SIGNER.signLink(
+        `cc-candybar://${VERB_DOCTOR_PROBE}/${forwardedNonce}`,
+      ),
     });
     expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
       { nonce, delivery: { kind: "cli" } },
-      { nonce: forwardedNonce, delivery: { kind: "forwarder", urlV: 1 } },
+      {
+        nonce: forwardedNonce,
+        delivery: { kind: "forwarder", urlV: URL_FRAME_VERSION },
+      },
     ]);
 
     // A frame the daemon cannot read is refused on its click event, with the
-    // frame's own facts, since the forwarder reads no answer.
+    // frame's own facts, since a forwarder of these versions reads no answer.
     await forwarded({ urlV: 99, url: "cc-candybar://copy/x" });
     await forwarded({ urlV: 1, url: "https://example.com/" });
     await forwarded({ urlV: 1 });
@@ -261,13 +276,15 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     );
     expect(events[0]).toMatch(/ via=cli verb=doctor-probe .* outcome=ok/);
     expect(events[1]).toMatch(
-      / via=forwarder urlV=1 verb=doctor-probe .* outcome=ok/,
+      new RegExp(
+        ` via=forwarder urlV=${URL_FRAME_VERSION} verb=doctor-probe .* outcome=ok`,
+      ),
     );
     expect(events[2]).toMatch(
-      / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1\)"/,
+      / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1, 2\)"/,
     );
     expect(events[3]).toMatch(
-      / via=forwarder urlV=1 .* outcome=bad-request problems="expected a cc-candybar:\/\/ link, got: https:\/\/example.com\/"/,
+      / via=forwarder urlV=1 .* outcome=bad-request problems="the link carries no signature: it was not drawn by this bar/,
     );
     expect(events[4]).toMatch(
       / via=forwarder urlV=1 .* outcome=bad-request problems="the URL handler's frame carries no url string"/,
@@ -275,7 +292,10 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 
     const SID = "doctor-e2e-2";
     await render(daemon, SID, projectDir);
-    await click(daemon, `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`);
+    await click(
+      daemon,
+      TEST_SIGNER.signLink(`cc-candybar://${VERB_DOCTOR_RUN}/${SID}`),
+    );
     await click(
       daemon,
       urlWriting(
@@ -308,7 +328,7 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 // the link to the forwarder app, which would deliver it to the user's own
 // daemon — replaced by the frame that app writes.
 test("the CLI's probe reads its own link back from the daemon it was delivered to", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
+  const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   // The env it places names this socket, which is where the CLI's send looks.
@@ -316,7 +336,12 @@ test("the CLI's probe reads its own link back from the daemon it was delivered t
   try {
     await daemon.listen(sockPath);
     const facts = await probeUrlHandler({
-      ...productionHandlerProbeEdge(WORLD.launcher, WORLD),
+      // Signed as the CLI signs: with the key file of the daemon it asks.
+      ...productionHandlerProbeEdge(
+        WORLD.launcher,
+        WORLD,
+        linkSignerFromKeyFile(linkKeyFile(stateDir)).signLink,
+      ),
       platform: "darwin",
       // The stand-in for the handler app below delivers to this daemon as
       // the app does: one frame, then hang up, reading no answer.

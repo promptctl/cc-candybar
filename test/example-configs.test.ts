@@ -20,7 +20,7 @@ import { WORLD } from "./helpers/host";
 // moment it lands (no per-file edit).
 
 import { textOf } from "../src/render/frame";
-import { linkUrls } from "./helpers/frame";
+import { linkTexts } from "./helpers/frame";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -86,7 +86,7 @@ describe("shipped example configs (examples/*.json5)", () => {
           fs.copyFileSync(path.join(examplesDir, f), path.join(dir, f));
         }
         const target = path.join(dir, file);
-        const loads = linkUrls(
+        const loads = linkTexts(
           expectClean(file, await checkConfig(WORLD, daemonGates(), target)).rendered,
         )
           .filter((url) => url.startsWith("cc-candybar://load-config/"))

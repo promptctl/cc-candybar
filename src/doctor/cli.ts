@@ -365,7 +365,11 @@ export async function doctorCommandPlan(
           (origin) => loadConfigOnce(world, origin),
           world.host,
         ),
-        productionHandlerProbeEdge(world.launcher, world),
+        productionHandlerProbeEdge(
+          world.launcher,
+          world,
+          linkSignerFromKeyFile(linkKeyFile(stateDir(world.host))).signLink,
+        ),
         () => askDaemon(world),
         world.host.env,
         process.cwd(),

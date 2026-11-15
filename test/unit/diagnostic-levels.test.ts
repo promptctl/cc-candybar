@@ -21,6 +21,7 @@ import {
   DIAGNOSTIC_INFO_COLORS,
   DIAGNOSTIC_WARNING_COLORS,
 } from "../../src/render/diagnostic-style";
+import { TEST_SIGNER } from "../helpers/link-signer";
 
 const SID = "sid-1";
 const sourced = (text: string) => ({ about: text, text, copy: text });
@@ -119,7 +120,7 @@ describe("the handoff line", () => {
       width: 80,
       rows: 20,
       colorCompatibility: "truecolor",
-    });
+    }, TEST_SIGNER);
     const runs = rows.flatMap((row) => row.runs);
     const indicator = runs.findIndex((run) => run.text.startsWith("⚠ 2"));
     expect(indicator).toBeGreaterThan(0);
