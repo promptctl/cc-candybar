@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-753",
+      "ref": "refs/pull/753/merge",
+      "sha": "0492c5ec224408ec0c61acece2bcb01b7a4bff00",
+      "timestamp": "2026-11-15T13:37:14.274Z",
+      "commits": [
+        {
+          "sha": "0492c5ec224408ec0c61acece2bcb01b7a4bff00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T06:36:15-07:00",
+          "message": "Merge ac81d1d16ac7ba66d7621e212978605aa0673598 into f6153274737f840e353302f669b6543916691714\n"
+        },
+        {
+          "sha": "ac81d1d16ac7ba66d7621e212978605aa0673598",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T06:34:52-07:00",
+          "message": "refactor(renderer): the draw reads no host part: its host facts arrive as world state, push arguments and watch pushes (candybar-host-renderer-x96a.gbw)\n\nThe update notice is folded in the renderer from world state, which carries\nthe act state and the act files' read failure beside the update. File-event\ndelivery, the launch lifeline and the latest pipe event are daemon\ndiagnostics the collector stamps into every session's document; the pipe\nevent's hold is judged at the draw's instant. A request event carries the\nfeed facts it draws with, the cache tallies are the host's render event's,\nand the renderer's watches are notices answered by watch pushes, with the\nkeep-or-rebind rule shared by both sides. Only managed storage is left in\nprocess.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f6153274737f840e353302f669b6543916691714",
