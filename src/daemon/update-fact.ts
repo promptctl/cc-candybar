@@ -6,8 +6,7 @@ import type { Update } from "../facts/world-state";
 // [LAW:one-source-of-truth] The update as a fact, stamped once by the watch
 // that owns it (src/daemon/update-notice.ts) and read by every session's
 // document: one change has one instant for every session. A caller with no
-// watch holds a box nothing writes, pending as a watch not yet sampled. Its own
-// module, so the demo's composition holds one without loading the watch.
+// watch holds a box nothing writes, pending as a watch not yet sampled.
 export type UpdateFact = IObservableValue<Fact<Update>>;
 
 export function newUpdateFact(): UpdateFact {

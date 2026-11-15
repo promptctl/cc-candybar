@@ -1,3 +1,4 @@
+import { compareStructural } from "mobx";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
@@ -14,7 +15,7 @@ import type {
   DirTarget,
   Deafness,
 } from "../foundations/watch-targets";
-import { followWatch, sameDeafness } from "../foundations/watch-targets";
+import { followWatch } from "../foundations/watch-targets";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects its log (writes to daemon.log at the requested level); other
@@ -318,7 +319,7 @@ export class WatcherRegistry {
     if (now.kind === "listening") this.tell(dir, { kind: "unknown" });
     else if (
       was.kind === "listening" ||
-      !sameDeafness(was.deafness, now.deafness)
+      !compareStructural(was.deafness, now.deafness)
     )
       this.tell(dir, failedOf(now.deafness));
   }
@@ -375,7 +376,7 @@ export class WatcherRegistry {
       // changes; every period retries a deaf directory, and the same refusal
       // repeated would bury the events around it.
       const deafness: Deafness = { kind: "refused", path: at, reason };
-      if (was?.kind !== "deaf" || !sameDeafness(was.deafness, deafness))
+      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
         this.logger("warn", `watch failed ${at}: ${reason}`);
       return { kind: "deaf", deafness };
     }

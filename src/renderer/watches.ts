@@ -7,10 +7,10 @@
 // answers it: a push whose deafness moved from what the watch held is heard
 // as an `unknown` window, so the holder re-derives what it says of it.
 
+import { compareStructural } from "mobx";
 import type { HostCalls, WatchId } from "../renderer-interface/adapter.js";
 import {
   followWatch,
-  sameDeafnesses,
   type Deafness,
   type HeldWatch,
   type Invalidation,
@@ -73,7 +73,7 @@ export class Watches {
   ): void {
     const watch = this.held.get(id);
     if (watch === undefined) return;
-    const moved = !sameDeafnesses(watch.deaf, deaf);
+    const moved = !compareStructural(watch.deaf, deaf);
     watch.deaf = deaf;
     const window = heard ?? (moved ? { kind: "unknown" } : null);
     if (window !== null) watch.heard(window);

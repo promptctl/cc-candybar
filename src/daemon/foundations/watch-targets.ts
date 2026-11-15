@@ -167,17 +167,6 @@ export interface Deafness {
   readonly reason: string;
 }
 
-// The same deafness: a directory deaf for another reason, or deaf another way,
-// is a change in what the bar must say of it.
-export const sameDeafness = (a: Deafness, b: Deafness): boolean =>
-  a.kind === b.kind && a.path === b.path && a.reason === b.reason;
-
-export const sameDeafnesses = (
-  a: readonly Deafness[],
-  b: readonly Deafness[],
-): boolean =>
-  a.length === b.length && a.every((d, i) => sameDeafness(d, b[i]!));
-
 // [LAW:no-silent-failure] A handle says, live, which of its targets the OS is
 // not listening to, so a consumer whose only refresh is the watch can show
 // the fault.
