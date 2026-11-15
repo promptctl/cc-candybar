@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-760",
+      "ref": "refs/pull/760/merge",
+      "sha": "2e8c1c8b1c0683b7be1222b428d08de9b4a66b55",
+      "timestamp": "2026-11-15T23:02:59.114Z",
+      "commits": [
+        {
+          "sha": "2e8c1c8b1c0683b7be1222b428d08de9b4a66b55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T16:02:00-07:00",
+          "message": "Merge aaec3101cbae740e97b1362515dd40ced8d74d38 into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+        },
+        {
+          "sha": "aaec3101cbae740e97b1362515dd40ced8d74d38",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T16:01:37-07:00",
+          "message": "feat(collector): a watch and a period refresh a session's transcript lanes, and a request waits on its world state (candybar-skeleton-wj0c.zhh)\n\nOne keyed entry per followed session reads every transcript lane (session,\nspeed, context, metrics, activity, cache, auto-compact). A watch on the\ntranscript and on Claude Code's settings file reads them again after a write,\nand a 10 s backstop period catches a dropped event. A request is no longer a\ntrigger: it waits only for its world state's first readings, so a warm\nsession draws at once.\n\n- Each lane's owner records its refresh under the trigger that caused it\n  (first, period, change), and every refresh writes its own line, so a lane\n  that never lands is the one whose line is missing.\n- `request` leaves the refresh triggers; the render event's `refreshed=` field,\n  the adapter's refresh reach and RefreshTimes are gone.\n- Speed takes a sample only when the transcript's stamp moved.\n- `today` leaves the transcript lanes: its fault is the session lane's.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "d713171fe40d61af17150aa2f106f3e7104931cb",
