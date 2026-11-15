@@ -262,7 +262,7 @@ export async function replyTo(
     // observability shouldn't pollute the metric being observed.
     const { stats: drawn } = await renderer.ask(
       { kind: "stats" },
-      instantOf(new Date(clock.now())),
+      instantAt(clock),
     );
     return stay({
       ok: true,
@@ -283,7 +283,7 @@ export async function replyTo(
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
         handlerProbes: handlerProbes.list(),
-        clients: renderSightings.list(instantOf(new Date(clock.now()))),
+        clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest,
         daemon: limits.serving(),
@@ -446,7 +446,7 @@ export async function replyTo(
     }
     const { snapshot } = await renderer.ask(
       { kind: "debug", what: req.what },
-      instantOf(new Date(clock.now())),
+      instantAt(clock),
     );
     return stay({ ok: true, debug: snapshot });
   }

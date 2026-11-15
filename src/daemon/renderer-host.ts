@@ -35,9 +35,9 @@ export interface RendererHost {
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
   deliver(input: EventInput, about: TurnRecord): Promise<TurnOutcome>;
-  // One push, at `at`, answered by its reply. A push that threw, or one
-  // answered by another push's reply, rejects: the caller that awaits it owns
-  // the failure.
+  // One push, at `at`, answered by its reply. A push that threw or rejected,
+  // or one answered by another push's reply, rejects with an Error naming the
+  // renderer and the push: the caller that awaits it owns the failure.
   ask<P extends AdapterPush>(push: P, at: Instant): Promise<ReplyTo<P["kind"]>>;
   // One push nobody awaits: its failure is logged here.
   tell(push: AdapterPush, at: Instant): void;
@@ -148,7 +148,14 @@ export function rendererHost(
     push: P,
     at: Instant,
   ): Promise<ReplyTo<P["kind"]>> => {
-    const output = await renderer.answer({ kind: "adapter", push, at });
+    // A renderer that rejected fails the push as one whose turn threw, so
+    // every failure is said with the renderer and the push it failed.
+    const output = await renderer
+      .answer({ kind: "adapter", push, at })
+      .catch(
+        (thrown: unknown) =>
+          ({ kind: "threw", failure: failureOf(thrown) }) as const,
+      );
     if (output.kind === "threw")
       throw new Error(
         `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`,
@@ -162,6 +169,8 @@ export function rendererHost(
     return output.reply as ReplyTo<P["kind"]>;
   };
   const tell = (push: AdapterPush, at: Instant): void =>
+    // [LAW:types-are-the-program] exception: `ask` rejects only with the
+    // Errors it makes, which no promise type carries.
     void ask(push, at).catch((thrown: unknown) =>
       log("error", (thrown as Error).message),
     );

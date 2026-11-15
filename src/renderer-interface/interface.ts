@@ -16,7 +16,7 @@ import type { Failure } from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "../doctor/sightings";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
-import type { Frame } from "../render/frame";
+import type { WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest } from "./request-context";
@@ -163,7 +163,8 @@ export interface Present {
   readonly session: SessionId;
   readonly surface: "statusline";
   readonly request: RequestId;
-  readonly frame: Frame;
+  // Read through `parseFrame`: its Infinity crosses as null.
+  readonly frame: WireFrame;
 }
 
 export type Effect = Present;

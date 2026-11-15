@@ -161,39 +161,50 @@ export function mainRenderer(
     }
   };
 
+  return rendererOf({
+    // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
+    // after it lands after its writes.
+    adapter: async (input) => {
+      try {
+        return { kind: "replied", reply: pushed(input.push, input.at) };
+      } catch (thrown) {
+        return { kind: "threw", failure: failureOf(thrown) };
+      }
+    },
+    event: async (input) => {
+      const record: RequestFacts = [];
+      const ended = await turn(input.event, input.at, record).then(
+        (effects) => ({ kind: "answered", effects }) as const,
+        // [LAW:single-enforcer] Classified here, where it was thrown: a
+        // class crosses no process.
+        (thrown: unknown) =>
+          ({ kind: "threw", failure: failureOf(thrown) }) as const,
+      );
+      // [LAW:one-source-of-truth] What the renderer needs read: the open
+      // views' subscriptions as they stand when the turn ends, however it
+      // ended.
+      return {
+        ...ended,
+        record,
+        subscriptions: parts.renderCache.subscriptions(),
+      };
+    },
+  });
+}
+
+// [LAW:single-enforcer] The one dispatch from an input to the answer of its
+// kind. Each arm is typed by its own input and output, so an arm answering
+// the other kind's output fails the build, which an overload's body does not.
+export function rendererOf(arms: {
+  readonly event: (input: EventInput) => Promise<RendererOutput>;
+  readonly adapter: (input: AdapterInput) => Promise<AdapterOutput>;
+}): Renderer {
   function answer(input: EventInput): Promise<RendererOutput>;
   function answer(input: AdapterInput): Promise<AdapterOutput>;
-  async function answer(
+  function answer(
     input: RendererInput,
   ): Promise<RendererOutput | AdapterOutput> {
-    switch (input.kind) {
-      case "adapter":
-        // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the
-        // input after it lands after its writes.
-        try {
-          return { kind: "replied", reply: pushed(input.push, input.at) };
-        } catch (thrown) {
-          return { kind: "threw", failure: failureOf(thrown) };
-        }
-      case "event": {
-        const record: RequestFacts = [];
-        const ended = await turn(input.event, input.at, record).then(
-          (effects) => ({ kind: "answered", effects }) as const,
-          // [LAW:single-enforcer] Classified here, where it was thrown: a
-          // class crosses no process.
-          (thrown: unknown) =>
-            ({ kind: "threw", failure: failureOf(thrown) }) as const,
-        );
-        // [LAW:one-source-of-truth] What the renderer needs read: the open
-        // views' subscriptions as they stand when the turn ends, however it
-        // ended.
-        return {
-          ...ended,
-          record,
-          subscriptions: parts.renderCache.subscriptions(),
-        };
-      }
-    }
+    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
   }
   return { answer };
 }

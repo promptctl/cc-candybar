@@ -199,7 +199,7 @@ export function renderFrame(
       statusline: failed,
       evaluated: 0,
       cellBreaks: 0,
-      lanes: null,
+      lanes: viewLanes(parts, sessionId),
       failure: { level, line: `frame ${line}` },
     };
   }

@@ -53,7 +53,8 @@ import { shellWord } from "../shell-word.js";
 import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { LaneSetups, type LaneEdge } from "./lane-setup.js";
 import type { LinkSigner } from "../click/link-signer.js";
-import { instantOf, type Instant } from "../utils/instant.js";
+import { instantAt, type Instant } from "../utils/instant.js";
+import { parseFrame } from "../render/frame.js";
 import { rendererHost } from "./renderer-host.js";
 import { loadMainRenderer } from "../renderer/main.js";
 import { readingsHost } from "./readings.js";
@@ -214,7 +215,8 @@ export interface Daemon {
   // written. A read already under way may finish. It resolves once every
   // teardown step has run, the renderer's included, and its `settled` once the
   // launches and lifeline it ended have ended. `atExit` is what puts the tmux
-  // status lines back: synchronous, because shutdown's exit follows at once.
+  // status lines back: synchronous, so they are back in one step early in the
+  // close, however long the later steps take inside shutdown's backstop.
   close(atExit: TmuxAtExit): Promise<{ readonly settled: Promise<Settled> }>;
 }
 
@@ -231,7 +233,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   } = inputs;
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
-  const instant = (): Instant => instantOf(new Date(clock.now()));
+  const instant = (): Instant => instantAt(clock);
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
   // launcher, and the lane edge's waits.
   const closing = new AbortController();
@@ -452,13 +454,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
   // click — brings its next frame forward.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
-    frame: async (sessionId, fps, at, following, feeds) =>
-      (
-        await parts.renderer.ask(
-          { kind: "frame", session: sessionId, fps, following, feeds },
-          at,
-        )
-      ).frame,
+    frame: async (sessionId, fps, at, following, feeds) => {
+      const { frame } = await parts.renderer.ask(
+        { kind: "frame", session: sessionId, fps, following, feeds },
+        at,
+      );
+      // [LAW:parse-dont-validate] The receiving edge of a feed frame.
+      return frame === null ? null : { ...frame, bar: parseFrame(frame.bar) };
+    },
     lanes: async (sessionId) =>
       (
         await parts.renderer.ask(

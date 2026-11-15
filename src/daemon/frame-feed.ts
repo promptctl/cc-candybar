@@ -103,9 +103,10 @@ export interface FeedDeps<Req> {
   // frame's own push, a bar's own beat — and is pushed for it, so a still bar
   // would never be still.
   // `following` and `feeds` are the feed's own (`following`, `feedsOf`), read
-  // as it asks, so the draw reads no feed. A frame only reads what its sources
-  // stored, so it refreshes nothing; it is drawn in the renderer's turn and
-  // arrives later, and the feed's phase says what happens meanwhile.
+  // as it asks, so the draw reads no feed.
+  // [LAW:effects-at-boundaries] A frame only reads what its sources stored, so
+  // it refreshes nothing; it is drawn in the renderer's turn and arrives
+  // later, and the feed's phase says what happens meanwhile.
   // [LAW:types-are-the-program] Null when the session has no view to draw
   // yet: a frame opens none (src/renderer/render-cache.ts `holdView`), so the
   // feed waits for the event that opens one.
@@ -342,8 +343,16 @@ export class FrameFeeds<Req> {
     sub: Subscriber,
     lanes: LaneSwitches | null,
   ): void {
-    // A daemon that closed while the lanes were out opens no feed.
-    if (this.closed) return;
+    // A daemon that closed while the lanes were out opens no feed: the
+    // subscriber is dropped as the close dropped those it followed.
+    // [LAW:nothing-unseen] Said, so a subscribe never vanishes from the log.
+    if (this.closed) {
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(sessionId)} dropped lane=${sub.lane} daemon-closed`,
+      );
+      return;
+    }
     if (lanes !== null && !lanes[sub.lane]) {
       this.refuse(sessionId, sub);
       return;

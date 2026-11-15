@@ -5,7 +5,10 @@
 // `undefined` crosses, because JSON leaves the key out and the far side reads
 // the field as `undefined` again. A number crosses whatever it counts: a
 // reading of one process's monotonic clock is a number too, so what an
-// `Instant` stands for is the type's to say (src/utils/instant.ts).
+// `Instant` stands for is the type's to say (src/utils/instant.ts). A number
+// crosses only while finite: JSON writes Infinity and NaN as null, and no type
+// tells them from a finite number, so a field that can hold one is spelled as
+// what arrives (`WireFrame`, src/render/frame.ts) and parsed where it lands.
 //
 // `Crosses<T>` is `true` when every part of `T` crosses, and otherwise names
 // each part that does not, so `const X: Crosses<T> = true` fails the build

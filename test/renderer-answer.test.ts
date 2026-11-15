@@ -22,6 +22,8 @@ import type {
   RequestId,
 } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
+import { renderFrame, type RendererParts } from "../src/renderer/draw-bar";
+import { MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { rendererParts } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
@@ -60,6 +62,7 @@ const NO_STATS = { size: 0, hits: 0, misses: 0 };
 // and every line the daemon's log was handed.
 function renderer(verbs?: RendererVerbs): {
   readonly r: Renderer;
+  readonly parts: RendererParts;
   readonly recorded: string[][];
   readonly logged: string[];
   readonly rig: SessionRig;
@@ -87,7 +90,7 @@ function renderer(verbs?: RendererVerbs): {
     recorded.push([...copies.values()]);
     record(sessionId, by, copies);
   };
-  return { r: mainRenderer(parts, NO_PUSHES), recorded, logged, rig };
+  return { r: mainRenderer(parts, NO_PUSHES), parts, recorded, logged, rig };
 }
 
 // A statusline request for the rig's session, through the host's checkpoint.
@@ -253,6 +256,26 @@ describe("a statusline request", () => {
     expect(threw(await done(r, present, true)).failure.message).toMatch(
       /not a present on its way/,
     );
+  });
+});
+
+describe("a feed's frame", () => {
+  test("records what it showed as it is drawn, under the feed, apart from the request's", async () => {
+    const { r, parts, recorded, rig } = renderer();
+    answered(await request({ r, rig }));
+    const by: string[] = [];
+    const record = rig.cache.delivered.bind(rig.cache);
+    rig.cache.delivered = (sessionId, drawer, copies) => {
+      by.push(drawer);
+      record(sessionId, drawer, copies);
+    };
+    const frame = renderFrame(parts, SESSION, MOVING_FPS, AT, {
+      following: new Set(),
+      feeds: UNFOLLOWED_FEEDS,
+    });
+    expect(frame?.failure).toBeNull();
+    expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
+    expect(by).toEqual(["feed"]);
   });
 });
 

@@ -12,7 +12,7 @@ import type { ClientHints, Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { Answered } from "../daemon/foundations/sighting-roles.js";
 import type { StorageKey, RequestId } from "./interface.js";
-import type { Frame } from "../render/frame";
+import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
 import type { Release } from "../utils/holds.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
@@ -143,11 +143,18 @@ export interface FeedFrame {
   // How many strip items dividing cells too wide for a line added.
   readonly cellBreaks: number;
   // The lanes the session's settings switched on as it drew, which the feed's
-  // lane gate reads as the frame goes out: null for a frame that failed,
-  // which read no settings and so ends no lane.
+  // lane gate reads as the frame goes out. A frame that failed reads them from
+  // the view, so a lane switched off while the render throws still ends; null
+  // while the session has no view.
   readonly lanes: LaneSwitches | null;
   readonly failure: LogLine | null;
 }
+
+// A FeedFrame as it crosses a process: its bar's Infinity arrives as null, so
+// the host reads it through `parseFrame`.
+export type WireFeedFrame = Omit<FeedFrame, "bar"> & {
+  readonly bar: WireFrame;
+};
 
 export type Level = "info" | "warn" | "error";
 
@@ -374,22 +381,24 @@ export type AdapterPush =
   | { readonly kind: "close-views" }
   | { readonly kind: "close-session-state" };
 
-// The kinds of push whose reply carries data.
-type ReadingPush = "frame" | "lanes" | "stats" | "debug";
-
-// What each push answers, of its own kind: what it read, or nothing.
-export type AdapterReply =
+// The replies that carry what their push read.
+type Reading =
   // Null while the session has no view.
-  | { readonly kind: "frame"; readonly frame: FeedFrame | null }
+  | { readonly kind: "frame"; readonly frame: WireFeedFrame | null }
   // Null while the session has no view.
   | { readonly kind: "lanes"; readonly lanes: LaneSwitches | null }
   | { readonly kind: "stats"; readonly stats: RendererStats }
-  | { readonly kind: "debug"; readonly snapshot: DebugSnapshot }
+  | { readonly kind: "debug"; readonly snapshot: DebugSnapshot };
+type ReadingPush = Reading["kind"];
+
+// What each push answers, of its own kind: what it read, or nothing.
+export type AdapterReply =
+  | Reading
   | { readonly kind: Exclude<AdapterPush["kind"], ReadingPush> };
 
 // The reply a push of kind `K` answers.
 export type ReplyTo<K extends AdapterPush["kind"]> = K extends ReadingPush
-  ? Extract<AdapterReply, { readonly kind: K }>
+  ? Extract<Reading, { readonly kind: K }>
   : { readonly kind: K };
 
 // [LAW:types-are-the-program] Every push and reply is plain data: the build
