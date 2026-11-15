@@ -4,15 +4,22 @@
     {
       "version": "pr-748",
       "ref": "refs/pull/748/merge",
-      "sha": "34d7ef221ea29874001ec5c83e23272156ed5028",
-      "timestamp": "2026-11-15T00:09:51.373Z",
+      "sha": "f6d8aeeffa50362894d1c0c1f4e0f3706393ffc3",
+      "timestamp": "2026-11-15T00:11:48.858Z",
       "commits": [
         {
-          "sha": "34d7ef221ea29874001ec5c83e23272156ed5028",
+          "sha": "f6d8aeeffa50362894d1c0c1f4e0f3706393ffc3",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T00:08:58Z",
-          "message": "Merge dafdaacfd417a85d60715f34ea441a297c03b310 into 71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3\n"
+          "timestamp": "2026-11-15T00:10:56Z",
+          "message": "Merge c5481c21b60691954901c340bd2c720b306ed167 into 71fcc390ab9296c2d28351a24c8bc5fab3a2d6b3\n"
+        },
+        {
+          "sha": "c5481c21b60691954901c340bd2c720b306ed167",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-14T17:10:36-07:00",
+          "message": "test(protocol): the pin's name says it forces a deliberate edit, not that it tells a breaking bump from an additive one (candybar-step-back-8us0.p1p)\n"
         },
         {
           "sha": "dafdaacfd417a85d60715f34ea441a297c03b310",
