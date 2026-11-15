@@ -64963,15 +64963,17 @@ var fileName = (sessionId2) => sessionFileName(sessionId2);
 var fileOf = (f) => import_node_path30.default.join(f.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 function madeOnce(folder) {
-  let st;
   try {
-    st = fs_default.statSync(folder);
-  } catch (e) {
-    if (e.code !== "ENOENT") throw e;
     fs_default.mkdirSync(folder);
-    return;
+  } catch (e) {
+    let st;
+    try {
+      st = fs_default.statSync(folder);
+    } catch {
+      throw e;
+    }
+    if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
   }
-  if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
 }
 var current = (was, found2) => was.health.kind === "watching" && found2.kind === "found" && found2.identity !== "gone" && was.identity !== "gone" && sameIdentity(found2.identity, was.identity);
 var ManagedStorage = class {
@@ -65205,7 +65207,7 @@ var ManagedStorage = class {
   }
   // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
   // folder still there, is a standing fault: every source read from the
-  // generation reads it, and the folder is marked lost, so the next load's
+  // generation reads it, and the generation ends, so the next load's
   // hold opens a fresh generation. No retry here: the OS refusing a watch
   // (limits, permissions) refuses an immediate retry the same way.
   faulted(watched, cause, reason) {
