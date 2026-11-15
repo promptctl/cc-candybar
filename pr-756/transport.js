@@ -23092,10 +23092,7 @@ var RATE_LIMITS = {
   // twice. Daemon-wide, so two sessions typing in one second collide. Only
   // the typing is limited: a click the pane refused typed
   // nothing, so clicking again once the dialog is closed goes through.
-  "claude-input.type": 1e3,
-  // A renderer that ends as it starts is started again on the next input,
-  // which a feed sends at its frame rate.
-  renderer: 1e3
+  "claude-input.type": 1e3
 };
 function checkRateLimit(lastStartAt, category, now2) {
   const minIntervalMs = RATE_LIMITS[category];
@@ -23338,9 +23335,14 @@ function lines(state, category, stream, ends, heard) {
   });
   stream?.on("data", (chunk3) => {
     if (!open2) return;
-    const parts = (partial + decoder.write(chunk3)).split("\n");
-    partial = parts.pop();
-    for (const line of parts) heard(line);
+    const text4 = decoder.write(chunk3);
+    let from = 0;
+    for (let nl = text4.indexOf("\n"); nl !== -1; nl = text4.indexOf("\n", from)) {
+      heard(partial + text4.slice(from, nl));
+      partial = "";
+      from = nl + 1;
+    }
+    partial += text4.slice(from);
     if (partial.length > MAX_CAPTURED_BYTES) ends.full();
   });
   return {
@@ -23403,7 +23405,7 @@ async function launchWaited(state, opts, io) {
       }
     };
     const stdout2 = io.stdout(state, opts.category, child.stdout, ends);
-    const stderr2 = capture(state, opts.category, child.stderr, ends);
+    const stderr2 = io.stderr(state, opts.category, child.stderr, ends);
     const output = () => ({ stdout: stdout2.take(), stderr: stderr2.take() });
     let settled3 = false;
     let timer = null;
@@ -23538,7 +23540,8 @@ function launchChannel(state, opts, heard) {
   const result = track(
     state,
     launchWaited(state, opts, {
-      stdout: (st, category, stream, ends) => lines(st, category, stream, ends, heard),
+      stdout: (st, category, stream, ends) => lines(st, category, stream, ends, heard.stdout),
+      stderr: (st, category, stream, ends) => lines(st, category, stream, ends, heard.stderr),
       stdin: (writable) => {
         writable.on("error", () => {
         });
@@ -23776,6 +23779,7 @@ function launcherWithState(owner, clock, spawner) {
       state,
       launchWaited(state, opts, {
         stdout: capture,
+        stderr: capture,
         stdin: (input) => feed(input, opts.stdinInput)
       })
     ),
@@ -58603,11 +58607,7 @@ function memoryLimitMb(env2) {
 function memoryLimitBytes(env2) {
   return memoryLimitMb(env2) * BYTES_PER_MB;
 }
-function memoryShares(limitBytes) {
-  const host = Math.floor(limitBytes / 4);
-  return { host, renderer: limitBytes - host };
-}
-var heapCapOf = (shareBytes) => Math.ceil(shareBytes / BYTES_PER_MB) * HEAP_CAP_OVER_RSS;
+var heapCapOf = (limitBytes) => Math.ceil(limitBytes / BYTES_PER_MB) * HEAP_CAP_OVER_RSS;
 var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
 var HEAP_SNAPSHOT_KEEP = 3;
 function readCharge(probed, previous) {
@@ -68455,17 +68455,27 @@ function rendererOf(arms) {
 }
 
 // src/daemon/renderer-supervisor.ts
-var CLOSES = /* @__PURE__ */ new Set([
+var RESTART = {
+  youngMs: 6e4,
+  firstBackoffMs: 1e3,
+  maxBackoffMs: 6e4
+};
+var restartDelayMs = (endedYoung) => endedYoung === 0 ? 0 : Math.min(
+  RESTART.firstBackoffMs * 2 ** (endedYoung - 1),
+  RESTART.maxBackoffMs
+);
+var CARRIED = /* @__PURE__ */ new Set([
   "close-journal",
   "close-views",
-  "close-session-state"
+  "close-session-state",
+  "pin",
+  "unpin"
 ]);
 function superviseRenderer(deps) {
   const { log } = deps;
-  let live = null;
+  let state = { kind: "idle" };
   let generations2 = 0;
-  let cause = { kind: "first" };
-  let closed = false;
+  let endedYoung = 0;
   const pinned = /* @__PURE__ */ new Set();
   let ended = [];
   const push = (scope, push2) => {
@@ -68527,25 +68537,22 @@ function superviseRenderer(deps) {
     };
     return scope;
   };
-  const startOne = () => {
+  const startOne = (cause) => {
     const generation = ++generations2;
     const scope = scopeOf2();
     const link = deps.start(scope.host, generation);
     scope.link = link;
     const startedAt = deps.monotonic();
     const sessions = deps.sessions().map((s) => ({ ...s, pinned: pinned.has(s.worldState.session) }));
-    const started2 = cause;
-    const ready = link.answer({
-      kind: "start",
-      start: { cause: started2, sessions },
-      at: deps.now()
-    }).then(({ output }) => {
-      const failed3 = "kind" in output && output.kind === "threw" ? output.failure : null;
+    const ready = link.answer({ kind: "start", start: { cause, sessions }, at: deps.now() }).then(
+      ({ output }) => "kind" in output && output.kind === "threw" ? output.failure : null,
+      (thrown2) => failureOf(thrown2)
+    ).then((failed3) => {
       log(
         failed3 === null ? "info" : "error",
         eventLine("renderer start", [
           ["generation", String(generation)],
-          ["cause", started2.kind],
+          ["cause", cause.kind],
           ["sessions", String(sessions.length)],
           ["took", `${Math.round(deps.monotonic() - startedAt)}ms`],
           ...failed3 === null ? [] : [["error", failed3.detail]]
@@ -68556,41 +68563,66 @@ function superviseRenderer(deps) {
     });
     void link.ended.then((words2) => {
       scope.dead = true;
+      ended.push(scope);
+      const current2 = state.kind === "live" && state.live.link === link;
+      if (!current2) {
+        log(
+          "info",
+          eventLine("renderer end", [
+            ["generation", String(generation)],
+            ["ended", words2]
+          ])
+        );
+        return;
+      }
+      endedYoung = deps.monotonic() - startedAt < RESTART.youngMs ? endedYoung + 1 : 0;
+      const delay = restartDelayMs(endedYoung);
       log(
-        closed ? "info" : "warn",
+        "warn",
         eventLine("renderer end", [
           ["generation", String(generation)],
-          ["ended", words2]
+          ["ended", words2],
+          ["restart", `${delay}ms`]
         ])
       );
-      if (live?.link !== link) return;
-      live = null;
-      cause = { kind: "crashed", ended: words2 };
-      ended.push(scope);
+      let cancel = () => {
+      };
+      state = { kind: "down", ended: words2, cancel: () => cancel() };
+      cancel = deps.after(delay, () => {
+        state = startOne({ kind: "crashed", ended: words2 });
+      });
     });
-    return { generation, link, scope, ready };
+    return {
+      kind: "live",
+      live: { generation, link, scope, startedAt, ready }
+    };
   };
   const answer2 = async (input) => {
     if (input.kind === "event" && input.event.kind === "effect-done") {
       const of = input.event.of;
-      if (live === null || generationOf(of) !== live.generation)
+      if (state.kind !== "live" || generationOf(of) !== state.live.generation)
         throw new Error(
           `effect ${of} was returned by a renderer that has ended`
         );
     }
-    if (input.kind === "adapter" && CLOSES.has(input.push.kind) && live === null)
-      return { output: { kind: input.push.kind }, hopMs: 0 };
-    if (live === null) {
-      if (closed) throw new Error("the renderer supervisor is closed");
-      live = startOne();
-    }
-    const running = live;
-    await running.ready;
     if (input.kind === "adapter") {
       const { push: push2 } = input;
       if (push2.kind === "pin") pinned.add(push2.session);
       if (push2.kind === "unpin") pinned.delete(push2.session);
+      if (CARRIED.has(push2.kind) && state.kind !== "live")
+        return { output: { kind: push2.kind }, hopMs: 0 };
     }
+    if (state.kind === "idle") state = startOne({ kind: "first" });
+    switch (state.kind) {
+      case "closed":
+        throw new Error("the renderer supervisor is closed");
+      case "down":
+        throw new Error(
+          `no renderer runs: its process ${state.ended}, and another is starting`
+        );
+    }
+    const running = state.live;
+    await running.ready;
     const from = deps.monotonic();
     const { output, tookMs } = await running.link.answer(input);
     return {
@@ -68602,10 +68634,14 @@ function superviseRenderer(deps) {
     // [LAW:types-are-the-program] exception: each input's output is its own
     // kind's, as the renderer answered it; one dispatch cannot name that.
     answer: answer2,
+    arm: () => {
+      if (state.kind === "idle") state = startOne({ kind: "first" });
+    },
     close: async () => {
-      closed = true;
-      const running = live;
-      if (running !== null) await running.link.end();
+      const was = state;
+      state = { kind: "closed" };
+      if (was.kind === "down") was.cancel();
+      if (was.kind === "live") await was.live.link.end();
       for (const gone of ended) gone.release();
       ended = [];
     }
@@ -70235,10 +70271,19 @@ function createDaemon(inputs) {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing()
+        launcher: [...launcher.standing(), ...rendererLauncher.standing()]
       })
     );
   }
+  const observeWarnings = (whose) => (change) => {
+    if (change.kind === "launch-pipes") log("warn", `${whose}${change.text}`);
+    else
+      log(
+        change.fault === null ? "info" : "warn",
+        change.fault === null ? `${whose}launch lifeline running again` : `${whose}launch lifeline ${change.fault}; the next launch starts another`
+      );
+    restateFaults();
+  };
   const launcher = inputs.launcher({
     inherited: host.env,
     stats: stats.launchStats,
@@ -70246,28 +70291,16 @@ function createDaemon(inputs) {
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
     // hold them against.
     now: instant,
-    // [LAW:no-silent-failure] Each change in whether what the daemon launches
-    // dies with it, and each pipe event, is said in daemon.log, and every
-    // session's world state carries it, so its warning comes on frames too.
-    observeWarnings: (change) => {
-      if (change.kind === "launch-pipes") log("warn", change.text);
-      else
-        log(
-          change.fault === null ? "info" : "warn",
-          change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
-        );
-      restateFaults();
-    }
+    observeWarnings: observeWarnings("")
   });
   const probe2 = inputs.probe(launcher);
-  const shares2 = memoryShares(memoryLimitBytes2);
   const rendererClosing = new AbortController();
   const rendererLauncher = inputs.launcher({
     inherited: host.env,
     stats: stats.launchStats,
     signal: rendererClosing.signal,
     now: instant,
-    observeWarnings: () => restateFaults()
+    observeWarnings: observeWarnings("renderer ")
   });
   const limits = makeLimits({
     ...inputs.limits({
@@ -70276,7 +70309,10 @@ function createDaemon(inputs) {
       launcher,
       log
     }),
-    limitBytes: shares2.host
+    // [LAW:one-type-per-behavior] Each process the bars are served by is
+    // judged against the one published limit by its own backstop: a leak
+    // lives in one of them, and each is charged apart.
+    limitBytes: memoryLimitBytes2
   });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
@@ -70505,7 +70541,7 @@ function createDaemon(inputs) {
       clock,
       now: instant,
       host,
-      memoryShareBytes: shares2.renderer
+      memoryLimitBytes: memoryLimitBytes2
     }),
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice, or an awaited call.
@@ -70565,6 +70601,7 @@ function createDaemon(inputs) {
     monotonic: () => clock.monotonic(),
     now: instant,
     defer: (run3) => void clock.defer(run3),
+    after: (ms, run3) => clock.after(ms, run3, { unref: true }),
     log
   });
   const parts = {
@@ -70628,6 +70665,7 @@ function createDaemon(inputs) {
       binaryWatch.arm();
       updateWatch.arm();
       limits.arm();
+      renderer.arm();
     },
     async close(atExit) {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
@@ -71599,7 +71637,9 @@ function wireRenderer(channel, host) {
           }
           return;
         }
-        void Promise.resolve().then(() => reachInto(host, path43, args)).then(
+        void new Promise(
+          (resolve) => resolve(reachInto(host, path43, args))
+        ).then(
           (value) => answerCall(id2, { ok: true, value }),
           (thrown2) => answerCall(id2, { ok: false, failure: failureOf(thrown2) })
         );
@@ -79273,12 +79313,13 @@ async function foldEffects(rawValue, ctx, gathered) {
     try {
       await perform(leaf, value, ctx, i === 0 ? gathered : void 0);
     } catch (e) {
-      if (e instanceof DaemonClosing) {
+      const { kind } = failureOf(e);
+      if (kind === "closing") {
         if (errors2.length > 0)
           ctx.log("warn", `dispatch: ${errors2.join("; ")}`);
         throw e;
       }
-      if (!(e instanceof BadVerbArgs)) operational = true;
+      if (kind !== "bad-request") operational = true;
       errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
@@ -87070,11 +87111,29 @@ function mainRenderer(parts, generation, pushed, started2) {
     // sources, and the host's set, whole, releases none.
     start: async (input) => {
       const record2 = [];
+      const { cause, sessions } = input.start;
       return ended(
         (async () => {
-          for (const { context, worldState } of input.start.sessions)
-            configureSession(parts, context, worldState, input.at, record2);
-          started2(input.start, input.at);
+          const failed3 = [];
+          for (const session of sessions)
+            try {
+              configureSession(
+                parts,
+                session.context,
+                session.worldState,
+                input.at,
+                record2
+              );
+              started2(session, cause, input.at);
+            } catch (thrown2) {
+              failed3.push(
+                `${session.worldState.session}: ${failureOf(thrown2).detail}`
+              );
+            }
+          if (failed3.length > 0)
+            throw new Error(
+              `the start opened ${sessions.length - failed3.length} of ${sessions.length} sessions; ${failed3.join("; ")}`
+            );
           return [];
         })(),
         record2
@@ -87335,18 +87394,16 @@ function startOver(inputs, sessionState, history, host) {
         return { kind: "close-session-state" };
     }
   };
-  const started2 = (start, at) => {
-    for (const { context, pinned } of start.sessions) {
-      const sessionId2 = context.hookData.session_id;
-      if (pinned) pin(sessionId2);
-      if (start.cause.kind === "crashed")
-        holdClickError(
-          sessionState,
-          sessionId2,
-          `the renderer restarted: its process ${start.cause.ended}; open menus and armed confirms were lost`,
-          at
-        );
-    }
+  const started2 = ({ context, pinned }, cause, at) => {
+    const sessionId2 = context.hookData.session_id;
+    if (pinned) pin(sessionId2);
+    if (cause.kind === "crashed")
+      holdClickError(
+        sessionState,
+        sessionId2,
+        `the renderer restarted: its process ${cause.ended}; open menus and armed confirms were lost`,
+        at
+      );
   };
   return mainRenderer(
     { ...parts, verbs: verbsOver(verbCtx, host.clicks) },
@@ -87373,6 +87430,7 @@ function debugOf(view, what) {
 
 // src/daemon/renderer-links.ts
 var endedOf = (result) => result.ok ? `exited with code ${result.exitCode}` : whyFailed(result);
+var END_GRACE_MS = 100;
 function processRenderers(paths2) {
   return (own2) => (host, generation) => {
     const boot = {
@@ -87380,10 +87438,12 @@ function processRenderers(paths2) {
       stateDir: paths2.state,
       sessionState: paths2.sessionState,
       settingsHistory: paths2.settingsHistory,
-      memoryShareBytes: own2.memoryShareBytes,
-      bundle: own2.bundle.path
+      memoryLimitBytes: own2.memoryLimitBytes,
+      bundle: own2.bundle.path,
+      digest: own2.bundle.digest
     };
     const [bin, ...flags] = own2.bundle.node;
+    const signal = new AbortController();
     let heard = () => {
     };
     const channel = own2.launcher.launchChannel(
@@ -87391,20 +87451,27 @@ function processRenderers(paths2) {
         bin,
         args: [
           ...flags,
-          `--max-old-space-size=${heapCapOf(own2.memoryShareBytes)}`,
+          `--max-old-space-size=${heapCapOf(own2.memoryLimitBytes)}`,
           own2.bundle.entry,
           "renderer",
           JSON.stringify(boot)
         ],
-        category: "renderer"
+        category: "renderer",
+        signal: signal.signal
       },
-      (line) => {
-        try {
-          heard(line);
-        } catch (thrown2) {
-          own2.log("error", `renderer line refused: ${String(thrown2)}`);
-          channel.close();
-        }
+      {
+        stdout: (line) => {
+          try {
+            heard(line);
+          } catch (thrown2) {
+            own2.log("error", `renderer line refused: ${String(thrown2)}`);
+            channel.close();
+          }
+        },
+        // [LAW:no-silent-failure] What it says before it reaches the host's
+        // log, or past it (node's own warnings, a crash's trace), is logged
+        // as it is said.
+        stderr: (line) => own2.log("warn", `renderer stderr: ${line}`)
       }
     );
     const wire = wireRenderer(
@@ -87419,8 +87486,6 @@ function processRenderers(paths2) {
     const ended = channel.result.then((result) => {
       const words2 = endedOf(result);
       wire.fail(new Error(`the renderer's process ${words2}`));
-      const said = result.stderr.trim();
-      if (said !== "") own2.log("warn", `renderer stderr: ${said}`);
       return words2;
     });
     return {
@@ -87428,37 +87493,49 @@ function processRenderers(paths2) {
       ended,
       end: async () => {
         channel.close();
+        const cancel = own2.launcher.clock.after(
+          END_GRACE_MS,
+          () => signal.abort(
+            new Error(
+              `the renderer did not end ${END_GRACE_MS}ms after its stdin closed`
+            )
+          )
+        );
         await ended;
+        cancel();
       }
     };
   };
 }
 function inProcessRenderers(parts) {
-  return (own2) => (host, generation) => {
-    const renderer = loadMainRenderer({
-      generation,
-      clock: own2.clock,
-      now: own2.now,
-      storage: { ...parts.storage(own2.log), doctor: parts.doctorStores },
-      linkSigner: parts.linkSigner,
-      stateDir: parts.stateDir,
-      locations: locations(own2.host),
-      env: own2.host.env,
-      home: own2.host.home,
-      gates: parts.gates,
-      bundle: own2.bundle.path,
-      memoryLimitBytes: own2.memoryShareBytes
-    }).start(host);
-    let end;
-    const ended = new Promise((resolve) => end = resolve);
-    return {
-      answer: async (input) => {
-        const from = own2.clock.monotonic();
-        const output = await renderer.answer(input);
-        return { output, tookMs: own2.clock.monotonic() - from };
-      },
-      ended,
-      end: async () => end("ended with its daemon")
+  return (own2) => {
+    const storage = { ...parts.storage(own2.log), doctor: parts.doctorStores };
+    return (host, generation) => {
+      const renderer = loadMainRenderer({
+        generation,
+        clock: own2.clock,
+        now: own2.now,
+        storage,
+        linkSigner: parts.linkSigner,
+        stateDir: parts.stateDir,
+        locations: locations(own2.host),
+        env: own2.host.env,
+        home: own2.host.home,
+        gates: parts.gates,
+        bundle: own2.bundle.path,
+        memoryLimitBytes: own2.memoryLimitBytes
+      }).start(host);
+      let end;
+      const ended = new Promise((resolve) => end = resolve);
+      return {
+        answer: async (input) => {
+          const from = own2.clock.monotonic();
+          const output = await renderer.answer(input);
+          return { output, tookMs: own2.clock.monotonic() - from };
+        },
+        ended,
+        end: async () => end("ended with its daemon")
+      };
     };
   };
 }

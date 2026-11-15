@@ -4,15 +4,22 @@
     {
       "version": "pr-756",
       "ref": "refs/pull/756/merge",
-      "sha": "f260d7d80f0b77135425de242786310ce1065e98",
-      "timestamp": "2026-11-15T16:43:30.060Z",
+      "sha": "5c60ce0f67e246573d22be06721043323d135344",
+      "timestamp": "2026-11-15T17:07:25.785Z",
       "commits": [
         {
-          "sha": "f260d7d80f0b77135425de242786310ce1065e98",
+          "sha": "5c60ce0f67e246573d22be06721043323d135344",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T09:42:32-07:00",
-          "message": "Merge 5448d64185a932d240b331130037c0a6dcf1e5e7 into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+          "timestamp": "2026-11-15T17:06:32Z",
+          "message": "Merge 72d8782ef02f47367f4c1a0da11ef8d9490a107d into 3d01afd006325c4b6298b3fd91cf2b77b5fae42b\n"
+        },
+        {
+          "sha": "72d8782ef02f47367f4c1a0da11ef8d9490a107d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T10:06:21-07:00",
+          "message": "fix(renderer): the supervisor starts its renderer as the daemon arms and paces restarts by backoff (candybar-host-renderer-x96a.v58)\n\nAnswers the high review of the renderer's process split:\n\n- The supervisor is a state machine (idle, live, down, closed). It starts\n  the renderer on arm, off the first request's path, and restarts one that\n  ended after an exponential backoff while renderers in a row end young.\n  An input meanwhile fails with how the last one ended and spawns nothing;\n  pins and teardown steps are carried by the next start. The launcher's\n  renderer rate limit is gone: the supervisor owns the pacing.\n- Pins and unpins are recorded as they arrive, so one that lands while a\n  renderer is dying is not lost.\n- A host call's failure keeps its kind across the wire, and the renderer's\n  click dispatch classifies by failureOf rather than instanceof.\n- A call reach runs as its line arrives, in order with the notices after it.\n- A renderer refuses a host of another build (the boot carries the digest).\n- The renderer's stderr is logged line by line, not captured for its life;\n  the channel's line splitter scans each chunk once.\n- The renderer launcher's lifeline faults are logged and reach the world.\n- A renderer that does not end on stdin close is signalled after a grace,\n  so the teardown cannot hang on it.\n- A renderer start opens each session on its own.\n- The renderer flushes its session state on every exit path.\n- Each process is judged against the whole published limit: a fixed split\n  put the host under a node baseline at a lowered limit.\n- An in-process renderer loads its storage as the daemon is built.\n- hosted() moves to the test helpers; dropped law markers are restored.\n"
         },
         {
           "sha": "5448d64185a932d240b331130037c0a6dcf1e5e7",
