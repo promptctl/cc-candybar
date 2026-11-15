@@ -137,8 +137,7 @@ describe("daemon pool", () => {
 // [LAW:verifiable-goals] The ceiling holds at the spawn: a process the pool has
 // no slot for never starts. What that needs is a process and a slot, not a
 // daemon, so each spawn runs a stand-in that leaves a marker and sleeps. It is
-// `/bin/sh -c` because the helper appends `daemon`, which node would read as its
-// subcommand and the ledger would count as a real start. To `sh -c` it is `$0`.
+// `/bin/sh -c`, which takes the `daemon` the helper appends as `$0`.
 // Pinned to an isolated size-2 pool, so it never contends with the suite's spawns.
 describe("the pool holds a spawn to its ceiling", () => {
   test("a 3rd spawn starts nothing until a slot frees, on a pool sized 2", async () => {

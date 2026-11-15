@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 import { withStamp } from "../scripts/version-stamp.cjs";
 
@@ -55,7 +55,9 @@ describe("PACKAGE_VERSION", () => {
 });
 
 test("the stamp's preload keeps what NODE_OPTIONS already held", () => {
-  const preload = `--import=${pathToFileURL(join(process.cwd(), "scripts", "version-stamp.cjs")).href}`;
-  expect(withStamp("--trace-warnings")).toBe(`--trace-warnings ${preload}`);
+  const stamp = require.resolve("../scripts/version-stamp.cjs");
+  const [kept, preload, ...rest] = withStamp("--trace-warnings").split(" ");
+  expect([kept, rest]).toEqual(["--trace-warnings", []]);
+  expect(fileURLToPath(preload!.replace(/^--import=/, ""))).toBe(stamp);
   expect(withStamp(undefined)).toBe(preload);
 });
