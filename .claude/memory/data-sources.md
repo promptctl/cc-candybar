@@ -56,7 +56,7 @@ Per-session usage records live in one store. Session totals and today's total ar
 
 A transcript's change stamp is its mtime plus its size, because an append within one mtime tick changes only the size.
 
-Every lane read from a session's transcript, and the auto-compact window read from its Claude Code settings, is one keyed source per session, read again when a watch on either file hears a write and on a backstop period for an event the OS dropped. A request is not a trigger: a warm session's request draws what is held, which the watch made current before Claude Code's next tick. Each lane's owner gates its read on its file's stamp, so the period over a quiet transcript reads nothing. Speed takes a sample only when the stamp moved, because a sample per period would fill the ring with idle pairs and push the last turn of work out of the burn-rate history.
+Every lane read from a session's transcript, and the auto-compact window read from its Claude Code settings, is one keyed source per session, read again when a watch on either file hears a write and on a backstop period for an event the OS dropped. A request is not a trigger: a warm session's request draws what is held, which the watch made current before Claude Code's next tick. Each lane's owner gates its read on its file's stamp, so the period over a quiet transcript reads nothing. Speed takes a sample only when the stamp moved, because a sample per period would fill the ring with idle pairs and push the last turn of work out of the burn-rate history. So no sample ends an idle session's rate; the draw does, against its own instant.
 
 ## Transcript folds are incremental
 

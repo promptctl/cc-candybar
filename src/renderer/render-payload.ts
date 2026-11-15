@@ -77,7 +77,7 @@ import {
   type ValuedField,
   type ValuedGlobals,
 } from "../config/globals-fields.js";
-import { type Instant } from "../utils/instant.js";
+import { dateOf, type Instant } from "../utils/instant.js";
 import type { Fact } from "../facts/fact.js";
 import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
@@ -292,7 +292,7 @@ export type DrawnPayload = RenderPayloadOf<Pending>;
 // [LAW:types-are-the-program] What a view keeps of it: everything but the
 // facts of the draw's own instant (DRAW_PROJECTIONS, which each draw hands
 // its binding), so no stored value moves with the clock.
-export type ViewPayload = Omit<DrawnPayload, "feeds" | "today">;
+export type ViewPayload = Omit<DrawnPayload, "feeds" | "today" | "speed">;
 // The control's facts (src/segments/autocompact.ts) — or the refusal that the
 // settings file could not be read, carried as text, so the control says why
 // it cannot show the window.
@@ -813,7 +813,6 @@ export function composePayload(
     metrics: metricsOver(unstamped(built.metrics), hookData),
     activity: unstamped(built.activity),
     cache: unstamped(built.cache),
-    speed: unstamped(built.speed),
     autoCompact: unstamped(built.autocompact),
     git: unstamped(built.git),
     pr: unstamped(built.pr),
@@ -883,13 +882,6 @@ export function composePayload(
   const burn: BurnPayload | Pending | undefined =
     firstPending(lanes.usage, lanes.metrics) ??
     burnOf(valueOf(lanes.usage)?.cost, valueOf(lanes.metrics)?.sessionDuration);
-  // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
-  // history fold independently from one observation — either can be present
-  // without the other (a fresh burst has rates but a one-sample history; an
-  // idle-after-burst session has a history but no current rate). Merge
-  // whatever each yields; the whole `speed` key drops only when both are
-  // absent.
-  const speedPayload = over(lanes.speed, speedPayloadOf);
   // [LAW:types-are-the-program] Partial projections so absent provider data
   // travels as missing fields all the way to the inputs. Each provider's
   // null sub-fields become absent keys here; an input's fallback chain
@@ -979,7 +971,6 @@ export function composePayload(
     resumeCommand: resumeCommand(workspace, sessionId, hints.claudeConfigDir),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(burn !== undefined && { burn }),
-    ...(speedPayload !== undefined && { speed: speedPayload }),
     ...(fiveHour !== undefined && {
       block: {
         // [LAW:one-source-of-truth] Both fields read straight from the
@@ -1108,8 +1099,22 @@ function burnOf(
   return costPerHour === undefined ? undefined : { costPerHour };
 }
 
-function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
-  const rates = projectSpeed(obs);
+// [LAW:one-source-of-truth] `speed` at a draw's instant: a rate is the burn
+// between the last two samples, which says nothing of now once the draw is
+// further past the last sample than one sample window, so an idle session's
+// rate ends with no sample taken (DRAW_PROJECTIONS). The rates and the
+// burn-rate history fold independently from one observation — an
+// idle-after-burst session has a history but no current rate — and the whole
+// `speed` key drops only when both are absent.
+export function speedOf(
+  fact: Reading<SpeedObservation>,
+  at: Instant,
+): SpeedPayload | Pending | undefined {
+  if (fact.kind === "pending") return pendingOf(fact.why);
+  if (fact.kind !== "ok") return undefined;
+  const obs = fact.value;
+  const current = dateOf(at).getTime() - obs.cur.atMs <= MAX_SPEED_SAMPLE_MS;
+  const rates = current ? projectSpeed(obs) : undefined;
   const history = projectSpeedHistory(obs);
   return rates !== undefined || history !== undefined
     ? { ...rates, ...(history !== undefined && { history }) }

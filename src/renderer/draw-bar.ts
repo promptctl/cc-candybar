@@ -44,6 +44,7 @@ import {
   sourcesFactOf,
   settleWorld,
   todayOf,
+  speedOf,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
@@ -685,6 +686,7 @@ export function drawRender(
     drawing,
     feeds,
     today: todayOf(document.builtins.today, at),
+    speed: speedOf(document.builtins.speed, at),
   };
   const metrics = isPending(payload.metrics) ? undefined : payload.metrics;
   noteFacts(

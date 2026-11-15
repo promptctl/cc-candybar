@@ -186,7 +186,6 @@ describe("a frame's payload", () => {
     expect(payload.tmux).toEqual({ pane: "%7", session: pendingOf("unread") });
     for (const lane of [
       payload.session,
-      payload.speed,
       payload.context,
       payload.metrics,
       payload.activity,

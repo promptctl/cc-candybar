@@ -17,20 +17,16 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { projectTokensPerSecond } from "../src/renderer/render-payload";
-import { type RenderPayloadDeps } from "../src/daemon/readings";
-import { type EffectiveGlobals } from "../src/config/effective-globals";
-import { globalsFor } from "./helpers/selection";
-import type { ClientHints } from "../src/daemon/foundations/protocol";
+import {
+  projectTokensPerSecond,
+  speedOf,
+} from "../src/renderer/render-payload";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
-import type { ClaudeHookData } from "../src/utils/claude";
-import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
+import { failed, ok, pendingOf } from "../src/utils/outcome";
 import { validateConfig } from "./helpers/parse-and-validate";
 import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -39,18 +35,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
-import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { instantOf } from "../src/utils/instant";
-import {
-  absentOwners,
-  fakeContext,
-  fakeGit,
-  fakeMetrics,
-  fakeTmux,
-  fakeUsage,
-  requestPayload,
-  settled,
-} from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -292,181 +277,73 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
   });
 });
 
-// ─── payloadOf — speed lane ──────────────────────────────────────────
+// ─── speedOf — the draw's projection ─────────────────────────────────────────
 
-function depsWith(
-  overrides: Partial<RenderPayloadDeps> = {},
-): RenderPayloadDeps {
-  return {
-    ...absentOwners(),
-    gitProvider: fakeGit(async () => ABSENT),
-    usageStore: fakeUsage({
-      usage: async () =>
-        ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
-      today: () => ABSENT,
-      speed: async () => {
-        const prev = { input: 1000, output: 1000, total: 2000, atMs: 0 };
-        const cur = { input: 1000, output: 1500, total: 2500, atMs: 1000 };
-        return ok({ prev, cur, samples: [prev, cur] });
-      },
-    }),
-    contextProvider: fakeContext(async () => ABSENT),
-    metricsProvider: fakeMetrics(async () => ABSENT),
-    tmuxService: fakeTmux(async () => ABSENT),
-    log: () => {},
-    history: () => EMPTY_HISTORY_DEPTH,
-    navigation: () => 0,
-    feeds: () => UNFOLLOWED_FEEDS,
-    ...overrides,
-  } as unknown as RenderPayloadDeps;
-}
+const sample = (output: number, atMs: number) => ({
+  input: 1000,
+  output,
+  total: 1000 + output,
+  atMs,
+});
 
-// The daemon-resolved effective globals; these speed-lane tests don't
-// exercise them, so any well-formed struct satisfies the required argument.
-// No client hints: these fixtures exercise the daemon-side folds, not the wire
-// boundary. An empty object is the honest "this render carried no hints"
-// (the shape an old client produces), so `host.ssh` stays absent throughout.
-const NO_HINTS: ClientHints = {};
+describe("speedOf — the draw's projection", () => {
+  const at = (ms: number) => instantOf(new Date(ms));
 
-const EFFECTIVE_GLOBALS: EffectiveGlobals = globalsFor(DEFAULT_DSL_CONFIG);
-
-function hook(): ClaudeHookData {
-  return {
-    hook_event_name: "Status",
-    session_id: "speed-test",
-    transcript_path: "/no/such/transcript.jsonl",
-    cwd: "/tmp",
-    model: { id: "x", display_name: "x" },
-    workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
-  } as unknown as ClaudeHookData;
-}
-
-describe("payloadOf — speed lane", () => {
-  test("projectable: output/total rates land; idle input lane is absent", async () => {
-    const payload = await requestPayload(
-      hook(),
-      instantOf(new Date(1000)),
-      depsWith(),
-      undefined,
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
+  test("projectable: output/total rates land; idle input lane is absent", () => {
+    const prev = sample(1000, 0);
+    const cur = sample(1500, 1000);
+    const speed = speedOf(ok({ prev, cur, samples: [prev, cur] }), at(1000));
     // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
-    expect(settled(payload.speed)?.output).toBe(500);
-    expect(settled(payload.speed)?.total).toBe(500);
-    expect(settled(payload.speed)?.input).toBeUndefined();
+    expect(speed).toEqual({ output: 500, total: 500, history: "500" });
   });
 
-  test("first render (no prior sample) ⇒ no speed key, never a fabricated rate", async () => {
-    const payload = await requestPayload(
-      hook(),
-      instantOf(new Date(1000)),
-      depsWith({
-        usageStore: fakeUsage({
-          usage: async () =>
-            ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
-          today: () => ABSENT,
-          speed: async () => {
-            const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
-            return ok({ cur, samples: [cur] });
-          },
-        }) as unknown as RenderPayloadDeps["usageStore"],
-      }),
-      undefined,
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
-    expect(payload.speed).toBeUndefined();
+  test("an idle session's rate ends a sample window after its last sample, and its history stays", () => {
+    const prev = sample(1000, 0);
+    const cur = sample(1500, 1000);
+    const obs = ok({ prev, cur, samples: [prev, cur] });
+    expect(speedOf(obs, at(11_000))).toMatchObject({ total: 500 });
+    expect(speedOf(obs, at(11_001))).toEqual({ history: "500" });
   });
 
-  test("burn-rate history projects each adjacent total-lane pair; idle gaps are 0", async () => {
-    const payload = await requestPayload(
-      hook(),
-      instantOf(new Date(1000)),
-      depsWith({
-        usageStore: fakeUsage({
-          usage: async () =>
-            ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
-          today: () => ABSENT,
-          speed: async () => {
-            // total/atMs: 0@0, 100@1s (+100/s), 100@2s (idle ⇒ 0), 400@3s (+300/s).
-            const samples = [
-              { input: 0, output: 0, total: 0, atMs: 0 },
-              { input: 0, output: 100, total: 100, atMs: 1000 },
-              { input: 0, output: 100, total: 100, atMs: 2000 },
-              { input: 0, output: 400, total: 400, atMs: 3000 },
-            ];
-            return ok({
-              prev: samples[2],
-              cur: samples[3]!,
-              samples,
-            });
-          },
-        }) as unknown as RenderPayloadDeps["usageStore"],
-      }),
-      undefined,
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
-    );
-    expect(settled(payload.speed)?.history).toBe("100,0,300");
+  test("first sample (no prior) ⇒ no speed key, never a fabricated rate", () => {
+    const cur = sample(5, 1000);
+    expect(speedOf(ok({ cur, samples: [cur] }), at(1000))).toBeUndefined();
   });
 
-  test("history skips unmeasurable (out-of-window) pairs instead of fabricating a 0 bar", async () => {
-    const payload = await requestPayload(
-      hook(),
-      instantOf(new Date(1000)),
-      depsWith({
-        usageStore: fakeUsage({
-          usage: async () =>
-            ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
-          today: () => ABSENT,
-          speed: async () => {
-            // total/atMs: 0@0, 100@1s (+100/s, in-window), 400@30s (29s gap ⇒
-            // stale, out-of-window), 410@30.005s (5ms ⇒ rapid, out-of-window).
-            const samples = [
-              { input: 0, output: 0, total: 0, atMs: 0 },
-              { input: 0, output: 100, total: 100, atMs: 1000 },
-              { input: 0, output: 400, total: 400, atMs: 30000 },
-              { input: 0, output: 410, total: 410, atMs: 30005 },
-            ];
-            return ok({ prev: samples[2], cur: samples[3]!, samples });
-          },
-        }) as unknown as RenderPayloadDeps["usageStore"],
-      }),
-      undefined,
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
+  test("burn-rate history projects each adjacent total-lane pair; idle gaps are 0", () => {
+    // total/atMs: +100/s, idle ⇒ 0, +300/s.
+    const samples = [
+      sample(0, 0),
+      sample(100, 1000),
+      sample(100, 2000),
+      sample(400, 3000),
+    ];
+    const speed = speedOf(
+      ok({ prev: samples[2], cur: samples[3]!, samples }),
+      at(3000),
     );
-    // Only the single in-window pair survives; the stale and rapid gaps are
-    // dropped, never shown as 0.
-    expect(settled(payload.speed)?.history).toBe("100");
+    expect(speed).toMatchObject({ history: "100,0,300" });
   });
 
-  test("a single-sample ring yields no history (needs two samples for one bar)", async () => {
-    const payload = await requestPayload(
-      hook(),
-      instantOf(new Date(1000)),
-      depsWith({
-        usageStore: fakeUsage({
-          usage: async () =>
-            ok({ calculatedCost: 1, tokens: 1500, tokenBreakdown: null }),
-          today: () => ABSENT,
-          speed: async () => {
-            const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
-            return ok({ cur, samples: [cur] });
-          },
-        }) as unknown as RenderPayloadDeps["usageStore"],
-      }),
-      undefined,
-      EFFECTIVE_GLOBALS,
-      NO_HINTS,
-      NO_CONFIG_FILE,
+  test("history skips unmeasurable (out-of-window) pairs instead of fabricating a 0 bar", () => {
+    // +100/s in-window, a 29s stale gap, then a 5ms rapid pair: only the
+    // first survives, never shown as 0.
+    const samples = [
+      sample(0, 0),
+      sample(100, 1000),
+      sample(400, 30_000),
+      sample(410, 30_005),
+    ];
+    const speed = speedOf(
+      ok({ prev: samples[2], cur: samples[3]!, samples }),
+      at(30_005),
     );
-    expect(payload.speed).toBeUndefined();
+    expect(speed).toEqual({ history: "100" });
+  });
+
+  test("a pending observation draws pending; a failed one draws nothing", () => {
+    expect(speedOf(pendingOf("unread"), at(0))).toEqual(pendingOf("unread"));
+    expect(speedOf(failed("parse", "read"), at(0))).toBeUndefined();
   });
 });
 
