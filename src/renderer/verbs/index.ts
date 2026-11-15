@@ -269,7 +269,7 @@ export interface DaemonContext {
   // Reload that config from disk now, so the next render reads what a click
   // just wrote rather than waiting on the file watcher.
   readonly reloadConfig: (origin: RenderOrigin) => void;
-  // The storage key of each source that config declares, from the same
+  // The storage folder of each source that config declares, from the same
   // render state: what a `run` supersedes.
   readonly sourcesFor: (origin: RenderOrigin) => DeclaredSources;
   // [LAW:single-enforcer] The signer every `run` link was drawn with: a link
@@ -1765,10 +1765,10 @@ function runOf(
     // The bundled config's runs go in the user's home.
     cwd: decl.cwd ?? ctx.locations.home,
     // The loader proved every name a declared source of this config, whose
-    // state holds its key.
+    // state holds its folder.
     refreshes: decl.refreshes.map((name) => ({
       name,
-      storage: sources.get(name)!,
+      folder: sources.get(name)!,
     })),
   };
 }

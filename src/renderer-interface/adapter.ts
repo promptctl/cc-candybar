@@ -2,18 +2,15 @@
 // host, spelled in shared types. The host's parts satisfy `AdapterToHost`
 // structurally where it calls the renderer's start, so no renderer file names
 // a host type. The host reaches the renderer only by an `AdapterPush`, plain
-// data a process can carry, answered by its `AdapterReply`. Each entry is a
-// reach a later step removes: in process it is a call nobody counts, so the
-// list is what shows the work left.
+// data a process can carry, answered by its `AdapterReply`.
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { ClientHints, Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { Answered } from "../daemon/foundations/sighting-roles.js";
-import type { StorageKey, RequestId } from "./interface.js";
+import type { RequestId } from "./interface.js";
 import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
-import type { Release } from "../utils/holds.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
 import type { Crosses, Reaches } from "./crosses.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -46,6 +43,11 @@ import type { DoctorMachineEdge } from "../doctor/ports.js";
 declare const WATCH_ID: unique symbol;
 export type WatchId = number & { readonly [WATCH_ID]: true };
 
+// A render state's hold on its storage folders, named by the id the renderer
+// minted.
+declare const STORAGE_HOLD_ID: unique symbol;
+export type StorageHoldId = number & { readonly [STORAGE_HOLD_ID]: true };
+
 export interface LaneSession {
   readonly sessionId: SessionId;
   readonly hints: ClientHints;
@@ -60,11 +62,11 @@ export interface LaneSession {
   readonly answered: Answered;
 }
 
-// A source a run makes stale: its full name, for the event, and its file's key
-// in the storage owner.
+// A source a run makes stale: its full name, for the event, and the storage
+// folder its file is in.
 export interface RunRefresh {
   readonly name: string;
-  readonly storage: StorageKey;
+  readonly folder: string;
 }
 
 // [LAW:types-are-the-program] One run, as the verb hands it over: everything
@@ -154,8 +156,8 @@ export type DoctorReads = Omit<DoctorMachineEdge, "install"> & {
 
 // [LAW:effects-at-boundaries] exception: what the renderer reaches in the
 // host that crosses a process: each a notice, which answers nothing, or an
-// awaited call answering plain data. Each is a reach a later step removes.
-export interface HostCalls {
+// awaited call answering plain data.
+export interface AdapterToHost {
   // A feed's next frame brought forward.
   readonly wake: (sessionId: SessionId, cause: WakeCause) => void;
   // A line into the host's one log, which rotates itself: two writers would
@@ -233,25 +235,21 @@ export interface HostCalls {
     readonly watch: (id: WatchId, key: string, targets: WatchTargets) => void;
     readonly unwatch: (id: WatchId) => void;
   };
-}
-
-// [LAW:types-are-the-program] Every reach above crosses: the build fails on
-// one a process could not carry, naming it.
-export const HOST_CALLS_CROSS: Reaches<HostCalls> = true;
-
-// What the renderer still reaches in the host as a part of it, in process.
-// Each keeps its in-process shape until a later step hands it in.
-export interface InProcessReaches {
-  // [LAW:effects-at-boundaries] exception: the owner of every plugin's
-  // session files, which a config's sources are keyed and watched in.
-  readonly managedStorage: {
-    keyFor(folder: string): StorageKey;
-    watch(key: StorageKey): Release;
+  // [LAW:no-ambient-temporal-coupling] The storage folders each render state's
+  // latest load named, held by the host's storage owner under the id the
+  // renderer minted, from the state's first load to its reclaim: a folder's
+  // watch lives as long as a build names it, never as long as a view. Every
+  // load holds again, so a folder whose generation ended is keyed again at
+  // the next load.
+  readonly storage: {
+    readonly hold: (id: StorageHoldId, folders: readonly string[]) => void;
+    readonly release: (id: StorageHoldId) => void;
   };
 }
 
-// What the renderer reaches in the host, handed in at its start.
-export type AdapterToHost = HostCalls & InProcessReaches;
+// [LAW:types-are-the-program] Every reach crosses: the build fails on one a
+// process could not carry, naming it.
+export const REACHES_CROSS: Reaches<AdapterToHost> = true;
 
 // Why a feed's next frame was brought forward: a value its bar reads changed
 // (`data`), its session's own state moved (`state`), its config reloaded

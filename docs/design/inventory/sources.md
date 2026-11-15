@@ -128,7 +128,7 @@ Today the path is read → parse → publish, in `declareSource`.
 - `runOf` reads `ctx.configFor(origin).actions` to rebuild the signed declaration, and `ctx.sourcesFor(origin)` for storage keys (`src/renderer/verbs/index.ts`).
 - `stateGate` and `configGate` read `sessionConfig`.
 - `navigation` depth uses the session config's gate.
-- `ManagedStorage` assumes builds in the daemon. `UNOWNED_STORAGE` is what a build outside uses, and it creates and watches nothing.
+- `ManagedStorage` is the host's: a build names its storage folders as plain paths, and the render cache holds them under a state's hold id (`storage.hold` and `release`); the host creates, watches and numbers each folder's generations.
 
 **A shell declaration from a Draw:** provenance is lost at merge, because a variable carries no source file. The honest flow:
 1. Facts sends the answer book to Draw.
@@ -165,7 +165,7 @@ Today the path is read → parse → publish, in `declareSource`.
 | `XDG_CONFIG_HOME`, `XDG_DATA_DIRS`, `XDG_DATA_HOME`, `HOMEBREW_PREFIX`, homedir | `discovery.ts`, `plugin-folders.ts` (process env) | Draw, so a dev Draw may differ from prod |
 | Plugin roots, definitions, `{checkout}` paths (`checkoutOf`, `worktreeLink`: fs, no spawn seen) | `plugins.ts`, `git-root.ts` | Draw |
 | `DEFAULT_DSL_CONFIG`, themes, presets, `BUNDLED_PRESETS` | Code; no fs found in `src/themes` | Draw (per build) |
-| `storage.keyFor` (mkdir, generation), `storage.watch` | `declaredSources`, `buildRenderState` | Facts, **wire** (`StorageKey`) |
+| `storage.hold` and `release` (mkdir, generation, watch) | `RenderCache` | Facts, **wire** (folder paths under a hold id) |
 | `loadKey`, `compileKey`, compile, `CompileInput` | `render.ts` | Draw |
 | `authoredRoots`, `fileHeldSettings`, `configPath`, `unused`, `dropped`, `buildWarnings`, `plugins` | State build | Draw |
 | `default_empty_value`, `resolveEffectiveGlobals`, `settingCounts` | Pure | Draw |

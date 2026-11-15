@@ -12,11 +12,11 @@ import type {
 import type {
   Subscription,
   Subscriptions,
-  StorageKey,
 } from "../renderer-interface/interface.js";
 import type {
   AdapterToHost,
   EveryEntryLoad,
+  StorageHoldId,
 } from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { Watches } from "./watches.js";
@@ -174,9 +174,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The renderer's watches (src/renderer/watches.ts): the answers book's and
   // each entry's config watch.
   watchers: Pick<Watches, "acquire" | "follow">;
-  // The owner of every plugin's managed storage, whose folders a state's
-  // build holds (StateDeps).
-  storage: PluginStorage;
+  // The host's storage owner, which holds the folders each served state's
+  // latest load named (`holdFolders`), from its first load to its reclaim.
+  storage: AdapterToHost["storage"];
   // What signs the `run` links its compiles draw (StateDeps).
   signer: LinkSigner;
   // The gates a load builds against (StateDeps).
@@ -189,21 +189,6 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // providers and the usage store.
   log?: DaemonLogger;
 }
-
-// What a render state's build asks of the managed storage owner: the key of
-// each storage folder its config declares (creating the folder), and that
-// folder's watch, held from the build to the state's reclaim.
-export type PluginStorage = AdapterToHost["managedStorage"];
-
-// [LAW:single-enforcer] The storage of a build outside the daemon (the
-// doctor's load, the demo's): it creates, watches and sweeps no folder,
-// because only the daemon's owner knows which files its sessions hold, and a
-// sweep anywhere else removes theirs. A view reading its keys reads the files
-// as they are.
-export const UNOWNED_STORAGE: PluginStorage = {
-  keyFor: (folder) => ({ folder, generation: 0 }),
-  watch: () => () => {},
-};
 
 // What building one config's state needs.
 export interface StateDeps {
@@ -218,7 +203,6 @@ export interface StateDeps {
   // The environment an `env` source reads: the daemon's host.
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly sessionState: SessionStateRW;
-  readonly storage: PluginStorage;
   // What signs the `run` links a compile draws.
   readonly signer: LinkSigner;
   // The gates a config's sessions click through, which a load builds once so a
@@ -336,10 +320,9 @@ export interface DslRenderState {
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;
   // [LAW:no-ambient-temporal-coupling] Each plugin source the config
-  // declares, at the key its build took for the source's folder. The build
-  // holds each folder's watch until the state is reclaimed (its registry's
-  // teardown), so a reload — which builds its successor first — never closes
-  // and reopens one, and no view touches a watch.
+  // declares, at its storage folder. The cache holds these folders for as
+  // long as it serves the state, so a reload, which holds its successor's
+  // first, never closes and reopens a watch, and no view touches one.
   readonly sources: DeclaredSources;
 }
 
@@ -535,6 +518,8 @@ export interface CacheEntry {
 // render — which otherwise resumed on a disposed store, every chained read
 // recomputed untracked.
 interface StateHold {
+  // The id the state's storage folders are held under at the host.
+  readonly id: StorageHoldId;
   holders: number;
   retired: Teardown | null;
 }
@@ -647,9 +632,9 @@ function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
       // [LAW:single-enforcer] A declared storage folder is watched by name in
       // its plugin folder, by the follower that already watches the
       // definition: its removal, recreation or replacement reloads the
-      // config, whose build recreates the folder and takes a new generation
-      // from the storage owner — which never re-arms a watch itself.
-      ...new Set([...entry.state.sources.values()].map((k) => k.folder)),
+      // config, whose load's hold has the storage owner recreate the folder
+      // under a new generation — the owner never re-arms a watch itself.
+      ...new Set(entry.state.sources.values()),
     ],
     // An existing root is watched for every child: a folder created in it is
     // a plugin installed.
@@ -707,9 +692,7 @@ interface Failed {
 
 // [LAW:types-are-the-program] What a build reads, all of it read from disk
 // before the build starts: the chain as it resolved, the loaded chain, and the
-// storage key of every plugin source the config declares. `keyFor` moves a
-// folder's generation on a loss or a changed identity, so a key is an input
-// to the build, never something it finds out.
+// storage folder of every plugin source the config declares.
 interface LoadInputs {
   readonly cwd: string;
   readonly chain: ConfigChain;
@@ -795,26 +778,17 @@ function loadKey(inputs: LoadInputs): string {
     } satisfies Projection<LoadedChain>,
     sources: [...inputs.sources]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, key]) => [name, key.folder, key.generation] as const),
+      .map(([name, folder]) => [name, folder] as const),
   } satisfies Projection<LoadInputs>);
 }
 
-// [LAW:single-enforcer] The storage owner's one ask per load: for each folder
-// the config's sources name, its key. The owner creates the folder, so its
-// program has somewhere to write before any session reads it. The render path
-// does no I/O for a source: a session's subscription takes the key from here.
-function declaredSources(
-  config: DslConfig,
-  storage: PluginStorage,
-): DeclaredSources {
-  const keys = new Map<string, StorageKey>();
-  const sources = new Map<string, StorageKey>();
-  for (const [name, decl] of Object.entries(config.variables)) {
-    if (decl.kind !== "source") continue;
-    const key = keys.get(decl.storage) ?? storage.keyFor(decl.storage);
-    keys.set(decl.storage, key);
-    sources.set(name, key);
-  }
+// Each plugin source the config declares, at its storage folder. The render
+// path does no I/O for a source: a session's subscription names the folder,
+// and the host's storage owner reads it.
+function declaredSources(config: DslConfig): DeclaredSources {
+  const sources = new Map<string, string>();
+  for (const [name, decl] of Object.entries(config.variables))
+    if (decl.kind === "source") sources.set(name, decl.storage);
   return sources;
 }
 
@@ -826,7 +800,6 @@ function declaredSources(
 export function resolveLoad(
   cwd: string,
   chain: ConfigChain,
-  storage: PluginStorage,
 ): ResolvedLoad | Failed {
   const warnings: string[] = [];
   try {
@@ -841,7 +814,7 @@ export function resolveLoad(
       cwd,
       chain,
       loaded,
-      sources: declaredSources(loaded.config, storage),
+      sources: declaredSources(loaded.config),
     };
     return { kind: "resolved", ...inputs, key: loadKey(inputs), warnings };
   } catch (err) {
@@ -923,10 +896,6 @@ export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     // click.
     deps.gates.state.gateFor(config);
     deps.gates.config.gateFor(config);
-    // [LAW:no-ambient-temporal-coupling] Each folder's watch, held by the
-    // registry until the state's teardown.
-    for (const key of new Set(load.sources.values()))
-      registry.own(deps.storage.watch(key));
   } catch (err) {
     registry.dispose();
     if (err instanceof ConfigError) warnings.push(...err.warnings);
@@ -1048,7 +1017,7 @@ export function loadChain(
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const resolved = resolveLoad(cwd, chain, deps.storage);
+  const resolved = resolveLoad(cwd, chain);
   if (resolved.kind === "failed") {
     return settle(frame, chain, [], resolved, deps.clock);
   }
@@ -1125,11 +1094,12 @@ export function fallbackState(
 ): DslRenderState {
   // The failed load's approved project: the seed draws the plugins it ships,
   // as the load would have.
-  const resolved = resolveLoad(
-    cwd,
-    { layers: [], home: "", repo, locs: deps.locations },
-    deps.storage,
-  );
+  const resolved = resolveLoad(cwd, {
+    layers: [],
+    home: "",
+    repo,
+    locs: deps.locations,
+  });
   const built =
     resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
   // [LAW:no-silent-failure] The default validates by program invariant
@@ -1315,13 +1285,13 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
 }
 
 // What a view needs read: each plugin source its config declares, at its
-// folder's storage key, then each run its registry names, in digest order.
+// storage folder, then each run its registry names, in digest order.
 export const subscriptionsOf = ({
   state,
   registry,
 }: Pick<SessionView, "state" | "registry">): Subscription[] => [
   ...[...state.sources].map(
-    ([source, storage]): Subscription => ({ kind: "plugin", source, storage }),
+    ([source, folder]): Subscription => ({ kind: "plugin", source, folder }),
   ),
   ...registry
     .subscriptions()
@@ -1357,6 +1327,8 @@ export class RenderCache<
   private walk: (() => void) | null = null;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
+  // The last storage hold id minted.
+  private storageHolds = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = new Map<SessionId, SessionView<S, F>>();
@@ -1483,14 +1455,17 @@ export class RenderCache<
       watch: null,
     };
     this.serve(entry.state);
-    // [LAW:single-enforcer] Insert, bound, watch, then notify — in that
+    // [LAW:single-enforcer] Insert, hold, bound, watch, then notify — in that
     // order. From the moment the entry is in the map it is reachable for
     // eviction and dispose, so a throwing observer cannot strand a registry
     // outside it, and a reentrant getOrCreate for this key finds the entry
-    // rather than building a duplicate. The bound runs first because it is a
-    // fact about the MAP, complete at insertion: nothing later (including an
-    // observer throwing) can skip it. [LAW:dataflow-not-control-flow]
+    // rather than building a duplicate. The hold precedes the bound: an
+    // eviction there releases another state's folders, which this one may
+    // name too. The bound runs before the watch because it is a fact about
+    // the MAP, complete at insertion: nothing later (including an observer
+    // throwing) can skip it. [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
+    this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
       "info",
@@ -1759,7 +1734,7 @@ export class RenderCache<
   }
 
   // [LAW:one-source-of-truth] What every session's open view needs read: the
-  // plugin sources its config declares, at their folders' storage keys, and
+  // plugin sources its config declares, at their storage folders, and
   // the runs its `shell` and `file` sources name. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
@@ -1891,13 +1866,24 @@ export class RenderCache<
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
       );
-    this.holds.set(state, { holders: 0, retired: null });
+    this.holds.set(state, {
+      id: ++this.storageHolds as StorageHoldId,
+      holders: 0,
+      retired: null,
+    });
     this.compiles.set(state.compileKey, state.compiled);
     if (held === undefined)
       this.log(
         "info",
         `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`,
       );
+  }
+
+  // The host holds the storage folders a served state's latest load named.
+  private holdFolders(state: DslRenderState): void {
+    // [LAW:single-enforcer] The host keys each folder once, however many
+    // sources name it.
+    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
   }
 
   private holdOf(state: DslRenderState): StateHold {
@@ -1953,6 +1939,7 @@ export class RenderCache<
   private reclaim(state: DslRenderState, hold: StateHold): void {
     if (hold.retired === null || hold.holders > 0) return;
     this.holds.delete(state);
+    this.deps.storage.release(hold.id);
     this.log("info", configDisposeLine(hold.retired, state.registry.dispose()));
     // [LAW:one-source-of-truth] `holds` lists every state not yet reclaimed,
     // so a compile no state left there carries has no render to draw it.
@@ -2020,8 +2007,15 @@ export class RenderCache<
     if (loaded.kind === "built") {
       entry.state = loaded.state;
       this.serve(loaded.state);
-      this.retire(served, "reload", { entry, state: loaded.state });
     }
+    // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed:
+    // a kept or failed one keys again any folder whose generation ended, so a
+    // config reload is a lost or faulted folder's recovery even while the
+    // config is broken. The successor's hold precedes its predecessor's
+    // release, so a folder both name is never closed and reopened.
+    this.holdFolders(entry.state);
+    if (loaded.kind === "built")
+      this.retire(served, "reload", { entry, state: loaded.state });
     // A reload can move the entry onto a compile no other entry carries, and
     // charges the views it reopened, once their predecessors are retired.
     this.fit(entry);

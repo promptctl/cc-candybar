@@ -35,14 +35,12 @@ import {
   type Event,
   type Subscription,
   type Subscriptions,
-  type StorageKey,
 } from "../renderer-interface/interface.js";
 import type { Timekeeper } from "../time.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { Holds } from "../utils/holds.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { failed, ok, type Failed, type Ok } from "../utils/outcome.js";
-import { sameKey } from "./cache/managed-storage.js";
 import { assembleFacts, failedStamp } from "./facts-assembly.js";
 import {
   declareLanes,
@@ -170,7 +168,7 @@ const sourcesOf = (
 ): Subscribed => ({
   plugins: new Map(
     subscriptions.flatMap((s) =>
-      s.kind === "plugin" ? [[s.source, s.storage] as const] : [],
+      s.kind === "plugin" ? [[s.source, s.folder] as const] : [],
     ),
   ),
   runs: new Map(
@@ -191,10 +189,7 @@ const sourcesOf = (
 // digests are the same set.
 const sameSources = (a: Subscribed, b: Subscribed): boolean =>
   a.plugins.size === b.plugins.size &&
-  [...a.plugins].every(([name, key]) => {
-    const other: StorageKey | undefined = b.plugins.get(name);
-    return other !== undefined && sameKey(key, other);
-  }) &&
+  [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) &&
   a.runs.size === b.runs.size &&
   [...a.runs.keys()].every((digest) => b.runs.has(digest));
 

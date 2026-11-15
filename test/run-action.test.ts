@@ -57,7 +57,6 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
-import type { StorageKey } from "../src/renderer-interface/interface";
 import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
@@ -433,7 +432,6 @@ describe("a run's declaration", () => {
       locations: locs(),
       env: HOST.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -463,7 +461,6 @@ describe("a run's declaration", () => {
       locations: locs(),
       env: HOST.env,
       sessionState: r.sessionState,
-      storage: r.providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
     });
@@ -851,7 +848,7 @@ describe("a click on a run link", () => {
 
 describe("the run owner", () => {
   const SESSION: SessionId = sessionIdOf(SID);
-  const KEY: StorageKey = { folder: "/s", generation: 0 };
+  const FOLDER = "/s";
 
   // A run of `script` under /bin/sh, refreshing one source whose supersedes
   // and resumes are recorded.
@@ -864,9 +861,9 @@ describe("the run owner", () => {
     const held: string[] = [];
     const runs = new Runs({
       clock: systemTimekeeper,
-      supersede: (key, sid) => {
-        held.push(`supersede ${key.folder} ${sid}`);
-        return () => held.push(`resume ${key.folder} ${sid}`);
+      supersede: (folder, sid) => {
+        held.push(`supersede ${folder} ${sid}`);
+        return () => held.push(`resume ${folder} ${sid}`);
       },
       launch,
       holdClickError: (sessionId, text, at) =>
@@ -886,7 +883,7 @@ describe("the run owner", () => {
         claudeConfigDir: undefined,
       }),
       cwd: dir,
-      refreshes: [{ name: STATUS, storage: KEY }],
+      refreshes: [{ name: STATUS, folder: FOLDER }],
     });
     return { runs, lines, sessionState, held, run };
   }

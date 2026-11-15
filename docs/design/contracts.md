@@ -45,7 +45,7 @@ type RendererMessage =
   | { kind: "hook"; hook: ClaudeHookData; hints: ClientHints }
   | { kind: "declare"; session: SessionId; layers: ConfigLayer[]; sources: SourceSpec[] }
   | { kind: "key"; source: SourceId; keyValueHash: string }
-  | { kind: "supersede"; storage: StorageKey; session: SessionId };
+  | { kind: "supersede"; folder: string; session: SessionId };
 ```
 
 A second `attach` under a live name is refused loudly.

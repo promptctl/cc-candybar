@@ -36,7 +36,6 @@ import {
   type RenderPayloadDeps,
 } from "../src/daemon/readings";
 import { type ViewFacts } from "../src/renderer-interface/request-context";
-import type { StorageKey } from "../src/renderer-interface/interface";
 import type { Fact } from "../src/facts/fact";
 import type { Update, WorldState } from "../src/facts/world-state";
 import type { Subscriptions } from "../src/renderer-interface/interface";
@@ -103,8 +102,8 @@ function handLanded() {
       declareToday: (holds: Holds) => entry(holds, "today"),
     },
     managedStorage: {
-      declare: (holds: Holds, storage: StorageKey) =>
-        entry(holds, `source:${storage.folder}`),
+      declare: (holds: Holds, folder: string) =>
+        entry(holds, `source:${folder}`),
     },
     log: () => {},
   } as unknown as RenderPayloadDeps;
@@ -156,7 +155,7 @@ const subscribing = (
     [session]: folders.map((folder) => ({
       kind: "plugin" as const,
       source: folder,
-      storage: { folder, generation: 1 },
+      folder,
     })),
   },
 });
