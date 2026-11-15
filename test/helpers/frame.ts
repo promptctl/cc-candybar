@@ -34,17 +34,26 @@ export const runAt = (runs: readonly Run[], at: number): Run | undefined => {
 };
 
 /** The run under the first character of `text`, on the first row that draws it. */
-export const runUnder = ({ rows }: Pick<Frame, "rows">, text: string): Run | undefined => {
-  const { runs } = rows.find(({ runs }) => plainOf(runs).includes(text)) ?? { runs: [] };
+export const runUnder = (
+  { rows }: Pick<Frame, "rows">,
+  text: string,
+): Run | undefined => {
+  const { runs } = rows.find(({ runs }) => plainOf(runs).includes(text)) ?? {
+    runs: [],
+  };
   return runAt(runs, plainOf(runs).indexOf(text));
 };
 
 /** Whether two frames draw alike. Each carries its own moment, so their rows decide. */
-export const sameDraw = (a: Pick<Frame, "rows">, b: Pick<Frame, "rows">): boolean =>
-  isDeepStrictEqual(a.rows, b.rows);
+export const sameDraw = (
+  a: Pick<Frame, "rows">,
+  b: Pick<Frame, "rows">,
+): boolean => isDeepStrictEqual(a.rows, b.rows);
 
 /** Every background a frame draws, one per run, in order. */
-export const backgroundsOf = ({ rows }: Pick<Frame, "rows">): (string | undefined)[] =>
+export const backgroundsOf = ({
+  rows,
+}: Pick<Frame, "rows">): (string | undefined)[] =>
   rows.flatMap(({ runs }) => runs.map(({ bg }) => bg));
 
 /**
@@ -55,7 +64,9 @@ export const backgroundsOf = ({ rows }: Pick<Frame, "rows">): (string | undefine
  */
 export const truecolorOf = (color: string | undefined): ColorRgba => {
   if (color === undefined || color === "default") {
-    throw new Error(`a colour the terminal owns has no RGB to measure, got ${color}`);
+    throw new Error(
+      `a colour the terminal owns has no RGB to measure, got ${color}`,
+    );
   }
   return ColorSpec.parse(color).getTruecolor();
 };

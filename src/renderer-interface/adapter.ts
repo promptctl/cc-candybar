@@ -7,7 +7,6 @@
 // list is what shows the work left.
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import type { DiagnosticMessage, SourcedText } from "../render/diagnostics";
 import type { ClientHints, Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { Answered } from "../daemon/foundations/sighting-roles.js";
@@ -19,20 +18,11 @@ import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
 import type { Crosses, Reaches } from "./crosses.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { ClientHint } from "../client-hint.js";
-import type {
-  LaunchCategory,
-  LaunchResult,
-  Launcher,
-} from "../proc/launcher.js";
+import type { LaunchCategory, LaunchResult } from "../proc/launcher.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import type { TypeResult } from "../claude-input/typing.js";
+import type { RefreshTimes, ViewFacts } from "./request-context.js";
 import type {
-  CheckedRenderRequest,
-  RefreshTimes,
-  ViewFacts,
-} from "./request-context.js";
-import type {
-  Delivery,
   ProbeArrival,
   RenderCacheStats,
   StatsSnapshot,
@@ -44,38 +34,17 @@ import type {
 import type { ServingDaemon } from "../daemon/foundations/memory-limit.js";
 import type { RenderSighting } from "../daemon/foundations/sightings.js";
 import type {
-  HeldWatch,
+  Deafness,
   Invalidation,
-  WatchMove,
-  WatchSpec,
   WatchTargets,
-  WatcherHandle,
 } from "../daemon/foundations/watch-targets.js";
+import type { HeldEvent } from "../utils/event-hold.js";
 import type { InstallFacts } from "../doctor/checks.js";
 import type { DoctorMachineEdge } from "../doctor/ports.js";
 
-// The per-session facts the notice reads: whose clicks these are, what this
-// session dismissed (the identity it wrote, or nothing), and whether the
-// session's config allows the notice at all (Globals.updateNotice).
-export interface NoticeContext {
-  readonly sessionId: SessionId;
-  readonly dismissed: string | null;
-  readonly enabled: boolean;
-}
-
-// What one update tells a session: the offer, an info message whose line is
-// the sentence and the three affordances, and the failure of the last act on
-// it, a plain warning of its own. They are two messages because they are two
-// levels: the offer is nothing going wrong, a failed click is
-// [LAW:no-silent-failure].
-// [LAW:types-are-the-program] At most one of each, and no failure without its
-// offer: a failure with nothing to retry is unrepresentable.
-export type UpdateNotice =
-  | { readonly offer: readonly []; readonly failure: readonly [] }
-  | {
-      readonly offer: readonly [DiagnosticMessage];
-      readonly failure: readonly [] | readonly [SourcedText];
-    };
+// A watch the renderer holds, named by the id it minted.
+declare const WATCH_ID: unique symbol;
+export type WatchId = number & { readonly [WATCH_ID]: true };
 
 export interface LaneSession {
   readonly sessionId: SessionId;
@@ -153,13 +122,6 @@ export type Level = "info" | "warn" | "error";
 export interface LogLine {
   readonly level: Level;
   readonly line: string;
-}
-
-// A cache's tally, as the render event's debug facts show it.
-export interface CacheTally {
-  readonly size: number;
-  readonly hits: number;
-  readonly misses: number;
 }
 
 // [LAW:types-are-the-program] A launch a click makes: the program, its
@@ -262,58 +224,29 @@ export interface HostCalls {
   };
   // Where a `doctor-probe` link records that it arrived.
   readonly probes: { readonly arrive: (arrival: ProbeArrival) => void };
+  // An answer carrying the launcher's pipe event reached its client.
+  readonly pipeEventAnswered: (event: HeldEvent) => void;
+  // The renderer's watches, each held by the host's one registry under the
+  // id the renderer minted, from its `watch` to its `unwatch`: every window
+  // it hears comes back as a `watch` push.
+  readonly watches: {
+    readonly watch: (id: WatchId, key: string, targets: WatchTargets) => void;
+    readonly unwatch: (id: WatchId) => void;
+  };
 }
 
 // [LAW:types-are-the-program] Every reach above crosses: the build fails on
 // one a process could not carry, naming it.
 export const HOST_CALLS_CROSS: Reaches<HostCalls> = true;
 
-// What the renderer still reaches in the host as a part of it, in process:
-// the facts the draw reads synchronously and the owners of its watches and
-// storage. Each keeps its in-process shape until a later step hands it in.
+// What the renderer still reaches in the host as a part of it, in process.
+// Each keeps its in-process shape until a later step hands it in.
 export interface InProcessReaches {
-  // [LAW:effects-at-boundaries] exception: the feeds' subscribers, which lanes
-  // follow a session and the request each feed draws from.
-  readonly frameFeeds: {
-    following(sessionId: SessionId): ReadonlySet<Lane>;
-    latest(sessionId: SessionId): CheckedRenderRequest | null;
-    feedsOf(sessionId: SessionId, at: Instant): LaneFeeds;
-  };
-  // [LAW:effects-at-boundaries] exception: the update watch's notice and the
-  // failure of its last act.
-  readonly updateWatch: {
-    notice(ctx: NoticeContext): UpdateNotice;
-    error(): string | null;
-  };
-  // [LAW:effects-at-boundaries] exception: whether file events are heard.
-  readonly fileEvents: { delivery(): Delivery };
-  // [LAW:effects-at-boundaries] exception: the launcher's warnings a draw
-  // shows, and the pipe event an answer delivered.
-  readonly launcher: Pick<Launcher, "launcherWarnings" | "answeredPipeEvent">;
-  // [LAW:effects-at-boundaries] exception: the repository and usage caches'
-  // tallies.
-  readonly cacheTallies: () => {
-    readonly git: CacheTally;
-    readonly usage: CacheTally;
-  };
   // [LAW:effects-at-boundaries] exception: the owner of every plugin's
   // session files, which a config's sources are keyed and watched in.
   readonly managedStorage: {
     keyFor(folder: string): StorageKey;
     watch(key: StorageKey): Release;
-  };
-  // [LAW:effects-at-boundaries] exception: the daemon's one watcher registry.
-  readonly watchers: {
-    acquire(
-      key: string,
-      targets: WatchTargets,
-      onInvalidate: (invalidation: Invalidation) => void,
-    ): WatcherHandle;
-    follow(
-      held: HeldWatch | null,
-      spec: WatchSpec,
-      onInvalidate: (invalidation: Invalidation) => void,
-    ): { readonly watch: HeldWatch; readonly move: WatchMove };
   };
 }
 
@@ -371,6 +304,15 @@ export type AdapterPush =
   | { readonly kind: "reload-every"; readonly since: number }
   // The reload of the config `origin` resolves to, after a write.
   | { readonly kind: "reload-config"; readonly origin: RenderOrigin }
+  // What one of the renderer's watches heard: once as the host acquires it
+  // (`heard` null), then for every window; and what of its targets the OS is
+  // not listening to, as of the push.
+  | {
+      readonly kind: "watch";
+      readonly id: WatchId;
+      readonly heard: Invalidation | null;
+      readonly deaf: readonly Deafness[];
+    }
   // The daemon's teardown, in its three renderer steps: the journal in flight
   // commits, the views close, and the session state flushes, last.
   | { readonly kind: "close-journal" }

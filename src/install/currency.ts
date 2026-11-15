@@ -9,7 +9,7 @@
 
 import { ABSENT, failed, type Outcome } from "../utils/outcome";
 import { timeoutSignal, type Timekeeper } from "../time";
-import type { Version } from "../facts/world-state";
+import { formatVersion, type Version } from "../facts/world-state";
 
 const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
@@ -31,10 +31,6 @@ export function parseReleaseVersion(text: string): Parsed<Version> {
         reason: `"${text}" is not a release version (expected MAJOR.MINOR.PATCH)`,
         failedAt: "parse",
       };
-}
-
-export function formatVersion(v: Version): string {
-  return v.join(".");
 }
 
 // Lexicographic over the triple: the first differing component decides.

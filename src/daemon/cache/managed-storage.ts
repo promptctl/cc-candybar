@@ -325,10 +325,12 @@ export class ManagedStorage {
         return;
       case "changed": {
         const { paths } = invalidation;
-        if (paths.has(path.join(key.folder, path.basename(key.folder)))) {
+        if (paths.includes(path.join(key.folder, path.basename(key.folder)))) {
           this.judged(watched, () => this.sessions.changed(inFolder));
         } else {
-          this.sessions.changed((f) => inFolder(f) && paths.has(fileOf(f)));
+          this.sessions.changed(
+            (f) => inFolder(f) && paths.includes(fileOf(f)),
+          );
         }
         return;
       }

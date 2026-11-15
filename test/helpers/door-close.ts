@@ -25,9 +25,17 @@ export type ErrorRed = (typeof ERROR_REDS)[number];
  * colour drawn for it (at 256 colours the cube or grey entry, at ansi the
  * sixteen rich-js assumes).
  */
-export function doorClose({ rows }: Pick<Frame, "rows">): { readonly ink: ColorRgba; readonly ground: ColorRgba } {
-  const found = rows.flatMap(({ runs }) => runs.filter(({ text }) => text.includes(DOOR_CLOSE_GLYPH)));
-  if (found.length !== 1) throw new Error(`expected one ${DOOR_CLOSE_GLYPH} in the frame, found ${found.length}`);
+export function doorClose({ rows }: Pick<Frame, "rows">): {
+  readonly ink: ColorRgba;
+  readonly ground: ColorRgba;
+} {
+  const found = rows.flatMap(({ runs }) =>
+    runs.filter(({ text }) => text.includes(DOOR_CLOSE_GLYPH)),
+  );
+  if (found.length !== 1)
+    throw new Error(
+      `expected one ${DOOR_CLOSE_GLYPH} in the frame, found ${found.length}`,
+    );
   const { fg, bg } = found[0]!;
   return { ink: truecolorOf(fg), ground: truecolorOf(bg) };
 }

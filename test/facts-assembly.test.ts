@@ -3,6 +3,7 @@
 // a turn in which nothing moved leaves untouched, and what the stamp says when
 // one answer does.
 
+import { daemonFactsOf } from "./helpers/daemon-facts";
 import { restamp, type Fact } from "../src/facts/fact";
 import type { BuiltinFacts } from "../src/facts/world-state";
 import type { GitRead } from "../src/segments/git";
@@ -151,7 +152,7 @@ describe("a session's facts document", () => {
       undefined,
       SID,
       readingsOf(r.inputs, r.inputs.lanes()),
-      PENDING,
+      daemonFactsOf(),
       T0,
     );
     // The expected document is read from the owners, never from the readings.
@@ -191,7 +192,7 @@ describe("a session's facts document", () => {
       undefined,
       SID,
       readingsOf(r.inputs, r.inputs.lanes()),
-      PENDING,
+      daemonFactsOf(),
       T0,
     );
     expect(Object.keys(doc.builtins).sort()).toEqual([...BUILTIN_KEYS]);
@@ -207,7 +208,7 @@ describe("a session's facts document", () => {
         undefined,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
-        PENDING,
+        daemonFactsOf(),
         T0,
       ).builtins.pr;
     };
@@ -252,7 +253,7 @@ describe("a session's facts document", () => {
         undefined,
         SID,
         readingsOf(r.inputs, lanes),
-        PENDING,
+        daemonFactsOf(),
         T0,
       );
       expect(doc.sources).toEqual({
@@ -269,14 +270,14 @@ describe("a session's facts document", () => {
         undefined,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
-        PENDING,
+        daemonFactsOf(),
         T0,
       );
       const again = assembleFacts(
         first,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
-        PENDING,
+        daemonFactsOf(),
         at(60),
       );
       expect(again).toBe(first);
@@ -288,7 +289,7 @@ describe("a session's facts document", () => {
         undefined,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
-        PENDING,
+        daemonFactsOf(),
         T0,
       );
       r.deps.faults.refreshed(SID, "cache", "refresh threw");
@@ -296,7 +297,7 @@ describe("a session's facts document", () => {
         first,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
-        PENDING,
+        daemonFactsOf(),
         at(60),
       );
       expect(second.seq).toBe(2);
@@ -320,7 +321,7 @@ describe("a session's facts document", () => {
         second,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
-        PENDING,
+        daemonFactsOf(),
         at(120),
       );
       expect(third.seq).toBe(3);
@@ -336,16 +337,30 @@ describe("a session's facts document", () => {
       const r = await sampled(rig());
       const readings = readingsOf(r.inputs, r.inputs.lanes());
       const none = restamp(undefined, ABSENT, T0);
-      const first = assembleFacts(undefined, SID, readings, none, T0);
-      expect(first.update).toBe(none);
-      expect(assembleFacts(first, SID, readings, none, at(5))).toBe(first);
+      const first = assembleFacts(
+        undefined,
+        SID,
+        readings,
+        daemonFactsOf(none),
+        T0,
+      );
+      expect(first.daemon.update.newer).toBe(none);
+      expect(
+        assembleFacts(first, SID, readings, daemonFactsOf(none), at(5)),
+      ).toBe(first);
       const newer = restamp(
         none,
         ok<Update>({ kind: "release", newer: [2, 0, 0], running: [1, 0, 0] }),
         at(10),
       );
-      const second = assembleFacts(first, SID, readings, newer, at(10));
-      expect(second.update).toBe(newer);
+      const second = assembleFacts(
+        first,
+        SID,
+        readings,
+        daemonFactsOf(newer),
+        at(10),
+      );
+      expect(second.daemon.update.newer).toBe(newer);
       expect(second.seq).toBe(2);
       for (const key of BUILTIN_KEYS) {
         expect(second.builtins[key]).toBe(first.builtins[key]);
@@ -360,24 +375,41 @@ describe("a session's facts document", () => {
         undefined,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
-        PENDING,
+        daemonFactsOf(),
         T0,
       );
-      const failedOnce = failedStamp(first, "the read broke");
+      const failedOnce = failedStamp(first, "the read broke", daemonFactsOf());
       expect(failedOnce.seq).toBe(first.seq + 1);
       expect(failedOnce.builtins).toBe(first.builtins);
       expect(stampFailureOf(failedOnce)).toBe("the read broke");
-      expect(failedStamp(failedOnce, "the read broke")).toBe(failedOnce);
-      expect(stampFailureOf(failedStamp(failedOnce, "another"))).toBe(
-        "another",
+      expect(failedStamp(failedOnce, "the read broke", daemonFactsOf())).toBe(
+        failedOnce,
       );
+      expect(
+        stampFailureOf(failedStamp(failedOnce, "another", daemonFactsOf())),
+      ).toBe("another");
+      // The daemon's facts are read apart from the owners that threw, so a
+      // failure that persists still carries them as they stand.
+      const newer = restamp(
+        first.daemon.update.newer,
+        ok<Update>({ kind: "release", newer: [2, 0, 0], running: [1, 0, 0] }),
+        at(10),
+      );
+      const moved = failedStamp(
+        failedOnce,
+        "the read broke",
+        daemonFactsOf(newer),
+      );
+      expect(moved.seq).toBe(failedOnce.seq + 1);
+      expect(moved.daemon.update.newer).toBe(newer);
+      expect(moved.builtins).toBe(first.builtins);
       expect(stampFailureOf(first)).toBeNull();
       // The next clean stamp is a document without it.
       const clean = assembleFacts(
         failedOnce,
         SID,
         readingsOf(r.inputs, r.inputs.lanes()),
-        PENDING,
+        daemonFactsOf(),
         at(60),
       );
       expect(clean.seq).toBe(failedOnce.seq + 1);

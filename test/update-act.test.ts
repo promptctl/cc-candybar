@@ -29,7 +29,25 @@ import {
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
 import { makeUpdateWatch } from "../src/daemon/update-notice";
-import { newUpdateFact } from "../src/daemon/update-fact";
+import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
+import { updateNotice } from "../src/daemon/foundations/update-offer";
+import type { UpdateWatch } from "../src/daemon/update-notice";
+
+// The notice a session that dismissed nothing is shown, folded as its draw
+// folds it from its world state: the update the fact holds, and the act the
+// watch read.
+const noticeOf = (fact: UpdateFact, watch: UpdateWatch) => {
+  const held = fact.get();
+  return updateNotice(
+    held.kind === "ok" ? held.value : null,
+    watch.acts().act,
+    {
+      sessionId: S,
+      dismissed: null,
+      enabled: true,
+    },
+  );
+};
 import {
   daemonGates,
   UPDATE_DISMISSED_KEY,
@@ -646,14 +664,14 @@ describe("claimAct: one act per bundle", () => {
       log: (_level, msg) => logged.push(msg),
     });
     expect(await watch.running()).toBe(false);
-    expect(watch.error()).toMatch(/update act files .*JSON/);
-    expect(logged).toEqual([watch.error()]);
+    expect(watch.acts().actsError).toMatch(/update act files .*JSON/);
+    expect(logged).toEqual([watch.acts().actsError]);
     fs.writeFileSync(
       path.join(dir, "1", "record.json"),
       JSON.stringify({ ...RECORD, started: Date.now() }),
     );
     expect(await watch.running()).toBe(false);
-    expect(watch.error()).toBeNull();
+    expect(watch.acts().actsError).toBeNull();
   });
 
   // [LAW:no-ambient-temporal-coupling] A release poll out when the daemon
@@ -661,8 +679,9 @@ describe("claimAct: one act per bundle", () => {
   test("a closed watch keeps no dismiss gate, and a late release poll registers none", async () => {
     let answer!: (latest: Response) => void;
     const gates = daemonGates();
+    const fact = newUpdateFact();
     const watch = makeUpdateWatch({
-      fact: newUpdateFact(),
+      fact,
       clock: systemTimekeeper,
       launcher: processLauncher,
       probe: processProbe,
@@ -693,9 +712,7 @@ describe("claimAct: one act per bundle", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(admits("999.0.0")).toBe(false);
-    expect(
-      watch.notice({ sessionId: S, dismissed: null, enabled: true }),
-    ).toEqual({ offer: [], failure: [] });
+    expect(noticeOf(fact, watch)).toEqual({ offer: [], failure: [] });
   });
 
   // [LAW:one-source-of-truth] The update is one fact for the daemon, stamped by
@@ -806,8 +823,9 @@ describe("the update watch: one turn at a time on the act files", () => {
         return job;
       },
     };
+    const fact = newUpdateFact();
     const watch = makeUpdateWatch({
-      fact: newUpdateFact(),
+      fact,
       clock: systemTimekeeper,
       launcher,
       probe: systemProbe(launcher),
@@ -823,8 +841,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       log: (_level, msg) => logged.push(msg),
     });
     closers.push(() => watch.close());
-    const notice = () =>
-      watch.notice({ sessionId: S, dismissed: null, enabled: true });
+    const notice = () => noticeOf(fact, watch);
     return {
       dir,
       ps,
@@ -1034,7 +1051,7 @@ describe("the update watch: one turn at a time on the act files", () => {
     await new Promise((resolve) => setTimeout(resolve, 2_300));
     expect(h.applied()).toBe(0);
     expect(h.logged.filter((l) => /succeeded/.test(l))).toEqual([]);
-    expect(h.watch.error()).toBeNull();
+    expect(h.watch.acts().actsError).toBeNull();
   });
 
   test("a claim whose `ps` close aborted withdraws, and its program never runs", async () => {

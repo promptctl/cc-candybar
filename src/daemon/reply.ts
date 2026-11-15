@@ -3,6 +3,7 @@
 import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
+import { cacheTallyFacts } from "./readings.js";
 import { failedWith, renderFailure } from "./foundations/render-answers.js";
 import type { ClickInFlight } from "./clicks-in-flight.js";
 import {
@@ -383,6 +384,7 @@ export async function replyTo(
       parts.renderer,
       parts.collector,
       parts.menuIdle,
+      frameFeeds,
       clock,
       checked.req,
       order,
@@ -409,6 +411,9 @@ export async function replyTo(
         };
       },
     );
+    // [LAW:nothing-unseen] What the host's caches answered by this render's
+    // end.
+    noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
     // [LAW:single-enforcer] The answer's present is owed its one effect-done
     // on every exit: a reply that never reaches the connection settles here.
     try {
@@ -669,7 +674,15 @@ async function handleClick(
   const delivered = await parts.renderer.answer({
     kind: "event",
     at: instantAt(parts.clock),
-    event: { kind: "click", verb, value, session, arrival, id: click.id },
+    event: {
+      kind: "click",
+      verb,
+      value,
+      session,
+      arrival,
+      id: click.id,
+      latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
+    },
   });
   switch (delivered.kind) {
     case "answered":

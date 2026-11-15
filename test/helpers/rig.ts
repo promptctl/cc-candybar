@@ -35,7 +35,10 @@ import {
 } from "../../src/dsl/render";
 import type { LinkSigner } from "../../src/click/link-signer";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
-import { sessionIdOf, type SessionId } from "../../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../../src/daemon/foundations/session-id";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SettingsHistory } from "../../src/renderer/settings-history";
 import type { Host } from "../../src/host";
@@ -207,12 +210,7 @@ export function buildRig(init: RigInit = {}): Rig {
   );
   const sessionState = init.sessionState ?? new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store,
-    "",
-    sessionState,
-    null,
-    init.env,
-  );
+  const registry = new SourceRegistry(store, "", sessionState, null, init.env);
   const registered = registerCompiled(
     config,
     registry,
@@ -244,7 +242,10 @@ export function buildRig(init: RigInit = {}): Rig {
         compiled,
         store,
         registry,
-        draw.payload ?? { session_id: sessionId, workspace: { project_dir: cwd } },
+        draw.payload ?? {
+          session_id: sessionId,
+          workspace: { project_dir: cwd },
+        },
         draw.at ?? instantOf(new Date()),
         { ...RIG_OPTS, ...draw.opts },
         draw.observers,

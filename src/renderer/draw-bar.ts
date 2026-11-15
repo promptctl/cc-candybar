@@ -3,11 +3,10 @@
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
-import {
-  fileEventsWarnings,
-  type FileEventsWarning,
-} from "../daemon/foundations/file-events-warnings";
-import type { LauncherWarning, PipeEvent } from "../proc/launcher";
+import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
+import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
+import type { HeldEvent } from "../utils/event-hold.js";
+import { updateNotice } from "../daemon/foundations/update-offer.js";
 import {
   type CheckedRenderRequest,
   type RefreshTimes,
@@ -262,14 +261,14 @@ export function lanesAt(
   parts: RendererParts,
   origin: RenderOrigin,
   sessionId: SessionId,
+  latest: CheckedRenderRequest | null,
 ): LaneSwitches {
-  const { renderCache, frameFeeds } = parts;
+  const { renderCache } = parts;
   using hold = renderCache.hold(
     origin.projectDir,
     origin.cwd,
     origin.target.path,
   );
-  const latest = frameFeeds.latest(sessionId);
   // [LAW:dataflow-not-control-flow] exception: a click with no request on
   // record (none since a restart, or its last one evicted) has no hint, and is measured as if in
   // tmux so a tmux session's click owes its setup; the owed setup is settled
@@ -522,7 +521,7 @@ export function drawRender(
   clickShown: ClickErrorRecord | null;
   // The launcher's pipe event this draw showed, which an answer carrying it
   // marks answered.
-  pipeShown: PipeEvent | null;
+  pipeShown: HeldEvent | null;
   // Records what the frame's copy clicks copy, once it reached its client.
   delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
@@ -531,14 +530,10 @@ export function drawRender(
   const {
     sessionState,
     renderCache,
-    updateWatch,
     linkSigner,
-    fileEvents,
     renderWarnings,
-    cacheTallies,
     effectSessions,
     menuIdle,
-    launcher,
   } = parts;
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -559,6 +554,7 @@ export function drawRender(
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure = view.source.failure();
+  const document = view.source.facts();
   // Which animation lanes this session's settings switch on, as drawn.
   const lanes = laneSwitches(effective, payload.tmux !== undefined);
   noteFacts(facts, {
@@ -579,15 +575,20 @@ export function drawRender(
     clickHold.kind === "held" || clickHold.kind === "owed"
       ? clickHold.error
       : null;
-  // [LAW:one-source-of-truth] The daemon-wide update notice, read for
-  // THIS session: what it dismissed and whether its config allows the
-  // notice — both values, folded by the notice into zero or one offer and
-  // zero or one failure.
-  const updates = updateWatch.notice({
-    sessionId,
-    dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
-    enabled: effective.updateNotice,
-  });
+  // [LAW:one-source-of-truth] The daemon-wide update notice, as the world
+  // state carries it, read for THIS session: what it dismissed and whether
+  // its config allows the notice — both values, folded by the notice into
+  // zero or one offer and zero or one failure.
+  const { update } = document.daemon;
+  const updates = updateNotice(
+    update.newer.kind === "ok" ? update.newer.value : null,
+    update.act,
+    {
+      sessionId,
+      dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
+      enabled: effective.updateNotice,
+    },
+  );
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
   const questions = repoQuestions(entry.repos, sessionId, linkSigner);
@@ -607,7 +608,7 @@ export function drawRender(
     said(refusedArgsError(req.refusedArgs)),
     said(hintsError),
     sourced("load", entry.lastError),
-    sourced("update-act", updateWatch.error()),
+    sourced("update-act", update.actsError),
     ...state.dropped.map((e) => ({
       about: `dropped\0${e.file}`,
       text: e.message,
@@ -627,11 +628,12 @@ export function drawRender(
     entry.watch === null ? null : watchFault("config watch", entry.watch, null);
   // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
-  const launched = launcher.launcherWarnings(at, drawing.by);
+  const { daemon } = document;
+  const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
   const pipeShown = pipeWarning?.event ?? null;
   const standing: readonly StandingWarning[] = [
-    ...fileEventsWarnings(fileEvents.delivery()),
+    ...daemon.fileEvents,
     ...launched,
     ...(configWatch === null
       ? []
@@ -680,7 +682,6 @@ export function drawRender(
       })),
     ],
   );
-  const document = view.source.facts();
   const projected = {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing,
@@ -801,7 +802,6 @@ export function drawRender(
           frame,
           viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
         );
-  const { git: g, usage: u } = cacheTallies();
   const fx = effects.lastFrame();
   // Each placement wearing its own effect, on its own clock; `-` for none.
   const own =
@@ -842,8 +842,6 @@ export function drawRender(
       ...[...standing, ...drawnWarnings].map(tagOf),
     ].join(",") || "-";
   noteFacts(facts, {
-    git: `${g.size}/${g.hits}h/${g.misses}m`,
-    usage: `${u.size}/${u.hits}h/${u.misses}m`,
     effect: fx.effect,
     effectT: fx.t.toFixed(3),
     // The rate the session's animation clock ran at for this frame.
@@ -1028,11 +1026,11 @@ export function laneSessionOf(
 export function laneClicked(
   parts: RendererParts,
   sessionId: SessionId,
+  latest: CheckedRenderRequest | null,
   before: LaneSwitches,
   after: LaneSwitches,
 ): void {
-  const { frameFeeds, laneSetups, tmuxStatusLines } = parts;
-  const latest = frameFeeds.latest(sessionId);
+  const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.clicked(
     sessionId,
     latest === null ? null : laneSessionOf(parts, latest),
@@ -1053,11 +1051,17 @@ export async function answerRequest(
   req: CheckedRenderRequest,
   at: Instant,
   waitMs: number,
-  // When the session's menus' idle period began, as the host read it.
-  idleSince: Instant | null,
+  // What the host's feeds knew of the session as the request arrived: which
+  // lanes follow it and draw it now, and what each was sent of late; and when
+  // its menus' idle period began, as the host's clock read it.
+  feed: {
+    readonly following: ReadonlySet<Lane>;
+    readonly feeds: LaneFeeds;
+    readonly idleSince: Instant | null;
+  },
   facts: RequestFacts,
 ): Promise<RequestAnswer> {
-  const { clock, frameFeeds, log } = parts;
+  const { clock, log } = parts;
   // [LAW:no-ambient-temporal-coupling] The wait is counted from this turn's
   // start on the renderer's own clock.
   const turnFrom = clock.monotonic();
@@ -1130,10 +1134,10 @@ export async function answerRequest(
     parts,
     setup,
     ANSWERING,
-    frameFeeds.feedsOf(sessionId, setup.at),
-    idleSince,
+    feed.feeds,
+    feed.idleSince,
   );
-  const elsewhere = handedOffTo(lanes, frameFeeds.following(sessionId));
+  const elsewhere = handedOffTo(lanes, feed.following);
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
@@ -1172,7 +1176,7 @@ function answerDelivered(
   sessionId: SessionId,
   copied: () => void,
   clickShown: ClickErrorRecord | null,
-  pipeShown: PipeEvent | null,
+  pipeShown: HeldEvent | null,
 ): () => void {
   return () => {
     copied();
@@ -1180,7 +1184,7 @@ function answerDelivered(
       answeredClickError(parts.sessionState, sessionId, clickShown);
     // Daemon-wide: one session's answer having shown the launcher's pipe
     // event is what makes it not silent.
-    if (pipeShown !== null) parts.launcher.answeredPipeEvent(pipeShown);
+    if (pipeShown !== null) parts.pipeEventAnswered(pipeShown);
   };
 }
 

@@ -58,6 +58,7 @@ import { SettingsHistory } from "./settings-history.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { WorldStates } from "./world-states.js";
+import { Watches } from "./watches.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import {
   configLoadedLine,
@@ -112,7 +113,11 @@ export function mainRenderer(
           event.context,
           at,
           event.waitMs,
-          event.idleSince,
+          {
+            following: new Set(event.following),
+            feeds: event.feeds,
+            idleSince: event.idleSince,
+          },
           record,
         );
         const id = ++minted as EffectId;
@@ -155,7 +160,7 @@ export function mainRenderer(
         // click since the firing keeps what it opened.
         // [LAW:effects-at-boundaries] exception: the idle clock stays with
         // the host, so the turn asks it in place.
-        await parts.verbs.closeIdle(event.session, {
+        await parts.verbs.closeIdle(event.session, event.latest, {
           ...event.idle,
           confirm: () =>
             parts.menuIdle.confirmClose(event.session, event.idle.firedAt),
@@ -277,6 +282,9 @@ function startOver(
   const renderWarnings = new RenderWarningRecords();
   // The world states the host hands the renderer, which its views read.
   const worldStates = new WorldStates();
+  // [LAW:single-enforcer] Every watch this renderer holds, each held by the
+  // host's registry under an id minted here.
+  const watches = new Watches(host.watches);
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock,
@@ -284,7 +292,7 @@ function startOver(
       locations: inputs.locations,
       env: inputs.env,
       sessionState,
-      watchers: host.watchers,
+      watchers: watches,
       log,
       storage: host.managedStorage,
       signer: linkSigner,
@@ -398,9 +406,10 @@ function startOver(
     links: linkSigner,
     runs: host.runs,
     lanes: {
-      of: (origin, sessionId) => lanesAt(parts, origin, sessionId),
-      clicked: (sessionId, before, after) =>
-        laneClicked(parts, sessionId, before, after),
+      of: (origin, sessionId, latest) =>
+        lanesAt(parts, origin, sessionId, latest),
+      clicked: (sessionId, latest, before, after) =>
+        laneClicked(parts, sessionId, latest, before, after),
     },
     views: {
       follow: (sessionId, origin) =>
@@ -486,6 +495,9 @@ function startOver(
           kind: "debug",
           snapshot: debugOf(renderCache.latestView(), push.what),
         };
+      case "watch":
+        watches.pushed(push.id, push.heard, push.deaf);
+        return { kind: "watch" };
       case "hold-click-error":
         holdClickError(sessionState, push.session, push.text, at);
         return { kind: "hold-click-error" };

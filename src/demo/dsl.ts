@@ -65,7 +65,8 @@ import { WorldStates } from "../renderer/world-states.js";
 import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { sessionSource } from "../renderer/session-source.js";
 import { SessionState } from "../renderer/session-state.js";
-import { newUpdateFact } from "../daemon/update-fact.js";
+import { IDLE, type DaemonFacts } from "../facts/world-state.js";
+import { pendingOf } from "../utils/outcome.js";
 import { EMPTY_HISTORY_DEPTH } from "../renderer/settings-history.js";
 import { drawDsl } from "../dsl/render.js";
 import { SessionEffects } from "../render/effect.js";
@@ -183,9 +184,13 @@ async function renderFrames(): Promise<void> {
     runs.close();
     throw e;
   }
-  // The demo runs no update watch: its world state carries an update nothing
-  // has sampled.
-  const updateFact = newUpdateFact();
+  // The demo runs no update watch and launches nothing: its world state
+  // carries an update nothing has sampled, and no fault of a daemon's own.
+  const daemonFacts: DaemonFacts = {
+    update: { newer: pendingOf("unread"), act: IDLE, actsError: null },
+    fileEvents: [],
+    launcher: [],
+  };
   // [LAW:single-enforcer] The session's world state, read by the host's own
   // collector over the demo's providers and handed straight to the store its
   // view reads, as the daemon's renderer takes it.
@@ -196,7 +201,7 @@ async function renderFrames(): Promise<void> {
   let subscriptions = (): Subscriptions => ({ sources: {} });
   const collector = new Collector({
     owners: providers,
-    update: () => updateFact.get(),
+    daemon: () => daemonFacts,
     clock: world.clock,
     // The demo's one session is drawn for as long as it runs.
     watched: () => true,

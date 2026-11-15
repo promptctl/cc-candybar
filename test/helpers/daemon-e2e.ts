@@ -44,7 +44,11 @@ import { until } from "./until";
 import { fieldOf, fieldsOf } from "../../src/utils/logfmt";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
-export const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
+export const configFlag = (p: string): string[] => [
+  "cc-candybar",
+  "--config",
+  p,
+];
 
 const REPLY_BUDGET_MS = 5000;
 
@@ -83,9 +87,11 @@ export function answeredEvents(log: string, sessionId: string): string[] {
 // click was sent) can be this click's.
 export function clickEventOf(log: string, id: number, from: number): string {
   return (
-    logLines(log).slice(from).find(
-      (l) => l.includes("] click ") && fieldsOf(l).get("req") === String(id),
-    ) ?? ""
+    logLines(log)
+      .slice(from)
+      .find(
+        (l) => l.includes("] click ") && fieldsOf(l).get("req") === String(id),
+      ) ?? ""
   );
 }
 
@@ -271,7 +277,11 @@ export function sendClick(
 // is this click's whatever else is in flight.
 export type ClickAnswer =
   | { readonly kind: "replied"; readonly resp: Response }
-  | { readonly kind: "timed-out"; readonly outcome: string; readonly event: string };
+  | {
+      readonly kind: "timed-out";
+      readonly outcome: string;
+      readonly event: string;
+    };
 
 export async function clickAnswer(
   target: DaemonTarget,
@@ -317,13 +327,17 @@ export async function click(
   replyBudgetMs = REPLY_BUDGET_MS,
 ): Promise<void> {
   const answer = await clickAnswer(target, url, replyBudgetMs);
-  if (toldOf(answer) !== "ok") throw new Error(`click failed: ${saidOf(answer)}`);
+  if (toldOf(answer) !== "ok")
+    throw new Error(`click failed: ${saidOf(answer)}`);
 }
 
 // The reply code a refused click's outcome reaches its client as: the test's
 // own statement of the wire, kept apart from the daemon's mapping so the two
 // check each other.
-const REPLY_CODE = { "bad-request": "BAD_REQUEST", threw: "RENDER_FAILED" } as const;
+const REPLY_CODE = {
+  "bad-request": "BAD_REQUEST",
+  threw: "RENDER_FAILED",
+} as const;
 
 // `clickAnswer`, for a test whose click the daemon must refuse: a forged link
 // is a bad request, and a click whose verb fails threw.

@@ -124,17 +124,30 @@ function settingsPathOf(hints: ClientHints, home: string): string {
 //
 // `at` is the request's arrival, the instant its speed sample is taken at.
 // It answers how long each lane took, once every lane has landed.
-// [LAW:one-source-of-truth] What a renderer reaches of the host's readings: the
-// refresh over these providers, and their caches' tallies.
+// [LAW:one-source-of-truth] What a renderer reaches of the host's readings:
+// the refresh over these providers.
 export const readingsHost = (
   deps: RenderPayloadDeps,
-): Pick<AdapterToHost, "refresh" | "cacheTallies"> => ({
+): Pick<AdapterToHost, "refresh"> => ({
   refresh: (facts, at) => refreshPayload({ ...facts, deps }, at),
-  cacheTallies: () => ({
-    git: deps.gitProvider.getStats(),
-    usage: deps.usageStore.getStats(),
-  }),
 });
+
+// [LAW:nothing-unseen] The repository and usage caches' tallies, as a render
+// event's facts show them: what the host's caches answered by the end of a
+// render.
+export function cacheTallyFacts(
+  deps: Pick<RenderPayloadDeps, "gitProvider" | "usageStore">,
+): { readonly git: string; readonly usage: string } {
+  const tally = (t: {
+    readonly size: number;
+    readonly hits: number;
+    readonly misses: number;
+  }): string => `${t.size}/${t.hits}h/${t.misses}m`;
+  return {
+    git: tally(deps.gitProvider.getStats()),
+    usage: tally(deps.usageStore.getStats()),
+  };
+}
 
 export async function refreshPayload(
   inputs: PayloadInputs,

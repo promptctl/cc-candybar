@@ -144,7 +144,10 @@ import type {
   RunRequest,
   AdapterToHost,
 } from "../../renderer-interface/adapter";
-import type { DeclaredSources } from "../../renderer-interface/request-context";
+import type {
+  CheckedRenderRequest,
+  DeclaredSources,
+} from "../../renderer-interface/request-context";
 import { sessionEnv } from "../../daemon/foundations/session-env";
 import { runDeclaration, type SlashAction } from "../../config/action";
 import type { SlashLine } from "../../claude-input/slash-line";
@@ -280,11 +283,17 @@ export interface DaemonContext {
   // follows a click of that session (`clicked`): the click path measures
   // them before each click and after its commit (`journaled`), and the
   // daemon hands both to the one owner of lane setup
-  // (src/daemon/lane-setup.ts) and of the tmux status line.
+  // (src/daemon/lane-setup.ts) and of the tmux status line. `latest` is the
+  // session's newest request the host holds, whose hints name its pane.
   readonly lanes: {
-    readonly of: (origin: RenderOrigin, sessionId: SessionId) => LaneSwitches;
+    readonly of: (
+      origin: RenderOrigin,
+      sessionId: SessionId,
+      latest: CheckedRenderRequest | null,
+    ) => LaneSwitches;
     readonly clicked: (
       sessionId: SessionId,
+      latest: CheckedRenderRequest | null,
       before: LaneSwitches,
       after: LaneSwitches,
     ) => void;
@@ -318,6 +327,8 @@ export interface VerbContext extends DaemonContext {
   readonly turnWaited: (ms: number) => void;
   // Whether the client that sent THIS click has left.
   readonly clientGone: () => Promise<boolean>;
+  // The newest request of THIS click's session the host holds.
+  readonly latest: CheckedRenderRequest | null;
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
@@ -834,16 +845,25 @@ function sessionConfig(ctx: Unbound, sid: SessionId): DslConfig {
 // rendered, which has no config to switch them.
 interface LaneMeter {
   readonly sessionId: SessionId;
+  readonly latest: CheckedRenderRequest | null;
   readonly before: LaneSwitches;
   readonly read: () => LaneSwitches;
 }
 
-function laneMeter(ctx: DaemonContext, sid: SessionId): LaneMeter | null {
+function laneMeter(
+  ctx: DaemonContext,
+  sid: SessionId,
+  latest: CheckedRenderRequest | null,
+): LaneMeter | null {
   const requested = requestedOrigin(ctx, sid);
   if (requested === null) return null;
   const read = (): LaneSwitches =>
-    ctx.lanes.of(sessionRenderOrigin(requested, ctx.sessionState, sid), sid);
-  return { sessionId: sid, before: read(), read };
+    ctx.lanes.of(
+      sessionRenderOrigin(requested, ctx.sessionState, sid),
+      sid,
+      latest,
+    );
+  return { sessionId: sid, latest, before: read(), read };
 }
 
 // What the session's config nests; a session that has never rendered has no
@@ -2017,11 +2037,12 @@ function throwAll(failures: readonly unknown[]): void {
 // there, and the daemon is gone from under what follows the commit.
 async function journaled<C extends DaemonContext>(
   sid: SessionId | null,
+  latest: CheckedRenderRequest | null,
   ctx: C,
   turn: JournalTurn,
   handler: (ctx: Journaled<C>) => Promise<void>,
 ): Promise<void> {
-  const lanes = sid === null ? null : laneMeter(ctx, sid);
+  const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin();
   const navigation = ctx.navigation.begin(journal.sessionState);
   // Each commit runs whatever the other did: both record what landed.
@@ -2084,6 +2105,7 @@ async function journaled<C extends DaemonContext>(
       const after = lanes.read();
       ctx.lanes.clicked(
         lanes.sessionId,
+        lanes.latest,
         journal.written() ? lanes.before : after,
         after,
       );
@@ -2132,7 +2154,7 @@ function click(
       },
       () => gather(value, ctx),
       (gathered, turn) =>
-        journaled(sid, ctx, turn, async (c) => {
+        journaled(sid, ctx.latest, ctx, turn, async (c) => {
           try {
             await handler(value, c, gathered);
           } finally {
@@ -2189,6 +2211,7 @@ export interface IdleClose extends IdleSpan {
 // it: it is not in VERBS.
 export function closeIdleMenus(
   sid: SessionId,
+  latest: CheckedRenderRequest | null,
   idle: IdleClose,
   ctx: DaemonContext,
 ): Promise<void> {
@@ -2200,7 +2223,7 @@ export function closeIdleMenus(
       gone: async () => false,
     },
     (turn) =>
-      journaled(sid, ctx, turn, async (c) => {
+      journaled(sid, latest, ctx, turn, async (c) => {
         if (!(await turn.landed(idle.confirm()))) {
           c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
           return;

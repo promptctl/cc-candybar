@@ -491,7 +491,11 @@ test("a watcher reload during a parked pbcopy starts no `by=click` setup", async
       ...ctx,
       launch,
       diagnosticCopy: () => "text",
-      lanes: { of: () => now, clicked: (...args) => moves.push(args) },
+      lanes: {
+        of: () => now,
+        clicked: (sessionId, _latest, before, after) =>
+          moves.push([sessionId, before, after]),
+      },
     },
   );
   await drain();
@@ -585,6 +589,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
     placeWaited: _p,
     gatherTook: _g,
     clientGone: _c,
+    latest: _l,
     ...verbCtx
   } = ctx;
   const events: string[] = [];
@@ -592,6 +597,7 @@ test("the click path counts a click pending from arrival, through a refusal, and
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
     menuIdle: idle,
     payloadProviders: {},
+    frameFeeds: { latest: () => null },
     log: (_level: string, line: string) => events.push(line),
     ...clickParts(verbCtx, idle),
   } as unknown as DaemonParts;
@@ -633,6 +639,7 @@ test("a click's turn holds its session in the collector while it runs, with noth
     placeWaited: _p,
     gatherTook: _g,
     clientGone: _c,
+    latest: _l,
     ...verbCtx
   } = ctx;
   // The collector's holds, as the sweep reads them: how many are taken and
@@ -648,6 +655,7 @@ test("a click's turn holds its session in the collector while it runs, with noth
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
     menuIdle: idle,
     payloadProviders: {},
+    frameFeeds: { latest: () => null },
     log: () => {},
     ...clickParts(verbCtx, idle, { holding, clicked: () => {} }),
   } as unknown as DaemonParts;
@@ -683,6 +691,7 @@ test("a click whose session will not decode is a bad request whose event still n
     placeWaited: _p,
     gatherTook: _g,
     clientGone: _c,
+    latest: _l,
     ...verbCtx
   } = ctx;
   const events: string[] = [];

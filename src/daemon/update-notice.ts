@@ -1,42 +1,25 @@
-// The update notice: something newer exists than the code rendering the bar,
-// and here is what to do about it. Two facts feed it — a source checkout whose
-// `src/` digest no longer matches the bundle (src/daemon/build-currency.ts) and
-// a published install behind the registry's latest release
-// (src/install/currency.ts) — and they are ONE statement to the reader: what is
-// newer, what is running, and three clicks: act (rebuild / upgrade), dismiss
-// (this session, this identity), disable (the config file, durably).
+// What is newer than the code rendering the bar, and the act on it. Two facts
+// feed it — a source checkout whose `src/` digest no longer matches the bundle
+// (src/daemon/build-currency.ts) and a published install behind the
+// registry's latest release (src/install/currency.ts) — and they are ONE
+// statement to the reader, which the renderer folds from its world state
+// (src/daemon/foundations/update-offer.ts).
 //
-// [LAW:one-type-per-behavior] Both facts render through one `Update` and one
-// sentence shape; what differs is a table of words and a command.
-//
-// [LAW:effects-at-boundaries] `updateReading` / `updateNotice` are pure:
-// (currency samples) → the update's reading, and (update, act state, session
-// context) → the offer and the failure. The watch below is the edge: the
-// clocks, the registry fetch, the act's record, the validator registrations.
+// [LAW:effects-at-boundaries] `updateReading` is pure: (currency samples) →
+// the update's reading. The watch below is the edge: the clocks, the registry
+// fetch, the act's record, the validator registrations.
 
-import {
-  effectsUrl,
-  VERB_APPLY_UPDATE,
-  VERB_SET_CONFIG,
-  VERB_SET_STATE,
-} from "../click/wire";
 import {
   assessCurrency,
   fetchLatestVersion,
-  formatVersion,
   PACKAGE_NAME,
   type Currency,
 } from "../install/currency";
 import type { LaunchOpts, Launcher } from "../proc/launcher";
 import {
-  diagnosticSpan,
-  UPDATE_SEVERITY,
-  type DiagnosticLine,
-  type SourcedText,
-} from "../render/diagnostics";
-import {
-  shortDigest,
-  type SourceStamp,
+  formatVersion,
+  IDLE,
+  type ActState,
   type Update,
 } from "../facts/world-state";
 import { PACKAGE_VERSION } from "../version";
@@ -44,14 +27,12 @@ import { assessBuild, bundleStamp, type BuildCurrency } from "./build-currency";
 import {
   claimAct,
   endOverdue,
-  IDLE,
   judgeAct,
   makeActReader,
   type ActFacts,
-  type ActState,
 } from "./update-act";
 import type { ProcessProbe } from "./process-fingerprint";
-import { runInAction } from "mobx";
+import { compareStructural, observable, runInAction } from "mobx";
 import { restamp } from "../facts/fact";
 import type { UpdateFact } from "./update-fact";
 import { instantAt } from "../utils/instant";
@@ -67,144 +48,32 @@ import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs, DaemonClosing } from "./foundations/verb-error";
 import type { Gates } from "./foundations/gates";
+import { UPDATE_DISMISSED_KEY } from "./foundations/update-keys";
 import {
-  UPDATE_DISMISSED_KEY,
-  UPDATE_NOTICE_FIELD,
-  UPDATE_NOTICE_SESSION_KEY,
-} from "./foundations/update-keys";
+  describeStamp,
+  updateIdentity,
+  wordsOf,
+} from "./foundations/update-offer";
 import type { Timekeeper } from "../time.js";
-import type {
-  NoticeContext,
-  UpdateNotice,
-} from "../renderer-interface/adapter";
 
-// What a dismissal names: the newer thing's identity, so a dismissal lapses
-// the moment something newer again appears — the digest for source (the
-// version alone would miss every uncommitted edit), the version for a release.
-export function updateIdentity(update: Update): string {
-  return update.kind === "source"
-    ? update.newer.digest
-    : formatVersion(update.newer);
-}
-
-// How a stamp reads to a person: the version it reports and the short digest
-// that tells two builds of one version apart.
-export const describeStamp = (s: SourceStamp): string =>
-  `${s.version} [${shortDigest(s.digest)}]`;
-
-// [LAW:dataflow-not-control-flow] The words and the command, as one table
-// the notice and the act both read. Nothing downstream asks which kind it is.
-interface UpdateFacts {
-  readonly headline: string;
-  readonly newer: string;
-  readonly running: string;
-  readonly act: string;
-  readonly busy: string;
-  readonly command: Pick<LaunchOpts, "bin" | "args" | "cwd">;
-}
-
-export function factsOf(update: Update): UpdateFacts {
+// [LAW:dataflow-not-control-flow] The command the act runs, by the update it
+// applies. Nothing downstream asks which kind it is.
+export function commandOf(
+  update: Update,
+): Pick<LaunchOpts, "bin" | "args" | "cwd"> {
   switch (update.kind) {
     case "source":
-      return {
-        headline: "Newer source",
-        newer: describeStamp(update.newer),
-        running: describeStamp(update.running),
-        act: "rebuild",
-        busy: "rebuilding…",
-        command: { bin: "pnpm", args: ["build"], cwd: update.root },
-      };
+      return { bin: "pnpm", args: ["build"], cwd: update.root };
     case "release":
       return {
-        headline: "Newer release",
-        newer: formatVersion(update.newer),
-        running: formatVersion(update.running),
-        act: "upgrade",
-        busy: "upgrading…",
-        command: {
-          bin: "pnpm",
-          args: [
-            "dlx",
-            `${PACKAGE_NAME}@${formatVersion(update.newer)}`,
-            "install",
-          ],
-        },
+        bin: "pnpm",
+        args: [
+          "dlx",
+          `${PACKAGE_NAME}@${formatVersion(update.newer)}`,
+          "install",
+        ],
       };
   }
-}
-const NO_NOTICE: UpdateNotice = { offer: [], failure: [] };
-
-// [LAW:dataflow-not-control-flow] One update becomes zero or one offer and
-// zero or one failure — the lists ARE the answer, so the diagnostics fold
-// them beside the errors and warnings with no "is there a notice" branch.
-// Both stand under the one gate: a dismissed or disabled offer hides its
-// failure too. While the act runs the offer's affordance is a busy label.
-export function updateNotice(
-  update: Update | null,
-  act: ActState,
-  ctx: NoticeContext,
-): UpdateNotice {
-  if (update === null) return NO_NOTICE;
-  const identity = updateIdentity(update);
-  if (!ctx.enabled || ctx.dismissed === identity) return NO_NOTICE;
-  const facts = factsOf(update);
-  const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
-  const failedText = (text: string): SourcedText => ({
-    about: `update-failed\0${identity}`,
-    text,
-    copy: text,
-  });
-  const failure: readonly [] | readonly [SourcedText] =
-    act.kind === "failed" && act.identity === identity
-      ? [failedText(`${facts.act} failed: ${act.reason}`)]
-      : [];
-  // The sentence is plain text (the viewer's ⧉ copies it); the affordances
-  // each carry their own effect.
-  const actSpan =
-    act.kind === "running"
-      ? diagnosticSpan(`[${facts.busy}]`, null)
-      : diagnosticSpan(
-          `[${facts.act}]`,
-          effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }]),
-        );
-  const first: DiagnosticLine = [
-    diagnosticSpan(sentence, null),
-    actSpan,
-    diagnosticSpan(
-      "[dismiss]",
-      effectsUrl([
-        {
-          verb: VERB_SET_STATE,
-          args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity],
-        },
-      ]),
-    ),
-    diagnosticSpan(
-      "[disable]",
-      effectsUrl([
-        {
-          verb: VERB_SET_CONFIG,
-          args: [ctx.sessionId, UPDATE_NOTICE_FIELD, "false"],
-        },
-        {
-          verb: VERB_SET_STATE,
-          args: [ctx.sessionId, UPDATE_NOTICE_SESSION_KEY, "false"],
-        },
-      ]),
-    ),
-  ];
-  return {
-    offer: [
-      {
-        severity: UPDATE_SEVERITY,
-        about: `update\0${identity}`,
-        message: sentence,
-        copy: sentence,
-        lines: [first],
-      },
-    ],
-    failure,
-  };
 }
 
 // [LAW:dataflow-not-control-flow] The two currency samples folded into the one
@@ -283,10 +152,19 @@ export interface UpdateWatchOptions {
   readonly log: (level: LogLevel, msg: string) => void;
 }
 
+// The act on the update, as its files were last read, and why they could not
+// be read (null when they could): what every session's world state carries
+// beside the update, so a move of either restamps it.
+export interface ActsRead {
+  readonly act: ActState;
+  readonly actsError: string | null;
+}
+
 export interface UpdateWatch {
   arm(): void;
   close(): void;
-  notice(ctx: NoticeContext): UpdateNotice;
+  // Observable: read inside a derivation, it is followed.
+  acts(): ActsRead;
   // The apply-update verb's effect. Rejects with BadVerbArgs when there is
   // nothing to apply or an act is already running on this bundle, and with
   // DaemonClosing when the daemon closed before the claim stood.
@@ -295,9 +173,6 @@ export interface UpdateWatch {
   // it. False while its files can't be read: the error says so, and holding
   // every restart on a file nothing repairs would hold them for good.
   running(): Promise<boolean>;
-  // Why this bundle's act files can't be read, as of the last look; null when
-  // they can.
-  error(): string | null;
 }
 
 // A build or an install is a long child; ten minutes is generous for either
@@ -379,11 +254,25 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     return read;
   };
   const acts = makeActReader(actsDir, readStart, launcher, clock);
-  // [LAW:one-source-of-truth] The act as last read, for the notice's render
-  // and for noticing an end; null until the first read. Every decision — a
-  // second click, a restart's hold — reads the record afresh instead, since a
-  // read a tick old can say "idle" after a build has cleared the bundle.
+  // [LAW:one-source-of-truth] The act as last read, for noticing an end; null
+  // until the first read. Every decision — a second click, a restart's hold —
+  // reads the record afresh instead, since a read a tick old can say "idle"
+  // after a build has cleared the bundle.
   let seen: ActState | null = null;
+  // [LAW:no-silent-failure] Files that can't be read or written are an error
+  // the indicator shows; null while they can be.
+  let unreadable: string | null = null;
+  // [LAW:one-source-of-truth] What the notice is folded from, beside the
+  // update: written with `seen` and `unreadable`, so a move of either is a
+  // move of every session's world state.
+  const actsRead = observable.box<ActsRead>(
+    { act: IDLE, actsError: null },
+    { deep: false, equals: compareStructural },
+  );
+  const publishActs = (): void =>
+    runInAction(() =>
+      actsRead.set({ act: seen ?? IDLE, actsError: unreadable }),
+    );
   let gate: { readonly identity: string; readonly dispose: () => void } | null =
     null;
   const logBuild = changeLogger(log);
@@ -469,18 +358,19 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   type ActsTouch<T> =
     | { readonly ok: true; readonly value: T }
     | { readonly ok: false; readonly error: string };
-  let unreadable: string | null = null;
   const logUnreadable = changeLogger(log);
   async function touchActs<T>(touch: () => Promise<T>): Promise<ActsTouch<T>> {
     try {
       const value = await touch();
       unreadable = null;
+      publishActs();
       return { ok: true, value };
     } catch (err) {
       if (err instanceof DaemonClosing) {
         return { ok: false, error: err.message };
       }
       unreadable = `update act files (${actsDir}): ${(err as Error).message}`;
+      publishActs();
       logUnreadable(["error", unreadable]);
       return { ok: false, error: unreadable };
     }
@@ -507,20 +397,25 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     });
     if (closed || !read.ok) return;
     const next = judgeAct(read.value);
-    if (seen === null && next.kind === "running") {
+    const was = seen;
+    seen = next;
+    if (was === null && next.kind === "running") {
       log("info", `apply-update: act ${next.act} is running; watching it`);
     }
-    if (seen?.kind === "running" && next.kind !== "running") {
-      if (next.kind === "succeeded") {
-        log("info", `apply-update: act ${next.act} succeeded`);
-        sampleBuild();
-        onApplied();
-      }
-      if (next.kind === "failed") {
-        log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
-      }
+    const ended = was?.kind === "running" && next.kind !== "running";
+    const succeeded = ended && next.kind === "succeeded";
+    if (succeeded) log("info", `apply-update: act ${next.act} succeeded`);
+    if (ended && next.kind === "failed") {
+      log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
     }
-    seen = next;
+    // [LAW:one-source-of-truth] One action: a success's sampled build and the
+    // act it ends land together, so no stamp pairs the new update with the act
+    // still running.
+    runInAction(() => {
+      if (succeeded) sampleBuild();
+      publishActs();
+    });
+    if (succeeded) onApplied();
   }
 
   // [LAW:no-ambient-temporal-coupling] Each tick scheduled only once the last
@@ -550,13 +445,12 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       publish();
       armed.forEach((release) => release());
     },
-    notice: (ctx) => updateNotice(current(), seen ?? IDLE, ctx),
+    acts: () => actsRead.get(),
     running: () =>
       actTurn(async () => {
         const read = await touchActs(() => acts.read());
         return read.ok && judgeAct(read.value).kind === "running";
       }),
-    error: () => unreadable,
     act: () =>
       actTurn(async () => {
         if (closed) throw new DaemonClosing("apply-update");
@@ -571,10 +465,11 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
             "apply-update: nothing newer is known to apply",
           );
         }
-        const facts = factsOf(update);
+        const words = wordsOf(update);
+        const command = commandOf(update);
         const newest = read.value;
         if (judgeAct(newest).kind === "running") {
-          throw new BadVerbArgs(`apply-update: already ${facts.busy}`);
+          throw new BadVerbArgs(`apply-update: already ${words.busy}`);
         }
         // The child inherits the daemon's environment (PATH included): no env
         // is passed, so nothing about the command is composed from data.
@@ -583,7 +478,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           actsDir,
           newest === null ? null : newest.act,
           updateIdentity(update),
-          { ...facts.command, category: "update.apply" },
+          { ...command, category: "update.apply" },
           ACT_TIMEOUT_MS,
           clock.now(),
           readStart,
@@ -593,9 +488,10 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         }
         log(
           "info",
-          `apply-update: act ${claim.act}: ${facts.act} — ${facts.command.bin} ${facts.command.args?.join(" ") ?? ""}`,
+          `apply-update: act ${claim.act}: ${words.act} — ${command.bin} ${command.args?.join(" ") ?? ""}`,
         );
         seen = { kind: "running", act: claim.act };
+        publishActs();
       }),
   };
 }

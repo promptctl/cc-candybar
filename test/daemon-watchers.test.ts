@@ -298,6 +298,38 @@ describe("WatcherRegistry", () => {
     },
   );
 
+  // Root ignores directory permissions, so the second refusal cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a deaf directory refused again for another reason tells its slot the new fault",
+    async () => {
+      const parent = fs.mkdtempSync(path.join(os.tmpdir(), "watch-redeaf-"));
+      const dir = path.join(parent, "later");
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
+      const heard: Invalidation[] = [];
+      try {
+        const handle = reg.acquire("k", { dirs: [{ path: dir }] }, (h) =>
+          heard.push(h),
+        );
+        expect(handle.deaf[0]?.reason).toContain("ENOENT");
+        fs.mkdirSync(dir);
+        fs.chmodSync(dir, 0o000);
+        reg.judge();
+        await until(() => heard.length === 1, "the new refusal's window");
+        expect(handle.deaf[0]?.reason).toContain("EACCES");
+        expect(heard).toEqual([
+          { kind: "failed", reason: expect.stringContaining("EACCES") },
+        ]);
+      } finally {
+        reg.closeAll();
+        fs.chmodSync(dir, 0o700);
+        rmrf(parent);
+      }
+    },
+  );
+
   test("an error after open reaches the consumer and the stats", async () => {
     const fake = standIn();
     try {
@@ -406,8 +438,8 @@ describe("WatcherRegistry", () => {
       listener("change", "conf");
       await until(() => seen.length === 2, "the removal's invalidation");
       expect(seen).toEqual([
-        { kind: "changed", paths: new Set([path.join(conf, "config.json5")]) },
-        { kind: "changed", paths: new Set([path.join(conf, "conf")]) },
+        { kind: "changed", paths: [path.join(conf, "config.json5")] },
+        { kind: "changed", paths: [path.join(conf, "conf")] },
       ]);
       reg.closeAll();
     } finally {
@@ -450,7 +482,7 @@ describe("WatcherRegistry", () => {
       await until(() => seen.length === 2, "the watched name's invalidation");
       expect(seen[1]).toEqual({
         kind: "changed",
-        paths: new Set([path.join(conf, "config.json5")]),
+        paths: [path.join(conf, "config.json5")],
       });
       reg.closeAll();
     } finally {
@@ -567,7 +599,7 @@ describe("WatcherRegistry", () => {
       fake.opened[0]!.listener("rename", "a");
       fake.opened[0]!.listener("rename", "b");
       await until(() => seen.length === 1, "the new name's invalidation");
-      expect(seen).toEqual([{ kind: "changed", paths: new Set(["/w/b"]) }]);
+      expect(seen).toEqual([{ kind: "changed", paths: ["/w/b"] }]);
       reg.closeAll();
     } finally {
       fake.restore();
@@ -645,7 +677,7 @@ describe("WatcherRegistry", () => {
       await until(() => seen.length === 2, "the watched name's window");
       expect(seen[1]).toEqual({
         kind: "changed",
-        paths: new Set([path.join(conf, "config.json5")]),
+        paths: [path.join(conf, "config.json5")],
       });
       expect(counters).toEqual({
         ...zeroCounters(),

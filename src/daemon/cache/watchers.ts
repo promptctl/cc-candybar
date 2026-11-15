@@ -1,3 +1,4 @@
+import { compareStructural } from "mobx";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
@@ -14,6 +15,7 @@ import type {
   DirTarget,
   Deafness,
 } from "../foundations/watch-targets";
+import { followWatch } from "../foundations/watch-targets";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects its log (writes to daemon.log at the requested level); other
@@ -129,6 +131,13 @@ function folded(window: Gathering, next: Gathering): Gathering {
   return window;
 }
 
+// A window as its holders hear it: its paths a list in one order, so two
+// windows that heard the same paths are equal values.
+const heardOf = (window: Gathering): Invalidation =>
+  window.kind === "changed"
+    ? { kind: "changed", paths: [...window.paths].sort() }
+    : window;
+
 const namedOf = (dir: string, filename: string | null): Gathering =>
   filename === null
     ? { kind: "unknown" }
@@ -207,37 +216,15 @@ export class WatcherRegistry {
     return this.makeHandle(slot, holder);
   }
 
-  // [LAW:single-enforcer] The one rule for a watch whose targets can move: a
-  // consumer derives its spec from disk again and the held watch follows it
-  // exactly when the key differs. The same key is the same directories, kept
-  // as they are; a new key acquires the spec's watch and then releases the
-  // held one, so a directory both name keeps its OS handle through the move.
-  // Nothing held yet is a first acquire, which is a rebind from nothing.
-  //
-  // A spec with a directory that binds nothing yet (gone, or a mount's
-  // transient fault) keeps the watch held: a derive that lands between a
-  // directory's removal and its making again would otherwise trade a watch
-  // FSEvents keeps on its path for a slot the OS refuses. The next derive
-  // that finds the directory there rebinds, since its key differs.
-  //
-  // [LAW:no-ambient-temporal-coupling] A kept watch retries nothing: its deaf
-  // directories are the period's to open again (`judge`). A follow that
-  // retried would answer the failed window its own handle's error told, and
-  // a handle that errors after every open would retry itself at the debounce
-  // cadence.
+  // The held watch following `spec` (`followWatch`).
   follow(
     held: HeldWatch | null,
     spec: WatchSpec,
     onInvalidate: (invalidation: Invalidation) => void,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
-    if (held !== null && (held.key === spec.key || spec.unbound))
-      return { watch: held, move: "kept" };
-    const watch = {
-      key: spec.key,
-      handle: this.acquire(spec.key, spec.targets, onInvalidate),
-    };
-    held?.handle.release();
-    return { watch, move: "rebound" };
+    return followWatch(held, spec, (key, targets) =>
+      this.acquire(key, targets, onInvalidate),
+    );
   }
 
   private opened(key: string, targets: WatchTargets): WatcherSlot {
@@ -319,17 +306,22 @@ export class WatcherRegistry {
   }
 
   // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, it hears the fault. Listening again, it hears an
-  // `unknown` window: whatever changed while the directory was deaf or bound
-  // to another folder went unheard, and a holder that re-derives on it reports
-  // its fault cleared. Deaf staying deaf is no change and tells nothing.
+  // state. Going deaf, or deaf for another reason, it hears the fault.
+  // Listening again, it hears an `unknown` window: whatever changed while the
+  // directory was deaf or bound to another folder went unheard, and a holder
+  // that re-derives on it reports its fault cleared. Deaf for the same reason
+  // is no change and tells nothing.
   private reopen(dir: DirWatch, cause: string): void {
     const was = dir.state;
     if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    dir.state = this.open(dir, () => dir, cause, was);
-    if (dir.state.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening")
-      this.tell(dir, failedOf(dir.state.deafness));
+    const now = this.open(dir, () => dir, cause, was);
+    dir.state = now;
+    if (now.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (
+      was.kind === "listening" ||
+      !compareStructural(was.deafness, now.deafness)
+    )
+      this.tell(dir, failedOf(now.deafness));
   }
 
   // `dirOf` names the watch the handle belongs to; its callbacks run only
@@ -383,15 +375,10 @@ export class WatcherRegistry {
       // [LAW:nothing-unseen] A refusal is logged when it starts or its reason
       // changes; every period retries a deaf directory, and the same refusal
       // repeated would bury the events around it.
-      const same =
-        was?.kind === "deaf" &&
-        was.deafness.kind === "refused" &&
-        was.deafness.reason === reason;
-      if (!same) this.logger("warn", `watch failed ${at}: ${reason}`);
-      return {
-        kind: "deaf",
-        deafness: { kind: "refused", path: at, reason },
-      };
+      const deafness: Deafness = { kind: "refused", path: at, reason };
+      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
+        this.logger("warn", `watch failed ${at}: ${reason}`);
+      return { kind: "deaf", deafness };
     }
   }
 
@@ -437,9 +424,10 @@ export class WatcherRegistry {
         DEBOUNCE_MS,
         () => {
           slot.debounce = null;
+          const heard = heardOf(debounce.window);
           for (const holder of slot.holders) {
             try {
-              holder.onInvalidate(debounce.window);
+              holder.onInvalidate(heard);
             } catch (e) {
               this.logger(
                 "warn",

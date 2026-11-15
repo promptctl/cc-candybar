@@ -8,6 +8,7 @@
 // own composition (test/helpers/session-rig.ts) and read the way a draw reads
 // it; what moves is an owner, a pick, a request or the update fact.
 
+import { daemonFactsOf } from "./helpers/daemon-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,6 +22,7 @@ import { refreshPayload, type Readings } from "../src/daemon/readings";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
 import { ok, pendingOf } from "../src/utils/outcome";
+import { settledLane } from "../src/utils/reading";
 import type { Fact } from "../src/facts/fact";
 import type { Update } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
@@ -112,16 +114,32 @@ describe("one turn", () => {
   });
 });
 
+// The host's name read through `check`, which throws to fail the owners.
+const hostThrowing = (check: () => void) => ({
+  hostService: {
+    declareName: () => {
+      const lane = settledLane(ok("tester-box"));
+      return {
+        ...lane,
+        current: () => {
+          check();
+          return lane.current();
+        },
+      };
+    },
+    declareUser: () => settledLane(ok("tester")),
+  },
+});
+
 describe("a world state that cannot be stamped", () => {
   test("is a failure the draw reads, the last one stays drawn, and the next good stamp clears it", async () => {
     const broken = observable.box(false);
     const logged: string[] = [];
     const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
-      update: () => {
-        if (broken.get()) throw new Error("update watch exploded");
-        return pendingOf("unread");
-      },
+      owners: hostThrowing(() => {
+        if (broken.get()) throw new Error("host read exploded");
+      }),
       log: (level, message) => logged.push(`${level} ${message}`),
       observers: { onViewChanged: (sid) => changed.push(sid) },
     });
@@ -133,10 +151,10 @@ describe("a world state that cannot be stamped", () => {
     const settled = changed.length;
     runInAction(() => broken.set(true));
     expect(changed.length).toBeGreaterThan(settled);
-    expect(view.source.failure()).toContain("update watch exploded");
+    expect(view.source.failure()).toContain("host read exploded");
     // The bar is still the last turn's, whole.
     expect(view.source.payload()).toEqual(before);
-    expect(logged.join("\n")).toContain("update watch exploded");
+    expect(logged.join("\n")).toContain("host read exploded");
 
     const failed = changed.length;
     runInAction(() => broken.set(false));
@@ -153,11 +171,10 @@ describe("a fault that persists", () => {
     const logged: string[] = [];
     const changed: string[] = [];
     const rig = sessionRig(dir, cleanups, {
-      update: () => {
+      owners: hostThrowing(() => {
         tick.get();
-        if (broken.get()) throw new Error("update watch exploded");
-        return pendingOf("unread");
-      },
+        if (broken.get()) throw new Error("host read exploded");
+      }),
       log: (level, message) => logged.push(`${level} ${message}`),
       observers: { onViewChanged: (sid) => changed.push(sid) },
     });
@@ -170,7 +187,7 @@ describe("a fault that persists", () => {
     const woken = changed.length;
 
     runInAction(() => tick.set(1));
-    expect(view.source.failure()).toContain("update watch exploded");
+    expect(view.source.failure()).toContain("host read exploded");
     expect(view.source.facts()).toBe(document);
     expect(view.source.payload()).toBe(payload);
     expect(logged.length).toBe(lines);
@@ -184,7 +201,7 @@ describe("what wakes a view", () => {
     const depth = observable.box(0);
     const update = observable.box<Fact<Update>>(pendingOf("unread"));
     const rig = sessionRig(dir, cleanups, {
-      update: () => update.get(),
+      daemon: () => daemonFactsOf(update.get()),
       source: {
         history: () => ({ undo: depth.get(), redo: 0, sinceEdit: 0 }),
       },
@@ -289,7 +306,7 @@ describe("the all-pending document", () => {
         undefined,
         SID,
         pendingReadings,
-        pendingOf("unread"),
+        daemonFactsOf(),
         instantOf(new Date(0)),
       );
       // Nothing is known: every fact of the document is pending, and the draw

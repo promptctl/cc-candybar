@@ -7,6 +7,8 @@ import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
 import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
+import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
+import type { LauncherFact } from "../proc/launcher";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
@@ -58,6 +60,17 @@ export interface StampDiagnostic {
 }
 export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
+// [LAW:types-are-the-program] What every session's document carries of the
+// daemon itself, by whose it is: the update, whether file events are heard,
+// and what the launcher stands behind (whether what it launches dies with it,
+// and the latest pipe event, whose hold each draw judges at its own instant
+// and for whom it draws, src/utils/event-hold.ts).
+export interface DaemonFacts {
+  readonly update: UpdateState;
+  readonly fileEvents: readonly FileEventsWarning[];
+  readonly launcher: readonly LauncherFact[];
+}
+
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the
 // transcript's folds alone: the hook's instantaneous fields (cost, the
 // context window, durations, lines) are the renderer's, laid over them when
@@ -90,8 +103,33 @@ export interface WorldState {
   readonly builtins: BuiltinFacts;
   readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;
   readonly runs: Readonly<Record<string, RunFact>>;
-  readonly update: Fact<Update>;
+  readonly daemon: DaemonFacts;
   readonly diagnostics: readonly FactsDiagnostic[];
+}
+
+// [LAW:types-are-the-program] The act on an update as every daemon sees it.
+// `succeeded` is its own arm, not `idle`, so a daemon watching an act end can
+// tell a rebuilt bundle from nothing having happened.
+export type ActState =
+  | { readonly kind: "idle" }
+  | { readonly kind: "running"; readonly act: number }
+  | { readonly kind: "succeeded"; readonly act: number }
+  | {
+      readonly kind: "failed";
+      readonly act: number;
+      readonly identity: string;
+      readonly reason: string;
+    };
+
+export const IDLE: ActState = { kind: "idle" };
+
+// What the update notice is folded from: what is newer than the running code,
+// the act on it as its files were last read, and why those files could not be
+// read (null when they could).
+export interface UpdateState {
+  readonly newer: Fact<Update>;
+  readonly act: ActState;
+  readonly actsError: string | null;
 }
 
 // [LAW:one-source-of-truth] One observation of the active session's cumulative
@@ -184,6 +222,10 @@ export type Update =
 // verdict needs is total only over that shape — so the parser refuses anything
 // else rather than admitting a prerelease it could not order.
 export type Version = readonly [major: number, minor: number, patch: number];
+
+export function formatVersion(v: Version): string {
+  return v.join(".");
+}
 
 // What identifies a build to a person: the version it reports and the
 // digest of the source it was built from.

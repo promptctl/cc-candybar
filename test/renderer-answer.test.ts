@@ -9,6 +9,7 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -44,7 +45,8 @@ import type {
   RendererVerbs,
 } from "../src/renderer/verbs/port";
 import { answerStatusline } from "../src/daemon/statusline-answer";
-import type { WorldState } from "../src/facts/world-state";
+import type { DaemonFacts, WorldState } from "../src/facts/world-state";
+import type { HeldEvent } from "../src/utils/event-hold";
 import { hearingEvents, NO_PUSHES } from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
@@ -58,38 +60,42 @@ afterEach(() => {
   for (const fn of cleanups.reverse()) fn();
 });
 
-const NO_STATS = { size: 0, hits: 0, misses: 0 };
-
 // The renderer over the rig's render cache and owners, the copies each
 // delivered frame recorded in that cache, in the order they were recorded,
-// and every line the daemon's log was handed.
-function renderer(verbs?: RendererVerbs): {
+// every line the daemon's log was handed, and each pipe event an answer told
+// the host it carried. `daemon` is what every world state carries of the
+// daemon itself.
+function renderer(
+  verbs?: RendererVerbs,
+  daemon?: () => DaemonFacts,
+): {
   readonly r: Renderer;
   readonly parts: MainRendererParts;
   readonly recorded: string[][];
   // Each session whose view told the cache its data moved, in order.
   readonly changed: string[];
   readonly logged: string[];
+  readonly pipesAnswered: HeldEvent[];
   readonly rig: SessionRig;
 } {
   const logged: string[] = [];
   const changed: string[] = [];
+  const pipesAnswered: HeldEvent[] = [];
   const rig = sessionRig(dir, cleanups, {
     log: (level, message) => logged.push(`${level} ${message}`),
     observers: { onViewChanged: (sessionId) => changed.push(sessionId) },
+    ...(daemon === undefined ? {} : { daemon }),
   });
-  const { providers } = rig;
-  const parts = rendererParts({
-    cache: rig.cache,
-    sessionState: rig.sessionState,
-    worldStates: rig.served.worldStates,
-    providers: {
-      ...providers,
-      gitProvider: { ...providers.gitProvider, getStats: () => NO_STATS },
-      usageStore: { ...providers.usageStore, getStats: () => NO_STATS },
-    },
-    verbs,
-  });
+  const parts: MainRendererParts = {
+    ...rendererParts({
+      cache: rig.cache,
+      sessionState: rig.sessionState,
+      worldStates: rig.served.worldStates,
+      providers: rig.providers,
+      verbs,
+    }),
+    pipeEventAnswered: (event) => pipesAnswered.push(event),
+  };
   // The cache's record of a delivered frame, heard on its way in.
   const recorded: string[][] = [];
   const record = rig.cache.delivered.bind(rig.cache);
@@ -103,6 +109,7 @@ function renderer(verbs?: RendererVerbs): {
     recorded,
     changed,
     logged,
+    pipesAnswered,
     rig,
   };
 }
@@ -169,6 +176,8 @@ const request = async (t: { r: Renderer; rig: SessionRig }) => {
       context,
       waitMs: 5000,
       idleSince: null,
+      following: [],
+      feeds: UNFOLLOWED_FEEDS,
     },
   });
 };
@@ -251,6 +260,8 @@ describe("a statusline request", () => {
           context,
           waitMs: 5000,
           idleSince: null,
+          following: [],
+          feeds: UNFOLLOWED_FEEDS,
         },
       }),
     );
@@ -295,6 +306,8 @@ describe("a statusline request", () => {
           context,
           waitMs: 0,
           idleSince: null,
+          following: [],
+          feeds: UNFOLLOWED_FEEDS,
         },
       }),
     );
@@ -305,6 +318,31 @@ describe("a statusline request", () => {
     expect(lines.filter((l) => l.startsWith("info refreshed "))).toEqual([
       `info refreshed req=${REQUEST} sid=${SESSION} refreshed=session:1ms,today:2ms,context:3ms,metrics:4ms,activity:5ms,cache:6ms,speed:7ms,autocompact:8ms`,
     ]);
+  });
+
+  test("draws the daemon's own faults its world state carries, and an answer that carried the pipe event tells the host once it arrived", async () => {
+    const event = {
+      text: "a launched program's pipe outlived its launch",
+      at: AT,
+      answered: false,
+    };
+    const t = renderer(undefined, () => ({
+      ...daemonFactsOf(),
+      launcher: [
+        {
+          kind: "lifeline",
+          message: "programs launched now would outlive their launcher",
+        },
+        { kind: "launch-pipes", event },
+      ],
+    }));
+    const { effects, record } = answered(await request(t));
+    const facts = new Map(record);
+    expect(facts.get("warn")).toBe("lifeline,launch-pipes");
+    expect(facts.get("pipeEvent")).toBe("held");
+    expect(t.pipesAnswered).toEqual([]);
+    answered(await done(t.r, presentOf(effects), true));
+    expect(t.pipesAnswered).toEqual([event]);
   });
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
@@ -484,6 +522,7 @@ describe("the session's config, ahead of its request", () => {
       host,
       t.rig.served.collector,
       { since: () => undefined },
+      UNFOLLOWED,
       systemTimekeeper,
       checked(),
       REQUEST,
@@ -515,6 +554,8 @@ describe("the session's config, ahead of its request", () => {
         context: checked(),
         waitMs: 5000,
         idleSince: null,
+        following: [],
+        feeds: UNFOLLOWED_FEEDS,
       },
     });
     expect(threw(answering).failure.message).toMatch(
@@ -564,6 +605,7 @@ describe("two requests of one session at different keys", () => {
         host,
         t.rig.served.collector,
         { since: () => undefined },
+        UNFOLLOWED,
         systemTimekeeper,
         checked(pane),
         id as RequestId,
@@ -602,13 +644,17 @@ describe("two requests of one session at different keys", () => {
 
 describe("a click", () => {
   // A click on the rig's session's link, delivered by the CLI.
-  const click = (verb: string): Event => ({
+  const click = (
+    verb: string,
+    latest: CheckedRenderRequest | null = null,
+  ): Event => ({
     kind: "click",
     verb,
     value: "",
     session: { ok: true, id: SESSION },
     arrival: { via: "link", delivery: { kind: "cli" } },
     id: 1 as RequestId,
+    latest,
   });
 
   test("answers with what the open views read once its act has landed", async () => {
@@ -651,6 +697,24 @@ describe("a click", () => {
     expect(thrown.subscriptions.sources).toEqual({});
   });
 
+  test("hands its act the host's newest request of its session, though the session has retired", async () => {
+    let seen: CheckedRenderRequest | null | undefined;
+    const t = renderer({
+      handler: (verb) =>
+        verb === "act"
+          ? async (_value, facts) => {
+              seen = facts.latest;
+            }
+          : undefined,
+      closeIdle: () => Promise.reject(new Error("no idle close here")),
+    });
+    await request(t);
+    await handIn(t.r, { kind: "retire", session: SESSION });
+    const latest = checked("%3");
+    answered(await handIn(t.r, click("act", latest)));
+    expect(seen).toBe(latest);
+  });
+
   test("of a verb the renderer does not have is its bad request", async () => {
     const t = renderer();
     const { failure } = threw(await handIn(t.r, click("nope")));
@@ -680,6 +744,7 @@ describe("the idle close", () => {
         kind: "menu-idle",
         session: SESSION,
         idle,
+        latest: null,
       }),
     );
     expect(effects).toEqual([]);

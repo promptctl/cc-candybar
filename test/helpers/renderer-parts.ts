@@ -3,7 +3,6 @@
 // inert host (`AdapterToHost`, src/renderer-interface/adapter.ts) for what its
 // side reaches. No daemon is built.
 
-import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { RenderWarningRecords } from "../../src/renderer/render-warnings";
 import type { SessionState } from "../../src/renderer/session-state";
 import { EffectSessions } from "../../src/render/effect";
@@ -20,7 +19,6 @@ import {
 } from "../../src/daemon/readings";
 import { systemTimekeeper } from "../../src/time";
 import { TEST_SIGNER } from "./link-signer";
-import { unscriptedLauncher } from "./fake-launcher";
 
 // A renderer that acts no verb: every click names a verb it does not have,
 // and an idle close is refused, so a test that clicks hands in the act it
@@ -71,25 +69,9 @@ export function inertHost(providers: RenderPayloadDeps): AdapterToHost {
     serving: unhosted("serving"),
     renderSightings: { ofSession: async () => [] },
     probes: { arrive: unhosted("probes") },
-    frameFeeds: {
-      feedsOf: () => UNFOLLOWED_FEEDS,
-      following: () => new Set(),
-      latest: () => null,
-    },
-    updateWatch: {
-      notice: () => ({ offer: [], failure: [] }),
-      error: () => null,
-    },
-    fileEvents: {
-      delivery: () => ({
-        kind: "delivering",
-        unreported: [],
-        missedSince: null,
-      }),
-    },
-    launcher: unscriptedLauncher,
+    pipeEventAnswered: () => {},
+    watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
     managedStorage: UNOWNED_STORAGE,
-    watchers: { acquire: unhosted("watchers"), follow: unhosted("watchers") },
   };
 }
 

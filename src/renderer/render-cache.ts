@@ -19,6 +19,7 @@ import type {
   EveryEntryLoad,
 } from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import type { Watches } from "./watches.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
 import {
@@ -170,7 +171,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // What an `env` source reads (StateDeps).
   env: Readonly<Record<string, string | undefined>>;
   sessionState: SessionStateRW;
-  watchers: AdapterToHost["watchers"];
+  // The renderer's watches (src/renderer/watches.ts): the answers book's and
+  // each entry's config watch.
+  watchers: Pick<Watches, "acquire" | "follow">;
   // The owner of every plugin's managed storage, whose folders a state's
   // build holds (StateDeps).
   storage: PluginStorage;
@@ -221,9 +224,10 @@ export interface StateDeps {
   // The gates a config's sessions click through, which a load builds once so a
   // config that cannot gate fails there.
   readonly gates: Gates;
-  // The daemon's one watcher registry, which the cache's own watches (the
-  // answers book's) ride. A build outside the daemon leaves it out.
-  readonly watchers?: AdapterToHost["watchers"];
+  // The renderer's watches, each held by the host's one registry, which the
+  // cache's own watches (the answers book's) ride; a watch's deafness is the
+  // host's latest push of it. A build outside the daemon leaves it out.
+  readonly watchers?: Pick<Watches, "acquire" | "follow">;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
@@ -434,7 +438,7 @@ export type LoadCause =
 const heardField = (heard: Invalidation): string => {
   switch (heard.kind) {
     case "changed":
-      return [...heard.paths].join(",");
+      return heard.paths.join(",");
     case "unknown":
       return "unknown";
     case "failed":
@@ -2121,9 +2125,11 @@ export class RenderCache<
     // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
     // candidate appeared, a link was re-pointed), and which directories the
     // entry now hears: a change that fires nothing is read against this line.
+    // Which of them the OS refused is the host registry's line (`watch
+    // failed`), as the deafness reaches this renderer only after the acquire.
     this.log(
       "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")} deaf=${watch.handle.deaf.length}`,
+      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")}`,
     );
     for (const { path: at, reason } of unresolved)
       this.log(

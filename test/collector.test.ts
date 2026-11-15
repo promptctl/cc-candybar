@@ -9,6 +9,7 @@
 // whose entries a test lands by hand, and reads what it handed in and what
 // the owners hold; no renderer is built.
 
+import { daemonFactsOf } from "./helpers/daemon-facts";
 import { observable, runInAction } from "mobx";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
@@ -134,7 +135,7 @@ function collectorOver(
   const logged: string[] = [];
   const collector = new Collector({
     owners,
-    update,
+    daemon: () => daemonFactsOf(update()),
     clock,
     watched: (session) => watched.has(session),
     deliver: async (event) => {
@@ -246,22 +247,27 @@ describe("a stamp that throws", () => {
   test("hands in the last document with the failure and the next seq; the same failure hands in nothing, and the next good stamp clears it", () => {
     const broken = observable.box(false);
     const tick = observable.box(0);
-    const { owners } = handLanded();
-    const { collector, handedIn, logged } = collectorOver(owners, {
-      update: () => {
+    const { owners: base } = handLanded();
+    const failing = (): Lane<string> => ({
+      current: () => {
         tick.get();
-        if (broken.get()) throw new Error("update watch exploded");
-        return pendingOf("unread");
+        if (broken.get()) throw new Error("host read exploded");
+        return ABSENT as Current<string>;
       },
     });
+    const owners = {
+      ...base,
+      hostService: { declareName: failing, declareUser: failing },
+    } as unknown as RenderPayloadDeps;
+    const { collector, handedIn, logged } = collectorOver(owners);
     const first = collector.requested(requestAt("/a"));
     runInAction(() => broken.set(true));
     expect(handedIn).toHaveLength(1);
     const failedDoc = (handedIn[0] as { worldState: WorldState }).worldState;
     expect(failedDoc.seq).toBe(first.seq + 1);
     expect(failedDoc.builtins).toBe(first.builtins);
-    expect(stampFailureOf(failedDoc)).toContain("update watch exploded");
-    expect(logged.join("\n")).toContain("update watch exploded");
+    expect(stampFailureOf(failedDoc)).toContain("host read exploded");
+    expect(logged.join("\n")).toContain("host read exploded");
 
     runInAction(() => tick.set(1));
     expect(handedIn).toHaveLength(1);
@@ -271,6 +277,35 @@ describe("a stamp that throws", () => {
     const clean = (handedIn[1] as { worldState: WorldState }).worldState;
     expect(clean.seq).toBe(failedDoc.seq + 1);
     expect(stampFailureOf(clean)).toBeNull();
+  });
+});
+
+describe("owners that keep failing to read", () => {
+  test("leave the daemon's facts current: a move of them hands in a document carrying it, still saying what failed", () => {
+    const broken = observable.box(false);
+    const newer = observable.box<Fact<Update>>(pendingOf("unread"));
+    const { owners: base } = handLanded();
+    const failing = (): Lane<string> => ({
+      current: () => {
+        if (broken.get()) throw new Error("host read exploded");
+        return ABSENT as Current<string>;
+      },
+    });
+    const owners = {
+      ...base,
+      hostService: { declareName: failing, declareUser: failing },
+    } as unknown as RenderPayloadDeps;
+    const { collector, handedIn } = collectorOver(owners, {
+      update: () => newer.get(),
+    });
+    collector.requested(requestAt("/a"));
+    runInAction(() => broken.set(true));
+    expect(handedIn).toHaveLength(1);
+    runInAction(() => newer.set(pendingOf("superseded")));
+    expect(handedIn).toHaveLength(2);
+    const doc = (handedIn[1] as { worldState: WorldState }).worldState;
+    expect(doc.daemon.update.newer).toEqual(pendingOf("superseded"));
+    expect(stampFailureOf(doc)).toContain("host read exploded");
   });
 });
 

@@ -22,9 +22,12 @@ export type Drawn = Rgb | { readonly ansi: number };
 const drawnOf = (color: string | undefined): Drawn | undefined => {
   if (color === undefined || color === "default") return undefined;
   const spec = ColorSpec.parse(color);
-  if (spec.number !== undefined && spec.number < 16) return { ansi: spec.number };
+  if (spec.number !== undefined && spec.number < 16)
+    return { ansi: spec.number };
   const { hex } = spec.getTruecolor();
-  return [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as unknown as Rgb;
+  return [1, 3, 5].map((at) =>
+    parseInt(hex.slice(at, at + 2), 16),
+  ) as unknown as Rgb;
 };
 
 // The joiner's glyphs, read off the shape rich-js renders with: the arrow
@@ -57,7 +60,14 @@ export function drawnChars({ rows }: Pick<Frame, "rows">): Char[] {
       const bg = drawnOf(run.bg);
       const reverse = run.attrs?.includes("reverse") === true;
       return [...run.text].flatMap((ch) => {
-        const char: Char = { ch, fg, bg, joiner: JOINERS.has(ch), reverse, before };
+        const char: Char = {
+          ch,
+          fg,
+          bg,
+          joiner: JOINERS.has(ch),
+          reverse,
+          before,
+        };
         before = reverse ? fg : bg;
         return ch.trim() === "" ? [] : [char];
       });
@@ -67,8 +77,10 @@ export function drawnChars({ rows }: Pick<Frame, "rows">): Char[] {
 
 export const isRgb = (c: Drawn | undefined): c is Rgb => Array.isArray(c);
 /** Whether two colours are drawn alike: one RGB, or one slot. */
-export const same = (a: Drawn | undefined, b: Drawn | undefined): boolean => JSON.stringify(a) === JSON.stringify(b);
-export const hex = (c: Rgb): string => `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+export const same = (a: Drawn | undefined, b: Drawn | undefined): boolean =>
+  JSON.stringify(a) === JSON.stringify(b);
+export const hex = (c: Rgb): string =>
+  `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 
 /**
  * A drawn colour as the terminal shows it, by hex: a slot in the VGA colours
@@ -77,7 +89,11 @@ export const hex = (c: Rgb): string => `#${c.map((v) => v.toString(16).padStart(
  * terminal's own colour.
  */
 export const shown = (c: Drawn | undefined): string | undefined =>
-  c === undefined ? undefined : isRgb(c) ? hex(c) : ColorSpec.fromAnsi(c.ansi).getTruecolor().hex;
+  c === undefined
+    ? undefined
+    : isRgb(c)
+      ? hex(c)
+      : ColorSpec.fromAnsi(c.ansi).getTruecolor().hex;
 
 /**
  * An arrow the joiner drew leaving a cell: the ground it leaves, the ground it
@@ -97,7 +113,9 @@ export interface Seam {
 /** Every arrow in `chars` that leaves a cell, in drawing order. */
 export function seams(chars: readonly Char[]): Seam[] {
   return chars.flatMap(({ ch, fg, bg, reverse, before }, at) =>
-    ARROWS.has(ch) && !reverse && before !== undefined ? [{ glyph: ch, left: before, right: bg, ink: fg, at }] : [],
+    ARROWS.has(ch) && !reverse && before !== undefined
+      ? [{ glyph: ch, left: before, right: bg, ink: fg, at }]
+      : [],
   );
 }
 
@@ -109,12 +127,18 @@ export function seams(chars: readonly Char[]): Seam[] {
 export const cellBefore = (chars: readonly Char[], at: number): string => {
   let from = at;
   while (from > 0 && !chars[from - 1]!.joiner) from--;
-  return chars.slice(from, at).map((c) => c.ch).join("");
+  return chars
+    .slice(from, at)
+    .map((c) => c.ch)
+    .join("");
 };
 export const cellAfter = (chars: readonly Char[], at: number): string => {
   let to = at + 1;
   while (to < chars.length && !chars[to]!.joiner) to++;
-  return chars.slice(at + 1, to).map((c) => c.ch).join("");
+  return chars
+    .slice(at + 1, to)
+    .map((c) => c.ch)
+    .join("");
 };
 
 /** A cell's text as a seam names it: without its padding or any space. */

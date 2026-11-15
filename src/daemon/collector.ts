@@ -17,6 +17,7 @@
 
 import { inspect } from "node:util";
 import {
+  compareStructural,
   computed,
   observable,
   reaction,
@@ -24,9 +25,8 @@ import {
   type IComputedValue,
   type IObservableValue,
 } from "mobx";
-import type { Fact } from "../facts/fact.js";
 import {
-  type Update,
+  type DaemonFacts,
   type WorldState,
   stampFailureOf,
   shortDigest,
@@ -41,7 +41,7 @@ import type { Timekeeper } from "../time.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { Holds } from "../utils/holds.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import { failed } from "../utils/outcome.js";
+import { failed, ok, type Failed, type Ok } from "../utils/outcome.js";
 import { sameKey } from "./cache/managed-storage.js";
 import { assembleFacts, failedStamp } from "./facts-assembly.js";
 import {
@@ -75,9 +75,10 @@ export interface CollectorDeps {
   // The owners every lane is read from, and the log for those whose owner
   // does not log.
   readonly owners: RenderPayloadDeps;
-  // The daemon's one update fact, stamped by its watch
-  // (src/daemon/update-notice.ts): every session's document carries it.
-  readonly update: () => Fact<Update>;
+  // What every session's document carries of the daemon itself: its update
+  // and the act on it (src/daemon/update-notice.ts), and its own faults.
+  // Observable, so a move of either restamps every session.
+  readonly daemon: () => DaemonFacts;
   readonly clock: Pick<Timekeeper, "now" | "every">;
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // frame feeds are the one record of who is watching.
@@ -143,15 +144,15 @@ interface SessionRecord {
   phase: Phase;
 }
 
-// What a stamp reads, or what stopped it reading: a derivation that throws is
-// a stamp that did not complete, not a reaction that never ran.
-type StampInputs =
-  | {
-      readonly kind: "read";
-      readonly readings: Readings;
-      readonly update: Fact<Update>;
-    }
-  | { readonly kind: "failed"; readonly reason: string };
+// What a stamp reads: what the session's owners read, or what stopped them
+// reading (a derivation that throws is a stamp that did not complete, not a
+// reaction that never ran), and the daemon's own facts, read apart from them,
+// so owners that fail to read leave the daemon's facts current, and a move of
+// the daemon's facts re-reads no owner.
+interface StampInputs {
+  readonly owners: Ok<Readings> | Failed;
+  readonly daemon: DaemonFacts;
+}
 
 // What a session's declaration keys on, of the request that named it.
 const locatorOf = (req: ViewFacts): ViewFacts => ({
@@ -208,6 +209,12 @@ export class Collector {
   private stopSweep: (() => void) | null = null;
 
   constructor(private readonly deps: CollectorDeps) {}
+
+  // [LAW:one-source-of-truth] The daemon's facts, derived once for every
+  // session, and moved only when what they say moved.
+  private readonly daemon = computed(() => this.deps.daemon(), {
+    equals: compareStructural,
+  });
 
   // [LAW:single-enforcer] A request names the session's keys: they are
   // declared again and stamped in one action, and that stamp is returned to
@@ -348,12 +355,12 @@ export class Collector {
     // one that fails fails the request that named it, and takes nothing.
     let document: WorldState;
     try {
-      if (first.kind === "failed") throw new Error(first.reason);
+      if (first.owners.kind === "failed") throw new Error(first.owners.reason);
       document = assembleFacts(
         undefined,
         session,
-        first.readings,
-        first.update,
+        first.owners.value,
+        first.daemon,
         instantAt(this.deps.clock),
       );
     } catch (e) {
@@ -386,10 +393,14 @@ export class Collector {
     const declared = observable.box(this.declared(keys, holds), {
       deep: false,
     });
+    const owners = computed(() => this.read(declared.get()));
     return {
       holds,
       declared,
-      inputs: computed(() => this.read(declared.get())),
+      inputs: computed(() => ({
+        owners: owners.get(),
+        daemon: this.daemon.get(),
+      })),
     };
   }
 
@@ -471,15 +482,11 @@ export class Collector {
     return { ...locator, deps: this.deps.owners };
   }
 
-  private read({ locator, lanes }: Declared): StampInputs {
+  private read({ locator, lanes }: Declared): Ok<Readings> | Failed {
     try {
-      return {
-        kind: "read",
-        readings: readingsOf(this.inputsOf(locator), lanes),
-        update: this.deps.update(),
-      };
+      return ok(readingsOf(this.inputsOf(locator), lanes));
     } catch (e) {
-      return { kind: "failed", reason: `reading the owners: ${String(e)}` };
+      return failed(`reading the owners: ${String(e)}`, "read");
     }
   }
 
@@ -492,10 +499,16 @@ export class Collector {
     moved: StampInputs,
   ): boolean {
     const prior = stamped.document;
+    const { owners, daemon } = moved;
     const next =
-      moved.kind === "failed"
-        ? failedStamp(prior, moved.reason)
-        : this.assembled(prior, moved, instantAt(this.deps.clock));
+      owners.kind === "failed"
+        ? failedStamp(prior, owners.reason, daemon)
+        : this.assembled(
+            prior,
+            owners.value,
+            daemon,
+            instantAt(this.deps.clock),
+          );
     const failure = next === prior ? null : stampFailureOf(next);
     // [LAW:no-silent-failure] Told to the log as well as to the bar.
     if (failure !== null)
@@ -510,19 +523,18 @@ export class Collector {
 
   private assembled(
     prior: WorldState,
-    moved: Extract<StampInputs, { kind: "read" }>,
+    readings: Readings,
+    daemon: DaemonFacts,
     at: Instant,
   ): WorldState {
     try {
-      return assembleFacts(
-        prior,
-        prior.session,
-        moved.readings,
-        moved.update,
-        at,
-      );
+      return assembleFacts(prior, prior.session, readings, daemon, at);
     } catch (e) {
-      return failedStamp(prior, `stamping the world state: ${String(e)}`);
+      return failedStamp(
+        prior,
+        `stamping the world state: ${String(e)}`,
+        daemon,
+      );
     }
   }
 

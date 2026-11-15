@@ -13,7 +13,8 @@ import {
 } from "../../src/renderer/render-cache";
 import { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import { stateDir } from "../../src/daemon/paths";
-import type { CollectorDeps } from "../../src/daemon/collector";
+import type { DaemonFacts } from "../../src/facts/world-state";
+import { daemonFactsOf } from "./daemon-facts";
 import { collected } from "./collected";
 import { settleWorld } from "../../src/renderer/render-payload";
 import { refreshPayload } from "../../src/daemon/readings";
@@ -130,29 +131,31 @@ export type SessionRig = ReturnType<typeof sessionRig>;
 
 // The daemon's composition over those owners: the host's collector reading
 // them into world states handed straight to the store the views read, as the
-// daemon's renderer takes them. `update` is the update fact every world state
-// carries, `source` overrides what the session source reads beyond the world
+// daemon's renderer takes them. `daemon` is what every world state carries
+// of the daemon itself, `source` overrides what the session source reads beyond the world
 // state (the depths), `log` is the daemon's log, and `observers` hear what the
-// cache tells the daemon.
+// cache tells the daemon. `owners` replaces the fixed owners it names.
 export function sessionRig(
   dir: string,
   cleanups: Array<() => void>,
   {
-    update = () => pendingOf("unread"),
+    daemon = () => daemonFactsOf(),
+    owners = {},
     source = {},
     log = () => {},
     observers = {},
   }: {
-    readonly update?: CollectorDeps["update"];
+    readonly daemon?: () => DaemonFacts;
+    readonly owners?: Partial<ReturnType<typeof fixedOwners>>;
     readonly source?: Partial<SessionSourceDeps>;
     readonly log?: (level: string, message: string) => void;
     readonly observers?: RenderCacheObservers;
   } = {},
 ) {
-  const providers = fixedOwners(log);
+  const providers = { ...fixedOwners(log), ...owners };
   const sessionState = new SessionState();
   const served = collected(
-    { owners: providers as never, update, log },
+    { owners: providers as never, daemon, log },
     cleanups,
   );
   const watchers = new WatcherRegistry({

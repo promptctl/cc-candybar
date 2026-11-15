@@ -22,6 +22,7 @@ import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest } from "./request-context";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
+import type { Lane, LaneFeeds } from "../config/lanes";
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -124,6 +125,12 @@ export type Event =
       // began, as the host's idle clock reads it at the request's instant:
       // null while that frame drew none, or a click is in flight.
       readonly idleSince: Instant | null;
+      // What the host's feeds know of the session at the request's instant:
+      // the lanes that follow it and draw it now, which the statusline hands
+      // the bar to, and what each was sent of late, which the bar's rate
+      // cell shows.
+      readonly following: readonly Lane[];
+      readonly feeds: LaneFeeds;
     }
   | {
       // A session's world state moved since the one the renderer holds: read
@@ -161,6 +168,11 @@ export type Event =
       // asked by this id while the turn waits for the click's place and its
       // journal turn.
       readonly id: RequestId;
+      // [LAW:one-source-of-truth] The newest request of the click's session
+      // the host holds, whose hints are the pane its lanes follow: null when
+      // the click names no session, or the host holds no request of it (none
+      // since a restart, or its record evicted).
+      readonly latest: CheckedRenderRequest | null;
     }
   | {
       // The session's idle clock ran out: the turn closes its menus as the
@@ -171,6 +183,8 @@ export type Event =
       // span, and the close's journal turn names it when it asks the clock
       // whether the session is still idle since.
       readonly idle: IdleSpan;
+      // The newest request of the session the host holds, as a click's.
+      readonly latest: CheckedRenderRequest | null;
     };
 
 export type EffectOutcome =

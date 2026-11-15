@@ -5,6 +5,7 @@
 // what those fields answer. Read over the real usage, context and metrics
 // owners, the three whose answers the hook used to be laid into.
 
+import { daemonFactsOf } from "./helpers/daemon-facts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -147,7 +148,7 @@ test("two hooks that differ only in their instantaneous fields read one document
         inputs,
         settledLanes(ABSENT, { plugins: new Map(), runs: new Map() }),
       ),
-      pendingOf("unread"),
+      daemonFactsOf(),
       AT,
     );
   };

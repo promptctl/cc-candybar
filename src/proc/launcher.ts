@@ -4,7 +4,7 @@
 
 import type { Timekeeper } from "../time";
 import type { Drawing } from "../config/lanes";
-import type { HeldEvent } from "../utils/event-hold";
+import { eventHoldAt, type HeldEvent } from "../utils/event-hold";
 import type { Instant } from "../utils/instant";
 
 // Closed list of subprocess categories. Adding a new spawn site requires
@@ -237,16 +237,46 @@ export interface PipeEvent extends HeldEvent {
   readonly counts: ReadonlyMap<string, number>;
 }
 
+// The latest pipe event as every render judges it: what it says, when, and
+// whether an answer carried it. Its counts are the launcher's own.
+export interface LaunchPipesFact {
+  readonly kind: "launch-pipes";
+  readonly event: HeldEvent;
+}
+
+// What the launcher stands behind now, whoever draws it: the lifeline's fault
+// while it stands, and the latest pipe event.
+export type LauncherFact = LifelineWarning | LaunchPipesFact;
+
+// Seconds every render shows a pipe event: long enough to read on a bar that
+// redraws only on events. That it is seen at all is the owed half of the hold.
+export const PIPE_EVENT_HOLD_S = 60;
+
 export interface LaunchPipesWarning {
   readonly kind: "launch-pipes";
   readonly message: string;
   // The record the warning shows, which an answer carrying it marks answered.
-  readonly event: PipeEvent;
+  readonly event: HeldEvent;
   // Why this render shows it: inside the hold, or owed past it.
   readonly hold: "held" | "owed";
 }
 
 export type LauncherWarning = LifelineWarning | LaunchPipesWarning;
+
+// [LAW:single-enforcer] What the launcher's facts warn a render at `at` for
+// `render`: the lifeline's fault while it stands, and the latest pipe event
+// while the event hold shows it.
+export function launcherWarningsAt(
+  facts: readonly LauncherFact[],
+  at: Instant,
+  render: Drawing["by"],
+): LauncherWarning[] {
+  return facts.flatMap((fact): LauncherWarning[] => {
+    if (fact.kind === "lifeline") return [fact];
+    const hold = eventHoldAt(fact.event, PIPE_EVENT_HOLD_S, at, render);
+    return hold === "over" ? [] : [{ ...fact, message: fact.event.text, hold }];
+  });
+}
 
 export type WarningChange =
   | { readonly kind: "lifeline"; readonly fault: string | null }
@@ -327,8 +357,8 @@ export interface Launcher {
   // Ends a job's group with the timeout's own escalation, and gives it a verdict
   // of the launcher's unless its own landed first (see `endJob`).
   endJob(pid: number, status: string, end: JobEnd): JobEnding;
-  // What the launcher warns a render drawn at `at` for `render`.
-  launcherWarnings(at: Instant, render: Drawing["by"]): LauncherWarning[];
+  // What the launcher stands behind now (`launcherWarningsAt` judges it).
+  standing(): LauncherFact[];
   // An answer carrying `event` reached its client.
-  answeredPipeEvent(event: PipeEvent): void;
+  answeredPipeEvent(event: HeldEvent): void;
 }
