@@ -709,6 +709,7 @@ function clickReply(outcome: RequestOutcome): Response {
     case "threw":
     case "closing":
     case "abandoned":
+    case "down":
       return failedWith(outcome.message);
   }
 }

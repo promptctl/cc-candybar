@@ -45,7 +45,8 @@ import { daemonGates } from "./foundations/update-keys.js";
 import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
-import { memoryLimitBytes } from "./limits";
+import { heapCapMb, memoryLimitBytes } from "./limits";
+import { processPort } from "./renderer-process.js";
 import { mb } from "./foundations/memory-limit";
 import { armParentWatchdog, anchorFromEnv } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
@@ -110,6 +111,15 @@ function runningBundle(): RunningBundle {
       ...new Set([path, ...(process.argv[1] ? [process.argv[1]] : [])]),
     ],
   };
+}
+
+// The entry this process runs, which its renderer's process runs too: the
+// bundle, or the source a test's loader compiles, where the module's own file
+// is no entry. [LAW:no-silent-failure] A daemon is always run from one.
+function processEntry(): string {
+  const entry = process.argv[1];
+  if (entry === undefined) throw new Error("the daemon was run with no entry");
+  return entry;
 }
 
 export function runDaemon(world: World): void {
@@ -199,6 +209,15 @@ async function boot(): Promise<void> {
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
     ...productionAdapters(paths, daemonLog, world.clock),
+    // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
+    // launched through the process's launcher: the daemon's close aborts its
+    // own launches before the renderer's last steps of it.
+    renderer: processPort({
+      launcher: world.launcher,
+      entry: processEntry(),
+      cwd: paths.state,
+      heapCapMb: heapCapMb(host.env),
+    }),
     bundle: runningBundle(),
     host,
     paths,

@@ -32,6 +32,7 @@ import {
 import { laneOffReason } from "../config/menu-places";
 import type { Timekeeper } from "../time";
 import type { SessionId } from "./foundations/session-id";
+import { failureOf } from "./foundations/verb-error.js";
 import type { FeedStats } from "./foundations/stats-snapshot";
 import {
   type FeedFrame,
@@ -193,6 +194,11 @@ interface Feed {
   moving: number;
   unseen: number;
   failed: number;
+  // [LAW:single-enforcer] The fault its frame step last said, so a step that
+  // keeps throwing it (a renderer down for its backoff) says it once, and says
+  // its recovery; and how many steps faulted.
+  fault: string | null;
+  faulted: number;
   pushed: number;
   drawMs: number;
   // Parts its frames evaluated: between data changes, those reading the instant.
@@ -380,6 +386,11 @@ export class FrameFeeds<Req> {
     );
   }
 
+  // Every session an open feed draws: what a renderer's complete start pins.
+  openFeeds(): readonly SessionId[] {
+    return [...this.feeds.keys()];
+  }
+
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the
   // fact its pin counts, from the feed's open to its close.
   feedOpen(sessionId: SessionId): boolean {
@@ -493,6 +504,8 @@ export class FrameFeeds<Req> {
       moving: 0,
       unseen: 0,
       failed: 0,
+      fault: null,
+      faulted: 0,
       pushed: 0,
       drawMs: 0,
       evaluated: 0,
@@ -561,10 +574,14 @@ export class FrameFeeds<Req> {
       // woken while its adapter throws still draws at its spacing.
       const woken = wokenWhileOut(feed);
       feed.lastStart = moment;
-      this.deps.log(
-        "error",
-        `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
-      );
+      feed.faulted++;
+      const said = failureOf(error).message;
+      if (feed.fault !== said)
+        this.deps.log(
+          "error",
+          `feed sid=${JSON.stringify(feed.sessionId)} threw: ${inspect(error)}`,
+        );
+      feed.fault = said;
       if (this.feeds.get(feed.sessionId) !== feed) return;
       this.schedule(feed, null, at);
       if (woken) this.hasten(feed);
@@ -586,6 +603,13 @@ export class FrameFeeds<Req> {
       [...this.following(feed.sessionId)],
       this.feedsOf(feed.sessionId, at),
     );
+    if (feed.fault !== null) {
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(feed.sessionId)} recovered after ${feed.fault}`,
+      );
+      feed.fault = null;
+    }
     // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits,
     // with no timer, until the event that opens one wakes it.
     // A draw that found no view drew nothing, so it spaces nothing: the
@@ -806,7 +830,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
     );
     feed.summarizedAt = now;
   }

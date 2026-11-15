@@ -9,13 +9,35 @@ import { fileStores, productionMachineEdge } from "../doctor/edge";
 import { systemLauncher } from "../proc/system-launcher";
 import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
-import type { DaemonAdapters } from "./daemon.js";
+import type { DaemonAdapters, DaemonStorage } from "./daemon.js";
+import type { DaemonLogger } from "../utils/logger";
+import type { DoctorStores } from "../doctor/ports";
+import type { LinkSigner } from "../click/link-signer.js";
 import { fileStorage } from "./file-storage";
 import { productionLaneEdge } from "./lane-edge.js";
 import { linkKeyFile, linkSignerFromKeyFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
+import { inProcessPort } from "./renderer-process.js";
 import type { DaemonLog } from "./log";
 import type { DaemonPaths } from "./paths";
+
+// The real adapters a renderer process builds itself from: the files the
+// renderer still opens itself, at the paths its host's own `Host` names.
+export function rendererAdapters(
+  paths: DaemonPaths,
+  log: DaemonLogger,
+  machine: Timekeeper,
+): {
+  readonly storage: DaemonStorage;
+  readonly doctorStores: DoctorStores;
+  readonly linkSigner: LinkSigner;
+} {
+  return {
+    storage: fileStorage(paths, log, machine),
+    doctorStores: fileStores(paths.state),
+    linkSigner: linkSignerFromKeyFile(linkKeyFile(paths.state)),
+  };
+}
 
 // [LAW:effects-at-boundaries] Every real adapter, over the paths and the log it
 // is given, so a daemon built over a temporary directory touches nothing else.
@@ -46,6 +68,9 @@ export function productionAdapters(
         snapshotDir: paths.state,
         writeLogNow: () => daemonLog.writeNow(),
       }),
+    // [LAW:one-type-per-behavior] In this process: the daemon process's entry
+    // (server.ts) runs it in a process of its own.
+    renderer: inProcessPort,
     fetch,
     stat: fs.statSync,
   };

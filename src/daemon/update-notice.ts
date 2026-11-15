@@ -47,8 +47,6 @@ import {
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue";
 import { changeLogger, type LogLevel } from "../utils/logger";
 import { BadVerbArgs, DaemonClosing } from "./foundations/verb-error";
-import type { Gates } from "./foundations/gates";
-import { UPDATE_DISMISSED_KEY } from "./foundations/update-keys";
 import {
   describeStamp,
   updateIdentity,
@@ -142,8 +140,6 @@ export interface UpdateWatchOptions {
   readonly releaseIntervalMs: number;
   readonly registryUrl: string;
   readonly fetchImpl: typeof fetch;
-  // The gates whose dismiss key follows the notice's identity.
-  readonly gates: Gates;
   // Runs after a successful act: the bundle on disk has changed, and the
   // binary watch should notice now rather than at its next tick. Called in a
   // turn of the act queue and not awaited, since what it starts may wait on
@@ -219,11 +215,9 @@ function describeRelease(c: Currency): [LogLevel, string] {
 
 // [LAW:single-enforcer] The daemon's one owner of "what is newer than me":
 // it samples the build on a clock, polls the registry on a slower one when
-// the layout is a published install, starts and watches the act, and owns the two
-// click gates — the dismiss allow-list (re-registered to the current
-// identity whenever it changes, so a stale dismissal simply stops matching)
-// and the dismiss allow-list's identity. The disable allow-list is in the
-// gates themselves (`daemonGates`), where a daemon is built with them.
+// the layout is a published install, and starts and watches the act. The
+// dismiss gate follows the fact it writes, in the renderer that loads what
+// the gate admits (src/renderer/update-gate.ts).
 export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   const {
     fact,
@@ -237,7 +231,6 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     releaseIntervalMs,
     registryUrl,
     fetchImpl,
-    gates,
     onApplied,
     log,
   } = opts;
@@ -273,8 +266,6 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     runInAction(() =>
       actsRead.set({ act: seen ?? IDLE, actsError: unreadable }),
     );
-  let gate: { readonly identity: string; readonly dispose: () => void } | null =
-    null;
   const logBuild = changeLogger(log);
   const logRelease = changeLogger(log);
 
@@ -287,7 +278,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     actQueue.run("acts", body);
 
   // [LAW:no-ambient-temporal-coupling] A closed watch knows of no update, so a
-  // release poll landing after the close registers no gate, and a turn that
+  // release poll landing after the close publishes none, and a turn that
   // reads this after its await judges nothing: the launches abort first, so
   // what a closing daemon's `ps` answered says nothing.
   let closed = false;
@@ -296,38 +287,20 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     armed.push(clock.every(ms, run, { unref: true }));
   };
 
-  // The update as the fact says it, so the notice, the gate and the apply verb
+  // The update as the fact says it, so the notice and the apply verb
   // read the one fold every session's document carries.
   const current = (): Update | null => {
     const held = fact.get();
     return held.kind === "ok" ? held.value : null;
   };
 
-  // The dismiss gate follows the identity: dispose the old allow-list, register
-  // the new one, none when nothing is newer.
-  function syncGate(): void {
-    const update = current();
-    const identity = update === null ? null : updateIdentity(update);
-    if ((gate === null ? null : gate.identity) === identity) return;
-    gate?.dispose();
-    gate =
-      identity === null
-        ? null
-        : {
-            identity,
-            dispose: gates.state.register(UPDATE_DISMISSED_KEY, [identity]),
-          };
-  }
-
   // [LAW:single-enforcer] The one writer of the fact: what the samples say now,
-  // stamped at this turn, and the gate that follows the fact's identity. A
-  // closed watch knows of no update, so a poll landing after the close
-  // publishes that.
+  // stamped at this turn. A closed watch knows of no update, so a poll landing
+  // after the close publishes that.
   function publish(): void {
     const reading = closed ? ABSENT : updateReading(build, release);
     const next = restamp(fact.get(), reading, instantAt(clock));
     runInAction(() => fact.set(next));
-    syncGate();
   }
 
   function sampleBuild(): BuildCurrency {

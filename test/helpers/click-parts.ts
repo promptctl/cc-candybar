@@ -35,6 +35,8 @@ export function clickParts(
     verbs: verbsOver(verbCtx, { gone: async (click) => clicks.gone(click) }),
     menuIdle,
     renderCache: { subscriptions: () => ({ sources: {} }) },
+    // What the renderer times each turn by.
+    clock: systemTimekeeper,
   } as unknown as MainRendererParts;
   return {
     renderer: rendererHost(

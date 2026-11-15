@@ -105,6 +105,7 @@ describe("the daemon probe", () => {
     charge: { kind: "charged", measure: "phys_footprint", bytes },
     rss: 600 * MB,
     heapTotal: 100 * MB,
+    processes: [],
   });
 
   test("past three quarters of the budget by the charge fails, naming the measure; at it does not", () => {
@@ -138,6 +139,7 @@ describe("the daemon probe", () => {
           charge: { kind: "stand-in", bytes, gap, unread: "footprint timeout" },
           rss: bytes + gap,
           heapTotal: 100 * MB,
+          processes: [],
         },
       },
     },
@@ -611,6 +613,7 @@ describe("parseServingDaemon", () => {
         },
         rss: 1,
         heapTotal: 1,
+        processes: [],
       },
     });
     for (const gap of [undefined, "150", Number.NaN]) {

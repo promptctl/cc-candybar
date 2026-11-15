@@ -9,6 +9,10 @@ import type { SessionId } from "../daemon/foundations/session-id";
 import type { WorldState } from "../facts/world-state";
 
 export class WorldStates {
+  // [LAW:single-enforcer] Told every document taken: each one carries the
+  // daemon-wide facts, which the update gate follows.
+  constructor(private readonly took: (document: WorldState) => void) {}
+
   // [LAW:one-source-of-truth] One document per session, the newest handed in.
   private readonly documents = observable.map<SessionId, WorldState>(
     undefined,
@@ -31,6 +35,7 @@ export class WorldStates {
       );
     }
     runInAction(() => this.documents.set(document.session, document));
+    this.took(document);
   }
 
   // [LAW:no-defensive-null-guards] The host delivers a session's `config`,

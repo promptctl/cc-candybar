@@ -58,6 +58,11 @@ import { instantAt, type Instant } from "../utils/instant.js";
 import { parseFrame } from "../render/frame.js";
 import { rendererHost } from "./renderer-host.js";
 import { loadMainRenderer } from "../renderer/main.js";
+import type { RendererPort } from "./renderer-process.js";
+import type { AdapterToHost } from "../renderer-interface/adapter.js";
+import { bootEnv } from "../renderer-interface/wire.js";
+import { answeredBy, type HeldEvent } from "../utils/event-hold.js";
+import { located } from "./statusline-answer.js";
 import { readingsHost } from "./readings.js";
 import { installFacts } from "../doctor/edge.js";
 import { ClicksInFlight } from "./clicks-in-flight.js";
@@ -137,6 +142,9 @@ export interface DaemonAdapters {
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
   }) => LimitsDeps;
+  // [LAW:one-type-per-behavior] Where the renderer runs: in this process, or
+  // in a process of its own (src/daemon/renderer-process.ts).
+  readonly renderer: RendererPort;
   // The registry the update notice asks which release is newest.
   readonly fetch: typeof fetch;
   // How the binary watch reads the bundle's mtime.
@@ -271,16 +279,20 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<
-    Pick<DaemonFacts, "fileEvents" | "launcher">
+    Pick<DaemonFacts, "fileEvents" | "launcher" | "rendererEnded">
   >(
-    { fileEvents: [], launcher: [] },
+    { fileEvents: [], launcher: [], rendererEnded: null },
     { deep: false, equals: compareStructural },
   );
+  // [LAW:one-source-of-truth] How the last renderer process ended, held for
+  // the bar until an answer has carried it.
+  let rendererEnded: HeldEvent | null = null;
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
+        rendererEnded,
       }),
     );
   }
@@ -318,19 +330,27 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const probe = inputs.probe(launcher);
   // Before every owner that arms a timer: storage that cannot be read refuses
   // the build with nothing running.
-  const storage = inputs.storage(log);
-  const loadedRenderer = loadMainRenderer({
-    clock,
-    now: instant,
-    storage: { ...storage, doctor: inputs.doctorStores },
-    linkSigner: inputs.linkSigner,
-    stateDir: paths.state,
-    locations: locs,
-    env: host.env,
-    home: host.home,
-    gates,
-    bundle: bundle.path,
-    memoryLimitBytes,
+  const preparedRenderer = inputs.renderer({
+    load: () =>
+      loadMainRenderer({
+        clock,
+        now: instant,
+        storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
+        linkSigner: inputs.linkSigner,
+        stateDir: paths.state,
+        locations: locs,
+        env: host.env,
+        home: host.home,
+        gates,
+        bundle: bundle.path,
+        memoryLimitBytes,
+      }),
+    boot: {
+      host: { ...host, env: bootEnv(host.env) },
+      bundle: bundle.path,
+      memoryLimitBytes,
+    },
+    node: bundle.node,
   });
   // Building starts nothing: only the daemon that won the socket arms them, so
   // the page answers the doctor's `serving` with no timer counting its memory.
@@ -342,6 +362,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       log,
     }),
     limitBytes: memoryLimitBytes,
+    // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
+    // renderer's process counts in it while one runs. Read only once armed,
+    // by when the link below exists.
+    renderer: () => link.process(),
+    writeRendererHeapSnapshot: (file) => link.heapSnapshot(file),
   });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
@@ -621,7 +646,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
     registryUrl,
     fetchImpl: inputs.fetch,
-    gates,
     onApplied: () => binaryWatch.checkNow(),
     log,
   });
@@ -650,10 +674,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const doctorEdge = inputs.doctorEdge(launcher, host);
   const claudeInput = inputs.claudeInput(launcher);
   const readings = readingsHost(payloadProviders);
-  // [LAW:one-way-deps] The main renderer's start, handed the host's parts it
-  // reaches: the compiler checks each against its entry in `AdapterToHost`
-  // here, so no renderer file names a host type.
-  const renderer = loadedRenderer.start({
+  // [LAW:one-way-deps] The host's parts the main renderer reaches: the
+  // compiler checks each against its entry in `AdapterToHost` here, so no
+  // renderer file names a host type.
+  const reaches: AdapterToHost = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice, or an awaited call.
     wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
@@ -697,8 +721,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         renderSightings.ofSession(sessionId, now),
     },
     probes: { arrive: (arrival) => handlerProbes.arrive(arrival) },
-    pipeEventAnswered: (event) => {
+    eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
+      if (rendererEnded !== null && answeredBy(rendererEnded, event))
+        rendererEnded = { ...rendererEnded, answered: true };
       restateFaults();
     },
     watches: {
@@ -729,6 +755,38 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       hold: (id, folders) => managedStorage.hold(id, folders),
       release: (id) => managedStorage.release(id),
     },
+  };
+  const link = preparedRenderer.start({
+    reaches,
+    log,
+    clock,
+    // [LAW:single-enforcer] A renderer that starts again is configured as a
+    // request would: every live session whose newest request the host holds
+    // gets its `config` with its latest stamp, and every open feed its `pin`,
+    // through the host's one path to the renderer.
+    start: async () => {
+      const at = instant();
+      for (const sessionId of frameFeeds.openFeeds())
+        parts.renderer.tell({ kind: "pin", session: sessionId }, at);
+      await Promise.all(
+        [...collector.liveDocuments()].flatMap(([sessionId, worldState]) => {
+          const req = frameFeeds.latest(sessionId);
+          return req === null
+            ? []
+            : [
+                parts.renderer.answer({
+                  kind: "event",
+                  at,
+                  event: { kind: "config", context: located(req), worldState },
+                }),
+              ];
+        }),
+      );
+    },
+    ended: (event) => {
+      rendererEnded = event;
+      restateFaults();
+    },
   });
   const parts: DaemonParts = {
     clicks,
@@ -756,7 +814,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     updateWatch,
     limits,
     collector,
-    renderer: rendererHost("main", clock, renderer, log, collector),
+    renderer: rendererHost("main", clock, link.renderer, log, collector),
   };
 
   return {
@@ -792,6 +850,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       binaryWatch.arm();
       updateWatch.arm();
       limits.arm();
+      link.arm();
     },
     async close(atExit) {
       // The renderer's three steps of the teardown, each awaited where it
@@ -837,6 +896,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.
         ["sessionState close", rendererStep("close-session-state")],
+        // After every step the renderer takes: its process, when it has one,
+        // ends with nothing left to flush.
+        ["renderer process close", () => link.close()],
       ];
       for (const [step, run] of teardown) {
         try {

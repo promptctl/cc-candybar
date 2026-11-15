@@ -60,6 +60,13 @@ export const HEALTHY_SERVING: ServingDaemon = {
     },
     rss: 160 * 1024 * 1024,
     heapTotal: 90 * 1024 * 1024,
+    processes: [
+      {
+        role: "host",
+        pid: 4100,
+        sizes: { rss: 160 * 1024 * 1024, heapTotal: 90 * 1024 * 1024 },
+      },
+    ],
   },
   limit: 512 * 1024 * 1024,
   postMortems: { kind: "ok", value: [] },

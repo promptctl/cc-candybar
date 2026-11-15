@@ -5,7 +5,7 @@ import { inTmux } from "../tmux-hint.js";
 import { inspect } from "node:util";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
-import type { HeldEvent } from "../utils/event-hold.js";
+import { eventHoldAt, type HeldEvent } from "../utils/event-hold.js";
 import { updateNotice } from "../daemon/foundations/update-offer.js";
 import {
   type CheckedRenderRequest,
@@ -519,9 +519,9 @@ export function drawRender(
   evaluated: number;
   cellBreaks: number;
   clickShown: ClickErrorRecord | null;
-  // The launcher's pipe event this draw showed, which an answer carrying it
-  // marks answered.
-  pipeShown: HeldEvent | null;
+  // The held events this draw showed (the launcher's pipe event, the last
+  // renderer's end), which an answer carrying them marks answered.
+  eventsShown: readonly HeldEvent[];
   // Records what the frame's copy clicks copy, once it reached its client.
   delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
@@ -631,10 +631,14 @@ export function drawRender(
   const { daemon } = document;
   const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
-  const pipeShown = pipeWarning?.event ?? null;
+  const ended = rendererEndedAt(daemon.rendererEnded, at, drawing.by);
+  const eventsShown = [pipeWarning?.event, ended?.event].flatMap((e) =>
+    e === undefined ? [] : [e],
+  );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
     ...launched,
+    ...(ended === undefined ? [] : [ended]),
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -831,6 +835,7 @@ export function drawRender(
       case "config-watch":
       case "lifeline":
       case "launch-pipes":
+      case "renderer-ended":
       case "when":
         return w.kind;
     }
@@ -892,7 +897,7 @@ export function drawRender(
     evaluated,
     cellBreaks,
     clickShown,
-    pipeShown,
+    eventsShown,
     delivered,
     lanes,
   };
@@ -917,10 +922,35 @@ interface FactsWarning {
   readonly message: string;
 }
 
+// [LAW:no-silent-failure] A renderer process that ended took its session
+// state that lives only in memory with it (open menus, armed confirms): the
+// bar the next one draws says so, by the same event hold as a pipe event.
+interface RendererEndedWarning {
+  readonly kind: "renderer-ended";
+  readonly message: string;
+  readonly event: HeldEvent;
+}
+
+// Seconds every render shows it, as long as a pipe event and for the same
+// reason: a bar that redraws only on events still shows it long enough to read.
+const RENDERER_ENDED_HOLD_S = 60;
+
+function rendererEndedAt(
+  event: HeldEvent | null,
+  at: Instant,
+  render: Drawing["by"],
+): RendererEndedWarning | undefined {
+  return event === null ||
+    eventHoldAt(event, RENDERER_ENDED_HOLD_S, at, render) === "over"
+    ? undefined
+    : { kind: "renderer-ended", message: event.text, event };
+}
+
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
   | LauncherWarning
+  | RendererEndedWarning
   | ConfigWatchWarning
   | LoadWarning
   | FactsWarning;
@@ -1130,7 +1160,7 @@ export async function answerRequest(
     refreshed: refreshedFact(refreshed),
   });
   const sessionId = req.hookData.session_id;
-  const { drawn, clickShown, pipeShown, delivered, lanes } = drawRender(
+  const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
     parts,
     setup,
     ANSWERING,
@@ -1159,7 +1189,7 @@ export async function answerRequest(
       sessionId,
       delivered,
       clickShown,
-      pipeShown,
+      eventsShown,
     ),
   };
 }
@@ -1168,23 +1198,23 @@ export async function answerRequest(
 // the draw, because a closure keeps alive every variable its function's other
 // closures capture: one made inside the draw would hold the draw's setup until
 // its frame settles.
-// [LAW:single-enforcer] An answer carrying the click error or the launcher's
-// pipe event that reaches its client is the one that delivered it
+// [LAW:single-enforcer] An answer carrying the click error or a daemon-wide
+// held event that reaches its client is the one that delivered it
 // (src/utils/event-hold.ts).
 function answerDelivered(
   parts: RendererParts,
   sessionId: SessionId,
   copied: () => void,
   clickShown: ClickErrorRecord | null,
-  pipeShown: HeldEvent | null,
+  eventsShown: readonly HeldEvent[],
 ): () => void {
   return () => {
     copied();
     if (clickShown !== null)
       answeredClickError(parts.sessionState, sessionId, clickShown);
-    // Daemon-wide: one session's answer having shown the launcher's pipe
-    // event is what makes it not silent.
-    if (pipeShown !== null) parts.pipeEventAnswered(pipeShown);
+    // Daemon-wide: one session's answer having shown the event is what makes
+    // it not silent.
+    for (const event of eventsShown) parts.eventAnswered(event);
   };
 }
 

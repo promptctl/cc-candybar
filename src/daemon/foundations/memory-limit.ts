@@ -93,8 +93,10 @@ export type MemoryCharge =
 // naively produced — is exactly how a rotation quietly stops matching what the
 // writer emits, leaving a directory that grows forever or a heap snapshot whose
 // attribution was evicted from under it.
+// The renderer's heap is its own process's, so its snapshot is its own file.
 export const BREACH_ARTIFACTS = {
   memoryReport: { prefix: "memory-", suffix: ".txt" },
+  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
   heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" },
 } as const;
 
@@ -104,6 +106,11 @@ export type BreachArtifact = keyof typeof BREACH_ARTIFACTS;
 // `unmeasured` until the first probe answers — the instant before a daemon's
 // first check, and for good in the browser page, which never arms its limits.
 // Never a construction-time number passed off as a reading.
+// [LAW:one-source-of-truth] The limit is the daemon's whole: the charge,
+// `rss` and `heapTotal` are over every process it runs as, and `processes`
+// says each one's share, the host's first. A renderer in a process of its
+// own is read as its latest ping answered, and counts in the charge from its
+// start, before any has.
 export type MemoryReading =
   | { readonly kind: "unmeasured" }
   | {
@@ -111,7 +118,24 @@ export type MemoryReading =
       readonly charge: ReadCharge;
       readonly rss: number;
       readonly heapTotal: number;
+      readonly processes: readonly ProcessMemory[];
     };
+
+export interface ProcessMemory {
+  readonly role: "host" | "renderer";
+  readonly pid: number;
+  // Null for a renderer no ping has answered yet.
+  readonly sizes: MemorySizes | null;
+}
+
+// What `process.memoryUsage()` reports, beside every charge: RSS (the charge
+// itself on Linux, the stand-in on macOS) and heapTotal, the part V8 admits to
+// — the gap between the charge and the heap is the whole reason a breach
+// writes an attribution artifact rather than only a heap snapshot.
+export interface MemorySizes {
+  readonly rss: number;
+  readonly heapTotal: number;
+}
 
 // [LAW:types-are-the-program] The charge as a reading holds it: the
 // platform's own, or RSS standing in less `gap` — how far RSS ran over the

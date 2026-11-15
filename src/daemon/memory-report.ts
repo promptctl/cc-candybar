@@ -65,6 +65,16 @@ export async function memoryReport(
   ].join("\n");
 }
 
+// Each process's report, in the order its probes are given: the host's, then
+// its renderer's.
+export async function memoryReports(
+  each: ReadonlyArray<readonly MemoryProbe[]>,
+): Promise<string> {
+  const reports: string[] = [];
+  for (const probes of each) reports.push(await memoryReport(probes));
+  return reports.join("\n\n");
+}
+
 // [LAW:dataflow-not-control-flow] The platform difference is a LIST in
 // preference order, not a branch inside the reader: `memoryReport` folds whatever
 // it is handed, so a better probe — or a platform this does not know yet — is a
@@ -91,29 +101,33 @@ export function platformProbes(
   if (platform === "linux") {
     return [
       // One line per accounting class for the whole address space — Linux's
-      // answer to `footprint`, and free (no subprocess).
-      fileProbe("/proc/self/smaps_rollup"),
+      // answer to `footprint`, and free (no subprocess). A process may read
+      // its own child's.
+      fileProbe(`/proc/${pid}/smaps_rollup`),
       // Always present, coarser: VmRSS and friends, so Linux never falls all
       // the way through to "no probe answered".
-      fileProbe("/proc/self/status"),
+      fileProbe(`/proc/${pid}/status`),
     ];
   }
   return [];
 }
 
-// Reads the charge, given the RSS read at the same moment (the charge itself
-// where the platform charges RSS, and the stand-in where its probe fails).
-export type ChargeProbe = (rss: number) => Promise<MemoryCharge>;
+// Reads the charge of the processes together, given their RSS read at the
+// same moment (the charge itself where the platform charges RSS, and the
+// stand-in where its probe fails).
+export type ChargeProbe = (
+  pids: readonly number[],
+  rss: number,
+) => Promise<MemoryCharge>;
 
 // [LAW:dataflow-not-control-flow] The platform is the discriminator, chosen
 // once: the backstop asks the probe it was handed, never which platform runs.
 export function chargeProbe(
   launcher: Launcher,
   platform: NodeJS.Platform,
-  pid: number,
 ): ChargeProbe {
   return platform === "darwin"
-    ? footprintCharge(pid, (args) =>
+    ? footprintCharge((args) =>
         launcher.launch({
           bin: FOOTPRINT,
           args,
@@ -121,19 +135,18 @@ export function chargeProbe(
           category: "limits.charge",
         }),
       )
-    : async (rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+    : async (_pids, rss) => ({ kind: "charged", measure: "rss", bytes: rss });
 }
 
-// `footprint --noCategories -f bytes` prints its auxiliary data as exact byte
-// counts; the charge is the `phys_footprint:` line.
+// `footprint --noCategories -f bytes` prints each process's auxiliary data as
+// exact byte counts; the charge is the sum of their `phys_footprint:` lines,
+// one call for every process, so the processes are read at one moment.
 export function footprintCharge(
-  pid: number,
   run: (args: string[]) => Promise<LaunchResult>,
 ): ChargeProbe {
-  return async (rss) => {
+  return async (pids, rss) => {
     const result = await run([
-      "-p",
-      String(pid),
+      ...pids.flatMap((pid) => ["-p", String(pid)]),
       "--noCategories",
       "-f",
       "bytes",
@@ -145,20 +158,27 @@ export function footprintCharge(
         unread: `footprint ${failureText(result)}`,
       };
     }
-    const bytes = physFootprintOf(result.stdout);
-    return bytes === null
+    const each = physFootprintsOf(result.stdout);
+    // [LAW:no-silent-failure] A process footprint left out (one that ended
+    // between the read and the call) is no charge of the whole.
+    return each.length !== pids.length
       ? {
           kind: "stand-in",
           bytes: rss,
-          unread: "footprint printed no phys_footprint line",
+          unread: `footprint printed ${each.length} phys_footprint lines for ${pids.length} processes`,
         }
-      : { kind: "charged", measure: "phys_footprint", bytes };
+      : {
+          kind: "charged",
+          measure: "phys_footprint",
+          bytes: each.reduce((total, bytes) => total + bytes, 0),
+        };
   };
 }
 
-export function physFootprintOf(text: string): number | null {
-  const m = /^\s*phys_footprint:\s+(\d+) B\s*$/m.exec(text);
-  return m === null ? null : Number(m[1]);
+export function physFootprintsOf(text: string): number[] {
+  return [...text.matchAll(/^\s*phys_footprint:\s+(\d+) B\s*$/gm)].map((m) =>
+    Number(m[1]),
+  );
 }
 
 function commandProbe(

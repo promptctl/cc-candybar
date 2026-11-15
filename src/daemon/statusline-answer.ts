@@ -65,7 +65,7 @@ function failed(
 // [LAW:effects-at-boundaries] The request's context as both its turns take
 // it: the checkout its directory is in, read from the disk by the host, so
 // the renderer reads no file for it and the two turns read one location.
-function located(req: CheckedRenderRequest): CheckedRenderRequest {
+export function located(req: CheckedRenderRequest): CheckedRenderRequest {
   const dir = req.hookData.workspace?.current_dir ?? req.cwd;
   return {
     ...req,
@@ -158,6 +158,14 @@ export async function answerStatusline(
     },
   });
   recorded(facts, delivered);
+  // [LAW:nothing-unseen] Both turns' hops, beside `took`: what reaching the
+  // renderer cost this request.
+  noteFacts(facts, {
+    hop:
+      configured.hopMs === null || delivered.hopMs === null
+        ? "-"
+        : `${configured.hopMs + delivered.hopMs}ms`,
+  });
   if (delivered.kind === "threw") {
     noteFacts(facts, { renderer: host.name });
     return failed(host, delivered.failure);

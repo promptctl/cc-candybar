@@ -188,11 +188,12 @@ async function renderFrames(): Promise<void> {
     update: { newer: pendingOf("unread"), act: IDLE, actsError: null },
     fileEvents: [],
     launcher: [],
+    rendererEnded: null,
   };
   // [LAW:single-enforcer] The session's world state, read by the host's own
   // collector over the demo's providers and handed straight to the store its
   // view reads, as the daemon's renderer takes it.
-  const worldStates = new WorldStates();
+  const worldStates = new WorldStates(() => {});
   // What the view needs read, handed back after every world state as the
   // host hands back every turn's output: a run named once a fact landed is
   // subscribed by the turn that landed it. Nothing until the view opens.

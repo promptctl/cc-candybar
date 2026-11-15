@@ -2,15 +2,15 @@
 
 ## The limit judges what the platform charges
 
-The memory backstop measures what the OS charges the process: the physical footprint on macOS, RSS on Linux. It avoids RSS on macOS because macOS RSS includes pages malloc has freed and marked reusable. A backstop that judges by that RSS kills daemons whose real footprint is far under the limit.
+The memory backstop measures what the OS charges the daemon, its renderer's process included: the physical footprint on macOS, RSS on Linux. One footprint call names both pids, so the two are read at one moment; on Linux the renderer's RSS is its latest ping's, since the host reads nothing of another process on the render path. It avoids RSS on macOS because macOS RSS includes pages malloc has freed and marked reusable. A backstop that judges by that RSS kills daemons whose real footprint is far under the limit.
 
 On macOS the footprint comes from a subprocess. It is read asynchronously once a minute, and each reading is scheduled only after the previous one answers. When a reading fails, RSS stands in, minus the gap between RSS and the footprint at the last good reading. That gap holds steady from minute to minute, and judging a failed reading on raw RSS kills healthy daemons too. A host whose footprint has never been read has no gap and is judged on RSS.
 
 The env override for the limit keeps "RSS" in its name. It's a published contract, so don't rename it.
 
-## A breach leaves two post-mortems
+## A breach leaves a post-mortem of each kind
 
-On a breach the daemon writes the platform's own memory attribution first, then a V8 heap snapshot, under one shared identity, and exits. The attribution is needed because a heap snapshot describes only V8's half. The breaches that trip the limit are the ones where RSS and the heap disagree: V8's own mappings, malloc, page tables and file-backed code, part of which no eviction can reach. Rotation keeps the newest few breaches, with both files for each.
+On a breach the daemon writes the platform's own memory attribution of each process first, then the renderer's V8 heap snapshot, then its own, under one shared identity, and exits. The attribution is needed because a heap snapshot describes only V8's half. The breaches that trip the limit are the ones where RSS and the heap disagree: V8's own mappings, malloc, page tables and file-backed code, part of which no eviction can reach. Rotation keeps the newest few breaches, with every file of each.
 
 ## The render cache has a byte budget
 

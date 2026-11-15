@@ -24,6 +24,7 @@ import { SIGHTING_ROLES } from "../daemon/foundations/sighting-roles.js";
 import type { Asked } from "./checks.js";
 import type {
   MemoryReading,
+  ProcessMemory,
   PostMortem,
   ServingDaemon,
 } from "../daemon/foundations/memory-limit.js";
@@ -128,6 +129,23 @@ const isPostMortem = (m: unknown): m is PostMortem => {
   );
 };
 
+// One process's share of a reading: the host's or its renderer's, with the
+// sizes its latest read gave, or none yet.
+const isProcessMemory = (p: unknown): p is ProcessMemory => {
+  const m = (p ?? {}) as {
+    role?: unknown;
+    pid?: unknown;
+    sizes?: { rss?: unknown; heapTotal?: unknown } | null;
+  };
+  return (
+    (m.role === "host" || m.role === "renderer") &&
+    typeof m.pid === "number" &&
+    (m.sizes === null ||
+      (typeof m.sizes?.rss === "number" &&
+        typeof m.sizes.heapTotal === "number"))
+  );
+};
+
 // A reading as the daemon spelled it: none yet, or a charge — the platform's
 // own measure, or RSS standing in with why and the gap it is judged less —
 // beside the RSS and heap it was read with.
@@ -139,6 +157,7 @@ const isMemoryReading = (m: unknown): m is MemoryReading => {
     >;
     rss?: unknown;
     heapTotal?: unknown;
+    processes?: unknown;
   };
   if (r.kind === "unmeasured") return true;
   const c = r.charge;
@@ -146,6 +165,8 @@ const isMemoryReading = (m: unknown): m is MemoryReading => {
     r.kind === "measured" &&
     typeof r.rss === "number" &&
     typeof r.heapTotal === "number" &&
+    Array.isArray(r.processes) &&
+    r.processes.every(isProcessMemory) &&
     typeof c?.bytes === "number" &&
     ((c.kind === "charged" &&
       (c.measure === "phys_footprint" || c.measure === "rss")) ||

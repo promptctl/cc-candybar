@@ -27,7 +27,7 @@ import {
   type DaemonVerbContext,
   type MainRendererParts,
 } from "./verbs/port.js";
-import type { Timekeeper } from "../time.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
 import type { SessionStorage } from "../renderer-interface/session-state.js";
 import type {
   HistoryStorage,
@@ -58,6 +58,7 @@ import { SettingsHistory } from "./settings-history.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { WorldStates } from "./world-states.js";
+import { UpdateGate } from "./update-gate.js";
 import { Watches } from "./watches.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import {
@@ -181,6 +182,7 @@ export function mainRenderer(
     },
     event: async (input) => {
       const record: RequestFacts = [];
+      const from = parts.clock.monotonic();
       const ended = await turn(input.event, input.at, record).then(
         (effects) => ({ kind: "answered", effects }) as const,
         // [LAW:single-enforcer] Classified here, where it was thrown: a
@@ -195,6 +197,7 @@ export function mainRenderer(
         ...ended,
         record,
         subscriptions: parts.renderCache.subscriptions(),
+        turnMs: elapsedMs(parts.clock, from),
       };
     },
   });
@@ -280,8 +283,13 @@ function startOver(
   // [LAW:single-enforcer] What each session's renderers could not honour, as
   // their frames recorded it (src/renderer/render-warnings.ts).
   const renderWarnings = new RenderWarningRecords();
+  // [LAW:one-source-of-truth] The dismiss gate follows the update fact the
+  // host's documents carry: the gates are this renderer's own.
+  const updateGate = new UpdateGate(gates);
   // The world states the host hands the renderer, which its views read.
-  const worldStates = new WorldStates();
+  const worldStates = new WorldStates((document) =>
+    updateGate.took(document.daemon.update.newer),
+  );
   // [LAW:single-enforcer] Every watch this renderer holds, each held by the
   // host's registry under an id minted here.
   const watches = new Watches(host.watches);

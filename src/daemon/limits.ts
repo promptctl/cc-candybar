@@ -4,7 +4,7 @@ import v8 from "node:v8";
 import { type DaemonLogger } from "../utils/logger";
 import {
   chargeProbe,
-  memoryReport,
+  memoryReports,
   platformProbes,
   type ChargeProbe,
 } from "./memory-report";
@@ -21,6 +21,8 @@ import {
   type BreachArtifact,
   type MemoryReading,
   type ReadCharge,
+  type MemorySizes,
+  type ProcessMemory,
   BREACH_ARTIFACTS,
 } from "./foundations/memory-limit";
 import type { Launcher } from "../proc/launcher";
@@ -155,15 +157,6 @@ function breachArtifactOf(base: string): BreachArtifact | null {
   return null;
 }
 
-// What process.memoryUsage() reports, beside every charge: RSS (the charge
-// itself on Linux, the stand-in on macOS) and heapTotal, the part V8 admits to
-// — the gap between the charge and the heap is the whole reason this module
-// writes an attribution artifact rather than only a heap snapshot.
-export interface MemorySizes {
-  readonly rss: number;
-  readonly heapTotal: number;
-}
-
 export interface LimitsDeps {
   // The machine's clock: when a post-mortem is stamped, and the pace of the
   // readings.
@@ -182,12 +175,14 @@ export interface LimitsDeps {
   // to say how much of it is V8, which is the difference between "a cache to
   // fix" and "something a heap snapshot cannot show you".
   memoryBytes: () => MemorySizes;
-  // What the platform charges this process (memory-report.ts chargeProbe).
+  // What the platform charges these processes together
+  // (memory-report.ts chargeProbe).
   memoryCharge: ChargeProbe;
-  // The platform's own attribution of this process's resident memory, as text.
-  // Total by contract (src/daemon/memory-report.ts): it reports which probe
-  // could not answer rather than throwing, because the caller is already dying.
-  captureMemoryReport: () => Promise<string>;
+  // The platform's own attribution of each process's resident memory, as
+  // text. Total by contract (src/daemon/memory-report.ts): it reports which
+  // probe could not answer rather than throwing, because the caller is
+  // already dying.
+  captureMemoryReport: (pids: readonly number[]) => Promise<string>;
   writeMemoryReport: (filePath: string, text: string) => void;
   writeHeapSnapshot: (filePath: string) => string;
   // What the log holds, written before the loop blocks (log.ts).
@@ -213,7 +208,18 @@ export interface LimitsHandle {
   disarm(): void;
 }
 
-export function makeLimits(deps: LimitsDeps): LimitsHandle {
+// What the daemon's renderer link answers of the renderer's own process
+// (src/daemon/renderer-process.ts): its pid and its sizes as its latest ping
+// read them while one runs, and its heap written to a file.
+export interface RendererMemory {
+  readonly renderer: () => {
+    readonly pid: number;
+    readonly usage: MemorySizes | null;
+  } | null;
+  readonly writeRendererHeapSnapshot: (filePath: string) => Promise<void>;
+}
+
+export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
   const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
   const keep = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
@@ -238,9 +244,31 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
 
   async function measure(): Promise<boolean> {
     if (triggered) return true;
-    const { rss, heapTotal } = deps.memoryBytes();
-    const charge = readCharge(await deps.memoryCharge(rss), latest);
-    const reading = { kind: "measured", charge, rss, heapTotal } as const;
+    const own = deps.memoryBytes();
+    const renderer = deps.renderer();
+    const processes: readonly ProcessMemory[] = [
+      { role: "host", pid: deps.pid, sizes: own },
+      ...(renderer === null
+        ? []
+        : [
+            {
+              role: "renderer" as const,
+              pid: renderer.pid,
+              sizes: renderer.usage,
+            },
+          ]),
+    ];
+    const pids = processes.map((p) => p.pid);
+    const rss = sum(processes, (s) => s.rss);
+    const heapTotal = sum(processes, (s) => s.heapTotal);
+    const charge = readCharge(await deps.memoryCharge(pids, rss), latest);
+    const reading = {
+      kind: "measured",
+      charge,
+      rss,
+      heapTotal,
+      processes,
+    } as const;
     latest = reading;
     // [LAW:nothing-unseen] One line per reading, whatever it says: the history
     // a breach is read against, which no cache count can reconstruct.
@@ -272,7 +300,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     // where the post-mortem will look for it.
     await attempt(deps.log, "memory report", async () => {
       const file = artifactFile(deps.snapshotDir, "memoryReport", identity);
-      const report = await deps.captureMemoryReport();
+      const report = await deps.captureMemoryReport(pids);
       if (disarmed) return;
       deps.writeMemoryReport(file, report);
       deps.log("info", `memory report written: ${file}`);
@@ -283,6 +311,18 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
       deps.log("info", "daemon closed during the breach: no snapshot, no exit");
       return false;
     }
+    // The renderer's heap first: it is the half that holds the caches, and its
+    // write leaves the host's loop free to hear that it finished.
+    if (renderer !== null)
+      await attempt(deps.log, "renderer heap snapshot", async () => {
+        const file = artifactFile(
+          deps.snapshotDir,
+          "rendererHeapSnapshot",
+          identity,
+        );
+        await deps.writeRendererHeapSnapshot(file);
+        deps.log("info", `renderer heap snapshot written: ${file}`);
+      });
     await attempt(deps.log, "heap snapshot", () => {
       // [LAW:no-ambient-temporal-coupling] The snapshot holds the loop for
       // seconds and can double the heap, which can draw the OS's kill with no
@@ -357,16 +397,38 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
   return { check, describeNextRestart, serving, arm, disarm };
 }
 
-// The per-check log line's fields, logfmt.
+// The tree's total of one size, over the processes whose sizes were read.
+function sum(
+  processes: readonly ProcessMemory[],
+  size: (sizes: MemorySizes) => number,
+): number {
+  return processes.reduce(
+    (total, p) => total + (p.sizes === null ? 0 : size(p.sizes)),
+    0,
+  );
+}
+
+// The per-check log line's fields, logfmt: the whole, then each process's.
 function readingFields(
-  { charge, rss, heapTotal }: Extract<MemoryReading, { kind: "measured" }>,
+  {
+    charge,
+    rss,
+    heapTotal,
+    processes,
+  }: Extract<MemoryReading, { kind: "measured" }>,
   limit: number,
 ): string {
   const unread =
     charge.kind === "stand-in"
       ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB`
       : "";
-  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread}`;
+  const each = processes
+    .map(
+      (p) =>
+        ` ${p.role}=${p.pid}:${p.sizes === null ? "unread" : `rss${mb(p.sizes.rss)}MB/heap${mb(p.sizes.heapTotal)}MB`}`,
+    )
+    .join("");
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread}${each}`;
 }
 
 // [LAW:no-silent-failure] The death path's one shape for "do this, and if it
@@ -446,10 +508,12 @@ export function realLimitsDeps(
       const mem = process.memoryUsage();
       return { rss: mem.rss, heapTotal: mem.heapTotal };
     },
-    memoryCharge: chargeProbe(owner.launcher, process.platform, process.pid),
-    captureMemoryReport: () =>
-      memoryReport(
-        platformProbes(owner.launcher, process.platform, process.pid),
+    memoryCharge: chargeProbe(owner.launcher, process.platform),
+    captureMemoryReport: (pids) =>
+      memoryReports(
+        pids.map((pid) =>
+          platformProbes(owner.launcher, process.platform, pid),
+        ),
       ),
     // 0600 like the heap snapshot v8 writes beside it: the pair shares an
     // identity, so it shares a permission — a post-mortem pair where one half is
