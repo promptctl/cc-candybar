@@ -876,10 +876,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       const teardown: readonly TeardownStep[] = [
         // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
         // ends is not started again, so no step below waits on a fresh boot.
-        ["renderer closing", () => link.closing()],
+        ["renderer close begins", () => link.beginClose()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
-        // [LAW:no-ambient-temporal-coupling] Before any renderer step:
+        // [LAW:no-ambient-temporal-coupling] Before any of the renderer's turns:
         // one waits behind whatever turn the renderer is in, which can outlast
         // shutdown's backstop, while this waits only on its own tmux calls.
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],

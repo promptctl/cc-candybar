@@ -49,7 +49,7 @@ export interface RendererLink {
   arm(): void;
   // The daemon's close has begun: the live renderer takes the close's steps,
   // and no renderer starts again.
-  closing(): void;
+  beginClose(): void;
   // Ends the renderer's process, after the daemon's close has run the
   // renderer's own steps of it.
   close(): Promise<void>;
@@ -105,7 +105,7 @@ function inProcessRenderer(
     renderer,
     arm: () => {},
     // Nothing restarts in process.
-    closing: () => {},
+    beginClose: () => {},
     close: async () => {},
     process: () => null,
   };
@@ -222,7 +222,12 @@ type Phase =
       readonly why: string;
       readonly cancelRetry: () => void;
     }
-  | { readonly kind: "closed" };
+  // The renderer the close stopped is ending, which the close awaits.
+  | { readonly kind: "closed"; readonly ended: Promise<unknown> };
+
+// Where the close's beginning leaves a renderer: one live takes the close's
+// steps, and any other is closed.
+type Begun = Extract<Phase, { kind: "closing" | "closed" }>;
 
 // [LAW:one-source-of-truth] What one renderer holds in the host, each of its
 // own ids to the host's, released once the next renderer has answered its
@@ -452,8 +457,9 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] An end once the close has begun
     // starts nothing: a fresh renderer holds nothing to flush, and the close's
     // remaining steps would wait on its boot.
-    if (phase.kind === "closing" || phase.kind === "closed") {
-      phase = { kind: "closed" };
+    if (phase.kind === "closing")
+      phase = { kind: "closed", ended: link.channel.ended };
+    if (phase.kind === "closed") {
       // [LAW:nothing-unseen] Said all the same: one that did not exit may have
       // ended before its close steps ran.
       log(
@@ -531,35 +537,31 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     await link.channel.ended;
     grace();
   };
-  // A boot the close ended as it began, ending beside the close's steps.
-  let bootEnded: Promise<void> = Promise.resolve();
   // [LAW:no-ambient-temporal-coupling] The close has begun, whichever phase it
   // finds: the live renderer stays to take the close's steps, and nothing else
   // runs or starts.
-  const closing = (): void => {
+  const beginClose = (): Begun => {
     switch (phase.kind) {
       case "live":
-        phase = { kind: "closing", link: phase.link };
-        return;
+        return (phase = { kind: "closing", link: phase.link });
       // A boot holds nothing to flush, and the close's steps would wait on it:
-      // it ends now, and what waited for it fails as a closed renderer's.
+      // it ends now, beside them, and what waited for it fails as a closed
+      // renderer's.
       case "starting": {
         const { link, queued } = phase;
-        phase = { kind: "closed" };
+        const begun = { kind: "closed", ended: ending(link) } as const;
+        phase = begun;
         for (const send of queued) send();
-        bootEnded = ending(link);
-        return;
+        return begun;
       }
       case "down":
         phase.cancelRetry();
-        phase = { kind: "closed" };
-        return;
+        return (phase = { kind: "closed", ended: Promise.resolve() });
       case "idle":
-        phase = { kind: "closed" };
-        return;
+        return (phase = { kind: "closed", ended: Promise.resolve() });
       case "closing":
       case "closed":
-        return;
+        return phase;
     }
   };
 
@@ -638,13 +640,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       spawn();
       stopPings = clock.every(PING_PERIOD_MS, pinged, { unref: true });
     },
-    closing,
+    beginClose,
     close: async () => {
-      closing();
-      const link = phase.kind === "closing" ? phase.link : null;
-      phase = { kind: "closed" };
+      const begun = beginClose();
+      const ended = begun.kind === "closing" ? ending(begun.link) : begun.ended;
+      phase = { kind: "closed", ended };
       stopPings();
-      await Promise.all([bootEnded, link === null ? null : ending(link)]);
+      await ended;
       releaseGone();
     },
     process: () => {

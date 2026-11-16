@@ -645,7 +645,7 @@ describe("a renderer process's close", () => {
     child.say({ kind: "started", pid: 9001 });
     clock.advance(YOUNG_MS);
     await settled();
-    link.closing();
+    link.beginClose();
     const heard = child.written.length;
     void link.renderer.answer(pin).catch(() => {});
     await settled();
@@ -670,7 +670,7 @@ describe("a renderer process's close", () => {
     link.arm();
     const child = children[0]!;
     const waiting = link.renderer.answer(pin);
-    link.closing();
+    link.beginClose();
     expect(child.stdinEnded).toBe(true);
     await expect(waiting).rejects.toThrow(
       new RendererDown("renderer main is closed"),
@@ -686,7 +686,7 @@ describe("a renderer process's close", () => {
     link.arm();
     children[0]!.exit(CRASHED);
     await settled();
-    link.closing();
+    link.beginClose();
     clock.advance(BACKOFF_MAX_MS);
     expect(children).toHaveLength(1);
     await link.close();
@@ -698,7 +698,16 @@ describe("a renderer process's close", () => {
     const child = children[0]!;
     child.say({ kind: "started", pid: 9001 });
     await settled();
-    link.closing();
+    // Its boot's ping is answered, so only a ping sent in the close can judge
+    // it.
+    const booted = child.written.find((l) => l.kind === "ping");
+    child.say({
+      kind: "ping",
+      n: (booted as { n: number }).n,
+      usage: { rss: 5, heapTotal: 3 },
+    });
+    await settled();
+    link.beginClose();
     clock.advance(PING_PERIOD_MS + HUNG_AFTER_MS + PING_PERIOD_MS);
     await settled();
     expect(child.opts.signal?.aborted).toBe(true);
