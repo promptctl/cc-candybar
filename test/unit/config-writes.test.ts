@@ -37,7 +37,7 @@ describe("a click's config writes", () => {
     const w = writes();
     const effects: Effect[] = [];
     let applied = false;
-    w.land("/a.json5", DISK["/a.json5"]!, DISK["/a.json5"]!);
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: DISK["/a.json5"]! }]);
     w.seal(effects, SID, landing(() => (applied = true)));
     expect(effects).toEqual([]);
     expect(applied).toBe(true);
@@ -45,7 +45,7 @@ describe("a click's config writes", () => {
 
   test("a click reads its own writes, and the disk for the rest", () => {
     const w = writes();
-    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: "{ a: 2 }\n" }]);
     expect(w.read("/a.json5")).toBe("{ a: 2 }\n");
     expect(w.read("/b.json5")).toBe(DISK["/b.json5"]);
   });
@@ -53,8 +53,8 @@ describe("a click's config writes", () => {
   test("two writes to one file are one change, from the first read to the last write", () => {
     const w = writes();
     const effects: Effect[] = [];
-    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
-    w.land("/a.json5", "{ a: 2 }\n", "{ a: 3 }\n");
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: "{ a: 2 }\n" }]);
+    w.land([{ file: "/a.json5", before: "{ a: 2 }\n", after: "{ a: 3 }\n" }]);
     w.seal(effects, SID, landing(() => {}));
     expect(effects).toEqual([
       {
@@ -78,8 +78,8 @@ describe("a click's config writes", () => {
     const w = writes();
     const effects: Effect[] = [];
     let applied = false;
-    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
-    w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: "{ a: 2 }\n" }]);
+    w.land([{ file: "/b.json5", before: DISK["/b.json5"]!, after: "{ b: 2 }\n" }]);
     w.seal(effects, SID, landing(() => (applied = true)));
     const [a, b] = ids(effects);
     let opened = false;
@@ -104,8 +104,8 @@ describe("a click's config writes", () => {
   test("a landing that missed reports why, though a later change landed", () => {
     const w = writes();
     const effects: Effect[] = [];
-    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
-    w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: "{ a: 2 }\n" }]);
+    w.land([{ file: "/b.json5", before: DISK["/b.json5"]!, after: "{ b: 2 }\n" }]);
     w.seal(effects, SID, landing(() => {}));
     const [a, b] = ids(effects);
     w.settled(a!, { kind: "refused", reason: "a moved" });
@@ -116,25 +116,39 @@ describe("a click's config writes", () => {
 
   test("a write from text other than the click's lands its changes over what the click wrote", () => {
     const w = writes();
-    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 1, x: 1 }\n");
+    w.land([
+      { file: "/a.json5", before: DISK["/a.json5"]!, after: "{ a: 1, x: 1 }\n" },
+    ]);
     // A history step, recorded before the click added `x`.
-    w.land("/a.json5", "{ a: 1 }\n", "{ a: 6 }\n");
+    w.land([{ file: "/a.json5", before: "{ a: 1 }\n", after: "{ a: 6 }\n" }]);
     expect(w.read("/a.json5")).toBe("{ a: 6, x: 1 }\n");
   });
 
   test("a write whose setting the click itself moved is refused", () => {
     const w = writes();
-    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
-    expect(() => w.land("/a.json5", "{ a: 5 }\n", "{ a: 6 }\n")).toThrow(
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: "{ a: 2 }\n" }]);
+    expect(() => w.land([{ file: "/a.json5", before: "{ a: 5 }\n", after: "{ a: 6 }\n" }])).toThrow(
       "a in /a.json5 was changed earlier in this click",
     );
+  });
+
+  test("writes that land together land nothing when one contradicts the click", () => {
+    const w = writes();
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: "{ a: 2 }\n" }]);
+    expect(() =>
+      w.land([
+        { file: "/b.json5", before: DISK["/b.json5"]!, after: "{ b: 2 }\n" },
+        { file: "/a.json5", before: "{ a: 5 }\n", after: "{ a: 6 }\n" },
+      ]),
+    ).toThrow("a in /a.json5 was changed earlier in this click");
+    expect(w.read("/b.json5")).toBe(DISK["/b.json5"]);
   });
 
   test("a landing names only the files its changes change", () => {
     const w = writes();
     const effects: Effect[] = [];
-    w.land("/a.json5", DISK["/a.json5"]!, DISK["/a.json5"]!);
-    w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: DISK["/a.json5"]! }]);
+    w.land([{ file: "/b.json5", before: DISK["/b.json5"]!, after: "{ b: 2 }\n" }]);
     w.seal(effects, SID, landing(() => {}));
     expect(w.settled(ids(effects)[0]!, { kind: "ok" })).toMatchObject({
       files: ["/b.json5"],
@@ -147,7 +161,7 @@ describe("a click's config writes", () => {
 
   test("a write with no session to land for is the click's bug, said", () => {
     const w = writes();
-    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
+    w.land([{ file: "/a.json5", before: DISK["/a.json5"]!, after: "{ a: 2 }\n" }]);
     expect(() => w.seal([], null, landing(() => {}))).toThrow(
       "a click with no session wrote /a.json5",
     );

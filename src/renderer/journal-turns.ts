@@ -13,9 +13,8 @@
 // turn, and no turn ever asks for a place, so the two cannot deadlock.
 //
 // `close` ends the turns for good: what is queued is refused as its turn
-// arrives, and what is in flight goes no further than its next `landed`. What
-// it wrote by then is still its click's, landing whole with its consequence
-// or not at all (src/renderer/config-writes.ts). A click's launches are bounded
+// arrives, and what is in flight goes no further than its next `landed` and
+// lands nothing (src/renderer/config-writes.ts). A click's launches are bounded
 // (`clickLaunch`), so a turn comes back unless a child outlives SIGKILL, in
 // uninterruptible sleep: its launch never settles, and `getStats` shows the
 // holder's `heldMs` growing.

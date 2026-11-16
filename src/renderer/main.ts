@@ -533,6 +533,7 @@ function startOver(
       // the one in flight stops at its next await once the host's abort lands.
       case "close-journal":
         journalTurns.close();
+        configWrites.close();
         return { kind: "close-journal" };
       case "close-views":
         renderCache.close();

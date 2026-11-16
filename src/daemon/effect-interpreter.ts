@@ -14,16 +14,11 @@ import type {
   ConfigChange,
   EffectOutcome,
 } from "../renderer-interface/interface.js";
-import { resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
-
-const readText = (file: string): string | null => {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw e;
-  }
-};
+import {
+  readConfigText,
+  resolvedTarget,
+  writeAtomic,
+} from "../utils/atomic-write.js";
 
 const writeText = (file: string, text: string | null): void =>
   text === null
@@ -38,7 +33,7 @@ const said = (read: Read | "object"): string =>
       : read.text;
 
 // A file as it stood, and as the turn's changes leave it.
-interface Landing {
+interface Rewrite {
   readonly file: string;
   readonly was: string | null;
   readonly will: string | null;
@@ -49,14 +44,16 @@ interface Landing {
 export function performChanges(
   changes: readonly ConfigChange[],
 ): EffectOutcome {
-  const landings = new Map<string, Landing>();
+  const rewrites = new Map<string, Rewrite>();
   try {
     for (const { target, changes: list } of changes) {
-      const file = target.path;
+      // Keyed by the file a write lands in, so two paths to one file are one
+      // rewrite of it.
+      const file = resolvedTarget(target.path);
       // A file an earlier change of the turn named, as that change left it,
       // an absent one included.
-      const prior = landings.get(file);
-      const was = prior === undefined ? readText(file) : prior.was;
+      const prior = rewrites.get(file);
+      const was = prior === undefined ? readConfigText(file) : prior.was;
       const applied = applyChanges(
         prior === undefined ? was : prior.will,
         list,
@@ -66,16 +63,16 @@ export function performChanges(
           kind: "refused",
           reason: `${addressText(applied.at)} in ${file} changed since it was read (it was ${said(applied.read)}, it is ${said(applied.found)}) — nothing was written`,
         };
-      landings.set(file, { file, was, will: applied.text });
+      rewrites.set(file, { file, was, will: applied.text });
     }
   } catch (e) {
     return { kind: "failed", reason: `config read failed: ${message(e)}` };
   }
-  const written: Landing[] = [];
+  const written: Rewrite[] = [];
   try {
-    for (const landing of landings.values()) {
-      writeText(landing.file, landing.will);
-      written.push(landing);
+    for (const rewrite of rewrites.values()) {
+      writeText(rewrite.file, rewrite.will);
+      written.push(rewrite);
     }
     return { kind: "ok" };
   } catch (e) {
@@ -84,7 +81,7 @@ export function performChanges(
 }
 
 // The files a failed write already wrote, put back as they stood.
-function putBack(written: readonly Landing[], cause: unknown): string {
+function putBack(written: readonly Rewrite[], cause: unknown): string {
   const reason = `config write failed: ${message(cause)}`;
   try {
     for (const { file, was } of [...written].reverse()) writeText(file, was);

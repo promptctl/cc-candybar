@@ -45,6 +45,7 @@ import {
   type Savepoint,
   isSettingKey,
 } from "../renderer-interface/history-storage";
+import type { ConfigWrites } from "./config-writes.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
 export interface HistoryDepth {
@@ -79,9 +80,7 @@ const EMPTY: SessionHistory = { past: [], future: [] };
 
 // Where a click's config writes go: changes its turn returns
 // (src/renderer/config-writes.ts).
-export interface ConfigFiles {
-  land(file: string, before: string | null, after: string | null): void;
-}
+export type ConfigFiles = Pick<ConfigWrites, "land">;
 
 // Records one click's changes. Handlers write through `sessionState` (which
 // records settings keys once they are written, and holds every write until
@@ -246,7 +245,7 @@ export class SettingsHistory {
       sessionState,
       file: (sessionId, file, before, after) => {
         note(sessionId, { kind: "file", file, before, after });
-        files.land(file, before, after);
+        files.land([{ file, before, after }]);
       },
       wrote: () => {
         written = true;
@@ -379,11 +378,17 @@ export class SettingsHistory {
         `${verb}: ${stale.map(describe).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
       );
     }
+    click.files.land(
+      step.flatMap((change) =>
+        change.kind === "file"
+          ? [{ file: change.file, before: change[from], after: change[to] }]
+          : [],
+      ),
+    );
     for (const change of step) {
+      if (change.kind === "file") continue;
       const value = change[to];
-      if (change.kind === "file")
-        click.files.land(change.file, change[from], value);
-      else if (value === null) click.held.clear(sessionId, change.key);
+      if (value === null) click.held.clear(sessionId, change.key);
       else click.held.set(sessionId, change.key, value);
     }
     click.stepped(sessionId, step);

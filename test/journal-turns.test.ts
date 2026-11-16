@@ -104,7 +104,12 @@ function setup() {
   // `style`.
   const click = (theme: string, style: string, parked: Promise<unknown>) =>
     parkedClick(ctx, theme, style, parked);
-  return { sessionState, ctx, turns, logged, click };
+  // The renderer's `close-journal`.
+  const close = (): void => {
+    turns.close();
+    ctx.configWrites.close();
+  };
+  return { sessionState, ctx, turns, logged, click, close };
 }
 
 // A click reaches its turn some microtasks after it is sent, under real timers
@@ -293,38 +298,37 @@ test("a verb stamps its session's landing, though its handler threw", async () =
 });
 
 describe("close", () => {
-  test("a click in flight lands what it did before the close, as one undoable step", async () => {
-    const { sessionState, ctx, turns, click } = setup();
+  test("a click in flight lands nothing of what it did before the close", async () => {
+    const { sessionState, ctx, click, close } = setup();
     const held = gate();
     const cut = click("nord", "plain", held.wait);
     await drain();
-    turns.close();
+    close();
     held.open();
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
-    expect(sessionState.get(SID, "endcaps")).toBeNull();
-    expect(undoDepth(ctx)).toBe(1);
-    undoOf(ctx.history, SID);
     expect(sessionState.get(SID, "theme")).toBeNull();
+    expect(sessionState.get(SID, "endcaps")).toBeNull();
+    expect(undoDepth(ctx)).toBe(0);
   });
 
   test("a click that landed before the close stays one step", async () => {
-    const { ctx, turns, click } = setup();
+    const { ctx, click, close } = setup();
     await click("nord", "plain", Promise.resolve());
-    turns.close();
+    close();
     expect(undoDepth(ctx)).toBe(1);
   });
 
   test("a click queued behind the turn it cut off is refused", async () => {
-    const { ctx, turns, click } = setup();
+    const { ctx, click, close } = setup();
     const held = gate();
     const cut = click("nord", "plain", held.wait);
     const queued = click("dracula", "powerline", Promise.resolve());
     await drain();
-    turns.close();
+    close();
     held.open();
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
     await expect(queued).rejects.toThrow("the daemon closed");
-    expect(undoDepth(ctx)).toBe(1);
+    expect(undoDepth(ctx)).toBe(0);
   });
 });
 

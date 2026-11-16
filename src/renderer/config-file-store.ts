@@ -120,15 +120,7 @@ export function persistValueText(key: string, raw: string): string {
 
 // ─── The file ────────────────────────────────────────────────────────────────
 
-/** The file's text, or null when it does not exist. */
-export function readConfigText(file: string): string | null {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw e;
-  }
-}
+export { readConfigText } from "../utils/atomic-write.js";
 
 function docOf(text: string): Node | null {
   return /^\s*$/.test(text) ? null : parseDocument(text);

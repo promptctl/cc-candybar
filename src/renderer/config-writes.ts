@@ -32,6 +32,13 @@ export interface Landing {
   readonly refused: () => void;
 }
 
+// A file's text as a write found it, and as it leaves it.
+export interface FileWrite {
+  readonly file: string;
+  readonly before: string | null;
+  readonly after: string | null;
+}
+
 // How a landing ended: every change of its click landed, or the first reason
 // one did not.
 export type Landed = Landing & { readonly outcome: EffectOutcome };
@@ -48,6 +55,7 @@ export class ConfigWrites {
     missed: Exclude<EffectOutcome, { kind: "ok" }> | null;
   } | null = null;
   private waiting: Array<() => void> = [];
+  private closed = false;
 
   constructor(
     private readonly mint: () => EffectId,
@@ -62,24 +70,26 @@ export class ConfigWrites {
     return written === undefined ? this.disk(file) : written.after;
   }
 
-  // A write of the open click: one change per file, from the click's first
-  // read of it to its last write. A write from text other than the click's
-  // own (a history step, from what it recorded) lands as the changes between
-  // its two texts, applied over what the click already wrote.
-  land(file: string, before: string | null, after: string | null): void {
-    const open = this.open.get(file);
-    if (open === undefined) {
+  // Writes of the open click, landing together or not at all: one change per
+  // file, from the click's first read of it to its last write. A write from
+  // text other than the click's own (a history step, from what it recorded)
+  // lands as the changes between its two texts, applied over what the click
+  // already wrote.
+  land(writes: readonly FileWrite[]): void {
+    const landed = writes.map(({ file, before, after }) => {
+      const open = this.open.get(file);
+      if (open === undefined) return { file, before, after };
+      const applied = applyChanges(open.after, diffChanges(before, after));
+      // [LAW:no-silent-failure] The click's own writes moved a setting its
+      // later write steps from: the click contradicts itself.
+      if (applied.kind === "moved")
+        throw new BadVerbArgs(
+          `${addressText(applied.at)} in ${file} was changed earlier in this click — nothing was written`,
+        );
+      return { file, before: open.before, after: applied.text };
+    });
+    for (const { file, before, after } of landed)
       this.open.set(file, { before, after });
-      return;
-    }
-    const applied = applyChanges(open.after, diffChanges(before, after));
-    // [LAW:no-silent-failure] The click's own writes moved a setting its
-    // later write steps from: the click contradicts itself.
-    if (applied.kind === "moved")
-      throw new BadVerbArgs(
-        `${addressText(applied.at)} in ${file} was changed earlier in this click — nothing was written`,
-      );
-    this.open.set(file, { before: open.before, after: applied.text });
   }
 
   // The open click is over. Its changes join its turn's effects, and its
@@ -90,6 +100,9 @@ export class ConfigWrites {
     session: SessionId | null,
     { consequence, refused }: Pick<Landing, "consequence" | "refused">,
   ): void {
+    // [LAW:no-ambient-temporal-coupling] A click the daemon's close cut off
+    // lands nothing, so nothing of it is performed under the teardown.
+    if (this.closed) return this.open.clear();
     const written = [...this.open].flatMap(([path, { before, after }]) => {
       const list = diffChanges(before, after);
       return list.length === 0 ? [] : [{ path, list }];
@@ -129,6 +142,11 @@ export class ConfigWrites {
     this.landing = null;
     for (const resume of this.waiting.splice(0)) resume();
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
+  }
+
+  // No click seals after this: the daemon is closing.
+  close(): void {
+    this.closed = true;
   }
 
   // Resolves once no click's changes are on their way.

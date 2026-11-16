@@ -17,8 +17,11 @@ import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { Step } from "../../src/renderer-interface/history-storage";
 
 export const WRITES_IN_PLACE: ConfigFiles = {
-  land: (file, _before, after) =>
-    after === null ? rmSync(file, { force: true }) : writeFileSync(file, after),
+  land: (writes) => {
+    for (const { file, after } of writes)
+      if (after === null) rmSync(file, { force: true });
+      else writeFileSync(file, after);
+  },
 };
 
 // A config writer's store with no click around it: it reads the disk, and
