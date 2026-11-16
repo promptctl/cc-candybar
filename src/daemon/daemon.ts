@@ -69,7 +69,6 @@ import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import { repoConfigs } from "../config/repo-book.js";
 import { recordAnswer } from "./repo-book.js";
 import type { EffectOutcome } from "../renderer-interface/interface.js";
-import { BadVerbArgs } from "./foundations/verb-error.js";
 import { linkSignerOver } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
@@ -470,7 +469,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
   // off takes (src/daemon/lane-setup.ts), which performs each setup the
   // renderer's effects ask for.
+  // [LAW:single-enforcer] [LAW:no-ambient-temporal-coupling] Everything that
+  // types into a session's pane, one at a time: a slash line, a restart's
+  // shell line, a band's /reload-plugins. Two in one pane type over each
+  // other.
+  const panes = new KeyedSerialQueue<SessionId>();
   const laneSetups = new LaneSetups({
+    panes,
     edge: inputs.laneEdge(
       launcher,
       (sessionId) => frameFeeds.following(sessionId),
@@ -678,27 +683,27 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watched: (sessionId) => frameFeeds.feedOpen(sessionId),
     deliver: (event) =>
       parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
+    retired: (session) => tmuxStatusLines.retired(session),
     log,
   });
 
   const clicks = new ClicksInFlight();
   const claudeLaunch = clickLaunchVia(launcher);
-  // [LAW:no-ambient-temporal-coupling] Each session's typings, one at a time:
-  // two lines in one pane would type over each other.
-  const typings = new KeyedSerialQueue<SessionId>();
   // [LAW:no-silent-failure] An act on a session reads it as its newest
   // request reported it; one this daemon holds none of is refused, saying so.
-  const sessionAt = (sessionId: SessionId): LaneSession | EffectOutcome => {
+  const sessionAt = (
+    sessionId: SessionId,
+  ):
+    | { readonly kind: "session"; readonly session: LaneSession }
+    | EffectOutcome => {
     const latest = frameFeeds.latest(sessionId);
     return latest === null
       ? {
           kind: "refused",
           reason: `session ${sessionId} has sent this daemon no request yet — its pane is not known`,
         }
-      : laneSessionOf(latest);
+      : { kind: "session", session: laneSessionOf(latest) };
   };
-  const isOutcome = (at: LaneSession | EffectOutcome): at is EffectOutcome =>
-    "kind" in at;
   const typeInto = typeInPane(inputs.claudeInput(launcher));
   // [LAW:single-enforcer] Every act a renderer returns, performed by its kind
   // (src/daemon/act-interpreter.ts).
@@ -734,11 +739,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       "type-slash": {
         endsInTurn: true,
         perform: ({ session, line }) =>
-          typings.run(session, async () => {
+          panes.run(session, async () => {
             const at = sessionAt(session);
-            return isOutcome(at)
-              ? at
-              : typeSlashAct(typeInto, at.hints.tmux, line);
+            return at.kind === "session"
+              ? typeSlashAct(typeInto, at.session.hints.tmux, line)
+              : at;
           }),
       },
       run: {
@@ -765,28 +770,26 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       },
       "apply-update": {
         endsInTurn: true,
-        perform: () =>
-          updateWatch.act().then(
-            (): EffectOutcome => ({ kind: "ok" }),
-            (e: unknown): EffectOutcome => ({
-              kind: e instanceof BadVerbArgs ? "refused" : "failed",
-              reason: e instanceof Error ? e.message : String(e),
-            }),
-          ),
+        perform: async () => {
+          await updateWatch.act();
+          return { kind: "ok" };
+        },
       },
       "restart-claude": {
         endsInTurn: false,
         perform: async ({ session }) => {
           const at = sessionAt(session);
-          return isOutcome(at) ? at : laneSetups.start(at, { kind: "restart" });
+          return at.kind === "session"
+            ? laneSetups.start(at.session, { kind: "restart" })
+            : at;
         },
       },
       surface: {
         endsInTurn: false,
         perform: async ({ session, surface, on }) => {
           // [LAW:dataflow-not-control-flow] The tmux row is the daemon's own
-          // to draw: held while on, at the pane the newest request reported,
-          // released once off. Holding it again is no change.
+          // to draw: held while on, at the pane the newest request reported
+          // and following it request by request, released once off.
           // [LAW:no-silent-failure] A row asked for where the session reported
           // no pane is refused, saying why, as every act in its pane is.
           if (surface === "tmux-status") {
@@ -797,9 +800,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
             return { kind: "ok" };
           }
           const at = sessionAt(session);
-          return isOutcome(at)
-            ? at
-            : laneSetups.start(at, { kind: "surface", surface, on });
+          return at.kind === "session"
+            ? laneSetups.start(at.session, { kind: "surface", surface, on })
+            : at;
         },
       },
     },
@@ -994,6 +997,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           parts.renderer.ask({ kind }, instant());
       // The session state still flushes after a close failed (runTeardown).
       const teardown: readonly TeardownStep[] = [
+        // [LAW:no-ambient-temporal-coupling] First: no change or act is
+        // performed under any step after it.
+        ["renderer effects close", () => parts.renderer.close()],
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
         // journal in flight, so none opens after.
         ["journalTurns close", rendererStep("close-journal")],

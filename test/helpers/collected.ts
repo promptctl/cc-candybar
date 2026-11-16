@@ -48,13 +48,22 @@ export function collected(
     watched: () => false,
     daemon: () => daemonFactsOf(),
     ...deps,
+    retired: () => {},
     // The host hands an output's subscriptions back once the renderer's
     // answer settles, a turn of the event loop after the store took the
     // world state, so a wait resolved inside the take sees no run it names
     // subscribed yet.
     deliver: async (event) => {
       if (event.kind === "world-state") worldStates.take(event.worldState);
-      else retireSession({ renderCache: cache(), worldStates }, event.session);
+      else
+        retireSession(
+          {
+            renderCache: cache(),
+            worldStates,
+            laneSurfaces: { retired: () => {} },
+          },
+          event.session,
+        );
       await Promise.resolve();
       collector.subscribed(cache().subscriptions());
       return { kind: "answered" };

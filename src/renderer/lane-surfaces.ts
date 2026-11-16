@@ -21,10 +21,10 @@
 // switches as that event finds them, so a lane whose switch is back where it
 // stood — toggled back, or moved back by another session's save — owes nothing.
 //
-// The tmux row is held at every request whose switch is on in tmux, and on or
-// off at a click that moved it, never at a draw: the host's hold is idempotent
-// and the row's feed ends once its lane is off, so a row another session's
-// save turned off is never re-taken from a remembered switch.
+// The tmux row is turned on or off at a click that moved its switch, and at a
+// request whose switch differs from what the host was last asked, never at a
+// draw. Once on, the host's adapter follows the session's pane at each of its
+// requests (src/daemon/tmux-status.ts), so no request asks again.
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { LANE_NAMES, type Lane, type LaneSwitches } from "../config/lanes.js";
@@ -46,6 +46,8 @@ type Owed = Map<Lane, boolean>;
 export class LaneSurfaces {
   // Each session's owed lanes, least recently owed first.
   private readonly owed = new Map<SessionId, Owed>();
+  // The sessions whose tmux row the host was last asked to hold.
+  private readonly rows = new Set<SessionId>();
 
   constructor(
     private readonly deps: {
@@ -71,7 +73,8 @@ export class LaneSurfaces {
     const byOf = (lane: Lane): SetupCause =>
       moved.includes(lane) ? "click" : "owed";
     if (held) {
-      this.settle(sessionId, owed, after, byOf, effects);
+      const set = this.settle(sessionId, owed, after, byOf, effects);
+      if (set.has("tmuxStatus")) this.asked(sessionId, after.tmuxStatus);
       return;
     }
     for (const [lane, from] of owed)
@@ -102,8 +105,8 @@ export class LaneSurfaces {
   }
 
   // A request of `sessionId` arrived, finding its switches at `switches`: the
-  // setups its clicks owe go now, and its tmux row is held while its switch is
-  // on.
+  // setups its clicks owe go now, and its tmux row is asked to its switch
+  // when that differs from what was last asked.
   noted(sessionId: SessionId, switches: LaneSwitches, effects: Effect[]): void {
     const set = this.settle(
       sessionId,
@@ -112,13 +115,28 @@ export class LaneSurfaces {
       () => "owed",
       effects,
     );
-    if (switches.tmuxStatus && !set.has("tmuxStatus"))
+    const on = switches.tmuxStatus;
+    if (!set.has("tmuxStatus") && this.rows.has(sessionId) !== on)
       this.deps.acts.add(effects, {
         kind: "surface",
         session: sessionId,
         surface: "tmux-status",
-        on: true,
+        on,
       });
+    this.asked(sessionId, on);
+  }
+
+  // The session retired: nothing of it is owed or asked.
+  retired(sessionId: SessionId): void {
+    this.owed.delete(sessionId);
+    this.rows.delete(sessionId);
+  }
+
+  // [LAW:one-source-of-truth] What the host was last asked of the session's
+  // tmux row.
+  private asked(sessionId: SessionId, on: boolean): void {
+    if (on) this.rows.add(sessionId);
+    else this.rows.delete(sessionId);
   }
 
   private take(sessionId: SessionId): Owed {

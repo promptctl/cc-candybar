@@ -43,13 +43,20 @@ export type ClickErrorHold =
   | { readonly kind: "owed"; readonly error: ClickErrorRecord }
   | { readonly kind: "over" };
 
+// [LAW:no-silent-failure] A failure joins one no answer has carried yet, so a
+// click's own errors and the act it returned that failed after them both show.
 export function holdClickError(
   state: SessionStateRW,
   sessionId: SessionId,
   text: string,
   at: Instant,
 ): void {
-  const record: ClickErrorRecord = { text, at, answered: false };
+  const unseen = lastClickError(state, sessionId);
+  const record: ClickErrorRecord = {
+    text: unseen === null || unseen.answered ? text : `${unseen.text}\n${text}`,
+    at,
+    answered: false,
+  };
   state.set(sessionId, KEY, JSON.stringify(record));
 }
 

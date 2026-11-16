@@ -150,7 +150,7 @@ export function mainRenderer(
         return;
       case "effect-done": {
         if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
-        if (parts.acts.settled(event.of, event.outcome)) return;
+        if (parts.acts.settled(event.of, event.outcome, at)) return;
         const delivered = deliveries.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
         // one already settled, is the host's bug: said, never ignored.
@@ -296,7 +296,7 @@ function startOver(
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const configWrites = new ConfigWrites(mint, readConfigText);
-  const acts = new Acts({ mint, sessionState, now });
+  const acts = new Acts({ mint, sessionState });
   // [LAW:single-enforcer] The one queue every journal waits its turn in, the
   // renderer's own: no host part takes a turn.
   const journalTurns = new JournalTurns({

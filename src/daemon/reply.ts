@@ -359,6 +359,12 @@ export async function replyTo(
       // says how that answer is spelled, and no feed reads it
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
+      // [LAW:single-enforcer] A tmux row that is on follows its session's
+      // pane, request by request (src/daemon/tmux-status.ts).
+      parts.tmuxStatusLines.requested(
+        checked.req.hookData.session_id,
+        checked.req.hints.tmux,
+      );
     }
     // The request's event, written on every exit, and its reply.
     const recorded = (rendered: {

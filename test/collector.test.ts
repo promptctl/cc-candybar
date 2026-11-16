@@ -145,6 +145,7 @@ function collectorOver(
     daemon: () => daemonFactsOf(update()),
     clock,
     watched: (session) => watched.has(session),
+    retired: () => {},
     deliver: async (event) => {
       handedIn.push(event);
       return event.kind === "retire" ? retired() : ANSWERED;

@@ -405,7 +405,9 @@ async function clickRun(r: Rig, url: string, ctx: VerbContext): Promise<void> {
   for (const act of actsOf(ctx, "run")) {
     void r.runs
       .start({ sessionId: act.session, ...act.program })
-      .then((outcome) => (ctx.acts as Acts).settled(act.id, outcome));
+      .then((outcome) =>
+        (ctx.acts as Acts).settled(act.id, outcome, instantOf(new Date())),
+      );
   }
 }
 
@@ -883,7 +885,7 @@ describe("the run owner", () => {
     const o = owner();
     const ended = o.runs.start(o.run(`echo "  it broke  " >&2; exit 3`));
     expect(o.held).toEqual([`supersede /s ${SID}`]);
-    expect(await ended).toEqual(failed("run act: exited with code 3: it broke"));
+    expect(await ended).toEqual(failed("act: exited with code 3: it broke"));
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
     expect(o.runs.stats()).toMatchObject({
       started: 1,
@@ -900,14 +902,14 @@ describe("the run owner", () => {
   test("a non-zero exit that says nothing fails with the reason", async () => {
     const o = owner();
     expect(await o.runs.start(o.run("exit 4"))).toEqual(
-      failed("run act: exited with code 4"),
+      failed("act: exited with code 4"),
     );
   });
 
   test("a timeout fails with the reason, resumes its sources, and counts as timed out", async () => {
     const o = owner(200);
     expect(await o.runs.start(o.run("sleep 5"))).toEqual(
-      failed("run act: timed out after 0.2 s"),
+      failed("act: timed out after 0.2 s"),
     );
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({
@@ -921,7 +923,7 @@ describe("the run owner", () => {
   test("a program that floods its output fails with the limit, not the flood, and counts as failed", async () => {
     const o = owner();
     expect(await o.runs.start(o.run("yes >&2"))).toEqual(
-      failed(`run act: output exceeded ${MAX_CAPTURED_BYTES} bytes`),
+      failed(`act: output exceeded ${MAX_CAPTURED_BYTES} bytes`),
     );
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({ failed: 1, timedOut: 0 });
@@ -941,7 +943,7 @@ describe("the run owner", () => {
       error: "a pipe failed to read: EIO",
     }));
     expect(await o.runs.start(o.run(""))).toEqual(
-      failed("run act: a pipe failed to read: EIO"),
+      failed("act: a pipe failed to read: EIO"),
     );
     expect(o.runs.stats()).toMatchObject({ failed: 1 });
     expect(o.lines).toContainEqual(expect.stringContaining("outcome=pipe"));
@@ -951,7 +953,7 @@ describe("the run owner", () => {
     const o = owner();
     expect(
       await o.runs.start({ ...o.run(""), argv: ["./no-such-program"] }),
-    ).toEqual(failed(expect.stringMatching(/^run act: .*ENOENT/)));
+    ).toEqual(failed(expect.stringMatching(/^act: .*ENOENT/)));
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({ failed: 1 });
     expect(o.lines).toContainEqual(
@@ -961,12 +963,12 @@ describe("the run owner", () => {
     );
   });
 
-  test("closing the owner aborts the run in flight and resumes its sources, counting no failure", async () => {
+  test("closing the owner aborts the run in flight, resumes its sources and ends it `closing`, counting no failure", async () => {
     const o = owner();
     const ended = o.runs.start(o.run("sleep 30"));
     expect(o.runs.stats().running).toBe(1);
     o.runs.close();
-    await ended;
+    expect(await ended).toMatchObject({ kind: "closing" });
     expect(o.runs.stats()).toMatchObject({ running: 0, failed: 0 });
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
     expect(o.lines).toContainEqual(expect.stringContaining("outcome=aborted"));

@@ -1,22 +1,23 @@
 // [LAW:single-enforcer] Where every act a renderer returns is performed: one
 // performer per kind, each answering the act's outcome, so the renderer
 // decides what is done and the host alone does it. A performer that throws
-// fails its act with what it said; none rejects.
+// has its act's outcome classified here as the throw was; none rejects.
 //
-// [LAW:no-ambient-temporal-coupling] Every act starts as its turn hands it
-// over, in the order the turn returned them, so a run supersedes its sources
-// before the next request reads them. An act that ends in its turn holds the
-// click that returned it until its outcome is in; one that outlives it (a
-// run, a restart, a surface) answers when it ends.
+// [LAW:no-ambient-temporal-coupling] Every act starts as its turn's output
+// reaches the host, in the order the turn returned them, so a run supersedes
+// its sources before its click is answered. An act that ends in its turn
+// holds the click that returned it until its outcome is in; one that outlives
+// it (a run, a restart, a surface) answers when it ends.
 //
-// Only what must not interleave waits behind another: a session's typings
-// (two lines in one pane would type over each other) and a session's lane
-// setups (src/daemon/lane-setup.ts). A copy never waits behind a restart.
+// Only what must not interleave waits behind another: whatever types into a
+// session's pane (a slash line, a lane setup) waits for the pane
+// (src/daemon/daemon.ts). A copy never waits behind a restart.
 
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { eventLine } from "../utils/logfmt.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
+import { failureOf } from "./foundations/verb-error.js";
 
 // [LAW:types-are-the-program] Exhaustive over the act kinds: an act added to
 // the renderer's vocabulary is a compile error here until the host says how
@@ -37,6 +38,22 @@ export interface ActInterpreter {
   endsInTurn(act: Act): boolean;
 }
 
+// [LAW:single-enforcer] A performer's throw as its act's outcome, by the
+// class it was thrown as: bad input refused, the daemon's close closing, and
+// anything else failed.
+function thrownOutcome(thrown: unknown): EffectOutcome {
+  const { kind, message } = failureOf(thrown);
+  return {
+    kind:
+      kind === "bad-request"
+        ? "refused"
+        : kind === "closing"
+          ? "closing"
+          : "failed",
+    reason: message,
+  };
+}
+
 export function actInterpreter(
   performers: ActPerformers,
   clock: Pick<Timekeeper, "monotonic">,
@@ -48,20 +65,21 @@ export function actInterpreter(
   return {
     perform: async (act) => {
       const from = clock.monotonic();
-      const outcome = await performerOf(act)
-        // [LAW:types-are-the-program] exception: the kind indexes the
-        // performer of the same kind, which the compiler cannot carry across
-        // the union.
-        .perform(act as never)
-        .catch(
-          (thrown: unknown): EffectOutcome => ({
-            kind: "failed",
-            reason: thrown instanceof Error ? thrown.message : String(thrown),
-          }),
-        );
+      let outcome: EffectOutcome;
+      // A performer that throws before it returns its promise is caught as
+      // one whose promise rejected.
+      try {
+        outcome = await performerOf(act)
+          // [LAW:types-are-the-program] exception: the kind indexes the
+          // performer of the same kind, which the compiler cannot carry
+          // across the union.
+          .perform(act as never);
+      } catch (thrown) {
+        outcome = thrownOutcome(thrown);
+      }
       // [LAW:nothing-unseen] One line per act performed, its outcome named.
       log(
-        outcome.kind === "ok" ? "info" : "warn",
+        outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
         eventLine("effect", [
           ["kind", act.kind],
           ["sid", act.session ?? "-"],

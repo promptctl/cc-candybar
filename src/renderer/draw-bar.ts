@@ -124,7 +124,7 @@ export interface RendererState {
   // signed with, over the state directory's key.
   readonly linkSigner: LinkSigner;
   // [LAW:single-enforcer] What each lane switch asks of the world.
-  readonly laneSurfaces: Pick<LaneSurfaces, "noted" | "clicked">;
+  readonly laneSurfaces: Pick<LaneSurfaces, "noted" | "clicked" | "retired">;
 }
 
 export type RendererParts = RendererState & AdapterToHost;
@@ -376,6 +376,7 @@ export function configureSession(
 // closing, never runs over the document gone.
 export function retireSession(
   parts: Pick<RendererParts, "worldStates"> & {
+    readonly laneSurfaces: Pick<LaneSurfaces, "retired">;
     readonly renderCache: Pick<RendererParts["renderCache"], "retireSession">;
   },
   session: SessionId,
@@ -384,6 +385,7 @@ export function retireSession(
     parts.worldStates.drop(session);
     parts.renderCache.retireSession(session);
   });
+  parts.laneSurfaces.retired(session);
 }
 
 // [LAW:single-enforcer] The one way a session's view is held at a context:

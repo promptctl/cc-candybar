@@ -48,7 +48,8 @@ export type HostTurn = TurnOutcome & {
 
 // [LAW:types-are-the-program] What the acts a turn's caller waited for make of
 // its answer, as a click's own steps do (src/renderer/verbs/index.ts): the
-// daemon's failure when any failed, a bad request when each was refused.
+// daemon's failure when any failed, its close when the close cut one off, and
+// a bad request when each was refused.
 function actsFailed(
   done: ReadonlyArray<{ readonly act: Act; readonly outcome: EffectOutcome }>,
 ): Failure | null {
@@ -59,10 +60,18 @@ function actsFailed(
   const message = failures
     .map(({ act, outcome }) => `${act.kind}: ${outcome.reason}`)
     .join("; ");
-  return failures.some((f) => f.kind === "failed")
+  const kinds = new Set(failures.map((f) => f.kind));
+  return kinds.has("failed")
     ? { kind: "threw", message, detail: message }
-    : badRequest(message);
+    : kinds.has("closing")
+      ? { kind: "closing", message, detail: message }
+      : badRequest(message);
 }
+
+const CLOSING: EffectOutcome = {
+  kind: "closing",
+  reason: "the daemon closed before it was done",
+};
 
 export interface RendererHost {
   readonly name: RendererName;
@@ -78,6 +87,9 @@ export interface RendererHost {
   ask<P extends AdapterPush>(push: P, at: Instant): Promise<ReplyTo<P["kind"]>>;
   // One push nobody awaits: its failure is logged here.
   tell(push: AdapterPush, at: Instant): void;
+  // The daemon is closing: no effect a turn returns from here on is
+  // performed, and each is answered `closing`.
+  close(): void;
 }
 
 export function rendererHost(
@@ -104,6 +116,10 @@ export function rendererHost(
     readonly unseen: (text: string) => void;
   },
 ): RendererHost {
+  // [LAW:single-enforcer] [LAW:no-ambient-temporal-coupling] Where the close
+  // stops every change and act: none a turn returns is performed under the
+  // teardown, whichever turn returned it and whenever it answered.
+  let closed = false;
   const held = async (input: EventInput): Promise<HostTurn> => {
     const session = sessionOf(input.event);
     const release = session === null ? () => {} : collector.holding(session);
@@ -127,13 +143,26 @@ export function rendererHost(
       const changes = output.effects.filter(
         (effect): effect is ConfigChange => effect.kind === "change",
       );
-      const landed = changes.length === 0 ? null : performChanges(changes);
+      const landed = closed ? CLOSING : performChanges(changes);
       const settled: Array<Promise<unknown>> = [];
       const waited: Array<Promise<{ act: Act; outcome: EffectOutcome }>> = [];
       for (const effect of output.effects) {
         switch (effect.kind) {
           case "change":
-            settled.push(settle(effect, landed!));
+            settled.push(settle(effect, landed));
+            break;
+          // [LAW:single-enforcer] A repository answer lands with its click's
+          // changes (src/renderer/config-writes.ts): performed once they have
+          // landed, else answered as they were.
+          case "approve-repo":
+            waited.push(
+              performed(
+                effect,
+                landed.kind === "ok"
+                  ? acts.interpreter.perform(effect)
+                  : Promise.resolve(landed),
+              ),
+            );
             break;
           case "present":
             if (input.event.kind !== "request")
@@ -145,7 +174,12 @@ export function rendererHost(
               );
             break;
           default: {
-            const done = performed(effect);
+            const done = performed(
+              effect,
+              closed
+                ? Promise.resolve(CLOSING)
+                : acts.interpreter.perform(effect),
+            );
             if (acts.interpreter.endsInTurn(effect)) waited.push(done);
           }
         }
@@ -172,14 +206,15 @@ export function rendererHost(
         actsFailed: null,
       }),
     );
-  // An act performed, and its outcome handed back to the renderer.
+  // An act's outcome, handed back to the renderer.
   const performed = async (
     act: Act,
+    performing: Promise<EffectOutcome>,
   ): Promise<{ act: Act; outcome: EffectOutcome }> => {
-    const outcome = await acts.interpreter.perform(act);
+    const outcome = await performing;
     const delivered = await settle(act, outcome);
     if (
-      outcome.kind !== "ok" &&
+      (outcome.kind === "failed" || outcome.kind === "refused") &&
       (act.session === null || delivered.kind === "threw")
     )
       acts.unseen(`${act.kind}: ${outcome.reason}`);
@@ -281,7 +316,16 @@ export function rendererHost(
       // supervisor's to say.
       if (failure.kind !== "down") log("error", failure.detail);
     });
-  return { name, answer: turn, deliver, ask, tell };
+  return {
+    name,
+    answer: turn,
+    deliver,
+    ask,
+    tell,
+    close: () => {
+      closed = true;
+    },
+  };
 }
 
 // [LAW:one-source-of-truth] The session an event names: what a turn holds,

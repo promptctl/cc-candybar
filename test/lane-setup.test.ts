@@ -37,7 +37,8 @@ import { SessionState } from "../src/renderer/session-state";
 import { instantOf } from "../src/utils/instant";
 import type { Lane, LaneSwitches } from "../src/config/lanes";
 import type { TmuxHint } from "../src/tmux-hint";
-import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import { KeyedSerialQueue } from "../src/utils/keyed-serial-queue";
 
 const SID = sessionIdOf("1f6e0c2a-0d0e-4a52-9d1b-2b0b0f0e0a11");
 const TMUX: TmuxHint = {
@@ -952,7 +953,6 @@ describe("LaneSurfaces", () => {
       acts: new Acts({
         mint: () => ++minted as EffectId,
         sessionState: new SessionState(),
-        now: () => instantOf(new Date(0)),
       }),
       log: (level, msg) => logs.push(`${level} ${msg}`),
     });
@@ -1071,11 +1071,24 @@ describe("LaneSurfaces", () => {
 
   // The row's feed ends once its lane is off, so a request holds it while the
   // switch is on, and holding it again is no change.
-  test("a request whose tmux switch is on holds the row, once", () => {
-    const { clicked, noted } = lanes();
+  // The host's adapter follows the row's pane at every request, so a request
+  // asks only when its switch differs from what the host was last asked.
+  test("a request asks the tmux row to its switch only when that differs from the last ask", () => {
+    const { surfaces, clicked, noted } = lanes();
     expect(noted({ tmuxStatus: true })).toEqual(["tmux-status on"]);
+    expect(noted({ tmuxStatus: true })).toEqual([]);
+    expect(noted({})).toEqual(["tmux-status off"]);
     expect(noted({})).toEqual([]);
+    // A click's move the host could not set up yet is owed, and asked once.
     clicked(false, {}, { tmuxStatus: true });
+    expect(noted({ tmuxStatus: true })).toEqual(["tmux-status on"]);
+    expect(noted({ tmuxStatus: true })).toEqual([]);
+    // A click that moved it is the last ask.
+    expect(clicked(true, { tmuxStatus: true }, {})).toEqual(["tmux-status off"]);
+    expect(noted({})).toEqual([]);
+    // A retired session was asked nothing.
+    expect(noted({ tmuxStatus: true })).toEqual(["tmux-status on"]);
+    surfaces.retired(SID);
     expect(noted({ tmuxStatus: true })).toEqual(["tmux-status on"]);
   });
 
@@ -1102,6 +1115,7 @@ describe("LaneSetups", () => {
       edge,
       host: HOST,
       log: (level, msg) => logs.push(`${level} ${msg}`),
+      panes: new KeyedSerialQueue<SessionId>(),
     });
     return { setups, logs };
   };
@@ -1153,20 +1167,19 @@ describe("LaneSetups", () => {
     await second;
   });
 
-  test("a setup refused at once is logged and answered refused, saying why", async () => {
+  // The host's act line logs an outcome (src/daemon/act-interpreter.ts).
+  test("a setup refused at once is answered refused, naming its surface and why", async () => {
     const { edge, did } = fakeEdge();
     const { setups, logs } = owner(edge);
     expect(await setups.start(session({ tmux: null }), PANE_ON)).toEqual({
       kind: "refused",
-      reason: expect.stringMatching(/not running inside tmux/),
+      reason: expect.stringMatching(/^pane on: .*not running inside tmux/),
     });
     expect(did).toEqual([]);
-    expect(logs).toEqual([
-      expect.stringMatching(/^warn lane: pane on: .*not running inside tmux/),
-    ]);
+    expect(logs).toEqual([]);
   });
 
-  test("a restart that fails after it started is logged and answered failed, once it ends", async () => {
+  test("a restart that fails after it started is answered failed, once it ends", async () => {
     let gone!: (v: boolean) => void;
     let asked!: () => void;
     const waiting = new Promise<void>((r) => (asked = r));
@@ -1193,8 +1206,6 @@ describe("LaneSetups", () => {
       kind: "failed",
       reason: expect.stringMatching(/^Claude Code in %7 did not exit/),
     });
-    expect(logs.at(-1)).toMatch(
-      /^warn lane: restart-claude: Claude Code in %7 did not exit/,
-    );
+    expect(logs.filter((l) => l.startsWith("warn"))).toEqual([]);
   });
 });

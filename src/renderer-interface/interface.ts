@@ -196,7 +196,10 @@ export type EffectOutcome =
   | { readonly kind: "failed"; readonly reason: string }
   // A change to a setting that moved since the renderer read it: nothing was
   // written, and nothing made over that reading can land.
-  | { readonly kind: "refused"; readonly reason: string };
+  | { readonly kind: "refused"; readonly reason: string }
+  // The daemon closed before the effect was done: no failure of the effect's
+  // own, so no bar holds it, as a click the close cut off is no failure.
+  | { readonly kind: "closing"; readonly reason: string };
 
 // [LAW:one-type-per-behavior] Every frame reaches its surface by `present`;
 // the statusline's arm carries the request it answers.

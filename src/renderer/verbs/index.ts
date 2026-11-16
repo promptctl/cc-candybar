@@ -769,7 +769,8 @@ function changeLanded(
         ctx.reloadConfig(origin);
     });
     step(() => consequence(effects));
-  } else failed.push(outcome.reason);
+    // A landing the close cut off is no failure of the click's.
+  } else if (outcome.kind !== "closing") failed.push(outcome.reason);
   if (failed.length === 0) return;
   const reason = failed.join("\n");
   ctx.log("warn", `config change: ${reason} (session=${session})`);

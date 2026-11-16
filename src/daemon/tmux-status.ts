@@ -506,10 +506,14 @@ export type StatusClick =
  * [LAW:single-enforcer] The one writer of this lane's tmux state: every
  * session's rows, every status line's layout, every server's click binding.
  * [LAW:no-shared-mutable-globals] One owner, the daemon; its maps are written
- * only through observe / answered / the subscriptions it holds.
+ * only through observe / requested / retired / answered / the subscriptions
+ * it holds.
  */
 export class TmuxStatusLines {
   private readonly held = new Map<SessionId, Held>();
+  // The sessions whose `tmux-status` surface is on: each is held at its pane
+  // while it reports one.
+  private readonly wanted = new Set<SessionId>();
   private readonly servers = new Map<string, Server>();
   private closed = false;
   private writes = 0;
@@ -517,16 +521,37 @@ export class TmuxStatusLines {
 
   constructor(private readonly deps: TmuxStatusDeps) {}
 
-  // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival with its own hints, a click's commit with its session's latest —
-  // never at a draw: a session whose switch is on and that reported a tmux
-  // pane is held, any other is not. A daemon restart picks each session up at
-  // its next request.
+  // [LAW:dataflow-not-control-flow] The `tmux-status` surface turned on or off
+  // for the session, at its pane as its newest request reported it, never at
+  // a draw: a session whose surface is on and that reported a tmux pane is
+  // held, any other is not. A daemon restart picks each session up at its next
+  // request, which asks the surface on again.
   observe(
     sessionId: SessionId,
     tmux: TmuxHint | null | undefined,
     on: boolean,
   ): void {
+    if (on) this.wanted.add(sessionId);
+    else this.wanted.delete(sessionId);
+    this.follow(sessionId, tmux);
+  }
+
+  // A request of the session arrived: a row that is on follows its pane, and
+  // one this owner released (its pane gone, its feed refused) is held again.
+  requested(sessionId: SessionId, tmux: TmuxHint | null | undefined): void {
+    this.follow(sessionId, tmux);
+  }
+
+  // The session retired: its row is no longer asked for.
+  retired(sessionId: SessionId): void {
+    this.wanted.delete(sessionId);
+  }
+
+  private follow(
+    sessionId: SessionId,
+    tmux: TmuxHint | null | undefined,
+  ): void {
+    const on = this.wanted.has(sessionId);
     if (this.closed) return;
     const held = this.held.get(sessionId);
     const where = on && tmux !== null && tmux !== undefined ? tmux : null;

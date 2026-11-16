@@ -105,7 +105,6 @@ export function rendererParts({
   const acts = new Acts({
     mint,
     sessionState,
-    now: () => instantOf(new Date()),
   });
   return {
     ...inertHost(),

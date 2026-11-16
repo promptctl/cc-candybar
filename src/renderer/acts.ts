@@ -37,7 +37,6 @@ export class Acts {
     private readonly deps: {
       readonly mint: () => EffectId;
       readonly sessionState: SessionStateRW;
-      readonly now: () => Instant;
     },
   ) {}
 
@@ -48,18 +47,23 @@ export class Acts {
     effects.push({ ...act, id } as Act);
   }
 
-  // An act's `effect-done`: false for an id no act of this renderer's holds.
-  // [LAW:no-silent-failure] A failed act with a bar shows there.
-  settled(id: EffectId, outcome: EffectOutcome): boolean {
+  // An act's `effect-done`, at the input's instant: false for an id no act of
+  // this renderer's holds.
+  // [LAW:no-silent-failure] A failed or refused act with a bar shows there.
+  // One the close cut off is no failure of its own.
+  settled(id: EffectId, outcome: EffectOutcome, at: Instant): boolean {
     const act = this.owed.get(id);
     if (act === undefined) return false;
     this.owed.delete(id);
-    if (outcome.kind !== "ok" && act.session !== null)
+    if (
+      (outcome.kind === "failed" || outcome.kind === "refused") &&
+      act.session !== null
+    )
       holdClickError(
         this.deps.sessionState,
         act.session,
         `${act.kind}: ${outcome.reason}`,
-        this.deps.now(),
+        at,
       );
     return true;
   }

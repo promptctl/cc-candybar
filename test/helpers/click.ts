@@ -114,20 +114,26 @@ class LandingAtOnce extends ConfigWrites {
         e.kind === "approve-repo",
     );
     const ctx = this.context!;
-    const landed = changes.length === 0 ? null : performChanges(changes);
-    for (const change of changes) changeDone(ctx, change.id, landed!, effects);
-    for (const answer of answers) {
+    const landed = performChanges(changes);
+    for (const change of changes) changeDone(ctx, change.id, landed, effects);
+    // An answer lands once the changes have, as the host's does.
+    const answered = (answer: (typeof answers)[number]): EffectOutcome => {
       const filed = recordAnswer(
         repoConfigs(ctx.stateDir),
         answer.dir,
         answer.answer,
       );
-      const outcome: EffectOutcome =
-        filed.kind === "failed"
-          ? { kind: "failed", reason: filed.reason }
-          : { kind: "ok" };
-      changeDone(ctx, answer.id, outcome, effects);
-    }
+      return filed.kind === "failed"
+        ? { kind: "failed", reason: filed.reason }
+        : { kind: "ok" };
+    };
+    for (const answer of answers)
+      changeDone(
+        ctx,
+        answer.id,
+        landed.kind === "ok" ? answered(answer) : landed,
+        effects,
+      );
   }
 }
 
@@ -160,7 +166,6 @@ export function testVerbContext(
     acts: new Acts({
       mint: () => (1_000_000 + ++minted) as EffectId,
       sessionState,
-      now: () => instantOf(new Date()),
     }),
     configWrites,
     effects: [],
@@ -303,7 +308,7 @@ export async function performActs<K extends Act["kind"]>(
   const outcomes: EffectOutcome[] = [];
   for (const act of acts) {
     const outcome = await perform(act);
-    (ctx.acts as Acts).settled(act.id, outcome);
+    (ctx.acts as Acts).settled(act.id, outcome, instantOf(new Date()));
     outcomes.push(outcome);
   }
   return outcomes;

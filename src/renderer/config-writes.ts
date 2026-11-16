@@ -1,10 +1,11 @@
 // [LAW:single-enforcer] How a click's config writes leave the renderer: as
 // `change`s its turn returns, which the host performs, never as a file the
-// renderer writes. A repository answer lands the same way, as `approve-repo`,
-// since it changes which layers a config is made of. A click lands whole or
-// not at all, so what else it did is its consequence (its journal's commit),
-// held here from its turn until its writes' `effect-done`s: applied once they
-// land, in the turn of the last, dropped when they do not. A journal turn opens only once no click's changes are on their way
+// renderer writes. A repository answer lands with them, as `approve-repo`,
+// since it changes which layers a config is made of: the host performs it once
+// the changes have landed (src/daemon/renderer-host.ts). A click lands whole
+// or not at all, so what else it did is its consequence (its journal's
+// commit), held here from its turn until its writes' `effect-done`s: applied
+// once they land, in the turn of the last, dropped when they do not. A journal turn opens only once no click's changes are on their way
 // (src/renderer/journal-turns.ts), so each click reads the files the clicks
 // ahead of it wrote, and at most one click is ever landing. The host owes every
 // change it is handed its `effect-done` (src/daemon/renderer-host.ts).
@@ -92,7 +93,9 @@ export class ConfigWrites {
   ): void {
     const answers = this.answers.splice(0);
     // [LAW:no-ambient-temporal-coupling] A click the daemon's close cut off
-    // lands nothing, so nothing of it is performed under the teardown.
+    // lands nothing: its journal commits nothing, a click that wrote only
+    // session state included. The host performs no effect under the teardown
+    // either (src/daemon/renderer-host.ts), whichever turn returned it.
     if (this.closed) return this.open.clear();
     const written = [...this.open].flatMap(([path, { before, after }]) => {
       const list = diffChanges(before, after);

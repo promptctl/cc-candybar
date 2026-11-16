@@ -50,10 +50,22 @@ test("an answer carrying an older failure leaves a newer one owed", () => {
   holdClickError(state, SID, "dispatch: boom", at(102));
   answeredClickError(state, SID, error);
   expect(lastClickError(state, SID)).toEqual({
-    text: "dispatch: boom",
+    text: "set-state: refused\ndispatch: boom",
     at: at(102),
     answered: false,
   });
+});
+
+test("a failure joins one no answer carried yet, and replaces one an answer did", () => {
+  const state = new SessionState();
+  holdClickError(state, SID, "set-state: refused", at(100));
+  holdClickError(state, SID, "copy: pbcopy failed", at(101));
+  expect(lastClickError(state, SID)?.text).toBe(
+    "set-state: refused\ncopy: pbcopy failed",
+  );
+  answeredClickError(state, SID, lastClickError(state, SID)!);
+  holdClickError(state, SID, "run: build: exit 1", at(102));
+  expect(lastClickError(state, SID)?.text).toBe("run: build: exit 1");
 });
 
 test("reading a click's errors writes nothing, so a later render inside the hold still shows them", () => {

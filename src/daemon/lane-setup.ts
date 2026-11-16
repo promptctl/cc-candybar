@@ -67,7 +67,7 @@ import {
 } from "../attach-launcher.js";
 import type { LauncherNode } from "../attach-preload.js";
 import { BadVerbArgs } from "./foundations/verb-error.js";
-import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
+import type { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import type { ClientHints } from "./foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import { answeredOf, type Answered } from "./foundations/sighting-roles.js";
@@ -628,25 +628,28 @@ const setupName = (setup: LaneSetup): string =>
     ? "restart-claude"
     : `${setup.surface} ${setup.on ? "on" : "off"}`;
 
-// [LAW:single-enforcer] The one owner of lane setup. One session's setups run
-// one at a time, each after the last has finished — two restarts of one pane
-// would type over each other. How each setup ends is logged and answered as
-// its effect's outcome, which the session's bar shows when it failed.
+// [LAW:single-enforcer] The one owner of lane setup. A session's setups run
+// in its pane's queue, each after whatever typed into the pane before it has
+// finished — two typers in one pane would type over each other. How each
+// setup ends is answered as its effect's outcome, which the host's act line
+// logs and the session's bar shows when it failed.
 export class LaneSetups {
-  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
-  private readonly setups = new KeyedSerialQueue<SessionId>();
-
   constructor(
     private readonly deps: {
       readonly edge: LaneEdge;
       readonly host: LaneHost;
       readonly log: DaemonLogger;
+      // [LAW:no-ambient-temporal-coupling] Everything that types into a
+      // session's pane, one at a time (src/daemon/daemon.ts).
+      readonly panes: KeyedSerialQueue<SessionId>;
     },
   ) {}
 
   // Resolves once the setup has finished, however it ended.
   start(session: LaneSession, setup: LaneSetup): Promise<EffectOutcome> {
-    return this.setups.run(session.sessionId, () => this.sync(session, setup));
+    return this.deps.panes.run(session.sessionId, () =>
+      this.sync(session, setup),
+    );
   }
 
   private async sync(
@@ -655,12 +658,12 @@ export class LaneSetups {
   ): Promise<EffectOutcome> {
     const where = `(session=${session.sessionId})`;
     const name = setupName(setup);
+    // A surface's reason names it; a restart's act is the restart.
     const failed = (error: unknown): EffectOutcome => {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.deps.log("warn", `lane: ${name}: ${reason} ${where}`);
+      const said = error instanceof Error ? error.message : String(error);
       return {
         kind: error instanceof BadVerbArgs ? "refused" : "failed",
-        reason,
+        reason: setup.kind === "restart" ? said : `${name}: ${said}`,
       };
     };
     const plan =

@@ -85,6 +85,8 @@ export interface CollectorDeps {
   // alone; it settles once the renderer's turn did, and the collector reads
   // nothing of how it ended.
   readonly deliver: (event: HandedIn) => Promise<unknown>;
+  // A session retired: what the host's parts keep of it goes with it.
+  readonly retired: (session: SessionId) => void;
   readonly log: DaemonLogger;
 }
 
@@ -553,6 +555,7 @@ export class Collector {
   // or one retired again since, is not this retire's to remove.
   private retire(record: SessionRecord, live: Live): void {
     release(live);
+    this.deps.retired(record.session);
     const retiring = { kind: "retiring" } as const;
     record.phase = retiring;
     this.deps.log(

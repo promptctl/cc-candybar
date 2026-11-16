@@ -165,10 +165,15 @@ export class Runs {
     if (outcome === "timeout") this.timedOut++;
     if (result.ok) return { kind: "ok" };
     // An aborted run is the daemon going down, not the program failing.
-    if (outcome !== "timeout" && outcome !== "aborted") this.failed++;
+    if (outcome === "aborted")
+      return {
+        kind: "closing",
+        reason: `${run.action}: the daemon closed before it ended`,
+      };
+    if (outcome !== "timeout") this.failed++;
     return {
       kind: "failed",
-      reason: `run ${run.action}: ${failureText(result)}`,
+      reason: `${run.action}: ${failureText(result)}`,
     };
   }
 }
