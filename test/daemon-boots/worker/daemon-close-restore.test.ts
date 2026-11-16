@@ -15,13 +15,10 @@ import {
   type RendererPort,
 } from "../../../src/daemon/renderer-process";
 import type { TmuxAtExit } from "../../../src/daemon/tmux-status";
-import { systemOneShotLauncher } from "../../../src/proc/system-launcher";
-import { runTmuxAtExit } from "../../../src/proc/tmux";
 import type {
   Renderer,
   RendererInput,
 } from "../../../src/renderer-interface/interface";
-import { systemTimekeeper } from "../../../src/time";
 import { configFlag, render } from "../../helpers/daemon-e2e";
 import type { DaemonEndpoint } from "../../helpers/daemon-wire";
 import { hostOf } from "../../helpers/host";
@@ -95,12 +92,16 @@ const heldOnClose =
       log: paths.log,
       now: () => daemon.clock.now(),
     };
-    const oneShot = systemOneShotLauncher(
-      { inherited: process.env },
-      systemTimekeeper,
-    );
-    const atExit: TmuxAtExit = (at, args, stdin) =>
-      runTmuxAtExit(oneShot, { socket: at }, "tmux-status", args, stdin);
+    // The process's own at-exit runner, as a blocking tmux call.
+    const atExit: TmuxAtExit = (at, args, input) => {
+      const run = spawnSync("tmux", ["-S", at, ...args], {
+        encoding: "utf8",
+        input,
+      });
+      return run.status === 0
+        ? { kind: "ok", stdout: run.stdout }
+        : { kind: "failed", reason: run.stderr };
+    };
     try {
       const pane = tmux("list-panes", "-t", "bar", "-F", "#{pane_id}").trim();
       const own = (): string => tmux("show-options", "-t", "bar");
