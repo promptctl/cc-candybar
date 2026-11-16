@@ -4,15 +4,22 @@
     {
       "version": "pr-776",
       "ref": "refs/pull/776/merge",
-      "sha": "0d6499a9a6a9ac85bc2fece40dfcbe003c442603",
-      "timestamp": "2026-11-16T23:15:05.262Z",
+      "sha": "062180af6da2f7fe3b063b30bc272bb8d68d4bef",
+      "timestamp": "2026-11-16T23:16:19.002Z",
       "commits": [
         {
-          "sha": "0d6499a9a6a9ac85bc2fece40dfcbe003c442603",
+          "sha": "062180af6da2f7fe3b063b30bc272bb8d68d4bef",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T23:14:07Z",
-          "message": "Merge cfbfbf0cfbf921999e5df89a2968d24d6919e84f into ef473125f81ac3346bc4f19160cb340e8bf8c5e1\n"
+          "timestamp": "2026-11-16T23:15:20Z",
+          "message": "Merge 8782cd2e71fe80be3aa4f953eab63a00baff98e4 into ef473125f81ac3346bc4f19160cb340e8bf8c5e1\n"
+        },
+        {
+          "sha": "8782cd2e71fe80be3aa4f953eab63a00baff98e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T16:15:09-07:00",
+          "message": "docs(config): a bare save writes the user layer (candybar-host-renderer-x96a.u2t)\n"
         },
         {
           "sha": "cfbfbf0cfbf921999e5df89a2968d24d6919e84f",
