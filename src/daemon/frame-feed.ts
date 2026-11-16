@@ -15,6 +15,11 @@ import {
   type RefreshTrigger,
 } from "../utils/refresh-ledger.js";
 import { inspect } from "node:util";
+import {
+  build as buildHistogram,
+  encodeIntoCompressedBase64,
+  type Histogram,
+} from "hdr-histogram-js";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
@@ -201,6 +206,10 @@ interface Feed {
   faulted: number;
   pushed: number;
   drawMs: number;
+  // [LAW:nothing-unseen] Frame pacing: each frame's lateness, from the moment
+  // it fell due to the moment it was drawn, in microseconds. The rate says how
+  // many frames a feed drew; the spread of their lateness says how evenly.
+  readonly lateness: Histogram;
   // Parts its frames evaluated: between data changes, those reading the instant.
   evaluated: number;
   // Strip items its frames' divided cells added: the feed is what shows how a
@@ -241,6 +250,19 @@ const answerOf = (answers: Answers, lane: Lane): string =>
 // defeating the dedupe; how many frames a lane was actually sent is feedsOf's
 // count.
 const paceOf = (period: number): number => Math.round(1000 / period);
+
+// A feed's frame lateness over its life, in ms: the frames counted, the
+// percentiles, the largest, and the mean and standard deviation. The spread
+// between p50 and the tail is the jitter. The summary also writes the whole
+// histogram, compressed, so any other percentile, or a merge of many feeds or
+// of a day's summaries, is read from the log without asking the daemon.
+const latenessOf = (h: Histogram): string => {
+  const ms = (us: number): string => (us / 1000).toFixed(2);
+  const s = h.summary;
+  return s.totalCount === 0
+    ? "-"
+    : `n:${s.totalCount},p50:${ms(s.p50)},p90:${ms(s.p90)},p99:${ms(s.p99)},p99.9:${ms(s.p99_9)},max:${ms(s.max)},mean:${ms(h.mean)},stddev:${ms(h.stdDeviation)}`;
+};
 
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_MS = 60_000;
@@ -508,6 +530,7 @@ export class FrameFeeds<Req> {
       faulted: 0,
       pushed: 0,
       drawMs: 0,
+      lateness: buildHistogram({ bitBucketSize: "packed" }),
       evaluated: 0,
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
@@ -558,7 +581,13 @@ export class FrameFeeds<Req> {
   // frame set for a change shows it however early its timer fires, and none is
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
-  private async draw(feed: Feed, due: Instant): Promise<void> {
+  // `dueMoment` is when its timer was set to fire, which its lateness is
+  // measured from.
+  private async draw(
+    feed: Feed,
+    due: Instant,
+    dueMoment: number,
+  ): Promise<void> {
     feed.phase = { kind: "drawing", woken: false };
     const started = this.deps.clock.monotonic();
     const wall = this.deps.instant();
@@ -568,7 +597,7 @@ export class FrameFeeds<Req> {
     ) as Instant;
     const moment = started + (at - wall) * 1000;
     try {
-      await this.step(feed, started, moment, at);
+      await this.step(feed, started, moment, at, dueMoment);
       // A step is whole only once nothing of it threw, its push included; a
       // feed closed while it drew recovers nothing.
       if (feed.fault !== null && this.feeds.get(feed.sessionId) === feed) {
@@ -602,6 +631,7 @@ export class FrameFeeds<Req> {
     started: number,
     moment: number,
     at: Instant,
+    dueMoment: number,
   ): Promise<void> {
     // The renderer answers a failed render with its error frame; a rejection
     // is a fault in the adapter, `draw`'s to report.
@@ -628,6 +658,7 @@ export class FrameFeeds<Req> {
     this.drawn++;
     feed.drawn++;
     feed.drawMs += finished - started;
+    feed.lateness.recordValue(Math.round((finished - dueMoment) * 1000));
     feed.evaluated += frame.evaluated;
     feed.cellBreaks += frame.cellBreaks;
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
@@ -740,7 +771,7 @@ export class FrameFeeds<Req> {
   private fire(feed: Feed, due: Instant, dueMoment: number): void {
     const remaining = dueMoment - this.deps.clock.monotonic();
     if (remaining > 0) this.setTimer(feed, due, dueMoment, remaining);
-    else void this.draw(feed, due);
+    else void this.draw(feed, due, dueMoment);
   }
 
   private shown(feed: Feed): boolean {
@@ -832,7 +863,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms lateness=${latenessOf(feed.lateness)} latenessHistogram=${encodeIntoCompressedBase64(feed.lateness)}`,
     );
     feed.summarizedAt = now;
   }
