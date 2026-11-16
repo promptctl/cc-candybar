@@ -53263,11 +53263,9 @@ init_globals();
 init_globals();
 var LAYER_ROLES = ["user", "project", "local"];
 function layerFlags(roles) {
-  return {
-    user: roles.includes("user"),
-    project: roles.includes("project"),
-    local: roles.includes("local")
-  };
+  return Object.fromEntries(
+    LAYER_ROLES.map((role) => [role, roles.includes(role)])
+  );
 }
 function layerRoleOf(raw) {
   return LAYER_ROLES.includes(raw) ? raw : null;
@@ -75268,6 +75266,10 @@ function writeLayer(locs, answers, query, role) {
 function writeLayers(locs, answers, query) {
   const resolved = resolveDslConfig(locs, answers, query);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
+  const places = LAYER_ROLES.flatMap((role) => {
+    const place = placeOf(resolved, layers, query, role);
+    return place.kind === "at" ? [{ path: place.path, role }] : [];
+  });
   const writeOf = (role) => {
     const place = placeOf(resolved, layers, query, role);
     if (place.kind === "refused") return place;
@@ -75275,18 +75277,16 @@ function writeLayers(locs, answers, query) {
       kind: "layer",
       path: place.path,
       role,
-      below: layers.filter((l) => rank(l.role) < rank(role)),
-      above: layers.filter((l) => rank(l.role) > rank(role)),
+      below: places.filter((l) => rank(l.role) < rank(role)),
+      above: places.filter((l) => rank(l.role) > rank(role)),
       repo: resolved.repos.plugins,
       cwd: query.cwd ?? null,
       locs
     };
   };
-  return {
-    user: writeOf("user"),
-    project: writeOf("project"),
-    local: writeOf("local")
-  };
+  return Object.fromEntries(
+    LAYER_ROLES.map((role) => [role, writeOf(role)])
+  );
 }
 function placeOf(resolved, layers, { projectDir, configFile }, role) {
   if (role === "user") return { kind: "at", path: resolved.home };
@@ -77661,7 +77661,7 @@ function compileAction(parse4, name, action2, stateKeyToVar, perConfigDomains, c
   if ("redo" in action2) return { kind: "redo" };
   if ("back" in action2) return { kind: "back" };
   if ("rewind" in action2) return { kind: "rewind" };
-  if ("save" in action2) return { kind: "save", layer: action2.layer ?? "ask" };
+  if ("save" in action2) return { kind: "save", layer: action2.layer ?? "user" };
   if ("preset" in action2) {
     const layer = action2.layer ?? "user";
     return action2.preset === "save" ? { kind: "preset-save", layer } : {
@@ -83055,7 +83055,7 @@ function loadConfigChain(locs, chain2, dflt, trace, session, read2 = (p2) => fs_
     allowedPalettes
   );
 }
-function inheritedConfig(locs, chain2, dflt, session) {
+function inheritedConfig(locs, chain2, dflt, session, read2) {
   const { base, layers } = mergeChain(
     locs,
     chain2,
@@ -83063,7 +83063,7 @@ function inheritedConfig(locs, chain2, dflt, session) {
     { warned: () => {
     } },
     session,
-    (p2) => fs_default.readFileSync(p2, "utf-8")
+    read2
   );
   return layers.at(-1)?.config ?? base;
 }
@@ -85480,7 +85480,7 @@ function handedOffTo(lanes, following) {
 var HANDOFF_BUTTON = "[\u27F2 claude]";
 function laneHandoff(sessionId2, writable, lanes) {
   const reset = effectsUrl(
-    writable.map((layer) => ({
+    writable.filter((layer) => layer !== "project").map((layer) => ({
       verb: VERB_RESET_CONFIG,
       args: [
         sessionId2,
@@ -86677,6 +86677,17 @@ function requireValueTarget(key) {
   }
   return target;
 }
+function seenBy(layer, read2) {
+  const held = (layers) => layers.flatMap((l) => {
+    const text4 = read2(l.path);
+    return text4 === null ? [] : [{ ...l, text: text4 }];
+  });
+  return { ...layer, below: held(layer.below), above: held(layer.above) };
+}
+function textsOf(layers) {
+  const texts = new Map(layers.map((l) => [l.path, l.text]));
+  return (path44) => texts.get(path44);
+}
 function commit2(store, into, before, after, refuse4) {
   const will = loadOrRefuse(into, after);
   let held;
@@ -86690,7 +86701,7 @@ function refuseHidden(into, was, will) {
   const hidden = hiddenBy(into, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
-      `refused: ${into.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${into.path}, so this click would change nothing on the bar \u2014 edit it there`
+      `refused: ${into.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${into.path}, so this click would change nothing on the bar \u2014 write it to that layer instead`
     );
   }
 }
@@ -86702,7 +86713,7 @@ function writtenOnly(into, read2) {
   } catch (e) {
     if (!(e instanceof BadVerbArgs) || into.above.length === 0) throw e;
     throw new BadVerbArgs(
-      `${e.message} \u2014 or it is declared by ${into.above.map((l) => l.path).join(", ")}, which the bar does not edit`
+      `${e.message} \u2014 or it is declared by ${into.above.map((l) => l.path).join(", ")}, above it: write to that layer instead`
     );
   }
 }
@@ -86723,24 +86734,35 @@ function loadedOrNull(into, text4) {
   }
 }
 function inheritedOf(into) {
-  return inheritedConfig(into.locs, into.below, DEFAULT_DSL_CONFIG, {
-    repo: into.repo,
-    cwd: into.cwd
-  });
+  try {
+    return inheritedConfig(
+      into.locs,
+      into.below,
+      DEFAULT_DSL_CONFIG,
+      { repo: into.repo, cwd: into.cwd },
+      textsOf(into.below)
+    );
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    throw new BadVerbArgs(
+      `refused: a layer beneath ${into.path} does not load \u2014 ${e.message}`
+    );
+  }
 }
 function chainOver(into, text4) {
+  const layers = [
+    ...into.below,
+    ...text4 !== null ? [{ path: into.path, role: into.role, text: text4 }] : [],
+    ...into.above
+  ];
   return loadConfigChain(
     into.locs,
-    [
-      ...into.below,
-      ...text4 !== null ? [{ path: into.path, role: into.role }] : [],
-      ...into.above
-    ],
+    layers,
     DEFAULT_DSL_CONFIG,
     { warned: () => {
     } },
     { repo: into.repo, cwd: into.cwd },
-    (p2) => p2 === into.path && text4 !== null ? text4 : fs_default.readFileSync(p2, "utf8")
+    textsOf(layers)
   );
 }
 function writtenConfig(into, chain2) {
@@ -86761,8 +86783,8 @@ function changedPaths(a, b, at = "") {
 function isPlainObject4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
-function proveLoads(into, text4) {
-  loadOrRefuse(into, text4);
+function proveLoads(layer, text4, read2) {
+  loadOrRefuse(seenBy(layer, read2), text4);
 }
 function loadOrRefuse(into, text4) {
   try {
@@ -86802,7 +86824,8 @@ function readValue(text4, key) {
 function writeValues(store, into, pairs2) {
   writeDrafts(store, into, pairs2, []);
 }
-function writeDrafts(store, into, pairs2, placements) {
+function writeDrafts(store, layer, pairs2, placements) {
+  const into = seenBy(layer, (file) => store.read(file));
   const before = store.read(into.path);
   const under3 = inheritedOf(into);
   const valued = pairs2.reduce(
@@ -86867,7 +86890,8 @@ function deleteAtPath(text4, under3, path44) {
   const ownPreset = path44[0] === "presets" && path44.length > 2 && under3.presets[path44[1]] === void 0;
   return deleteValue(text4, path44, ownPreset ? 2 : 0);
 }
-function deleteValues(store, into, keys2) {
+function deleteValues(store, layer, keys2) {
+  const into = seenBy(layer, (file) => store.read(file));
   const targets = keys2.map(requireTarget);
   const before = store.read(into.path);
   if (before === null) return;
@@ -86893,7 +86917,7 @@ function freePresetName(doc, under3, into) {
       // all) — the editor refuses files the loader renders.
       ...into.above.flatMap(
         (l) => Object.keys(
-          import_json55.default.parse(fs_default.readFileSync(l.path, "utf8")).presets ?? {}
+          import_json55.default.parse(l.text).presets ?? {}
         )
       )
     ].map(ident)
@@ -86903,7 +86927,8 @@ function freePresetName(doc, under3, into) {
     (_, i2) => `${SAVED_PRESET_PREFIX}${i2 + 1}`
   ).find((candidate) => !taken.has(ident(candidate)));
 }
-function writePreset(store, into, from, globals, picks, placements) {
+function writePreset(store, layer, from, globals, picks, placements) {
+  const into = seenBy(layer, (file) => store.read(file));
   const before = store.read(into.path);
   const doc = docOf(before ?? "");
   const under3 = inheritedOf(into);
@@ -86943,7 +86968,8 @@ function writePreset(store, into, from, globals, picks, placements) {
   commit2(store, into, before, placed2, refuseHidden);
   return name;
 }
-function writeThemeDefault(store, into, theme24, look) {
+function writeThemeDefault(store, layer, theme24, look) {
+  const into = seenBy(layer, (file) => store.read(file));
   const before = store.read(into.path);
   const after = setValue(
     before ?? "",
@@ -86953,7 +86979,8 @@ function writeThemeDefault(store, into, theme24, look) {
   );
   return commit2(store, into, before, after, refuseHidden);
 }
-function deletePreset(store, into, name) {
+function deletePreset(store, layer, name) {
+  const into = seenBy(layer, (file) => store.read(file));
   const under3 = inheritedOf(into);
   if (under3.presets[name] !== void 0) {
     throw new BadVerbArgs(
@@ -86981,7 +87008,8 @@ function deletePreset(store, into, name) {
     releases
   );
 }
-function applyLayoutOp(store, into, key, op) {
+function applyLayoutOp(store, layer, key, op) {
+  const into = seenBy(layer, (file) => store.read(file));
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
@@ -87456,7 +87484,12 @@ var SettingsHistory = class {
       );
     }
     const files = stepped2.flatMap((s) => s.kind === "file" ? [s] : []);
-    for (const { file, text: text4 } of files) click3.files.prove(file, text4);
+    const stepTexts = new Map(files.map(({ file, text: text4 }) => [file, text4]));
+    const read2 = (file) => {
+      const text4 = stepTexts.get(file);
+      return text4 === void 0 ? click3.files.read(file) : text4;
+    };
+    for (const { file, text: text4 } of files) click3.files.prove(file, text4, read2);
     for (const { file, text: text4 } of files)
       click3.files.land(file, click3.files.read(file), text4);
     for (const s of stepped2)
@@ -87930,14 +87963,14 @@ function changeLanded(ctx, { session, files, answered, consequence, outcome }, e
   ctx.log("warn", `config change: ${reason} (session=${session})`);
   holdClickError(ctx.sessionState, session, reason, ctx.now());
 }
-function proveLoadsAsLayer(ctx, sid, file, text4) {
+function proveLoadsAsLayer(ctx, sid, file, text4, read2) {
   const origin = sid === null ? null : recordedOrigin(ctx, sid);
   const layer = origin === null ? void 0 : originLayers(ctx, origin).find((l) => l.path === file);
   if (layer === void 0)
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from \u2014 its step is not taken`
     );
-  proveLoads(layer, text4);
+  proveLoads(layer, text4, read2);
 }
 function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
@@ -88698,7 +88731,7 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
-    prove: (file, text4) => proveLoadsAsLayer(ctx, sid, file, text4)
+    prove: (file, text4, read2) => proveLoadsAsLayer(ctx, sid, file, text4, read2)
   });
   const navigation = ctx.navigation.begin(journal.sessionState);
   const failures = [];
@@ -89716,7 +89749,7 @@ function buildRenderState(load, deps) {
       store,
       registry,
       compiled: registration.compiled,
-      // What a reset clears is the home's: resets write nowhere else.
+      // What the menu's resets clear is the user layer's: they name no other.
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
       configPath: chain2.layers.some((l) => l.path === chain2.home) ? chain2.home : null,

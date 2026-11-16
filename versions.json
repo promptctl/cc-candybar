@@ -4,15 +4,22 @@
     {
       "version": "pr-776",
       "ref": "refs/pull/776/merge",
-      "sha": "b009088c0098a98d25d186f06aacb41bfda31643",
-      "timestamp": "2026-11-16T22:57:15.345Z",
+      "sha": "0d6499a9a6a9ac85bc2fece40dfcbe003c442603",
+      "timestamp": "2026-11-16T23:15:05.262Z",
       "commits": [
         {
-          "sha": "b009088c0098a98d25d186f06aacb41bfda31643",
+          "sha": "0d6499a9a6a9ac85bc2fece40dfcbe003c442603",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T22:56:15Z",
-          "message": "Merge 3c45eb1c8116190b2fcef565b7a1aaa19010fed7 into ef473125f81ac3346bc4f19160cb340e8bf8c5e1\n"
+          "timestamp": "2026-11-16T23:14:07Z",
+          "message": "Merge cfbfbf0cfbf921999e5df89a2968d24d6919e84f into ef473125f81ac3346bc4f19160cb340e8bf8c5e1\n"
+        },
+        {
+          "sha": "cfbfbf0cfbf921999e5df89a2968d24d6919e84f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T16:13:56-07:00",
+          "message": "fix(config): a click's writes are proved against the files as the click leaves them (candybar-host-renderer-x96a.u2t)\n\nA click can write more than one layer (a `do` across layers, the lane\nescape, an undo step), and each write was proved against the other layers as\nthey stood on disk: a value an earlier write of the same click set in the\nproject's file did not hide a later user write of the same field. A write's\nneighbouring layers are now every role's file location, read through the\nclick, and an undo or redo step proves each file between the others as the\nstep leaves them. A layer beneath that does not load refuses the write,\nnaming why.\n\nA bare `save` writes the user's layer, as every other config write does, so\nit never throws at render; `layer: \"ask\"` binds the layer per link. The lane\nescape resets its switches in this person's own layers, never the project's\nchecked-in file. Refusal messages, verb docs and comments say what the\nlayers now are.\n"
         },
         {
           "sha": "3c45eb1c8116190b2fcef565b7a1aaa19010fed7",
