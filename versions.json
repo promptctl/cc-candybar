@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-777",
-      "ref": "refs/pull/777/merge",
-      "sha": "3d6f6492d26bd8b81b8880085c3ccc6ebb62a2cf",
-      "timestamp": "2026-11-16T23:47:24.457Z",
+      "version": "pr-778",
+      "ref": "refs/pull/778/merge",
+      "sha": "fd1b2085fdf3599530e8cbb80706774ad691fb90",
+      "timestamp": "2026-11-16T23:53:05.471Z",
       "commits": [
         {
-          "sha": "3d6f6492d26bd8b81b8880085c3ccc6ebb62a2cf",
+          "sha": "fd1b2085fdf3599530e8cbb80706774ad691fb90",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T23:46:04Z",
-          "message": "Merge 18bd58115ed5bd496fb60c10ce1f4fe05907c8b6 into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
+          "timestamp": "2026-11-16T16:52:07-07:00",
+          "message": "Merge f4eb16c29cb62a325412d7c5bdc82c5503108f7e into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
         },
         {
-          "sha": "18bd58115ed5bd496fb60c10ce1f4fe05907c8b6",
+          "sha": "f4eb16c29cb62a325412d7c5bdc82c5503108f7e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T16:45:52-07:00",
-          "message": "fix(daemon): a boot the close ends gets its grace beside the teardown, and the renderer's end is a named teardown step (candybar-host-renderer-x96a.w8l)\n"
-        },
-        {
-          "sha": "a083e51cd61f2f359b74b672f35c510a574db7bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T16:42:12-07:00",
-          "message": "fix(daemon): the renderer the close waits on is still pinged, its end in the close is logged, and the teardown is bracketed so the renderer always ends (candybar-host-renderer-x96a.w8l)\n\nAn in-process flush that fails is logged and the close still ends, as the process renderer's does.\n"
-        },
-        {
-          "sha": "e178af90b73af1f808ebb856bd2575f90ffe0217",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T16:34:30-07:00",
-          "message": "fix(daemon): the close holds the renderer through its teardown, starts none, and flushes the session state as the renderer ends (candybar-host-renderer-x96a.w8l)\n\nThe renderer link learned of the close only in its last step, so a\nrenderer that ended mid-close was restarted and the close's remaining\nasks queued behind a fresh boot. The link's close now spans the\nteardown: a live renderer keeps serving, its end starts nothing, a boot\nunder way ends at once. The host's close-session-state ask is gone; the\nrenderer's own end flushes the session state, as it does on every other\nway out.\n"
+          "timestamp": "2026-11-16T16:51:45-07:00",
+          "message": "fix(daemon): once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (candybar-host-renderer-x96a.w8l)\n\nThe teardown's first step tells the renderer link the close has begun: a live renderer stays to take the close's steps and is still pinged, a boot under way ends with the close grace, a down renderer's retry is cancelled, and an end in the close is logged and starts nothing. The session-state flush stays an ask the host judges.\n"
         }
       ]
     },

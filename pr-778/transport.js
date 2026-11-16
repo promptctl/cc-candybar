@@ -93365,9 +93365,12 @@ function createDaemon(inputs) {
     async close() {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
       const teardown = [
+        // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
+        // ends is not started again, so no step below waits on a fresh boot.
+        ["renderer closing", () => link.closing()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
-        // [LAW:no-ambient-temporal-coupling] First, before any renderer step:
+        // [LAW:no-ambient-temporal-coupling] Before any renderer step:
         // one waits behind whatever turn the renderer is in, which can outlast
         // shutdown's backstop, while this waits only on its own tmux calls.
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
@@ -93392,17 +93395,14 @@ function createDaemon(inputs) {
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
         ["fileEvents close", () => fileEvents.close()],
-        ["watcherRegistry close", () => watcherRegistry.closeAll()]
+        ["watcherRegistry close", () => watcherRegistry.closeAll()],
+        // Last: a run that ends in the teardown holds its click error first.
+        ["sessionState close", rendererStep("close-session-state")],
+        // After every step the renderer takes: its process, when it has one,
+        // ends with nothing left to flush.
+        ["renderer process close", () => link.close()]
       ];
-      await runTeardown(
-        [
-          [
-            "renderer close",
-            () => link.close(() => runTeardown(teardown, log))
-          ]
-        ],
-        log
-      );
+      await runTeardown(teardown, log);
       closed = true;
       return { settled: launcher.settled() };
     }
@@ -94467,31 +94467,18 @@ function create(file) {
 init_globals();
 var inProcessPort = ({ load }) => {
   const loaded = load();
-  return { start: (own2) => inProcessRenderer(loaded, own2) };
+  return { start: (own2) => inProcessRenderer(loaded, own2.reaches) };
 };
-function inProcessRenderer(loaded, { reaches, clock, log }) {
+function inProcessRenderer(loaded, reaches) {
   const renderer = loaded.start(reaches);
   return {
     renderer,
     arm: () => {
     },
-    // [LAW:single-enforcer] The flush a process renderer runs as its stdin
-    // ends (src/renderer-process.ts), here where it has no stdin.
-    close: async (teardown) => {
-      try {
-        await teardown();
-      } finally {
-        await renderer.answer({
-          kind: "adapter",
-          push: { kind: "close-session-state" },
-          at: instantAt(clock)
-        }).catch(
-          (thrown2) => log(
-            "warn",
-            `the session state did not flush: ${failureOf(thrown2).detail}`
-          )
-        );
-      }
+    // Nothing restarts in process.
+    closing: () => {
+    },
+    close: async () => {
     },
     process: () => null
   };
