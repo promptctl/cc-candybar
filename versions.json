@@ -4,15 +4,22 @@
     {
       "version": "pr-760",
       "ref": "refs/pull/760/merge",
-      "sha": "651fcabf12b14bcd2a5bdc6921827444b268fbae",
-      "timestamp": "2026-11-16T00:03:49.254Z",
+      "sha": "e62a82a11661356cd95336e1ba9a6f6898931b82",
+      "timestamp": "2026-11-16T00:13:04.983Z",
       "commits": [
         {
-          "sha": "651fcabf12b14bcd2a5bdc6921827444b268fbae",
+          "sha": "e62a82a11661356cd95336e1ba9a6f6898931b82",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T00:03:01Z",
-          "message": "Merge 62d2b3ca869e2afb4f82ce315954cd405a5619cb into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+          "timestamp": "2026-11-16T00:12:02Z",
+          "message": "Merge a672c058bc1f754ee70d6d2c09983e36d825bea6 into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+        },
+        {
+          "sha": "a672c058bc1f754ee70d6d2c09983e36d825bea6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T17:11:50-07:00",
+          "message": "fix(providers): one close ends every provider, so no rig leaves a transcript period re-arming (candybar-skeleton-wj0c.zhh)\n\nThe daemon, the demo and two test rigs each listed the providers to close by hand, and the lists drifted when the transcript lanes arrived: an entry still held keeps its 10 s period re-arming for the life of the jest worker, which another file's close-ends-everything ledger then counts. The providers' own close is now the one list; the rigs that build a transcript trigger of their own close it, and a test's holds close with it.\n"
         },
         {
           "sha": "62d2b3ca869e2afb4f82ce315954cd405a5619cb",

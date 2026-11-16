@@ -65767,9 +65767,7 @@ function createPayloadProviders(opts) {
     cacheExpiry: new CacheExpiryProvider(clock, logger, ledger),
     faults: new RefreshFaults()
   };
-  return {
-    ...lanes,
-    home: opts.host.home,
+  const owners = {
     hostService: new HostService({ clock, logger, ledger }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
@@ -65792,9 +65790,26 @@ function createPayloadProviders(opts) {
       clock,
       logger,
       ledger
-    }),
+    })
+  };
+  return {
+    ...lanes,
+    ...owners,
+    home: opts.host.home,
     sourceRuns: opts.sourceRuns,
-    log: opts.logger
+    log: opts.logger,
+    // [LAW:single-enforcer] The one close of every owner built here: a held
+    // entry's period re-arms after every read, so an owner a caller forgets
+    // keeps its timers for good. The transcript lanes go before the usage
+    // store their reads fill.
+    close: () => {
+      owners.gitProvider.close();
+      owners.transcriptLanes.close();
+      lanes.usageStore.close();
+      owners.tmuxService.close();
+      owners.hostService.close();
+      owners.managedStorage.close();
+    }
   };
 }
 
@@ -86323,14 +86338,7 @@ function createDaemon(inputs) {
     ledger: refreshLedger,
     sourceRuns
   });
-  const {
-    gitProvider: gitService,
-    usageStore,
-    tmuxService,
-    hostService,
-    managedStorage,
-    transcriptLanes
-  } = payloadProviders;
+  const { managedStorage } = payloadProviders;
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
@@ -86705,16 +86713,11 @@ function createDaemon(inputs) {
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
         ["renderer views close", rendererStep("close-views")],
-        ["gitService close", () => gitService.close()],
-        ["transcriptLanes close", () => transcriptLanes.close()],
-        ["usageStore close", () => usageStore.close()],
-        ["tmuxService close", () => tmuxService.close()],
-        ["hostService close", () => hostService.close()],
+        ["payloadProviders close", () => payloadProviders.close()],
         ["runs close", () => runs.close()],
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
-        ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.
