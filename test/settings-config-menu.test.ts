@@ -47,7 +47,8 @@ import {
 import { chmodSync } from "node:fs";
 import { dirname } from "node:path";
 import { linkClick } from "./helpers/click";
-import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
+import { testVerbContext,
+  verbContextWith, effectsOf, recordRender } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf, type Instant } from "../src/utils/instant";
@@ -65,6 +66,7 @@ import { settingMenuPath } from "../src/config/menu-places";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { lastClickError } from "../src/daemon/foundations/click-error";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("settings-ui-aok-3");
@@ -135,8 +137,7 @@ function rig(
   let tmuxPane = "";
   const logs: string[] = [];
   const reloads: { text: string; picks: Record<string, string | null> }[] = [];
-  const ctx: VerbContext = {
-    ...testVerbContext(sessionState, durable?.historyFor(sessionState), undefined, durable?.host),
+  const ctx: VerbContext = verbContextWith(testVerbContext(sessionState, durable?.historyFor(sessionState), undefined, durable?.host), {
     log: (_level, msg) => logs.push(msg),
     configFor: () => entry.config,
     reloadConfig: () => {
@@ -149,8 +150,8 @@ function rig(
       const next = load(durable!.text()!);
       entry.registry.dispose();
       entry = next;
-    },
-  };
+    }
+});
   return {
     get config() {
       return entry.config;
@@ -511,16 +512,22 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(r.logs).toContainEqual(`save: nothing unsaved (session=${SID})`);
   });
 
+  // The click is taken; what the host refused shows on the session's ⚠.
   test("a refused write keeps every draft and leaves the file as it was", async () => {
     await r.click(await wrapUrl());
     await r.click(await paddingUp());
     const before = durable.text();
+    const depth = durable.history(SID).past.length;
     chmodSync(dirname(durable.configPath), 0o500);
     try {
-      await expect(r.click(saveUrl()!)).rejects.toThrow(/config write failed/);
+      await r.click(saveUrl()!);
     } finally {
       chmodSync(dirname(durable.configPath), 0o755);
     }
+    expect(lastClickError(r.sessionState, SID)?.text).toMatch(
+      /config write failed.*nothing was written/,
+    );
+    expect(durable.history(SID).past).toHaveLength(depth);
     expect(durable.text()).toBe(before);
     expect(r.sessionState.get(SID, "autoWrap")).toBe("false");
     expect(r.sessionState.get(SID, "padding")).toBe("2");

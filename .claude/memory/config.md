@@ -26,7 +26,11 @@ No variable is declared under another. The draw lands a read on the first declar
 
 ## The config file is the durable store
 
-There's no daemon-side overrides layer. A click that persists something edits the user's config file in place: it splices one value span and keeps every other byte, comments included. The daemon reloads through the same watcher a hand edit trips. A value written by the menu looks the same as a hand-edited one.
+There's no daemon-side overrides layer. A click that persists something edits the user's config file in place: it splices one value span and keeps every other byte, comments included. A value written by the menu looks the same as a hand-edited one.
+
+The renderer never writes a file. A click's writes leave its turn as changes, one per file, each naming the settings it touches and the value it read there, and the host lands a turn's changes together or not at all. The check is per setting, so a hand edit elsewhere in the file never refuses a click, and one to the same setting always does. A change is carried as JSON5 text, because a value carried as data would lose its comments and its layout. An object whose members can't be rebuilt byte for byte (an emptied `{}`) is changed whole, and nothing wider, so the check stays as narrow as the edit.
+
+A click lands whole. What else it did (the picks a save releases, its history step) applies in the turn its changes land, after the clicking session reloads, or is dropped when they don't land, with the reason on the ⚠. The click's reply only says it was taken. A journal turn opens only once the changes ahead of it have landed, so each click reads what the one before it wrote, and within a click a writer reads the click's own earlier writes, not the disk.
 
 When file events resume after a span the daemon couldn't vouch for, every entry reloads, whatever its own watch heard, because an edit made during the span may never have been heard. A reload of unchanged inputs keeps its state, so only an entry whose files changed rebuilds. Keeping still costs a full resolve, validation and key of the chain, so the catch-up reloads one entry per turn of the loop: a walk over every entry in one turn holds the loop for seconds, and every client waiting behind it hangs up.
 
@@ -48,13 +52,13 @@ Every globals field is one row of the fields table. The schema, the resolved glo
 
 A draft is derived, never flagged. It's a setting whose session value differs from what the file resolves to under the preset the save will land in. Save recomputes the drafts at click time against the config the session renders with, so it writes exactly what the button counted.
 
-Save writes, reloads, then releases the picks, all in one handler. So no render draws the old file without the picks, a refused write keeps every draft, and a released session follows later changes to the file instead of pinning over them.
+Save's write and the picks it releases land together, so no render draws the old file without the picks, a refused write keeps every draft, and a released session follows later changes to the file instead of pinning over them.
 
 Reset deletes the setting at every layer: the globals, every bundled preset's globals, and every theme's default. A preset the user wrote keeps its pinned value, because that pin is the user's own content.
 
 ## Undo, and edit mode
 
-Undo and redo work one step per click. A journal around every verb handler records each step, storing the whole file before and after for every file written. A step whose target no longer reads as it left it (after a hand edit, or another session's write) is refused loudly, and every change to that target drops off the stacks.
+Undo and redo work one step per click. A journal around every verb handler records each step, storing the whole file before and after for every file written. A step goes back as the changes between those two texts, so another session's write to a different setting of the same file doesn't stop it. A step whose setting no longer reads as it left it is refused loudly, and that file drops off the session's stacks, since the move would refuse every step back over it. A write that fails for I/O keeps the step, to land once it can.
 
 Edit mode's save and cancel are that history and nothing more. Layout clicks are already written to the file, so entering edit mode takes a savepoint, and cancel applies the net change backwards as one step. A target someone else changed in the meantime is kept, never overwritten. Undo and redo can't bring cancelled edits back. The savepoint is taken and released at the one place every click's writes pass, so any control that enters or leaves edit mode needs no bookkeeping of its own. There's no per-session unsaved layout, because the render cache holds one compiled tree per project and cwd, not per session.
 

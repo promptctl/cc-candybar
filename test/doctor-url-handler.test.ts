@@ -33,7 +33,8 @@ import { SessionState } from "../src/renderer/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { asyncSightings, recordRender, testVerbContext } from "./helpers/click";
+import { asyncSightings, recordRender, testVerbContext,
+  verbContextWith } from "./helpers/click";
 import {
   emptyStores,
   HEALTHY_FACTS,
@@ -368,8 +369,7 @@ describe("the daemon's side of the round trip", () => {
       0,
     );
     const logs: string[] = [];
-    const ctx: VerbContext = {
-      ...testVerbContext(sessionState, undefined, DEFAULT_DSL_CONFIG),
+    const ctx: VerbContext = verbContextWith(testVerbContext(sessionState, undefined, DEFAULT_DSL_CONFIG), {
       arrival,
       clients: asyncSightings(clients),
       log: (_level, message) => logs.push(message),
@@ -401,8 +401,8 @@ describe("the daemon's side of the round trip", () => {
           unused: [],
           config: DEFAULT_DSL_CONFIG,
         }),
-      },
-    };
+      }
+});
     const click = async (verb: string, value: string): Promise<void> =>
       await VERBS.get(verb)!(value, ctx);
     return { sessionState, logs, click };

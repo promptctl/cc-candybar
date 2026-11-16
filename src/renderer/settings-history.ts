@@ -13,15 +13,24 @@
 // Another session's write to a file this session also wrote is not in this
 // session's history, and undo never reaches it. Undo and redo apply a change
 // only while its target still reads as the state the change promised to step
-// from. A target changed since by anything else (another session's click, a
-// hand edit) makes every change this session holds for that target
-// unreachable, because each of them chains through the state that is gone. So
-// the step refuses loudly, applies nothing, and drops those changes from both
-// stacks. The session's other changes stay steppable.
+// from: a session pick is checked here, and a file's settings by the host,
+// which refuses a change whose setting moved (src/config/config-changes.ts).
+// A target changed since by anything else (another session's click, a hand
+// edit) makes every change this session holds for that target unreachable,
+// because each of them chains through the state that is gone. So the step
+// refuses loudly, applies nothing, and drops those changes from both stacks.
+// The session's other changes stay steppable.
+//
+// [LAW:no-ambient-temporal-coupling] A click lands whole or not at all. Its
+// session writes are held in its journal, which it reads its own through, and
+// its config writes are changes the host performs after its turn. The
+// journal's commit is the click's consequence: the held writes reach the store
+// and the history moves together. It runs once the click's changes land, or
+// at once for a click that made none, and never for a click whose changes the
+// host refused.
 
 import { observable, runInAction } from "mobx";
 import { EDIT_MODE_KEY, EDIT_MODE_REF } from "../config/loader/edit-mode";
-import { readConfigText, writeConfigText } from "./config-file-store";
 import type { DaemonLogger } from "../utils/logger";
 import { recordingView } from "./session-state";
 import { type SessionStateRW } from "../renderer-interface/session-state";
@@ -68,10 +77,19 @@ const MAX_BYTES = 8 * 1024 * 1024;
 
 const EMPTY: SessionHistory = { past: [], future: [] };
 
+// Where a click's config writes go: changes its turn returns
+// (src/renderer/config-writes.ts).
+export interface ConfigFiles {
+  land(file: string, before: string | null, after: string | null): void;
+}
+
 // Records one click's changes. Handlers write through `sessionState` (which
-// records settings keys once they are written) and report their config-file
-// writes through `file`; `commit` turns what was recorded so far into one
-// step and starts the next one empty.
+// records settings keys once they are written, and holds every write until
+// `commit`) and report their config-file writes through `file`. `undo`,
+// `redo` and `rewind` step the session's history in the same click, each
+// first making what the click changed so far a step of its own, so one click
+// behaves exactly as the same clicks made one at a time; each returns the
+// step it restored. `commit` is the click's consequence.
 export interface Journal {
   readonly sessionState: SessionStateRW;
   file(
@@ -80,6 +98,9 @@ export interface Journal {
     before: string | null,
     after: string,
   ): void;
+  undo(sessionId: SessionId): Step;
+  redo(sessionId: SessionId): Step;
+  rewind(sessionId: SessionId): Step;
   commit(): void;
   // A write this journal holds no step for (a history step, the repo book).
   wrote(): void;
@@ -134,7 +155,17 @@ export class SettingsHistory {
     return this.state.get(sessionId) ?? EMPTY;
   }
 
-  begin(): Journal {
+  begin(files: ConfigFiles): Journal {
+    const held = heldWrites(this.sessionState);
+    // Each session's history as this click leaves it.
+    const working = new Map<SessionId, SessionHistory>();
+    const click: Click = {
+      held,
+      files,
+      historyOf: (sessionId) =>
+        working.get(sessionId) ?? this.history(sessionId),
+      move: (sessionId, history) => working.set(sessionId, history),
+    };
     const pending: Pending = new Map();
     let written = false;
     const note = (sessionId: SessionId, change: Change): void => {
@@ -154,7 +185,7 @@ export class SettingsHistory {
     // remember to. The key itself is navigation, never a step.
     const toggles = new Map<SessionId, EditToggle>();
     const sessionState = recordingView(
-      this.sessionState,
+      held,
       // Every key, since a write of any can move a lane: only settings are steps.
       () => true,
       (sessionId, key, before, after) => {
@@ -171,82 +202,114 @@ export class SettingsHistory {
         note(sessionId, { kind: "session", key, before, after });
       },
     );
+    // What the click changed so far, as one step of its history.
+    const step = (): void => {
+      const committing = new Map(pending);
+      const toggled = new Map(toggles);
+      pending.clear();
+      toggles.clear();
+      for (const sessionId of new Set([
+        ...committing.keys(),
+        ...toggled.keys(),
+      ])) {
+        // A click that wrote a value already there changed nothing, and a
+        // step that changes nothing would be an undo that visibly does
+        // nothing.
+        const changes = [...(committing.get(sessionId)?.values() ?? [])].filter(
+          (c) => c.before !== c.after,
+        );
+        const current = click.historyOf(sessionId);
+        // A fresh step abandons whatever was undone. The click's own steps
+        // land BEFORE the savepoint a toggle in the same click takes: what
+        // opened edit mode is not an edit made in it.
+        const appended =
+          changes.length === 0 ? current : afterAppend(current, changes);
+        const toggle = toggled.get(sessionId);
+        const next =
+          toggle === undefined ? appended : withToggle(appended, toggle);
+        if (next !== current) click.move(sessionId, next);
+      }
+    };
     return {
       sessionState,
-      file: (sessionId, file, before, after) =>
-        note(sessionId, { kind: "file", file, before, after }),
+      file: (sessionId, file, before, after) => {
+        note(sessionId, { kind: "file", file, before, after });
+        files.land(file, before, after);
+      },
       wrote: () => {
         written = true;
       },
       written: () => written,
+      undo: (sessionId) => {
+        step();
+        return this.undo(click, sessionId);
+      },
+      redo: (sessionId) => {
+        step();
+        return this.redo(click, sessionId);
+      },
+      rewind: (sessionId) => {
+        step();
+        return this.rewind(click, sessionId);
+      },
       commit: () => {
+        step();
         // Handed off before it is saved, so a save that fails is reported by
         // this commit alone and never recorded again by a later one.
-        const committing = new Map(pending);
-        const toggled = new Map(toggles);
-        pending.clear();
-        toggles.clear();
-        for (const sessionId of new Set([
-          ...committing.keys(),
-          ...toggled.keys(),
-        ])) {
-          // A click that wrote a value already there changed nothing, and a
-          // step that changes nothing would be an undo that visibly does
-          // nothing.
-          const step = [...(committing.get(sessionId)?.values() ?? [])].filter(
-            (c) => c.before !== c.after,
-          );
-          const current = this.history(sessionId);
-          // A fresh step abandons whatever was undone. The click's own steps
-          // land BEFORE the savepoint a toggle in the same click takes: what
-          // opened edit mode is not an edit made in it.
-          const appended =
-            step.length === 0 ? current : afterAppend(current, step);
-          const toggle = toggled.get(sessionId);
-          const next =
-            toggle === undefined ? appended : withToggle(appended, toggle);
-          if (next !== current) this.put(sessionId, next);
-        }
+        const moved = new Map(working);
+        working.clear();
+        // [LAW:no-ambient-temporal-coupling] The step is saved before the
+        // session's writes are applied: the save is what can fail, and a
+        // click whose step was not saved applies nothing of its own.
+        for (const [sessionId, history] of moved) this.put(sessionId, history);
+        held.flush();
       },
     };
   }
 
-  // Returns the step it restored, so the caller can say what changed.
-  undo(sessionId: SessionId): Step {
-    const history = this.history(sessionId);
+  private undo(click: Click, sessionId: SessionId): Step {
+    const history = click.historyOf(sessionId);
     const step = history.past.at(-1);
     if (step === undefined) {
       throw new BadVerbArgs("undo: nothing to undo");
     }
-    this.apply(sessionId, step, "before", "undo", afterUndo(history, step));
+    this.apply(
+      click,
+      sessionId,
+      step,
+      "before",
+      "undo",
+      afterUndo(history, step),
+    );
     return step;
   }
 
   // [LAW:no-silent-failure] Cancel for edit mode: put every target edit mode
   // changed back to what it held when edit mode opened — one step, landing
-  // whole or not at all (`apply`) — then give the stack back the shape it had,
-  // with nothing to redo, so neither `↶` nor `↷` can bring back what was
-  // discarded. A target changed since by anything else (a hand edit, another
-  // session) is not put back: overwriting it would destroy that change, and no
-  // later cancel could put it back either. Every other target is, and then the
-  // refusal names what was kept, loudly. Edit mode stays where it is — the
-  // click that cancels also leaves — so the savepoint is taken again at the
-  // stack as it now stands. Returns what it put back.
-  rewind(sessionId: SessionId): Step {
-    const history = this.history(sessionId);
+  // whole or not at all — then give the stack back the shape it had, with
+  // nothing to redo, so neither `↶` nor `↷` can bring back what was discarded.
+  // A session pick changed since by anything else is not put back:
+  // overwriting it would destroy that change, and no later cancel could put it
+  // back either. Every other target is, and then the refusal names what was
+  // kept, loudly. A file's settings are the host's to check, and a refusal
+  // there refuses the whole cancel. Edit mode stays where it is — the click
+  // that cancels also leaves — so the savepoint is taken again at the stack as
+  // it now stands. Returns what it put back.
+  private rewind(click: Click, sessionId: SessionId): Step {
+    const history = click.historyOf(sessionId);
     const { savepoint } = history;
     if (savepoint === undefined) {
       throw new BadVerbArgs(
         "rewind: edit mode has no savepoint — nothing to cancel",
       );
     }
-    const stale = savepoint.net.filter(
-      (c) => this.read(sessionId, c) !== c.after,
+    const stale = savepoint.net.filter((c) =>
+      moved(click, sessionId, c, "after"),
     );
     const gone = new Set(stale.map(identity));
     const putBack = savepoint.net.filter((c) => !gone.has(identity(c)));
     const past = capped(without(pastAt(history, savepoint), gone));
-    this.apply(sessionId, putBack, "before", "rewind", {
+    this.apply(click, sessionId, putBack, "before", "rewind", {
       past,
       future: [],
       savepoint: { at: past.length, net: [], below: [] },
@@ -259,8 +322,8 @@ export class SettingsHistory {
     return putBack;
   }
 
-  redo(sessionId: SessionId): Step {
-    const history = this.history(sessionId);
+  private redo(click: Click, sessionId: SessionId): Step {
+    const history = click.historyOf(sessionId);
     const { past, future } = history;
     const step = future.at(-1);
     if (step === undefined) {
@@ -268,7 +331,7 @@ export class SettingsHistory {
     }
     const all = [...past, step];
     const kept = capped(all);
-    this.apply(sessionId, step, "after", "redo", {
+    this.apply(click, sessionId, step, "after", "redo", {
       past: kept,
       future: future.slice(0, -1),
       ...savepointAfter(history.savepoint, all.length - kept.length, step),
@@ -276,13 +339,13 @@ export class SettingsHistory {
     return step;
   }
 
-  // [LAW:no-silent-failure] A step lands whole, together with the history
-  // that records it, or not at all: every change is checked before any is
-  // written, and a failure while writing it or saving `then` puts back what
-  // was already written before the error goes on. A stale target is refused
-  // by name, and its now-unreachable changes leave both stacks (see the
-  // header).
+  // [LAW:no-silent-failure] A step is refused whole when a session pick it
+  // steps has moved: the pick is named, and its now-unreachable changes leave
+  // both stacks (see the header). Otherwise each pick is written through the
+  // click, and each file's step is a change the click returns, from what the
+  // step recorded, so the host refuses it when a setting in it moved.
   private apply(
+    click: Click,
     sessionId: SessionId,
     step: Step,
     to: "before" | "after",
@@ -290,71 +353,35 @@ export class SettingsHistory {
     then: SessionHistory,
   ): void {
     const from = to === "before" ? "after" : "before";
-    const stale = step.filter((c) => this.read(sessionId, c) !== c[from]);
+    const stale = step.filter((c) => moved(click, sessionId, c, from));
     if (stale.length > 0) {
-      const gone = new Set(stale.map(identity));
-      const { past, future, savepoint } = this.history(sessionId);
-      // Edit mode's net change forgets those targets too: putting them back
-      // would overwrite whatever changed them.
-      this.put(sessionId, {
-        past: without(past, gone),
-        future: without(future, gone),
-        ...(savepoint !== undefined && {
-          savepoint: {
-            // A step left empty leaves the stack, so the position counts the
-            // steps below it that survive.
-            at: without(
-              [...past, ...[...future].reverse()].slice(0, savepoint.at),
-              gone,
-            ).length,
-            net: savepoint.net.filter((c) => !gone.has(identity(c))),
-            below: without(savepoint.below, gone),
-          },
-        }),
-      });
+      click.move(
+        sessionId,
+        forgotten(click.historyOf(sessionId), new Set(stale.map(identity))),
+      );
       throw new BadVerbArgs(
         `${verb}: ${stale.map(describe).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
       );
     }
-    const written: Change[] = [];
-    try {
-      for (const change of step) {
-        this.write(sessionId, change, change[to]);
-        written.push(change);
-      }
-      this.put(sessionId, then);
-    } catch (e) {
-      try {
-        for (const change of written.reverse()) {
-          this.write(sessionId, change, change[from]);
-        }
-      } catch (restoring) {
-        throw new Error(
-          `${(e as Error).message}; and putting the step back failed, so it is half-applied: ${(restoring as Error).message}`,
-        );
-      }
-      throw e;
+    for (const change of step) {
+      const value = change[to];
+      if (change.kind === "file")
+        click.files.land(change.file, change[from], value);
+      else if (value === null) click.held.clear(sessionId, change.key);
+      else click.held.set(sessionId, change.key, value);
     }
+    click.move(sessionId, then);
   }
 
-  private read(sessionId: SessionId, change: Change): string | null {
-    return change.kind === "session"
-      ? this.sessionState.get(sessionId, change.key)
-      : readConfigText(change.file);
-  }
-
-  private write(
-    sessionId: SessionId,
-    change: Change,
-    value: string | null,
-  ): void {
-    if (change.kind === "file") {
-      writeConfigText(change.file, value, this.logger);
-    } else if (value === null) {
-      this.sessionState.clear(sessionId, change.key);
-    } else {
-      this.sessionState.set(sessionId, change.key, value);
-    }
+  // [LAW:single-enforcer] A file a change of this session's did not land in
+  // (the host refused it, or could not write it): its history no longer
+  // chains through that file, so every change it holds for the file leaves
+  // both stacks, as a stale target's does.
+  forgetFile(sessionId: SessionId, file: string): void {
+    this.put(
+      sessionId,
+      forgotten(this.history(sessionId), new Set([`file:${file}`])),
+    );
   }
 
   // Move-to-end keeps insertion order as recency, so the bounds drop the
@@ -557,4 +584,93 @@ function describe(change: Change): string {
   return change.kind === "session"
     ? `session setting "${change.key}"`
     : change.file;
+}
+
+// ─── A click ─────────────────────────────────────────────────────────────────
+
+// What a click steps its history through: the session writes it holds, the
+// files its changes go to, and each session's history as the click leaves it.
+interface Click {
+  readonly held: SessionStateRW;
+  readonly files: ConfigFiles;
+  readonly historyOf: (sessionId: SessionId) => SessionHistory;
+  readonly move: (sessionId: SessionId, history: SessionHistory) => void;
+}
+
+// A session pick that no longer holds the value a step would step from. A
+// file's settings are the host's to check, as its change lands.
+function moved(
+  click: Click,
+  sessionId: SessionId,
+  change: Change,
+  from: "before" | "after",
+): boolean {
+  return (
+    change.kind === "session" &&
+    click.held.get(sessionId, change.key) !== change[from]
+  );
+}
+
+// The history with every change to the targets `gone` names gone from both
+// stacks. Edit mode's net change forgets those targets too: putting them back
+// would overwrite whatever changed them.
+function forgotten(
+  { past, future, savepoint }: SessionHistory,
+  gone: ReadonlySet<string>,
+): SessionHistory {
+  return {
+    past: without(past, gone),
+    future: without(future, gone),
+    ...(savepoint !== undefined && {
+      savepoint: {
+        // A step left empty leaves the stack, so the position counts the
+        // steps below it that survive.
+        at: without(
+          [...past, ...[...future].reverse()].slice(0, savepoint.at),
+          gone,
+        ).length,
+        net: savepoint.net.filter((c) => !gone.has(identity(c))),
+        below: without(savepoint.below, gone),
+      },
+    }),
+  };
+}
+
+// [LAW:no-ambient-temporal-coupling] A click's session writes, held over the
+// store until its consequence lands (`flush`): nothing outside the click sees
+// a write whose click may not land, and the click reads its own.
+function heldWrites(
+  store: SessionStateRW,
+): SessionStateRW & { readonly flush: () => void } {
+  const held = new Map<SessionId, Map<string, string | null>>();
+  const put = (sessionId: SessionId, key: string, value: string | null) => {
+    const writes = held.get(sessionId) ?? new Map<string, string | null>();
+    writes.set(key, value);
+    held.set(sessionId, writes);
+  };
+  return {
+    get: (sessionId, key) => {
+      const writes = held.get(sessionId);
+      return writes?.has(key) ? writes.get(key)! : store.get(sessionId, key);
+    },
+    revision: (sessionId) => store.revision(sessionId),
+    set: (sessionId, key, value) => put(sessionId, key, value),
+    setBatch: (sessionId, pairs) => {
+      for (const { key, value } of pairs) put(sessionId, key, value);
+    },
+    clear: (sessionId, key) => put(sessionId, key, null),
+    // One transaction, so no observer sees half a click.
+    flush: () =>
+      runInAction(() => {
+        for (const [sessionId, writes] of held) {
+          const sets = [...writes].flatMap(([key, value]) =>
+            value === null ? [] : [{ key, value }],
+          );
+          if (sets.length > 0) store.setBatch(sessionId, sets);
+          for (const [key, value] of writes)
+            if (value === null) store.clear(sessionId, key);
+        }
+        held.clear();
+      }),
+  };
 }

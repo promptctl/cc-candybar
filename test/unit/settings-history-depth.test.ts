@@ -7,6 +7,7 @@ import { autorun } from "mobx";
 import { SessionState } from "../../src/renderer/session-state";
 import { SettingsHistory } from "../../src/renderer/settings-history";
 import { sessionIdOf, type SessionId } from "../../src/daemon/foundations/session-id";
+import { WRITES_IN_PLACE } from "../helpers/history-step";
 
 const A = sessionIdOf("a");
 const B = sessionIdOf("b");
@@ -15,7 +16,7 @@ test("one session's step moves its own depth and no other session's", () => {
   const sessionState = new SessionState();
   const history = new SettingsHistory(sessionState, () => {});
   const pick = (sessionId: SessionId, theme: string): void => {
-    const journal = history.begin();
+    const journal = history.begin(WRITES_IN_PLACE);
     journal.sessionState.set(sessionId, "theme", theme);
     journal.commit();
   };

@@ -72,6 +72,7 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { EDITS_IN_PLACE } from "./helpers/history-step";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -416,10 +417,7 @@ describe("config-file-store: segment-palette placement", () => {
     durable.dispose();
   });
 
-  const store = (): EditStore => ({
-    record: () => {},
-    logger: () => {},
-  });
+  const store = (): EditStore => EDITS_IN_PLACE;
 
   // [LAW:no-silent-failure] The gate admits keys from the config a session
   // rendered; a key naming a segment that neither this file nor the bundled
@@ -505,10 +503,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     durable.dispose();
   });
 
-  const store = (): EditStore => ({
-    record: () => {},
-    logger: () => {},
-  });
+  const store = (): EditStore => EDITS_IN_PLACE;
 
   const OTHER_DECL =
     "other: { template: 'other-text', bg: 'panel', fg: 'foreground' }";

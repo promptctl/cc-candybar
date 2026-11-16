@@ -23,6 +23,7 @@ import {
 } from "../../src/daemon/foundations/verb-error";
 import {
   type Effect,
+  Present,
   type EffectId,
   type Event,
   type Renderer,
@@ -53,7 +54,7 @@ const CLOCK = {
   now: () => 1_700_000_000_000,
 };
 
-const present = (id: number, request = REQUEST): Effect => ({
+const present = (id: number, request = REQUEST): Present => ({
   kind: "present",
   id: id as EffectId,
   session: SESSION,
@@ -82,6 +83,7 @@ const threwWith = (
 ): RendererOutput => ({
   kind: "threw",
   failure: failureOf(new Error(message)),
+  effects: [],
   subscriptions,
   record,
   turnMs: 0,
@@ -274,6 +276,7 @@ test("a render turn that throws a bad argument is still the daemon's failure, as
   const { renderer } = scripted({
     kind: "threw",
     failure: failureOf(new BadVerbArgs("no such row")),
+    effects: [],
     subscriptions: NO_SUBSCRIPTIONS,
     turnMs: 0,
     record: [],

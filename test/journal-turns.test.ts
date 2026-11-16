@@ -41,10 +41,12 @@ import {
   HEALTHY_INSTALL_EDGE,
 } from "./helpers/doctor-facts";
 import { VERB_DOCTOR_RUN } from "../src/click/wire";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { recordRender, testVerbContext,
+  verbContextWith } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { undoOf } from "./helpers/history-step";
 
 const SID = sessionIdOf("s1");
 const IDLE = {
@@ -89,15 +91,16 @@ function setup() {
   const sessionState = new SessionState();
   recordRender(sessionState, SID);
   const logged: string[] = [];
+  const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT);
   const turns = new JournalTurns({
     log: (_level, msg) => logged.push(msg),
     monotonic: () => systemTimekeeper.monotonic(),
+    changesLanded: () => base.configWrites.landed(),
   });
-  const ctx: VerbContext = {
-    ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
+  const ctx = verbContextWith(base, {
     journalTurns: turns,
     log: (_level, msg) => logged.push(msg),
-  };
+  });
   // A click writing `theme`, parked on `parked` in a launch before it writes
   // `style`.
   const click = (theme: string, style: string, parked: Promise<unknown>) =>
@@ -120,13 +123,14 @@ describe("journals take turns", () => {
     const first = click("nord", "plain", held.wait);
     const second = click("dracula", "powerline", Promise.resolve());
     await drain();
-    expect(sessionState.get(SID, "theme")).toBe("nord");
+    // A click lands whole, so nothing of the first shows while it waits.
+    expect(sessionState.get(SID, "theme")).toBeNull();
     held.open();
     await Promise.all([first, second]);
     expect(sessionState.get(SID, "theme")).toBe("dracula");
     expect(sessionState.get(SID, "endcaps")).toBe("powerline");
     expect(undoDepth(ctx)).toBe(2);
-    ctx.history.undo(SID);
+    undoOf(ctx.history, SID);
     expect(sessionState.get(SID, "theme")).toBe("nord");
     expect(sessionState.get(SID, "endcaps")).toBe("plain");
   });
@@ -137,7 +141,7 @@ describe("journals take turns", () => {
     const slow = click("nord", "plain", held.wait);
     await drain();
     let closed = false;
-    const closing = closeIdleMenus(SID, null, IDLE, ctx).then(
+    const closing = closeIdleMenus(SID, null, IDLE, ctx, ctx.effects).then(
       () => (closed = true),
     );
     await drain();
@@ -166,6 +170,7 @@ describe("the idle close decides in its turn", () => {
             confirm: async () => idle.confirmClose(sid, closing.firedAt),
           },
           ctx,
+          ctx.effects,
         );
         fired.push(running);
         return running.then(
@@ -271,7 +276,7 @@ test("a navigation commit that throws leaves the settings journal committed", as
     click(encodeSegments([SID, "theme", "nord"]), ctx),
   ).rejects.toThrow("navigation broke");
   expect(undoDepth(ctx)).toBe(1);
-  ctx.history.undo(SID);
+  undoOf(ctx.history, SID);
   expect(sessionState.get(SID, "theme")).toBeNull();
 });
 
@@ -303,7 +308,7 @@ describe("close", () => {
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
     expect(sessionState.get(SID, "endcaps")).toBeNull();
     expect(undoDepth(ctx)).toBe(1);
-    ctx.history.undo(SID);
+    undoOf(ctx.history, SID);
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
@@ -479,7 +484,7 @@ test("stats name the holder and what waits", async () => {
   const held = gate();
   const slow = click("nord", "plain", held.wait);
   await drain();
-  const queued = closeIdleMenus(SID, null, IDLE, ctx);
+  const queued = closeIdleMenus(SID, null, IDLE, ctx, ctx.effects);
   await drain();
   expect(turns.getStats()).toMatchObject({ holder: "dispatch", queued: 1 });
   held.open();

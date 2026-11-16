@@ -21,6 +21,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import JSON5 from "json5";
+import { EDITS_IN_PLACE } from "./helpers/history-step";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const config = (source: string) =>
@@ -166,7 +167,7 @@ describe("a save under a preset that pins the field lands where it renders", () 
     writeFileSync(file, source);
     const before = drafts(source, p);
     writeValues(
-      { record: () => {}, logger: () => {} },
+      EDITS_IN_PLACE,
       { path: file, above: [], repo: null, cwd: null, locs: locs() },
       before.map(({ target, value }) => [target, value] as const),
     );

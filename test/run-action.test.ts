@@ -57,7 +57,8 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
-import { clickUrl, effectsOf, testVerbContext } from "./helpers/click";
+import { clickUrl, effectsOf, testVerbContext,
+  verbContextWith } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
@@ -394,12 +395,11 @@ function clickContext(
     SESSION_CLIENT_HINTS_KEY,
     JSON.stringify({ claudeConfigDir: "/u/.claude-x" }),
   );
-  return {
-    ...testVerbContext(r.sessionState, undefined, view.state.config),
+  return verbContextWith(testVerbContext(r.sessionState, undefined, view.state.config), {
     sourcesFor: () => view.state.sources,
     runs: r.runs,
-    ...over,
-  };
+    ...over
+});
 }
 
 // The session's variables as whichever shell spawned the daemon set them.

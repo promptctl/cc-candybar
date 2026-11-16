@@ -839,7 +839,8 @@ function statusline(r: Rig, configFile: string) {
       const output = await renderer.answer(input);
       if (output.kind === "answered")
         for (const effect of output.effects)
-          presented.push(parseFrame(effect.frame));
+          if (effect.kind === "present")
+            presented.push(parseFrame(effect.frame));
       return output;
     }),
     () => {},

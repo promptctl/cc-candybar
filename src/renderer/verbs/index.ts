@@ -63,7 +63,6 @@ import {
   type Journal,
   type SettingsHistory,
 } from "../settings-history";
-import { type Step } from "../../renderer-interface/history-storage";
 import type { NavigationHistory } from "../navigation-history";
 import {
   placementId,
@@ -131,6 +130,12 @@ import {
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
 import type { JournalTurn, JournalTurns } from "../journal-turns";
+import type { ConfigWrites, Landed } from "../config-writes";
+import type {
+  Effect,
+  EffectId,
+  EffectOutcome,
+} from "../../renderer-interface/interface";
 import { recordAnswer, repoAnswerFields, repoConfigs } from "../repo-configs";
 import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
@@ -193,6 +198,7 @@ import {
   BadVerbArgs,
   DaemonClosing,
   decodeWire,
+  failureOf,
 } from "../../daemon/foundations/verb-error";
 import {
   parseSessionId,
@@ -257,8 +263,13 @@ export interface DaemonContext {
   // `save` compares the session against the same config the bar was drawn from.
   readonly configFor: (origin: RenderOrigin) => DslConfig;
   // Reload that config from disk now, so the next render reads what a click
-  // just wrote rather than waiting on the file watcher.
+  // just wrote rather than waiting on the file watcher: in the turn a click's
+  // changes land (`changeLanded`), and after a repository answer.
   readonly reloadConfig: (origin: RenderOrigin) => void;
+  // [LAW:single-enforcer] Where every click's config writes go: changes its
+  // turn returns, and its consequence held until they land
+  // (src/renderer/config-writes.ts).
+  readonly configWrites: ConfigWrites;
   // The storage folder of each source that config declares, from the same
   // render state: what a `run` supersedes.
   readonly sourcesFor: (origin: RenderOrigin) => DeclaredSources;
@@ -312,6 +323,8 @@ export interface VerbContext extends DaemonContext {
   readonly clientGone: () => Promise<boolean>;
   // The newest request of THIS click's session the host holds.
   readonly latest: CheckedRenderRequest | null;
+  // THIS click's turn's effects, which its config changes join.
+  readonly effects: Effect[];
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
@@ -761,17 +774,52 @@ function recordedOrigin(
   return raw === null ? null : parseRenderOrigin(raw);
 }
 
-// [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
-// session renders from reloads it before the click answers, as save does; one
-// that wrote no such file rebuilds nothing (a reload restarts every source).
-// Another session's file reaches its render through the fs watcher.
-function reloadIfWritten(ctx: Unbound, sid: SessionId, step: Step): void {
+// [LAW:single-enforcer] How a click's config changes landed, in the turn of
+// their last `effect-done`. [LAW:no-ambient-temporal-coupling] Landed, a
+// change to the file its session renders from reloads it, and then the click's
+// consequence applies, in the same turn, so no frame draws the reloaded file
+// without what the click did beside it, nor that without the file. A change to
+// another file rebuilds nothing here (a reload restarts every source) and
+// reaches the sessions that render it through the fs watcher.
+// [LAW:no-silent-failure] Not landed, the click's consequence is dropped: its
+// drafts, picks and history stay as they were, and the reason shows on its
+// session's ⚠. Refused, since a setting moved under it, its session's history
+// also forgets those files: the move would refuse every step back over them
+// too. A write that failed leaves them, to step again once it can land.
+export function changeDone(
+  ctx: Omit<DaemonContext, TurnBound>,
+  id: EffectId,
+  outcome: EffectOutcome,
+): boolean {
+  const landed = ctx.configWrites.settled(id, outcome);
+  if (landed === undefined) return false;
+  if (landed !== "owed") changeLanded(ctx, landed);
+  return true;
+}
+
+function changeLanded(
+  ctx: Omit<DaemonContext, TurnBound>,
+  { session, files, consequence, outcome }: Landed,
+): void {
+  if (outcome.kind !== "ok") {
+    ctx.log("warn", `config change: ${outcome.reason} (session=${session})`);
+    if (outcome.kind === "refused")
+      for (const file of files) ctx.history.forgetFile(session, file);
+    holdClickError(ctx.sessionState, session, outcome.reason, ctx.now());
+    return;
+  }
   // A session with no recorded render has no cache entry to draw stale.
-  const origin = recordedOrigin(ctx, sid);
-  if (origin === null) return;
-  const { path } = originHome(ctx, origin);
-  if (step.some((c) => c.kind === "file" && c.file === path)) {
+  const origin = recordedOrigin(ctx, session);
+  if (origin !== null && files.includes(originHome(ctx, origin).path))
     ctx.reloadConfig(origin);
+  // [LAW:no-silent-failure] No click answers this turn, so what fails here
+  // shows on the session's ⚠ itself.
+  try {
+    consequence();
+  } catch (e) {
+    const reason = failureOf(e).message;
+    ctx.log("warn", `config change landed: ${reason} (session=${session})`);
+    holdClickError(ctx.sessionState, session, reason, ctx.now());
   }
 }
 
@@ -831,15 +879,15 @@ function originHome(
 
 function editStore(ctx: ClickContext, sid: SessionId): EditStore {
   return {
+    read: (file) => ctx.configWrites.read(file),
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.log,
   };
 }
 
 // [LAW:single-enforcer] `persist`'s twin of setState: the SAME validate-then-
 // write shape, writing into the session's config file instead of
-// SessionState. The write is DURABLE, and the session's config reloads before
-// the click answers, as save's does, so the next render draws it
+// SessionState. The write is DURABLE, and the session's config reloads in
+// the turn it lands (changeLanded), so the next render draws it
 // ([LAW:no-ambient-temporal-coupling] — not a bet on the fs watcher's latency).
 // [LAW:no-silent-failure] Unknown key or out-of-domain value is a loud
 // BAD_REQUEST — the config-file twin of `set-state`'s gate (configGate),
@@ -866,7 +914,6 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
     key,
   );
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
-  ctx.reloadConfig(origin);
   ctx.log(
     "info",
     `set-config: ${landing.key}=${result.value} → ${home.path} (session=${sid})`,
@@ -909,7 +956,8 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
-  const stored = readValue(home.path, landing.key);
+  const store = editStore(ctx, sid);
+  const stored = readValue(store.read(home.path), landing.key);
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
@@ -923,7 +971,6 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
-  ctx.reloadConfig(origin);
   ctx.log(
     "info",
     `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${home.path} (session=${sid})`,
@@ -934,12 +981,12 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
 // file as ONE write. The drafts are derived at click time by the SAME function
 // the render counts them with, over the config this session renders with, so
 // the click writes exactly what the `💾 save N` cell counted.
-// [LAW:no-ambient-temporal-coupling] One handler owns the order write → reload
-// → release. The picks are released only once the session's config has
-// reloaded the file that now holds them, so no render in between draws the old
-// file without them; released, the session follows the file again — a later
-// hand edit, another session's save, a reset — instead of pinning over it. A
-// refused write throws before either, keeping every draft.
+// [LAW:no-ambient-temporal-coupling] The write and the picks it releases are
+// one click, which lands whole (changeLanded): the picks are released in the
+// turn the session's config reloads the file that now holds them, so no frame
+// draws the old file without them, and a write refused here or by the host
+// keeps every draft. Released, the session follows the file again — a later
+// hand edit, another session's save, a reset — instead of pinning over it.
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
 // session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
@@ -967,7 +1014,6 @@ const save: VerbHandler = async (value, ctx) => {
   gatePlacements("save", gate, placements);
   const home = originHome(ctx, origin);
   writeDrafts(editStore(ctx, sid), home, pairs, placements);
-  ctx.reloadConfig(origin);
   for (const key of [
     ...drafts.map((d) => d.sessionKey),
     ...placements.map((p) => p.key),
@@ -1004,8 +1050,9 @@ function gatePlacements(
 // session switches to it. Once the file holds every setting the session had
 // picked, those picks are released — the preset now renders them — so the
 // session is left with one pick: the preset itself.
-// [LAW:no-ambient-temporal-coupling] Save's order: write, reload, then the
-// session — the preset the pick names exists before the pick does.
+// [LAW:no-ambient-temporal-coupling] The pick and the preset it names land
+// together, as a save's do (changeLanded): no frame draws a pick of a preset
+// the loaded file lacks.
 // [LAW:single-enforcer] Each pinned value re-crosses the session gate that
 // admitted it, as a save's do.
 const savePreset: VerbHandler = async (value, ctx) => {
@@ -1032,7 +1079,6 @@ const savePreset: VerbHandler = async (value, ctx) => {
     picks,
     snapshot.placements,
   );
-  ctx.reloadConfig(origin);
   for (const key of [
     ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
     ...snapshot.placements.map((p) => p.key),
@@ -1049,11 +1095,12 @@ const savePreset: VerbHandler = async (value, ctx) => {
 // Save the look the session draws as the active theme's default
 // (candybar-theme-colours-6fq5.ix8): `themeDefaults.<theme>` in the session's
 // home file takes the session's shade, variation and style, and each of the
-// session's picks of those three that the reloaded file now draws is released,
+// session's picks of those three that the written file draws is released,
 // so the session follows the file again, as a save's do. A field the config's
 // globals declare is not the rung's to save (themeDefaultSave), so a pick of it
 // is still a draft, and stays, so the bar does not move under the click.
-// [LAW:no-ambient-temporal-coupling] Save's order: write, reload, release.
+// [LAW:no-ambient-temporal-coupling] The write and the release land together,
+// as a save's do, read over the config the write's own load proved.
 // [LAW:no-silent-failure] A theme chosen by a rule has no name until a render
 // evaluates it, and a theme's default is keyed by name: refused, naming the
 // rule, never a guess at what it would have rendered.
@@ -1071,11 +1118,15 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
-  ctx.reloadConfig(origin);
+  const written = writeThemeDefault(
+    editStore(ctx, sid),
+    home,
+    save.theme,
+    save.look,
+  );
   const pick = (key: string) => ctx.sessionState.get(sid, key);
   const drafted = new Set(
-    settingDrafts(ctx.configFor(origin), pick).map((d) => d.sessionKey),
+    settingDrafts(written, pick).map((d) => d.sessionKey),
   );
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey,
@@ -1101,7 +1152,6 @@ const deletePreset: VerbHandler = async (value, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const home = originHome(ctx, origin);
   deletePresetFromFile(editStore(ctx, sid), home, name);
-  ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
   ctx.log("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
@@ -1111,13 +1161,13 @@ const deletePreset: VerbHandler = async (value, ctx) => {
 // at every layer that can hold it (resetLayers) — their paths in the session's
 // config file, as ONE write, and the session's own picks. A `do` over several
 // resets arrives here as one effect (batchAdjacentWrites), so reset all is one
-// write, one reload, and one undo step. Gated by key MEMBERSHIP
+// change, one reload, and one undo step. Gated by key MEMBERSHIP
 // (the session's configGate's keys) rather than a value domain — there is no value to
 // validate, only a legitimate target to clear — and every key is checked
 // before anything is written, so a batch lands whole or not at all.
-// [LAW:no-ambient-temporal-coupling] Save's order, for the same reason: the
-// file is written and reloaded before the picks are released, so no render in
-// between draws a pick's absence over a file that still holds the value.
+// [LAW:no-ambient-temporal-coupling] The write and the picks it clears land
+// together, as a save's do, so no frame draws a pick's absence over a file
+// that still holds the value.
 const resetConfig: VerbHandler = async (value, ctx) => {
   const [sessionId = "", ...keys] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
@@ -1135,7 +1185,6 @@ const resetConfig: VerbHandler = async (value, ctx) => {
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
   deleteValues(editStore(ctx, sid), home, fileKeys);
-  ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
   ctx.log(
     "info",
@@ -1218,14 +1267,18 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  const placed = applyLayoutOpToFile(editStore(ctx, sid), home, key, op);
+  const { placed, config } = applyLayoutOpToFile(
+    editStore(ctx, sid),
+    home,
+    key,
+    op,
+  );
   // A removed placement's session state ends with it (endedSessionKeys).
-  // Measured on the file as it now reads, and released in the same click, so
-  // its undo brings the placement and its drafts back.
-  ctx.reloadConfig(origin);
+  // Measured on the config the write's own load proved, and released in the
+  // same click, so its undo brings the placement and its drafts back.
   // The session state the edit discards — the fact its log line carries.
   const released = endedSessionKeys(
-    endedPlacements(before, ctx.configFor(origin)),
+    endedPlacements(before, config),
     ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
   ).filter((key) => ctx.sessionState.get(sid, key) !== null);
   for (const key of released) ctx.sessionState.clear(sid, key);
@@ -1246,12 +1299,8 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
 const undo: VerbHandler = async (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  // The click's own earlier changes are a step of their own first, so one
-  // click behaves exactly as the same clicks made one at a time.
-  ctx.journal.commit();
-  const step = ctx.history.undo(sid);
+  const step = ctx.journal.undo(sid);
   ctx.journal.wrote();
-  reloadIfWritten(ctx, sid, step);
   ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
@@ -1276,12 +1325,9 @@ const back: VerbHandler = async (value, ctx) => {
 // other target was put back, naming the target it kept.
 const rewind: VerbHandler = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  // The click's own earlier changes are a step of their own first, as undo's.
-  ctx.journal.commit();
   // Said first: a stale target throws after the rest were put back.
   ctx.journal.wrote();
-  const restored = ctx.history.rewind(sid);
-  reloadIfWritten(ctx, sid, restored);
+  const restored = ctx.journal.rewind(sid);
   ctx.log(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
@@ -1292,10 +1338,8 @@ const rewind: VerbHandler = async (value, ctx) => {
 const redo: VerbHandler = async (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  ctx.journal.commit();
-  const step = ctx.history.redo(sid);
+  const step = ctx.journal.redo(sid);
   ctx.journal.wrote();
-  reloadIfWritten(ctx, sid, step);
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
@@ -1712,8 +1756,8 @@ const run: VerbHandler = async (value, ctx) => {
 // The link's own signature proves only that the bar drew the link, and a
 // config can draw any link, so the answer keeps a mac of its own. The book
 // lives beside the link key, and the render cache watches it, so every bar
-// reloads; the clicking session's reloads before the click answers, as save's
-// does.
+// reloads; the clicking session's reloads before the click answers. The book
+// is the daemon's own state, not a config layer, so it is written in place.
 const repoConfig: VerbHandler = async (value, ctx) => {
   const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),
@@ -1904,14 +1948,19 @@ function throwAll(failures: readonly unknown[]): void {
 // is the click boundary: every entry of the table the daemon looks up against
 // runs inside a journal it opens and commits. `dispatch` folds its effects
 // through the RAW leaf table, so a click of N effects is one journal and one
-// step, never N. The commit runs even when a handler threw — whatever landed
+// step, never N. The commit runs even when a handler threw — whatever it did
 // before the throw is real, so it is recorded. [LAW:no-silent-failure] A
 // commit that fails too never hides the handler's own error: the click
 // reports both.
 //
+// [LAW:no-ambient-temporal-coupling] The commit and what follows it are the
+// click's consequence (src/renderer/config-writes.ts): applied at once by a
+// click that changed no config file, and otherwise in the turn its changes
+// land (changeLanded), or never, when they are refused.
+//
 // [LAW:single-enforcer] It is also where every click of a session passes, so
 // it measures that session's lane switches (`sid` names it): before the
-// handler, and after the commit — after any reload the handler made, since a
+// handler, and after the commit — after the reload its landing made, since a
 // reload is synchronous. What a lane runs follows the difference, which no
 // render, frame or other session's write can make.
 //
@@ -1923,11 +1972,12 @@ async function journaled<C extends DaemonContext>(
   sid: SessionId | null,
   latest: CheckedRenderRequest | null,
   ctx: C,
+  effects: Effect[],
   turn: JournalTurn,
   handler: (ctx: Journaled<C>) => Promise<void>,
 ): Promise<void> {
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
-  const journal = ctx.history.begin();
+  const journal = ctx.history.begin(ctx.configWrites);
   const navigation = ctx.navigation.begin(journal.sessionState);
   // Each commit runs whatever the other did: both record what landed.
   const commit = turn.holds(() => {
@@ -1975,27 +2025,36 @@ async function journaled<C extends DaemonContext>(
   } catch (e) {
     failures.push(e);
   }
-  let live = true;
+  const consequence = (): void => {
+    const failed: unknown[] = [];
+    let live = true;
+    try {
+      live = commit();
+    } catch (e) {
+      failed.push(e);
+    }
+    if (live && lanes !== null) {
+      try {
+        // [LAW:no-ambient-temporal-coupling] Only a click that wrote can have
+        // moved its lanes: for one that wrote nothing, what moved while it
+        // parked is a watcher reload, and no move of its own.
+        const after = lanes.read();
+        ctx.lanes.clicked(
+          lanes.sessionId,
+          lanes.latest,
+          journal.written() ? lanes.before : after,
+          after,
+        );
+      } catch (e) {
+        failed.push(e);
+      }
+    }
+    throwAll(failed);
+  };
   try {
-    live = commit();
+    ctx.configWrites.seal(effects, sid, consequence);
   } catch (e) {
     failures.push(e);
-  }
-  if (live && lanes !== null) {
-    try {
-      // [LAW:no-ambient-temporal-coupling] Only a click that wrote can have
-      // moved its lanes: for one that wrote nothing, what moved while it
-      // parked is a watcher reload, and no move of its own.
-      const after = lanes.read();
-      ctx.lanes.clicked(
-        lanes.sessionId,
-        lanes.latest,
-        journal.written() ? lanes.before : after,
-        after,
-      );
-    } catch (e) {
-      failures.push(e);
-    }
   }
   throwAll(failures);
 }
@@ -2025,7 +2084,7 @@ function click(
       },
       () => gather(value, ctx),
       (gathered, turn) =>
-        journaled(sid, ctx.latest, ctx, turn, async (c) => {
+        journaled(sid, ctx.latest, ctx, ctx.effects, turn, async (c) => {
           try {
             await handler(value, c, gathered);
           } finally {
@@ -2082,6 +2141,7 @@ export function closeIdleMenus(
   latest: CheckedRenderRequest | null,
   idle: IdleClose,
   ctx: DaemonContext,
+  effects: Effect[],
 ): Promise<void> {
   return ctx.journalTurns.take(
     "menu-idle",
@@ -2091,7 +2151,7 @@ export function closeIdleMenus(
       gone: async () => false,
     },
     (turn) =>
-      journaled(sid, latest, ctx, turn, async (c) => {
+      journaled(sid, latest, ctx, effects, turn, async (c) => {
         if (!(await turn.landed(idle.confirm()))) {
           c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
           return;

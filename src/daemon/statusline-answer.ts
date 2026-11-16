@@ -6,6 +6,7 @@
 import path from "node:path";
 import type {
   Effect,
+  Present,
   RequestId,
   TurnOutcome,
 } from "../renderer-interface/interface.js";
@@ -167,23 +168,24 @@ export async function answerStatusline(
         ? "-"
         : `${configured.hopMs + delivered.hopMs}ms`,
   });
-  if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed(host, delivered.failure);
-  }
   const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
+    effects:
+      effects
+        .map((e) => (e.kind === "present" ? `present:${e.surface}` : e.kind))
+        .join(",") || "-",
   });
-  // [LAW:types-are-the-program] Every effect the turn returned, in its order,
-  // is performed or refused: the first statusline frame for this request
-  // answers it, and nothing else may.
-  let answer: Effect | null = null;
+  // [LAW:types-are-the-program] Every present the turn returned, in its
+  // order, is performed or refused: the first statusline frame for this
+  // request answers it, and nothing else may; a turn that threw answers
+  // nothing. A change was the host's to perform as the turn answered.
+  let answer: Present | null = null;
   for (const effect of effects) {
     switch (effect.kind) {
       case "present":
-        if (effect.request !== id)
+        if (delivered.kind === "threw") done(effect, "its turn threw");
+        else if (effect.request !== id)
           done(
             effect,
             `presents request ${effect.request}, not this turn's ${id}`,
@@ -192,8 +194,11 @@ export async function answerStatusline(
           done(effect, `a second statusline frame for request ${id}`);
         else answer = effect;
         break;
+      case "change":
+        break;
     }
   }
+  if (delivered.kind === "threw") return failed(host, delivered.failure);
   if (answer === null)
     return failed(
       host,

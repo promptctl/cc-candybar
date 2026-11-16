@@ -44,7 +44,8 @@ import {
   HEALTHY_INSTALL_EDGE,
   noManagedSettings,
 } from "./helpers/doctor-facts";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { recordRender, testVerbContext,
+  verbContextWith } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -110,9 +111,11 @@ const edge = (over: Partial<DoctorEdge>): DoctorEdge =>
 function setup(over: Partial<DoctorEdge> = {}) {
   const sessionState = new SessionState();
   const logged: string[] = [];
+  const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT);
   const turns = new JournalTurns({
     log: () => {},
     monotonic: () => systemTimekeeper.monotonic(),
+    changesLanded: () => base.configWrites.landed(),
   });
   for (const sid of [A, B, SESSION_C]) {
     recordRender(sessionState, sid);
@@ -121,8 +124,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const held = gate();
   const healthy = healthyDaemonEdge().daemons;
   const gathers: string[] = [];
-  const ctx: VerbContext = {
-    ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
+  const ctx = verbContextWith(base, {
     journalTurns: turns,
     log: (_level, line) => logged.push(line),
     doctorStores: emptyStores(),
@@ -134,7 +136,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
       },
       ...over,
     }),
-  };
+  });
   const written = (sid: SessionId) => sessionState.get(sid, "theme");
   const doctor = (sid: string, c: VerbContext = ctx) =>
     VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(sid), c);
@@ -310,7 +312,9 @@ describe("one session's order", () => {
 });
 
 describe("a gather is a snapshot of one config", () => {
-  test("a `do` of set-config then doctor judges the written config", async () => {
+  // A click lands whole, when it ends: its doctor judges the config the click
+  // found, and the write is there for the next click.
+  test("a `do` of set-config then doctor judges the config the click found", async () => {
     const fixture = durableConfig();
     try {
       const sessionState = new SessionState();
@@ -324,28 +328,28 @@ describe("a gather is a snapshot of one config", () => {
       );
       const seen: Array<string | null> = [];
       const healthy = healthyDaemonEdge().daemons;
-      const ctx: VerbContext = {
-        ...testVerbContext(
+      const ctx: VerbContext = verbContextWith(testVerbContext(
           sessionState,
           fixture.historyFor(sessionState),
           config,
           fixture.host,
-        ),
+        ), {
         doctorStores: emptyStores(),
         doctor: edge({
           daemons: () => {
             seen.push(fixture.text());
             return healthy();
           },
-        }),
-      };
+        })
+});
       const url = effectsUrl([
         { verb: VERB_SET_CONFIG, args: [A, "palette", [...ALLOWED][0]!] },
         { verb: VERB_DOCTOR_RUN, args: [A] },
       ]);
       await VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
       expect(seen).toHaveLength(1);
-      expect(seen[0]).toContain("palette");
+      expect(seen).toEqual([null]);
+      expect(fixture.text()).toContain("palette");
     } finally {
       fixture.dispose();
     }
