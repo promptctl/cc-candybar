@@ -4,15 +4,22 @@
     {
       "version": "pr-775",
       "ref": "refs/pull/775/merge",
-      "sha": "41a519f0a84c70b990a9a089549c535d4d4c28da",
-      "timestamp": "2026-11-16T21:50:10.038Z",
+      "sha": "58fdc02f8299cb53c70534cf74136f6e4e1362fe",
+      "timestamp": "2026-11-16T21:55:20.411Z",
       "commits": [
         {
-          "sha": "41a519f0a84c70b990a9a089549c535d4d4c28da",
+          "sha": "58fdc02f8299cb53c70534cf74136f6e4e1362fe",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T21:49:14Z",
-          "message": "Merge 264468e5ead516770f8916efb688a045f28af2ab into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+          "timestamp": "2026-11-16T21:54:15Z",
+          "message": "Merge 6bddc10d4dca0b727239486df8c865b714f64a19 into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+        },
+        {
+          "sha": "6bddc10d4dca0b727239486df8c865b714f64a19",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T14:54:04-07:00",
+          "message": "fix(daemon): each tmux server is put back on its own at close, and a closed reconcile draws nothing more\n"
         },
         {
           "sha": "264468e5ead516770f8916efb688a045f28af2ab",

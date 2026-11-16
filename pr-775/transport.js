@@ -73598,19 +73598,33 @@ var TmuxStatusLines = class {
     return session !== void 0 && server.layouts.has(session) && server.view.shownBy.get(session) === held.pane;
   }
   // [LAW:single-enforcer] The daemon's shutdown: everything it laid out put
-  // back. [LAW:no-ambient-temporal-coupling] Nothing new starts, and every
-  // tmux call already in flight lands first: a lay-out write is its own tmux
-  // client, which reaches the server whenever it does, so a restore that ran
-  // beside it could be laid out over again once the daemon is gone.
+  // back. [LAW:no-ambient-temporal-coupling] Nothing new starts, and each
+  // server's tmux call already in flight lands first: a lay-out write is its
+  // own tmux client, which reaches the server whenever it does, so a restore
+  // that ran beside it could be laid out over again once the daemon is gone.
+  // Each server is put back on its own, so one slow or failing server holds
+  // up no other.
   async close() {
     this.closed = true;
     for (const held of this.held.values()) held.unsubscribe?.();
     this.held.clear();
-    await this.settled();
-    for (const [socket, server] of this.servers) {
+    await Promise.all(
+      [...this.servers].map(
+        ([socket, server]) => this.closeServer(socket, server)
+      )
+    );
+  }
+  async closeServer(socket, server) {
+    try {
+      await server.running;
       for (const session of [...server.layouts.keys()])
         await this.restore(socket, server, session);
       await this.restoreBinding(socket, server);
+    } catch (error) {
+      this.deps.log(
+        "warn",
+        `tmux-status: socket=${JSON.stringify(socket)} restore at close threw: ${String(error)}`
+      );
     }
   }
   // A click on the range `<range>` of pane `%<n>` on the server `<socket>`
@@ -73732,7 +73746,7 @@ var TmuxStatusLines = class {
       }
       if (server.left.has(session)) continue;
       const layout = known ?? await this.install(socket, server, session);
-      if (layout === null) continue;
+      if (layout === null || this.closed) continue;
       const shown = panes.find((h) => h.pane === view.shownBy.get(session));
       const rows = shown?.frame?.rows.slice(0, MAX_STATUS_ROWS - layout.prior.base) ?? [];
       await this.draw(socket, session, layout, rows);
