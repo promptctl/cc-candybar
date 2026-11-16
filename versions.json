@@ -4,15 +4,22 @@
     {
       "version": "pr-761",
       "ref": "refs/pull/761/merge",
-      "sha": "b07c5f4931066eebcdf312522ad2286d5f474985",
-      "timestamp": "2026-11-16T01:17:02.775Z",
+      "sha": "1044e46f5c0c80da42920f6de959251ef45d2029",
+      "timestamp": "2026-11-16T01:27:29.135Z",
       "commits": [
         {
-          "sha": "b07c5f4931066eebcdf312522ad2286d5f474985",
+          "sha": "1044e46f5c0c80da42920f6de959251ef45d2029",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T01:15:53Z",
-          "message": "Merge 3e0e5bae7d9e3c46da79b28948013edbe9bcc236 into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
+          "timestamp": "2026-11-16T01:26:32Z",
+          "message": "Merge 8b5a2cf82dd21b441fccbb9f5c9b75819bc693d2 into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
+        },
+        {
+          "sha": "8b5a2cf82dd21b441fccbb9f5c9b75819bc693d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T18:26:21-07:00",
+          "message": "test(e2e): a render that hits the daemon's 200ms guard is asked again until its reply budget runs out, not for five asks (candybar-host-renderer-x96a.xae)\n\nOn a loaded runner a cold daemon's first render waited behind a 685-870ms\nconfig load, longer than five 200ms guards, so the build-currency e2e cases\nfailed though the daemon answered. Each ask waits on the daemon's own\nanswer; the budget is a backstop for a daemon that never answers.\n"
         },
         {
           "sha": "3e0e5bae7d9e3c46da79b28948013edbe9bcc236",
