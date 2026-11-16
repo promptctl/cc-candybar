@@ -25,10 +25,11 @@
 // one server's calls run one at a time, in the order the reconcile decides
 // them. The daemon's shutdown restores through the same calls, after the ones
 // in flight have landed, inside the 500 ms before it is SIGKILLed: a restore
-// is a call or two a session, as a reconcile is. A draw is the one write that
-// could not undo a restore that ran beside it — it runs under
-// `if-shell -F '#{@cc-candybar-status-prior}'`, which the restore removes —
-// but a lay-out write could, so the restore waits rather than races.
+// is a call or two a session, as a reconcile is. A tmux call outlives a daemon
+// that is killed, so a draw runs under
+// `if-shell -F '#{@cc-candybar-status-prior}'`, which a restore removes: the
+// last draw of a killed daemon lands on nothing once the next one has put its
+// session back.
 
 import type { SessionId } from "./foundations/session-id.js";
 import { LANES } from "../config/lanes.js";
@@ -633,19 +634,35 @@ export class TmuxStatusLines {
   }
 
   // [LAW:single-enforcer] The daemon's shutdown: everything it laid out put
-  // back. [LAW:no-ambient-temporal-coupling] Nothing new starts, and every
-  // tmux call already in flight lands first: a lay-out write is its own tmux
-  // client, which reaches the server whenever it does, so a restore that ran
-  // beside it could be laid out over again once the daemon is gone.
+  // back. [LAW:no-ambient-temporal-coupling] Nothing new starts, and each
+  // server's tmux call already in flight lands first: a lay-out write is its
+  // own tmux client, which reaches the server whenever it does, so a restore
+  // that ran beside it could be laid out over again once the daemon is gone.
+  // Each server is put back on its own, so one slow or failing server holds
+  // up no other.
   async close(): Promise<void> {
     this.closed = true;
     for (const held of this.held.values()) held.unsubscribe?.();
     this.held.clear();
-    await this.settled();
-    for (const [socket, server] of this.servers) {
+    await Promise.all(
+      [...this.servers].map(([socket, server]) =>
+        this.closeServer(socket, server),
+      ),
+    );
+  }
+
+  private async closeServer(socket: string, server: Server): Promise<void> {
+    try {
+      await server.running;
       for (const session of [...server.layouts.keys()])
         await this.restore(socket, server, session);
       await this.restoreBinding(socket, server);
+    } catch (error) {
+      // [LAW:no-silent-failure] As a reconcile's throw is: said, per server.
+      this.deps.log(
+        "warn",
+        `tmux-status: socket=${JSON.stringify(socket)} restore at close threw: ${String(error)}`,
+      );
     }
   }
 
@@ -782,7 +799,7 @@ export class TmuxStatusLines {
       }
       if (server.left.has(session)) continue;
       const layout = known ?? (await this.install(socket, server, session));
-      if (layout === null) continue;
+      if (layout === null || this.closed) continue;
       const shown = panes.find((h) => h.pane === view.shownBy.get(session));
       const rows =
         shown?.frame?.rows.slice(0, MAX_STATUS_ROWS - layout.prior.base) ?? [];

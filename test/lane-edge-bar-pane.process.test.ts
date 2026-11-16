@@ -12,8 +12,8 @@ import { productionLaneEdge } from "../src/daemon/lane-edge";
 import { type Launcher } from "../src/proc/launcher";
 import type { TmuxHint } from "../src/tmux-hint";
 import { systemTimekeeper } from "../src/time";
+import { HAS_TMUX } from "./helpers/private-tmux";
 
-const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
 
 (HAS_TMUX ? describe : describe.skip)("a bar pane on a real tmux", () => {
   let dir: string;

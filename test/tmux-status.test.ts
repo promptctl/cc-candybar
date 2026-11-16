@@ -330,7 +330,7 @@ describe("TmuxStatusLines", () => {
     expect(h.owner.linkAt(value).kind).toBe("refused");
   });
 
-  test("the daemon's shutdown puts back everything it laid out, at once", async () => {
+  test("the daemon's shutdown puts back everything it laid out", async () => {
     const h = harness(["$1", "$2"]);
     h.hold(S1, "%1");
     h.hold(S2, "%2");
@@ -344,21 +344,21 @@ describe("TmuxStatusLines", () => {
     expect(h.owner.stats()).toMatchObject({ sessions: 0, layouts: 0 });
   });
 
-  test("a draw still in flight when the daemon shuts down lands on nothing", async () => {
+  test("a draw that lands after its session was put back writes nothing", async () => {
     const h = harness();
     h.hold(S1, "%1");
     await h.answer({ "%1": "$1" }, { $1: "%1" });
     await h.frame(S1, frameOf("one"));
     let release = (): void => {};
     h.tmux.gate = new Promise((resolve) => (release = resolve));
-    // The draw's write is in tmux's hands when the shutdown restores.
+    // The draw's write is in tmux's hands — a killed daemon's last call — when
+    // the next daemon puts the session back.
     const drawing = h.frame(S1, frameOf("two\nthree"));
     await new Promise((resolve) => setImmediate(resolve));
-    const closing = h.owner.close();
+    h.tmux.sessions.set("$1", new Map());
     h.tmux.gate = null;
     release();
     await drawing;
-    await closing;
     expect([...session(h)]).toEqual([]);
   });
 

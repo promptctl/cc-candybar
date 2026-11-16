@@ -1,6 +1,5 @@
 // [LAW:behavior-not-structure] What a daemon laid out on a real tmux server is
-// put back when it shuts down: the at-exit handle's synchronous tmux calls
-// finish before the process does.
+// put back when it shuts down, before shutdown's backstop ends the process.
 
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
