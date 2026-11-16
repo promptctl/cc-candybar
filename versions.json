@@ -4,15 +4,22 @@
     {
       "version": "pr-773",
       "ref": "refs/pull/773/merge",
-      "sha": "b30f74c4700dca9ee96c5cc35ad30788cfa566e1",
-      "timestamp": "2026-11-16T20:43:11.484Z",
+      "sha": "7237fdb7f0f159d371f9626dcf79f22a1e592394",
+      "timestamp": "2026-11-16T20:46:22.439Z",
       "commits": [
         {
-          "sha": "b30f74c4700dca9ee96c5cc35ad30788cfa566e1",
+          "sha": "7237fdb7f0f159d371f9626dcf79f22a1e592394",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T13:42:18-07:00",
-          "message": "Merge 3089862b1fd757073819e7355882b06dd867fa22 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+          "timestamp": "2026-11-16T20:45:10Z",
+          "message": "Merge 1c8baf4044289ec31ea55ab84f3b8db50404f5ca into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+        },
+        {
+          "sha": "1c8baf4044289ec31ea55ab84f3b8db50404f5ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T13:44:58-07:00",
+          "message": "test(daemon): every wait in the fork-bomb ceiling test is named and bounded only against a hang\n\n- Each step (two boots, the refused daemon's exit, the killed worker's\n  death, the control's boot) waits through `until` with one bound that\n  catches a hang and claims nothing about speed. A stuck step fails by\n  name, and its rejection still runs the test's cleanup.\n- The reclaim waits until d2's socket stops answering, i.e. its worker is\n  gone, not just its tsx wrapper: the worker's registry entry holds the\n  slot.\n- The local exit helper is gone.\n"
         },
         {
           "sha": "3089862b1fd757073819e7355882b06dd867fa22",
