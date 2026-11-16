@@ -4,15 +4,22 @@
     {
       "version": "pr-760",
       "ref": "refs/pull/760/merge",
-      "sha": "9bd74a9dda41f8954c61cc905833be39b32d6ac8",
-      "timestamp": "2026-11-15T23:54:50.792Z",
+      "sha": "651fcabf12b14bcd2a5bdc6921827444b268fbae",
+      "timestamp": "2026-11-16T00:03:49.254Z",
       "commits": [
         {
-          "sha": "9bd74a9dda41f8954c61cc905833be39b32d6ac8",
+          "sha": "651fcabf12b14bcd2a5bdc6921827444b268fbae",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T23:53:50Z",
-          "message": "Merge 73856eae6eb8d3c042c659c241c771ab50e5bdab into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+          "timestamp": "2026-11-16T00:03:01Z",
+          "message": "Merge 62d2b3ca869e2afb4f82ce315954cd405a5619cb into d713171fe40d61af17150aa2f106f3e7104931cb\n"
+        },
+        {
+          "sha": "62d2b3ca869e2afb4f82ce315954cd405a5619cb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T17:02:49-07:00",
+          "message": "test(daemon-value): a timer left over after close is shown with the daemon's log (candybar-skeleton-wj0c.zhh)\n"
         },
         {
           "sha": "73856eae6eb8d3c042c659c241c771ab50e5bdab",
