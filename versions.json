@@ -4,39 +4,39 @@
     {
       "version": "pr-761",
       "ref": "refs/pull/761/merge",
-      "sha": "5bd73b16cabb52f96b74c73b0b934b6c65d86023",
-      "timestamp": "2026-11-16T01:11:01.232Z",
+      "sha": "b07c5f4931066eebcdf312522ad2286d5f474985",
+      "timestamp": "2026-11-16T01:17:02.775Z",
       "commits": [
         {
-          "sha": "5bd73b16cabb52f96b74c73b0b934b6c65d86023",
+          "sha": "b07c5f4931066eebcdf312522ad2286d5f474985",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T01:09:54Z",
-          "message": "Merge 9ad2e4d12d9dd0631041c35cf2e5b5d32523c49a into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
+          "timestamp": "2026-11-16T01:15:53Z",
+          "message": "Merge 3e0e5bae7d9e3c46da79b28948013edbe9bcc236 into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
         },
         {
-          "sha": "9ad2e4d12d9dd0631041c35cf2e5b5d32523c49a",
+          "sha": "3e0e5bae7d9e3c46da79b28948013edbe9bcc236",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T18:09:43-07:00",
           "message": "fix(collector): today is gated on the session lane again, the speed fact's new shape is version 3, and a teardown says which steps failed (candybar-host-renderer-x96a.xae)\n\nSecond high review of #761:\n- today goes back to main's gate: the session lane's failure is today's,\n  under the roots too, since the sums hold the session's last record; the\n  roots are judged by the record's own path, as the scan judges them. Judging\n  roots first by the hook's path let the two disagree and left stale totals.\n- FACTS_VERSION is 3: samples carry turnOpen and prev/cur are gone, so a\n  renderer built before reads another version, not a blank speed.\n- A speed read marks only the newest sample's stamp as sampled.\n- runTeardown answers the steps that threw; the demo fails its run on one.\n- The speed lane's pending and failed arms are tested again.\n"
         },
         {
-          "sha": "659b7c08882b897dd51e0b2e41a07e6949382fcc",
+          "sha": "9ec263f8c7368236b6ad015196a73d24c25073d5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T18:00:10-07:00",
           "message": "fix(collector): outside its directory's roots, a session lane that threw fails today (candybar-host-renderer-x96a.xae)\n"
         },
         {
-          "sha": "4c3c814c10f1599963022984c2363dc136420a22",
+          "sha": "aecd788d0b8fa08a5e7b3ccf9966c38577826c1a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T17:54:26-07:00",
           "message": "fix(collector): a response's usage counts once, an unknown stop ends a turn, and today waits on a session outside its directory (candybar-host-renderer-x96a.xae)\n\nHigh review of #761:\n- Claude Code writes each content block of one response as its own entry,\n  each repeating the usage, so a fold counted tokens and cost 2-4 times and\n  every tok/s rate with them. The fold counts a response once, at the first\n  entry of its run.\n- A turn goes on only at tool_use, pause_turn or a block still streaming;\n  any other stop ends it, model_context_window_exceeded and later ones too.\n- Turn state is the main transcript's fold alone, not an OR over sidechains.\n- Outside the directory set's roots, today fails with or waits on the\n  session's transcript entry, so a failed declaration no longer draws a\n  total silently missing the session's work.\n- The providers hand back named close steps, and one teardown runner serves\n  the daemon and the demo, logging each failure with its stack.\n- Comments that still called speed a draw projection are fixed.\n"
         },
         {
-          "sha": "8be4ca9902383f6244bfe5ab31b478760a426a6d",
+          "sha": "b3b867529562f9d189e2f8ba68c2e1425c726256",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T17:39:14-07:00",
