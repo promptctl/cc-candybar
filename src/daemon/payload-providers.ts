@@ -1,9 +1,9 @@
 // The data providers a view's payload reads, constructed once per process
 // that renders.
 //
-// [LAW:one-source-of-truth] The daemon and the demo render from the same set,
-// built here: a provider added to `RenderPayloadDeps` is constructed in this
-// one place, so every renderer has it and none restates the list.
+// [LAW:one-source-of-truth] A provider added to `RenderPayloadDeps` is
+// constructed in this one place, so the daemon and the tests that build its
+// providers get the same list and none restates it.
 //
 // [LAW:effects-at-boundaries] Construction arms one unref'd timer (the usage
 // sweep) and touches no disk — every owner's period starts only once a home

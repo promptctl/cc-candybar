@@ -24,8 +24,8 @@
 //       hand (Theme/Endcaps picker sections below).
 //     • steppers ({set,min,max,by}) and cyclers ({set,cycle}) as bare {{ action }}.
 //
-// Render it with the demo (which takes the config path as its argument):
-//   pnpm demo examples/demo-actions.json5
+// Render it once, from its path:
+//   cc-candybar check --render examples/demo-actions.json5
 //
 // What to try:
 //   Click "▸ theme"  → open the theme picker; click any theme to apply.

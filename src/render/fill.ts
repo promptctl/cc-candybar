@@ -158,7 +158,7 @@ export function fitRow(
  *
  * Leaves every cell content-sized when nothing demanded fill — the common path,
  * which pays one scan — and when the width is not finite, because "the rest of the row"
- * means nothing against an unbounded row (the check command renders at
+ * means nothing against an unbounded row (the measuring draw above runs at
  * Infinity, and a content-sized cell is the honest answer there).
  *
  * [LAW:no-ambient-temporal-coupling] The width the row already occupies is

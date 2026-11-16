@@ -18,13 +18,13 @@ export function quickActions(prefix: string): {
 } {
   const name = (action: QuickAction) => `${prefix}${action}`;
   return {
-    // [LAW:dataflow-not-control-flow] `⎘ resume`, `↗ repo` and `↗ config`
-    // are gated on their values: a payload the daemon did not build
-    // carries no resume command, a local-only repo no page, and a bar
-    // on the bundled default no file, and the glyph is absent.
+    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
+    // their values: a local-only repo has no page and a bar on the bundled
+    // default no file, and the glyph is absent. Every payload carries a
+    // resume command, so `⎘ resume` is not gated.
     template:
       `{{ action "${name("copySession")}" "⎘ id" }}` +
-      `{{ if ne .resume_command "" }} {{ action "${name("copyResume")}" "⎘ resume" }}{{ end }}` +
+      ` {{ action "${name("copyResume")}" "⎘ resume" }}` +
       ` {{ action "${name("openProject")}" "↗ proj" }}` +
       ` {{ action "${name("openTranscript")}" "↗ log" }}` +
       '{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "↗ repo" }}{{ end }}' +

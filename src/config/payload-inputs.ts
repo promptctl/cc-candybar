@@ -81,7 +81,8 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
   },
   // The session's resume command and the config file it renders from
   // (RenderPayload.resumeCommand / .configPath), read by the quick-action
-  // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
+  // tray's `⎘ resume` and `↗ config`; a config path of "" is "none", which
+  // hides `↗ config`.
   resume_command: { kind: "input", path: "resumeCommand", default: "" },
   config_path: { kind: "input", path: "configPath", default: "" },
   // [LAW:one-source-of-truth] The value every setting and config-only global

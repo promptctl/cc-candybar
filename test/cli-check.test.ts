@@ -509,13 +509,14 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
-  // brandon-menu-ia-q30.ge5 review: the toolbar's `⎘ resume` and `↗ config`
-  // are gated on their values, so check's fixture supplies both and a broken
-  // override of either action is caught rather than hidden behind its gate.
+  // brandon-menu-ia-q30.ge5 review: the toolbar's `↗ config` is gated on its
+  // value, so check's fixture supplies a config path and a broken override of
+  // its action is caught rather than hidden behind the gate; `⎘ resume`'s is
+  // always drawn.
   it.each([
     ["copyResume", "{ copy: '{{ .resume_cmd }}' }"],
     ["openConfig", "{ open: '{{ .config_file }}' }"],
-  ])("catches a broken %s behind its value gate", async (action, decl) => {
+  ])("catches a broken %s in the toolbar", async (action, decl) => {
     const p = write(
       `broken-${action}.json5`,
       `{

@@ -46,9 +46,9 @@
 // `background`: this segment sits on `surface-active`, so blending toward
 // `background` would mute toward a colour that is not actually behind it.
 //
-// Try it (static demo, no click state needed — this example has no
+// Try it (one static render, no click state needed — this example has no
 // interactive elements):
-//   pnpm demo examples/multi-color-git.json5
+//   cc-candybar check --render examples/multi-color-git.json5
 // or point a real config at it:
 //   cp examples/multi-color-git.json5 ~/.config/cc-candybar/config.json5
 //

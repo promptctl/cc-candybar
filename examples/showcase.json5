@@ -7,7 +7,7 @@
 // by default, depth on click.
 //
 // Try it (real path — this bar is interactive, so it needs a running daemon,
-// not the static `pnpm demo`, which has no SessionState to resolve state vars):
+// not a static `cc-candybar check --render`, which takes no clicks):
 //   cp examples/showcase.json5 ~/.config/cc-candybar/config.json5
 // then click around in any Claude Code session's status line.
 //
