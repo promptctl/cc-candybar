@@ -72517,7 +72517,7 @@ var distributionOf = (h) => {
   const ms = (v) => v.toFixed(2);
   return d.count === 0 ? "-" : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
 };
-var histogramsOf = (feed2, state) => state === "running" ? "" : ` drawHistogram=${encodedOf(feed2.drawTime)} heldHistogram=${encodedOf(feed2.held)} latenessHistogram=${encodedOf(feed2.lateness)}`;
+var histogramsOf = (feed2, state) => state === "running" ? "" : ` drawHistogram=${encodedOf(feed2.drawTime)} latenessHistogram=${encodedOf(feed2.lateness)}`;
 var SUMMARY_EVERY_MS = 6e4;
 var MAX_REQUESTS = 256;
 function wokenWhileOut(feed2) {
@@ -72721,7 +72721,6 @@ var FrameFeeds = class {
       faulted: 0,
       pushed: 0,
       drawTime: durationHistogram(),
-      held: durationHistogram(),
       lateness: durationHistogram(),
       evaluated: 0,
       cellBreaks: 0,
@@ -72773,11 +72772,7 @@ var FrameFeeds = class {
   // measured from.
   async draw(feed2, due, dueMoment) {
     feed2.phase = { kind: "drawing", woken: false };
-    const holdFrom = this.deps.clock.monotonic();
-    await this.deps.eventsSettled();
-    if (this.feeds.get(feed2.sessionId) !== feed2) return;
     const started2 = this.deps.clock.monotonic();
-    recordMs(feed2.held, started2 - holdFrom);
     const wall = this.deps.instant();
     const at = Math.min(
       Math.max(due, wall),
@@ -73008,7 +73003,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} faulted=${feed2.faulted} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed2.drawTime)} held=${distributionOf(feed2.held)} lateness=${distributionOf(feed2.lateness)}${histogramsOf(feed2, state)}`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} faulted=${feed2.faulted} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed2.drawTime)} lateness=${distributionOf(feed2.lateness)}${histogramsOf(feed2, state)}`
     );
     feed2.summarizedAt = now2;
   }
@@ -74557,14 +74552,10 @@ var LaneSetups = class {
 // src/daemon/renderer-host.ts
 init_globals();
 function rendererHost(name, clock, renderer, log, collector) {
-  let eventTurns = 0;
-  let settledWaiters = [];
-  const eventsSettled = () => eventTurns === 0 ? Promise.resolve() : new Promise((resolve) => settledWaiters.push(resolve));
   const held = async (input) => {
     const session = sessionOf(input.event);
     const release4 = session === null ? () => {
     } : collector.holding(session);
-    eventTurns++;
     try {
       const sentAt = clock.monotonic();
       const { subscriptions, turnMs, ...answered } = await renderer.answer(input);
@@ -74576,12 +74567,6 @@ function rendererHost(name, clock, renderer, log, collector) {
       return output;
     } finally {
       release4();
-      eventTurns--;
-      if (eventTurns === 0) {
-        const settled3 = settledWaiters;
-        settledWaiters = [];
-        for (const resolve of settled3) resolve();
-      }
     }
   };
   const turn = (input) => held(input).catch(
@@ -74655,7 +74640,7 @@ function rendererHost(name, clock, renderer, log, collector) {
     const failure = failureOf(thrown2);
     if (failure.kind !== "down") log("error", failure.detail);
   });
-  return { name, answer: turn, deliver, ask, tell, eventsSettled };
+  return { name, answer: turn, deliver, ask, tell };
 }
 function sessionOf(event) {
   switch (event.kind) {
@@ -92222,7 +92207,6 @@ function createDaemon(inputs) {
       );
       return frame2 === null ? null : { ...frame2, bar: parseFrame(frame2.bar) };
     },
-    eventsSettled: () => parts.renderer.eventsSettled(),
     lanes: async (sessionId2) => (await parts.renderer.ask(
       { kind: "lanes", session: sessionId2 },
       instant()

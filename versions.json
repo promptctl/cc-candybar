@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-765",
-      "ref": "refs/pull/765/merge",
-      "sha": "b74d1a51b2e66976af61ea39729bc403f8387842",
-      "timestamp": "2026-11-16T04:57:36.618Z",
+      "version": "pr-766",
+      "ref": "refs/pull/766/merge",
+      "sha": "3557945eded31f7e67fa5cc6ba3868d5178dacef",
+      "timestamp": "2026-11-16T05:10:50.914Z",
       "commits": [
         {
-          "sha": "b74d1a51b2e66976af61ea39729bc403f8387842",
+          "sha": "3557945eded31f7e67fa5cc6ba3868d5178dacef",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:56:35-07:00",
-          "message": "Merge b2e5ad89c692668bd4f892a43807f14d535e4454 into de3c13c9486c8ef1f1e628f961ce4877c1199dd8\n"
+          "timestamp": "2026-11-15T22:09:56-07:00",
+          "message": "Merge 0be5fbe6ba99c4b42b0dffca3f443321125f7467 into de3c13c9486c8ef1f1e628f961ce4877c1199dd8\n"
         },
         {
-          "sha": "b2e5ad89c692668bd4f892a43807f14d535e4454",
+          "sha": "0be5fbe6ba99c4b42b0dffca3f443321125f7467",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:56:24-07:00",
-          "message": "fix(frames): a feed's frame waits for every event turn out to the renderer (candybar-host-renderer-x96a.cwq)\n\nA statusline request crosses to the renderer twice and the renderer is one\nloop, so at 60 fps each crossing could land behind frames asked after it.\nThe host's path to the renderer now says when no event turn is out, a feed\nasks for its frame only then, and the feed summary says how long each frame\nwas held.\n"
+          "timestamp": "2026-11-15T22:09:38-07:00",
+          "message": "fix(renderer): a frame push draws on a turn of its own, after the events heard with it (candybar-host-renderer-x96a.cwq)\n\nThe renderer is one thread, and a stdin chunk's lines are heard in one\nsynchronous loop, so a frame drawn as it is heard went ahead of every\nrequest heard with it or after it, and of the request's continuations.\nThe renderer's input reader now starts every event as it is heard and\ndraws each frame push on an event-loop turn of its own, after the frame\nbefore it, so a request waits behind at most the frame drawing as it\narrives.\n"
         }
       ]
     },
