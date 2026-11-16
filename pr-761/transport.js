@@ -31200,11 +31200,12 @@ var SessionUsageStore = class {
       return record2;
     });
   }
-  // The `today` projection, which declareToday and daysOutside below answer
-  // together: the cross-session sum of every record's today bucket.
-  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
-  // makes the whole projection `failed` — a total silently missing today's
-  // main work would be a confident wrong number, worse than a loud gap.
+  // What the `today` fact (todayReading, src/daemon/readings.ts) reads here:
+  // a directory set's sums of every record's day buckets (declareToday), and
+  // a session's own days (daysOf) when no set sums its transcript.
+  // [LAW:no-silent-failure] A failed scan fails the set's sums — a total
+  // silently missing a session's work would be a confident wrong number,
+  // worse than a loud gap.
   //
   // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
   // the sum is that session plus every session whose transcript lives in THAT
@@ -32755,8 +32756,8 @@ function readingsOf(inputs, lanes) {
   };
   return {
     lanes: laneReadings,
-    // The session's own days gate today only where the directory set does not
-    // already sum them, so no transcript lane fault gates it.
+    // The session's lane gates today only where the directory set does not
+    // already sum the session's days (todayReading).
     today: guarded(
       "today",
       () => todayReading(
@@ -32764,7 +32765,9 @@ function readingsOf(inputs, lanes) {
         deps.usageStore,
         sessionId2,
         inputs.hookData.transcript_path,
-        entry
+        // The session lane as a lane read sees it: the entry's failure, then
+        // its refresh's fault, then the entry.
+        read2("session", () => entry)
       )
     ),
     faults: REFRESH_LANES.flatMap((lane) => {

@@ -4,15 +4,22 @@
     {
       "version": "pr-761",
       "ref": "refs/pull/761/merge",
-      "sha": "1a7f50834080eba11e16520734a3413bafbed628",
-      "timestamp": "2026-11-16T00:55:33.651Z",
+      "sha": "974203ce2d1818b4a751272738e4ef29da0d01ea",
+      "timestamp": "2026-11-16T01:01:24.521Z",
       "commits": [
         {
-          "sha": "1a7f50834080eba11e16520734a3413bafbed628",
+          "sha": "974203ce2d1818b4a751272738e4ef29da0d01ea",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T00:54:36Z",
-          "message": "Merge 4c3c814c10f1599963022984c2363dc136420a22 into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
+          "timestamp": "2026-11-16T01:00:21Z",
+          "message": "Merge 659b7c08882b897dd51e0b2e41a07e6949382fcc into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
+        },
+        {
+          "sha": "659b7c08882b897dd51e0b2e41a07e6949382fcc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T18:00:10-07:00",
+          "message": "fix(collector): outside its directory's roots, a session lane that threw fails today (candybar-host-renderer-x96a.xae)\n"
         },
         {
           "sha": "4c3c814c10f1599963022984c2363dc136420a22",
