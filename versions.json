@@ -4,15 +4,22 @@
     {
       "version": "pr-774",
       "ref": "refs/pull/774/merge",
-      "sha": "c6556ea0ad3c33250aefa86636563229ed4377ee",
-      "timestamp": "2026-11-16T20:58:36.883Z",
+      "sha": "393060e28fd199672485b4fe11e5c420f511927f",
+      "timestamp": "2026-11-16T21:03:03.153Z",
       "commits": [
         {
-          "sha": "c6556ea0ad3c33250aefa86636563229ed4377ee",
+          "sha": "393060e28fd199672485b4fe11e5c420f511927f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T20:57:36Z",
-          "message": "Merge 5b52376ad15cfa36808e4bc5ab7d2872d75ac8c4 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+          "timestamp": "2026-11-16T21:02:01Z",
+          "message": "Merge 09bdb020da3708ec90772d79b62a1b5a2563ead4 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+        },
+        {
+          "sha": "09bdb020da3708ec90772d79b62a1b5a2563ead4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T14:01:48-07:00",
+          "message": "test(daemon): the fork-bomb test's timeout covers its four boots, and d3's own environment is the control\n\n- The test's timeout is four of the helper's readiness budgets and the\n  reap's wait, so a hung step fails by the helper's diagnosis, and a boot\n  in flight is the helper's to kill, before jest's timeout.\n- d1 is asserted to be the registry's one entry; d4 boots on d3's\n  environment; the registry after the sweep holds d1 and d4 by identity.\n- A daemon killed mid-test leaves the teardown's list.\n"
         },
         {
           "sha": "5b52376ad15cfa36808e4bc5ab7d2872d75ac8c4",
