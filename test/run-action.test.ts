@@ -260,10 +260,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   cleanups.push(() => {
     runs.close();
     cache.close();
-    providers.gitProvider.close();
-    providers.usageStore.close();
-    providers.tmuxService.close();
-    providers.managedStorage.close();
+    providers.close();
     watchers.closeAll();
   });
   return {

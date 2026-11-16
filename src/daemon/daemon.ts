@@ -415,14 +415,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     ledger: refreshLedger,
     sourceRuns,
   });
-  const {
-    gitProvider: gitService,
-    usageStore,
-    tmuxService,
-    hostService,
-    managedStorage,
-    transcriptLanes,
-  } = payloadProviders;
+  const { managedStorage } = payloadProviders;
   // [LAW:single-enforcer] Each session's idle clock and the timer that closes
   // its menus (src/daemon/menu-idle.ts): a click restarts the clock, and the
   // close is a `menu-idle` turn of the renderer, the journaled write a ✕ makes,
@@ -901,16 +894,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
         ["renderer views close", rendererStep("close-views")],
-        ["gitService close", () => gitService.close()],
-        ["transcriptLanes close", () => transcriptLanes.close()],
-        ["usageStore close", () => usageStore.close()],
-        ["tmuxService close", () => tmuxService.close()],
-        ["hostService close", () => hostService.close()],
+        ["payloadProviders close", () => payloadProviders.close()],
         ["runs close", () => runs.close()],
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
-        ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.

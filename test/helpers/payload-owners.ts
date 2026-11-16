@@ -443,13 +443,19 @@ function openHome(
   });
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken
   // fixture, failed here with its stack, as the daemon logs it as an error.
-  if (faults.length > 0) {
+  // The home ends what it built: its holds, and the trigger whose period a
+  // hold arms.
+  const close = (): void => {
     holds.close();
+    keyed.transcriptLanes.close();
+  };
+  if (faults.length > 0) {
+    close();
     throw new Error(`a lane's declaration threw:\n${faults.join("\n")}`);
   }
   return {
     lanes: () => lanes,
-    [Symbol.dispose]: () => void holds.close(),
+    [Symbol.dispose]: close,
   };
 }
 

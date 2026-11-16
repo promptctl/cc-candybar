@@ -262,10 +262,9 @@ function rig(): Rig {
   served.serve(cache);
   cleanups.push(() => {
     cache.close();
-    providers.gitProvider.close();
-    providers.usageStore.close();
-    providers.tmuxService.close();
-    providers.managedStorage.close();
+    // The watch-less trigger built over them, then every provider's own.
+    providers.transcriptLanes.close();
+    providers.close();
     watchers.closeAll();
   });
   return {

@@ -52,7 +52,7 @@ export function createPayloadProviders(opts: {
   // The caller's one owner of every `shell` and `file` run, whose stats and
   // close are the caller's.
   readonly sourceRuns: SourceRuns;
-}): RenderPayloadDeps {
+}): RenderPayloadDeps & { close(): void } {
   const { launcher, clock, logger, ledger } = opts;
   // [LAW:one-source-of-truth] The owners the transcript lanes refresh are the
   // ones the payload reads.
@@ -70,9 +70,7 @@ export function createPayloadProviders(opts: {
     cacheExpiry: new CacheExpiryProvider(clock, logger, ledger),
     faults: new RefreshFaults(),
   } satisfies LaneOwners;
-  return {
-    ...lanes,
-    home: opts.host.home,
+  const owners = {
     hostService: new HostService({ clock, logger, ledger }),
     gitProvider: new GitDataProvider({
       inner: new GitService(launcher),
@@ -96,7 +94,24 @@ export function createPayloadProviders(opts: {
       logger,
       ledger,
     }),
+  };
+  return {
+    ...lanes,
+    ...owners,
+    home: opts.host.home,
     sourceRuns: opts.sourceRuns,
     log: opts.logger,
+    // [LAW:single-enforcer] The one close of every owner built here: a held
+    // entry's period re-arms after every read, so an owner a caller forgets
+    // keeps its timers for good. The transcript lanes go before the usage
+    // store their reads fill.
+    close: () => {
+      owners.gitProvider.close();
+      owners.transcriptLanes.close();
+      lanes.usageStore.close();
+      owners.tmuxService.close();
+      owners.hostService.close();
+      owners.managedStorage.close();
+    },
   };
 }

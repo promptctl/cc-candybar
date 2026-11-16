@@ -139,8 +139,9 @@ function collectorOver(
   const clock: HeldClock = heldClock(new Date(1_700_000_000_000));
   const handedIn: HandedIn[] = [];
   const logged: string[] = [];
+  const laned = withTranscriptLanes(owners, clock);
   const collector = new Collector({
-    owners: withTranscriptLanes(owners, clock),
+    owners: laned,
     daemon: () => daemonFactsOf(update()),
     clock,
     watched: (session) => watched.has(session),
@@ -150,7 +151,10 @@ function collectorOver(
     },
     log: (level, message) => logged.push(`${level} ${message}`),
   });
-  cleanups.push(() => collector.close());
+  cleanups.push(() => {
+    collector.close();
+    laned.transcriptLanes.close();
+  });
   return { collector, clock, handedIn, logged };
 }
 
@@ -733,8 +737,13 @@ test("a run whose declaration throws answers its failure, and every other run an
     });
   const broken = runAt("broken");
   const fine = runAt("fine");
+  const laned = withTranscriptLanes(absentOwners());
+  cleanups.push(() => {
+    holds.close();
+    laned.transcriptLanes.close();
+  });
   const owners = {
-    ...withTranscriptLanes(absentOwners()),
+    ...laned,
     sourceRuns: {
       declare: (_: Holds, run: Judged) => {
         if (run.digest === broken.digest) throw new Error("watch bug");

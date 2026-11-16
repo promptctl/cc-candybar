@@ -187,6 +187,7 @@ export function sessionRig(
   served.serve(cache);
   cleanups.push(() => {
     cache.close();
+    providers.transcriptLanes.close();
     watchers.closeAll();
   });
   return { cache, sessionState, providers, served };
