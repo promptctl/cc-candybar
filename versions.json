@@ -2,45 +2,31 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-769",
-      "ref": "refs/pull/769/merge",
-      "sha": "16809eb54601b9a7887cf6744a8356222697deac",
-      "timestamp": "2026-11-16T15:34:43.880Z",
+      "version": "pr-770",
+      "ref": "refs/pull/770/merge",
+      "sha": "3c701a9431de94cca8df62a45597076c37daa060",
+      "timestamp": "2026-11-16T16:30:37.069Z",
       "commits": [
         {
-          "sha": "16809eb54601b9a7887cf6744a8356222697deac",
+          "sha": "3c701a9431de94cca8df62a45597076c37daa060",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T08:33:41-07:00",
-          "message": "Merge aa885c7fd4abfaf9142a8def398daa0cc1accd76 into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
+          "timestamp": "2026-11-16T09:29:22-07:00",
+          "message": "Merge 9408579a05e0c70d7dcf16953fbb774ef014062f into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
         },
         {
-          "sha": "aa885c7fd4abfaf9142a8def398daa0cc1accd76",
+          "sha": "9408579a05e0c70d7dcf16953fbb774ef014062f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T08:33:15-07:00",
-          "message": "feat(click): a click's config writes are changes its turn returns, which the host performs, and the next click waits for them to land (candybar-host-renderer-x96a.axx)\n\nThe renderer no longer writes a config file. A writer reads the file as the\nclick's own changes on their way leave it, and lands its write as a change at\nsettings, each carrying what it read; the host performs every turn's changes\nin answer order, thrown turns included, refusing a change whose setting moved,\nand settles each with an effect-done. A journal turn opens only once the\nchanges ahead of it have landed. The landing's turn reloads the clicking\nsession and sets up any lane its reload moved; a change that did not land is\nheld on the session's warning, and the session's history stops stepping the\nfile, so undo brings back what the click released.\n\nA change to or from a file that does not parse replaces it whole, guarded by\nits bytes. Spec section 7 states the change's shape and how the renderer\nstands in for discovery until the config chain is handed in.\n"
+          "timestamp": "2026-11-16T09:29:02-07:00",
+          "message": "feat(click): a click's config writes are changes the host lands whole, so a refused one changes nothing (candybar-host-renderer-x96a.axx)\n\nThe renderer no longer writes a config file. A click's writes leave its\nturn as `change` effects, one per file, each naming the settings it\ntouches and the JSON5 value it read there. The host performs a turn's\nchanges together or not at all, checking each setting against what was\nread, so a hand edit elsewhere in the file never refuses a click and one\nto the same setting always does.\n\nWhat else a click did (the picks a save releases, its history step) is\nits consequence: applied in the turn its changes land, after the clicking\nsession reloads, or dropped when they don't, with the reason on the ⚠.\nA change refused because a setting moved also makes the session's history\nforget that file; a write that fails for I/O keeps the step. A journal\nturn opens only once the changes ahead of it have landed.\n"
         },
         {
-          "sha": "1ae5587ef9e6f61b2974791270c3c54b9af8de32",
+          "sha": "f3244fc18ca4df8809d1cf272d8c0679eab5cbf0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T07:57:17-07:00",
-          "message": "feat(config): a config write is a list of changes at settings, each carrying what it read, and applying them refuses a setting that moved (candybar-host-renderer-x96a.axx)\n"
-        },
-        {
-          "sha": "a1b0de76bdca663e59a8c4869f729a33bef6bd76",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T07:55:33-07:00",
-          "message": "docs(click): no comment names load-config or toolbar-toggle, which are gone (candybar-host-renderer-x96a.axx)\n"
-        },
-        {
-          "sha": "dc2218ae51696e75004684ecf08e811b62bdf50f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T22:46:13-07:00",
-          "message": "refactor(click): load-config and toolbar-toggle are deleted, so a session's config is only what its client named (candybar-host-renderer-x96a.axx)\n\nNo draw emits either verb. A load-config pick stored an absolute path in\nsession state and let a click redirect which file a session reads and\nwrites, so the renderer's home and the file the host will write could\ndisagree. With the pick gone, no click moves a session's origin, and the\nrender cache's follow, the views port and the pick's config-target source\ngo with it. A session uses another file through --config or\nCC_CANDYBAR_CONFIG.\n"
+          "timestamp": "2026-11-16T09:08:27-07:00",
+          "message": "refactor(click): load-config and toolbar-toggle are deleted, so a session's config is only what its client named (candybar-host-renderer-x96a.axx)\n"
         }
       ]
     },

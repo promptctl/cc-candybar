@@ -2759,8 +2759,8 @@ var require_errors = __commonJS({
       }
     };
     var ERR_PARSE_ARGS_INVALID_OPTION_VALUE = class extends Error {
-      constructor(message) {
-        super(message);
+      constructor(message2) {
+        super(message2);
         this.code = "ERR_PARSE_ARGS_INVALID_OPTION_VALUE";
       }
     };
@@ -2814,7 +2814,7 @@ var require_validators = __commonJS({
         throw new ERR_INVALID_ARG_TYPE(name, `('${ArrayPrototypeJoin(union, "|")}')`, value);
       }
     }
-    function validateBoolean2(value, name) {
+    function validateBoolean(value, name) {
       if (typeof value !== "boolean") {
         throw new ERR_INVALID_ARG_TYPE(name, "Boolean", value);
       }
@@ -2833,7 +2833,7 @@ var require_validators = __commonJS({
     function validateBooleanArray(value, name) {
       validateArray(value, name);
       for (let i2 = 0; i2 < value.length; i2++) {
-        validateBoolean2(value[i2], `${name}[${i2}]`);
+        validateBoolean(value[i2], `${name}[${i2}]`);
       }
     }
     function validateObject(value, name, options) {
@@ -2851,7 +2851,7 @@ var require_validators = __commonJS({
       validateString,
       validateStringArray,
       validateUnion,
-      validateBoolean: validateBoolean2,
+      validateBoolean,
       validateBooleanArray
     };
   }
@@ -2981,7 +2981,7 @@ var require_parseargs = __commonJS({
     } = require_primordials();
     var {
       validateArray,
-      validateBoolean: validateBoolean2,
+      validateBoolean,
       validateBooleanArray,
       validateObject,
       validateString,
@@ -3195,9 +3195,9 @@ To specify an option argument starting with a dash use ${example}.`;
       const options = objectGetOwn(config2, "options") ?? { __proto__: null };
       const parseConfig = { args, strict, options, allowPositionals };
       validateArray(args, "args");
-      validateBoolean2(strict, "strict");
-      validateBoolean2(allowPositionals, "allowPositionals");
-      validateBoolean2(returnTokens, "tokens");
+      validateBoolean(strict, "strict");
+      validateBoolean(allowPositionals, "allowPositionals");
+      validateBoolean(returnTokens, "tokens");
       validateObject(options, "options");
       ArrayPrototypeForEach(
         ObjectEntries(options),
@@ -3218,7 +3218,7 @@ To specify an option argument starting with a dash use ${example}.`;
           }
           const multipleOption = objectGetOwn(optionConfig, "multiple");
           if (ObjectHasOwn(optionConfig, "multiple")) {
-            validateBoolean2(multipleOption, `options.${longOption}.multiple`);
+            validateBoolean(multipleOption, `options.${longOption}.multiple`);
           }
           const defaultValue = objectGetOwn(optionConfig, "default");
           if (defaultValue !== void 0) {
@@ -3228,7 +3228,7 @@ To specify an option argument starting with a dash use ${example}.`;
                 validator = multipleOption ? validateStringArray : validateString;
                 break;
               case "boolean":
-                validator = multipleOption ? validateBooleanArray : validateBoolean2;
+                validator = multipleOption ? validateBooleanArray : validateBoolean;
                 break;
             }
             validator(defaultValue, `options.${longOption}.default`);
@@ -3767,8 +3767,8 @@ var init_tslib_es6 = __esm({
       };
       return ownKeys(o);
     };
-    _SuppressedError = typeof SuppressedError === "function" ? SuppressedError : function(error, suppressed, message) {
-      var e = new Error(message);
+    _SuppressedError = typeof SuppressedError === "function" ? SuppressedError : function(error, suppressed, message2) {
+      var e = new Error(message2);
       return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
     };
     tslib_es6_default = {
@@ -4146,7 +4146,7 @@ var require_path_browserify = __commonJS({
         }
         return _format("/", pathObject);
       },
-      parse: function parse3(path43) {
+      parse: function parse4(path43) {
         assertPath(path43);
         var ret = { root: "", dir: "", base: "", ext: "", name: "" };
         if (path43.length === 0) return ret;
@@ -5245,9 +5245,9 @@ var require_argErrors = __commonJS({
     };
     exports2.invalidArgValue = invalidArgValue;
     var outOfRange = (name, range, value, native2) => {
-      const message = 'The value of "' + name + '" is out of range. It must be ' + range + ". Received ";
+      const message2 = 'The value of "' + name + '" is out of range. It must be ' + range + ". Received ";
       if (native2)
-        return (0, exports2.withNativeCode)(new RangeError(message + String(value)), "ERR_OUT_OF_RANGE");
+        return (0, exports2.withNativeCode)(new RangeError(message2 + String(value)), "ERR_OUT_OF_RANGE");
       let received;
       if (Number.isInteger(value) && Math.abs(value) > TWO_POW_322)
         received = (0, inspectPrimitive_1.addNumericalSeparator)("" + value);
@@ -5258,7 +5258,7 @@ var require_argErrors = __commonJS({
         received += "n";
       } else
         received = (0, inspect_1.inspect)(value);
-      return (0, exports2.withCode)(new RangeError(message + received), "ERR_OUT_OF_RANGE");
+      return (0, exports2.withCode)(new RangeError(message2 + received), "ERR_OUT_OF_RANGE");
     };
     exports2.outOfRange = outOfRange;
     var invalidThis = (type3) => (0, exports2.withCode)(new TypeError('Value of "this" must be of type ' + type3), "ERR_INVALID_THIS");
@@ -6025,8 +6025,8 @@ var require_process = __commonJS({
       if (!p2.cwd)
         p2.cwd = () => "/";
       if (!p2.emitWarning)
-        p2.emitWarning = (message, type3) => {
-          console.warn(`${type3}${type3 ? ": " : ""}${message}`);
+        p2.emitWarning = (message2, type3) => {
+          console.warn(`${type3}${type3 ? ": " : ""}${message2}`);
         };
       if (!p2.env)
         p2.env = {};
@@ -6551,11 +6551,11 @@ var require_validators2 = __commonJS({
         throw (0, argErrors_1.invalidArgType)(name, "of type string", value);
     };
     exports2.validateString = validateString;
-    var validateBoolean2 = (value, name) => {
+    var validateBoolean = (value, name) => {
       if (typeof value !== "boolean")
         throw (0, argErrors_1.invalidArgType)(name, "of type boolean", value);
     };
-    exports2.validateBoolean = validateBoolean2;
+    exports2.validateBoolean = validateBoolean;
     var validateFunction = (value, name) => {
       if (typeof value !== "function")
         throw (0, argErrors_1.invalidArgType)(name, "of type function", value);
@@ -6749,12 +6749,12 @@ var require_SystemError = __commonJS({
       constructor(code2, prefix, info) {
         const path43 = info.path;
         const dest = info.dest;
-        let message = prefix + ": " + info.syscall + " returned " + info.code + " (" + info.message + ")";
+        let message2 = prefix + ": " + info.syscall + " returned " + info.code + " (" + info.message + ")";
         if (path43 !== void 0)
-          message += " " + path43;
+          message2 += " " + path43;
         if (dest !== void 0)
-          message += " => " + dest;
-        super(message);
+          message2 += " => " + dest;
+        super(message2);
         this.code = code2;
         this.info = info;
         this.errno = info.errno;
@@ -6812,12 +6812,12 @@ var require_errors2 = __commonJS({
       ENOTSUP: [-95, "operation not supported on socket"]
     };
     var formatMessage = (code2, uv, syscall2, path43, dest) => {
-      let message = code2 + ": " + (uv ? uv[1] : "unknown error") + ", " + syscall2;
+      let message2 = code2 + ": " + (uv ? uv[1] : "unknown error") + ", " + syscall2;
       if (path43)
-        message += " '" + path43 + "'";
+        message2 += " '" + path43 + "'";
       if (dest)
-        message += " -> '" + dest + "'";
-      return message;
+        message2 += " -> '" + dest + "'";
+      return message2;
     };
     var createError = (code2, syscall2 = "", path43 = "", dest = "", Constructor = Error) => {
       const uv = UV[code2];
@@ -8991,12 +8991,12 @@ var require_primordials2 = __commonJS({
         if (!Array.isArray(errors2)) {
           throw new TypeError(`Expected input to be an Array, got ${typeof errors2}`);
         }
-        let message = "";
+        let message2 = "";
         for (let i2 = 0; i2 < errors2.length; i2++) {
-          message += `    ${errors2[i2].stack}
+          message2 += `    ${errors2[i2].stack}
 `;
         }
-        super(message);
+        super(message2);
         this.name = "AggregateError";
         this.errors = errors2;
       }
@@ -9179,9 +9179,9 @@ var require_errors3 = __commonJS({
     var classRegExp = /^([A-Z][a-z0-9]*)+$/;
     var nodeInternalPrefix = "__node_internal_";
     var codes = {};
-    function assert(value, message) {
+    function assert(value, message2) {
       if (!value) {
-        throw new codes.ERR_INTERNAL_ASSERTION(message);
+        throw new codes.ERR_INTERNAL_ASSERTION(message2);
       }
     }
     function addNumericalSeparator(val) {
@@ -9212,13 +9212,13 @@ var require_errors3 = __commonJS({
       }
       return format(msg, ...args);
     }
-    function E(code2, message, Base) {
+    function E(code2, message2, Base) {
       if (!Base) {
         Base = Error;
       }
       class NodeError extends Base {
         constructor(...args) {
-          super(getMessage(code2, message, args));
+          super(getMessage(code2, message2, args));
         }
         toString() {
           return `${this.name} [${code2}]: ${this.message}`;
@@ -9264,11 +9264,11 @@ var require_errors3 = __commonJS({
       return innerError || outerError;
     }
     var AbortError = class extends Error {
-      constructor(message = "The operation was aborted", options = void 0) {
+      constructor(message2 = "The operation was aborted", options = void 0) {
         if (options !== void 0 && typeof options !== "object") {
           throw new codes.ERR_INVALID_ARG_TYPE("options", "Object", options);
         }
-        super(message, options);
+        super(message2, options);
         this.code = "ABORT_ERR";
         this.name = "AbortError";
       }
@@ -9571,7 +9571,7 @@ var require_util4 = __commonJS({
         }
       },
       isBlob,
-      deprecate(fn, message) {
+      deprecate(fn, message2) {
         return fn;
       },
       addAbortListener: require_events().addAbortListener || function addAbortListener(signal, listener) {
@@ -9730,7 +9730,7 @@ var require_validators3 = __commonJS({
         throw new ERR_INVALID_ARG_VALUE(name, value, reason);
       }
     });
-    function validateBoolean2(value, name) {
+    function validateBoolean(value, name) {
       if (typeof value !== "boolean") throw new ERR_INVALID_ARG_TYPE(name, "boolean", value);
     }
     function getOwnPropertyValueOrDefault(options, key, defaultValue) {
@@ -9767,7 +9767,7 @@ var require_validators3 = __commonJS({
     function validateBooleanArray(value, name) {
       validateArray(value, name);
       for (let i2 = 0; i2 < value.length; i2++) {
-        validateBoolean2(value[i2], `${name}[${i2}]`);
+        validateBoolean(value[i2], `${name}[${i2}]`);
       }
     }
     function validateAbortSignalArray(value, name) {
@@ -9871,7 +9871,7 @@ var require_validators3 = __commonJS({
       validateStringArray,
       validateBooleanArray,
       validateAbortSignalArray,
-      validateBoolean: validateBoolean2,
+      validateBoolean,
       validateBuffer,
       validateDictionary,
       validateEncoding,
@@ -10113,7 +10113,7 @@ var require_end_of_stream = __commonJS({
     var { AbortError, codes } = require_errors3();
     var { ERR_INVALID_ARG_TYPE, ERR_STREAM_PREMATURE_CLOSE } = codes;
     var { kEmptyObject, once: once2 } = require_util4();
-    var { validateAbortSignal, validateFunction, validateObject, validateBoolean: validateBoolean2 } = require_validators3();
+    var { validateAbortSignal, validateFunction, validateObject, validateBoolean } = require_validators3();
     var { Promise: Promise2, PromisePrototypeThen, SymbolDispose } = require_primordials2();
     var {
       isClosed,
@@ -10336,7 +10336,7 @@ var require_end_of_stream = __commonJS({
         opts = kEmptyObject;
       }
       if ((_opts = opts) !== null && _opts !== void 0 && _opts.cleanup) {
-        validateBoolean2(opts.cleanup, "cleanup");
+        validateBoolean(opts.cleanup, "cleanup");
         autoCleanup = opts.cleanup;
       }
       return new Promise2((resolve, reject2) => {
@@ -15103,8 +15103,8 @@ var require_cp = __commonJS({
       ERR_FS_CP_UNKNOWN: "Cannot copy an unknown file type",
       ERR_FS_EISDIR: "Path is a directory"
     };
-    var cpSystemError = (code2, message, path43, errno, uv) => new fs_core_1.SystemError(code2, PREFIX2[code2], { code: uv, message, path: path43, syscall: "cp", errno });
-    var cpCodeError = (code2, message) => (0, argErrors_1.withNativeCode)(new Error(message), code2);
+    var cpSystemError = (code2, message2, path43, errno, uv) => new fs_core_1.SystemError(code2, PREFIX2[code2], { code: uv, message: message2, path: path43, syscall: "cp", errno });
+    var cpCodeError = (code2, message2) => (0, argErrors_1.withNativeCode)(new Error(message2), code2);
     var invalidFilterReturn = (value) => (0, argErrors_1.withCode)(new TypeError('Expected boolean to be returned from the "filter" function but got an instance of Promise.'), "ERR_INVALID_RETURN_VALUE");
     var asCopyfileError = (error, src, dest) => error && typeof error.code === "string" && typeof error.syscall === "string" ? (0, fs_core_1.createError)(error.code, "copyfile", src, dest) : error;
     var getValidCpMode = (mode) => {
@@ -21484,7 +21484,7 @@ var require_dist = __commonJS({
       var token;
       var key;
       var root;
-      var parse3 = function parse4(text4, reviver) {
+      var parse4 = function parse5(text4, reviver) {
         source = String(text4);
         parseState = "start";
         stack = [];
@@ -22310,8 +22310,8 @@ var require_dist = __commonJS({
         }
         return c2;
       }
-      function syntaxError(message) {
-        var err = new SyntaxError(message);
+      function syntaxError(message2) {
+        var err = new SyntaxError(message2);
         err.lineNumber = line;
         err.columnNumber = column;
         return err;
@@ -22533,7 +22533,7 @@ var require_dist = __commonJS({
         }
       };
       var JSON56 = {
-        parse: parse3,
+        parse: parse4,
         stringify: stringify2
       };
       var lib = JSON56;
@@ -28367,8 +28367,8 @@ var inspect = (v) => {
 
 // src/daemon/foundations/verb-error.ts
 var BadVerbArgs = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "BadVerbArgs";
   }
 };
@@ -28385,8 +28385,8 @@ var ClickAbandoned = class extends Error {
   }
 };
 var RendererDown = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "RendererDown";
   }
 };
@@ -28413,8 +28413,8 @@ function failureOf(thrown2) {
   };
 }
 function badRequest(...problems) {
-  const message = problems.join("; ");
-  return { kind: "bad-request", message, detail: message };
+  const message2 = problems.join("; ");
+  return { kind: "bad-request", message: message2, detail: message2 };
 }
 function decodeWire(decode) {
   try {
@@ -29549,8 +29549,8 @@ function launcherWithState(owner, clock, spawner) {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
       observeWarnings: (change) => {
-        const message = change.kind === "launch-pipes" ? change.text : change.fault === null ? null : lifelineMessage(change.fault);
-        if (message !== null) process.emitWarning(message);
+        const message2 = change.kind === "launch-pipes" ? change.text : change.fault === null ? null : lifelineMessage(change.fault);
+        if (message2 !== null) process.emitWarning(message2);
       },
       signal: new AbortController().signal,
       now: () => instantOf(new Date(clock.now())),
@@ -32078,9 +32078,9 @@ var Reaction = class {
     if (globalState.disableErrorBoundaries) {
       throw error;
     }
-    const message = __MOBX_DEV__ ? `[mobx] Encountered an uncaught exception that was thrown by a reaction or observer component, in: '${this}'` : `[mobx] uncaught error in '${this}'`;
+    const message2 = __MOBX_DEV__ ? `[mobx] Encountered an uncaught exception that was thrown by a reaction or observer component, in: '${this}'` : `[mobx] uncaught error in '${this}'`;
     if (!globalState.suppressReactionErrors) {
-      console.error(message, error);
+      console.error(message2, error);
     } else if (__MOBX_DEV__) {
       console.warn(`[mobx] (error in reaction '${this.name_}' suppressed, fix error of causing action below)`);
     }
@@ -32088,7 +32088,7 @@ var Reaction = class {
       spyReport({
         type: "error",
         name: this.name_,
-        message,
+        message: message2,
         error: "" + error
       });
     }
@@ -34540,9 +34540,9 @@ var import_node_path6 = __toESM(require_path_browserify(), 1);
 init_globals();
 var debugEnabled = false;
 var debugOn = () => debugEnabled;
-function debug(message, ...args) {
+function debug(message2, ...args) {
   if (debugOn()) {
-    console.error(`[DEBUG] ${message}`, ...args);
+    console.error(`[DEBUG] ${message2}`, ...args);
   }
 }
 function changeLogger(log) {
@@ -34553,7 +34553,7 @@ function changeLogger(log) {
     log(level, msg);
   };
 }
-var quietLogger = (_level, message) => debug(message);
+var quietLogger = (_level, message2) => debug(message2);
 
 // src/utils/folder-identity.ts
 init_globals();
@@ -34724,7 +34724,7 @@ function followWatch(held, spec, acquire) {
 }
 
 // src/daemon/cache/watchers.ts
-var defaultLogger = (_level, message) => debug(message);
+var defaultLogger = (_level, message2) => debug(message2);
 var DEBOUNCE_MS = 50;
 function folded(window2, next) {
   if (next.kind === "failed") return next;
@@ -34928,12 +34928,12 @@ var WatcherRegistry = class {
   heard(dir, handle, changed) {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    const moved2 = changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
-      if (filter === null || changed === null || filter.has(changed) || moved)
+      if (filter === null || changed === null || filter.has(changed) || moved2)
         this.fire(slot, namedOf(dir.path, changed));
     }
-    if (moved) this.judged(dir, "moved");
+    if (moved2) this.judged(dir, "moved");
   }
   tell(dir, invalidation) {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
@@ -35038,7 +35038,7 @@ var stopped = (since) => `file events stopped at ${iso(since)}; the OS has deliv
 function fileEventsWarnings(d) {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
-  const message = () => {
+  const message2 = () => {
     switch (d.kind) {
       case "delivering":
         return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
@@ -35048,7 +35048,7 @@ function fileEventsWarnings(d) {
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
   };
-  return [{ kind: "file-events", state: d.kind, message: message() }];
+  return [{ kind: "file-events", state: d.kind, message: message2() }];
 }
 
 // src/daemon/cache/file-events.ts
@@ -37522,8 +37522,8 @@ function resolveColorSystem(spec, options) {
   throw new ColorParseError(`Unknown color system name: ${JSON.stringify(spec)} (expected "auto", "truecolor", "256", "ansi", or "none")`);
 }
 var ColorParseError = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "ColorParseError";
   }
 };
@@ -43586,8 +43586,8 @@ var ATTRIBUTE_SHORT_ALIASES = {
 };
 var NEVER_CHANGES = { lastChange: Number.NEGATIVE_INFINITY, nextChange: Number.POSITIVE_INFINITY };
 var StyleSyntaxError = class extends Error {
-  constructor(message, options) {
-    super(message, options);
+  constructor(message2, options) {
+    super(message2, options);
     this.name = "StyleSyntaxError";
   }
 };
@@ -45033,11 +45033,11 @@ var Animation = {
     return Animation.of({
       at: (t2) => animation.at(beat2.lastChange(t2)),
       nextChange(t2) {
-        const moved = animation.nextChange(beat2.lastChange(t2));
-        if (moved === Number.POSITIVE_INFINITY)
-          return moved;
+        const moved2 = animation.nextChange(beat2.lastChange(t2));
+        if (moved2 === Number.POSITIVE_INFINITY)
+          return moved2;
         const end = beat2.nextChange(t2);
-        return moved <= end ? end : beat2.lastChange(moved) === moved ? moved : beat2.nextChange(moved);
+        return moved2 <= end ? end : beat2.lastChange(moved2) === moved2 ? moved2 : beat2.nextChange(moved2);
       },
       // The value held now began at this hold's start at the latest: an early
       // answer where the animation had not moved by it, which the contract allows.
@@ -45198,8 +45198,8 @@ var ColorRamp = class _ColorRamp {
     const last2 = this.stops[this.stops.length - 1].at;
     const span = last2 - first2;
     const inside = first2 <= value && value <= last2;
-    const moved = inside ? value - this.scroll * span : value;
-    const read2 = this.unmoved(inside && moved < first2 ? moved + span : moved);
+    const moved2 = inside ? value - this.scroll * span : value;
+    const read2 = this.unmoved(inside && moved2 < first2 ? moved2 + span : moved2);
     return this.hue === 0 ? read2 : Oklch.fromRgba(read2).applyKey({ ...IDENTITY, hueShift: 360 * this.hue }).toRgba();
   }
   /** The colour at `value` with the ramp unmoved: the stops and the ease alone. */
@@ -45713,10 +45713,10 @@ var RichText = class _RichText {
         throw new Error("Style argument must not be provided when appending RichText");
       }
       const offset = this._text.get().length;
-      const moved = content._spans.get().map((span) => span.move(offset));
+      const moved2 = content._spans.get().map((span) => span.move(offset));
       this._text.set(this._text.get() + content._text.get());
       this._addSpan(offset, this._text.get().length, content._format.get().style);
-      for (const span of moved)
+      for (const span of moved2)
         this._spans.push(span);
       return this;
     }
@@ -46625,8 +46625,8 @@ var JoinedCell = class _JoinedCell {
     const reaches = (side) => moves[side]?.color !== void 0 && this.parts[side].has("fg") || moves[side]?.bgcolor !== void 0 && this.parts[side].has("bg");
     if (!reaches("left") && !reaches("right"))
       return void 0;
-    const moved = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
-    const edges = { left: moved(this.edges.left, moves.left), right: moved(this.edges.right, moves.right) };
+    const moved2 = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
+    const edges = { left: moved2(this.edges.left, moves.left), right: moved2(this.edges.right, moves.right) };
     const next = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
     const restamp2 = (level) => ({ ...level, owner: level.owner === this ? next : level.owner, inner: level.inner && restamp2(level.inner) });
     return { colors: next.style, style: style.withAnchor(style.anchor && restamp2(style.anchor)) };
@@ -46845,11 +46845,11 @@ var Recolored = class {
     }
   }
   /** `segment`'s cells drawn in the looks the effect painted them. */
-  *_repainted(segment, look, glyphs, moved, depth) {
+  *_repainted(segment, look, glyphs, moved2, depth) {
     const { style: base, wire, slots, pair, attributes } = look;
     const runs = [];
     for (const [k, { glyph }] of glyphs.entries()) {
-      const now2 = moved[k];
+      const now2 = moved2[k];
       const colors = onScreen(now2, pair.reverse);
       const last2 = runs[runs.length - 1];
       const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
@@ -46895,7 +46895,7 @@ var Recolored = class {
       terminals.add(own2);
       return own2;
     };
-    const moved = (from, to) => {
+    const moved2 = (from, to) => {
       const specs = movedSpecs(from, to, depth, theme24);
       return specs.fg === void 0 && specs.bg === void 0 ? void 0 : { color: edgeOf(specs.fg, true), bgcolor: edgeOf(specs.bg, false) };
     };
@@ -46903,14 +46903,14 @@ var Recolored = class {
       const wire2 = edge.drawnColors(depth);
       const slots2 = { fg: (wire2.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire2.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
       const terminal = { fg: wire2.color?.isDefault ?? true, bg: wire2.bgcolor?.isDefault ?? true };
-      return moved(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
+      return moved2(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
     };
     const moveOf = (side) => {
       const read2 = joined.reads[side];
       if (read2 === null)
         return void 0;
       const cell3 = beside2(cells, side, read2.owner);
-      return cell3 === void 0 ? unseen(read2.edge) : moved(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
+      return cell3 === void 0 ? unseen(read2.edge) : moved2(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
     };
     const rederived = joined.rederived({ left: moveOf("left"), right: moveOf("right") }, look.style, depth);
     if (rederived === void 0)
@@ -46942,8 +46942,8 @@ var Recolored = class {
    * in, the rest as `wire` wrote them.
    */
   respec(wire, from, to, depth) {
-    const moved = movedSpecs(from, to, depth, this.theme);
-    return { color: moved.fg ?? wire.color, bgcolor: moved.bg ?? wire.bgcolor };
+    const moved2 = movedSpecs(from, to, depth, this.theme);
+    return { color: moved2.fg ?? wire.color, bgcolor: moved2.bg ?? wire.bgcolor };
   }
 };
 var Effected = class _Effected {
@@ -46989,8 +46989,8 @@ var Effected = class _Effected {
    */
   static shows(pair, to, depth, theme24) {
     const from = onScreen(pair, pair.reverse);
-    const moved = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
-    return onScreen({ fg: moved.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
+    const moved2 = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
+    return onScreen({ fg: moved2.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved2.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
   }
 };
 function cellSeed(key, row2, col) {
@@ -47041,12 +47041,12 @@ function edgesBeside(walked, drawings) {
       const drawing2 = drawings[i2];
       if (look === void 0 || drawing2 === void 0 || !("painted" in drawing2))
         return;
-      const moved = drawing2.painted;
+      const moved2 = drawing2.painted;
       glyphs.forEach(({ cell: cell3 }, k) => {
         if (cell3 === void 0)
           return;
         const row2 = byRow.get(cell3.row) ?? [];
-        row2.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved[k] });
+        row2.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved2[k] });
         byRow.set(cell3.row, row2);
       });
     });
@@ -47525,8 +47525,8 @@ function atShares(loop, share) {
       const field = loop.field(t2, drawn);
       return (look, cell3) => {
         const w = Math.round(clamp013(field(cell3)) * LEVELS) / LEVELS;
-        const moved = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
-        return { ...look, fg: moved(look.fg, cell3.terminal.fg), bg: moved(look.bg, cell3.terminal.bg) };
+        const moved2 = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
+        return { ...look, fg: moved2(look.fg, cell3.terminal.fg), bg: moved2(look.bg, cell3.terminal.bg) };
       };
     });
   };
@@ -48027,7 +48027,7 @@ function rewritten(text4, glyphs, shown) {
     from.push(from[i2] + glyph.length);
     to.push(to[i2] + shown[i2].length);
   });
-  const moved = (offset) => {
+  const moved2 = (offset) => {
     let i2 = 0;
     while (i2 + 1 < from.length && from[i2 + 1] <= offset)
       i2++;
@@ -48035,7 +48035,7 @@ function rewritten(text4, glyphs, shown) {
   };
   const result = text4.blankCopy(shown.join(""));
   for (const span of text4.spans)
-    result.stylize(span.style, moved(span.start), moved(span.end));
+    result.stylize(span.style, moved2(span.start), moved2(span.end));
   return result;
 }
 var BREAKS = pattern(/[\n\t]/);
@@ -48549,9 +48549,9 @@ function diagnosticFrame(text4, colors) {
     pending: []
   };
 }
-function renderFailedFrame(message) {
+function renderFailedFrame(message2) {
   return diagnosticFrame(
-    permanentGlyphText({ kind: "permanent", cause: "render_failed", message }),
+    permanentGlyphText({ kind: "permanent", cause: "render_failed", message: message2 }),
     DIAGNOSTIC_ERROR_COLORS
   );
 }
@@ -48632,9 +48632,9 @@ function plainOf2(runs) {
 }
 
 // src/daemon/foundations/render-answers.ts
-var failedWith = (message) => ({
+var failedWith = (message2) => ({
   ok: false,
-  error: message,
+  error: message2,
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
 });
@@ -48867,20 +48867,17 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
   noteFacts(facts, {
     hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
   });
-  if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, delivered.failure);
-  }
   const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
-    effects: effects.map(effectName).join(",") || "-"
+    effects: effects.map((e) => e.kind === "present" ? `present:${e.surface}` : e.kind).join(",") || "-"
   });
   let answer2 = null;
   for (const effect of effects) {
     switch (effect.kind) {
       case "present":
-        if (effect.request !== id2)
+        if (delivered.kind === "threw") done2(effect, "its turn threw");
+        else if (effect.request !== id2)
           done2(
             effect,
             `presents request ${effect.request}, not this turn's ${id2}`
@@ -48889,11 +48886,11 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
           done2(effect, `a second statusline frame for request ${id2}`);
         else answer2 = effect;
         break;
-      // Performed where every turn's changes are (src/daemon/renderer-host.ts).
       case "change":
         break;
     }
   }
+  if (delivered.kind === "threw") return failed2(host, delivered.failure);
   if (answer2 === null)
     return failed2(
       host,
@@ -48917,7 +48914,6 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
     settled: (took) => done2(presented, took ? null : "the client did not take the answer")
   };
 }
-var effectName = (effect) => effect.kind === "present" ? `present:${effect.surface}` : `change:${effect.target.path}`;
 
 // src/daemon/render-checkpoint.ts
 init_globals();
@@ -50136,7 +50132,7 @@ function together(parts) {
         ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
       )
     ),
-    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
+    (frames) => (colors, cell3) => frames.reduce((moved2, part) => part(moved2, cell3), colors)
   );
 }
 var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
@@ -51909,8 +51905,8 @@ var Scanner = class {
   peek() {
     return this.text[this.pos] ?? "";
   }
-  fail(message) {
-    throw new Json5EditError(message, this.pos);
+  fail(message2) {
+    throw new Json5EditError(message2, this.pos);
   }
   skipTrivia() {
     for (; ; ) {
@@ -52240,6 +52236,35 @@ function setValue(text4, path43, valueText, dialect) {
   }
   return setBelow(text4, parseDocument(text4), path43, valueText, dialect);
 }
+function insertValue(text4, path43, valueText, dialect, precedes) {
+  const parentPath = path43.slice(0, -1);
+  const leaf = path43[path43.length - 1];
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  if (leaf === void 0 || parent?.kind !== "object")
+    throw new Json5EditError(
+      `cannot insert ${path43.join(".")}: its parent is not an object`,
+      parent?.span.start ?? 0
+    );
+  if (entryOf2(parent, leaf) !== void 0)
+    throw new Json5EditError(
+      `cannot insert ${path43.join(".")}: it is already there`,
+      parent.span.start
+    );
+  const member = entryText([leaf], valueText, dialect);
+  const next = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
+  if (next === void 0) return appendMember(text4, parent, member, dialect);
+  if (!startsLine(text4, next.span.start))
+    return splice(text4, next.span.start, next.span.start, `${member}, `);
+  const indent2 = indentOfLine(text4, next.span.start);
+  const eol = eolOf(text4);
+  const at = lineStartOf(text4, next.span.start);
+  return splice(
+    text4,
+    at,
+    at,
+    `${indent2}${reindent(member, indent2, eol)},${eol}`
+  );
+}
 function setBelow(text4, start, path43, valueText, dialect) {
   let node = start;
   for (let i2 = 0; i2 < path43.length; i2++) {
@@ -52516,9 +52541,9 @@ function* walkNodePaths(node, path43) {
 function childrenOf(node) {
   return node.kind === "container" ? node.children : node.opens === void 0 ? [] : [node.opens.body];
 }
-function parseArm(parse3) {
-  if (parse3 === void 0 || "text" in parse3) return "text";
-  return "regex" in parse3 ? "regex" : "json";
+function parseArm(parse4) {
+  if (parse4 === void 0 || "text" in parse4) return "text";
+  return "regex" in parse4 ? "regex" : "json";
 }
 var CACHE_KEYS = [
   "ttl",
@@ -53485,8 +53510,8 @@ function repoWebUrl(remotes) {
   const url = repoRemoteUrl(remotes);
   return url === null ? null : remoteWebUrl(url);
 }
-function classifyForgePr(label2, result, noPrPattern, parse3) {
-  if (result.ok) return parse3(result.stdout);
+function classifyForgePr(label2, result, noPrPattern, parse4) {
+  if (result.ok) return parse4(result.stdout);
   if (isMissingCommand(result)) return ABSENT;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT;
@@ -53675,8 +53700,8 @@ var TemplateError = class extends Error {
   kind = "EvalError";
   pos;
   source;
-  constructor(message, pos, ctx = {}) {
-    super(message, { cause: ctx.cause });
+  constructor(message2, pos, ctx = {}) {
+    super(message2, { cause: ctx.cause });
     this.pos = pos;
     this.source = ctx.source;
   }
@@ -53698,8 +53723,8 @@ var ParseError = class extends TemplateError {
   kind = "ParseError";
   expected;
   found;
-  constructor(message, pos, ctx = {}) {
-    super(message, pos, ctx);
+  constructor(message2, pos, ctx = {}) {
+    super(message2, pos, ctx);
     this.expected = ctx.expected;
     this.found = ctx.found;
   }
@@ -53769,12 +53794,12 @@ var MissingFieldError = class extends EvalError {
 var FailError = class extends EvalError {
   name = "FailError";
   kind = "FailError";
-  constructor(message, pos = {
+  constructor(message2, pos = {
     line: 0,
     column: 0,
     offset: 0
   }, ctx = {}) {
-    super(message, pos, ctx);
+    super(message2, pos, ctx);
   }
 };
 function buildSnippet(source, pos) {
@@ -53884,8 +53909,8 @@ var Lexer = class {
   * Build a ParseError that always carries the source for snippet
   * extraction. Lexer call sites use this exclusively.
   */
-  err(message, pos, extra = {}) {
-    return new ParseError(message, pos, {
+  err(message2, pos, extra = {}) {
+    return new ParseError(message2, pos, {
       ...extra,
       source: this.src
     });
@@ -54269,8 +54294,8 @@ var Parser = class {
     });
     return t2;
   }
-  errAt(t2, message, extra = {}) {
-    return new ParseError(message, t2.pos, {
+  errAt(t2, message2, extra = {}) {
+    return new ParseError(message2, t2.pos, {
       ...extra,
       source: this.source
     });
@@ -58669,10 +58694,10 @@ function rejectUnknownKeys(ctx, path43, raw, noun, allowed, spokenFor = EMPTY_PA
     }
   }
 }
-function reject(ctx, path43, message) {
+function reject(ctx, path43, message2) {
   ctx.issues.push({
     path: path43,
-    message,
+    message: message2,
     line: findKeyLine(ctx.source, path43.split("."))
   });
   return null;
@@ -58736,10 +58761,10 @@ function taggedUnion(ctx, schema, path43, raw) {
   }
   const arms = schema.arms;
   if (!Object.hasOwn(arms, tagValue)) {
-    const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
+    const message2 = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
     ctx.issues.push({
       path: `${path43}.${schema.tag}`,
-      message,
+      message: message2,
       line: findKeyLine(ctx.source, [...path43.split("."), schema.tag])
     });
     return null;
@@ -58773,11 +58798,11 @@ function refine(inner, ...checks) {
     if (value === null) return null;
     for (const check of checks) {
       if (check.ok(value)) continue;
-      const { field, message } = check.issue(value);
+      const { field, message: message2 } = check.issue(value);
       const at = field === "" ? path43 : `${path43}.${field}`;
       ctx.issues.push({
         path: at,
-        message,
+        message: message2,
         line: findKeyLine(ctx.source, at.split("."))
       });
       return null;
@@ -60995,8 +61020,8 @@ function toBool(v) {
   );
 }
 var PendingValueError = class extends Error {
-  constructor(variable, message) {
-    super(message);
+  constructor(variable, message2) {
+    super(message2);
     this.variable = variable;
   }
   variable;
@@ -61110,9 +61135,9 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   );
   return minted;
 }
-function plainMessage({ about, text: message, copy: copy3 }, severity) {
-  const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
-  return first2 === void 0 ? [] : [{ severity, about, message, copy: copy3, lines: [first2, ...rest2] }];
+function plainMessage({ about, text: message2, copy: copy3 }, severity) {
+  const [first2, ...rest2] = message2.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
+  return first2 === void 0 ? [] : [{ severity, about, message: message2, copy: copy3, lines: [first2, ...rest2] }];
 }
 function copyKeys(list2) {
   return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
@@ -61123,16 +61148,16 @@ function copyLink(sessionId2, by, key, position) {
     `copy diagnostic ${position}`
   );
 }
-var rankOf = (message) => DIAGNOSTIC_LEVELS[message.severity.level].rank;
+var rankOf = (message2) => DIAGNOSTIC_LEVELS[message2.severity.level].rank;
 function worstLevel(list2) {
   return list2[0]?.severity.level ?? null;
 }
 var IDENTITY_BITS = 32;
 var OCCURRENCES = 256;
 var PAGES = 4096;
-function identityOf(message) {
+function identityOf(message2) {
   const digest2 = createHash("sha256").update(
-    `${message.severity.level}\0${message.severity.glyph}\0${message.about}`
+    `${message2.severity.level}\0${message2.severity.glyph}\0${message2.about}`
   ).digest("hex");
   return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
 }
@@ -61260,13 +61285,13 @@ var drawnRows = (cells, opts) => drawStripCells(cells, opts).lines.map((runs) =>
   runs
 }));
 var ISSUE_INDENT = " ";
-function channelRows(message, opts, trailing) {
-  const colors = colorsOf(message.severity);
+function channelRows(message2, opts, trailing) {
+  const colors = colorsOf(message2.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const styled = (link) => link === null ? base : base.withLink(link);
   const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
-  return message.lines.flatMap((line, i2) => {
-    const prefix = cell(i2 === 0 ? message.severity.glyph : ISSUE_INDENT, base);
+  return message2.lines.flatMap((line, i2) => {
+    const prefix = cell(i2 === 0 ? message2.severity.glyph : ISSUE_INDENT, base);
     const cells = line.flatMap(
       (span) => span.text.split(" ").flatMap((w) => chopCells(w, fold)).map((w) => cell(w, styled(span.link)))
     );
@@ -61582,7 +61607,7 @@ function settingControlDomain(field) {
 function rangedDomain(row2) {
   return "optionDomain" in row2 && row2.optionDomain !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
 }
-function fragmentRejection(description, message) {
+function fragmentRejection(description, message2) {
   return {
     required: false,
     // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
@@ -61592,7 +61617,7 @@ function fragmentRejection(description, message) {
       if (raw[field] !== void 0) {
         ctx.issues.push({
           path: `${path43}.${field}`,
-          message: message(`${path43}.${field}`),
+          message: message2(`${path43}.${field}`),
           line: findKeyLine(ctx.source, [...path43.split("."), field])
         });
       }
@@ -63799,20 +63824,9 @@ var validateEndcaps = (raw) => {
   }
   return { ok: true, value: raw };
 };
-var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false"]);
-var validateBoolean = (raw) => {
-  if (BOOLEAN_TRUTHY.has(raw)) return { ok: true, value: "1" };
-  if (BOOLEAN_FALSY.has(raw)) return { ok: true, value: "" };
-  return {
-    ok: false,
-    reason: `expected boolean-ish (1, 0, true, false), got "${raw}"`
-  };
-};
 var BASELINE = {
   endcaps: validateEndcaps,
-  theme: validateTheme,
-  "toolbar-expanded": validateBoolean
+  theme: validateTheme
 };
 function makeStateKeyspace() {
   return createKeyspace(BASELINE, "state", deriveActionValidators);
@@ -65889,9 +65903,9 @@ var PricingService = class {
     if (entry.model && typeof entry.model === "string") {
       return entry.model;
     }
-    const message = entry.message;
-    if (message?.model) {
-      const model = message.model;
+    const message2 = entry.message;
+    if (message2?.model) {
+      const model = message2.model;
       if (typeof model === "string") {
         return model;
       }
@@ -69184,10 +69198,10 @@ var SETTING_DECL_JSON = {
 };
 var DECL_KEYS = ["label", "domain", "default"];
 var RANGE_KEYS = ["min", "max", "step", "atLeast"];
-function issue(ctx, path43, message) {
+function issue(ctx, path43, message2) {
   ctx.issues.push({
     path: path43,
-    message,
+    message: message2,
     line: findKeyLine(ctx.source, path43.split("."))
   });
   return void 0;
@@ -69620,10 +69634,10 @@ function validateActions(ctx, raw, home) {
   }
   return out;
 }
-function issue2(ctx, path43, message) {
+function issue2(ctx, path43, message2) {
   ctx.issues.push({
     path: path43,
-    message,
+    message: message2,
     line: findKeyLine(ctx.source, path43.split("."))
   });
 }
@@ -72096,12 +72110,12 @@ function judgeRun(run3) {
     run: { ...run3, parser }
   } : { kind: "refused", digest: run3.digest, reason };
 }
-function parserOf(parse3) {
-  switch (parse3.kind) {
+function parserOf(parse4) {
+  switch (parse4.kind) {
     case "text":
       return textParser;
     case "regex":
-      return capturing(parse3.pattern);
+      return capturing(parse4.pattern);
     case "json":
       return (text4) => text4.trim() === "" ? ABSENT : jsonParser(text4);
   }
@@ -72347,9 +72361,9 @@ var Collector = class {
   watch(session, stamped, reader) {
     const stop2 = reaction(
       () => reader.inputs.get(),
-      (moved) => runInAction(() => {
-        if (moved === stamped.from) return;
-        if (this.stamp({ session, stamped }, moved))
+      (moved2) => runInAction(() => {
+        if (moved2 === stamped.from) return;
+        if (this.stamp({ session, stamped }, moved2))
           void this.deps.deliver({
             kind: "world-state",
             worldState: stamped.document
@@ -72417,9 +72431,9 @@ var Collector = class {
   // one it replaces: the document itself when nothing it holds moved, and a
   // failed stamp keeps the prior readings and says why (`failedStamp`).
   // Answers whether the document moved.
-  stamp({ session, stamped }, moved) {
+  stamp({ session, stamped }, moved2) {
     const prior = stamped.document;
-    const { owners, daemon: daemon3 } = moved;
+    const { owners, daemon: daemon3 } = moved2;
     const next = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon3) : this.assembled(
       prior,
       owners.value,
@@ -72433,7 +72447,7 @@ var Collector = class {
         `world state sid=${JSON.stringify(session)}: ${failure}`
       );
     stamped.document = next;
-    stamped.from = moved;
+    stamped.from = moved2;
     return next !== prior;
   }
   assembled(prior, readings, daemon3, at) {
@@ -74446,17 +74460,17 @@ var LaneSetups = class {
   // `session` is the session as its latest request reported it, or null when
   // this daemon holds none yet.
   clicked(sessionId2, session, before, after) {
-    const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
+    const moved2 = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
     const owed = this.take(sessionId2);
-    for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
-    const byOf = (lane) => moved.includes(lane) ? "click" : "owed";
+    for (const lane of moved2) if (!owed.has(lane)) owed.set(lane, before[lane]);
+    const byOf = (lane) => moved2.includes(lane) ? "click" : "owed";
     if (session !== null) {
       this.settle(session, owed, after, byOf);
       return;
     }
     for (const [lane, from] of owed)
       if (from === after[lane]) owed.delete(lane);
-    if (moved.length > 0) {
+    if (moved2.length > 0) {
       const lanes = [...owed.keys()].map(
         (lane) => `${lane} ${after[lane] ? "on" : "off"}`
       );
@@ -74549,33 +74563,34 @@ init_globals();
 init_globals();
 var import_json53 = __toESM(require_dist(), 1);
 var ABSENT3 = { kind: "absent" };
-function documentOf(text4) {
-  return text4 === null || /^\s*$/.test(text4) ? null : parseDocument(text4);
-}
-function parsedOf(text4) {
+function parse2(text4) {
+  if (text4 === null || /^\s*$/.test(text4)) return { kind: "none" };
   try {
-    return documentOf(text4);
+    return { kind: "document", root: parseDocument(text4) };
   } catch (e) {
     if (!(e instanceof Json5EditError)) throw e;
-    return "unparsed";
+    return { kind: "unparsed" };
   }
 }
-function readAt(text4, at) {
+function readAt(text4, parsed2, at) {
   if (text4 === null) return ABSENT3;
-  const doc = parsedOf(text4);
-  return at.length === 0 || doc === "unparsed" ? { kind: "file", text: text4 } : readOf(text4, nodeAtAddress(doc, at));
+  if (at.length === 0 || parsed2.kind !== "document")
+    return { kind: "file", text: text4 };
+  return readOf(text4, nodeAt(parsed2.root, at));
 }
 function readOf(text4, node) {
   return node === void 0 ? ABSENT3 : { kind: "value", text: movableTextOf(text4, node) };
 }
 function sameRead(a, b) {
-  return a.kind === "value" && b.kind === "value" ? sameValue(import_json53.default.parse(a.text), import_json53.default.parse(b.text)) : a.kind === b.kind && (a.kind === "absent" || a.text === b.text);
+  if (a.kind === "value" && b.kind === "value")
+    return sameValue(import_json53.default.parse(a.text), import_json53.default.parse(b.text));
+  if (a.kind === "file" && b.kind === "file") return a.text === b.text;
+  return a.kind === "absent" && b.kind === "absent";
 }
 function sameValue(a, b) {
   if (Object.is(a, b)) return true;
-  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null)
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b))
     return false;
-  if (Array.isArray(a) !== Array.isArray(b)) return false;
   const ak = Object.keys(a);
   const bk = Object.keys(b);
   return ak.length === bk.length && ak.every(
@@ -74585,38 +74600,55 @@ function sameValue(a, b) {
     )
   );
 }
-function nodeAtAddress(root, at) {
-  let node = root ?? void 0;
-  for (const key of at) {
-    node = node?.kind === "object" ? node.entries.find((e) => e.key === key)?.value : void 0;
-  }
-  return node;
-}
 function diffChanges(before, after) {
   if (before === after) return [];
-  const was = parsedOf(before);
-  const will = parsedOf(after);
-  const read2 = readAt(before, []);
-  const whole = after === null ? [{ op: "remove", at: [], read: read2 }] : [{ op: "set", at: [], text: after, read: read2 }];
-  if (was === null || will === null || was === "unparsed" || will === "unparsed")
-    return whole;
-  const members = diffNode([], before, was, after, will);
+  if (before === null)
+    return [{ op: "insert", at: [], text: after, precedes: null }];
+  const read2 = { kind: "file", text: before };
+  if (after === null) return [{ op: "remove", at: [], read: read2 }];
+  const whole = [
+    { op: "replace", at: [], text: after, read: read2 }
+  ];
+  const was = parse2(before);
+  const will = parse2(after);
+  if (was.kind !== "document" || will.kind !== "document") return whole;
+  const members = diffNode([], before, was.root, after, will.root);
   const rebuilt = applyChanges(before, members);
   return rebuilt.kind === "applied" && rebuilt.text === after ? members : whole;
 }
 function diffNode(at, beforeText, was, afterText, will) {
-  if (textOf(beforeText, was) === textOf(afterText, will)) return [];
-  return was.kind === "object" && will.kind === "object" ? diffMembers(at, beforeText, was, afterText, will) : [
+  const written2 = textOf(afterText, will);
+  if (textOf(beforeText, was) === written2) return [];
+  const whole = at.length === 0 ? [
     {
-      op: "set",
+      op: "replace",
+      at,
+      text: afterText,
+      read: { kind: "file", text: beforeText }
+    }
+  ] : [
+    {
+      op: "replace",
       at,
       text: movableTextOf(afterText, will),
       read: readOf(beforeText, was)
     }
   ];
+  if (was.kind !== "object" || will.kind !== "object") return whole;
+  const members = diffMembers(at, beforeText, was, afterText, will);
+  return rebuilds(beforeText, members, at, written2) ? members : whole;
+}
+function rebuilds(text4, changes, at, written2) {
+  const result = applyChanges(text4, changes);
+  if (result.kind !== "applied") return false;
+  const parsed2 = parse2(result.text);
+  if (parsed2.kind !== "document") return false;
+  const node = nodeAt(parsed2.root, at);
+  return node !== void 0 && textOf(result.text, node) === written2;
 }
 function diffMembers(at, beforeText, was, afterText, will) {
-  const kept = new Map(will.entries.map((e) => [e.key, e.value]));
+  const prior = new Map(was.entries.map((e) => [e.key, e.value]));
+  const kept = new Set(will.entries.map((e) => e.key));
   const gone = was.entries.filter((e) => !kept.has(e.key)).map(
     (e) => ({
       op: "remove",
@@ -74624,38 +74656,69 @@ function diffMembers(at, beforeText, was, afterText, will) {
       read: readOf(beforeText, e.value)
     })
   );
-  const prior = new Map(was.entries.map((e) => [e.key, e.value]));
-  const moved = will.entries.flatMap((e) => {
+  const anchors = will.entries.map((e, i2) => {
+    const next = will.entries.slice(i2 + 1).find((n) => prior.has(n.key));
+    return next?.key ?? null;
+  });
+  const changed = will.entries.flatMap((e, i2) => {
     const old = prior.get(e.key);
     return old === void 0 ? [
       {
-        op: "set",
+        op: "insert",
         at: [...at, e.key],
         text: movableTextOf(afterText, e.value),
-        read: ABSENT3
+        precedes: anchors[i2]
       }
     ] : diffNode([...at, e.key], beforeText, old, afterText, e.value);
   });
-  return [...gone, ...moved];
+  return [...gone, ...changed];
 }
 function applyChanges(text4, changes) {
   let current2 = text4;
   for (const change of changes) {
-    const found2 = readAt(current2, change.at);
-    if (!sameRead(found2, change.read))
-      return { kind: "moved", at: change.at, read: change.read, found: found2 };
-    try {
-      current2 = applied(current2, change);
-    } catch (e) {
-      if (!(e instanceof Json5EditError)) throw e;
-      return { kind: "moved", at: change.at, read: change.read, found: found2 };
-    }
+    const parsed2 = parse2(current2);
+    const ancestor = movedAncestor(parsed2, change.at);
+    if (ancestor !== null)
+      return {
+        kind: "moved",
+        at: ancestor,
+        read: "object",
+        found: readAt(current2, parsed2, ancestor)
+      };
+    const read2 = change.op === "insert" ? ABSENT3 : change.read;
+    const found2 = readAt(current2, parsed2, change.at);
+    if (!sameRead(found2, read2))
+      return { kind: "moved", at: change.at, read: read2, found: found2 };
+    current2 = applied(current2, change);
   }
   return { kind: "applied", text: current2 };
 }
+function movedAncestor(parsed2, at) {
+  if (at.length === 0) return null;
+  if (parsed2.kind !== "document") return [];
+  for (let depth = 0; depth < at.length; depth++) {
+    const up = at.slice(0, depth);
+    if (nodeAt(parsed2.root, up)?.kind !== "object") return up;
+  }
+  return null;
+}
 function applied(text4, change) {
-  if (change.at.length === 0) return change.op === "set" ? change.text : null;
-  return change.op === "set" ? setValue(text4 ?? "", change.at, change.text, JSON5_DIALECT) : deleteValue(text4, change.at, change.at.length - 1);
+  if (change.at.length === 0)
+    return change.op === "remove" ? null : change.text;
+  switch (change.op) {
+    case "replace":
+      return setValue(text4, change.at, change.text, JSON5_DIALECT);
+    case "insert":
+      return insertValue(
+        text4,
+        change.at,
+        change.text,
+        JSON5_DIALECT,
+        change.precedes
+      );
+    case "remove":
+      return deleteValue(text4, change.at, change.at.length - 1);
+  }
 }
 function addressText(at) {
   return at.length === 0 ? "the whole file" : at.join(".");
@@ -74670,26 +74733,46 @@ var readText = (file) => {
     throw e;
   }
 };
-var said = (read2) => read2.kind === "absent" ? "nothing" : read2.text;
-function performChange(change) {
-  const file = change.target.path;
+var writeText = (file, text4) => text4 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text4);
+var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.text;
+function performChanges(changes) {
+  const landings = /* @__PURE__ */ new Map();
   try {
-    const applied3 = applyChanges(readText(file), change.changes);
-    if (applied3.kind === "moved")
-      return {
-        kind: "failed",
-        reason: `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said(applied3.read)}, it is ${said(applied3.found)}) \u2014 nothing was written`
-      };
-    if (applied3.text === null) fs_default.rmSync(resolvedTarget(file), { force: true });
-    else writeAtomic(file, applied3.text);
+    for (const { target, changes: list2 } of changes) {
+      const file = target.path;
+      const was = landings.get(file)?.was ?? readText(file);
+      const applied3 = applyChanges(landings.get(file)?.will ?? was, list2);
+      if (applied3.kind === "moved")
+        return {
+          kind: "refused",
+          reason: `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said(applied3.read)}, it is ${said(applied3.found)}) \u2014 nothing was written`
+        };
+      landings.set(file, { file, was, will: applied3.text });
+    }
+  } catch (e) {
+    return { kind: "failed", reason: `config read failed: ${message(e)}` };
+  }
+  const written2 = [];
+  try {
+    for (const landing of landings.values()) {
+      writeText(landing.file, landing.will);
+      written2.push(landing);
+    }
     return { kind: "ok" };
   } catch (e) {
-    return {
-      kind: "failed",
-      reason: `config write failed (${file}): ${e.message}`
-    };
+    return { kind: "failed", reason: putBack(written2, e) };
   }
 }
+function putBack(written2, cause) {
+  const reason = `config write failed: ${message(cause)}`;
+  try {
+    for (const { file, was } of [...written2].reverse()) writeText(file, was);
+    return `${reason} \u2014 nothing was written`;
+  } catch (e) {
+    return `${reason}; and putting back what was written failed, so it is half-written: ${message(e)}`;
+  }
+}
+var message = (e) => e instanceof Error ? e.message : String(e);
 
 // src/daemon/renderer-host.ts
 function rendererHost(name, clock, renderer, log, collector) {
@@ -74701,10 +74784,17 @@ function rendererHost(name, clock, renderer, log, collector) {
       const sentAt = clock.monotonic();
       const { subscriptions, turnMs, ...answered } = await renderer.answer(input);
       const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
+      const changes = output.effects.filter(
+        (effect) => effect.kind === "change"
+      );
+      const landed = changes.length === 0 ? null : performChanges(changes);
       for (const effect of output.effects) {
-        if (effect.kind === "change") settle3(effect, performChange(effect));
+        if (effect.kind === "change") settle3(effect, landed);
         else if (input.event.kind !== "request")
-          refuse4(effect, `a ${input.event.kind} turn answers no request`);
+          settle3(effect, {
+            kind: "failed",
+            reason: `a ${input.event.kind} turn answers no request`
+          });
       }
       collector.subscribed(subscriptions);
       return output;
@@ -74734,7 +74824,6 @@ function rendererHost(name, clock, renderer, log, collector) {
     },
     [["effect", String(effect.id)]]
   );
-  const refuse4 = (effect, reason) => settle3(effect, { kind: "failed", reason });
   const record2 = (input, about, delivered) => {
     const session = sessionOf(input.event);
     const head = [
@@ -74891,7 +74980,7 @@ function presence(path43) {
 // src/doctor/state-file.ts
 init_globals();
 var import_node_path35 = __toESM(require_path_browserify(), 1);
-function stateFile(dir, name, empty2, parse3) {
+function stateFile(dir, name, empty2, parse4) {
   const file = import_node_path35.default.join(dir, name);
   const read2 = () => {
     let text4;
@@ -74912,7 +75001,7 @@ function stateFile(dir, name, empty2, parse3) {
         reason: `${file} is not JSON: ${e.message}`
       };
     }
-    const parsed2 = parse3(doc);
+    const parsed2 = parse4(doc);
     return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
   };
   return {
@@ -74985,7 +75074,7 @@ function repoAnswerFields(sessionId2, dir, answer2) {
 }
 function repoQuestions(gate2, sessionId2, signer) {
   return gate2.awaiting.map((dir) => {
-    const message = `a cc-candybar config for ${dir} \u2014 run it?`;
+    const message2 = `a cc-candybar config for ${dir} \u2014 run it?`;
     const answers = REPO_ANSWERS.map(
       (answer2) => diagnosticSpan(
         `[${answer2 === "approved" ? "approve" : "decline"}]`,
@@ -75002,12 +75091,12 @@ function repoQuestions(gate2, sessionId2, signer) {
         ])
       )
     );
-    const line = [diagnosticSpan(message, null), ...answers];
+    const line = [diagnosticSpan(message2, null), ...answers];
     return {
       severity: APPROVAL_SEVERITY,
       about: `repo-question\0${dir}`,
-      message,
-      copy: message,
+      message: message2,
+      copy: message2,
       lines: [line]
     };
   });
@@ -75917,12 +76006,12 @@ function parseDuration(s) {
       throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
   }
 }
-function parserIdOf(parse3) {
-  switch (parse3.kind) {
+function parserIdOf(parse4) {
+  switch (parse4.kind) {
     case "text":
       return { kind: "text" };
     case "regex":
-      return { kind: "regex", pattern: parse3.pattern };
+      return { kind: "regex", pattern: parse4.pattern };
     case "json":
       return { kind: "json" };
   }
@@ -76262,14 +76351,14 @@ var SourceRegistry = class _SourceRegistry {
   // it holds the old run's answer until the new run's lands — the old `ok` is
   // simply not overwritten yet, so a key change draws no pending flash (spec
   // section 19).
-  declareSource(name, read2, cache2, parse3) {
-    const publish = this.publisherFor(name, parse3);
+  declareSource(name, read2, cache2, parse4) {
+    const publish = this.publisherFor(name, parse4);
     const refreshOf = this.registerCachePolicy(name, cache2);
     const run3 = computed(
       () => {
         const refresh = refreshOf();
         return refresh.kind === "ok" ? ok(
-          runOf2({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
+          runOf2({ read: read2, parse: parserIdOf(parse4), refresh: refresh.value })
         ) : refresh;
       },
       // A failure is a failure whatever it says: its text is the variable's
@@ -76316,13 +76405,13 @@ var SourceRegistry = class _SourceRegistry {
   // document. Selected once, at declaration — the pipeline never asks again.
   // The run parsed by the arm's own parser (source-runs.ts), so its value is
   // the arm's type.
-  publisherFor(name, parse3) {
-    switch (parse3.kind) {
+  publisherFor(name, parse4) {
+    switch (parse4.kind) {
       case "text":
       case "regex":
-        return this.scalarPublisher(name, parse3.default);
+        return this.scalarPublisher(name, parse4.default);
       case "json":
-        return this.documentPublisher(name, parse3.default);
+        return this.documentPublisher(name, parse4.default);
     }
   }
   scalarPublisher(name, varDefault) {
@@ -76428,10 +76517,10 @@ var SourceRegistry = class _SourceRegistry {
           this.lastErrors.delete(name);
           throw pending2;
         }
-        const message = e instanceof Error ? e.message : String(e);
-        this.recordError(name, message);
+        const message2 = e instanceof Error ? e.message : String(e);
+        this.recordError(name, message2);
         if (fallback === void 0) {
-          throw new Error(`variable "${name}": ${message}`);
+          throw new Error(`variable "${name}": ${message2}`);
         }
         return fallback;
       }
@@ -76614,10 +76703,10 @@ var SourceRegistry = class _SourceRegistry {
       return this.defaultEmptyValue;
     return "";
   }
-  recordError(name, message) {
+  recordError(name, message2) {
     this.lastErrors.set(name, {
       timestamp: this.store.clock.now(),
-      message
+      message: message2
     });
   }
   // The one fold from an outcome (whether the policy can fire, whether the
@@ -76902,7 +76991,7 @@ function bindRender(runtime, binding) {
     }
   };
 }
-function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
+function compileActions(parse4, actions, stateKeyToVar, perConfigDomains) {
   const out = /* @__PURE__ */ new Map();
   const entries = Object.entries(actions);
   for (const [name, action2] of [
@@ -76911,12 +77000,12 @@ function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
   ]) {
     out.set(
       name,
-      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
+      compileAction(parse4, name, action2, stateKeyToVar, perConfigDomains, out)
     );
   }
   return out;
 }
-function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
+function compileAction(parse4, name, action2, stateKeyToVar, perConfigDomains, compiled) {
   if ("set" in action2) {
     const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
     if ("to" in action2) {
@@ -77030,13 +77119,13 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
   if ("copy" in action2) {
     return {
       kind: "copy",
-      text: parseActionTemplate(parse3, action2.copy, name)
+      text: parseActionTemplate(parse4, action2.copy, name)
     };
   }
   if ("open" in action2) {
     return {
       kind: "open",
-      target: parseActionTemplate(parse3, action2.open, name)
+      target: parseActionTemplate(parse4, action2.open, name)
     };
   }
   if ("reset" in action2) {
@@ -77058,9 +77147,9 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
       kind: "run",
       name,
       declaration: runDeclaration(action2),
-      argv: action2.run.map((item) => parseActionTemplate(parse3, item, name)),
+      argv: action2.run.map((item) => parseActionTemplate(parse4, item, name)),
       env: Object.entries(action2.env).map(
-        ([variable, value]) => [variable, parseActionTemplate(parse3, value, name)]
+        ([variable, value]) => [variable, parseActionTemplate(parse4, value, name)]
       )
     };
   }
@@ -77072,7 +77161,7 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
   if ("preset" in action2) {
     return action2.preset === "save" ? { kind: "preset-save" } : {
       kind: "preset-delete",
-      name: parseActionTemplate(parse3, action2.name, name)
+      name: parseActionTemplate(parse4, action2.name, name)
     };
   }
   if ("themeDefault" in action2) return { kind: "theme-default-save" };
@@ -77125,9 +77214,9 @@ function bindsTemplateValue(c) {
       return false;
   }
 }
-function parseActionTemplate(parse3, src, name) {
+function parseActionTemplate(parse4, src, name) {
   try {
-    return parse3(src);
+    return parse4(src);
   } catch (e) {
     throw new Error(
       `Template parse error in actions.${name}: ${e.message}`,
@@ -79033,9 +79122,9 @@ function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
 function cellsWidth(cells) {
   return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
 }
-function brokenSegment(node, scope, ctx, message) {
-  ctx.onSegmentError?.(node.id, message);
-  const oneLine = message.replace(/\s*\n\s*/g, " ");
+function brokenSegment(node, scope, ctx, message2) {
+  ctx.onSegmentError?.(node.id, message2);
+  const oneLine = message2.replace(/\s*\n\s*/g, " ");
   return [
     {
       cells: applySegmentLayout(
@@ -79827,14 +79916,14 @@ function toCachePolicy(cache2) {
     `Unknown CacheDecl discriminator \u2014 loader invariant violated: ${JSON.stringify(cache2)}`
   );
 }
-function toSourceParse(parse3, dflt) {
-  switch (parseArm(parse3)) {
+function toSourceParse(parse4, dflt) {
+  switch (parseArm(parse4)) {
     case "json":
       return { kind: "json", default: dflt };
     case "regex":
       return {
         kind: "regex",
-        pattern: parse3.regex,
+        pattern: parse4.regex,
         default: dflt
       };
     case "text":
@@ -80030,7 +80119,7 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
   });
   const helpers = compileHelpers(engine, config2.helpers, "helpers");
   const sources = /* @__PURE__ */ new Map();
-  const parse3 = (src) => {
+  const parse4 = (src) => {
     const parsed2 = engine.parse(src, helpers);
     sources.set(parsed2, src);
     return parsed2;
@@ -80039,13 +80128,13 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
   const parseShared = (src) => {
     const known = nodeTemplates.get(src);
     if (known !== void 0) return known;
-    const parsed2 = parse3(src);
+    const parsed2 = parse4(src);
     nodeTemplates.set(src, parsed2);
     return parsed2;
   };
   const stateKeyToVar = new Map(stateReads);
   actionRuntime.compiled = compileActions(
-    parse3,
+    parse4,
     config2.actions,
     stateKeyToVar,
     perConfigDomains
@@ -80137,7 +80226,7 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
     const seen2 = rules.get(authored);
     rules.set(
       authored,
-      seen2 === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen2.where}, ${where}`, template: seen2.template }
+      seen2 === void 0 ? { where, template: parseExpressionSlot(parse4, where, authored) } : { where: `${seen2.where}, ${where}`, template: seen2.template }
     );
   }
   const instantNames = new Set(projections.map(([name]) => name));
@@ -80210,17 +80299,17 @@ var layoutGates = (segments) => (root) => {
     ...node.kind === "segment" && segments[node.name].when !== void 0 ? [segments[node.name].when] : []
   ]);
 };
-function parseExpressionSlot(parse3, path43, source) {
+function parseExpressionSlot(parse4, path43, source) {
   try {
-    return parse3(source);
+    return parse4(source);
   } catch (e) {
     throw new Error(
       `${path43} is not a valid template: ${e instanceof Error ? e.message : String(e)}`
     );
   }
 }
-var unreachable = (message) => {
-  throw new Error(`a slot settled on a name its domain refuses: ${message}`);
+var unreachable = (message2) => {
+  throw new Error(`a slot settled on a name its domain refuses: ${message2}`);
 };
 function evalRule(slot, rule, parts, warn, frame2) {
   const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame2);
@@ -80316,7 +80405,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         slot,
         evalRule(slot, state.rule, parts, warn, ruleFrame),
         state.rule.where,
-        (message) => warn({ kind: "rule", slot, message })
+        (message2) => warn({ kind: "rule", slot, message: message2 })
       );
       parts.drawnSlot(slot, name);
       return name;
@@ -80928,10 +81017,10 @@ function lowerGroup(g) {
     g.when
   );
 }
-function groupIssue(ctx, path43, message) {
+function groupIssue(ctx, path43, message2) {
   ctx.issues.push({
     path: path43,
-    message,
+    message: message2,
     line: findKeyLine(ctx.source, ["root"])
   });
 }
@@ -81012,7 +81101,7 @@ var isDictCall = (e) => e.kind === "call" && e.name === "dict";
 var isNonObjectLiteral = (e) => e.kind === "literal" && typeof e.value !== "object";
 var legalDisplayCount = (count) => cycleDisplayIssue("", count, 2) === void 0;
 function analyzeMenuCall(call) {
-  const issue3 = (message) => ({ kind: "issue", message });
+  const issue3 = (message2) => ({ kind: "issue", message: message2 });
   const [applyArg, ...tail] = call.argExprs;
   if (applyArg === void 0) {
     return issue3(
@@ -81089,8 +81178,8 @@ function segmentReferencesMenu(template) {
     return false;
   }
 }
-function menuIssue(ctx, path43, message) {
-  ctx.issues.push({ path: path43, message, line: findKeyLine(ctx.source, ["root"]) });
+function menuIssue(ctx, path43, message2) {
+  ctx.issues.push({ path: path43, message: message2, line: findKeyLine(ctx.source, ["root"]) });
 }
 function checkMenuDecls(ctx, out) {
   reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
@@ -81147,12 +81236,12 @@ function checkMenuDecls(ctx, out) {
     const calls = parseCalls(template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
-      const message = call.kind === "issue" ? call.message : identityIssue(call.apply);
-      if (message !== void 0) {
+      const message2 = call.kind === "issue" ? call.message : identityIssue(call.apply);
+      if (message2 !== void 0) {
         menuIssue(
           ctx,
           `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} ${message}.`
+          `segment "${segName}" has a {{ menu }} ${message2}.`
         );
       }
     }
@@ -81172,11 +81261,11 @@ function synthesizePlacementMenus(config2, issues) {
   const actions = {};
   const callsOf = /* @__PURE__ */ new Map();
   const reported = /* @__PURE__ */ new Set();
-  const issue3 = (segName, message) => {
+  const issue3 = (segName, message2) => {
     const path43 = `segments.${segName}`;
-    if (reported.has(`${path43}\0${message}`)) return;
-    reported.add(`${path43}\0${message}`);
-    issues.push({ path: path43, message });
+    if (reported.has(`${path43}\0${message2}`)) return;
+    reported.add(`${path43}\0${message2}`);
+    issues.push({ path: path43, message: message2 });
   };
   for (const preset of presetNames(config2.presets)) {
     const ownerBySynthKey = /* @__PURE__ */ new Map();
@@ -81711,21 +81800,21 @@ function withSettingsScope(scope, settings) {
 }
 function checkSettingOrder(ctx, segName, settings) {
   const at = (name) => `segments.${segName}.settings.${name}`;
-  const push = (name, message) => {
+  const push = (name, message2) => {
     ctx.issues.push({
       path: at(name),
-      message: `${at(name)}: ${message}`,
+      message: `${at(name)}: ${message2}`,
       line: findKeyLine(ctx.source, ["segments", segName, "settings", name])
     });
   };
   const broken = floorProblems(settings);
-  for (const { setting, message } of broken) push(setting, message);
+  for (const { setting, message: message2 } of broken) push(setting, message2);
   if (broken.length > 0) return;
-  for (const { setting, message } of settingOrderProblems(
+  for (const { setting, message: message2 } of settingOrderProblems(
     settings,
     defaultsOf(settings)
   )) {
-    push(setting, `the defaults do not stand together: ${message}`);
+    push(setting, `the defaults do not stand together: ${message2}`);
   }
 }
 function relationsReported(settings) {
@@ -81797,8 +81886,8 @@ function checkPlacementSettings(ctx, cfg, node, layoutKey, line) {
     ([n, v]) => inSettingDomain(declared[n], v)
   );
   if (!members || relationsReported(declared)) return;
-  for (const { message } of settingOrderProblems(declared, resolved)) {
-    ctx.issues.push({ path: layoutKey, message: `${where}: ${message}`, line });
+  for (const { message: message2 } of settingOrderProblems(declared, resolved)) {
+    ctx.issues.push({ path: layoutKey, message: `${where}: ${message2}`, line });
   }
 }
 function checkVarRefs(ctx, declPath, v, scope, segCtx) {
@@ -81936,10 +82025,10 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
     if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
       const through = via === null ? "" : ` through helper "${via}"`;
       const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
-      const message = opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`;
+      const message2 = opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`;
       ctx.issues.push({
         path: declPath,
-        message,
+        message: message2,
         line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
       });
       continue;
@@ -81968,12 +82057,12 @@ function checkTemplateRefs(ctx, declPath, template, scope, opts) {
 function helperKeyPath(name, segment) {
   return segment?.partials !== void 0 && Object.hasOwn(segment.partials, name) ? ["segments", segment.name, "partials", name] : ["helpers", name];
 }
-function checkHelperIssue(ctx, helper, message, keyPath = ["helpers", helper]) {
+function checkHelperIssue(ctx, helper, message2, keyPath = ["helpers", helper]) {
   const path43 = keyPath.join(".");
-  if (ctx.issues.some((i2) => i2.path === path43 && i2.message === message)) return;
+  if (ctx.issues.some((i2) => i2.path === path43 && i2.message === message2)) return;
   ctx.issues.push({
     path: path43,
-    message,
+    message: message2,
     line: findKeyLine(ctx.source, keyPath)
   });
 }
@@ -85203,13 +85292,8 @@ function retireSession(parts, session) {
   });
 }
 function holdSessionAt(parts, req) {
-  const origin = req.requested;
-  return parts.renderCache.holdSession(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    req
-  );
+  const { projectDir, cwd: cwd2, target } = req.requested;
+  return parts.renderCache.holdSession(projectDir, cwd2, target.path, req);
 }
 function setUpRender(parts, req, at, facts) {
   const hintsError = hintsErrorOf(req);
@@ -85548,9 +85632,8 @@ function arrived2(parts, req, lanes) {
   });
 }
 function laneSessionOf(req) {
-  const sessionId2 = req.hookData.session_id;
   return {
-    sessionId: sessionId2,
+    sessionId: req.hookData.session_id,
     hints: req.hints,
     origin: req.requested,
     transcript: req.hookData.transcript_path,
@@ -85804,7 +85887,7 @@ function placementPickProblems(config2, sessionPick, writes) {
         })
       );
       return settingOrderProblems(decls, values2).map(
-        ({ message }) => `placement "${id2}": ${message}`
+        ({ message: message2 }) => `placement "${id2}": ${message2}`
       );
     });
   });
@@ -86106,8 +86189,8 @@ function closingView(store, nestOf2, log) {
 // src/renderer/config-file-store.ts
 init_globals();
 var import_json55 = __toESM(require_dist(), 1);
-var BOOLEAN_TRUTHY2 = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY2 = /* @__PURE__ */ new Set(["0", "false", ""]);
+var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
+var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
 function persistValueText(key, raw) {
   const target = requireValueTarget(key);
   const kind = target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
@@ -86121,8 +86204,8 @@ function persistValueText(key, raw) {
     }
     return String(n);
   }
-  if (BOOLEAN_TRUTHY2.has(raw)) return "true";
-  if (BOOLEAN_FALSY2.has(raw)) return "false";
+  if (BOOLEAN_TRUTHY.has(raw)) return "true";
+  if (BOOLEAN_FALSY.has(raw)) return "false";
   throw new Error(
     `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`
   );
@@ -86288,8 +86371,8 @@ function commit2(store, home, before, after, refuse4) {
   const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse4(home, was, will);
-  store.land(home.path, before, after);
-  return topConfig(will);
+  store.record(home.path, before, after);
+  return will.config;
 }
 function refuseHidden(home, was, will) {
   const hidden = hiddenBy(home, was(), will);
@@ -86384,9 +86467,9 @@ function refuseNewDrops(home, was, will) {
     );
   }
 }
-function readValue(store, file, key) {
+function readValue(text4, key) {
   const target = requireValueTarget(key);
-  const doc = docOf(store.read(file) ?? "");
+  const doc = docOf(text4 ?? "");
   const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
   return node !== void 0 && "value" in node ? node.value : void 0;
 }
@@ -86717,7 +86800,7 @@ var SessionState = class {
   // ALL writes inside this one block. Previously, the verb's "loop and
   // call set N times" pattern fired reportChanged() N times, which
   // scheduled autoruns between pairs (visible to consumers as the menu
-  // value changing while toolbar-expanded was still old). The batch
+  // value changing while another key of the batch was still old). The batch
   // method is the structural fix: there is no way to get half-applied
   // state because there is no intermediate scheduler tick.
   //
@@ -86856,7 +86939,15 @@ var SettingsHistory = class {
   history(sessionId2) {
     return this.state.get(sessionId2) ?? EMPTY3;
   }
-  begin() {
+  begin(files) {
+    const held = heldWrites(this.sessionState);
+    const working = /* @__PURE__ */ new Map();
+    const click3 = {
+      held,
+      files,
+      historyOf: (sessionId2) => working.get(sessionId2) ?? this.history(sessionId2),
+      move: (sessionId2, history) => working.set(sessionId2, history)
+    };
     const pending2 = /* @__PURE__ */ new Map();
     let written2 = false;
     const note = (sessionId2, change) => {
@@ -86871,7 +86962,7 @@ var SettingsHistory = class {
     };
     const toggles = /* @__PURE__ */ new Map();
     const sessionState = recordingView(
-      this.sessionState,
+      held,
       // Every key, since a write of any can move a lane: only settings are steps.
       () => true,
       (sessionId2, key, before, after) => {
@@ -86888,44 +86979,65 @@ var SettingsHistory = class {
         note(sessionId2, { kind: "session", key, before, after });
       }
     );
+    const step4 = () => {
+      const committing = new Map(pending2);
+      const toggled = new Map(toggles);
+      pending2.clear();
+      toggles.clear();
+      for (const sessionId2 of /* @__PURE__ */ new Set([
+        ...committing.keys(),
+        ...toggled.keys()
+      ])) {
+        const changes = [...committing.get(sessionId2)?.values() ?? []].filter(
+          (c) => c.before !== c.after
+        );
+        const current2 = click3.historyOf(sessionId2);
+        const appended = changes.length === 0 ? current2 : afterAppend(current2, changes);
+        const toggle = toggled.get(sessionId2);
+        const next = toggle === void 0 ? appended : withToggle(appended, toggle);
+        if (next !== current2) click3.move(sessionId2, next);
+      }
+    };
     return {
       sessionState,
-      file: (sessionId2, file, before, after) => note(sessionId2, { kind: "file", file, before, after }),
+      file: (sessionId2, file, before, after) => {
+        note(sessionId2, { kind: "file", file, before, after });
+        files.land(file, before, after);
+      },
       wrote: () => {
         written2 = true;
       },
       written: () => written2,
+      undo: (sessionId2) => {
+        step4();
+        return this.undo(click3, sessionId2);
+      },
+      redo: (sessionId2) => {
+        step4();
+        return this.redo(click3, sessionId2);
+      },
+      rewind: (sessionId2) => {
+        step4();
+        return this.rewind(click3, sessionId2);
+      },
       commit: () => {
-        const committing = new Map(pending2);
-        const toggled = new Map(toggles);
-        pending2.clear();
-        toggles.clear();
-        for (const sessionId2 of /* @__PURE__ */ new Set([
-          ...committing.keys(),
-          ...toggled.keys()
-        ])) {
-          const step4 = [...committing.get(sessionId2)?.values() ?? []].filter(
-            (c) => c.before !== c.after
-          );
-          const current2 = this.history(sessionId2);
-          const appended = step4.length === 0 ? current2 : afterAppend(current2, step4);
-          const toggle = toggled.get(sessionId2);
-          const next = toggle === void 0 ? appended : withToggle(appended, toggle);
-          if (next !== current2) this.put(sessionId2, next);
-        }
+        step4();
+        const moved2 = new Map(working);
+        working.clear();
+        for (const [sessionId2, history] of moved2) this.put(sessionId2, history);
+        held.flush();
       }
     };
   }
-  // Returns the step it restored, so the caller can say what changed.
-  undo(sessionId2, files) {
-    const history = this.history(sessionId2);
+  undo(click3, sessionId2) {
+    const history = click3.historyOf(sessionId2);
     const step4 = history.past.at(-1);
     if (step4 === void 0) {
       throw new BadVerbArgs("undo: nothing to undo");
     }
     this.apply(
+      click3,
       sessionId2,
-      files,
       step4,
       "before",
       "undo",
@@ -86935,16 +87047,17 @@ var SettingsHistory = class {
   }
   // [LAW:no-silent-failure] Cancel for edit mode: put every target edit mode
   // changed back to what it held when edit mode opened — one step, landing
-  // whole or not at all (`apply`) — then give the stack back the shape it had,
-  // with nothing to redo, so neither `↶` nor `↷` can bring back what was
-  // discarded. A target changed since by anything else (a hand edit, another
-  // session) is not put back: overwriting it would destroy that change, and no
-  // later cancel could put it back either. Every other target is, and then the
-  // refusal names what was kept, loudly. Edit mode stays where it is — the
-  // click that cancels also leaves — so the savepoint is taken again at the
-  // stack as it now stands. Returns what it put back.
-  rewind(sessionId2, files) {
-    const history = this.history(sessionId2);
+  // whole or not at all — then give the stack back the shape it had, with
+  // nothing to redo, so neither `↶` nor `↷` can bring back what was discarded.
+  // A session pick changed since by anything else is not put back:
+  // overwriting it would destroy that change, and no later cancel could put it
+  // back either. Every other target is, and then the refusal names what was
+  // kept, loudly. A file's settings are the host's to check, and a refusal
+  // there refuses the whole cancel. Edit mode stays where it is — the click
+  // that cancels also leaves — so the savepoint is taken again at the stack as
+  // it now stands. Returns what it put back.
+  rewind(click3, sessionId2) {
+    const history = click3.historyOf(sessionId2);
     const { savepoint } = history;
     if (savepoint === void 0) {
       throw new BadVerbArgs(
@@ -86952,12 +87065,12 @@ var SettingsHistory = class {
       );
     }
     const stale = savepoint.net.filter(
-      (c) => this.read(sessionId2, files, c) !== c.after
+      (c) => moved(click3, sessionId2, c, "after")
     );
     const gone = new Set(stale.map(identity));
-    const putBack = savepoint.net.filter((c) => !gone.has(identity(c)));
+    const putBack2 = savepoint.net.filter((c) => !gone.has(identity(c)));
     const past = capped(without2(pastAt(history, savepoint), gone));
-    this.apply(sessionId2, files, putBack, "before", "rewind", {
+    this.apply(click3, sessionId2, putBack2, "before", "rewind", {
       past,
       future: [],
       savepoint: { at: past.length, net: [], below: [] }
@@ -86967,10 +87080,10 @@ var SettingsHistory = class {
         `rewind: ${stale.map(describe3).join(", ")} changed since edit mode opened \u2014 kept as it is; everything else edit mode changed was put back`
       );
     }
-    return putBack;
+    return putBack2;
   }
-  redo(sessionId2, files) {
-    const history = this.history(sessionId2);
+  redo(click3, sessionId2) {
+    const history = click3.historyOf(sessionId2);
     const { past, future } = history;
     const step4 = future.at(-1);
     if (step4 === void 0) {
@@ -86978,92 +87091,48 @@ var SettingsHistory = class {
     }
     const all2 = [...past, step4];
     const kept = capped(all2);
-    this.apply(sessionId2, files, step4, "after", "redo", {
+    this.apply(click3, sessionId2, step4, "after", "redo", {
       past: kept,
       future: future.slice(0, -1),
       ...savepointAfter(history.savepoint, all2.length - kept.length, step4)
     });
     return step4;
   }
-  // [LAW:no-silent-failure] A step lands whole, together with the history
-  // that records it, or not at all: every change is checked before any is
-  // written, and a failure while writing it or saving `then` puts back what
-  // was already written before the error goes on. A stale target is refused
-  // by name, naming the settings that moved in a file, and its now-unreachable
-  // changes leave both stacks (see the header). A file's change is the
-  // click's to land (`land`), so the host writes it.
-  apply(sessionId2, files, step4, to, verb, then) {
+  // [LAW:no-silent-failure] A step is refused whole when a session pick it
+  // steps has moved: the pick is named, and its now-unreachable changes leave
+  // both stacks (see the header). Otherwise each pick is written through the
+  // click, and each file's step is a change the click returns, from what the
+  // step recorded, so the host refuses it when a setting in it moved.
+  apply(click3, sessionId2, step4, to, verb, then) {
     const from = to === "before" ? "after" : "before";
-    const stale = step4.flatMap((c) => {
-      const now2 = this.read(sessionId2, files, c);
-      return now2 === c[from] ? [] : [c];
-    });
+    const stale = step4.filter((c) => moved(click3, sessionId2, c, from));
     if (stale.length > 0) {
-      this.forget(sessionId2, new Set(stale.map(identity)));
+      click3.move(
+        sessionId2,
+        forgotten(click3.historyOf(sessionId2), new Set(stale.map(identity)))
+      );
       throw new BadVerbArgs(
-        `${verb}: ${stale.map((c) => describeMoved(c, c[from], this.read(sessionId2, files, c))).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
+        `${verb}: ${stale.map(describe3).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
       );
     }
-    const written2 = [];
-    try {
-      for (const change of step4) {
-        this.write(sessionId2, files, change, change[from], change[to]);
-        written2.push(change);
-      }
-      this.put(sessionId2, then);
-    } catch (e) {
-      try {
-        for (const change of written2.reverse()) {
-          this.write(sessionId2, files, change, change[to], change[from]);
-        }
-      } catch (restoring) {
-        throw new Error(
-          `${e.message}; and putting the step back failed, so it is half-applied: ${restoring.message}`
-        );
-      }
-      throw e;
+    for (const change of step4) {
+      const value = change[to];
+      if (change.kind === "file")
+        click3.files.land(change.file, change[from], value);
+      else if (value === null) click3.held.clear(sessionId2, change.key);
+      else click3.held.set(sessionId2, change.key, value);
     }
+    click3.move(sessionId2, then);
   }
-  // [LAW:single-enforcer] A file this session's change did not land in (the
-  // host refused it, or could not write it): its history no longer chains
-  // through that file, so every change it holds for the file leaves both
-  // stacks, as a stale target's does.
+  // [LAW:single-enforcer] A file a change of this session's did not land in
+  // (the host refused it, or could not write it): its history no longer
+  // chains through that file, so every change it holds for the file leaves
+  // both stacks, as a stale target's does.
   forgetFile(sessionId2, file) {
-    this.forget(sessionId2, /* @__PURE__ */ new Set([identity({ kind: "file", file })]));
-  }
-  // Every change to the targets `gone` names leaves both stacks. Edit mode's
-  // net change forgets those targets too: putting them back would overwrite
-  // whatever changed them.
-  forget(sessionId2, gone) {
-    const { past, future, savepoint } = this.history(sessionId2);
-    this.put(sessionId2, {
-      past: without2(past, gone),
-      future: without2(future, gone),
-      ...savepoint !== void 0 && {
-        savepoint: {
-          // A step left empty leaves the stack, so the position counts the
-          // steps below it that survive.
-          at: without2(
-            [...past, ...[...future].reverse()].slice(0, savepoint.at),
-            gone
-          ).length,
-          net: savepoint.net.filter((c) => !gone.has(identity(c))),
-          below: without2(savepoint.below, gone)
-        }
-      }
-    });
-  }
-  read(sessionId2, files, change) {
-    return change.kind === "session" ? this.sessionState.get(sessionId2, change.key) : files.read(change.file);
-  }
-  write(sessionId2, files, change, from, to) {
-    if (change.kind === "file") {
-      files.land(change.file, from, to);
-    } else if (to === null) {
-      this.sessionState.clear(sessionId2, change.key);
-    } else {
-      this.sessionState.set(sessionId2, change.key, to);
-    }
+    this.put(
+      sessionId2,
+      forgotten(this.history(sessionId2), /* @__PURE__ */ new Set([`file:${file}`]))
+    );
   }
   // Move-to-end keeps insertion order as recency, so the bounds drop the
   // session that changed least recently. The new state is adopted only once
@@ -87199,10 +87268,58 @@ function describeStep(step4) {
 function describe3(change) {
   return change.kind === "session" ? `session setting "${change.key}"` : change.file;
 }
-function describeMoved(change, expected, now2) {
-  if (change.kind === "session") return describe3(change);
-  const moved = diffChanges(expected, now2).map((c) => addressText(c.at));
-  return `${moved.join(", ")} in ${change.file}`;
+function moved(click3, sessionId2, change, from) {
+  return change.kind === "session" && click3.held.get(sessionId2, change.key) !== change[from];
+}
+function forgotten({ past, future, savepoint }, gone) {
+  return {
+    past: without2(past, gone),
+    future: without2(future, gone),
+    ...savepoint !== void 0 && {
+      savepoint: {
+        // A step left empty leaves the stack, so the position counts the
+        // steps below it that survive.
+        at: without2(
+          [...past, ...[...future].reverse()].slice(0, savepoint.at),
+          gone
+        ).length,
+        net: savepoint.net.filter((c) => !gone.has(identity(c))),
+        below: without2(savepoint.below, gone)
+      }
+    }
+  };
+}
+function heldWrites(store) {
+  const held = /* @__PURE__ */ new Map();
+  const put = (sessionId2, key, value) => {
+    const writes = held.get(sessionId2) ?? /* @__PURE__ */ new Map();
+    writes.set(key, value);
+    held.set(sessionId2, writes);
+  };
+  return {
+    get: (sessionId2, key) => {
+      const writes = held.get(sessionId2);
+      return writes?.has(key) ? writes.get(key) : store.get(sessionId2, key);
+    },
+    revision: (sessionId2) => store.revision(sessionId2),
+    set: (sessionId2, key, value) => put(sessionId2, key, value),
+    setBatch: (sessionId2, pairs2) => {
+      for (const { key, value } of pairs2) put(sessionId2, key, value);
+    },
+    clear: (sessionId2, key) => put(sessionId2, key, null),
+    // One transaction, so no observer sees half a click.
+    flush: () => runInAction(() => {
+      for (const [sessionId2, writes] of held) {
+        const sets = [...writes].flatMap(
+          ([key, value]) => value === null ? [] : [{ key, value }]
+        );
+        if (sets.length > 0) store.setBatch(sessionId2, sets);
+        for (const [key, value] of writes)
+          if (value === null) store.clear(sessionId2, key);
+      }
+      held.clear();
+    })
+  };
 }
 
 // src/daemon/foundations/session-env.ts
@@ -87445,7 +87562,7 @@ function parseRenderOrigin(raw) {
   return { projectDir, cwd: cwd2, target: recordedTarget(source, configFile) };
 }
 function sessionOrigin(ctx, sid) {
-  const origin = requestedOrigin(ctx, sid);
+  const origin = recordedOrigin(ctx, sid);
   if (origin === null) {
     throw new BadVerbArgs(
       `session ${sid} has not rendered yet \u2014 no config to act on`
@@ -87453,40 +87570,46 @@ function sessionOrigin(ctx, sid) {
   }
   return origin;
 }
-function requestedOrigin(ctx, sid) {
+function recordedOrigin(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
 }
-function changeLanded(ctx, change, outcome) {
-  const { session, path: path43, latest } = change;
-  if (outcome.kind === "failed") {
+function changeDone(ctx, id2, outcome) {
+  const landed = ctx.configWrites.settled(id2, outcome);
+  if (landed === void 0) return false;
+  if (landed !== "owed") changeLanded(ctx, landed);
+  return true;
+}
+function changeLanded(ctx, { session, files, consequence, outcome }) {
+  if (outcome.kind !== "ok") {
     ctx.log("warn", `config change: ${outcome.reason} (session=${session})`);
-    ctx.history.forgetFile(session, path43);
+    if (outcome.kind === "refused")
+      for (const file of files) ctx.history.forgetFile(session, file);
     holdClickError(ctx.sessionState, session, outcome.reason, ctx.now());
     return;
   }
-  const origin = requestedOrigin(ctx, session);
-  if (origin === null || originHome(ctx, origin).path !== path43) return;
-  const before = ctx.lanes.of(origin, session, latest);
-  ctx.reloadConfig(origin);
-  ctx.lanes.clicked(
-    session,
-    latest,
-    before,
-    ctx.lanes.of(origin, session, latest)
-  );
+  const origin = recordedOrigin(ctx, session);
+  if (origin !== null && files.includes(originHome(ctx, origin).path))
+    ctx.reloadConfig(origin);
+  try {
+    consequence();
+  } catch (e) {
+    const reason = failureOf(e).message;
+    ctx.log("warn", `config change landed: ${reason} (session=${session})`);
+    holdClickError(ctx.sessionState, session, reason, ctx.now());
+  }
 }
 function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
 function laneMeter(ctx, sid, latest) {
-  const requested = requestedOrigin(ctx, sid);
-  if (requested === null) return null;
-  const read2 = () => ctx.lanes.of(requested, sid, latest);
+  const origin = recordedOrigin(ctx, sid);
+  if (origin === null) return null;
+  const read2 = () => ctx.lanes.of(origin, sid, latest);
   return { sessionId: sid, latest, before: read2(), read: read2 };
 }
 function nestOf(ctx, sid) {
-  const origin = requestedOrigin(ctx, sid);
+  const origin = recordedOrigin(ctx, sid);
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
 function originHome(ctx, origin) {
@@ -87498,17 +87621,10 @@ function originHome(ctx, origin) {
     origin.target.path
   );
 }
-var historyFiles = (ctx, sid) => ({
-  read: ctx.configText,
-  land: (file, before, after) => ctx.land(sid, file, before, after)
-});
 function editStore(ctx, sid) {
   return {
-    read: ctx.configText,
-    land: (file, before, after) => {
-      ctx.land(sid, file, before, after);
-      ctx.journal.file(sid, file, before, after);
-    }
+    read: (file) => ctx.configWrites.read(file),
+    record: (file, before, after) => ctx.journal.file(sid, file, before, after)
   };
 }
 var setConfig = async (rawValue, ctx) => {
@@ -87569,7 +87685,8 @@ var stepConfig = async (rawValue, ctx) => {
     (k) => ctx.sessionState.get(sid, k),
     key
   );
-  const stored = readValue(editStore(ctx, sid), home.path, landing.key);
+  const store = editStore(ctx, sid);
+  const stored = readValue(store.read(home.path), landing.key);
   const current2 = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
     "step-config",
     key,
@@ -87800,8 +87917,7 @@ var applyLayoutOp2 = async (rawValue, ctx) => {
 var undo = async (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
-  ctx.journal.commit();
-  const step4 = ctx.history.undo(sid, historyFiles(ctx, sid));
+  const step4 = ctx.journal.undo(sid);
   ctx.journal.wrote();
   ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
@@ -87817,9 +87933,8 @@ var back = async (value, ctx) => {
 };
 var rewind = async (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  ctx.journal.commit();
   ctx.journal.wrote();
-  const restored = ctx.history.rewind(sid, historyFiles(ctx, sid));
+  const restored = ctx.journal.rewind(sid);
   ctx.log(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
@@ -87828,8 +87943,7 @@ var rewind = async (value, ctx) => {
 var redo = async (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
-  ctx.journal.commit();
-  const step4 = ctx.history.redo(sid, historyFiles(ctx, sid));
+  const step4 = ctx.journal.redo(sid);
   ctx.journal.wrote();
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
@@ -88217,8 +88331,8 @@ async function foldEffects(rawValue, ctx, gathered) {
         ctx.now()
       );
     }
-    const message = `dispatch: ${errors2.join("; ")}`;
-    throw operational ? new Error(message) : new BadVerbArgs(message);
+    const message2 = `dispatch: ${errors2.join("; ")}`;
+    throw operational ? new Error(message2) : new BadVerbArgs(message2);
   }
 }
 function throwAll(failures) {
@@ -88229,9 +88343,9 @@ function throwAll(failures) {
     );
   }
 }
-async function journaled(sid, latest, ctx, turn, handler) {
+async function journaled(sid, latest, ctx, effects, turn, handler) {
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
-  const journal = ctx.history.begin();
+  const journal = ctx.history.begin(ctx.configWrites);
   const navigation = ctx.navigation.begin(journal.sessionState);
   const commit3 = turn.holds(() => {
     const failed3 = [];
@@ -88270,24 +88384,33 @@ async function journaled(sid, latest, ctx, turn, handler) {
   } catch (e) {
     failures.push(e);
   }
-  let live = true;
+  const consequence = () => {
+    const failed3 = [];
+    let live = true;
+    try {
+      live = commit3();
+    } catch (e) {
+      failed3.push(e);
+    }
+    if (live && lanes !== null) {
+      try {
+        const after = lanes.read();
+        ctx.lanes.clicked(
+          lanes.sessionId,
+          lanes.latest,
+          journal.written() ? lanes.before : after,
+          after
+        );
+      } catch (e) {
+        failed3.push(e);
+      }
+    }
+    throwAll(failed3);
+  };
   try {
-    live = commit3();
+    ctx.configWrites.seal(effects, sid, consequence);
   } catch (e) {
     failures.push(e);
-  }
-  if (live && lanes !== null) {
-    try {
-      const after = lanes.read();
-      ctx.lanes.clicked(
-        lanes.sessionId,
-        lanes.latest,
-        journal.written() ? lanes.before : after,
-        after
-      );
-    } catch (e) {
-      failures.push(e);
-    }
   }
   throwAll(failures);
 }
@@ -88305,7 +88428,7 @@ function click(verb, gather, handler) {
         gathered: ctx.gatherTook
       },
       () => gather(value, ctx),
-      (gathered, turn) => journaled(sid, ctx.latest, ctx, turn, async (c) => {
+      (gathered, turn) => journaled(sid, ctx.latest, ctx, ctx.effects, turn, async (c) => {
         try {
           await handler(value, c, gathered);
         } finally {
@@ -88331,14 +88454,14 @@ var VERBS = new Map([
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
-function closeIdleMenus(sid, latest, idle, ctx) {
+function closeIdleMenus(sid, latest, idle, ctx, effects) {
   return ctx.journalTurns.take(
     "menu-idle",
     {
       waited: (ms) => ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
       gone: async () => false
     },
-    (turn) => journaled(sid, latest, ctx, turn, async (c) => {
+    (turn) => journaled(sid, latest, ctx, effects, turn, async (c) => {
       if (!await turn.landed(idle.confirm())) {
         c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
@@ -88360,24 +88483,18 @@ function closeIdleMenus(sid, latest, idle, ctx) {
 }
 
 // src/renderer/verbs/port.ts
-function verbsOver(ctx, clicks, writes) {
+function verbsOver(ctx, clicks) {
   return {
     handler: (verb) => {
       const handler = VERBS.get(verb);
-      return handler && ((value, { click: click3, effects, ...facts }) => handler(value, {
+      return handler && ((value, { click: click3, ...facts }) => handler(value, {
         ...ctx,
         ...facts,
-        clientGone: () => clicks.gone(click3),
-        land: (session, path43, before, after) => writes.land(
-          effects,
-          { session, path: path43, latest: facts.latest },
-          before,
-          after
-        )
+        clientGone: () => clicks.gone(click3)
       }));
     },
-    closeIdle: (sessionId2, latest, idle) => closeIdleMenus(sessionId2, latest, idle, ctx),
-    landed: (change, outcome) => changeLanded(ctx, change, outcome)
+    closeIdle: (sessionId2, latest, idle, effects) => closeIdleMenus(sessionId2, latest, idle, ctx, effects),
+    changeDone: (id2, outcome) => changeDone(ctx, id2, outcome)
   };
 }
 
@@ -88662,9 +88779,9 @@ var Watches = class {
   pushed(id2, heard, deaf) {
     const watch2 = this.held.get(id2);
     if (watch2 === void 0) return;
-    const moved = !compareStructural(watch2.deaf, deaf);
+    const moved2 = !compareStructural(watch2.deaf, deaf);
     watch2.deaf = deaf;
-    const window2 = heard ?? (moved ? { kind: "unknown" } : null);
+    const window2 = heard ?? (moved2 ? { kind: "unknown" } : null);
     if (window2 !== null) watch2.heard(window2);
   }
 };
@@ -89285,9 +89402,9 @@ var RenderCache = class {
   // a session is watched before it retires one.
   pins = /* @__PURE__ */ new Map();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // its error, until a view opens for
-  // it: a frame draws that error, never the last bar it pushed. Written only
-  // by `opened`, which sets either this or the session's view, never both.
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
   openFailures = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -90185,44 +90302,68 @@ var ConfigWrites = class {
   }
   mint;
   disk;
-  // Each change on its way, and the text it leaves its file holding.
-  held = /* @__PURE__ */ new Map();
+  // The open click's writes, by file: what it read first, and wrote last.
+  open = /* @__PURE__ */ new Map();
+  landing = null;
   waiting = [];
-  // [LAW:one-source-of-truth] `file` as the changes on their way leave it:
-  // the last one's text, else the disk's. A turn opens only once the turns
-  // ahead of it have landed, so a click reads its own changes and no other's.
+  // [LAW:one-source-of-truth] `file` as the open click left it: its last
+  // write, else the disk, which holds every click ahead of it.
   read(file) {
-    const ours = [...this.held.values()].filter((h) => h.by.path === file);
-    return ours.length === 0 ? this.disk(file) : ours.at(-1).after;
+    const written2 = this.open.get(file);
+    return written2 === void 0 ? this.disk(file) : written2.after;
   }
-  // The change from `before` to `after` in `path`, into the turn's effects. A
-  // write that changes nothing is no change.
-  land(effects, by, before, after) {
-    const changes = diffChanges(before, after);
-    if (changes.length === 0) return;
-    const change = {
-      kind: "change",
-      id: this.mint(),
-      session: by.session,
-      target: { kind: "layer", path: by.path },
-      changes
+  // A write of the open click: one change per file, from the click's first
+  // read of it to its last write.
+  land(file, before, after) {
+    this.open.set(file, {
+      before: this.open.get(file)?.before ?? before,
+      after
+    });
+  }
+  // The open click is over. Its changes join its turn's effects, and its
+  // consequence waits for them; a click that changed no file has its
+  // consequence now.
+  seal(effects, session, consequence) {
+    const written2 = [...this.open].flatMap(([path43, { before, after }]) => {
+      const list2 = diffChanges(before, after);
+      return list2.length === 0 ? [] : [{ path: path43, list: list2 }];
+    });
+    const files = [...this.open.keys()];
+    this.open.clear();
+    if (written2.length === 0) return consequence();
+    if (session === null)
+      throw new Error(`a click with no session wrote ${files.join(", ")}`);
+    const changes = written2.map(
+      ({ path: path43, list: list2 }) => ({
+        kind: "change",
+        id: this.mint(),
+        session,
+        target: { kind: "layer", path: path43 },
+        changes: list2
+      })
+    );
+    this.landing = {
+      of: { session, files, consequence },
+      owed: new Set(changes.map((c) => c.id)),
+      missed: null
     };
-    this.held.set(change.id, { by, after });
-    effects.push(change);
+    effects.push(...changes);
   }
-  // A change's `effect-done`: what it wrote, or undefined for an id no change
-  // of this renderer's holds.
-  settled(id2) {
-    const held = this.held.get(id2);
-    if (held === void 0) return void 0;
-    this.held.delete(id2);
-    if (this.held.size === 0)
-      for (const resume of this.waiting.splice(0)) resume();
-    return held.by;
+  // A change's `effect-done`: the landing once its last change is settled,
+  // `owed` while others are still on their way, or undefined for an id no
+  // change of this renderer's holds.
+  settled(id2, outcome) {
+    const landing = this.landing;
+    if (landing === null || !landing.owed.delete(id2)) return void 0;
+    if (outcome.kind !== "ok") landing.missed ??= outcome;
+    if (landing.owed.size > 0) return "owed";
+    this.landing = null;
+    for (const resume of this.waiting.splice(0)) resume();
+    return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
   }
-  // Resolves once no change is on its way.
+  // Resolves once no click's changes are on their way.
   landed() {
-    return this.held.size === 0 ? Promise.resolve() : new Promise((resume) => this.waiting.push(resume));
+    return this.landing === null ? Promise.resolve() : new Promise((resume) => this.waiting.push(resume));
   }
 };
 
@@ -90266,28 +90407,29 @@ function mainRenderer(parts, pushed) {
         retireSession(parts, event.session);
         return;
       case "effect-done": {
+        if (parts.verbs.changeDone(event.of, event.outcome)) return;
         const delivered = deliveries.get(event.of);
-        if (delivered !== void 0) {
-          deliveries.delete(event.of);
-          if (event.outcome.kind === "ok") delivered();
-          return;
-        }
-        const change = parts.writes.settled(event.of);
-        if (change === void 0)
+        if (delivered === void 0)
           throw new Error(
-            `effect-done for effect ${event.of}, which is not an effect on its way`
+            `effect-done for effect ${event.of}, which is neither a present nor a change on its way`
           );
-        parts.verbs.landed(change, event.outcome);
+        deliveries.delete(event.of);
+        if (event.outcome.kind === "ok") delivered();
         return;
       }
       case "click":
         await clickTurn(parts, event, record2, effects);
         return;
       case "menu-idle":
-        await parts.verbs.closeIdle(event.session, event.latest, {
-          ...event.idle,
-          confirm: () => parts.menuIdle.confirmClose(event.session, event.idle.firedAt)
-        });
+        await parts.verbs.closeIdle(
+          event.session,
+          event.latest,
+          {
+            ...event.idle,
+            confirm: () => parts.menuIdle.confirmClose(event.session, event.idle.firedAt)
+          },
+          effects
+        );
         return;
     }
   };
@@ -90303,8 +90445,8 @@ function mainRenderer(parts, pushed) {
     },
     event: async (input) => {
       const record2 = [];
-      const effects = [];
       const from = parts.clock.monotonic();
+      const effects = [];
       const ended = await turn(input.event, input.at, record2, effects).then(
         () => ({ kind: "answered" }),
         // [LAW:single-enforcer] Classified here, where it was thrown: a
@@ -90313,8 +90455,8 @@ function mainRenderer(parts, pushed) {
       );
       return {
         ...ended,
-        record: record2,
         effects,
+        record: record2,
         subscriptions: parts.renderCache.subscriptions(),
         turnMs: elapsedMs(parts.clock, from)
       };
@@ -90339,11 +90481,11 @@ function startOver(inputs, sessionState, history, host) {
   );
   let minted = 0;
   const mint = () => ++minted;
-  const writes = new ConfigWrites(mint, readConfigText);
+  const configWrites = new ConfigWrites(mint, readConfigText);
   const journalTurns = new JournalTurns({
     log,
     monotonic: () => clock.monotonic(),
-    changesLanded: () => writes.landed()
+    changesLanded: () => configWrites.landed()
   });
   const navigationHistory = new NavigationHistory();
   const effectSessions = new EffectSessions();
@@ -90420,6 +90562,7 @@ function startOver(inputs, sessionState, history, host) {
     stateDir: inputs.stateDir,
     locations: inputs.locations,
     journalTurns,
+    configWrites,
     clickLanded: (sessionId2) => host.menuIdle.clicked(sessionId2, now2()),
     log,
     launch: host.launch,
@@ -90459,7 +90602,6 @@ function startOver(inputs, sessionState, history, host) {
     // render drew the bar with, so a save compares against the bar the user saw.
     configFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.config,
     reloadConfig,
-    configText: (file) => writes.read(file),
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.sources,
     links: linkSigner2,
@@ -90558,7 +90700,7 @@ function startOver(inputs, sessionState, history, host) {
     }
   };
   return mainRenderer(
-    { ...parts, verbs: verbsOver(verbCtx, host.clicks, writes), mint, writes },
+    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint },
     pushed
   );
 }
@@ -90697,10 +90839,10 @@ var TomlError = class _TomlError extends Error {
   line;
   column;
   codeblock;
-  constructor(message, options) {
+  constructor(message2, options) {
     const [line, column] = getLineColFromPtr(options.toml, options.ptr);
     const codeblock = makeCodeBlock(options.toml, line, column);
-    super(`Invalid TOML document: ${message}
+    super(`Invalid TOML document: ${message2}
 
 ${codeblock}`, options);
     this.line = line;
@@ -90708,8 +90850,8 @@ ${codeblock}`, options);
     this.codeblock = codeblock;
   }
   /** @internal */
-  static x(message, ctx, ptr) {
-    throw new _TomlError(message, { toml: ctx.s, ptr: ptr ?? ctx.p });
+  static x(message2, ctx, ptr) {
+    throw new _TomlError(message2, { toml: ctx.s, ptr: ptr ?? ctx.p });
   }
 };
 
@@ -91353,7 +91495,7 @@ function validateTablePeek(ctx, peek, ptr) {
   if (peek === null || ctx.uk === 2)
     TomlError.x(peek === null ? "trying to redefine an already defined table or value" : "document contains an unsafe property", ctx, ptr);
 }
-function parse2(toml, options = {}) {
+function parse3(toml, options = {}) {
   let ctx = {
     s: toml,
     p: 0,
@@ -91661,7 +91803,7 @@ function alacrittyFamilyIn(file, home, depth) {
   }
   let doc;
   try {
-    doc = parse2(text4);
+    doc = parse3(text4);
   } catch (e) {
     return {
       kind: "failed",
@@ -93329,9 +93471,9 @@ function fileHistoryStorage(file, logger) {
         fs_default.mkdirSync(import_node_path45.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(state), 384);
       } catch (e) {
-        const message = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
-        logger("error", message);
-        throw new Error(message);
+        const message2 = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
+        logger("error", message2);
+        throw new Error(message2);
       }
     }
   };
