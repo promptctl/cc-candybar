@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-761",
+      "ref": "refs/pull/761/merge",
+      "sha": "169fac2452e999a53bec1e57cdb88247df31e02b",
+      "timestamp": "2026-11-16T00:40:32.364Z",
+      "commits": [
+        {
+          "sha": "169fac2452e999a53bec1e57cdb88247df31e02b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T17:39:34-07:00",
+          "message": "Merge 8be4ca9902383f6244bfe5ab31b478760a426a6d into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
+        },
+        {
+          "sha": "8be4ca9902383f6244bfe5ab31b478760a426a6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T17:39:14-07:00",
+          "message": "fix(collector): tok/s lasts a whole turn, speed configs load again, a quiet session logs nothing and every provider closes (candybar-host-renderer-x96a.xae)\n\nSpeed samples come at transcript writes, which land seconds to minutes\napart in real work, so the 10 s sample window dropped long generations\nand the draw ended the rate mid-turn. Each sample now says whether\nClaude's turn was open after that write, read from the transcript (a\nprompt opens it; an interrupt or a final assistant message closes it).\nA pair is a rate only inside a turn, the current rate is the open turn's\nlatest measured interval, and it ends at the write that closes the turn.\nWith no clock in it, speed returns to the view's payload, so a config\nwhose cache policy reads speed.* loads as it did before. The observation\nis its ring alone; its prev and cur restated the ring's last two samples.\n\n- A source declares which triggers' clean refreshes write a line. The\n  transcript leaves out its backstop period, so a held quiet session adds\n  nothing to the log; its refreshes still count and a failed one writes.\n- The providers' close runs every owner's close whatever an earlier one\n  threw, and throws once naming each owner that failed.\n- today fails on the session's own ingest only when the directory set does\n  not already sum its transcript.\n- The usage store's running tally counts refreshes, and is named so.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "797e5342a7d59f9f4819a5ec602e6c062895e3f0",
