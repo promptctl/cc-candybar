@@ -44,6 +44,16 @@ describe("diffChanges then applyChanges gives back what was written", () => {
     roundTrip(FILE, null);
   });
 
+  test("a file that does not parse is replaced whole, and only over the same bytes", () => {
+    const broken = "{ globals: { theme: ";
+    roundTrip(broken, FILE);
+    roundTrip(FILE, broken);
+    expect(applyChanges(`${broken} `, diffChanges(broken, FILE))).toMatchObject({
+      kind: "moved",
+      at: [],
+    });
+  });
+
   test("a changed value is one change at its setting, keeping the line's comment", () => {
     const after = FILE.replace('"nord"', '"dracula"');
     expect(diffChanges(FILE, after)).toEqual([
@@ -51,7 +61,7 @@ describe("diffChanges then applyChanges gives back what was written", () => {
         op: "set",
         at: ["globals", "theme"],
         text: '"dracula"',
-        read: { kind: "value", value: "nord" },
+        read: { kind: "value", text: '"nord"' },
       },
     ]);
   });
@@ -72,8 +82,8 @@ describe("a setting that moved refuses the whole list", () => {
     expect(applyChanges(FILE.replace("shade: 3", "shade: 7"), changes)).toEqual<Applied>({
       kind: "moved",
       at: ["globals", "shade"],
-      read: { kind: "value", value: 3 },
-      found: { kind: "value", value: 7 },
+      read: { kind: "value", text: "3" },
+      found: { kind: "value", text: "7" },
     });
   });
 
@@ -81,6 +91,15 @@ describe("a setting that moved refuses the whole list", () => {
     const set = diffChanges(FILE, FILE.replace("shade: 3,", "shade: 3,\n    style: \"round\","));
     const outcome = applyChanges(FILE.replace("globals: {", "globals: 5, old: {"), set);
     expect(outcome.kind).toBe("moved");
+  });
+
+  test("a file broken by hand under a change refuses it, saying what the file holds", () => {
+    expect(applyChanges("{ globals: ", changes)).toEqual<Applied>({
+      kind: "moved",
+      at: ["globals", "shade"],
+      read: { kind: "value", text: "3" },
+      found: { kind: "file", text: "{ globals: " },
+    });
   });
 
   test("a file deleted under a change refuses it", () => {

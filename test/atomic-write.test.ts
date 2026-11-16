@@ -126,13 +126,12 @@ describe("linkChain", () => {
 
 // Undo of a first-ever config write removes what that write created — the
 // target behind a dangling link, never the link.
-test("writeConfigText(null) through a link removes the target, keeps the link", async () => {
-  const { writeConfigText } =
-    await import("../src/renderer/config-file-store.js");
+test("a change that deletes the file through a link removes the target, keeps the link", async () => {
+  const { writingStore } = await import("./helpers/writing-store.js");
   const link = path.join(dir, "config.json5");
   fs.symlinkSync("dotfiles-config.json5", link);
-  writeConfigText(link, "{}", () => {});
-  writeConfigText(link, null, () => {});
+  writingStore.land(link, null, "{}");
+  writingStore.land(link, "{}", null);
   expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
   expect(fs.existsSync(path.join(dir, "dotfiles-config.json5"))).toBe(false);
 });

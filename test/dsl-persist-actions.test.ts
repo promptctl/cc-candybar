@@ -20,6 +20,7 @@
 //   5. reset-config is gated by key membership and deletes the key's path
 //      from the file, so the next reload falls back to the bundled default.
 
+import { writingStore } from "./helpers/writing-store";
 import type { ColorCompatibility } from "../src/themes/policy";
 import { drawPayload } from "./helpers/draw-payload";
 import { locations } from "../src/daemon/paths";
@@ -168,7 +169,7 @@ describe("persistValueText", () => {
     const impossiblePath = join(blocker, "config.json5");
     expect(() =>
       writeValues(
-        { record: () => {}, logger: () => {} },
+        writingStore,
         {
           path: impossiblePath,
           above: [],

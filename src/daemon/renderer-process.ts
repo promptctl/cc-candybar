@@ -538,7 +538,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         toSend = { ...input, event: { ...e, of: effect.id } };
       }
       const output = await link.lines.renderer.answer(toSend);
-      if (output.kind !== "answered") return output;
+      // A turn that threw carries the effects its acts made too.
       return {
         ...output,
         effects: output.effects.map((effect) => {

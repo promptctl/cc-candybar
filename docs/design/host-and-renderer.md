@@ -255,9 +255,12 @@ type FileTarget =
   | { kind: "claude-settings"; session: SessionId };    // the session's Claude Code settings, from its session context
 
 type Change =
-  | { op: "set"; at: Address; value: JsonValue; read: { kind: "value"; value: JsonValue } | { kind: "absent" } }
-  | { op: "remove"; at: Address; read: JsonValue }
-  | { op: "insert"; at: Address; index: number; value: JsonValue };
+  | { op: "set"; at: Address; text: string; read: Read }
+  | { op: "remove"; at: Address; read: Read };
+
+// What the renderer saw at the address: a setting's JSON5 text, the whole
+// document's bytes (a change at the document's root), or nothing there.
+type Read = { kind: "value"; text: string } | { kind: "file"; text: string } | { kind: "absent" };
 
 // Today's run action, with its directory named, never spelled.
 interface Program {
@@ -267,7 +270,7 @@ interface Program {
 }
 ```
 
-`Address` is a setting's place inside its document, the keys and indexes from the document's root. `StoreName` is one name per durable store the profile holds; `SlashLine` is a slash command and its arguments, already parsed by the grammar the bar uses today; `Scheduled` is a token the renderer chose and gets back.
+`Address` is a setting's place inside its document, the keys from the document's root. An array is set whole, so a layout edit is guarded per row. A set carries JSON5 text rather than a value, so a copied row keeps its comments and every value JSON5 allows crosses the wire; two reads of a setting agree when their texts decode to the same value, so a hand edit that only reformats it has not moved it. A document that does not parse has no settings, so a change to it, or to one that will not, replaces the document whole and reads its bytes. Until step 5 hands the config chain in, a `layer` target is named by its path, which the renderer resolves from the session's render origin. `StoreName` is one name per durable store the profile holds; `SlashLine` is a slash command and its arguments, already parsed by the grammar the bar uses today; `Scheduled` is a token the renderer chose and gets back.
 
 - **Every effect names its operation.** There is no `tmux { args }` and no free-form command, because a raw command admits every command and the safety of a slash line or a run could not be expressed in it. A run link's program is the declaration its link signed, as today. [LAW:types-are-the-program]
 - **Every write target is named, never spelled.** A `layer` is reached through a session the renderer holds and named by its role in that session's chain, and so is `claude-settings`. Durable state is written by `store`, so no target names a file under the profile. Undo stores these names, so a history copied to another renderer resolves only against what that renderer was handed.
@@ -280,7 +283,7 @@ interface Program {
   Local merges above project, so a local value wins over the shared one. When the interpreter creates a local file, it adds the file to the repository's exclude file (`git rev-parse --git-path info/exclude`, which every worktree of the repository shares), so git never shows it. The local layer loads under the project layer's approval, because a clone can commit a file by that name.
 - **A config write is a `change`, and the renderer decides what it means.** It decides from the schema in its own bundle: a step's arithmetic, which settings a reset clears, where a layout insert goes. It returns plain changes, each `at` a setting's address inside the document its target names. The host never knows the schema, so a renderer can add a setting without a host install. A host-side verb, such as save a preset or step, would put the schema in the host.
 - **The host splices, and refuses a setting that moved.** It splices each value in place and keeps every other byte, comments included, and a change's list lands whole or not at all. `read` is the value the renderer saw at that address. If it has moved, the host refuses the whole change and names the setting. That is how undo refuses a setting someone else changed, how save cannot overwrite a hand edit made after its config was read, and how the doctor's fix lands only on the settings it diagnosed. The guard is per setting because dozens of sessions write Claude Code's settings file, and a whole-file guard would fail on every unrelated write.
-- **A turn that changes a config layer ends when the change lands.** The host hands the layer's new text to config discovery, the one writer of every `ConfigSnapshot`. Every session whose chain holds that file gets it before its renderer's next input, so each click sees what the one before it left, and the watcher then finds nothing new. Every other writer reaches discovery through the watcher, as today.
+- **A turn that changes a config layer ends when the change lands.** The host hands the layer's new text to config discovery, the one writer of every `ConfigSnapshot`. Every session whose chain holds that file gets it before its renderer's next input, so each click sees what the one before it left, and the watcher then finds nothing new. Every other writer reaches discovery through the watcher, as today. Until step 5, the renderer stands in for discovery: the clicking session reloads in its change's `effect-done` turn, a journal turn opens only once the changes ahead of it have landed, and a click reads a file as its own changes on their way leave it, so a click that writes twice reads its first write.
 - **`type-slash` checks, then acts.** The interpreter reads the pane and refuses unless it shows Claude Code's bare input box, then stashes, pastes and submits. Nothing in the bar can come between the check and the act, because the interpreter runs one effect at a time; the user can, in the gap between two tmux calls, as today.
 - **`run` carries its refreshes.** The collector holds each named source pending from the run's start until the program exits and the source has been re-read. The host owns that order. A run's program runs in its session's environment (above).
 - **Repository trust is the host's.** Which repositories may run commands is a security decision, so the host keeps the answers and resolves config by them; a click that answers the question returns `approve-repo` for the layer it asked about. [LAW:single-enforcer]

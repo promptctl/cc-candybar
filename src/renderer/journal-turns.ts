@@ -78,6 +78,9 @@ export class JournalTurns {
       readonly log: (level: "warn", msg: string) => void;
       // On a clock whose differences are milliseconds.
       readonly monotonic: () => Monotonic;
+      // Resolves once every config change a turn returned has landed
+      // (src/renderer/config-writes.ts).
+      readonly changesLanded: () => Promise<void>;
     },
   ) {}
 
@@ -92,6 +95,9 @@ export class JournalTurns {
     const asked = this.deps.monotonic();
     this.queued++;
     return this.queue.run(DAEMON_WIDE, async () => {
+      // [LAW:no-ambient-temporal-coupling] A turn reads the files the turns
+      // ahead of it wrote, so it opens once their changes have landed.
+      await this.deps.changesLanded();
       this.queued--;
       const since = this.deps.monotonic();
       waited(spanMs(asked, since));

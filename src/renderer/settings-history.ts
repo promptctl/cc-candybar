@@ -21,7 +21,8 @@
 
 import { observable, runInAction } from "mobx";
 import { EDIT_MODE_KEY, EDIT_MODE_REF } from "../config/loader/edit-mode";
-import { readConfigText, writeConfigText } from "./config-file-store";
+import type { EditStore } from "./config-file-store";
+import { addressText, diffChanges } from "../config/config-changes";
 import type { DaemonLogger } from "../utils/logger";
 import { recordingView } from "./session-state";
 import { type SessionStateRW } from "../renderer-interface/session-state";
@@ -78,7 +79,7 @@ export interface Journal {
     sessionId: SessionId,
     file: string,
     before: string | null,
-    after: string,
+    after: string | null,
   ): void;
   commit(): void;
   // A write this journal holds no step for (a history step, the repo book).
@@ -91,7 +92,11 @@ export interface Journal {
 // twice records one change from its first `before` to its last `after`.
 type Pending = Map<SessionId, Map<string, Change>>;
 
-const identity = (c: Change): string =>
+type Target =
+  | { readonly kind: "session"; readonly key: string }
+  | { readonly kind: "file"; readonly file: string };
+
+const identity = (c: Target): string =>
   c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
 
 export class SettingsHistory {
@@ -212,13 +217,20 @@ export class SettingsHistory {
   }
 
   // Returns the step it restored, so the caller can say what changed.
-  undo(sessionId: SessionId): Step {
+  undo(sessionId: SessionId, files: EditStore): Step {
     const history = this.history(sessionId);
     const step = history.past.at(-1);
     if (step === undefined) {
       throw new BadVerbArgs("undo: nothing to undo");
     }
-    this.apply(sessionId, step, "before", "undo", afterUndo(history, step));
+    this.apply(
+      sessionId,
+      files,
+      step,
+      "before",
+      "undo",
+      afterUndo(history, step),
+    );
     return step;
   }
 
@@ -232,7 +244,7 @@ export class SettingsHistory {
   // refusal names what was kept, loudly. Edit mode stays where it is — the
   // click that cancels also leaves — so the savepoint is taken again at the
   // stack as it now stands. Returns what it put back.
-  rewind(sessionId: SessionId): Step {
+  rewind(sessionId: SessionId, files: EditStore): Step {
     const history = this.history(sessionId);
     const { savepoint } = history;
     if (savepoint === undefined) {
@@ -241,12 +253,12 @@ export class SettingsHistory {
       );
     }
     const stale = savepoint.net.filter(
-      (c) => this.read(sessionId, c) !== c.after,
+      (c) => this.read(sessionId, files, c) !== c.after,
     );
     const gone = new Set(stale.map(identity));
     const putBack = savepoint.net.filter((c) => !gone.has(identity(c)));
     const past = capped(without(pastAt(history, savepoint), gone));
-    this.apply(sessionId, putBack, "before", "rewind", {
+    this.apply(sessionId, files, putBack, "before", "rewind", {
       past,
       future: [],
       savepoint: { at: past.length, net: [], below: [] },
@@ -259,7 +271,7 @@ export class SettingsHistory {
     return putBack;
   }
 
-  redo(sessionId: SessionId): Step {
+  redo(sessionId: SessionId, files: EditStore): Step {
     const history = this.history(sessionId);
     const { past, future } = history;
     const step = future.at(-1);
@@ -268,7 +280,7 @@ export class SettingsHistory {
     }
     const all = [...past, step];
     const kept = capped(all);
-    this.apply(sessionId, step, "after", "redo", {
+    this.apply(sessionId, files, step, "after", "redo", {
       past: kept,
       future: future.slice(0, -1),
       ...savepointAfter(history.savepoint, all.length - kept.length, step),
@@ -280,53 +292,39 @@ export class SettingsHistory {
   // that records it, or not at all: every change is checked before any is
   // written, and a failure while writing it or saving `then` puts back what
   // was already written before the error goes on. A stale target is refused
-  // by name, and its now-unreachable changes leave both stacks (see the
-  // header).
+  // by name, naming the settings that moved in a file, and its now-unreachable
+  // changes leave both stacks (see the header). A file's change is the
+  // click's to land (`land`), so the host writes it.
   private apply(
     sessionId: SessionId,
+    files: EditStore,
     step: Step,
     to: "before" | "after",
     verb: "undo" | "redo" | "rewind",
     then: SessionHistory,
   ): void {
     const from = to === "before" ? "after" : "before";
-    const stale = step.filter((c) => this.read(sessionId, c) !== c[from]);
+    const stale = step.flatMap((c) => {
+      const now = this.read(sessionId, files, c);
+      return now === c[from] ? [] : [c];
+    });
     if (stale.length > 0) {
-      const gone = new Set(stale.map(identity));
-      const { past, future, savepoint } = this.history(sessionId);
-      // Edit mode's net change forgets those targets too: putting them back
-      // would overwrite whatever changed them.
-      this.put(sessionId, {
-        past: without(past, gone),
-        future: without(future, gone),
-        ...(savepoint !== undefined && {
-          savepoint: {
-            // A step left empty leaves the stack, so the position counts the
-            // steps below it that survive.
-            at: without(
-              [...past, ...[...future].reverse()].slice(0, savepoint.at),
-              gone,
-            ).length,
-            net: savepoint.net.filter((c) => !gone.has(identity(c))),
-            below: without(savepoint.below, gone),
-          },
-        }),
-      });
+      this.forget(sessionId, new Set(stale.map(identity)));
       throw new BadVerbArgs(
-        `${verb}: ${stale.map(describe).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
+        `${verb}: ${stale.map((c) => describeMoved(c, c[from], this.read(sessionId, files, c))).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
       );
     }
     const written: Change[] = [];
     try {
       for (const change of step) {
-        this.write(sessionId, change, change[to]);
+        this.write(sessionId, files, change, change[from], change[to]);
         written.push(change);
       }
       this.put(sessionId, then);
     } catch (e) {
       try {
         for (const change of written.reverse()) {
-          this.write(sessionId, change, change[from]);
+          this.write(sessionId, files, change, change[to], change[from]);
         }
       } catch (restoring) {
         throw new Error(
@@ -337,23 +335,60 @@ export class SettingsHistory {
     }
   }
 
-  private read(sessionId: SessionId, change: Change): string | null {
+  // [LAW:single-enforcer] A file this session's change did not land in (the
+  // host refused it, or could not write it): its history no longer chains
+  // through that file, so every change it holds for the file leaves both
+  // stacks, as a stale target's does.
+  forgetFile(sessionId: SessionId, file: string): void {
+    this.forget(sessionId, new Set([identity({ kind: "file", file })]));
+  }
+
+  // Every change to the targets `gone` names leaves both stacks. Edit mode's
+  // net change forgets those targets too: putting them back would overwrite
+  // whatever changed them.
+  private forget(sessionId: SessionId, gone: ReadonlySet<string>): void {
+    const { past, future, savepoint } = this.history(sessionId);
+    this.put(sessionId, {
+      past: without(past, gone),
+      future: without(future, gone),
+      ...(savepoint !== undefined && {
+        savepoint: {
+          // A step left empty leaves the stack, so the position counts the
+          // steps below it that survive.
+          at: without(
+            [...past, ...[...future].reverse()].slice(0, savepoint.at),
+            gone,
+          ).length,
+          net: savepoint.net.filter((c) => !gone.has(identity(c))),
+          below: without(savepoint.below, gone),
+        },
+      }),
+    });
+  }
+
+  private read(
+    sessionId: SessionId,
+    files: EditStore,
+    change: Change,
+  ): string | null {
     return change.kind === "session"
       ? this.sessionState.get(sessionId, change.key)
-      : readConfigText(change.file);
+      : files.read(change.file);
   }
 
   private write(
     sessionId: SessionId,
+    files: EditStore,
     change: Change,
-    value: string | null,
+    from: string | null,
+    to: string | null,
   ): void {
     if (change.kind === "file") {
-      writeConfigText(change.file, value, this.logger);
-    } else if (value === null) {
+      files.land(change.file, from, to);
+    } else if (to === null) {
       this.sessionState.clear(sessionId, change.key);
     } else {
-      this.sessionState.set(sessionId, change.key, value);
+      this.sessionState.set(sessionId, change.key, to);
     }
   }
 
@@ -557,4 +592,16 @@ function describe(change: Change): string {
   return change.kind === "session"
     ? `session setting "${change.key}"`
     : change.file;
+}
+
+// A stale target as its refusal names it: a file by the settings in it that
+// moved from what the step expected.
+function describeMoved(
+  change: Change,
+  expected: string | null,
+  now: string | null,
+): string {
+  if (change.kind === "session") return describe(change);
+  const moved = diffChanges(expected, now).map((c) => addressText(c.at));
+  return `${moved.join(", ")} in ${change.file}`;
 }

@@ -19,7 +19,12 @@ import {
   noManagedSettings,
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
-import { VERBS } from "../../src/renderer/verbs";
+import { changeLanded, VERBS } from "../../src/renderer/verbs";
+import { diffChanges } from "../../src/config/config-changes";
+import { performChange } from "../../src/daemon/effect-interpreter";
+import type { Effect, EffectId } from "../../src/renderer-interface/interface";
+import { ConfigWrites } from "../../src/renderer/config-writes";
+import { readConfigText } from "../../src/renderer/config-file-store";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import type { VerbContext } from "../../src/renderer/verbs";
@@ -79,7 +84,7 @@ export function testVerbContext(
   config?: DslConfig,
   host: Host = HOST,
 ): VerbContext {
-  return {
+  const ctx: VerbContext = {
     gates: bareGates(),
     stateDir: stateDir(host),
     locations: locations(host),
@@ -91,6 +96,8 @@ export function testVerbContext(
     journalTurns: new JournalTurns({
       log: () => {},
       monotonic: () => systemTimekeeper.monotonic(),
+      // Each write here lands as the click makes it, so none is on its way.
+      changesLanded: async () => {},
     }),
     clickLanded: () => {},
     placeWaited: () => {},
@@ -180,7 +187,7 @@ export function testVerbContext(
     // holds no render cache, so there is nothing to rebuild: the file a click
     // wrote is the whole outcome, and it is what these tests read. A rig with a
     // cache hands in its own — test/settings-config-menu.test.ts records each
-    // reload to pin write → reload → release.
+    // reload to pin that it follows the write's landing.
     reloadConfig: () => {},
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.
@@ -217,18 +224,70 @@ export function testVerbContext(
     },
     // No draw here lists a diagnostic, so a copy-diagnostic click is refused.
     diagnosticCopy: () => undefined,
+    configText: readConfigText,
+    land: landingIn(() => ctx),
   };
+  return ctx;
 }
+
+// The host's interpreter performs each write as the click makes it, and the
+// click hears how it landed there and then, through `of()`'s reload and
+// session state, so the file a test reads is the file the click left. A
+// daemon performs a click's writes once its turn answers
+// (test/helpers/click-parts.ts drives that path).
+const landingIn =
+  (of: () => VerbContext): VerbContext["land"] =>
+  (session, file, before, after) => {
+    const changes = diffChanges(before, after);
+    if (changes.length === 0) return;
+    const outcome = performChange({
+      kind: "change",
+      id: 0 as EffectId,
+      session,
+      target: { kind: "layer", path: file },
+      changes,
+    });
+    changeLanded(of(), { session, path: file, latest: of().latest }, outcome);
+  };
 
 export { effectsOf, type DecodedEffect } from "../../src/click/read";
 
 // A rendered link as the daemon reads it; a test's links are always links.
 export const linkClick = clickOf;
 
-// Drive a rendered click URL through the real parse → dispatch path.
+// Drive a rendered click URL through the real parse → dispatch path, in the
+// daemon's order: the click's writes are changes on their way while it runs,
+// which it reads back (ConfigWrites), and once it has committed, each is
+// performed by the host's interpreter and its landing heard, whether or not
+// the click threw.
 export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   const { verb, value } = linkClick(url);
+  await clickVerb(verb, value, ctx);
+}
+
+// The same, for a verb and its value.
+export async function clickVerb(
+  verb: string,
+  value: string,
+  ctx: VerbContext,
+): Promise<void> {
   const handler = VERBS.get(verb);
   if (!handler) throw new Error(`no handler for verb "${verb}"`);
-  await handler(value, ctx);
+  let minted = 0;
+  const writes = new ConfigWrites(() => ++minted as EffectId, readConfigText);
+  const effects: Effect[] = [];
+  try {
+    await handler(value, {
+      ...ctx,
+      configText: (file) => writes.read(file),
+      land: (session, path, before, after) =>
+        writes.land(effects, { session, path, latest: ctx.latest }, before, after),
+    });
+  } finally {
+    for (const effect of effects) {
+      if (effect.kind !== "change") continue;
+      const outcome = performChange(effect);
+      changeLanded(ctx, writes.settled(effect.id)!, outcome);
+    }
+  }
 }

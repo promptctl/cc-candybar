@@ -13,6 +13,9 @@ import type {
 import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import { systemTimekeeper } from "../../src/time";
+import { ConfigWrites } from "../../src/renderer/config-writes";
+import { readConfigText } from "../../src/renderer/config-file-store";
+import type { EffectId } from "../../src/renderer-interface/interface";
 import { TEST_SIGNER } from "./link-signer";
 
 // A renderer that acts no verb: every click names a verb it does not have,
@@ -21,6 +24,9 @@ import { TEST_SIGNER } from "./link-signer";
 const NO_VERBS: RendererVerbs = {
   handler: () => undefined,
   closeIdle: () => Promise.reject(new Error("this rig closes no menus")),
+  landed: () => {
+    throw new Error("this rig writes no config");
+  },
 };
 
 // [LAW:no-silent-failure] A reach this rig has no host part for throws by
@@ -79,7 +85,11 @@ export function rendererParts({
   readonly worldStates: WorldStates;
   readonly verbs?: RendererVerbs;
 }): MainRendererParts {
+  let minted = 0;
+  const mint = (): EffectId => ++minted as EffectId;
   return {
+    mint,
+    writes: new ConfigWrites(mint, readConfigText),
     ...inertHost(),
     clock: systemTimekeeper,
     linkSigner: TEST_SIGNER,

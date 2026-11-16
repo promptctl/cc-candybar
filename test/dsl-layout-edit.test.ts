@@ -63,7 +63,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/renderer/config-file-store";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf, clickVerb } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import {
   encodeSegments,
@@ -1067,7 +1067,7 @@ async function fireVerb(
   ctx: VerbContext,
   ...args: string[]
 ): Promise<void> {
-  await VERBS.get(verb)!(args.map(encodeURIComponent).join("/"), ctx);
+  await clickVerb(verb, args.map(encodeURIComponent).join("/"), ctx);
 }
 
 // A session that has rendered from the fixture's file — the origin a durable

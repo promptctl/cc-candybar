@@ -2,6 +2,7 @@
 // its `copy` launch; the click-path cases drive `replyTo`, the daemon's real
 // click arm.
 
+import { writingStore } from "./helpers/writing-store";
 import { signedClick } from "./helpers/link-signer";
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { fieldOf } from "../src/utils/logfmt";
@@ -92,6 +93,7 @@ function setup() {
   const turns = new JournalTurns({
     log: (_level, msg) => logged.push(msg),
     monotonic: () => systemTimekeeper.monotonic(),
+    changesLanded: async () => {},
   });
   const ctx: VerbContext = {
     ...testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
@@ -126,7 +128,7 @@ describe("journals take turns", () => {
     expect(sessionState.get(SID, "theme")).toBe("dracula");
     expect(sessionState.get(SID, "endcaps")).toBe("powerline");
     expect(undoDepth(ctx)).toBe(2);
-    ctx.history.undo(SID);
+    ctx.history.undo(SID, writingStore);
     expect(sessionState.get(SID, "theme")).toBe("nord");
     expect(sessionState.get(SID, "endcaps")).toBe("plain");
   });
@@ -271,7 +273,7 @@ test("a navigation commit that throws leaves the settings journal committed", as
     click(encodeSegments([SID, "theme", "nord"]), ctx),
   ).rejects.toThrow("navigation broke");
   expect(undoDepth(ctx)).toBe(1);
-  ctx.history.undo(SID);
+  ctx.history.undo(SID, writingStore);
   expect(sessionState.get(SID, "theme")).toBeNull();
 });
 
@@ -303,7 +305,7 @@ describe("close", () => {
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
     expect(sessionState.get(SID, "endcaps")).toBeNull();
     expect(undoDepth(ctx)).toBe(1);
-    ctx.history.undo(SID);
+    ctx.history.undo(SID, writingStore);
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
@@ -327,6 +329,25 @@ describe("close", () => {
     await expect(queued).rejects.toThrow("the daemon closed");
     expect(undoDepth(ctx)).toBe(1);
   });
+});
+
+test("a turn opens once the config changes the turns ahead of it returned have landed", async () => {
+  const changes = gate();
+  const turns = new JournalTurns({
+    log: () => {},
+    monotonic: () => systemTimekeeper.monotonic(),
+    changesLanded: () => changes.wait,
+  });
+  const opened: string[] = [];
+  const asker = { waited: () => {}, gone: async () => false };
+  const second = turns.take("second", asker, async () => {
+    opened.push("second");
+  });
+  await drain();
+  expect(opened).toEqual([]);
+  changes.open();
+  await second;
+  expect(opened).toEqual(["second"]);
 });
 
 describe("the click path", () => {

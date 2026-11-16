@@ -8,6 +8,7 @@
 
 import {
   type Effect,
+  type EffectOutcome,
   type Event,
   type Renderer,
   type EventInput,
@@ -23,6 +24,7 @@ import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import { CrossedFailure, failureOf } from "./foundations/verb-error.js";
+import { performChange } from "./effect-interpreter.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
@@ -74,13 +76,19 @@ export function rendererHost(
       // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
       // turn, so what the process boundary costs is read from the event.
       const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
-      collector.subscribed(subscriptions);
-      // [LAW:single-enforcer] A present answers the request whose turn
-      // returned it, so every effect another turn returns is refused here,
-      // and none is left owed its `effect-done`.
-      if (output.kind === "answered" && input.event.kind !== "request")
-        for (const effect of output.effects)
+      // [LAW:single-enforcer] Every turn's changes are performed here, in the
+      // order the turns answered, before the turn's caller hears it, whether
+      // the turn answered or threw, and before anything else here can throw:
+      // a renderer holds its next click until each change's `effect-done`.
+      // A present answers the request whose turn returned it, so one another
+      // turn returns is refused here, and no effect is left owed its
+      // `effect-done`.
+      for (const effect of output.effects) {
+        if (effect.kind === "change") settle(effect, performChange(effect));
+        else if (input.event.kind !== "request")
           refuse(effect, `a ${input.event.kind} turn answers no request`);
+      }
+      collector.subscribed(subscriptions);
       return output;
     } finally {
       release();
@@ -89,17 +97,19 @@ export function rendererHost(
   // [LAW:single-enforcer] Every turn's caller, a fire-and-forget one included,
   // hears how the whole turn ended as a value: a hold that failed, a renderer
   // that rejected, or an output the host could not take, is the turn's
-  // failure. Nothing of it was taken, so the subscriptions last taken stand.
+  // failure. Its changes were performed before anything that could throw,
+  // and its subscriptions were not taken, so the ones last taken stand.
   const turn = (input: EventInput): Promise<HostTurn> =>
     held(input).catch(
       (thrown: unknown): HostTurn => ({
         kind: "threw",
         failure: failureOf(thrown),
         record: [],
+        effects: [],
         hopMs: null,
       }),
     );
-  const refuse = (effect: Effect, reason: string): void =>
+  const settle = (effect: Effect, outcome: EffectOutcome): void =>
     void deliver(
       {
         kind: "event",
@@ -108,11 +118,13 @@ export function rendererHost(
           kind: "effect-done",
           session: effect.session,
           of: effect.id,
-          outcome: { kind: "failed", reason },
+          outcome,
         },
       },
       [["effect", String(effect.id)]],
     );
+  const refuse = (effect: Effect, reason: string): void =>
+    settle(effect, { kind: "failed", reason });
   // A turn's line, when it learned something or failed.
   const record = (
     input: EventInput,

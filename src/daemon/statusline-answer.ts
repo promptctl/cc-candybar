@@ -174,7 +174,7 @@ export async function answerStatusline(
   const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
+    effects: effects.map(effectName).join(",") || "-",
   });
   // [LAW:types-are-the-program] Every effect the turn returned, in its order,
   // is performed or refused: the first statusline frame for this request
@@ -191,6 +191,9 @@ export async function answerStatusline(
         else if (answer !== null)
           done(effect, `a second statusline frame for request ${id}`);
         else answer = effect;
+        break;
+      // Performed where every turn's changes are (src/daemon/renderer-host.ts).
+      case "change":
         break;
     }
   }
@@ -220,3 +223,9 @@ export async function answerStatusline(
       done(presented, took ? null : "the client did not take the answer"),
   };
 }
+
+// An effect as the request's event names it.
+const effectName = (effect: Effect): string =>
+  effect.kind === "present"
+    ? `present:${effect.surface}`
+    : `change:${effect.target.path}`;

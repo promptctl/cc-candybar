@@ -16,6 +16,7 @@
 //   5b. Under a preset that pins a setting, a save lands in that preset's own
 //      globals, so the bar the file alone renders draws the saved value.
 
+import { lastClickError } from "../src/daemon/foundations/click-error";
 import { drawPayload } from "./helpers/draw-payload";
 import { locs } from "./helpers/host";
 import { unscriptedRuns } from "./helpers/fake-launcher";
@@ -47,7 +48,7 @@ import {
 import { chmodSync } from "node:fs";
 import { dirname } from "node:path";
 import { linkClick } from "./helpers/click";
-import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
+import { testVerbContext, effectsOf, recordRender, clickUrl } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf, type Instant } from "../src/utils/instant";
@@ -218,12 +219,7 @@ function rig(
     },
     // The daemon's own path: the URL's verb — `dispatch` for a compound
     // click — looked up in the one table, so a click is one history step.
-    click: async (url: string) => {
-      const { verb, value } = linkClick(url);
-      const handler = VERBS.get(verb);
-      if (!handler) throw new Error(`no handler for verb "${verb}"`);
-      await handler(value, ctx);
-    },
+    click: (url: string) => clickUrl(url, ctx),
     dispose: () => entry.registry.dispose(),
   };
 }
@@ -467,7 +463,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(textOf(r.render())).not.toContain("💾");
   });
 
-  test("save writes every draft in one edit, reloads, releases the picks, and the cell is gone", async () => {
+  test("save writes every draft in one edit and releases the picks, its landing reloads, and the cell is gone", async () => {
     await r.click(await wrapUrl());
     await r.click(await paddingUp());
     await r.click(saveUrl()!);
@@ -476,8 +472,8 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(globals.padding).toBe(2);
     expect(r.sessionState.get(SID, "autoWrap")).toBeNull();
     expect(r.sessionState.get(SID, "padding")).toBeNull();
-    // The very next render reads the reloaded file: the saved values, and
-    // nothing left to save — no frame of the old file without the picks.
+    // The next render after the landing reads the reloaded file: the saved
+    // values, and nothing left to save.
     const after = textOf(r.render());
     expect(after).toContain("☐ wrap");
     expect(after).toContain("padding 2");
@@ -511,16 +507,19 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(r.logs).toContainEqual(`save: nothing unsaved (session=${SID})`);
   });
 
-  test("a refused write keeps every draft and leaves the file as it was", async () => {
+  test("a write that does not land leaves the file as it was, says so, and ↶ brings back every draft", async () => {
     await r.click(await wrapUrl());
     await r.click(await paddingUp());
     const before = durable.text();
     chmodSync(dirname(durable.configPath), 0o500);
     try {
-      await expect(r.click(saveUrl()!)).rejects.toThrow(/config write failed/);
+      await r.click(saveUrl()!);
     } finally {
       chmodSync(dirname(durable.configPath), 0o755);
     }
+    expect(durable.text()).toBe(before);
+    expect(lastClickError(r.sessionState, SID)?.text).toMatch(/config write failed/);
+    await r.click(linksOf(r.render()).find((l) => l.text === "↶")!.url);
     expect(durable.text()).toBe(before);
     expect(r.sessionState.get(SID, "autoWrap")).toBe("false");
     expect(r.sessionState.get(SID, "padding")).toBe("2");
@@ -723,7 +722,7 @@ describe("reset returns settings to the bundled default", () => {
     expect(textOf(r.render())).toContain("dracula ▀▀▀");
     await r.click(await resetOf("palette"));
     expect(r.reloads).toEqual([
-      { text: durable.text(), picks: { theme: "dracula", style: null, padding: null } },
+      { text: durable.text(), picks: { theme: null, style: null, padding: null } },
     ]);
     expect(r.sessionState.get(SID, "theme")).toBeNull();
     expect(durable.parsed().globals).not.toHaveProperty("palette");
@@ -811,10 +810,10 @@ describe("reset returns settings to the bundled default", () => {
     await r.click(labelled("⟲")!);
     await r.click(labelled("⟲ reset all?")!);
 
-    // Every setting's reset in one click is ONE write and ONE reload, made
-    // while the session still held its picks — released only after.
+    // Every setting's reset in one click is ONE write and ONE reload, once
+    // the write has landed; the click released the picks.
     expect(r.reloads).toEqual([
-      { text: durable.text(), picks: { theme: null, style: "dim", padding: "5" } },
+      { text: durable.text(), picks: { theme: null, style: null, padding: null } },
     ]);
 
     const parsed = durable.parsed() as {
@@ -1113,9 +1112,9 @@ describe("save as preset", () => {
     await r.click(await savePreset());
 
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
-    // Reloaded once, while the session still held its picks.
+    // Reloaded once, once the write landed; the click released the picks.
     expect(r.reloads).toEqual([
-      { text: SAVED_CUSTOM_1, picks: { theme: "dracula", style: "dim", padding: "2" } },
+      { text: SAVED_CUSTOM_1, picks: { theme: null, style: null, padding: null } },
     ]);
     // The preset renders what the picks did, so they are released.
     for (const key of ["theme", "style", "padding"]) {
@@ -1375,15 +1374,15 @@ describe("a theme's default look, set from the bar", () => {
     expect(textOf(r.render())).toContain("⤓ default for dracula ▀▀▀");
   });
 
-  test("the click writes the look into themeDefaults.<theme>, reloads, then releases the picks", async () => {
+  test("the click writes the look into themeDefaults.<theme> and releases the picks, and its landing reloads", async () => {
     await start(THEMED);
     pick({ shade: "deepest", style: "dim" });
     await r.click(link(SAVE_LABEL)!);
 
     expect(durable.text()).toBe(THEMED_SAVED);
-    // Reloaded once, while the session still held its picks.
+    // Reloaded once, once the write landed; the click released the picks.
     expect(r.reloads).toEqual([
-      { text: THEMED_SAVED, picks: { theme: null, style: "dim", padding: null } },
+      { text: THEMED_SAVED, picks: { theme: null, style: null, padding: null } },
     ]);
     for (const key of ["shade", "variation", "style"]) {
       expect(r.sessionState.get(SID, key)).toBeNull();

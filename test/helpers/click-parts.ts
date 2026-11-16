@@ -13,6 +13,9 @@ import type { MenuIdle } from "../../src/daemon/menu-idle";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { mainRenderer } from "../../src/renderer/main";
 import { systemTimekeeper } from "../../src/time";
+import { ConfigWrites } from "../../src/renderer/config-writes";
+import { readConfigText } from "../../src/renderer/config-file-store";
+import type { EffectId } from "../../src/renderer-interface/interface";
 import {
   verbsOver,
   type DaemonVerbContext,
@@ -32,8 +35,19 @@ export function clickParts(
   // A click's turn reads the verbs, the idle clock and, for its output, the
   // open views' subscriptions: this rig opens none.
   const clicks = new ClicksInFlight();
+  // A click's writes are changes its turn returns, which the host performs
+  // and settles before the next input reaches the renderer.
+  let minted = 0;
+  const mint = (): EffectId => ++minted as EffectId;
+  const writes = new ConfigWrites(mint, readConfigText);
   const parts = {
-    verbs: verbsOver(verbCtx, { gone: async (click) => clicks.gone(click) }),
+    verbs: verbsOver(
+      { ...verbCtx, configText: (file) => writes.read(file) },
+      { gone: async (click) => clicks.gone(click) },
+      writes,
+    ),
+    mint,
+    writes,
     menuIdle,
     renderCache: { subscriptions: () => ({ sources: {} }) },
     // What the renderer times each turn by.

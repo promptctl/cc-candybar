@@ -22,6 +22,7 @@
 //   9. Undo refuses loudly when a target changed since the step — a hand
 //      edit or another session's write — and never overwrites it.
 
+import { writingStore } from "./helpers/writing-store";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
@@ -463,26 +464,35 @@ describe("settings history: a step lands whole, and records only what landed", (
     durable.dispose();
   });
 
-  test("an undo whose file write fails puts back the session change it already made", () => {
+  test("an undo whose file change does not land keeps its session change, and stops stepping the file", () => {
     const sessionState = new SessionState();
     const history = durable.historyFor(sessionState);
     const file = durable.configPath;
     const journal = history.begin();
-    journal.sessionState.set(S1, "theme", "nord"); // recorded first
+    journal.sessionState.set(S1, "theme", "nord");
     writeFileSync(file, "{ after: 1 }");
     journal.file(S1, file, "{ before: 1 }", "{ after: 1 }");
     journal.commit();
 
-    chmodSync(dirname(durable.configPath), 0o500); // the file write cannot land
-    expect(() => history.undo(S1)).toThrow(/config write failed/);
-    expect(sessionState.get(S1, "theme")).toBe("nord");
-    expect(durable.text()).toBe("{ after: 1 }");
-    expect(history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
-
-    chmodSync(dirname(durable.configPath), 0o700); // and once it can, the step is intact
-    history.undo(S1);
+    // The click hands the file's change to the host, which refuses it.
+    const landed: string[] = [];
+    history.undo(S1, {
+      read: writingStore.read,
+      land: (f, _before, after) => landed.push(`${f}=${after}`),
+    });
+    expect(landed).toEqual([`${file}={ before: 1 }`]);
+    history.forgetFile(S1, file);
     expect(sessionState.get(S1, "theme")).toBeNull();
-    expect(durable.text()).toBe("{ before: 1 }");
+    expect(durable.text()).toBe("{ after: 1 }");
+
+    // Its redo restores the session change alone.
+    history.redo(S1, {
+      read: writingStore.read,
+      land: () => {
+        throw new Error("the file left this session's history");
+      },
+    });
+    expect(sessionState.get(S1, "theme")).toBe("nord");
   });
 
   test("a session write that throws records no step", () => {
@@ -561,12 +571,12 @@ describe("settings history: the step and its record land together", () => {
     journal.commit();
 
     gate.refusing = true;
-    expect(() => history.undo(S1)).toThrow(/history save refused/);
+    expect(() => history.undo(S1, writingStore)).toThrow(/history save refused/);
     expect(sessionState.get(S1, "theme")).toBe("nord");
     expect(history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
     gate.refusing = false;
-    history.undo(S1);
+    history.undo(S1, writingStore);
     expect(sessionState.get(S1, "theme")).toBeNull();
   });
 

@@ -23,6 +23,7 @@ import type { CheckedRenderRequest } from "./request-context";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneFeeds } from "../config/lanes";
+import type { Change } from "../config/config-changes";
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -203,7 +204,19 @@ export interface Present {
   readonly frame: WireFrame;
 }
 
-export type Effect = Present;
+// [LAW:one-type-per-behavior] Every config write is a `change`: the changes
+// that take the file from what the renderer read to what it wrote, which the
+// host applies to the file as it stands, refusing them whole when a setting
+// moved. A layer is named by its path until config discovery is the host's.
+export interface ConfigChange {
+  readonly kind: "change";
+  readonly id: EffectId;
+  readonly session: SessionId;
+  readonly target: { readonly kind: "layer"; readonly path: string };
+  readonly changes: readonly Change[];
+}
+
+export type Effect = Present | ConfigChange;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.
@@ -232,8 +245,13 @@ export interface Subscriptions {
 
 // How a turn ended, a turn that threw included: its failure as data, a class
 // crossing no process. Either way it carries the record it reached.
-export type TurnOutcome = { readonly record: TurnRecord } & (
-  | { readonly kind: "answered"; readonly effects: readonly Effect[] }
+// [LAW:one-source-of-truth] A turn's effects are what its acts did, however
+// it ended: a click that wrote and then failed still lands what it wrote.
+export type TurnOutcome = {
+  readonly record: TurnRecord;
+  readonly effects: readonly Effect[];
+} & (
+  | { readonly kind: "answered" }
   | { readonly kind: "threw"; readonly failure: Failure }
 );
 

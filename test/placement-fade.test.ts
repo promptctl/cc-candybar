@@ -5,6 +5,7 @@
 // a click, an undo — and a reload draw from another source, so nothing they
 // reveal fades.
 
+import { writingStore } from "./helpers/writing-store";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
@@ -327,7 +328,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       on.render({ shown: false, when: at(1) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("compared");
-      history.undo(SID_S);
+      history.undo(SID_S, writingStore);
       on.render({ shown: false, when: at(2) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("fresh");
     } finally {
@@ -505,7 +506,7 @@ describe("a session's state revision moves with every change to it, whoever writ
     journal.sessionState.set(SID_S, "theme", "nord");
     journal.commit();
     const before = state.revision(SID_S);
-    history.undo(SID_S);
+    history.undo(SID_S, writingStore);
     expect(state.revision(SID_S)).not.toBe(before);
   });
 });

@@ -17,6 +17,7 @@ import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
+  Present,
   Event,
   Renderer,
   RendererOutput,
@@ -215,9 +216,11 @@ const threw = (output: RendererOutput) => {
   return output;
 };
 
-const presentOf = (effects: readonly Effect[]): Effect => {
+const presentOf = (effects: readonly Effect[]): Present => {
   expect(effects).toHaveLength(1);
-  return effects[0]!;
+  const [effect] = effects;
+  if (effect?.kind !== "present") throw new Error("the turn returned no present");
+  return effect;
 };
 
 describe("a statusline request", () => {
@@ -307,7 +310,7 @@ describe("a statusline request", () => {
     await done(r, present, false);
     expect(recorded).toEqual([]);
     expect(threw(await done(r, present, true)).failure.message).toMatch(
-      /not a present on its way/,
+      /not an effect on its way/,
     );
   });
 });
@@ -612,6 +615,9 @@ describe("a click", () => {
     const t = renderer({
       handler: (verb) => (verb === "act" ? () => act() : undefined),
       closeIdle: () => Promise.reject(new Error("no idle close here")),
+      landed: () => {
+        throw new Error("this rig writes no config");
+      },
     });
     act = async () => {
       await Promise.resolve();
@@ -633,6 +639,9 @@ describe("a click", () => {
     const t = renderer({
       handler: (verb) => (verb === "act" ? () => act() : undefined),
       closeIdle: () => Promise.reject(new Error("no idle close here")),
+      landed: () => {
+        throw new Error("this rig writes no config");
+      },
     });
     act = async () => {
       t.rig.cache.retireSession(SESSION);
@@ -655,6 +664,9 @@ describe("a click", () => {
             }
           : undefined,
       closeIdle: () => Promise.reject(new Error("no idle close here")),
+      landed: () => {
+        throw new Error("this rig writes no config");
+      },
     });
     await request(t);
     await handIn(t.r, { kind: "retire", session: SESSION });
@@ -680,6 +692,9 @@ describe("the idle close", () => {
       handler: () => undefined,
       closeIdle: async (sessionId) => {
         closed.push(sessionId);
+      },
+      landed: () => {
+        throw new Error("this rig writes no config");
       },
     });
     const idle = {

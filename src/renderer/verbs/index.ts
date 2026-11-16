@@ -63,7 +63,6 @@ import {
   type Journal,
   type SettingsHistory,
 } from "../settings-history";
-import { type Step } from "../../renderer-interface/history-storage";
 import type { NavigationHistory } from "../navigation-history";
 import {
   placementId,
@@ -198,7 +197,11 @@ import {
   parseSessionId,
   type SessionId,
 } from "../../daemon/foundations/session-id";
-import type { IdleSpan } from "../../renderer-interface/interface";
+import type {
+  EffectOutcome,
+  IdleSpan,
+} from "../../renderer-interface/interface";
+import type { ChangeOnItsWay } from "../config-writes";
 import { clickFailed } from "../../daemon/foundations/click-launch";
 
 // What the daemon hands everything that writes a session's state: a click's
@@ -312,6 +315,18 @@ export interface VerbContext extends DaemonContext {
   readonly clientGone: () => Promise<boolean>;
   // The newest request of THIS click's session the host holds.
   readonly latest: CheckedRenderRequest | null;
+  // [LAW:single-enforcer] A config file's text as the changes on their way
+  // leave it — during a click, only that click's own (config-writes.ts).
+  readonly configText: (file: string) => string | null;
+  // [LAW:single-enforcer] THIS click's config write: a change its turn
+  // returns, which the host performs (src/renderer/config-writes.ts). The
+  // session's reload follows the landing.
+  readonly land: (
+    session: SessionId,
+    file: string,
+    before: string | null,
+    after: string | null,
+  ) => void;
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
@@ -761,18 +776,41 @@ function requestedOrigin(
   return raw === null ? null : parseRenderOrigin(raw);
 }
 
-// [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
-// session renders from reloads it before the click answers, as save does; one
-// that wrote no such file rebuilds nothing (a reload restarts every source).
-// Another session's file reaches its render through the fs watcher.
-function reloadIfWritten(ctx: Unbound, sid: SessionId, step: Step): void {
-  // A session with no recorded render has no cache entry to draw stale.
-  const origin = requestedOrigin(ctx, sid);
-  if (origin === null) return;
-  const { path } = originHome(ctx, origin);
-  if (step.some((c) => c.kind === "file" && c.file === path)) {
-    ctx.reloadConfig(origin);
+// [LAW:single-enforcer] How a click's config change landed, in its
+// `effect-done`'s turn. [LAW:no-ambient-temporal-coupling] A change to the
+// file its session renders from reloads it before the next click's turn
+// opens, so that click reads the config the change left; a change to another
+// file rebuilds nothing (a reload restarts every source), and reaches the
+// sessions that render it through the fs watcher. [LAW:no-silent-failure] A
+// change that did not land shows on its session's ⚠, and its session's
+// history stops stepping the file, since its step never happened there. What
+// else the click did stays a step of its own, so ↶ brings back picks it
+// released.
+export function changeLanded(
+  ctx: Omit<DaemonContext, TurnBound>,
+  change: ChangeOnItsWay,
+  outcome: EffectOutcome,
+): void {
+  const { session, path, latest } = change;
+  if (outcome.kind === "failed") {
+    ctx.log("warn", `config change: ${outcome.reason} (session=${session})`);
+    ctx.history.forgetFile(session, path);
+    holdClickError(ctx.sessionState, session, outcome.reason, ctx.now());
+    return;
   }
+  // A session with no recorded render has no cache entry to draw stale.
+  const origin = requestedOrigin(ctx, session);
+  if (origin === null || originHome(ctx, origin).path !== path) return;
+  // [LAW:single-enforcer] The reload is the click's own write reaching its
+  // config, so the lanes it moves are the click's to set up (LaneSetups).
+  const before = ctx.lanes.of(origin, session, latest);
+  ctx.reloadConfig(origin);
+  ctx.lanes.clicked(
+    session,
+    latest,
+    before,
+    ctx.lanes.of(origin, session, latest),
+  );
 }
 
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
@@ -828,17 +866,26 @@ function originHome(
   );
 }
 
+// The click's config files for a history step, which records its own changes.
+const historyFiles = (ctx: ClickContext, sid: SessionId): EditStore => ({
+  read: ctx.configText,
+  land: (file, before, after) => ctx.land(sid, file, before, after),
+});
+
 function editStore(ctx: ClickContext, sid: SessionId): EditStore {
   return {
-    record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.log,
+    read: ctx.configText,
+    land: (file, before, after) => {
+      ctx.land(sid, file, before, after);
+      ctx.journal.file(sid, file, before, after);
+    },
   };
 }
 
 // [LAW:single-enforcer] `persist`'s twin of setState: the SAME validate-then-
 // write shape, writing into the session's config file instead of
-// SessionState. The write is DURABLE, and the session's config reloads before
-// the click answers, as save's does, so the next render draws it
+// SessionState. The write is DURABLE, and the session's config reloads once
+// it lands (changeLanded), so the next click reads it
 // ([LAW:no-ambient-temporal-coupling] — not a bet on the fs watcher's latency).
 // [LAW:no-silent-failure] Unknown key or out-of-domain value is a loud
 // BAD_REQUEST — the config-file twin of `set-state`'s gate (configGate),
@@ -865,7 +912,6 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
     key,
   );
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
-  ctx.reloadConfig(origin);
   ctx.log(
     "info",
     `set-config: ${landing.key}=${result.value} → ${home.path} (session=${sid})`,
@@ -908,7 +954,7 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
-  const stored = readValue(home.path, landing.key);
+  const stored = readValue(editStore(ctx, sid), home.path, landing.key);
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
@@ -922,7 +968,6 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
-  ctx.reloadConfig(origin);
   ctx.log(
     "info",
     `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${home.path} (session=${sid})`,
@@ -933,12 +978,12 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
 // file as ONE write. The drafts are derived at click time by the SAME function
 // the render counts them with, over the config this session renders with, so
 // the click writes exactly what the `💾 save N` cell counted.
-// [LAW:no-ambient-temporal-coupling] One handler owns the order write → reload
-// → release. The picks are released only once the session's config has
-// reloaded the file that now holds them, so no render in between draws the old
-// file without them; released, the session follows the file again — a later
-// hand edit, another session's save, a reset — instead of pinning over it. A
-// refused write throws before either, keeping every draft.
+// [LAW:no-ambient-temporal-coupling] One handler owns the order write →
+// release: a refused write throws before any pick is released, keeping every
+// draft. The session's config reloads once the write lands (changeLanded),
+// before the next click's turn, so a frame drawn in between draws the file as
+// it was; released, the session follows the file again — a later hand edit,
+// another session's save, a reset — instead of pinning over it.
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
 // session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
@@ -966,7 +1011,6 @@ const save: VerbHandler = async (value, ctx) => {
   gatePlacements("save", gate, placements);
   const home = originHome(ctx, origin);
   writeDrafts(editStore(ctx, sid), home, pairs, placements);
-  ctx.reloadConfig(origin);
   for (const key of [
     ...drafts.map((d) => d.sessionKey),
     ...placements.map((p) => p.key),
@@ -1003,8 +1047,8 @@ function gatePlacements(
 // session switches to it. Once the file holds every setting the session had
 // picked, those picks are released — the preset now renders them — so the
 // session is left with one pick: the preset itself.
-// [LAW:no-ambient-temporal-coupling] Save's order: write, reload, then the
-// session — the preset the pick names exists before the pick does.
+// [LAW:no-ambient-temporal-coupling] Save's order: write, then the session —
+// the preset the pick names is written before the pick is.
 // [LAW:single-enforcer] Each pinned value re-crosses the session gate that
 // admitted it, as a save's do.
 const savePreset: VerbHandler = async (value, ctx) => {
@@ -1031,7 +1075,6 @@ const savePreset: VerbHandler = async (value, ctx) => {
     picks,
     snapshot.placements,
   );
-  ctx.reloadConfig(origin);
   for (const key of [
     ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
     ...snapshot.placements.map((p) => p.key),
@@ -1048,11 +1091,12 @@ const savePreset: VerbHandler = async (value, ctx) => {
 // Save the look the session draws as the active theme's default
 // (candybar-theme-colours-6fq5.ix8): `themeDefaults.<theme>` in the session's
 // home file takes the session's shade, variation and style, and each of the
-// session's picks of those three that the reloaded file now draws is released,
-// so the session follows the file again, as a save's do. A field the config's
+// session's picks of those three that the written file draws is released, so
+// the session follows the file again, as a save's do. A field the config's
 // globals declare is not the rung's to save (themeDefaultSave), so a pick of it
 // is still a draft, and stays, so the bar does not move under the click.
-// [LAW:no-ambient-temporal-coupling] Save's order: write, reload, release.
+// [LAW:no-ambient-temporal-coupling] Save's order: write, then release, read
+// over the config the write's own load proved.
 // [LAW:no-silent-failure] A theme chosen by a rule has no name until a render
 // evaluates it, and a theme's default is keyed by name: refused, naming the
 // rule, never a guess at what it would have rendered.
@@ -1070,11 +1114,15 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
-  ctx.reloadConfig(origin);
+  const written = writeThemeDefault(
+    editStore(ctx, sid),
+    home,
+    save.theme,
+    save.look,
+  );
   const pick = (key: string) => ctx.sessionState.get(sid, key);
   const drafted = new Set(
-    settingDrafts(ctx.configFor(origin), pick).map((d) => d.sessionKey),
+    settingDrafts(written, pick).map((d) => d.sessionKey),
   );
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey,
@@ -1100,7 +1148,6 @@ const deletePreset: VerbHandler = async (value, ctx) => {
   const origin = sessionOrigin(ctx, sid);
   const home = originHome(ctx, origin);
   deletePresetFromFile(editStore(ctx, sid), home, name);
-  ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
   ctx.log("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
@@ -1110,13 +1157,13 @@ const deletePreset: VerbHandler = async (value, ctx) => {
 // at every layer that can hold it (resetLayers) — their paths in the session's
 // config file, as ONE write, and the session's own picks. A `do` over several
 // resets arrives here as one effect (batchAdjacentWrites), so reset all is one
-// write, one reload, and one undo step. Gated by key MEMBERSHIP
+// write and one undo step. Gated by key MEMBERSHIP
 // (the session's configGate's keys) rather than a value domain — there is no value to
 // validate, only a legitimate target to clear — and every key is checked
 // before anything is written, so a batch lands whole or not at all.
 // [LAW:no-ambient-temporal-coupling] Save's order, for the same reason: the
-// file is written and reloaded before the picks are released, so no render in
-// between draws a pick's absence over a file that still holds the value.
+// file's write goes before the picks are released, so a refused write
+// releases none.
 const resetConfig: VerbHandler = async (value, ctx) => {
   const [sessionId = "", ...keys] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
@@ -1134,7 +1181,6 @@ const resetConfig: VerbHandler = async (value, ctx) => {
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
   deleteValues(editStore(ctx, sid), home, fileKeys);
-  ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
   ctx.log(
     "info",
@@ -1217,14 +1263,18 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  const placed = applyLayoutOpToFile(editStore(ctx, sid), home, key, op);
+  const { placed, config } = applyLayoutOpToFile(
+    editStore(ctx, sid),
+    home,
+    key,
+    op,
+  );
   // A removed placement's session state ends with it (endedSessionKeys).
-  // Measured on the file as it now reads, and released in the same click, so
-  // its undo brings the placement and its drafts back.
-  ctx.reloadConfig(origin);
+  // Measured on the config the write's own load proved, and released in the
+  // same click, so its undo brings the placement and its drafts back.
   // The session state the edit discards — the fact its log line carries.
   const released = endedSessionKeys(
-    endedPlacements(before, ctx.configFor(origin)),
+    endedPlacements(before, config),
     ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
   ).filter((key) => ctx.sessionState.get(sid, key) !== null);
   for (const key of released) ctx.sessionState.clear(sid, key);
@@ -1248,9 +1298,8 @@ const undo: VerbHandler = async (value, ctx) => {
   // The click's own earlier changes are a step of their own first, so one
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
-  const step = ctx.history.undo(sid);
+  const step = ctx.history.undo(sid, historyFiles(ctx, sid));
   ctx.journal.wrote();
-  reloadIfWritten(ctx, sid, step);
   ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
@@ -1279,8 +1328,7 @@ const rewind: VerbHandler = async (value, ctx) => {
   ctx.journal.commit();
   // Said first: a stale target throws after the rest were put back.
   ctx.journal.wrote();
-  const restored = ctx.history.rewind(sid);
-  reloadIfWritten(ctx, sid, restored);
+  const restored = ctx.history.rewind(sid, historyFiles(ctx, sid));
   ctx.log(
     "info",
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
@@ -1292,9 +1340,8 @@ const redo: VerbHandler = async (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   ctx.journal.commit();
-  const step = ctx.history.redo(sid);
+  const step = ctx.history.redo(sid, historyFiles(ctx, sid));
   ctx.journal.wrote();
-  reloadIfWritten(ctx, sid, step);
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
@@ -1711,8 +1758,7 @@ const run: VerbHandler = async (value, ctx) => {
 // The link's own signature proves only that the bar drew the link, and a
 // config can draw any link, so the answer keeps a mac of its own. The book
 // lives beside the link key, and the render cache watches it, so every bar
-// reloads; the clicking session's reloads before the click answers, as save's
-// does.
+// reloads; the clicking session's reloads before the click answers.
 const repoConfig: VerbHandler = async (value, ctx) => {
   const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),

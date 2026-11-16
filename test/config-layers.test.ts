@@ -3,6 +3,7 @@
 // and a durable click writes the user's file, refusing a change a project
 // layer would hide.
 
+import { writingStore } from "./helpers/writing-store";
 import fs from "node:fs";
 import { hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -64,7 +65,7 @@ function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
   return o;
 }
 
-const noRecord = { record: () => {}, logger: () => {} };
+
 
 // The home a click in the project writes, under the answers the bar reads.
 const projectHome = () =>
@@ -103,7 +104,7 @@ test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectHome();
   expect(home).toEqual({ path: userFile, above: [{ path: projectFile, scope: "repo" }], repo: project, cwd: project, locs: locations(host) });
-  writeValues(noRecord, home, [["palette", "nord"]]);
+  writeValues(writingStore, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
 });
@@ -112,7 +113,7 @@ test("a click a project layer would hide is refused, naming the layer", () => {
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
   const before = fs.readFileSync(userFile, "utf8");
   expect(() =>
-    writeValues(noRecord, projectHome(), [["palette", "nord"]]),
+    writeValues(writingStore, projectHome(), [["palette", "nord"]]),
   ).toThrow(new RegExp(`${projectFile} sets globals\\.palette`));
   expect(fs.readFileSync(userFile, "utf8")).toBe(before);
 });
@@ -123,21 +124,21 @@ test("a reset the project layer hides still clears the user's file", () => {
     `{ globals: { palette: "nord" }, segments: { mine: { template: "USERSEG" } }, root: { h: ["mine"] } }`,
   );
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
-  deleteValues(noRecord, projectHome(), ["palette"]);
+  deleteValues(writingStore, projectHome(), ["palette"]);
   expect(fs.readFileSync(userFile, "utf8")).not.toContain("nord");
 });
 
 test("a click that repairs a broken user file is not refused under a project layer", () => {
   fs.writeFileSync(userFile, `{ globals: { palette: "no-such-theme" } }`);
   fs.writeFileSync(projectFile, `{ globals: { menuGlyph: "P" } }`);
-  writeValues(noRecord, projectHome(), [["palette", "nord"]]);
+  writeValues(writingStore, projectHome(), [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
 });
 
 test("save-as-preset never mints a name a project layer declares", () => {
   fs.writeFileSync(projectFile, `{ presets: { "custom-1": {} } }`);
   const name = writePreset(
-    noRecord,
+    writingStore,
     projectHome(),
     "default",
     {},
@@ -165,7 +166,7 @@ test("save-as-preset reads a layer above that the editor would refuse", () => {
     `{ presets: { "custom-1": {} }, globals: { menuGlyph: "a", menuGlyph: "b" } }`,
   );
   expect(
-    writePreset(noRecord, projectHome(), "default", {}, [], []),
+    writePreset(writingStore, projectHome(), "default", {}, [], []),
   ).toBe("custom-2");
 });
 
@@ -180,7 +181,7 @@ test("a first durable write with no user file succeeds beside an installed plugi
     fs.mkdirSync(path.dirname(def), { recursive: true });
     fs.writeFileSync(def, `{ data: "./d.json", segments: { status: { template: "x" } } }`);
     fs.writeFileSync(projectFile, `{ root: { h: ["plugins.deploy.status"] } }`);
-    writeValues(noRecord, projectHome(), [["palette", "nord"]]);
+    writeValues(writingStore, projectHome(), [["palette", "nord"]]);
     expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   }
 });
@@ -408,7 +409,7 @@ describe("a project layer inserting into the user's row", () => {
       // A layout op aimed at the inserted id writes nothing.
       const before = fs.readFileSync(userFile, "utf8");
       expect(() =>
-        applyLayoutOp(noRecord, projectHome(), "presets.default.root", {
+        applyLayoutOp(writingStore, projectHome(), "presets.default.root", {
           op: "remove",
           target: "theirs",
         }),

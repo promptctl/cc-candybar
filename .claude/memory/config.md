@@ -26,7 +26,7 @@ No variable is declared under another. The draw lands a read on the first declar
 
 ## The config file is the durable store
 
-There's no daemon-side overrides layer. A click that persists something edits the user's config file in place: it splices one value span and keeps every other byte, comments included. The daemon reloads through the same watcher a hand edit trips. A value written by the menu looks the same as a hand-edited one.
+There's no daemon-side overrides layer. A click that persists something edits the user's config file in place: the renderer returns changes at settings, each carrying what it read there, and the host splices each value span and keeps every other byte, comments included. The host refuses the whole write when a setting it read has moved, so a write never overwrites a hand edit to the settings it touches and never refuses one elsewhere in the file. Sessions other than the clicking one reload through the same watcher a hand edit trips. A value written by the menu looks the same as a hand-edited one.
 
 When file events resume after a span the daemon couldn't vouch for, every entry reloads, whatever its own watch heard, because an edit made during the span may never have been heard. A reload of unchanged inputs keeps its state, so only an entry whose files changed rebuilds. Keeping still costs a full resolve, validation and key of the chain, so the catch-up reloads one entry per turn of the loop: a walk over every entry in one turn holds the loop for seconds, and every client waiting behind it hangs up.
 
@@ -48,7 +48,7 @@ Every globals field is one row of the fields table. The schema, the resolved glo
 
 A draft is derived, never flagged. It's a setting whose session value differs from what the file resolves to under the preset the save will land in. Save recomputes the drafts at click time against the config the session renders with, so it writes exactly what the button counted.
 
-Save writes, reloads, then releases the picks, all in one handler. So no render draws the old file without the picks, a refused write keeps every draft, and a released session follows later changes to the file instead of pinning over them.
+Save writes, then releases the picks, in one click and one undo step, and the session's config reloads once the write lands, before the next click. A frame drawn in between can show the old file without the picks. A write that does not land shows on the session's ⚠ and leaves its history, and ↶ brings back the drafts the save released. A released session follows later changes to the file instead of pinning over them.
 
 Reset deletes the setting at every layer: the globals, every bundled preset's globals, and every theme's default. A preset the user wrote keeps its pinned value, because that pin is the user's own content.
 

@@ -9,7 +9,6 @@
 // (src/config/json5-edit.ts), so every byte a change does not touch survives,
 // comments included.
 
-import { isDeepStrictEqual } from "node:util";
 import JSON5 from "json5";
 import {
   deleteValue,
@@ -28,9 +27,15 @@ import {
 // per row.
 export type Address = readonly string[];
 
-// What a change read at its address: the decoded value, or nothing there.
+// What a change read at its address: a setting's text, the whole file's text,
+// or nothing there. Two settings agree when their texts decode to the same
+// value, so a hand edit that only reformats a setting has not moved it. A
+// change to the whole file reads its bytes, since a file that does not parse
+// has no settings to compare, and agrees only with the same bytes. Text, so a
+// read crosses a process whatever JSON5 value it holds.
 export type Read =
-  | { readonly kind: "value"; readonly value: unknown }
+  | { readonly kind: "value"; readonly text: string }
+  | { readonly kind: "file"; readonly text: string }
   | { readonly kind: "absent" };
 
 // [LAW:types-are-the-program] A set carries JSON5 text, not a value, so a
@@ -62,10 +67,68 @@ function documentOf(text: string | null): Node | null {
   return text === null || /^\s*$/.test(text) ? null : parseDocument(text);
 }
 
+// A file's text as a document, or `unparsed` for text a change can only
+// replace whole.
+function parsedOf(text: string | null): Node | null | "unparsed" {
+  try {
+    return documentOf(text);
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    return "unparsed";
+  }
+}
+
+// What a change at `at` reads in `text`. [LAW:no-silent-failure] A setting
+// in a file that no longer parses is not there to agree with what was read,
+// so the file's bytes are what was found.
+function readAt(text: string | null, at: Address): Read {
+  if (text === null) return ABSENT;
+  const doc = parsedOf(text);
+  return at.length === 0 || doc === "unparsed"
+    ? { kind: "file", text }
+    : readOf(text, nodeAtAddress(doc, at));
+}
+
 function readOf(text: string, node: Node | undefined): Read {
   return node === undefined
     ? ABSENT
-    : { kind: "value", value: JSON5.parse(textOf(text, node)) };
+    : { kind: "value", text: movableTextOf(text, node) };
+}
+
+function sameRead(a: Read, b: Read): boolean {
+  return a.kind === "value" && b.kind === "value"
+    ? sameValue(JSON5.parse(a.text), JSON5.parse(b.text))
+    : a.kind === b.kind &&
+        (a.kind === "absent" || a.text === (b as typeof a).text);
+}
+
+// Two decoded JSON5 values are the same value: a JSON5 value is null, a
+// boolean, a number (NaN equal to itself), a string, an array or a plain
+// object, so this needs no runtime's deep equality, and the site's renderer
+// compares as the daemon's does.
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (
+    typeof a !== "object" ||
+    typeof b !== "object" ||
+    a === null ||
+    b === null
+  )
+    return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ak = Object.keys(a);
+  const bk = Object.keys(b);
+  return (
+    ak.length === bk.length &&
+    ak.every(
+      (k) =>
+        Object.hasOwn(b, k) &&
+        sameValue(
+          (a as Record<string, unknown>)[k],
+          (b as Record<string, unknown>)[k],
+        ),
+    )
+  );
 }
 
 function nodeAtAddress(root: Node | null, at: Address): Node | undefined {
@@ -84,26 +147,30 @@ function nodeAtAddress(root: Node | null, at: Address): Node | undefined {
  * down to the first level where either side is not an object. When those do
  * not rebuild `after` byte for byte (a key restored in the middle of an
  * object, members reordered, a comment edited), the change is the whole
- * document, read whole.
+ * document, read whole. So is a change to or from a file that does not parse.
  */
 export function diffChanges(
   before: string | null,
   after: string | null,
 ): readonly Change[] {
   if (before === after) return [];
-  const was = documentOf(before);
-  const will = documentOf(after);
-  const read = readOf(before ?? "", was ?? undefined);
+  const was = parsedOf(before);
+  const will = parsedOf(after);
+  const read = readAt(before, []);
   const whole: readonly Change[] =
     after === null
       ? [{ op: "remove", at: [], read }]
       : [{ op: "set", at: [], text: after, read }];
-  if (was === null || will === null) return whole;
+  if (
+    was === null ||
+    will === null ||
+    was === "unparsed" ||
+    will === "unparsed"
+  )
+    return whole;
   const members = diffNode([], before!, was, after!, will);
   const rebuilt = applyChanges(before, members);
-  return rebuilt.kind === "applied" && rebuilt.text === after
-    ? members
-    : whole;
+  return rebuilt.kind === "applied" && rebuilt.text === after ? members : whole;
 }
 
 function diffNode(
@@ -171,8 +238,8 @@ export function applyChanges(
 ): Applied {
   let current = text;
   for (const change of changes) {
-    const found = readOf(current ?? "", nodeAtAddress(documentOf(current), change.at));
-    if (!isDeepStrictEqual(found, change.read))
+    const found = readAt(current, change.at);
+    if (!sameRead(found, change.read))
       return { kind: "moved", at: change.at, read: change.read, found };
     try {
       current = applied(current, change);

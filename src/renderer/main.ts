@@ -82,6 +82,8 @@ import {
   type Renderer,
 } from "../renderer-interface/interface.js";
 import { JournalTurns } from "./journal-turns.js";
+import { ConfigWrites } from "./config-writes.js";
+import { readConfigText } from "./config-file-store.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
@@ -96,17 +98,20 @@ export function mainRenderer(
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, () => void>();
-  let minted = 0;
 
+  // [LAW:one-source-of-truth] A turn's effects go into `effects` as its acts
+  // make them, as its facts go into `record`, so a turn that throws after an
+  // act still returns what the act did.
   const turn = async (
     event: Event,
     at: Instant,
     record: RequestFacts,
-  ): Promise<readonly Effect[]> => {
+    effects: Effect[],
+  ): Promise<void> => {
     switch (event.kind) {
       case "config":
         configureSession(parts, event.context, event.worldState, at, record);
-        return [];
+        return;
       case "request": {
         const { frame, delivered } = await answerRequest(
           parts,
@@ -120,40 +125,44 @@ export function mainRenderer(
           },
           record,
         );
-        const id = ++minted as EffectId;
+        const id = parts.mint();
         deliveries.set(id, delivered);
-        return [
-          {
-            kind: "present",
-            id,
-            session: event.context.hookData.session_id,
-            surface: "statusline",
-            request: event.id,
-            frame,
-          },
-        ];
+        effects.push({
+          kind: "present",
+          id,
+          session: event.context.hookData.session_id,
+          surface: "statusline",
+          request: event.id,
+          frame,
+        });
+        return;
       }
       case "world-state":
         parts.worldStates.take(event.worldState);
-        return [];
+        return;
       case "retire":
         retireSession(parts, event.session);
-        return [];
+        return;
       case "effect-done": {
         const delivered = deliveries.get(event.of);
+        if (delivered !== undefined) {
+          deliveries.delete(event.of);
+          if (event.outcome.kind === "ok") delivered();
+          return;
+        }
+        const change = parts.writes.settled(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
         // one already settled, is the host's bug: said, never ignored.
-        if (delivered === undefined)
+        if (change === undefined)
           throw new Error(
-            `effect-done for effect ${event.of}, which is not a present on its way`,
+            `effect-done for effect ${event.of}, which is not an effect on its way`,
           );
-        deliveries.delete(event.of);
-        if (event.outcome.kind === "ok") delivered();
-        return [];
+        parts.verbs.landed(change, event.outcome);
+        return;
       }
       case "click":
-        await clickTurn(parts, event, record);
-        return [];
+        await clickTurn(parts, event, record, effects);
+        return;
       case "menu-idle":
         // [LAW:no-ambient-temporal-coupling] Whether the session is still
         // idle is the clock's to say, in the close's own journal turn: a
@@ -165,7 +174,7 @@ export function mainRenderer(
           confirm: () =>
             parts.menuIdle.confirmClose(event.session, event.idle.firedAt),
         });
-        return [];
+        return;
     }
   };
 
@@ -181,9 +190,10 @@ export function mainRenderer(
     },
     event: async (input) => {
       const record: RequestFacts = [];
+      const effects: Effect[] = [];
       const from = parts.clock.monotonic();
-      const ended = await turn(input.event, input.at, record).then(
-        (effects) => ({ kind: "answered", effects }) as const,
+      const ended = await turn(input.event, input.at, record, effects).then(
+        () => ({ kind: "answered" }) as const,
         // [LAW:single-enforcer] Classified here, where it was thrown: a
         // class crosses no process.
         (thrown: unknown) =>
@@ -195,6 +205,7 @@ export function mainRenderer(
       return {
         ...ended,
         record,
+        effects,
         subscriptions: parts.renderCache.subscriptions(),
         turnMs: elapsedMs(parts.clock, from),
       };
@@ -269,11 +280,17 @@ function startOver(
     inputs.storage.history,
     history,
   );
+  // [LAW:one-source-of-truth] One id per effect this renderer returns, of
+  // every kind, so an `effect-done` names exactly one.
+  let minted = 0;
+  const mint = (): EffectId => ++minted as EffectId;
+  const writes = new ConfigWrites(mint, readConfigText);
   // [LAW:single-enforcer] The one queue every journal waits its turn in, the
   // renderer's own: no host part takes a turn.
   const journalTurns = new JournalTurns({
     log,
     monotonic: () => clock.monotonic(),
+    changesLanded: () => writes.landed(),
   });
   const navigationHistory = new NavigationHistory();
   // Each session's effect memory — when its effect came into force — held in
@@ -405,6 +422,7 @@ function startOver(
       renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
         .state.config,
     reloadConfig,
+    configText: (file) => writes.read(file),
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) =>
       renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
@@ -518,7 +536,7 @@ function startOver(
     }
   };
   return mainRenderer(
-    { ...parts, verbs: verbsOver(verbCtx, host.clicks) },
+    { ...parts, verbs: verbsOver(verbCtx, host.clicks, writes), mint, writes },
     pushed,
   );
 }

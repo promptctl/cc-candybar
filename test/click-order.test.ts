@@ -113,6 +113,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const turns = new JournalTurns({
     log: () => {},
     monotonic: () => systemTimekeeper.monotonic(),
+    changesLanded: async () => {},
   });
   for (const sid of [A, B]) {
     recordRender(sessionState, sid);

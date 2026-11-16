@@ -32,6 +32,7 @@
 //      file nor the bundled default declares cannot be pinned at all — the
 //      store refuses loudly rather than authoring a hollow declaration.
 
+import { writingStore } from "./helpers/writing-store";
 import { buildRig } from "./helpers/rig";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs } from "./helpers/host";
@@ -416,10 +417,7 @@ describe("config-file-store: segment-palette placement", () => {
     durable.dispose();
   });
 
-  const store = (): EditStore => ({
-    record: () => {},
-    logger: () => {},
-  });
+  const store = (): EditStore => writingStore;
 
   // [LAW:no-silent-failure] The gate admits keys from the config a session
   // rendered; a key naming a segment that neither this file nor the bundled
@@ -505,10 +503,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     durable.dispose();
   });
 
-  const store = (): EditStore => ({
-    record: () => {},
-    logger: () => {},
-  });
+  const store = (): EditStore => writingStore;
 
   const OTHER_DECL =
     "other: { template: 'other-text', bg: 'panel', fg: 'foreground' }";

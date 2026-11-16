@@ -279,6 +279,7 @@ describe("the close as a renderer turn", () => {
       kind: "threw",
       failure: failureOf(new Error("the close threw")),
       record: [],
+      effects: [],
       hopMs: 0,
     });
     const failures: string[] = [];

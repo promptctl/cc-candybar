@@ -4,6 +4,7 @@
 // `padding: 0`, which wins over top-level `globals` while it is active — the
 // case that decides where a save must write and what a pick compares against.
 
+import { writingStore } from "./helpers/writing-store";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { locs } from "./helpers/host";
 import { mergeWithDefault } from "../src/config/dsl-loader";
@@ -166,7 +167,7 @@ describe("a save under a preset that pins the field lands where it renders", () 
     writeFileSync(file, source);
     const before = drafts(source, p);
     writeValues(
-      { record: () => {}, logger: () => {} },
+      writingStore,
       { path: file, above: [], repo: null, cwd: null, locs: locs() },
       before.map(({ target, value }) => [target, value] as const),
     );

@@ -27,7 +27,6 @@
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
 import fs from "node:fs";
 import JSON5 from "json5";
-import { resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
@@ -82,7 +81,6 @@ import {
   type ConfigPath,
   type PersistTarget,
 } from "../config/loader/persist-target.js";
-import type { DaemonLogger } from "../utils/logger.js";
 import { BUNDLED_PRESETS, isBundledPreset } from "./bundled-presets.js";
 import { ident } from "../config/ident.js";
 
@@ -129,30 +127,6 @@ export function readConfigText(file: string): string | null {
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw e;
-  }
-}
-
-// [LAW:no-silent-failure] The existing file's mode survives (a hand-authored
-// file keeps whatever the user gave it) and a first-ever file takes the
-// process umask like any file the user would create. `null` text is the
-// absent file — undo of a first-ever write removes what that write created.
-// Logs at "error" for the daemon-log breadcrumb, then RETHROWS so the click
-// fails loudly instead of claiming a success that didn't happen.
-export function writeConfigText(
-  file: string,
-  text: string | null,
-  logger: DaemonLogger,
-): void {
-  try {
-    if (text === null) {
-      fs.rmSync(resolvedTarget(file), { force: true });
-      return;
-    }
-    writeAtomic(file, text);
-  } catch (e) {
-    const message = `config write failed (${file}): ${(e as Error).message}`;
-    logger("error", message);
-    throw new Error(message);
   }
 }
 
@@ -431,33 +405,41 @@ function requireValueTarget(key: string): ValueTarget {
 
 // ─── Tracked edits ───────────────────────────────────────────────────────────
 
-// [LAW:locality-or-seam] Where a tracked write reports what it changed: the
-// click's journal (src/renderer/settings-history.ts), which turns the click into
-// one undoable step. This module writes the file and never keeps history.
+// [LAW:locality-or-seam] A click's config files: `read` is a file as the
+// click's own changes on their way leave it, so a second write in one click
+// reads the first; `land` is where a tracked write goes, as a change its turn
+// returns for the host to perform, which its journal
+// (src/renderer/settings-history.ts) records as part of the click's one
+// undoable step. This module never writes a file.
 export interface EditStore {
-  readonly record: (file: string, before: string | null, after: string) => void;
-  readonly logger: DaemonLogger;
+  readonly read: (file: string) => string | null;
+  readonly land: (
+    file: string,
+    before: string | null,
+    after: string | null,
+  ) => void;
 }
 
-// [LAW:one-source-of-truth] Every tracked write lands here — the file write
-// and its record in one place, so recording cannot drift from mutation. The
-// file is the truth, so it goes first.
+// [LAW:one-source-of-truth] Every tracked write lands here.
 // [LAW:single-enforcer] THE gate on what a click may write: text the loader
 // accepts, proved by the loader itself — over the whole chain the file is
-// the bottom of — before the file changes. A write that would not load (a
+// the bottom of — before the click lands it. A write that would not load (a
 // copied group declared twice, a preset an action still targets, a segment a
 // project layer places removed) is refused with the loader's own diagnosis,
 // and the file — and everything the verb does after its write — stays as it
 // was. `refuse` is what else the click promised: a value or layout click
 // promises the bar changes (refuseHidden); a reset promises only that the
 // home stops holding what it held, which a layer above cannot hide.
+// Returns the config the bar draws once the write lands: the session's
+// reload follows the landing, so what a click reads of its own write's
+// result is read here.
 function commit(
   store: EditStore,
   home: ConfigHome,
   before: string | null,
   after: string,
   refuse: (home: ConfigHome, was: Was, will: LoadedChain) => void,
-): void {
+): DslConfig {
   const will = loadOrRefuse(home, after);
   // [LAW:one-source-of-truth] The file before the click is loaded at most
   // once, and only by a refusal that reads it; every refusal judges against
@@ -466,8 +448,8 @@ function commit(
   const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse(home, was, will);
-  writeConfigText(home.path, after, store.logger);
-  store.record(home.path, before, after);
+  store.land(home.path, before, after);
+  return topConfig(will);
 }
 
 // The chain the file before a click loads to, loaded when first asked; null
@@ -617,11 +599,12 @@ function refuseNewDrops(home: ConfigHome, was: Was, will: LoadedChain): void {
 
 /** The scalar the file declares at a value target, or undefined. */
 export function readValue(
+  store: EditStore,
   file: string,
   key: string,
 ): string | number | boolean | undefined {
   const target = requireValueTarget(key);
-  const doc = docOf(readConfigText(file) ?? "");
+  const doc = docOf(store.read(file) ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
   return node !== undefined && "value" in node ? node.value : undefined;
 }
@@ -655,7 +638,7 @@ export function writeDrafts(
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
 ): void {
-  const before = readConfigText(home.path);
+  const before = store.read(home.path);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
@@ -759,7 +742,7 @@ export function deleteValues(
   keys: readonly string[],
 ): void {
   const targets = keys.map(requireTarget);
-  const before = readConfigText(home.path);
+  const before = store.read(home.path);
   if (before === null) return;
   const after = targets.reduce(
     (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
@@ -819,7 +802,7 @@ export function writePreset(
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
-  const before = readConfigText(home.path);
+  const before = store.read(home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
   const own: ConfigPath = ["presets", name];
@@ -877,15 +860,15 @@ export function writeThemeDefault(
   home: ConfigHome,
   theme: string,
   look: Readonly<Record<ThemeDefaultField, string>>,
-): void {
-  const before = readConfigText(home.path);
+): DslConfig {
+  const before = store.read(home.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme],
     json5Text(look),
     JSON5_DIALECT,
   );
-  commit(store, home, before, after, refuseHidden);
+  return commit(store, home, before, after, refuseHidden);
 }
 
 /**
@@ -907,7 +890,7 @@ export function deletePreset(
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = readConfigText(home.path);
+  const before = store.read(home.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
@@ -942,12 +925,12 @@ export function applyLayoutOp(
   home: ConfigHome,
   key: string,
   op: LayoutOp,
-): NewPlacement | null {
+): { readonly placed: NewPlacement | null; readonly config: DslConfig } {
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = readConfigText(home.path);
+  const before = store.read(home.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const placement = homeOnly(home, () =>
     layoutPlacementOf(docOf(before ?? ""), target.preset, subject),
@@ -967,8 +950,7 @@ export function applyLayoutOp(
       `${placement.path.join(".")} in ${home.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  commit(store, home, before, after, refuseHidden);
-  return placed;
+  return { placed, config: commit(store, home, before, after, refuseHidden) };
 }
 
 // [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:
