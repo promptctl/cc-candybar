@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-770",
-      "ref": "refs/pull/770/merge",
-      "sha": "d84a1760b63fd89c2cfe96b2b4e0fb0c70393e9e",
-      "timestamp": "2026-11-16T17:17:45.565Z",
-      "commits": [
-        {
-          "sha": "d84a1760b63fd89c2cfe96b2b4e0fb0c70393e9e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T17:16:40Z",
-          "message": "Merge eb573710e127b2d60537ddd4980b8c9d6c0053ac into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
-        },
-        {
-          "sha": "eb573710e127b2d60537ddd4980b8c9d6c0053ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T10:16:28-07:00",
-          "message": "fix(history): a step's file is checked and proven at the click, so a hand edit is kept and named and no unloaded text is written (candybar-host-renderer-x96a.axx)\n\n- Undo, redo and cancel write a file as the changes between the texts the\n  step recorded, applied over the file as the click reads it. A setting\n  that moved is stale there, like a moved session pick: named in the\n  click's refusal, its file forgotten, and kept by cancel while everything\n  else is put back.\n- That text passes the loader gate every write passes before it lands,\n  refused when the session no longer renders from the file.\n- The refusal handler, the composition in the config writes, and the\n  history's forget-a-file entry point are deleted: a host refusal now\n  only meets a write that landed between the click's read and its landing.\n- A refusal over a whole-file read no longer quotes the file twice.\n- The spec's step 5 no longer schedules removing load-config.\n"
-        },
-        {
-          "sha": "6f77728b175cf32e87289789c3b4c6ff97c0a5ae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T09:58:33-07:00",
-          "message": "fix(click): a click cut off by close lands nothing, and a history step lands all its files or none (candybar-host-renderer-x96a.axx)\n\n- A click the daemon's close cut off seals nothing, so nothing of it is\n  performed under the teardown.\n- A step's file writes land together: one that contradicts the click\n  lands none of them.\n- The interpreter keys a turn's files by the file a write lands in, so\n  two paths to one file are one rewrite.\n- The host and the renderer read a config file through one reader.\n- Edit mode's cancel memory line says what a moved file setting does.\n"
-        },
-        {
-          "sha": "593100cfaa0601e3fa54516ec028d34259816cd6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T09:45:03-07:00",
-          "message": "fix(click): a refused click leaves nothing behind, and every click is answered after its landing (candybar-host-renderer-x96a.axx)\n\n- Close no longer commits a click in flight: what a cut-off click wrote\n  lands whole with its consequence, or not at all, so a refused click is\n  never committed at shutdown.\n- A refused click forgets only the files of the history steps it took; a\n  landing names only the files its changes change.\n- A landed click's reload and consequence each run, and any failure shows\n  on the session's warning indicator.\n- A second write to a file the click already wrote is applied over what\n  the click wrote, and a contradiction is refused.\n- The interpreter reads a file an earlier change removed as absent.\n- The host answers a turn only after its effect-done turns, so a click is\n  answered after its landing, in process or out of it.\n- The renderer reads subscriptions as part of the turn, so a read that\n  throws still hands on the turn's effects.\n"
-        },
-        {
-          "sha": "9408579a05e0c70d7dcf16953fbb774ef014062f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T09:29:02-07:00",
-          "message": "feat(click): a click's config writes are changes the host lands whole, so a refused one changes nothing (candybar-host-renderer-x96a.axx)\n\nThe renderer no longer writes a config file. A click's writes leave its\nturn as `change` effects, one per file, each naming the settings it\ntouches and the JSON5 value it read there. The host performs a turn's\nchanges together or not at all, checking each setting against what was\nread, so a hand edit elsewhere in the file never refuses a click and one\nto the same setting always does.\n\nWhat else a click did (the picks a save releases, its history step) is\nits consequence: applied in the turn its changes land, after the clicking\nsession reloads, or dropped when they don't, with the reason on the ⚠.\nA change refused because a setting moved also makes the session's history\nforget that file; a write that fails for I/O keeps the step. A journal\nturn opens only once the changes ahead of it have landed.\n"
-        },
-        {
-          "sha": "f3244fc18ca4df8809d1cf272d8c0679eab5cbf0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T09:08:27-07:00",
-          "message": "refactor(click): load-config and toolbar-toggle are deleted, so a session's config is only what its client named (candybar-host-renderer-x96a.axx)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "bfd86d4f92a91f2678bed4d48c6e38f0aa03998d",
-      "timestamp": "2026-11-16T05:17:57.910Z",
+      "sha": "df316f23603ca5bd744a8963232d120351758895",
+      "timestamp": "2026-11-16T17:24:35.731Z",
       "commits": [
         {
-          "sha": "bfd86d4f92a91f2678bed4d48c6e38f0aa03998d",
+          "sha": "df316f23603ca5bd744a8963232d120351758895",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T22:16:56-07:00",
-          "message": "docs(spec): A-1's open item says a request waits for the renderer's thread, not for turns taken one at a time (candybar-host-renderer-x96a.cwq) (#767)"
+          "timestamp": "2026-11-16T10:23:26-07:00",
+          "message": "feat(click): a click's config writes are changes the host lands whole (candybar-host-renderer-x96a.axx) (#770)\n\n* refactor(click): load-config and toolbar-toggle are deleted, so a session's config is only what its client named (candybar-host-renderer-x96a.axx)\n\n* feat(click): a click's config writes are changes the host lands whole, so a refused one changes nothing (candybar-host-renderer-x96a.axx)\n\nThe renderer no longer writes a config file. A click's writes leave its\nturn as `change` effects, one per file, each naming the settings it\ntouches and the JSON5 value it read there. The host performs a turn's\nchanges together or not at all, checking each setting against what was\nread, so a hand edit elsewhere in the file never refuses a click and one\nto the same setting always does.\n\nWhat else a click did (the picks a save releases, its history step) is\nits consequence: applied in the turn its changes land, after the clicking\nsession reloads, or dropped when they don't, with the reason on the ⚠.\nA change refused because a setting moved also makes the session's history\nforget that file; a write that fails for I/O keeps the step. A journal\nturn opens only once the changes ahead of it have landed.\n\n* fix(click): a refused click leaves nothing behind, and every click is answered after its landing (candybar-host-renderer-x96a.axx)\n\n- Close no longer commits a click in flight: what a cut-off click wrote\n  lands whole with its consequence, or not at all, so a refused click is\n  never committed at shutdown.\n- A refused click forgets only the files of the history steps it took; a\n  landing names only the files its changes change.\n- A landed click's reload and consequence each run, and any failure shows\n  on the session's warning indicator.\n- A second write to a file the click already wrote is applied over what\n  the click wrote, and a contradiction is refused.\n- The interpreter reads a file an earlier change removed as absent.\n- The host answers a turn only after its effect-done turns, so a click is\n  answered after its landing, in process or out of it.\n- The renderer reads subscriptions as part of the turn, so a read that\n  throws still hands on the turn's effects.\n\n* fix(click): a click cut off by close lands nothing, and a history step lands all its files or none (candybar-host-renderer-x96a.axx)\n\n- A click the daemon's close cut off seals nothing, so nothing of it is\n  performed under the teardown.\n- A step's file writes land together: one that contradicts the click\n  lands none of them.\n- The interpreter keys a turn's files by the file a write lands in, so\n  two paths to one file are one rewrite.\n- The host and the renderer read a config file through one reader.\n- Edit mode's cancel memory line says what a moved file setting does.\n\n* fix(history): a step's file is checked and proven at the click, so a hand edit is kept and named and no unloaded text is written (candybar-host-renderer-x96a.axx)\n\n- Undo, redo and cancel write a file as the changes between the texts the\n  step recorded, applied over the file as the click reads it. A setting\n  that moved is stale there, like a moved session pick: named in the\n  click's refusal, its file forgotten, and kept by cancel while everything\n  else is put back.\n- That text passes the loader gate every write passes before it lands,\n  refused when the session no longer renders from the file.\n- The refusal handler, the composition in the config writes, and the\n  history's forget-a-file entry point are deleted: a host refusal now\n  only meets a write that landed between the click's read and its landing.\n- A refusal over a whole-file read no longer quotes the file twice.\n- The spec's step 5 no longer schedules removing load-config."
         }
       ]
     }

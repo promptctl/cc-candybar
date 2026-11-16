@@ -2759,8 +2759,8 @@ var require_errors = __commonJS({
       }
     };
     var ERR_PARSE_ARGS_INVALID_OPTION_VALUE = class extends Error {
-      constructor(message) {
-        super(message);
+      constructor(message2) {
+        super(message2);
         this.code = "ERR_PARSE_ARGS_INVALID_OPTION_VALUE";
       }
     };
@@ -2814,7 +2814,7 @@ var require_validators = __commonJS({
         throw new ERR_INVALID_ARG_TYPE(name, `('${ArrayPrototypeJoin(union, "|")}')`, value);
       }
     }
-    function validateBoolean2(value, name) {
+    function validateBoolean(value, name) {
       if (typeof value !== "boolean") {
         throw new ERR_INVALID_ARG_TYPE(name, "Boolean", value);
       }
@@ -2833,7 +2833,7 @@ var require_validators = __commonJS({
     function validateBooleanArray(value, name) {
       validateArray(value, name);
       for (let i2 = 0; i2 < value.length; i2++) {
-        validateBoolean2(value[i2], `${name}[${i2}]`);
+        validateBoolean(value[i2], `${name}[${i2}]`);
       }
     }
     function validateObject(value, name, options) {
@@ -2851,7 +2851,7 @@ var require_validators = __commonJS({
       validateString,
       validateStringArray,
       validateUnion,
-      validateBoolean: validateBoolean2,
+      validateBoolean,
       validateBooleanArray
     };
   }
@@ -2981,7 +2981,7 @@ var require_parseargs = __commonJS({
     } = require_primordials();
     var {
       validateArray,
-      validateBoolean: validateBoolean2,
+      validateBoolean,
       validateBooleanArray,
       validateObject,
       validateString,
@@ -3195,9 +3195,9 @@ To specify an option argument starting with a dash use ${example}.`;
       const options = objectGetOwn(config2, "options") ?? { __proto__: null };
       const parseConfig = { args, strict, options, allowPositionals };
       validateArray(args, "args");
-      validateBoolean2(strict, "strict");
-      validateBoolean2(allowPositionals, "allowPositionals");
-      validateBoolean2(returnTokens, "tokens");
+      validateBoolean(strict, "strict");
+      validateBoolean(allowPositionals, "allowPositionals");
+      validateBoolean(returnTokens, "tokens");
       validateObject(options, "options");
       ArrayPrototypeForEach(
         ObjectEntries(options),
@@ -3218,7 +3218,7 @@ To specify an option argument starting with a dash use ${example}.`;
           }
           const multipleOption = objectGetOwn(optionConfig, "multiple");
           if (ObjectHasOwn(optionConfig, "multiple")) {
-            validateBoolean2(multipleOption, `options.${longOption}.multiple`);
+            validateBoolean(multipleOption, `options.${longOption}.multiple`);
           }
           const defaultValue = objectGetOwn(optionConfig, "default");
           if (defaultValue !== void 0) {
@@ -3228,7 +3228,7 @@ To specify an option argument starting with a dash use ${example}.`;
                 validator = multipleOption ? validateStringArray : validateString;
                 break;
               case "boolean":
-                validator = multipleOption ? validateBooleanArray : validateBoolean2;
+                validator = multipleOption ? validateBooleanArray : validateBoolean;
                 break;
             }
             validator(defaultValue, `options.${longOption}.default`);
@@ -3767,8 +3767,8 @@ var init_tslib_es6 = __esm({
       };
       return ownKeys(o);
     };
-    _SuppressedError = typeof SuppressedError === "function" ? SuppressedError : function(error, suppressed, message) {
-      var e = new Error(message);
+    _SuppressedError = typeof SuppressedError === "function" ? SuppressedError : function(error, suppressed, message2) {
+      var e = new Error(message2);
       return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
     };
     tslib_es6_default = {
@@ -4146,7 +4146,7 @@ var require_path_browserify = __commonJS({
         }
         return _format("/", pathObject);
       },
-      parse: function parse3(path43) {
+      parse: function parse4(path43) {
         assertPath(path43);
         var ret = { root: "", dir: "", base: "", ext: "", name: "" };
         if (path43.length === 0) return ret;
@@ -5245,9 +5245,9 @@ var require_argErrors = __commonJS({
     };
     exports2.invalidArgValue = invalidArgValue;
     var outOfRange = (name, range, value, native2) => {
-      const message = 'The value of "' + name + '" is out of range. It must be ' + range + ". Received ";
+      const message2 = 'The value of "' + name + '" is out of range. It must be ' + range + ". Received ";
       if (native2)
-        return (0, exports2.withNativeCode)(new RangeError(message + String(value)), "ERR_OUT_OF_RANGE");
+        return (0, exports2.withNativeCode)(new RangeError(message2 + String(value)), "ERR_OUT_OF_RANGE");
       let received;
       if (Number.isInteger(value) && Math.abs(value) > TWO_POW_322)
         received = (0, inspectPrimitive_1.addNumericalSeparator)("" + value);
@@ -5258,7 +5258,7 @@ var require_argErrors = __commonJS({
         received += "n";
       } else
         received = (0, inspect_1.inspect)(value);
-      return (0, exports2.withCode)(new RangeError(message + received), "ERR_OUT_OF_RANGE");
+      return (0, exports2.withCode)(new RangeError(message2 + received), "ERR_OUT_OF_RANGE");
     };
     exports2.outOfRange = outOfRange;
     var invalidThis = (type3) => (0, exports2.withCode)(new TypeError('Value of "this" must be of type ' + type3), "ERR_INVALID_THIS");
@@ -6025,8 +6025,8 @@ var require_process = __commonJS({
       if (!p2.cwd)
         p2.cwd = () => "/";
       if (!p2.emitWarning)
-        p2.emitWarning = (message, type3) => {
-          console.warn(`${type3}${type3 ? ": " : ""}${message}`);
+        p2.emitWarning = (message2, type3) => {
+          console.warn(`${type3}${type3 ? ": " : ""}${message2}`);
         };
       if (!p2.env)
         p2.env = {};
@@ -6551,11 +6551,11 @@ var require_validators2 = __commonJS({
         throw (0, argErrors_1.invalidArgType)(name, "of type string", value);
     };
     exports2.validateString = validateString;
-    var validateBoolean2 = (value, name) => {
+    var validateBoolean = (value, name) => {
       if (typeof value !== "boolean")
         throw (0, argErrors_1.invalidArgType)(name, "of type boolean", value);
     };
-    exports2.validateBoolean = validateBoolean2;
+    exports2.validateBoolean = validateBoolean;
     var validateFunction = (value, name) => {
       if (typeof value !== "function")
         throw (0, argErrors_1.invalidArgType)(name, "of type function", value);
@@ -6749,12 +6749,12 @@ var require_SystemError = __commonJS({
       constructor(code2, prefix, info) {
         const path43 = info.path;
         const dest = info.dest;
-        let message = prefix + ": " + info.syscall + " returned " + info.code + " (" + info.message + ")";
+        let message2 = prefix + ": " + info.syscall + " returned " + info.code + " (" + info.message + ")";
         if (path43 !== void 0)
-          message += " " + path43;
+          message2 += " " + path43;
         if (dest !== void 0)
-          message += " => " + dest;
-        super(message);
+          message2 += " => " + dest;
+        super(message2);
         this.code = code2;
         this.info = info;
         this.errno = info.errno;
@@ -6812,12 +6812,12 @@ var require_errors2 = __commonJS({
       ENOTSUP: [-95, "operation not supported on socket"]
     };
     var formatMessage = (code2, uv, syscall2, path43, dest) => {
-      let message = code2 + ": " + (uv ? uv[1] : "unknown error") + ", " + syscall2;
+      let message2 = code2 + ": " + (uv ? uv[1] : "unknown error") + ", " + syscall2;
       if (path43)
-        message += " '" + path43 + "'";
+        message2 += " '" + path43 + "'";
       if (dest)
-        message += " -> '" + dest + "'";
-      return message;
+        message2 += " -> '" + dest + "'";
+      return message2;
     };
     var createError = (code2, syscall2 = "", path43 = "", dest = "", Constructor = Error) => {
       const uv = UV[code2];
@@ -8991,12 +8991,12 @@ var require_primordials2 = __commonJS({
         if (!Array.isArray(errors2)) {
           throw new TypeError(`Expected input to be an Array, got ${typeof errors2}`);
         }
-        let message = "";
+        let message2 = "";
         for (let i2 = 0; i2 < errors2.length; i2++) {
-          message += `    ${errors2[i2].stack}
+          message2 += `    ${errors2[i2].stack}
 `;
         }
-        super(message);
+        super(message2);
         this.name = "AggregateError";
         this.errors = errors2;
       }
@@ -9179,9 +9179,9 @@ var require_errors3 = __commonJS({
     var classRegExp = /^([A-Z][a-z0-9]*)+$/;
     var nodeInternalPrefix = "__node_internal_";
     var codes = {};
-    function assert(value, message) {
+    function assert(value, message2) {
       if (!value) {
-        throw new codes.ERR_INTERNAL_ASSERTION(message);
+        throw new codes.ERR_INTERNAL_ASSERTION(message2);
       }
     }
     function addNumericalSeparator(val) {
@@ -9212,13 +9212,13 @@ var require_errors3 = __commonJS({
       }
       return format(msg, ...args);
     }
-    function E(code2, message, Base) {
+    function E(code2, message2, Base) {
       if (!Base) {
         Base = Error;
       }
       class NodeError extends Base {
         constructor(...args) {
-          super(getMessage(code2, message, args));
+          super(getMessage(code2, message2, args));
         }
         toString() {
           return `${this.name} [${code2}]: ${this.message}`;
@@ -9264,11 +9264,11 @@ var require_errors3 = __commonJS({
       return innerError || outerError;
     }
     var AbortError = class extends Error {
-      constructor(message = "The operation was aborted", options = void 0) {
+      constructor(message2 = "The operation was aborted", options = void 0) {
         if (options !== void 0 && typeof options !== "object") {
           throw new codes.ERR_INVALID_ARG_TYPE("options", "Object", options);
         }
-        super(message, options);
+        super(message2, options);
         this.code = "ABORT_ERR";
         this.name = "AbortError";
       }
@@ -9571,7 +9571,7 @@ var require_util4 = __commonJS({
         }
       },
       isBlob,
-      deprecate(fn, message) {
+      deprecate(fn, message2) {
         return fn;
       },
       addAbortListener: require_events().addAbortListener || function addAbortListener(signal, listener) {
@@ -9730,7 +9730,7 @@ var require_validators3 = __commonJS({
         throw new ERR_INVALID_ARG_VALUE(name, value, reason);
       }
     });
-    function validateBoolean2(value, name) {
+    function validateBoolean(value, name) {
       if (typeof value !== "boolean") throw new ERR_INVALID_ARG_TYPE(name, "boolean", value);
     }
     function getOwnPropertyValueOrDefault(options, key, defaultValue) {
@@ -9767,7 +9767,7 @@ var require_validators3 = __commonJS({
     function validateBooleanArray(value, name) {
       validateArray(value, name);
       for (let i2 = 0; i2 < value.length; i2++) {
-        validateBoolean2(value[i2], `${name}[${i2}]`);
+        validateBoolean(value[i2], `${name}[${i2}]`);
       }
     }
     function validateAbortSignalArray(value, name) {
@@ -9871,7 +9871,7 @@ var require_validators3 = __commonJS({
       validateStringArray,
       validateBooleanArray,
       validateAbortSignalArray,
-      validateBoolean: validateBoolean2,
+      validateBoolean,
       validateBuffer,
       validateDictionary,
       validateEncoding,
@@ -10113,7 +10113,7 @@ var require_end_of_stream = __commonJS({
     var { AbortError, codes } = require_errors3();
     var { ERR_INVALID_ARG_TYPE, ERR_STREAM_PREMATURE_CLOSE } = codes;
     var { kEmptyObject, once: once2 } = require_util4();
-    var { validateAbortSignal, validateFunction, validateObject, validateBoolean: validateBoolean2 } = require_validators3();
+    var { validateAbortSignal, validateFunction, validateObject, validateBoolean } = require_validators3();
     var { Promise: Promise2, PromisePrototypeThen, SymbolDispose } = require_primordials2();
     var {
       isClosed,
@@ -10336,7 +10336,7 @@ var require_end_of_stream = __commonJS({
         opts = kEmptyObject;
       }
       if ((_opts = opts) !== null && _opts !== void 0 && _opts.cleanup) {
-        validateBoolean2(opts.cleanup, "cleanup");
+        validateBoolean(opts.cleanup, "cleanup");
         autoCleanup = opts.cleanup;
       }
       return new Promise2((resolve, reject2) => {
@@ -15103,8 +15103,8 @@ var require_cp = __commonJS({
       ERR_FS_CP_UNKNOWN: "Cannot copy an unknown file type",
       ERR_FS_EISDIR: "Path is a directory"
     };
-    var cpSystemError = (code2, message, path43, errno, uv) => new fs_core_1.SystemError(code2, PREFIX2[code2], { code: uv, message, path: path43, syscall: "cp", errno });
-    var cpCodeError = (code2, message) => (0, argErrors_1.withNativeCode)(new Error(message), code2);
+    var cpSystemError = (code2, message2, path43, errno, uv) => new fs_core_1.SystemError(code2, PREFIX2[code2], { code: uv, message: message2, path: path43, syscall: "cp", errno });
+    var cpCodeError = (code2, message2) => (0, argErrors_1.withNativeCode)(new Error(message2), code2);
     var invalidFilterReturn = (value) => (0, argErrors_1.withCode)(new TypeError('Expected boolean to be returned from the "filter" function but got an instance of Promise.'), "ERR_INVALID_RETURN_VALUE");
     var asCopyfileError = (error, src, dest) => error && typeof error.code === "string" && typeof error.syscall === "string" ? (0, fs_core_1.createError)(error.code, "copyfile", src, dest) : error;
     var getValidCpMode = (mode) => {
@@ -21484,7 +21484,7 @@ var require_dist = __commonJS({
       var token;
       var key;
       var root;
-      var parse3 = function parse4(text4, reviver) {
+      var parse4 = function parse5(text4, reviver) {
         source = String(text4);
         parseState = "start";
         stack = [];
@@ -22310,8 +22310,8 @@ var require_dist = __commonJS({
         }
         return c2;
       }
-      function syntaxError(message) {
-        var err = new SyntaxError(message);
+      function syntaxError(message2) {
+        var err = new SyntaxError(message2);
         err.lineNumber = line;
         err.columnNumber = column;
         return err;
@@ -22532,11 +22532,11 @@ var require_dist = __commonJS({
           return final;
         }
       };
-      var JSON55 = {
-        parse: parse3,
+      var JSON56 = {
+        parse: parse4,
         stringify: stringify2
       };
-      var lib = JSON55;
+      var lib = JSON56;
       var es5 = lib;
       return es5;
     }));
@@ -28367,8 +28367,8 @@ var inspect = (v) => {
 
 // src/daemon/foundations/verb-error.ts
 var BadVerbArgs = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "BadVerbArgs";
   }
 };
@@ -28385,8 +28385,8 @@ var ClickAbandoned = class extends Error {
   }
 };
 var RendererDown = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "RendererDown";
   }
 };
@@ -28413,8 +28413,8 @@ function failureOf(thrown2) {
   };
 }
 function badRequest(...problems) {
-  const message = problems.join("; ");
-  return { kind: "bad-request", message, detail: message };
+  const message2 = problems.join("; ");
+  return { kind: "bad-request", message: message2, detail: message2 };
 }
 function decodeWire(decode) {
   try {
@@ -28451,8 +28451,6 @@ var VERB_SET_STATE = "set-state";
 var VERB_STEP_STATE = "step-state";
 var VERB_COPY = "copy";
 var VERB_OPEN_VSCODE = "open-vscode";
-var VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
-var VERB_LOAD_CONFIG = "load-config";
 var VERB_SET_CONFIG = "set-config";
 var VERB_STEP_CONFIG = "step-config";
 var VERB_SAVE = "save";
@@ -28505,8 +28503,6 @@ var SAYS = {
   [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key, by)],
   [VERB_COPY]: ([text4]) => [`copy ${saidCopy(text4)}`],
   [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
-  [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
-  [VERB_LOAD_CONFIG]: ([, path43]) => [`load config ${path43}`],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key, by)}`],
   [VERB_SAVE]: () => ["save settings"],
@@ -28632,7 +28628,6 @@ var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
   VERB_REDO,
   VERB_BACK,
   VERB_REWIND,
-  VERB_TOOLBAR_TOGGLE,
   VERB_APPLY_UPDATE,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
@@ -28640,7 +28635,6 @@ var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
-  VERB_LOAD_CONFIG,
   VERB_COPY_DIAGNOSTIC
 ]);
 function clickSessionOf(verb, value) {
@@ -28907,12 +28901,12 @@ function pipeEvent(state, kind, category) {
   const counts = new Map(last2 === null || last2.answered ? [] : last2.counts);
   const key = `${kind}\0${category}`;
   counts.set(key, (counts.get(key) ?? 0) + 1);
-  const said = [...counts].map(([at, n]) => {
+  const said2 = [...counts].map(([at, n]) => {
     const [k, c] = at.split("\0");
     return `${n}\xD7 ${c} ${pipeEventWords(k)}`;
   });
   state.pipeEvent = {
-    text: `${PIPE_EVENT_LEAD}${said.join("; ")}`,
+    text: `${PIPE_EVENT_LEAD}${said2.join("; ")}`,
     at: state.scope.now(),
     answered: false,
     counts
@@ -29555,8 +29549,8 @@ function launcherWithState(owner, clock, spawner) {
       stats: null,
       // A launcher with nobody to tell says the warning on stderr.
       observeWarnings: (change) => {
-        const message = change.kind === "launch-pipes" ? change.text : change.fault === null ? null : lifelineMessage(change.fault);
-        if (message !== null) process.emitWarning(message);
+        const message2 = change.kind === "launch-pipes" ? change.text : change.fault === null ? null : lifelineMessage(change.fault);
+        if (message2 !== null) process.emitWarning(message2);
       },
       signal: new AbortController().signal,
       now: () => instantOf(new Date(clock.now())),
@@ -29897,13 +29891,6 @@ function linksOf({ rows }) {
 }
 function decodeArgs(verb, value) {
   if (SEGMENTED_VERBS.has(verb)) return decodeSegments(value);
-  const slash2 = value.indexOf("/");
-  if (verb === VERB_LOAD_CONFIG && slash2 !== -1) {
-    return [
-      decodeURIComponent(value.slice(0, slash2)),
-      decodeURIComponent(value.slice(slash2 + 1))
-    ];
-  }
   return [decodeURIComponent(value)];
 }
 function clickOf(url) {
@@ -29977,8 +29964,8 @@ function saidBy(r, text4) {
   return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
 }
 function failureText(r, where = "") {
-  const said = saidBy(r, r.stderr);
-  return `${whyFailed(r)}${where}${said === "" ? "" : `: ${said}`}`;
+  const said2 = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
 }
 function launcherWarningsAt(facts, at, render3) {
   return facts.flatMap((fact) => {
@@ -32091,9 +32078,9 @@ var Reaction = class {
     if (globalState.disableErrorBoundaries) {
       throw error;
     }
-    const message = __MOBX_DEV__ ? `[mobx] Encountered an uncaught exception that was thrown by a reaction or observer component, in: '${this}'` : `[mobx] uncaught error in '${this}'`;
+    const message2 = __MOBX_DEV__ ? `[mobx] Encountered an uncaught exception that was thrown by a reaction or observer component, in: '${this}'` : `[mobx] uncaught error in '${this}'`;
     if (!globalState.suppressReactionErrors) {
-      console.error(message, error);
+      console.error(message2, error);
     } else if (__MOBX_DEV__) {
       console.warn(`[mobx] (error in reaction '${this.name_}' suppressed, fix error of causing action below)`);
     }
@@ -32101,7 +32088,7 @@ var Reaction = class {
       spyReport({
         type: "error",
         name: this.name_,
-        message,
+        message: message2,
         error: "" + error
       });
     }
@@ -34553,9 +34540,9 @@ var import_node_path6 = __toESM(require_path_browserify(), 1);
 init_globals();
 var debugEnabled = false;
 var debugOn = () => debugEnabled;
-function debug(message, ...args) {
+function debug(message2, ...args) {
   if (debugOn()) {
-    console.error(`[DEBUG] ${message}`, ...args);
+    console.error(`[DEBUG] ${message2}`, ...args);
   }
 }
 function changeLogger(log) {
@@ -34566,7 +34553,7 @@ function changeLogger(log) {
     log(level, msg);
   };
 }
-var quietLogger = (_level, message) => debug(message);
+var quietLogger = (_level, message2) => debug(message2);
 
 // src/utils/folder-identity.ts
 init_globals();
@@ -34612,6 +34599,14 @@ function writeAtomic(at, text4, mode) {
     fs_default.renameSync(tmp, file);
   } catch (e) {
     fs_default.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+function readConfigText(file) {
+  try {
+    return fs_default.readFileSync(file, "utf8");
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
     throw e;
   }
 }
@@ -34737,7 +34732,7 @@ function followWatch(held, spec, acquire) {
 }
 
 // src/daemon/cache/watchers.ts
-var defaultLogger = (_level, message) => debug(message);
+var defaultLogger = (_level, message2) => debug(message2);
 var DEBOUNCE_MS = 50;
 function folded(window2, next) {
   if (next.kind === "failed") return next;
@@ -35051,7 +35046,7 @@ var stopped = (since) => `file events stopped at ${iso(since)}; the OS has deliv
 function fileEventsWarnings(d) {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
-  const message = () => {
+  const message2 = () => {
     switch (d.kind) {
       case "delivering":
         return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
@@ -35061,7 +35056,7 @@ function fileEventsWarnings(d) {
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
   };
-  return [{ kind: "file-events", state: d.kind, message: message() }];
+  return [{ kind: "file-events", state: d.kind, message: message2() }];
 }
 
 // src/daemon/cache/file-events.ts
@@ -37535,8 +37530,8 @@ function resolveColorSystem(spec, options) {
   throw new ColorParseError(`Unknown color system name: ${JSON.stringify(spec)} (expected "auto", "truecolor", "256", "ansi", or "none")`);
 }
 var ColorParseError = class extends Error {
-  constructor(message) {
-    super(message);
+  constructor(message2) {
+    super(message2);
     this.name = "ColorParseError";
   }
 };
@@ -43599,8 +43594,8 @@ var ATTRIBUTE_SHORT_ALIASES = {
 };
 var NEVER_CHANGES = { lastChange: Number.NEGATIVE_INFINITY, nextChange: Number.POSITIVE_INFINITY };
 var StyleSyntaxError = class extends Error {
-  constructor(message, options) {
-    super(message, options);
+  constructor(message2, options) {
+    super(message2, options);
     this.name = "StyleSyntaxError";
   }
 };
@@ -48562,9 +48557,9 @@ function diagnosticFrame(text4, colors) {
     pending: []
   };
 }
-function renderFailedFrame(message) {
+function renderFailedFrame(message2) {
   return diagnosticFrame(
-    permanentGlyphText({ kind: "permanent", cause: "render_failed", message }),
+    permanentGlyphText({ kind: "permanent", cause: "render_failed", message: message2 }),
     DIAGNOSTIC_ERROR_COLORS
   );
 }
@@ -48645,9 +48640,9 @@ function plainOf2(runs) {
 }
 
 // src/daemon/foundations/render-answers.ts
-var failedWith = (message) => ({
+var failedWith = (message2) => ({
   ok: false,
-  error: message,
+  error: message2,
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
 });
@@ -48880,20 +48875,17 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
   noteFacts(facts, {
     hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
   });
-  if (delivered.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, delivered.failure);
-  }
   const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-"
+    effects: effects.map((e) => e.kind === "present" ? `present:${e.surface}` : e.kind).join(",") || "-"
   });
   let answer2 = null;
   for (const effect of effects) {
     switch (effect.kind) {
       case "present":
-        if (effect.request !== id2)
+        if (delivered.kind === "threw") done2(effect, "its turn threw");
+        else if (effect.request !== id2)
           done2(
             effect,
             `presents request ${effect.request}, not this turn's ${id2}`
@@ -48902,8 +48894,11 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
           done2(effect, `a second statusline frame for request ${id2}`);
         else answer2 = effect;
         break;
+      case "change":
+        break;
     }
   }
+  if (delivered.kind === "threw") return failed2(host, delivered.failure);
   if (answer2 === null)
     return failed2(
       host,
@@ -49090,20 +49085,20 @@ var RenderSightings = class {
   // day's first seed, a PR lookup — so a request that settles after a newer
   // one of the same session and role is not its latest, and is dropped; its
   // own settling replaces its arrival.
-  see(sessionId2, said, at, order2) {
-    const role = roleOf(said.client);
+  see(sessionId2, said2, at, order2) {
+    const role = roleOf(said2.client);
     const key = JSON.stringify([sessionId2, role]);
     const known = this.seen.get(key);
     if (known !== void 0 && known.order > order2) return;
     this.seen.delete(key);
-    this.seen.set(key, { sessionId: sessionId2, said: { ...said, role }, at, order: order2 });
+    this.seen.set(key, { sessionId: sessionId2, said: { ...said2, role }, at, order: order2 });
     if (this.seen.size > SIGHTINGS_KEPT) {
       this.seen.delete(this.seen.keys().next().value);
     }
   }
   list(now2) {
-    return [...this.seen.values()].map(({ sessionId: sessionId2, said, at }) => ({
-      ...said,
+    return [...this.seen.values()].map(({ sessionId: sessionId2, said: said2, at }) => ({
+      ...said2,
       sessionId: sessionId2,
       ago: now2 - at
     }));
@@ -50950,7 +50945,6 @@ var UNUSED = {
 var NAMED_BY = {
   argument: "command argument",
   environment: `$${CONFIG_ENV}`,
-  pick: "load-config pick",
   unknown: "source unknown"
 };
 function judgedConfig({ target, layers }) {
@@ -51591,8 +51585,8 @@ function clickArrived(arrival) {
       };
   }
 }
-function sessionWidth(sessionId2, said) {
-  const statusline = said.find((s) => s.role === "statusline");
+function sessionWidth(sessionId2, said2) {
+  const statusline = said2.find((s) => s.role === "statusline");
   return statusline === void 0 ? {
     kind: "failed",
     reason: `the daemon holds no statusline render of session ${sessionId2} \u2014 none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width \u2014 so no width a statusline client measured is known; run this again once the statusline has redrawn`
@@ -51919,8 +51913,8 @@ var Scanner = class {
   peek() {
     return this.text[this.pos] ?? "";
   }
-  fail(message) {
-    throw new Json5EditError(message, this.pos);
+  fail(message2) {
+    throw new Json5EditError(message2, this.pos);
   }
   skipTrivia() {
     for (; ; ) {
@@ -52250,6 +52244,35 @@ function setValue(text4, path43, valueText, dialect) {
   }
   return setBelow(text4, parseDocument(text4), path43, valueText, dialect);
 }
+function insertValue(text4, path43, valueText, dialect, precedes) {
+  const parentPath = path43.slice(0, -1);
+  const leaf = path43[path43.length - 1];
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  if (leaf === void 0 || parent?.kind !== "object")
+    throw new Json5EditError(
+      `cannot insert ${path43.join(".")}: its parent is not an object`,
+      parent?.span.start ?? 0
+    );
+  if (entryOf2(parent, leaf) !== void 0)
+    throw new Json5EditError(
+      `cannot insert ${path43.join(".")}: it is already there`,
+      parent.span.start
+    );
+  const member = entryText([leaf], valueText, dialect);
+  const next = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
+  if (next === void 0) return appendMember(text4, parent, member, dialect);
+  if (!startsLine(text4, next.span.start))
+    return splice(text4, next.span.start, next.span.start, `${member}, `);
+  const indent2 = indentOfLine(text4, next.span.start);
+  const eol = eolOf(text4);
+  const at = lineStartOf(text4, next.span.start);
+  return splice(
+    text4,
+    at,
+    at,
+    `${indent2}${reindent(member, indent2, eol)},${eol}`
+  );
+}
 function setBelow(text4, start, path43, valueText, dialect) {
   let node = start;
   for (let i2 = 0; i2 < path43.length; i2++) {
@@ -52526,9 +52549,9 @@ function* walkNodePaths(node, path43) {
 function childrenOf(node) {
   return node.kind === "container" ? node.children : node.opens === void 0 ? [] : [node.opens.body];
 }
-function parseArm(parse3) {
-  if (parse3 === void 0 || "text" in parse3) return "text";
-  return "regex" in parse3 ? "regex" : "json";
+function parseArm(parse4) {
+  if (parse4 === void 0 || "text" in parse4) return "text";
+  return "regex" in parse4 ? "regex" : "json";
 }
 var CACHE_KEYS = [
   "ttl",
@@ -53495,8 +53518,8 @@ function repoWebUrl(remotes) {
   const url = repoRemoteUrl(remotes);
   return url === null ? null : remoteWebUrl(url);
 }
-function classifyForgePr(label2, result, noPrPattern, parse3) {
-  if (result.ok) return parse3(result.stdout);
+function classifyForgePr(label2, result, noPrPattern, parse4) {
+  if (result.ok) return parse4(result.stdout);
   if (isMissingCommand(result)) return ABSENT;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT;
@@ -53685,8 +53708,8 @@ var TemplateError = class extends Error {
   kind = "EvalError";
   pos;
   source;
-  constructor(message, pos, ctx = {}) {
-    super(message, { cause: ctx.cause });
+  constructor(message2, pos, ctx = {}) {
+    super(message2, { cause: ctx.cause });
     this.pos = pos;
     this.source = ctx.source;
   }
@@ -53708,8 +53731,8 @@ var ParseError = class extends TemplateError {
   kind = "ParseError";
   expected;
   found;
-  constructor(message, pos, ctx = {}) {
-    super(message, pos, ctx);
+  constructor(message2, pos, ctx = {}) {
+    super(message2, pos, ctx);
     this.expected = ctx.expected;
     this.found = ctx.found;
   }
@@ -53779,12 +53802,12 @@ var MissingFieldError = class extends EvalError {
 var FailError = class extends EvalError {
   name = "FailError";
   kind = "FailError";
-  constructor(message, pos = {
+  constructor(message2, pos = {
     line: 0,
     column: 0,
     offset: 0
   }, ctx = {}) {
-    super(message, pos, ctx);
+    super(message2, pos, ctx);
   }
 };
 function buildSnippet(source, pos) {
@@ -53894,8 +53917,8 @@ var Lexer = class {
   * Build a ParseError that always carries the source for snippet
   * extraction. Lexer call sites use this exclusively.
   */
-  err(message, pos, extra = {}) {
-    return new ParseError(message, pos, {
+  err(message2, pos, extra = {}) {
+    return new ParseError(message2, pos, {
       ...extra,
       source: this.src
     });
@@ -54279,8 +54302,8 @@ var Parser = class {
     });
     return t2;
   }
-  errAt(t2, message, extra = {}) {
-    return new ParseError(message, t2.pos, {
+  errAt(t2, message2, extra = {}) {
+    return new ParseError(message2, t2.pos, {
       ...extra,
       source: this.source
     });
@@ -58679,10 +58702,10 @@ function rejectUnknownKeys(ctx, path43, raw, noun, allowed, spokenFor = EMPTY_PA
     }
   }
 }
-function reject(ctx, path43, message) {
+function reject(ctx, path43, message2) {
   ctx.issues.push({
     path: path43,
-    message,
+    message: message2,
     line: findKeyLine(ctx.source, path43.split("."))
   });
   return null;
@@ -58746,10 +58769,10 @@ function taggedUnion(ctx, schema, path43, raw) {
   }
   const arms = schema.arms;
   if (!Object.hasOwn(arms, tagValue)) {
-    const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
+    const message2 = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
     ctx.issues.push({
       path: `${path43}.${schema.tag}`,
-      message,
+      message: message2,
       line: findKeyLine(ctx.source, [...path43.split("."), schema.tag])
     });
     return null;
@@ -58783,11 +58806,11 @@ function refine(inner, ...checks) {
     if (value === null) return null;
     for (const check of checks) {
       if (check.ok(value)) continue;
-      const { field, message } = check.issue(value);
+      const { field, message: message2 } = check.issue(value);
       const at = field === "" ? path43 : `${path43}.${field}`;
       ctx.issues.push({
         path: at,
-        message,
+        message: message2,
         line: findKeyLine(ctx.source, at.split("."))
       });
       return null;
@@ -59839,10 +59862,10 @@ function oneAskPerClick(edge) {
     )
   };
 }
-async function transcriptReads2(edge, said) {
-  if (said.kind === "failed") return said;
+async function transcriptReads2(edge, said2) {
+  if (said2.kind === "failed") return said2;
   const byPath = /* @__PURE__ */ new Map();
-  for (const { path: file, answered } of said.value) {
+  for (const { path: file, answered } of said2.value) {
     byPath.set(file, answered || (byPath.get(file) ?? false));
   }
   return {
@@ -61005,8 +61028,8 @@ function toBool(v) {
   );
 }
 var PendingValueError = class extends Error {
-  constructor(variable, message) {
-    super(message);
+  constructor(variable, message2) {
+    super(message2);
     this.variable = variable;
   }
   variable;
@@ -61120,9 +61143,9 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   );
   return minted;
 }
-function plainMessage({ about, text: message, copy: copy3 }, severity) {
-  const [first2, ...rest2] = message.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
-  return first2 === void 0 ? [] : [{ severity, about, message, copy: copy3, lines: [first2, ...rest2] }];
+function plainMessage({ about, text: message2, copy: copy3 }, severity) {
+  const [first2, ...rest2] = message2.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
+  return first2 === void 0 ? [] : [{ severity, about, message: message2, copy: copy3, lines: [first2, ...rest2] }];
 }
 function copyKeys(list2) {
   return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
@@ -61133,16 +61156,16 @@ function copyLink(sessionId2, by, key, position) {
     `copy diagnostic ${position}`
   );
 }
-var rankOf = (message) => DIAGNOSTIC_LEVELS[message.severity.level].rank;
+var rankOf = (message2) => DIAGNOSTIC_LEVELS[message2.severity.level].rank;
 function worstLevel(list2) {
   return list2[0]?.severity.level ?? null;
 }
 var IDENTITY_BITS = 32;
 var OCCURRENCES = 256;
 var PAGES = 4096;
-function identityOf(message) {
+function identityOf(message2) {
   const digest2 = createHash("sha256").update(
-    `${message.severity.level}\0${message.severity.glyph}\0${message.about}`
+    `${message2.severity.level}\0${message2.severity.glyph}\0${message2.about}`
   ).digest("hex");
   return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
 }
@@ -61270,13 +61293,13 @@ var drawnRows = (cells, opts) => drawStripCells(cells, opts).lines.map((runs) =>
   runs
 }));
 var ISSUE_INDENT = " ";
-function channelRows(message, opts, trailing) {
-  const colors = colorsOf(message.severity);
+function channelRows(message2, opts, trailing) {
+  const colors = colorsOf(message2.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const styled = (link) => link === null ? base : base.withLink(link);
   const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
-  return message.lines.flatMap((line, i2) => {
-    const prefix = cell(i2 === 0 ? message.severity.glyph : ISSUE_INDENT, base);
+  return message2.lines.flatMap((line, i2) => {
+    const prefix = cell(i2 === 0 ? message2.severity.glyph : ISSUE_INDENT, base);
     const cells = line.flatMap(
       (span) => span.text.split(" ").flatMap((w) => chopCells(w, fold)).map((w) => cell(w, styled(span.link)))
     );
@@ -61592,7 +61615,7 @@ function settingControlDomain(field) {
 function rangedDomain(row2) {
   return "optionDomain" in row2 && row2.optionDomain !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
 }
-function fragmentRejection(description, message) {
+function fragmentRejection(description, message2) {
   return {
     required: false,
     // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
@@ -61602,7 +61625,7 @@ function fragmentRejection(description, message) {
       if (raw[field] !== void 0) {
         ctx.issues.push({
           path: `${path43}.${field}`,
-          message: message(`${path43}.${field}`),
+          message: message2(`${path43}.${field}`),
           line: findKeyLine(ctx.source, [...path43.split("."), field])
         });
       }
@@ -63809,20 +63832,9 @@ var validateEndcaps = (raw) => {
   }
   return { ok: true, value: raw };
 };
-var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false"]);
-var validateBoolean = (raw) => {
-  if (BOOLEAN_TRUTHY.has(raw)) return { ok: true, value: "1" };
-  if (BOOLEAN_FALSY.has(raw)) return { ok: true, value: "" };
-  return {
-    ok: false,
-    reason: `expected boolean-ish (1, 0, true, false), got "${raw}"`
-  };
-};
 var BASELINE = {
   endcaps: validateEndcaps,
-  theme: validateTheme,
-  "toolbar-expanded": validateBoolean
+  theme: validateTheme
 };
 function makeStateKeyspace() {
   return createKeyspace(BASELINE, "state", deriveActionValidators);
@@ -65899,9 +65911,9 @@ var PricingService = class {
     if (entry.model && typeof entry.model === "string") {
       return entry.model;
     }
-    const message = entry.message;
-    if (message?.model) {
-      const model = message.model;
+    const message2 = entry.message;
+    if (message2?.model) {
+      const model = message2.model;
       if (typeof model === "string") {
         return model;
       }
@@ -69194,10 +69206,10 @@ var SETTING_DECL_JSON = {
 };
 var DECL_KEYS = ["label", "domain", "default"];
 var RANGE_KEYS = ["min", "max", "step", "atLeast"];
-function issue(ctx, path43, message) {
+function issue(ctx, path43, message2) {
   ctx.issues.push({
     path: path43,
-    message,
+    message: message2,
     line: findKeyLine(ctx.source, path43.split("."))
   });
   return void 0;
@@ -69630,10 +69642,10 @@ function validateActions(ctx, raw, home) {
   }
   return out;
 }
-function issue2(ctx, path43, message) {
+function issue2(ctx, path43, message2) {
   ctx.issues.push({
     path: path43,
-    message,
+    message: message2,
     line: findKeyLine(ctx.source, path43.split("."))
   });
 }
@@ -72106,12 +72118,12 @@ function judgeRun(run3) {
     run: { ...run3, parser }
   } : { kind: "refused", digest: run3.digest, reason };
 }
-function parserOf(parse3) {
-  switch (parse3.kind) {
+function parserOf(parse4) {
+  switch (parse4.kind) {
     case "text":
       return textParser;
     case "regex":
-      return capturing(parse3.pattern);
+      return capturing(parse4.pattern);
     case "json":
       return (text4) => text4.trim() === "" ? ABSENT : jsonParser(text4);
   }
@@ -72792,13 +72804,13 @@ var FrameFeeds = class {
       const woken = wokenWhileOut(feed2);
       feed2.lastStart = moment2;
       feed2.faulted++;
-      const said = failureOf(error).message;
-      if (feed2.fault !== said)
+      const said2 = failureOf(error).message;
+      if (feed2.fault !== said2)
         this.deps.log(
           "error",
           `feed sid=${JSON.stringify(feed2.sessionId)} threw: ${inspect(error)}`
         );
-      feed2.fault = said;
+      feed2.fault = said2;
       if (this.feeds.get(feed2.sessionId) !== feed2) return;
       this.schedule(feed2, null, at);
       if (woken) this.hasten(feed2);
@@ -74167,7 +74179,7 @@ var BAND_CLIENT = import_node_path34.default.join("bin", "cc-candybar-native");
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
-var done = (said) => ({ kind: "done", said });
+var done = (said2) => ({ kind: "done", said: said2 });
 function paneOf(session) {
   const pane = tmuxPaneOf(session.hints.tmux);
   if (pane.kind === "refused") throw new BadVerbArgs(pane.reason);
@@ -74551,6 +74563,222 @@ var LaneSetups = class {
 
 // src/daemon/renderer-host.ts
 init_globals();
+
+// src/daemon/effect-interpreter.ts
+init_globals();
+
+// src/config/config-changes.ts
+init_globals();
+var import_json53 = __toESM(require_dist(), 1);
+var ABSENT3 = { kind: "absent" };
+function parse2(text4) {
+  if (text4 === null || /^\s*$/.test(text4)) return { kind: "none" };
+  try {
+    return { kind: "document", root: parseDocument(text4) };
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    return { kind: "unparsed" };
+  }
+}
+function readAt(text4, parsed2, at) {
+  if (text4 === null) return ABSENT3;
+  if (at.length === 0 || parsed2.kind !== "document")
+    return { kind: "file", text: text4 };
+  return readOf(text4, nodeAt(parsed2.root, at));
+}
+function readOf(text4, node) {
+  return node === void 0 ? ABSENT3 : { kind: "value", text: movableTextOf(text4, node) };
+}
+function sameRead(a, b) {
+  if (a.kind === "value" && b.kind === "value")
+    return sameValue(import_json53.default.parse(a.text), import_json53.default.parse(b.text));
+  if (a.kind === "file" && b.kind === "file") return a.text === b.text;
+  return a.kind === "absent" && b.kind === "absent";
+}
+function sameValue(a, b) {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b))
+    return false;
+  const ak = Object.keys(a);
+  const bk = Object.keys(b);
+  return ak.length === bk.length && ak.every(
+    (k) => Object.hasOwn(b, k) && sameValue(
+      a[k],
+      b[k]
+    )
+  );
+}
+function diffChanges(before, after) {
+  if (before === after) return [];
+  if (before === null)
+    return [{ op: "insert", at: [], text: after, precedes: null }];
+  const read2 = { kind: "file", text: before };
+  if (after === null) return [{ op: "remove", at: [], read: read2 }];
+  const whole = [
+    { op: "replace", at: [], text: after, read: read2 }
+  ];
+  const was = parse2(before);
+  const will = parse2(after);
+  if (was.kind !== "document" || will.kind !== "document") return whole;
+  const members = diffNode([], before, was.root, after, will.root);
+  const rebuilt = applyChanges(before, members);
+  return rebuilt.kind === "applied" && rebuilt.text === after ? members : whole;
+}
+function diffNode(at, beforeText, was, afterText, will) {
+  const written2 = textOf(afterText, will);
+  if (textOf(beforeText, was) === written2) return [];
+  const whole = at.length === 0 ? [
+    {
+      op: "replace",
+      at,
+      text: afterText,
+      read: { kind: "file", text: beforeText }
+    }
+  ] : [
+    {
+      op: "replace",
+      at,
+      text: movableTextOf(afterText, will),
+      read: readOf(beforeText, was)
+    }
+  ];
+  if (was.kind !== "object" || will.kind !== "object") return whole;
+  const members = diffMembers(at, beforeText, was, afterText, will);
+  return rebuilds(beforeText, members, at, written2) ? members : whole;
+}
+function rebuilds(text4, changes, at, written2) {
+  const result = applyChanges(text4, changes);
+  if (result.kind !== "applied") return false;
+  const parsed2 = parse2(result.text);
+  if (parsed2.kind !== "document") return false;
+  const node = nodeAt(parsed2.root, at);
+  return node !== void 0 && textOf(result.text, node) === written2;
+}
+function diffMembers(at, beforeText, was, afterText, will) {
+  const prior = new Map(was.entries.map((e) => [e.key, e.value]));
+  const kept = new Set(will.entries.map((e) => e.key));
+  const gone = was.entries.filter((e) => !kept.has(e.key)).map(
+    (e) => ({
+      op: "remove",
+      at: [...at, e.key],
+      read: readOf(beforeText, e.value)
+    })
+  );
+  const anchors = will.entries.map((e, i2) => {
+    const next = will.entries.slice(i2 + 1).find((n) => prior.has(n.key));
+    return next?.key ?? null;
+  });
+  const changed = will.entries.flatMap((e, i2) => {
+    const old = prior.get(e.key);
+    return old === void 0 ? [
+      {
+        op: "insert",
+        at: [...at, e.key],
+        text: movableTextOf(afterText, e.value),
+        precedes: anchors[i2]
+      }
+    ] : diffNode([...at, e.key], beforeText, old, afterText, e.value);
+  });
+  return [...gone, ...changed];
+}
+function applyChanges(text4, changes) {
+  let current2 = text4;
+  for (const change of changes) {
+    const parsed2 = parse2(current2);
+    const ancestor = movedAncestor(parsed2, change.at);
+    if (ancestor !== null)
+      return {
+        kind: "moved",
+        at: ancestor,
+        read: "object",
+        found: readAt(current2, parsed2, ancestor)
+      };
+    const read2 = change.op === "insert" ? ABSENT3 : change.read;
+    const found2 = readAt(current2, parsed2, change.at);
+    if (!sameRead(found2, read2))
+      return { kind: "moved", at: change.at, read: read2, found: found2 };
+    current2 = applied(current2, change);
+  }
+  return { kind: "applied", text: current2 };
+}
+function movedAncestor(parsed2, at) {
+  if (at.length === 0) return null;
+  if (parsed2.kind !== "document") return [];
+  for (let depth = 0; depth < at.length; depth++) {
+    const up = at.slice(0, depth);
+    if (nodeAt(parsed2.root, up)?.kind !== "object") return up;
+  }
+  return null;
+}
+function applied(text4, change) {
+  if (change.at.length === 0)
+    return change.op === "remove" ? null : change.text;
+  switch (change.op) {
+    case "replace":
+      return setValue(text4, change.at, change.text, JSON5_DIALECT);
+    case "insert":
+      return insertValue(
+        text4,
+        change.at,
+        change.text,
+        JSON5_DIALECT,
+        change.precedes
+      );
+    case "remove":
+      return deleteValue(text4, change.at, change.at.length - 1);
+  }
+}
+function addressText(at) {
+  return at.length === 0 ? "the whole file" : at.join(".");
+}
+
+// src/daemon/effect-interpreter.ts
+var writeText = (file, text4) => text4 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text4);
+var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.kind === "file" ? "the file as it was read" : read2.text;
+function performChanges(changes) {
+  const rewrites = /* @__PURE__ */ new Map();
+  try {
+    for (const { target, changes: list2 } of changes) {
+      const file = resolvedTarget(target.path);
+      const prior = rewrites.get(file);
+      const was = prior === void 0 ? readConfigText(file) : prior.was;
+      const applied3 = applyChanges(
+        prior === void 0 ? was : prior.will,
+        list2
+      );
+      if (applied3.kind === "moved")
+        return {
+          kind: "refused",
+          reason: `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said(applied3.read)}, it is ${said(applied3.found)}) \u2014 nothing was written`
+        };
+      rewrites.set(file, { file, was, will: applied3.text });
+    }
+  } catch (e) {
+    return { kind: "failed", reason: `config read failed: ${message(e)}` };
+  }
+  const written2 = [];
+  try {
+    for (const rewrite of rewrites.values()) {
+      writeText(rewrite.file, rewrite.will);
+      written2.push(rewrite);
+    }
+    return { kind: "ok" };
+  } catch (e) {
+    return { kind: "failed", reason: putBack(written2, e) };
+  }
+}
+function putBack(written2, cause) {
+  const reason = `config write failed: ${message(cause)}`;
+  try {
+    for (const { file, was } of [...written2].reverse()) writeText(file, was);
+    return `${reason} \u2014 nothing was written`;
+  } catch (e) {
+    return `${reason}; and putting back what was written failed, so it is half-written: ${message(e)}`;
+  }
+}
+var message = (e) => e instanceof Error ? e.message : String(e);
+
+// src/daemon/renderer-host.ts
 function rendererHost(name, clock, renderer, log, collector) {
   const held = async (input) => {
     const session = sessionOf(input.event);
@@ -74560,10 +74788,20 @@ function rendererHost(name, clock, renderer, log, collector) {
       const sentAt = clock.monotonic();
       const { subscriptions, turnMs, ...answered } = await renderer.answer(input);
       const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
+      const changes = output.effects.filter(
+        (effect) => effect.kind === "change"
+      );
+      const landed = changes.length === 0 ? null : performChanges(changes);
+      const settled3 = output.effects.flatMap(
+        (effect) => effect.kind === "change" ? [settle3(effect, landed)] : input.event.kind === "request" ? [] : [
+          settle3(effect, {
+            kind: "failed",
+            reason: `a ${input.event.kind} turn answers no request`
+          })
+        ]
+      );
       collector.subscribed(subscriptions);
-      if (output.kind === "answered" && input.event.kind !== "request")
-        for (const effect of output.effects)
-          refuse4(effect, `a ${input.event.kind} turn answers no request`);
+      await Promise.all(settled3);
       return output;
     } finally {
       release4();
@@ -74574,10 +74812,11 @@ function rendererHost(name, clock, renderer, log, collector) {
       kind: "threw",
       failure: failureOf(thrown2),
       record: [],
+      effects: [],
       hopMs: null
     })
   );
-  const refuse4 = (effect, reason) => void deliver(
+  const settle3 = (effect, outcome) => deliver(
     {
       kind: "event",
       at: instantAt(clock),
@@ -74585,7 +74824,7 @@ function rendererHost(name, clock, renderer, log, collector) {
         kind: "effect-done",
         session: effect.session,
         of: effect.id,
-        outcome: { kind: "failed", reason }
+        outcome
       }
     },
     [["effect", String(effect.id)]]
@@ -74746,7 +74985,7 @@ function presence(path43) {
 // src/doctor/state-file.ts
 init_globals();
 var import_node_path35 = __toESM(require_path_browserify(), 1);
-function stateFile(dir, name, empty2, parse3) {
+function stateFile(dir, name, empty2, parse4) {
   const file = import_node_path35.default.join(dir, name);
   const read2 = () => {
     let text4;
@@ -74767,7 +75006,7 @@ function stateFile(dir, name, empty2, parse3) {
         reason: `${file} is not JSON: ${e.message}`
       };
     }
-    const parsed2 = parse3(doc);
+    const parsed2 = parse4(doc);
     return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
   };
   return {
@@ -74840,7 +75079,7 @@ function repoAnswerFields(sessionId2, dir, answer2) {
 }
 function repoQuestions(gate2, sessionId2, signer) {
   return gate2.awaiting.map((dir) => {
-    const message = `a cc-candybar config for ${dir} \u2014 run it?`;
+    const message2 = `a cc-candybar config for ${dir} \u2014 run it?`;
     const answers = REPO_ANSWERS.map(
       (answer2) => diagnosticSpan(
         `[${answer2 === "approved" ? "approve" : "decline"}]`,
@@ -74857,1229 +75096,41 @@ function repoQuestions(gate2, sessionId2, signer) {
         ])
       )
     );
-    const line = [diagnosticSpan(message, null), ...answers];
+    const line = [diagnosticSpan(message2, null), ...answers];
     return {
       severity: APPROVAL_SEVERITY,
       about: `repo-question\0${dir}`,
-      message,
-      copy: message,
+      message: message2,
+      copy: message2,
       lines: [line]
     };
   });
 }
 
-// src/renderer/verbs/index.ts
+// src/daemon/foundations/render-origin.ts
 init_globals();
-
-// src/config/loader/discovery.ts
-init_globals();
-var import_node_path38 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/plugin-folders.ts
-init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
-function pluginRoots(locs, repo2) {
-  const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path37.default.join(d, "cc-candybar", "plugins")),
-    userPluginRoot(locs)
-  ];
-  return [
-    ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path37.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
-  ];
-}
-function userPluginRoot(locs) {
-  return import_node_path37.default.join(locs.dataHome, "cc-candybar", "plugins");
-}
-var REPO_PLUGIN_DIR = import_node_path37.default.join(".cc-candybar", "plugins");
-function installedPlugins(locs, repo2) {
-  const roots = pluginRoots(locs, repo2);
-  const byNs = /* @__PURE__ */ new Map();
-  const unchecked = [];
-  const strays = [];
-  for (const { dir: root, scope } of roots) {
-    const listed = listFolders(root);
-    if ("error" in listed) {
-      unchecked.push(listed);
-      continue;
-    }
-    for (const name of listed.folders) {
-      const definition = pluginDefinition(
-        import_node_path37.default.join(root, name, DEFINITION_FILE),
-        scope
-      );
-      const key = `${scope}\0${name}`;
-      byNs.delete(key);
-      byNs.set(key, definition);
-    }
-    for (const file of listed.files) {
-      strays.push({
-        path: import_node_path37.default.join(root, file),
-        scope,
-        name: void 0,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path37.default.join(root, "<name>", DEFINITION_FILE)}`
-      });
-    }
-  }
-  return {
-    roots: roots.map((r) => r.dir),
-    definitions: [...byNs.values()],
-    unchecked,
-    strays
-  };
-}
-function listFolders(root) {
-  try {
-    const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-    const isFolder = (e) => e.isDirectory() || isDirectoryLink(root, e);
-    return {
-      folders: entries.filter(isFolder).map((e) => e.name),
-      files: entries.filter((e) => !isFolder(e)).map((e) => e.name)
-    };
-  } catch (e) {
-    return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
-  }
-}
-function isDirectoryLink(root, e) {
-  if (!e.isSymbolicLink()) return false;
-  try {
-    return fs_default.statSync(import_node_path37.default.join(root, e.name)).isDirectory();
-  } catch {
-    return true;
-  }
-}
-
-// src/config/loader/discovery.ts
-var CONFIG_EXTENSIONS = ["json5", "json"];
-function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
-  if (configFile !== void 0) return [configFile];
-  const effectiveCwd = cwd2 ?? process.cwd();
-  return [
-    .../* @__PURE__ */ new Set([
-      ...projectDir ? CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path38.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
-      ) : [],
-      ...CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path38.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
-      ),
-      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
-    ])
-  ];
-}
-var REPO_CONFIG_BASE = ".cc-candybar";
-function xdgConfigBase(locs) {
-  return import_node_path38.default.join(locs.configHome, "cc-candybar", "config");
-}
-function homeLayer(path43) {
-  return { path: path43, scope: "plugins" };
-}
-function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
-  const unchecked = [];
-  const atLocation = /* @__PURE__ */ new Map();
-  for (const candidate of dslConfigCandidatePaths(
-    locs,
+function encodeRenderOrigin({
+  projectDir,
+  cwd: cwd2,
+  target
+}) {
+  return JSON.stringify({
     projectDir,
-    cwd2,
-    configFile
-  )) {
-    const p2 = presence(candidate);
-    if (p2 === "absent") continue;
-    if (p2 !== "present") {
-      unchecked.push(p2);
-      continue;
-    }
-    const dir = fs_default.realpathSync.native(import_node_path38.default.dirname(candidate));
-    const location = import_node_path38.default.join(
-      dir,
-      import_node_path38.default.basename(candidate).replace(/\.(json5|json)$/, "")
-    );
-    if (!atLocation.has(location)) {
-      atLocation.set(location, {
-        file: candidate,
-        repo: configFile !== void 0 || isUserFile(locs, candidate) ? null : { dir, link: worktreeLink(dir) }
-      });
-    }
-  }
-  const found2 = [...atLocation.values()];
-  const repos = gateRepos(
-    answers,
-    found2.flatMap((f) => f.repo === null ? [] : [f.repo]),
-    repoProject(projectDir)
-  );
-  const kept = found2.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
-  const layers = kept.map(
-    (f) => ({
-      path: f.file,
-      scope: f.repo === null ? "plugins" : "repo"
-    })
-  );
-  if (configFile === void 0) {
-    return {
-      kind: "chain",
-      layers,
-      home: userHome(locs, layers),
-      unchecked,
-      repos
-    };
-  }
-  const [own2] = unchecked;
-  const home = configFile;
-  if (layers.length > 0) {
-    return { kind: "chain", layers, home, unchecked, repos };
-  }
-  return own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos };
-}
-function isUserFile(locs, candidate) {
-  return CONFIG_EXTENSIONS.some(
-    (e) => candidate === `${xdgConfigBase(locs)}.${e}`
-  );
-}
-function repoProject(projectDir) {
-  if (projectDir === void 0 || presence(projectDir) !== "present") {
-    return null;
-  }
-  const listed = listFolders(import_node_path38.default.join(projectDir, REPO_PLUGIN_DIR));
-  const dir = fs_default.realpathSync.native(projectDir);
-  return {
-    dir,
-    link: worktreeLink(dir),
-    path: projectDir,
-    ships: !("error" in listed) && listed.folders.length > 0
-  };
-}
-function userHome(locs, layers) {
-  return layers.find((l) => isUserFile(locs, l.path))?.path ?? `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`;
-}
-function durableConfig(locs, answers, projectDir, cwd2, configFile) {
-  const resolved = resolveDslConfig(locs, answers, projectDir, cwd2, configFile);
-  const layers = resolved.kind === "chain" ? resolved.layers : [];
-  return {
-    path: resolved.home,
-    above: layers.filter((l) => l.path !== resolved.home),
-    repo: resolved.repos.plugins,
-    cwd: cwd2 ?? null,
-    locs
-  };
-}
-function configResolutionNotice(resolution) {
-  return noticeLines(resolution).join("\n") || null;
-}
-function noticeLines(resolution) {
-  switch (resolution.kind) {
-    case "chain":
-      return resolution.unchecked.map(
-        (u) => `Config location could not be checked: ${u.path} \u2014 ${u.error}`
-      );
-    case "missing":
-      return [
-        `Config file not found: ${resolution.path} \u2014 rendering the bundled default until it appears`
-      ];
-    case "unreadable":
-      return [
-        `Config file could not be read: ${resolution.path} \u2014 ${resolution.error} \u2014 rendering the bundled default until it can be`
-      ];
-  }
-}
-function detectConfigCollisions(locs, projectDir, cwd2) {
-  const existing = dslConfigCandidatePaths(locs, projectDir, cwd2).filter(
-    (candidate) => presence(candidate) === "present"
-  );
-  const groups = /* @__PURE__ */ new Map();
-  for (const candidate of existing) {
-    const dir = import_node_path38.default.dirname(candidate);
-    const base = import_node_path38.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path38.default.join(dir, base);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(candidate);
-  }
-  const collisions = [...groups.values()].filter((g) => g.length > 1);
-  if (collisions.length === 0) return null;
-  const lines2 = collisions.map((g) => {
-    const [winner, ...shadowed] = g;
-    return `${winner} shadows ${shadowed.join(", ")}`;
-  });
-  return `config-extension collision: ${lines2.join("; ")} \u2014 remove the duplicate`;
-}
-
-// src/daemon/foundations/click-error.ts
-init_globals();
-var KEY = "click.error";
-var CLICK_ERROR_HOLD_S = 5;
-function holdClickError(state, sessionId2, text4, at) {
-  const record2 = { text: text4, at, answered: false };
-  state.set(sessionId2, KEY, JSON.stringify(record2));
-}
-function answeredClickError(state, sessionId2, error) {
-  const last2 = lastClickError(state, sessionId2);
-  if (last2 === null || !answeredBy(last2, error)) return;
-  state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
-}
-function lastClickError(state, sessionId2) {
-  const raw = state.get(sessionId2, KEY);
-  return raw === null ? null : recordOf2(raw);
-}
-function clickErrorAt(state, sessionId2, at, render3) {
-  const last2 = lastClickError(state, sessionId2);
-  if (last2 === null) return { kind: "none" };
-  const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
-  return kind === "over" ? { kind } : { kind, error: last2 };
-}
-function recordOf2(raw) {
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof value !== "object" || value === null) return null;
-  const { text: text4, at, answered } = value;
-  return typeof text4 === "string" && typeof at === "number" && (answered === void 0 || typeof answered === "boolean") ? { text: text4, at, answered: answered === true } : null;
-}
-
-// src/renderer/verbs/key-seeds.ts
-init_globals();
-
-// src/renderer/setting-drafts.ts
-init_globals();
-
-// src/renderer/bundled-presets.ts
-init_globals();
-
-// src/config/default-dsl-config.ts
-init_globals();
-
-// src/config/dsl-loader.ts
-init_globals();
-var import_json53 = __toESM(require_dist(), 1);
-
-// src/config/loader/layout.ts
-init_globals();
-var LAYOUT_NODE_REF = "#/definitions/LayoutNode";
-var ROOT_FRAGMENT_REF = "#/definitions/RootFragment";
-var EMPTY_VERTICAL_NODE = {
-  kind: "container",
-  direction: "vertical",
-  children: []
-};
-function literalSpec(value) {
-  return { required: true, json: { const: value }, parse: () => value };
-}
-function segmentNameSpec() {
-  return {
-    // Mandatory in the schema (a missing/empty name pushes an issue → throw); the
-    // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path43, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && v.length > 0) return v;
-      ctx.issues.push({
-        path: `${path43}.${field}`,
-        message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return "";
-    }
-  };
-}
-function directionSpec() {
-  return {
-    // Mandatory in the schema (a missing/invalid direction pushes an issue →
-    // throw); the parse recovers to "vertical", a no-op for `fields`. See
-    // `cellsSegmentsSpec`.
-    required: true,
-    json: { enum: [...DIRECTIONS] },
-    parse: (ctx, path43, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && DIRECTIONS.includes(v)) {
-        return v;
-      }
-      ctx.issues.push({
-        path: `${path43}.${field}`,
-        message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(v)})`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return "vertical";
-    }
-  };
-}
-function childrenSpec(node) {
-  return {
-    // Mandatory in the schema (a missing/non-array `children` pushes an issue →
-    // throw); the parse recovers to [], a no-op for `fields`. See `cellsSegmentsSpec`.
-    required: true,
-    // [LAW:one-source-of-truth] The recursive field points at the node definition
-    // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
-    // self-reference. The runtime recursion and the schema recursion break the
-    // same cycle, declared in one place.
-    json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
-    parse: (ctx, path43, field, raw) => {
-      const v = raw[field];
-      if (!Array.isArray(v)) {
-        ctx.issues.push({
-          path: `${path43}.${field}`,
-          message: `a container must have a "children" array of layout nodes, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return [];
-      }
-      return v.map((child, i2) => node(ctx, `${path43}.${field}[${i2}]`, child));
-    }
-  };
-}
-var SEGMENT_NODE_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("segment"),
-    name: segmentNameSpec(),
-    when: optionalStringSpec(),
-    id: placementIdSpec(),
-    settings: placementSettingsSpec()
-  }
-};
-var distributionSpec = () => optionalEnumSpec(DISTRIBUTION_NAMES);
-var CONTAINER_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("container"),
-    direction: directionSpec(),
-    children: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-function segArmSpec() {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path43, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && v.length > 0) return v;
-      ctx.issues.push({
-        path: `${path43}.${field}`,
-        message: `a "seg" node must have a non-empty segment name, got ${describeValue2(v)}`,
-        line: findKeyLine(ctx.source, [...path43.split("."), field])
-      });
-      return "";
-    }
-  };
-}
-var SEG_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    seg: segArmSpec(),
-    when: optionalStringSpec(),
-    id: placementIdSpec(),
-    settings: placementSettingsSpec()
-  }
-};
-var H_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    h: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-var V_ARM_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    v: childrenSpec(lazy(() => validateRoot)),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-var validateRoot = (ctx, path43, raw) => {
-  if (typeof raw === "string") {
-    if (raw.length === 0) {
-      ctx.issues.push({
-        path: path43,
-        message: `a bare-string layout node must be a non-empty segment name`,
-        line: findKeyLine(ctx.source, ["root"])
-      });
-      return EMPTY_VERTICAL_NODE;
-    }
-    return { kind: "segment", name: raw };
-  }
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: path43,
-      message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "container") {
-    return record(ctx, CONTAINER_SCHEMA, path43, raw) ?? EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "segment") {
-    return record(ctx, SEGMENT_NODE_SCHEMA, path43, raw) ?? EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "cells") {
-    ctx.issues.push({
-      path: path43,
-      message: `kind: "cells" is no longer supported \u2014 use the h-arm spelling instead:
-  Old: { kind: "cells", segments: ["seg1", "seg2"] }
-  New: { h: ["seg1", "seg2"] }`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (raw.kind === "group") {
-    const group = record(ctx, GROUP_SCHEMA, path43, raw);
-    if (group === null) return EMPTY_VERTICAL_NODE;
-    ctx.groups.push({
-      name: group.name,
-      label: group.label,
-      ...group.open !== void 0 && { open: group.open },
-      ...group.direction !== void 0 && { direction: group.direction },
-      ...group.key !== void 0 && { key: group.key },
-      ...group.bg !== void 0 && { bg: group.bg },
-      ...group.fg !== void 0 && { fg: group.fg },
-      ...group.when !== void 0 && { when: group.when },
-      path: path43
-    });
-    return lowerGroup(group);
-  }
-  const hasH = "h" in raw;
-  const hasV = "v" in raw;
-  const hasSeg = "seg" in raw;
-  const armCount = (hasH ? 1 : 0) + (hasV ? 1 : 0) + (hasSeg ? 1 : 0);
-  if (armCount > 1) {
-    const present = ["seg", "h", "v"].filter((k) => k in raw);
-    ctx.issues.push({
-      path: path43,
-      message: `a layout node may have exactly one of "seg", "h", or "v" \u2014 got ${present.map((k) => `"${k}"`).join(" and ")} together`,
-      line: findKeyLine(ctx.source, ["root"])
-    });
-    return EMPTY_VERTICAL_NODE;
-  }
-  if (hasSeg) {
-    const arm2 = record(ctx, SEG_ARM_SCHEMA, path43, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "segment",
-      name: arm2.seg,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.id !== void 0 && { id: arm2.id },
-      ...arm2.settings !== void 0 && { settings: arm2.settings }
-    };
-  }
-  if (hasH) {
-    const arm2 = record(ctx, H_ARM_SCHEMA, path43, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: arm2.h,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
-    };
-  }
-  if (hasV) {
-    const arm2 = record(ctx, V_ARM_SCHEMA, path43, raw);
-    if (arm2 === null) return EMPTY_VERTICAL_NODE;
-    return {
-      kind: "container",
-      direction: "vertical",
-      children: arm2.v,
-      ...arm2.when !== void 0 && { when: arm2.when },
-      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
-    };
-  }
-  ctx.issues.push({
-    path: `${path43}.kind`,
-    message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
-    line: findKeyLine(ctx.source, ["root"])
-  });
-  return EMPTY_VERTICAL_NODE;
-};
-function rowsSpec() {
-  return {
-    required: true,
-    json: {
-      type: "object",
-      propertyNames: { pattern: ROW_NAME_RE.source },
-      additionalProperties: { $ref: LAYOUT_NODE_REF }
-    },
-    parse: (ctx, path43, field, raw) => {
-      const v = raw[field];
-      if (!isPlainObject3(v)) {
-        ctx.issues.push({
-          path: `${path43}.${field}`,
-          message: `"rows" must be an object of row name \u2192 layout node, got ${describeType2(v)}`,
-          line: findKeyLine(ctx.source, [...path43.split("."), field])
-        });
-        return {};
-      }
-      const rows = {};
-      for (const [name, node] of Object.entries(v)) {
-        if (!ROW_NAME_RE.test(name)) {
-          ctx.issues.push({
-            path: `${path43}.${field}.${name}`,
-            message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
-            line: findKeyLine(ctx.source, [...path43.split("."), field, name])
-          });
-          continue;
-        }
-        rows[name] = validateRoot(ctx, `${path43}.${field}.${name}`, node);
-      }
-      return rows;
-    }
-  };
-}
-var ROWS_SCHEMA = {
-  noun: "root key",
-  fields: {
-    rows: rowsSpec(),
-    when: optionalStringSpec(),
-    distribution: distributionSpec()
-  }
-};
-function validateRootFragment(ctx, path43, raw) {
-  if (isPlainObject3(raw) && "rows" in raw) {
-    return record(ctx, ROWS_SCHEMA, path43, raw) ?? { rows: {} };
-  }
-  return validateRoot(ctx, path43, raw);
-}
-var INSERT_SCHEMA = {
-  noun: "insert key",
-  fields: {
-    seg: segArmSpec(),
-    id: placementIdSpec(),
-    before: optionalStringSpec(),
-    after: optionalStringSpec()
-  }
-};
-function validateInsert(ctx, raw, file) {
-  if (!Array.isArray(raw)) {
-    ctx.issues.push({
-      path: "insert",
-      message: `"insert" must be a list of cells like { seg: "name", after: "placement" }, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, ["insert"])
-    });
-    return [];
-  }
-  return raw.flatMap((entry, i2) => {
-    const path43 = `insert.${i2}`;
-    const arm2 = record(ctx, INSERT_SCHEMA, path43, entry);
-    if (arm2 === null) return [];
-    const sides = ["before", "after"].filter(
-      (side) => arm2[side] !== void 0
-    );
-    if (sides.length !== 1) {
-      ctx.issues.push({
-        path: path43,
-        message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
-        line: findKeyLine(ctx.source, path43.split("."))
-      });
-      return [];
-    }
-    if (isReservedName(arm2.seg)) {
-      ctx.issues.push({
-        path: `${path43}.seg`,
-        message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
-        line: findKeyLine(ctx.source, [...path43.split("."), "seg"])
-      });
-      return [];
-    }
-    const relation = sides[0];
-    const anchor = arm2[relation];
-    if (isReservedName(anchor)) {
-      ctx.issues.push({
-        path: `${path43}.${relation}`,
-        message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome \u2014 anchor on a placement id instead`,
-        line: findKeyLine(ctx.source, [...path43.split("."), relation])
-      });
-      return [];
-    }
-    return [
-      {
-        seg: arm2.seg,
-        ...arm2.id !== void 0 && { id: arm2.id },
-        anchor,
-        relation,
-        by: { file, entry: path43 }
-      }
-    ];
+    cwd: cwd2,
+    configFile: target.path ?? null,
+    source: target.source
   });
 }
-function groupNameSpec() {
-  return {
-    required: true,
-    json: { type: "string", pattern: ROW_NAME_RE.source },
-    parse: (ctx, path43, field, raw) => {
-      const v = raw[field];
-      if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
-        ctx.issues.push({
-          path: `${path43}.${field}`,
-          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue2(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function groupKeySpec() {
-  return {
-    required: false,
-    json: { type: "string", minLength: 1 },
-    parse: (ctx, path43, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "string" || v === "" || v.includes("/")) {
-        ctx.issues.push({
-          path: `${path43}.${field}`,
-          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue2(v)}`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function groupLabelSpec() {
-  return {
-    required: true,
-    json: { type: "string", pattern: "^[^\\n\\r]*$" },
-    parse: (ctx, path43, field, raw) => {
-      const s = requireString(ctx, path43, raw, field);
-      if (s === null) return void 0;
-      if (/[\n\r]/.test(s)) {
-        ctx.issues.push({
-          path: `${path43}.${field}`,
-          message: `${path43}.${field}: group label must not contain newlines`,
-          line: findKeyLine(ctx.source, [...path43.split("."), field])
-        });
-        return void 0;
-      }
-      return s;
-    }
-  };
-}
-var GROUP_SCHEMA = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("group"),
-    name: groupNameSpec(),
-    label: groupLabelSpec(),
-    open: optionalBooleanSpec(),
-    direction: optionalEnumSpec(DIRECTIONS),
-    key: groupKeySpec(),
-    bg: optionalStringSpec(),
-    fg: optionalStringSpec(),
-    when: optionalStringSpec(),
-    distribution: distributionSpec(),
-    children: childrenSpec(lazy(() => validateRoot))
-  }
-};
-function groupStateKey(g) {
-  return g.key ?? GROUP_NS + g.name;
-}
-function lowerGroup(g) {
-  const ref = GROUP_NS + g.name;
-  return disclosureNode(
-    ref,
-    { variable: ref, key: groupStateKey(g), member: g.name },
-    {
-      kind: "container",
-      direction: g.direction ?? "vertical",
-      children: g.children,
-      ...g.distribution !== void 0 && { distribution: g.distribution }
-    },
-    "drop",
-    g.when
-  );
-}
-function groupIssue(ctx, path43, message) {
-  ctx.issues.push({
-    path: path43,
-    message,
-    line: findKeyLine(ctx.source, ["root"])
-  });
-}
-function synthesizeGroupDecls(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
-  const groups = ctx.groups;
-  if (groups.length === 0) return;
-  const seen2 = /* @__PURE__ */ new Set();
-  for (const g of groups) {
-    if (seen2.has(g.name)) {
-      groupIssue(
-        ctx,
-        g.path,
-        `duplicate group name "${g.name}" \u2014 group names must be unique (they name the synthesized state var, action, and toggle segment)`
-      );
-    }
-    seen2.add(g.name);
-  }
-  for (const inner of groups) {
-    for (const outer of groups) {
-      if (inner !== outer && inner.path.startsWith(`${outer.path}.`) && groupStateKey(inner) === groupStateKey(outer)) {
-        groupIssue(
-          ctx,
-          inner.path,
-          `group "${inner.name}" shares key "${groupStateKey(inner)}" with its ancestor group "${outer.name}" \u2014 a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.`
-        );
-      }
-    }
-  }
-  const defaultByKey = /* @__PURE__ */ new Map();
-  for (const g of groups) {
-    const key = groupStateKey(g);
-    if (!defaultByKey.has(key)) defaultByKey.set(key, DISCLOSURE_CLOSED);
-    if (g.open === true) {
-      const prior = defaultByKey.get(key);
-      if (prior !== DISCLOSURE_CLOSED) {
-        groupIssue(
-          ctx,
-          g.path,
-          `groups "${prior}" and "${g.name}" share key "${key}" and both declare open: true \u2014 a shared key holds one open group; pick one`
-        );
-      }
-      defaultByKey.set(key, g.name);
-    }
-  }
-  const variables = {};
-  const actions = {};
-  const segments = {};
-  for (const g of groups) {
-    const name = GROUP_NS + g.name;
-    const key = groupStateKey(g);
-    const depth = groups.filter(
-      (other) => other !== g && g.path.startsWith(other.path + ".")
-    ).length;
-    const indent2 = "  ".repeat(depth);
-    variables[name] = disclosureStateVar(key, defaultByKey.get(key));
-    actions[name] = disclosureCycleAction(key, g.name);
-    segments[name] = {
-      template: disclosureTrigger(
-        name,
-        `${indent2}${g.label} ${DISCLOSURE_GLYPH_CLOSED}`,
-        `${indent2}${g.label} ${DISCLOSURE_GLYPH_OPEN}`
-      ),
-      ...g.bg !== void 0 && { bg: g.bg },
-      ...g.fg !== void 0 && { fg: g.fg }
-    };
-  }
-  out.variables = { ...out.variables ?? {}, ...variables };
-  out.actions = { ...out.actions ?? {}, ...actions };
-  out.segments = { ...out.segments ?? {}, ...segments };
-}
 
-// src/config/loader/menu-synth.ts
+// src/daemon/foundations/session-keys.ts
 init_globals();
-var MENU_FUNC = "menu";
-var MIGRATION = `a menu binds its trigger text the way a cycle action binds a display \u2014 write {{ menu "applyTheme" "\u25B8" "\u25BE" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "\u25B8" "\u25BE" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends \u25B8/\u25BE of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed \u2014 the page cursor is synthesized from the menu's identity`;
-var isDictCall = (e) => e.kind === "call" && e.name === "dict";
-var isNonObjectLiteral = (e) => e.kind === "literal" && typeof e.value !== "object";
-var legalDisplayCount = (count) => cycleDisplayIssue("", count, 2) === void 0;
-function analyzeMenuCall(call) {
-  const issue3 = (message) => ({ kind: "issue", message });
-  const [applyArg, ...tail] = call.argExprs;
-  if (applyArg === void 0) {
-    return issue3(
-      `with no arguments \u2014 it takes an apply-action name and its trigger text (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
-    );
-  }
-  if (applyArg.kind !== "literal" || typeof applyArg.value !== "string") {
-    return issue3(
-      `whose apply action is not a string literal \u2014 a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
-    );
-  }
-  const last2 = tail[tail.length - 1];
-  const optsArg = last2 !== void 0 && isDictCall(last2) ? last2 : void 0;
-  const displays = optsArg === void 0 ? tail : tail.slice(0, -1);
-  if (displays.some(isDictCall)) {
-    return issue3(
-      `whose options (dict \u2026) is not its last argument \u2014 ${MIGRATION}`
-    );
-  }
-  if (last2 !== void 0 && optsArg === void 0 && !isNonObjectLiteral(last2) && legalDisplayCount(displays.length - 1)) {
-    return issue3(
-      `whose last argument is neither a literal nor a literal (dict \u2026) \u2014 the renderer tells a display from the options dict by the value it evaluates to, so this call could be read as ${displays.length} displays or as ${displays.length - 1} plus options, and both are legal. Make the options explicit as a trailing (dict \u2026) \u2014 {{ menu "${applyArg.value}" (printf "\u2026") (printf "\u2026") (dict) }} binds dynamic displays unambiguously \u2014 or bind the trigger text as literals`
-    );
-  }
-  const arity = cycleDisplayIssue("whose trigger", displays.length, 2);
-  if (arity !== void 0) return issue3(`${arity} \u2014 ${MIGRATION}`);
-  const entries = optsArg === void 0 ? {} : staticDictEntries(optsArg);
-  if (entries === null) {
-    return issue3(
-      `whose options (dict \u2026) is not fully literal \u2014 every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)`
-    );
-  }
-  let options;
-  try {
-    options = parseMenuOptions(entries);
-  } catch (e) {
-    return issue3(`with invalid options \u2014 ${e.message}`);
-  }
-  const sharedKey = options.key;
-  if (sharedKey !== void 0) {
-    const reserved = reservedNamespaceOf(sharedKey);
-    if (reserved !== void 0) {
-      return issue3(
-        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace \u2014 a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes "${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix`
-      );
-    }
-  }
-  return { kind: "ok", apply: applyArg.value, options };
-}
-function parseCalls(template) {
-  const engine = createEngine({ fromString: (s) => s });
-  try {
-    return engine.parse(template).referencedCalls().filter((c) => c.name === MENU_FUNC).map(analyzeMenuCall);
-  } catch {
-    return "parse-failed";
-  }
-}
-function hostedMenus(template, placement) {
-  const calls = parseCalls(template);
-  return calls === "parse-failed" ? [] : calls.flatMap(
-    (call) => call.kind === "ok" ? [
-      {
-        key: menuStateKey(placement, call.apply, call.options.key),
-        member: menuMember(call.apply)
-      }
-    ] : []
-  );
-}
-function segmentReferencesMenu(template) {
-  const engine = createEngine({ fromString: (s) => s });
-  try {
-    return engine.parse(template).referencedFunctions().has(MENU_FUNC);
-  } catch {
-    return false;
-  }
-}
-function menuIssue(ctx, path43, message) {
-  ctx.issues.push({ path: path43, message, line: findKeyLine(ctx.source, ["root"]) });
-}
-function checkMenuDecls(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
-  reservedNamespaceCollisions(ctx, out, MENU_PAGE_NS, "{{ menu }} helpers");
-  for (const [name, body] of Object.entries(out.helpers ?? {})) {
-    if (segmentReferencesMenu(body)) {
-      ctx.issues.push({
-        path: `helpers.${name}`,
-        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template \u2014 its identity is derived from the segment it sits in, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
-        line: findKeyLine(ctx.source, ["helpers", name])
-      });
-    }
-  }
-  const segments = out.segments ?? {};
-  for (const [segName, seg2] of Object.entries(segments)) {
-    for (const field of ["bg", "fg", "when"]) {
-      const tpl = seg2[field];
-      if (typeof tpl === "string" && segmentReferencesMenu(tpl)) {
-        menuIssue(
-          ctx,
-          `segments.${segName}.${field}`,
-          `segment "${segName}" uses {{ menu }} in its "${field}" \u2014 a menu is only valid in a segment's "template" (its placement is published only there; "${field}" needs a ${field === "when" ? "predicate" : "color"}). Move the {{ menu }} into the template.`
-        );
-      }
-    }
-    for (const [name, body] of Object.entries(seg2.partials ?? {})) {
-      if (segmentReferencesMenu(body)) {
-        ctx.issues.push({
-          path: `segments.${segName}.partials.${name}`,
-          message: `segments.${segName}.partials.${name} uses {{ menu }}, but a menu must live directly in a segment's "template" string \u2014 the synthesis pass that wires its state never follows a {{ template }} call into a partial. Inline the {{ menu }} call into the template itself.`,
-          line: findKeyLine(ctx.source, [
-            "segments",
-            segName,
-            "partials",
-            name
-          ])
-        });
-      }
-    }
-  }
-  if (out.root !== void 0) {
-    for (const node of walkNodes(fragmentNode(out.root))) {
-      if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
-        menuIssue(
-          ctx,
-          "root",
-          `a layout node's "when" predicate uses {{ menu }} \u2014 a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`
-        );
-      }
-    }
-  }
-  for (const [segName, { template }] of Object.entries(segments)) {
-    if (template === void 0 || !segmentReferencesMenu(template)) continue;
-    const calls = parseCalls(template);
-    if (calls === "parse-failed") continue;
-    for (const call of calls) {
-      const message = call.kind === "issue" ? call.message : identityIssue(call.apply);
-      if (message !== void 0) {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} ${message}.`
-        );
-      }
-    }
-  }
-}
-function identityIssue(apply) {
-  if (apply === "") {
-    return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
-  }
-  if (menuMember(apply) === DISCLOSURE_CLOSED) {
-    return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
-  }
-  return void 0;
-}
-function synthesizePlacementMenus(config2, issues) {
-  const variables = {};
-  const actions = {};
-  const callsOf = /* @__PURE__ */ new Map();
-  const reported = /* @__PURE__ */ new Set();
-  const issue3 = (segName, message) => {
-    const path43 = `segments.${segName}`;
-    if (reported.has(`${path43}\0${message}`)) return;
-    reported.add(`${path43}\0${message}`);
-    issues.push({ path: path43, message });
-  };
-  for (const preset of presetNames(config2.presets)) {
-    const ownerBySynthKey = /* @__PURE__ */ new Map();
-    const claimed = /* @__PURE__ */ new Map();
-    for (const node of walkNodes(presetRoot(config2, preset).node)) {
-      if (node.kind !== "segment") continue;
-      const seg2 = config2.segments[node.name];
-      if (seg2 === void 0) continue;
-      if (!callsOf.has(node.name)) {
-        callsOf.set(node.name, parseCalls(seg2.template));
-      }
-      const calls = callsOf.get(node.name);
-      if (calls === "parse-failed") continue;
-      const id2 = placementId(node);
-      for (const [index, call] of calls.entries()) {
-        if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
-          continue;
-        }
-        const { apply, options } = call;
-        const member = menuMember(apply);
-        const stateKey = menuStateKey(id2, apply, options.key);
-        const pageKey = menuPageKey(stateKey);
-        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
-        const clashKey = [stateKey, pageKey].find((k) => {
-          const prior2 = ownerBySynthKey.get(k);
-          return prior2 !== void 0 && prior2 !== owner;
-        });
-        if (clashKey !== void 0) {
-          issue3(
-            node.name,
-            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently \u2014 distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`
-          );
-          continue;
-        }
-        ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey, owner);
-        const identity2 = menuActionName(stateKey, member);
-        const claimant = `${node.name}\0${index}`;
-        const prior = claimed.get(identity2);
-        if (prior !== void 0 && prior !== claimant) {
-          issue3(
-            node.name,
-            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
-          );
-          continue;
-        }
-        claimed.set(identity2, claimant);
-        actions[identity2] = disclosureCycleAction(stateKey, member);
-        variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
-        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-        actions[pageKey] = { set: pageKey, int: true };
-      }
-    }
-  }
-  return {
-    ...config2,
-    variables: { ...config2.variables, ...variables },
-    actions: { ...config2.actions, ...actions }
-  };
-}
+var SESSION_RENDER_ORIGIN_KEY = "render-origin";
+var SESSION_CLIENT_HINTS_KEY = "client-hints";
 
-// src/config/loader/styles.ts
-init_globals();
-function endcapsNameMessage(at, name, endcapsAt) {
-  return `${at}: "${name}" is an endcaps shape, not a style \u2014 endcaps were renamed from "style" to "endcaps"; write ${endcapsAt}: "${name}"`;
-}
-var STYLE_SCHEMA = {
-  noun: "style key",
-  fields: {
-    hueShift: optionalNumberSpec(),
-    chromaScale: optionalNumberSpec({ min: 0 }),
-    lightnessScale: optionalNumberSpec(),
-    lightnessShift: optionalNumberSpec()
-  }
-};
-function validateStyles(ctx, raw) {
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: "styles",
-      message: `styles must be an object mapping style names to adaptation objects, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, ["styles"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, value] of Object.entries(raw)) {
-    if (name === "" || name.includes("/")) {
-      ctx.issues.push({
-        path: `styles.${name}`,
-        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
-        line: findKeyLine(ctx.source, ["styles", name])
-      });
-      continue;
-    }
-    if (isStyleEraEndcaps(name)) {
-      ctx.issues.push({
-        path: `styles.${name}`,
-        message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),
-        line: findKeyLine(ctx.source, ["styles", name])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, STYLE_SCHEMA, `styles.${name}`, value);
-    if (parsed2 !== null) out[name] = { ...IDENTITY, ...parsed2 };
-  }
-  return out;
-}
-
-// src/config/loader/presets.ts
-init_globals();
-var presetRootSpec = {
-  required: false,
-  json: { $ref: ROOT_FRAGMENT_REF },
-  parse: (ctx, path43, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path43}.${field}`, raw[field])
-};
-var presetGlobalsSpec = {
-  required: false,
-  json: presetGlobalsJson(),
-  parse: (ctx, path43, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path43}.${field}`, raw[field])
-};
-var PRESET_SCHEMA = {
-  noun: "preset key",
-  fields: { root: presetRootSpec, globals: presetGlobalsSpec }
-};
-function validatePresets(ctx, raw) {
-  if (!isPlainObject3(raw)) {
-    ctx.issues.push({
-      path: "presets",
-      message: `presets must be an object mapping preset names to config fragments, got ${describeType2(raw)}`,
-      line: findKeyLine(ctx.source, ["presets"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, value] of Object.entries(raw)) {
-    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
-      ctx.issues.push({
-        path: `presets.${name}`,
-        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
-        line: findKeyLine(ctx.source, ["presets", name])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, PRESET_SCHEMA, `presets.${name}`, value);
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-
-// src/config/loader/cross-ref.ts
+// src/dsl/render.ts
 init_globals();
 
-// src/config/loader/unplaced.ts
-init_globals();
-function presenceOf(segments, rendering) {
-  const owners = [...rendering].map(
-    ([ns, definition]) => [ownedBy(ns), definition]
-  );
-  return (name) => {
-    if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
-      return { kind: "declared" };
-    const owner = owners.find(([owns]) => owns(name));
-    if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
-    const scope = scopeOf(name);
-    return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
-  };
-}
-function reportable(presence2) {
-  return presence2.kind === "plugin" || presence2.kind === "missing";
-}
-function absentPlacement(config2, cells, presence2) {
-  const placed2 = /* @__PURE__ */ new Map();
-  const add2 = (id2, at) => {
-    placed2.set(id2, [...placed2.get(id2) ?? [], at]);
-  };
-  const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
-  const fragments = [
-    config2.root,
-    ...Object.values(config2.presets).flatMap(
-      (p2) => p2.root === void 0 ? [] : [p2.root]
-    )
-  ];
-  for (const tree of fragments.flatMap(trees))
-    for (const node of walkNodes(tree))
-      if (node.kind === "segment") add2(placementId(node), { seg: node.name });
-  for (const cell3 of cells)
-    add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
-  const absent = /* @__PURE__ */ new Set();
-  const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const [id2, at] of placed2)
-      if (!absent.has(id2) && at.every(standsOnAbsent)) {
-        absent.add(id2);
-        grew = true;
-      }
-  }
-  return (id2) => absent.has(id2);
-}
-function withoutUnplaced(config2) {
-  let removed = 0;
-  const declared = presenceOf(config2.segments, /* @__PURE__ */ new Map());
-  const placed2 = (name) => {
-    const keep2 = declared(name).kind === "declared";
-    if (!keep2) removed += 1;
-    return keep2;
-  };
-  const container = (node) => ({
-    ...node,
-    children: node.children.flatMap((child) => nodes(child))
-  });
-  const nodes = (node) => node.kind === "container" ? [container(node)] : placed2(node.name) ? [mapOpens(node, container)] : [];
-  const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
-  const root = (r) => ({
-    ...r,
-    rows: Object.fromEntries(
-      Object.entries(r.rows).map(([name, row2]) => [name, tree(row2)])
-    )
-  });
-  const fragment = (f) => isRowsFragment(f) ? root(f) : tree(f);
-  const preset = (p2) => p2.root === void 0 ? p2 : { ...p2, root: fragment(p2.root) };
-  const result = {
-    ...config2,
-    root: root(config2.root),
-    presets: Object.fromEntries(
-      Object.entries(config2.presets).map(([name, p2]) => [name, preset(p2)])
-    )
-  };
-  return removed === 0 ? config2 : result;
-}
-var EMPTY_ROW = {
-  kind: "container",
-  direction: "horizontal",
-  children: []
-};
-
-// src/config/loader/projections.ts
+// src/var-system/sources.ts
 init_globals();
 
 // src/template-engine/engine.ts
@@ -76858,5703 +75909,6 @@ function createCcCandybarEngine(opts) {
   });
 }
 
-// src/config/loader/projections.ts
-function instantRead(template, basis) {
-  for (const name of basis.reads.calls(template)) {
-    if (basis.clock.has(name)) return `calls "${name}"`;
-  }
-  for (const { reaches } of basis.reads.ofTemplate(template)) {
-    for (const name of reaches) {
-      const why2 = basis.projections.get(name);
-      if (why2 !== void 0) return `reads "${name}", which ${why2}`;
-    }
-  }
-  return null;
-}
-var FOLDS2 = /* @__PURE__ */ new WeakMap();
-function foldOf(config2) {
-  let fold = FOLDS2.get(config2);
-  if (fold === void 0) {
-    fold = foldProjections(config2);
-    FOLDS2.set(config2, fold);
-  }
-  return fold;
-}
-function projectionsOf(config2) {
-  return foldOf(config2).projections;
-}
-function foldProjections(config2) {
-  const declared = new Map(declaredVariables(config2));
-  const projections = /* @__PURE__ */ new Map();
-  const basis = {
-    reads: valueReadsOf(config2),
-    projections,
-    clock: CLOCK_FUNCTIONS
-  };
-  for (const [name, decl] of declared) {
-    if (decl.kind === "time") projections.set(name, "is a time variable");
-    const at = payloadPathOf(name, decl);
-    const drawn = at === void 0 ? null : drawProjectionAt(at);
-    if (drawn)
-      projections.set(
-        name,
-        `reads the draw's "${drawn}" (${DRAW_PROJECTIONS[drawn]})`
-      );
-  }
-  const rules = rulesOf(config2);
-  const slotReads = /* @__PURE__ */ new Map();
-  for (let grew = true; grew; ) {
-    grew = false;
-    for (const [name, decl] of declared) {
-      if (decl.kind !== "template" || projections.has(name)) continue;
-      const why2 = instantRead(decl.template, basis);
-      if (why2 !== null) {
-        projections.set(name, why2);
-        grew = true;
-      }
-    }
-    for (const slot of EXPRESSION_SLOTS) {
-      if (slotReads.has(slot)) continue;
-      for (const rule of rules[slot]) {
-        const why2 = instantRead(rule, basis);
-        if (why2 === null) continue;
-        slotReads.set(slot, why2);
-        grew = true;
-        break;
-      }
-    }
-    for (const [name, decl] of declared) {
-      const at = payloadPathOf(name, decl);
-      if (at === void 0 || projections.has(name)) continue;
-      const slot = slotAt(at);
-      const why2 = slot === void 0 ? void 0 : slotReads.get(slot);
-      if (why2 === void 0) continue;
-      projections.set(name, `reads the ${slot} rule, which ${why2}`);
-      grew = true;
-    }
-  }
-  return basis;
-}
-function authoredRules(config2) {
-  const fragments = [
-    [["globals"], config2.globals],
-    ...Object.entries(config2.presets ?? {}).map(
-      ([name, preset]) => [["presets", name, "globals"], preset.globals ?? {}]
-    )
-  ];
-  return fragments.flatMap(
-    ([at, globals]) => EXPRESSION_SLOTS.flatMap((slot) => {
-      const rule = globals[slot];
-      return isExpression(rule) ? [{ at: [...at, slot], slot, rule }] : [];
-    })
-  );
-}
-function rulesOf(config2) {
-  const rules = authoredRules(config2);
-  const rulesIn = (slot) => rules.flatMap((r) => r.slot === slot ? [r.rule] : []);
-  return {
-    style: rulesIn("style"),
-    palette: rulesIn("palette"),
-    effect: rulesIn("effect")
-  };
-}
-function instantReadOf(template, config2) {
-  return instantRead(template, foldOf(config2));
-}
-function templateInstants(basis) {
-  return (template) => instantRead(template, basis) !== null;
-}
-
-// src/config/loader/cross-ref.ts
-var UNREAD_DISTRIBUTION = {
-  nested: (nodePath2) => `${nodePath2} sets "distribution" on a container inside a row \u2014 the row's own container places every cell along it, through any { h } or { v } nested in it, so this one would place nothing. Set it on the row (the outermost horizontal container), or, on the bar, on the root, which places the rows.`,
-  bar: (nodePath2) => `${nodePath2} sets "distribution" on a vertical container none of whose children is a segment or a horizontal container \u2014 a bar row's hue is placed by the innermost vertical container it stacks through, so it would place nothing. Set it on that container, or on the row whose children are the cells (the horizontal container).`,
-  band: (nodePath2) => `${nodePath2} sets "distribution" on a vertical container in a disclosure body \u2014 a body's items are placed along their rows, never by which row they sit on, so it would place nothing. Set it on the row whose children are the items (the horizontal container), or give a group \`direction: 'horizontal'\`.`
-};
-function presetIdentCollisions(ctx, presets) {
-  const byIdent = /* @__PURE__ */ new Map();
-  for (const name of Object.keys(presets)) {
-    const id2 = ident(name);
-    const names = byIdent.get(id2);
-    if (names) names.push(name);
-    else byIdent.set(id2, [name]);
-  }
-  for (const [id2, names] of byIdent) {
-    if (names.length < 2) continue;
-    ctx.issues.push({
-      path: "presets",
-      message: `preset names ${names.map((n) => JSON.stringify(n)).join(" and ")} both collapse to the same synthesis identifier "${id2}" \u2014 edit mode's synthesized reset affordance would silently steal one preset's action for the other. Rename one.`,
-      line: findKeyLine(ctx.source, ["presets"])
-    });
-  }
-}
-function authoredPlacement(raw, name) {
-  const layouts = [
-    ["root", raw.root],
-    ...Object.entries(raw.presets ?? {}).map(
-      ([preset, p2]) => [`presets.${preset}.root`, p2.root]
-    )
-  ];
-  for (const [layoutKey, fragment] of layouts) {
-    if (fragment === void 0) continue;
-    for (const [node, path43] of fragmentNodePaths(fragment, layoutKey)) {
-      if (node.kind === "segment" && node.name === name)
-        return { layoutKey, path: path43 };
-    }
-  }
-  return void 0;
-}
-var unplacedMessage = (layoutKey, name, segments, presence2) => presence2.kind === "plugin" ? `${layoutKey} entry "${name}" does not match any segment plugin "${pluginNs(presence2.definition)}" declares \u2014 the plugin loaded from ${presence2.definition.path} declares: ${pluginDeclares(pluginNs(presence2.definition), segments)}${missingSegmentHint(name, segments)}` : `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
-function pluginDeclares(ns, segments) {
-  const owned = Object.keys(segments).filter(ownedBy(ns)).sort();
-  if (owned.length === 0) return "no segments";
-  return owned.map((seg2) => {
-    const settings = Object.keys(segments[seg2].settings ?? {});
-    return `${seg2} (${settings.length === 0 ? "no settings" : `settings: ${settings.join(", ")}`})`;
-  }).join(", ");
-}
-function missingSegmentHint(name, segments) {
-  return renamedHint(name) + otherScopeHint(name, (other) => Object.hasOwn(segments, other));
-}
-function validateCrossReferences(ctx, cfg, authored, presence2) {
-  const styleFragments = [
-    [["globals"], cfg.globals.style, "globals.endcaps"],
-    [["editGlobals"], cfg.editGlobals.style, "editGlobals.endcaps"],
-    ...Object.entries(cfg.presets).map(
-      ([name, preset]) => [
-        ["presets", name, "globals"],
-        preset.globals?.style,
-        `presets.${name}.globals.endcaps`
-      ]
-    ),
-    ...Object.entries(cfg.themeDefaults).map(
-      ([theme24, fragment]) => [["themeDefaults", theme24], fragment.style, "globals.endcaps"]
-    )
-  ];
-  for (const [at, name, endcapsAt] of styleFragments) {
-    if (name === void 0 || isExpression(name) || Object.prototype.hasOwnProperty.call(cfg.styles, name))
-      continue;
-    const where = `${at.join(".")}.style`;
-    ctx.issues.push({
-      path: where,
-      message: isStyleEraEndcaps(name) ? endcapsNameMessage(where, name, endcapsAt) : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
-      line: findKeyLine(ctx.source, [...at, "style"])
-    });
-  }
-  if (cfg.globals.preset !== void 0 && !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)) {
-    ctx.issues.push({
-      path: "globals.preset",
-      message: `globals.preset "${cfg.globals.preset}" does not match any declared preset (have: ${Object.keys(cfg.presets).join(", ")})`,
-      line: findKeyLine(ctx.source, ["globals", "preset"])
-    });
-  }
-  presetIdentCollisions(ctx, cfg.presets);
-  const templateScope = templateScopeOf(cfg);
-  for (const name of templateScope.names) {
-    if (name !== "settings" && !name.startsWith(SETTINGS_SCOPE_PREFIX))
-      continue;
-    ctx.issues.push({
-      path: "variables",
-      message: `variable "${name}" is named under "settings", which a segment's templates read as its placement's own settings (.settings.<name>) \u2014 rename it`,
-      line: findKeyLine(ctx.source, ["variables", name])
-    });
-  }
-  const checkPlacementCounts = (tree, layoutKey, layoutLine) => {
-    if (countAnchors(tree) > 1) {
-      ctx.issues.push({
-        path: layoutKey,
-        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" ${countAnchors(tree)} times \u2014 it may appear at most once per layout (it is one disclosure, and one state key holds one open state). Remove all but the placement you want; removing every placement puts the menu at its default position.`,
-        line: layoutLine
-      });
-    }
-    if (anchorUnderGate(tree)) {
-      ctx.issues.push({
-        path: layoutKey,
-        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" under a \`when\` or inside a disclosure body \u2014 the menu is visible under every condition, so its placement may not be gated. Move it to an ungated position, or remove it to put the menu at its default position.`,
-        line: layoutLine
-      });
-    }
-    const rootUnread = unreadAt(tree, "bar");
-    if (rootUnread !== void 0) {
-      ctx.issues.push({
-        path: layoutKey,
-        message: UNREAD_DISTRIBUTION[rootUnread](layoutKey),
-        line: layoutLine
-      });
-    }
-    const byId = /* @__PURE__ */ new Map();
-    for (const node of walkNodes(tree)) {
-      if (node.kind !== "segment" || presence2(node.name).kind !== "declared")
-        continue;
-      const id2 = placementId(node);
-      byId.set(id2, [...byId.get(id2) ?? [], node]);
-    }
-    for (const [id2, nodes] of byId) {
-      if (nodes.length < 2) continue;
-      const seg2 = nodes[1].name;
-      const free = freePlacementId(seg2, new Set(byId.keys()));
-      ctx.issues.push({
-        path: layoutKey,
-        message: `${layoutKey} has ${nodes.length} placements with the id "${id2}" \u2014 an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${seg2}", id: "${free}" }. A placement without an "id" takes its segment's name.`,
-        line: layoutLine
-      });
-    }
-  };
-  function unreadAt(node, where) {
-    if (node.kind === "segment" || node.distribution === void 0)
-      return void 0;
-    if (where === "nested") return "nested";
-    const placesRows = where === "bar" && node.children.some(
-      (child) => child.kind === "segment" || AXIS_OF[child.direction] === "cell"
-    );
-    return AXIS_OF[node.direction] === "row" && !placesRows ? where : void 0;
-  }
-  const whereBelow = (node, where) => node.kind === "segment" ? "band" : AXIS_OF[node.direction] === "cell" ? "nested" : where;
-  const childPaths = (node, path43) => node.kind === "container" ? node.children.map((child, i2) => [child, childPath(path43, i2)]) : node.opens === void 0 ? [] : [[node.opens.body, bodyPath(path43)]];
-  function* unreadBelow(children2, where) {
-    for (const [child, path43] of children2) {
-      const own2 = unreadAt(child, where);
-      if (own2 !== void 0) yield [own2, path43];
-      yield* unreadBelow(childPaths(child, path43), whereBelow(child, where));
-    }
-  }
-  const reported = /* @__PURE__ */ new Set();
-  const checkLayoutTree = (root, layoutKey) => {
-    const top = fragmentNode(root);
-    const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
-      ([name, row2]) => [row2, `${layoutKey}.rows.${name}`]
-    ) : childPaths(top, layoutKey);
-    for (const [where, path43] of unreadBelow(rows, whereBelow(top, "bar"))) {
-      ctx.issues.push({
-        path: path43,
-        message: UNREAD_DISTRIBUTION[where](path43),
-        line: findKeyLine(ctx.source, path43.split("."))
-      });
-    }
-    for (const [node, path43] of fragmentNodePaths(root, layoutKey)) {
-      const line = findKeyLine(ctx.source, path43.split("."));
-      if (node.when !== void 0) {
-        checkTemplateRefs(ctx, `${path43}.when`, node.when, templateScope, {
-          line
-        });
-        checkWhenParses(ctx, `${path43}.when`, node.when, line);
-        checkActionRefs(ctx, cfg, `${path43}.when`, node.when, line);
-      }
-      if (node.kind !== "segment") continue;
-      if (isSettingsAnchor(node.name)) {
-        if (node.id !== void 0 || node.settings !== void 0) {
-          ctx.issues.push({
-            path: path43,
-            message: `${layoutKey} gives the global settings menu anchor "${SETTINGS_ANCHOR}" an id or settings \u2014 the anchor only marks where the menu goes, so place it as the bare name "${SETTINGS_ANCHOR}"`,
-            line
-          });
-        }
-        continue;
-      }
-      const placed2 = presence2(node.name);
-      if (reportable(placed2)) {
-        reported.add(node.name);
-        ctx.unplaced.push({
-          path: path43,
-          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed2),
-          line
-        });
-      }
-      checkPlacementSettings(ctx, cfg, node, path43, line);
-    }
-  };
-  if (authored.root !== void 0) checkLayoutTree(authored.root, "root");
-  for (const [name, preset] of Object.entries(authored.presets ?? {})) {
-    if (preset.root !== void 0) {
-      checkLayoutTree(preset.root, `presets.${name}.root`);
-    }
-  }
-  const rendered = /* @__PURE__ */ new Map([["root", rootNode(cfg.root)]]);
-  for (const name of presetNames(cfg.presets)) {
-    const { node, path: path43 } = presetRoot(cfg, name);
-    rendered.set(path43, node);
-  }
-  for (const [key, tree] of rendered) {
-    checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
-  }
-  for (const [key, tree] of rendered) {
-    for (const [node] of walkNodePaths(tree, key)) {
-      if (node.kind !== "segment" || reported.has(node.name)) continue;
-      const placed2 = presence2(node.name);
-      if (!reportable(placed2)) continue;
-      reported.add(node.name);
-      ctx.inherited.push({
-        name: node.name,
-        path: key,
-        message: unplacedMessage(
-          `${key} inherits from a config layer below whose`,
-          node.name,
-          cfg.segments,
-          placed2
-        ),
-        line: findKeyLine(ctx.source, key.split("."))
-      });
-    }
-  }
-  validateDeclarations(ctx, cfg, templateScope, () => true);
-}
-var TREE_OP_ARMS = [
-  "removeSegment",
-  "insertSegment",
-  "insertSegmentFrom"
-];
-function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a) {
-  const at = `actions.${name}.${discriminator}`;
-  const line = findKeyLine(ctx.source, ["actions", name, discriminator]);
-  if (!presetNames(cfg.presets).includes(presetName)) {
-    ctx.issues.push({
-      path: at,
-      message: `actions.${name}: "${key}" names preset "${presetName}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
-      line
-    });
-    return;
-  }
-  if (discriminator === "reset") return;
-  const hasRemove = "removeSegment" in a;
-  const hasInsert = "insertSegment" in a;
-  const hasInsertFrom = "insertSegmentFrom" in a;
-  if (!hasRemove && !hasInsert && !hasInsertFrom) {
-    ctx.issues.push({
-      path: at,
-      message: `actions.${name}: "${key}" is a "presets.<name>.root" target and can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom" (not "to"/"from"/"cycle"/bounded \u2014 those have no meaning as a tree op)`,
-      line
-    });
-    return;
-  }
-  const checkDeclared = (role, segName) => {
-    if (Object.prototype.hasOwnProperty.call(cfg.segments, segName)) return;
-    ctx.issues.push({
-      path: at,
-      message: `actions.${name}: ${role} "${segName}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})${renamedHint(segName)}`,
-      line
-    });
-  };
-  const placed2 = new Set(placementIds(presetRoot(cfg, presetName).node));
-  const checkRetired = (role, id2) => {
-    if (!RENAMED_SEGMENTS.has(id2) || placed2.has(id2) || Object.prototype.hasOwnProperty.call(cfg.segments, id2)) {
-      return;
-    }
-    ctx.issues.push({
-      path: at,
-      message: `actions.${name}: ${role} "${id2}" names no placement${renamedHint(id2)}`,
-      line
-    });
-  };
-  if ("removeSegment" in a) checkRetired("removeSegment", a.removeSegment);
-  if ("insertSegment" in a) checkDeclared("insertSegment", a.insertSegment);
-  if ("insertSegment" in a || "insertSegmentFrom" in a) {
-    checkRetired("anchor", a.anchor);
-  }
-}
-var SETTINGS_SCOPE_PREFIX = "settings.";
-function withSettingsScope(scope, settings) {
-  return {
-    ...scope,
-    names: /* @__PURE__ */ new Set([
-      ...scope.names,
-      ...Object.keys(settings).map((n) => SETTINGS_SCOPE_PREFIX + n)
-    ])
-  };
-}
-function checkSettingOrder(ctx, segName, settings) {
-  const at = (name) => `segments.${segName}.settings.${name}`;
-  const push = (name, message) => {
-    ctx.issues.push({
-      path: at(name),
-      message: `${at(name)}: ${message}`,
-      line: findKeyLine(ctx.source, ["segments", segName, "settings", name])
-    });
-  };
-  const broken = floorProblems(settings);
-  for (const { setting, message } of broken) push(setting, message);
-  if (broken.length > 0) return;
-  for (const { setting, message } of settingOrderProblems(
-    settings,
-    defaultsOf(settings)
-  )) {
-    push(setting, `the defaults do not stand together: ${message}`);
-  }
-}
-function relationsReported(settings) {
-  return floorProblems(settings).length > 0 || settingOrderProblems(settings, defaultsOf(settings)).length > 0;
-}
-function defaultsOf(settings) {
-  return Object.fromEntries(
-    Object.entries(settings).map(([n, d]) => [n, d.default])
-  );
-}
-function floorProblems(settings) {
-  const floorOf3 = (name) => rangeOf(own(settings, name))?.atLeast;
-  return Object.keys(settings).flatMap((name) => {
-    const floor3 = floorOf3(name);
-    if (floor3 === void 0) return [];
-    if (floor3 === name || rangeOf(own(settings, floor3)) === void 0) {
-      return [
-        {
-          setting: name,
-          message: `atLeast "${floor3}" must name another range setting of this segment (its range settings: ${rangeSettingNames(settings, name).join(", ") || "none"})`
-        }
-      ];
-    }
-    const chain2 = [name];
-    for (let next = floor3; next !== void 0; next = floorOf3(next)) {
-      if (next === name) {
-        return chain2.every((member) => name <= member) ? [
-          {
-            setting: name,
-            message: `atLeast closes a cycle (${[...chain2, name].join(" \u2265 ")}) \u2014 every setting on it could only ever equal the rest`
-          }
-        ] : [];
-      }
-      if (chain2.includes(next)) return [];
-      chain2.push(next);
-    }
-    return [];
-  });
-}
-function own(settings, name) {
-  return Object.prototype.hasOwnProperty.call(settings, name) ? settings[name] : void 0;
-}
-function rangeSettingNames(settings, except) {
-  return Object.entries(settings).filter(([n, decl]) => n !== except && rangeOf(decl) !== void 0).map(([n]) => n);
-}
-function checkPlacementSettings(ctx, cfg, node, layoutKey, line) {
-  const seg2 = Object.prototype.hasOwnProperty.call(cfg.segments, node.name) ? cfg.segments[node.name] : void 0;
-  if (seg2 === void 0) return;
-  const declared = settingsOf(seg2);
-  const where = `${layoutKey}: placement "${placementId(node)}" of segment "${node.name}"`;
-  for (const [setting, value] of Object.entries(node.settings ?? {})) {
-    const decl = Object.prototype.hasOwnProperty.call(declared, setting) ? declared[setting] : void 0;
-    const problem = decl === void 0 ? `sets "${setting}", which segment "${node.name}" does not declare (it has: ${Object.keys(declared).join(", ")})` : inSettingDomain(decl, value) ? void 0 : `sets "${setting}" to ${JSON.stringify(value)}${decl.domain === "theme" ? retiredThemeNote(value) : ""}, but it must be ${describeSettingDomain(decl)}`;
-    if (problem !== void 0) {
-      ctx.issues.push({
-        path: layoutKey,
-        message: `${where} ${problem}`,
-        line
-      });
-    }
-  }
-  const resolved = Object.fromEntries(
-    Object.entries(declared).map(([n, d]) => [
-      n,
-      node.settings?.[n] ?? d.default
-    ])
-  );
-  const members = Object.entries(resolved).every(
-    ([n, v]) => inSettingDomain(declared[n], v)
-  );
-  if (!members || relationsReported(declared)) return;
-  for (const { message } of settingOrderProblems(declared, resolved)) {
-    ctx.issues.push({ path: layoutKey, message: `${where}: ${message}`, line });
-  }
-}
-function checkVarRefs(ctx, declPath, v, scope, segCtx) {
-  for (const [field, template] of variableTemplates(v)) {
-    checkTemplateRefs(ctx, `${declPath}.${field}`, template, scope, {
-      segCtx
-    });
-  }
-}
-function checkDependsOn(ctx, declPath, v, scope, segCtx) {
-  if (!hasCacheField(v) || !("depends_on" in v.cache)) return;
-  for (let i2 = 0; i2 < v.cache.depends_on.length; i2++) {
-    const target = v.cache.depends_on[i2];
-    if (scope.names.has(target)) continue;
-    const namespaced = segCtx !== void 0 ? `${segCtx}.${target}` : void 0;
-    const hint = namespaced !== void 0 && scope.names.has(namespaced) ? ` (segment-local vars are namespaced \u2014 write "${namespaced}")` : "";
-    ctx.issues.push({
-      path: `${declPath}.cache.depends_on[${i2}]`,
-      message: `cache.depends_on references unknown variable "${target}"${hint}`,
-      line: findKeyLine(ctx.source, [
-        ...declPath.split("."),
-        "cache",
-        "depends_on"
-      ])
-    });
-  }
-}
-var INSTANT_POLICY = 'it reads the instant a frame is drawn at, which changes every frame, and a cache policy re-runs its source when a stored value changes \u2014 re-run it on a period instead: cache: { ttl: "<duration>" }';
-function checkPolicyInstant(ctx, declPath, v, cfg) {
-  if (!hasCacheField(v)) return;
-  const line = (field) => findKeyLine(ctx.source, [...declPath.split("."), "cache", field]);
-  if ("key" in v.cache) {
-    const why2 = instantReadOf(v.cache.key, cfg);
-    if (why2 !== null) {
-      ctx.issues.push({
-        path: `${declPath}.cache.key`,
-        message: `cache.key ${why2}: ${INSTANT_POLICY}`,
-        line: line("key")
-      });
-    }
-  }
-  if ("depends_on" in v.cache) {
-    const projections = projectionsOf(cfg);
-    v.cache.depends_on.forEach((target, i2) => {
-      const why2 = projections.get(target);
-      if (why2 === void 0) return;
-      ctx.issues.push({
-        path: `${declPath}.cache.depends_on[${i2}]`,
-        message: `cache.depends_on names "${target}", which ${why2}: ${INSTANT_POLICY}`,
-        line: line("depends_on")
-      });
-    });
-  }
-}
-function checkRuleSlotReads(ctx, cfg) {
-  const declared = new Map(declaredVariables(cfg));
-  const fold = valueReadsOf(cfg);
-  const slotRead = (reads, seen2) => {
-    for (const { path: path43, reaches } of reads) {
-      const atSlot = EXPRESSION_SLOTS.find(
-        (slot) => SLOT_PATHS[slot] === path43 || SLOT_PATHS[slot].startsWith(`${path43}.`)
-      );
-      if (atSlot !== void 0)
-        return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
-      for (const name of reaches) {
-        const through = nameRead(name, seen2);
-        if (through !== null) return through;
-      }
-    }
-    return null;
-  };
-  const nameRead = (name, seen2) => {
-    if (seen2.has(name)) return null;
-    seen2.add(name);
-    const decl = declared.get(name);
-    const at = payloadPathOf(name, decl);
-    const slot = at === void 0 ? void 0 : slotAt(at);
-    if (slot !== void 0) return `reads "${name}", the ${slot}'s own name`;
-    for (const read2 of fold.ofVariable(decl)) {
-      const through = slotRead([read2], seen2);
-      if (through === null) continue;
-      return read2.field === "template" ? `reads "${name}", which ${through}` : `reads "${name}", whose ${read2.field} ${through}`;
-    }
-    return null;
-  };
-  for (const { at, rule } of authoredRules(cfg)) {
-    const why2 = slotRead(fold.ofTemplate(rule), /* @__PURE__ */ new Set());
-    if (why2 === null) continue;
-    const path43 = at.join(".");
-    ctx.issues.push({
-      path: path43,
-      message: `${path43} ${why2}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
-      line: findKeyLine(ctx.source, [...at])
-    });
-  }
-}
-function checkWhenParses(ctx, path43, when2, line) {
-  try {
-    SYNTAX_ENGINE.parse(when2);
-  } catch (e) {
-    ctx.issues.push({
-      path: path43,
-      message: `Template parse error in ${path43}: ${e.message}`,
-      line
-    });
-  }
-}
-function checkActionRefs(ctx, cfg, path43, template, line, helpers = cfg.helpers, segment) {
-  const field = path43.slice(path43.lastIndexOf(".") + 1);
-  for (const { name: aref, site, via } of templateActionRefs(
-    template,
-    helpers
-  )) {
-    if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
-    const inOptions = site === "options" ? " (in a picker, menu, carousel, swatch, swatches or themePreview)" : "";
-    if (via !== null) {
-      checkHelperIssue(
-        ctx,
-        via,
-        `Template references unknown action "${aref}"${inOptions}`,
-        helperKeyPath(via, segment)
-      );
-      continue;
-    }
-    ctx.issues.push({
-      path: path43,
-      message: `${field} references unknown action "${aref}"${inOptions}`,
-      line
-    });
-  }
-}
-function checkTemplateRefs(ctx, declPath, template, scope, opts) {
-  for (const [ref, via] of templateReads(template, scope.helpers)) {
-    if (refResolves(ref, scope)) continue;
-    if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
-      const through = via === null ? "" : ` through helper "${via}"`;
-      const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
-      const message = opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`;
-      ctx.issues.push({
-        path: declPath,
-        message,
-        line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
-      });
-      continue;
-    }
-    if (via !== null) {
-      checkHelperIssue(
-        ctx,
-        via,
-        `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`,
-        helperKeyPath(
-          via,
-          opts?.segCtx === void 0 ? void 0 : { name: opts.segCtx, partials: opts.partials }
-        )
-      );
-      continue;
-    }
-    const namespaced = opts?.segCtx !== void 0 ? `${opts.segCtx}.${ref}` : void 0;
-    const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
-    ctx.issues.push({
-      path: declPath,
-      message: `Template references unknown variable ".${ref}"${hint}`,
-      line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
-    });
-  }
-}
-function helperKeyPath(name, segment) {
-  return segment?.partials !== void 0 && Object.hasOwn(segment.partials, name) ? ["segments", segment.name, "partials", name] : ["helpers", name];
-}
-function checkHelperIssue(ctx, helper, message, keyPath = ["helpers", helper]) {
-  const path43 = keyPath.join(".");
-  if (ctx.issues.some((i2) => i2.path === path43 && i2.message === message)) return;
-  ctx.issues.push({
-    path: path43,
-    message,
-    line: findKeyLine(ctx.source, keyPath)
-  });
-}
-function checkSettingWrites(ctx, name, a, setting, optionDomains) {
-  const key = a.set;
-  const domain = settingControlDomain(SETTINGS[setting].configKey);
-  const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
-  if ("min" in a && (domain === "bool" || !("min" in domain))) {
-    ctx.issues.push({
-      path: `actions.${name}.min`,
-      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${key} is not an integer range; ${takes}`,
-      line: findKeyLine(ctx.source, ["actions", name, "min"])
-    });
-    return;
-  }
-  const writes = setWrites(a, optionDomains);
-  if (writes === ANY_INTEGER) {
-    ctx.issues.push({
-      path: `actions.${name}.int`,
-      message: `actions.${name}.int: an int cursor writes whatever integer the template binds, and a click outside the ${key} domain would change nothing; ${takes}`,
-      line: findKeyLine(ctx.source, ["actions", name, "int"])
-    });
-    return;
-  }
-  const outside = writes.filter(
-    (w) => !controlDomainAdmits(domain, w.value, optionDomains)
-  );
-  if (outside.length === 0) return;
-  if (key === SETTINGS.style.sessionKey && ("from" in a && a.from === "endcaps" || writes.every((w) => isStyleEraEndcaps(w.value)))) {
-    const endcaps = SETTINGS.endcaps.sessionKey;
-    ctx.issues.push(
-      "to" in a ? {
-        path: `actions.${name}.to`,
-        message: endcapsNameMessage(
-          `actions.${name}.to`,
-          a.to,
-          `set: "${endcaps}", to`
-        ),
-        line: findKeyLine(ctx.source, ["actions", name, "to"])
-      } : {
-        path: `actions.${name}.set`,
-        message: `actions.${name}.set: "${key}" here writes only endcaps shapes, not styles \u2014 endcaps were renamed from "style" to "endcaps"; write set: "${endcaps}"`,
-        line: findKeyLine(ctx.source, ["actions", name, "set"])
-      }
-    );
-    return;
-  }
-  for (const field of new Set(outside.map((w) => w.field))) {
-    const values2 = outside.filter((w) => w.field === field).map((w) => JSON.stringify(w.value));
-    const shown = values2.length <= REPORTED_VALUES ? values2.join(", ") : `${values2.slice(0, REPORTED_VALUES).join(", ")} and ${values2.length - REPORTED_VALUES} more`;
-    const where = `actions.${name}.${field}`;
-    ctx.issues.push({
-      path: where,
-      message: `${where}: ${shown} ${values2.length === 1 ? "is" : "are"} outside the ${key} domain \u2014 a click would write it and nothing would change; ${takes}`,
-      line: findKeyLine(ctx.source, ["actions", name, field])
-    });
-  }
-}
-var REPORTED_VALUES = 3;
-var ANY_INTEGER = /* @__PURE__ */ Symbol("any integer");
-function setWrites(a, optionDomains) {
-  if ("to" in a) return [{ field: "to", value: a.to }];
-  if ("cycle" in a) return a.cycle.map((value) => ({ field: "cycle", value }));
-  if ("from" in a) {
-    return resolveOptionDomain(a.from, optionDomains).members.map((value) => ({
-      field: "from",
-      value
-    }));
-  }
-  if ("min" in a) {
-    return [
-      { field: "min", value: String(a.min) },
-      { field: "max", value: String(a.max) }
-    ];
-  }
-  return ANY_INTEGER;
-}
-function subjects(record2, subject) {
-  return Object.entries(record2).filter(([name]) => subject(name));
-}
-function validateDeclarations(ctx, cfg, templateScope, subject) {
-  const optionDomains = configOptionDomains(cfg);
-  const knownDomains = knownOptionDomainNames(optionDomains);
-  for (const [name, a] of subjects(cfg.actions, subject)) {
-    const [field, from] = "from" in a ? ["from", a.from] : "insertSegmentFrom" in a ? ["insertSegmentFrom", a.insertSegmentFrom] : [null, null];
-    if (field !== null && typeof from === "string" && !knownDomains.includes(from)) {
-      ctx.issues.push({
-        path: `actions.${name}.${field}`,
-        message: `actions.${name} ${field}: references ${unknownOptionDomain(from, optionDomains)}`,
-        line: findKeyLine(ctx.source, ["actions", name, field])
-      });
-      continue;
-    }
-    if (!("set" in a)) continue;
-    if (CONFIG_ONLY_KEYS.has(a.set)) {
-      ctx.issues.push({
-        path: `actions.${name}.set`,
-        message: `actions.${name} sets "${a.set}", which has no session pick \u2014 globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", \u2026 } instead`,
-        line: findKeyLine(ctx.source, ["actions", name, "set"])
-      });
-    }
-    const setting = SESSION_KEY_TO_SETTING.get(a.set);
-    if (setting !== void 0) {
-      checkSettingWrites(ctx, name, a, setting, optionDomains);
-    }
-  }
-  for (const [name, a] of subjects(cfg.actions, subject)) {
-    if (!("do" in a)) continue;
-    a.do.forEach((member, i2) => {
-      const target = Object.prototype.hasOwnProperty.call(cfg.actions, member) ? cfg.actions[member] : void 0;
-      const problem = target === void 0 ? `references unknown action "${member}"` : "do" in target ? `"${member}" is itself a do action \u2014 list its members here instead` : a.do.indexOf(member) !== i2 ? `"${member}" is listed twice \u2014 each member fires once per click` : i2 > 0 && actionBindsTemplateValue(target) ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member \u2014 only the first is bound the region's display` : void 0;
-      if (problem !== void 0) {
-        ctx.issues.push({
-          path: `actions.${name}.do`,
-          message: `actions.${name} do: ${problem}`,
-          line: findKeyLine(ctx.source, ["actions", name, "do"])
-        });
-      }
-    });
-  }
-  for (const [name, a] of subjects(cfg.actions, subject)) {
-    if (!("run" in a)) continue;
-    for (const ref of a.refreshes) {
-      const decl = Object.hasOwn(cfg.variables, ref) ? cfg.variables[ref] : void 0;
-      if (decl?.kind === "source") continue;
-      ctx.issues.push({
-        path: `actions.${name}.refreshes`,
-        message: `actions.${name} refreshes "${ref}", which ${decl === void 0 ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, <scope>.<plugin>.<source> where the scope is plugins or repo; a plugin names its own sources bare)`,
-        line: findKeyLine(ctx.source, ["actions", name, "refreshes"])
-      });
-    }
-  }
-  for (const [name, a] of subjects(cfg.actions, subject)) {
-    const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
-    if (key === null) continue;
-    const discriminator = "persist" in a ? "persist" : "reset";
-    const target = parsePersistTarget(key);
-    if (target === null) {
-      const removed = removedGlobalPointer(key);
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: removed !== void 0 ? `actions.${name}: the globals field "${key}" was removed: ${removed}` : `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, a "themeDefaults.<theme>.<shade|variation|style>" target, or a "presets.<name>.root" target`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator])
-      });
-      continue;
-    }
-    const treeOps = TREE_OP_ARMS.filter((arm2) => arm2 in a);
-    if (target.scope !== "preset-root" && treeOps.length > 0) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a "presets.<name>.root" target \u2014 ${treeOps.map((arm2) => `"${arm2}"`).join("/")} is a tree op and applies only to one`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator])
-      });
-      continue;
-    }
-    if (target.scope === "preset-root") {
-      checkPresetRootTarget(
-        ctx,
-        cfg,
-        name,
-        discriminator,
-        key,
-        target.preset,
-        a
-      );
-      continue;
-    }
-    if (target.scope === "preset-globals" && !presetNames(cfg.presets).includes(target.preset)) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names preset "${target.preset}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator])
-      });
-      continue;
-    }
-    if (target.scope === "theme-default" && !ctx.allowedPalettes.has(target.theme)) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${[...ctx.allowedPalettes].sort().join(", ")})`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator])
-      });
-      continue;
-    }
-    if (target.scope !== "segment-palette") continue;
-    if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})${renamedHint(target.segment)}`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator])
-      });
-      continue;
-    }
-    if ("min" in a) {
-      ctx.issues.push({
-        path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is a segment palette target and cannot use a bounded stepper (min/max/by) \u2014 use "to", "from", or "cycle" instead`,
-        line: findKeyLine(ctx.source, ["actions", name, discriminator])
-      });
-    }
-  }
-  for (const [name, v] of subjects(cfg.variables, subject)) {
-    checkVarRefs(ctx, `variables.${name}`, v, templateScope);
-    const retired = retiredVariableMessage(name);
-    if (retired !== void 0) {
-      ctx.issues.push({
-        path: `variables.${name}`,
-        message: retired,
-        line: findKeyLine(ctx.source, ["variables", name])
-      });
-    }
-  }
-  for (const [segName, seg2] of subjects(cfg.segments, subject)) {
-    if (seg2.vars) {
-      for (const [vName, vDecl] of Object.entries(seg2.vars)) {
-        checkVarRefs(
-          ctx,
-          `segments.${segName}.vars.${vName}`,
-          vDecl,
-          templateScope,
-          segName
-        );
-      }
-    }
-    const settings = settingsOf(seg2);
-    checkSettingOrder(ctx, segName, settings);
-    if (seg2.partials !== void 0) {
-      for (const name of Object.keys(seg2.partials)) {
-        if (!Object.hasOwn(templateScope.helpers, name)) continue;
-        ctx.issues.push({
-          path: `segments.${segName}.partials.${name}`,
-          message: `segments.${segName}.partials.${name} reuses the name of a global helper (helpers.${name}) \u2014 partials and helpers share one define chain, so pick a name no helper already uses`,
-          line: findKeyLine(ctx.source, [
-            "segments",
-            segName,
-            "partials",
-            name
-          ])
-        });
-      }
-    }
-    const segHelpers = seg2.partials === void 0 ? templateScope.helpers : { ...templateScope.helpers, ...seg2.partials };
-    const segScope = withSettingsScope(
-      { ...templateScope, helpers: segHelpers },
-      settings
-    );
-    for (const field of SEGMENT_TEMPLATE_FIELDS) {
-      const tpl = seg2[field];
-      if (typeof tpl !== "string") continue;
-      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {
-        segCtx: segName,
-        settings,
-        partials: seg2.partials
-      });
-      checkActionRefs(
-        ctx,
-        cfg,
-        `segments.${segName}.${field}`,
-        tpl,
-        findKeyLine(ctx.source, ["segments", segName, field]),
-        segHelpers,
-        { name: segName, partials: seg2.partials }
-      );
-    }
-  }
-  for (const [name, v] of subjects(cfg.variables, subject)) {
-    checkDependsOn(ctx, `variables.${name}`, v, templateScope);
-    checkPolicyInstant(ctx, `variables.${name}`, v, cfg);
-  }
-  checkRuleSlotReads(ctx, cfg);
-  for (const [segName, seg2] of subjects(cfg.segments, subject)) {
-    if (!seg2.vars) continue;
-    for (const [vName, vDecl] of Object.entries(seg2.vars)) {
-      checkDependsOn(
-        ctx,
-        `segments.${segName}.vars.${vName}`,
-        vDecl,
-        templateScope,
-        segName
-      );
-      checkPolicyInstant(ctx, `segments.${segName}.vars.${vName}`, vDecl, cfg);
-    }
-  }
-}
-
-// src/config/loader/cycles.ts
-init_globals();
-function validateNoCycles(ctx, cfg, within4 = () => true) {
-  const { graph, nodeInfo } = buildTemplateGraph(cfg);
-  const WHITE2 = 0;
-  const GRAY = 1;
-  const BLACK = 2;
-  const color = /* @__PURE__ */ new Map();
-  const stack = [];
-  for (const node of graph.keys()) color.set(node, WHITE2);
-  for (const start of graph.keys()) {
-    if (!within4(start) || color.get(start) !== WHITE2) continue;
-    if (dfs(start)) return;
-  }
-  function dfs(node) {
-    color.set(node, GRAY);
-    stack.push(node);
-    for (const next of graph.get(node) ?? []) {
-      if (!within4(next)) continue;
-      const c = color.get(next);
-      if (c === GRAY) {
-        const cycleStart = stack.indexOf(next);
-        const cycle = [...stack.slice(cycleStart), next];
-        const firstNode = cycle[0];
-        const info = nodeInfo.get(firstNode);
-        ctx.issues.push({
-          path: info?.declarationPath ?? `variables.${firstNode}`,
-          message: `Dependency cycle: ${cycle.join(" \u2192 ")}`,
-          line: findKeyLine(
-            ctx.source,
-            info?.linePathParts ?? ["variables", firstNode]
-          )
-        });
-        return true;
-      }
-      if (c === WHITE2 && dfs(next)) return true;
-    }
-    color.set(node, BLACK);
-    stack.pop();
-    return false;
-  }
-}
-function buildTemplateGraph(cfg) {
-  const nodeInfo = /* @__PURE__ */ new Map();
-  const graph = /* @__PURE__ */ new Map();
-  const reads = valueReadsOf(cfg);
-  const addNode = (name, v, linePathParts) => {
-    nodeInfo.set(name, {
-      declarationPath: linePathParts.join("."),
-      linePathParts
-    });
-    graph.set(
-      name,
-      new Set(reads.ofVariable(v).flatMap(({ reaches }) => reaches))
-    );
-  };
-  for (const [name, v] of Object.entries(cfg.variables)) {
-    addNode(name, v, ["variables", name]);
-  }
-  for (const [segName, seg2] of Object.entries(cfg.segments)) {
-    for (const [vName, v] of Object.entries(seg2.vars ?? {})) {
-      addNode(`${segName}.${vName}`, v, ["segments", segName, "vars", vName]);
-    }
-  }
-  return { graph, nodeInfo };
-}
-
-// src/config/loader/nesting.ts
-init_globals();
-function validateNoNesting(ctx, cfg, names) {
-  const declaredAt = new Map(
-    [...declarationsAt(cfg)].map(([name, , at]) => [name, at])
-  );
-  for (const [inner, innerAt] of declaredAt) {
-    const parts = inner.split(".");
-    for (let n = 1; n < parts.length; n++) {
-      const outer = parts.slice(0, n).join(".");
-      const outerAt = declaredAt.get(outer);
-      if (outerAt === void 0 || !(names.checked(inner) || names.checked(outer))) {
-        continue;
-      }
-      const [mine, theirs, at] = names.authored(inner) ? [inner, outer, innerAt] : [outer, inner, outerAt];
-      const fix = names.authored(inner) === names.authored(outer) ? "Rename one so neither name starts with the other." : `"${theirs}" is declared outside this file (the bundled default, a plugin, a control the bar builds, or the daemon's payload), so rename "${mine}".`;
-      ctx.issues.push({
-        path: at.join("."),
-        message: `variable "${inner}" is declared under the variable "${outer}" \u2014 a read of ".${inner}" would name both, "${inner}" and a field of "${outer}". ${fix}`,
-        line: findKeyLine(ctx.source, [...at])
-      });
-    }
-  }
-}
-
-// src/config/dsl-loader.ts
-function noFile(dflt) {
-  return { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) };
-}
-function loadConfigSource(path43, source, dflt, ctx, allowedPalettes) {
-  const parsed2 = parseDslFile(path43, source, allowedPalettes, (refs, names) => {
-    const layer = applyPlugins(
-      // [LAW:one-source-of-truth] The layer's scope, decided where the
-      // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path43, ctx.scope, ctx.home),
-      ctx,
-      { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path43, allowedPalettes)
-    );
-    const owning2 = dropsOwning(layer, ctx.beneath.dropped);
-    return {
-      inherited: /* @__PURE__ */ new Set([
-        ...inheritableSegmentNames(layer.config),
-        ...names.filter((n) => owning2(n).length > 0)
-      ]),
-      layer: { plugins: layer, owning: owning2 }
-    };
-  });
-  const { plugins: plugins2, owning } = parsed2.layer;
-  const standing2 = withDroppedPlacements(
-    mergeWithDefault(parsed2.raw, plugins2.config),
-    owning,
-    (parsed2.raw.insert ?? []).map((cell3) => cell3.seg)
-  );
-  return {
-    source,
-    raw: parsed2.raw,
-    warnings: [...parsed2.warnings, ...plugins2.dropped.map(droppedPluginNotice)],
-    plugins: {
-      loaded: plugins2.loaded,
-      dropped: plugins2.dropped,
-      reached: standing2.reached,
-      rendering: plugins2.rendering
-    },
-    config: standing2.config
-  };
-}
-var installedMemo = /* @__PURE__ */ new WeakMap();
-function installedLayer(definitions, ctx, dflt, allowedPalettes) {
-  const key = JSON.stringify([
-    [...allowedPalettes ?? []].sort(),
-    definitions.map((d) => [d.path, d.scope, statKey(d.path)])
-  ]);
-  const byProject = installedMemo.get(dflt) ?? /* @__PURE__ */ new Map();
-  installedMemo.set(dflt, byProject);
-  const slot = JSON.stringify([ctx.repo, ctx.checkout?.root ?? null]);
-  const hit = byProject.get(slot);
-  if (hit?.key === key) return hit.layer;
-  const layer = applyPlugins(
-    definitions,
-    ctx,
-    { config: dflt, rendering: /* @__PURE__ */ new Map() },
-    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes)
-  );
-  byProject.set(slot, { key, layer });
-  return layer;
-}
-function statKey(file) {
-  try {
-    const st = fs_default.statSync(file);
-    return `${st.ino}:${st.size}:${st.mtimeMs}`;
-  } catch (e) {
-    return e.code ?? "unreadable";
-  }
-}
-function loadConfigChain(locs, chain2, dflt, trace, session, read2 = (p2) => fs_default.readFileSync(p2, "utf-8"), allowedPalettes) {
-  const ctx = {
-    repo: session.repo,
-    checkout: session.cwd === null ? null : checkoutOf(session.cwd),
-    home: locs.home
-  };
-  const found2 = installedPlugins(locs, ctx.repo);
-  const merged = installedLayer(found2.definitions, ctx, dflt, allowedPalettes);
-  const plugins2 = {
-    ...merged,
-    dropped: [...merged.dropped, ...found2.strays]
-  };
-  trace.warned(
-    found2.unchecked.map(
-      (u) => `Plugin folder could not be listed: ${u.path} \u2014 ${u.error}`
-    )
-  );
-  const base = plugins2.config;
-  const layers = [];
-  for (const { path: path43, scope } of chain2) {
-    const below = layers.at(-1)?.plugins;
-    const loaded = loadConfigSource(
-      path43,
-      read2(path43),
-      layers.at(-1)?.config ?? base,
-      {
-        ...ctx,
-        // [LAW:one-source-of-truth] A layer's scope is where discovery found
-        // it, carried here as data — never read off the file's name.
-        scope,
-        beneath: {
-          dropped: [
-            ...plugins2.dropped,
-            ...layers.flatMap((l) => l.plugins.dropped)
-          ],
-          rendering: below?.rendering ?? plugins2.rendering
-        }
-      },
-      allowedPalettes
-    );
-    trace.warned(loaded.warnings);
-    layers.push({ ...loaded, path: path43 });
-  }
-  const reached = new Set(layers.flatMap((l) => [...l.plugins.reached]));
-  const isReached = (d) => reached.has(d.path);
-  const surfaced = plugins2.dropped.filter(isReached);
-  const unreached = plugins2.dropped.filter((d) => !isReached(d));
-  trace.warned(surfaced.map(droppedPluginNotice));
-  const rendering = layers.at(-1)?.plugins.rendering ?? plugins2.rendering;
-  const installed = {
-    checkout: ctx.checkout,
-    roots: found2.roots,
-    loaded: plugins2.loaded,
-    dropped: surfaced,
-    unreached,
-    reached,
-    rendering
-  };
-  const top = layers.at(-1);
-  const renderable = ({
-    warnings,
-    ...rest2
-  }) => {
-    trace.warned(warnings);
-    return rest2;
-  };
-  if (top === void 0) {
-    return {
-      layers,
-      base,
-      installed,
-      ...renderable(
-        validateRenderable(
-          noFile(base),
-          rendering,
-          "<default>",
-          allowedPalettes
-        )
-      )
-    };
-  }
-  try {
-    return {
-      layers,
-      base,
-      installed,
-      ...renderable(
-        validateRenderable(
-          top,
-          rendering,
-          top.path,
-          allowedPalettes,
-          layers.slice(0, -1).reverse()
-        )
-      )
-    };
-  } catch (e) {
-    for (const [i2, layer] of layers.slice(0, -1).entries())
-      validateRenderable(
-        layer,
-        layer.plugins.rendering,
-        layer.path,
-        allowedPalettes,
-        layers.slice(0, i2).reverse()
-      );
-    throw e;
-  }
-}
-function checkPlugin(config2, ns, replaces, filePath2, allowedPalettes) {
-  if (replaces) {
-    validateRenderable(
-      unauthored(config2),
-      /* @__PURE__ */ new Map(),
-      filePath2,
-      allowedPalettes
-    );
-    return;
-  }
-  const owned = ownedBy(ns);
-  const issues = [];
-  const ctx = {
-    source: "",
-    issues,
-    allowedPalettes: /* @__PURE__ */ new Set(),
-    groups: [],
-    unplaced: [],
-    inherited: []
-  };
-  validateDeclarations(ctx, config2, templateScopeOf(config2), owned);
-  validateNoCycles(ctx, config2, owned);
-  validateNoNesting(ctx, config2, { checked: owned, authored: owned });
-  if (issues.length > 0) throw new ConfigError(filePath2, issues);
-}
-function unauthored(config2) {
-  return {
-    config: config2,
-    raw: { root: config2.root, presets: config2.presets },
-    source: ""
-  };
-}
-var NO_FILE = {
-  raw: {},
-  source: "",
-  warnings: [],
-  plugins: {
-    loaded: [],
-    dropped: [],
-    reached: /* @__PURE__ */ new Set(),
-    rendering: /* @__PURE__ */ new Map()
-  }
-};
-function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
-  const presence2 = presenceOf(authoredConfig.config.segments, rendering);
-  const written2 = layerInserts(
-    { ...authoredConfig, path: filePath2 },
-    beneath,
-    presence2
-  );
-  const judge = (cells, refused) => {
-    const inserted = placeInserts(
-      authoredConfig.config,
-      cells,
-      written2.authored
-    );
-    return judgeRenderable(
-      authoredConfig,
-      filePath2,
-      allowedPalettes,
-      beneath,
-      inserted.config,
-      presence2,
-      written2.dropped,
-      [...inserted.notices, ...refused]
-    );
-  };
-  try {
-    return judge(written2.cells, []);
-  } catch (e) {
-    if (!(e instanceof ConfigError) || written2.cells.length === 0) throw e;
-    const bare = judge([], []);
-    const own2 = new Set(
-      bare.dropped.flatMap((d) => d.issues.map((i2) => i2.message))
-    );
-    const { taken, refused } = written2.cells.reduce(
-      (acc, cell3) => {
-        try {
-          judge([...acc.taken, cell3], []);
-          return { ...acc, taken: [...acc.taken, cell3] };
-        } catch (err) {
-          if (!(err instanceof ConfigError)) throw err;
-          const why2 = err.issues.filter((issue3) => !own2.has(issue3.message)).map((issue3) => issue3.message).join("; ");
-          return {
-            ...acc,
-            refused: [
-              ...acc.refused,
-              insertNotice(
-                cell3,
-                `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why2}`
-              )
-            ]
-          };
-        }
-      },
-      { taken: [], refused: [] }
-    );
-    return judge(taken, refused);
-  }
-}
-function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
-  const issues = [];
-  const ctx = {
-    source,
-    issues,
-    allowedPalettes,
-    groups: [],
-    unplaced: [],
-    inherited: []
-  };
-  const refuseIfIssues = () => {
-    if (issues.length > 0) {
-      throw new ConfigError(
-        filePath2,
-        [...issues, ...ctx.unplaced, ...ctx.inherited],
-        notices
-      );
-    }
-  };
-  validateCrossReferences(ctx, merged, raw, presence2);
-  validateNoCycles(ctx, merged);
-  refuseIfIssues();
-  const dropped = droppedByFile(
-    filePath2,
-    merged.segments,
-    ctx,
-    presence2,
-    beneath,
-    filed
-  );
-  const config2 = withoutUnplaced(merged);
-  const withMenus = synthesizePlacementMenus(config2, issues);
-  refuseIfIssues();
-  const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
-  const authored = new Set(
-    [
-      ...declarationsAt({
-        variables: raw.variables ?? {},
-        segments: raw.segments ?? {}
-      })
-    ].map(([name]) => name)
-  );
-  validateNoNesting(ctx, withChrome, {
-    checked: () => true,
-    authored: (name) => authored.has(name)
-  });
-  refuseIfIssues();
-  return {
-    config: withChrome,
-    dropped,
-    placed: merged,
-    warnings: notices
-  };
-}
-function layerInserts(top, beneath, presence2) {
-  const layers = [...beneath].reverse().concat(top);
-  const standsOnAbsent = absentPlacement(
-    top.config,
-    layers.flatMap((layer) => layer.raw.insert ?? []),
-    presence2
-  );
-  const anchored2 = (cell3) => !standsOnAbsent(cell3.anchor);
-  const declared = (cell3) => presence2(cell3.seg).kind === "declared";
-  const broken = (cell3) => reportable(presence2(cell3.seg));
-  const own2 = (layer) => (layer.raw.insert ?? []).filter(anchored2);
-  return {
-    cells: layers.flatMap((layer) => own2(layer).filter(declared)),
-    authored: {
-      root: layers.some((layer) => layer.raw.root !== void 0),
-      presets: new Set(
-        layers.flatMap((layer) => Object.keys(layer.raw.presets ?? {}))
-      )
-    },
-    // One locator per layer, so its source is parsed at most once.
-    dropped: layers.flatMap((layer) => {
-      const lineOf = keyLocator(layer.source);
-      return (layer.raw.insert ?? []).filter(broken).map((cell3) => ({
-        file: layer.path,
-        issue: {
-          path: cell3.by.entry,
-          message: unplacedMessage(
-            cell3.by.entry,
-            cell3.seg,
-            top.config.segments,
-            presence2(cell3.seg)
-          ),
-          line: lineOf(cell3.by.entry.split("."))
-        }
-      }));
-    })
-  };
-}
-function droppedByFile(filePath2, segments, ctx, presence2, beneath, filed) {
-  const byFile = /* @__PURE__ */ new Map();
-  const add2 = (file, issue3) => {
-    byFile.set(file, [...byFile.get(file) ?? [], issue3]);
-  };
-  for (const { file, issue: issue3 } of filed) add2(file, issue3);
-  for (const issue3 of ctx.unplaced) add2(filePath2, issue3);
-  for (const { name, ...issue3 } of ctx.inherited) {
-    const author = beneath.flatMap((layer) => {
-      const at = authoredPlacement(layer.raw, name);
-      return at === void 0 ? [] : [{ layer, ...at }];
-    })[0];
-    if (author === void 0) add2(filePath2, issue3);
-    else
-      add2(author.layer.path, {
-        path: author.path,
-        message: unplacedMessage(
-          author.layoutKey,
-          name,
-          segments,
-          presence2(name)
-        ),
-        line: findKeyLine(author.layer.source, author.path.split("."))
-      });
-  }
-  return [...byFile].map(
-    ([file, issues]) => new DroppedFileError(file, issues)
-  );
-}
-function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolvablePaletteNames()), inheritedSegments = NO_INHERITED_SEGMENTS) {
-  return parseDslFile(filePath2, source, allowedPalettes, () => ({
-    inherited: inheritedSegments,
-    layer: null
-  })).raw;
-}
-function parseDslFile(filePath2, source, allowedPalettes, under3) {
-  const json2 = parseJson5OrThrow(filePath2, source);
-  const notice = editabilityNotice(filePath2, source);
-  const warnings = [
-    ...notice === null ? [] : [notice],
-    ...payloadDeclarationNotices(
-      filePath2,
-      source,
-      isPlainObject3(json2) && isPlainObject3(json2.variables) ? Object.keys(json2.variables) : []
-    )
-  ];
-  const issues = [];
-  const ctx = {
-    source,
-    issues,
-    allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
-    groups: [],
-    unplaced: [],
-    inherited: []
-  };
-  if (!isPlainObject3(json2)) {
-    throw new ConfigError(
-      filePath2,
-      [
-        {
-          path: "",
-          message: `Config root must be an object, got ${describeType2(json2)}`
-        }
-      ],
-      warnings
-    );
-  }
-  const { inherited, layer } = under3(
-    json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
-    isPlainObject3(json2.segments) ? Object.keys(json2.segments) : []
-  );
-  const raw = validateTopLevel(
-    ctx,
-    json2,
-    inherited,
-    actionHomeOf(filePath2),
-    filePath2
-  );
-  if (issues.length > 0) {
-    throw new ConfigError(filePath2, issues, warnings);
-  }
-  return { raw, warnings, layer };
-}
-var NO_INHERITED_SEGMENTS = /* @__PURE__ */ new Set();
-function parseJson5OrThrow(filePath2, source) {
-  try {
-    return import_json53.default.parse(source);
-  } catch (err) {
-    const e = err;
-    throw new ConfigError(filePath2, [
-      {
-        path: "",
-        message: `JSON5 syntax error: ${e.message}`,
-        line: e.lineNumber,
-        col: e.columnNumber
-      }
-    ]);
-  }
-}
-function validateTopLevel(ctx, raw, inheritedSegments, home, file) {
-  for (const key of Object.keys(raw)) {
-    if (!TOP_LEVEL_KEYS.has(key)) {
-      ctx.issues.push({
-        path: key,
-        message: `Unknown top-level key "${key}". Expected one of: ${[...TOP_LEVEL_KEYS].join(", ")}`,
-        line: findKeyLine(ctx.source, [key])
-      });
-    }
-  }
-  const out = {};
-  if (raw.globals !== void 0)
-    out.globals = validateGlobals(ctx, "globals", raw.globals);
-  if (raw.variables !== void 0)
-    out.variables = validateVariables(ctx, "variables", raw.variables);
-  if (raw.segments !== void 0)
-    out.segments = validateSegments(ctx, raw.segments, inheritedSegments);
-  if (raw.layout !== void 0) {
-    ctx.issues.push({
-      path: "layout",
-      message: `"layout" is no longer supported \u2014 use "root" with the A-grammar instead.
-  Replace:  layout: [["seg1", "seg2"], ["seg3"]]
-  With:     root: { v: [{ h: ["seg1", "seg2"] }, "seg3"] }
-  Single-row example:  root: { h: ["seg1", "seg2"] }`,
-      line: findKeyLine(ctx.source, ["layout"])
-    });
-  }
-  if (raw.root !== void 0)
-    out.root = validateRootFragment(ctx, "root", raw.root);
-  if (raw.insert !== void 0)
-    out.insert = validateInsert(ctx, raw.insert, file);
-  if (raw.actions !== void 0)
-    out.actions = validateActions(ctx, raw.actions, home);
-  if (raw.looks !== void 0) {
-    ctx.issues.push({
-      path: "looks",
-      message: `"looks" was renamed "styles" \u2014 move the block under styles: { \u2026 } (and globals.look to globals.style)`,
-      line: findKeyLine(ctx.source, ["looks"])
-    });
-  }
-  if (raw.styles !== void 0) out.styles = validateStyles(ctx, raw.styles);
-  if (raw.themeDefaults !== void 0)
-    out.themeDefaults = validateThemeDefaults(ctx, raw.themeDefaults);
-  if (raw.presets !== void 0)
-    out.presets = validatePresets(ctx, raw.presets);
-  if (raw.editGlobals !== void 0)
-    out.editGlobals = validateEditGlobals(ctx, "editGlobals", raw.editGlobals);
-  if (raw.helpers !== void 0)
-    out.helpers = validateHelpers(ctx, raw.helpers);
-  if (raw.plugins !== void 0)
-    out.plugins = validatePluginRefs(ctx, raw.plugins);
-  synthesizeGroupDecls(ctx, out);
-  checkMenuDecls(ctx, out);
-  synthesizeEditModeToggle(ctx, out);
-  reservedNamespaceCollisions(
-    ctx,
-    out,
-    SETTINGS_NS,
-    "the global settings menu"
-  );
-  pluginScopeCollisions(ctx, out, inheritedSegments);
-  return out;
-}
-var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
-  "globals",
-  "variables",
-  "segments",
-  "layout",
-  "looks",
-  "root",
-  "insert",
-  "actions",
-  "styles",
-  "themeDefaults",
-  "presets",
-  "editGlobals",
-  "helpers",
-  "plugins"
-]);
-function validatePluginRefs(ctx, raw) {
-  if (Array.isArray(raw) && raw.every((p2) => typeof p2 === "string" && p2 !== "")) {
-    return raw;
-  }
-  ctx.issues.push({
-    path: "plugins",
-    message: `"plugins" must be a list of plugin definition paths, got ${describeType2(raw)}`,
-    line: findKeyLine(ctx.source, ["plugins"])
-  });
-  return void 0;
-}
-
-// src/config/bundled-theme-defaults.ts
-init_globals();
-var BUNDLED_THEME_DEFAULTS = {};
-
-// src/config/default-dsl-config.ts
-var COMMAND_TRAY = commandTray("commands.");
-var AUTOCOMPACT2 = autocompactControl(
-  "autocompact.",
-  (n) => `{{ template "formatTokenCount" ${n} }}`
-);
-var GIT_INIT = confirmStep(
-  "gitInit",
-  { arm: "init", confirm: "init \u2713 confirm" },
-  [{ action: "gitInit.run", when: "true" }]
-);
-var DIR_TEMPLATE = '{{ $dir := ternary .location.main .current_dir (ne .location.main "") }}{{ if and (ne .home "") (or (eq .home $dir) (hasPrefix (printf "%s/" .home) $dir)) }}{{ $dir = printf "~%s" (trimPrefix .home $dir) }}{{ end }}{{ $text := printf "%s%s" (abbreviatePath $dir) .location.subpath }}{{ if ne .location.worktree "" }}{{ $text = printf "%s (%s %s)" $text .glyph.worktree .location.worktree }}{{ end }}{{ action "copyDir" $text }}';
-var GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
-var EFFORT_BUBBLE_CONTRAST = 1.08;
-var PERCENT = { min: 0, max: 100, step: 5 };
-var QUOTA_SETTINGS = {
-  warnAt: { label: "warning at %", domain: PERCENT, default: 50 },
-  errorAt: {
-    label: "error at %",
-    domain: { ...PERCENT, atLeast: "warnAt" },
-    default: 80
-  }
-};
-function budgetSettings(budget) {
-  return {
-    budget: {
-      label: "budget $",
-      domain: { min: 0, max: 1e4, step: 5 },
-      default: budget
-    },
-    warnAt: { label: "warning at %", domain: PERCENT, default: 80 }
-  };
-}
-var RAW_DEFAULT_DSL_CONFIG = {
-  globals: {
-    // Picked by the daemon's basePalette resolution; user overrides in their
-    // own config. Every registry theme ships the same derived spec set
-    // (surface, panel, surface-active, foreground — see rich-js
-    // buildPalette), so this is a pure taste call, not a compatibility one.
-    // tokyo-night chosen (brandon-theming-8uj.2) over the prior
-    // catppuccin-latte — a light palette that landed as a drive-by in an
-    // unrelated formatting-cleanup commit and read poorly on the dark
-    // terminals most users run — after live-clicking every registry theme
-    // through the settings menu's theme picker: it stays legible where
-    // warmer bases (gruvbox, dracula) drifted toward mud and the pastel
-    // ones (rose-pine, atom-one) washed out at this contrast.
-    palette: "tokyo-night"
-  },
-  // ─── Variables ─────────────────────────────────────────────────────────────
-  // Every value the segment templates read. Sources:
-  //   • input — daemon's augmented payload (see src/renderer/render-payload.ts)
-  //   • env   — process environment
-  //   • shell — subprocess; cached
-  //   • state — per-session daemon state
-  variables: {
-    ...COMMAND_TRAY.variables,
-    // From hookData, pass-through.
-    current_dir: {
-      kind: "input",
-      path: "workspace.current_dir",
-      default: "?"
-    },
-    "model.display_name": {
-      kind: "input",
-      path: "model.display_name",
-      default: ""
-    },
-    // The session's reasoning-effort setting (`/effort`): one of
-    // low|medium|high|xhigh|max, or "" when Claude Code sends none.
-    "effort.level": {
-      kind: "input",
-      path: "effort.level",
-      default: ""
-    },
-    // The effort gauge's glyph ladder, space-separated, one entry per ordinal
-    // the `effortGauge` helper folds a level to: unknown, low, medium, high,
-    // xhigh — the Nerd Font chevron_up / chevron_double_up / chevron_triple_up
-    // icons (nf-md, U+F0143 / U+F013F / U+F0DBC). Max has no entry: it climbs
-    // the low, high and xhigh rungs. Low and medium share the single chevron
-    // on purpose and are told apart by colour: low is quiet. A font without
-    // the icons overrides this variable (e.g. `"? ↑ ↑ ⇈ ⤊"`) — and, for max,
-    // the `effortGauge` helper, which draws the bubble's caps (U+E0B6/U+E0B4).
-    "effort.glyphs": {
-      kind: "literal",
-      value: "? \u{F0143} \u{F0143} \u{F013F} \u{F0DBC}"
-    },
-    // What marks a linked worktree in `directory`'s parenthetical.
-    "glyph.worktree": { kind: "literal", value: "\u22AB" },
-    ...GIT_INIT.variables,
-    version: { kind: "input", path: "version", default: "" },
-    // home flows through the augmented payload (projectPayload reads
-    // HOME, falling back to USERPROFILE on Windows where HOME is often
-    // unset). Sourcing via `kind: "input"` rather than `kind: "env",
-    // name: "HOME"` makes the directory `~` collapse work on every
-    // platform without per-platform config edits.
-    home: { kind: "input", path: "home", default: "" },
-    // The tmux session name of the pane this session's client reported flows
-    // through the daemon's augmented payload (TmuxService asks at most once
-    // per pane per 30 s, so this stays cheap; `tmux.pane` itself is in
-    // PAYLOAD_INPUTS). A `kind: "shell"` declaration would spawn the
-    // subprocess at every cache-entry creation, where the daemon's one owner
-    // asks once per pane for every session on it.
-    "tmux.session": { kind: "input", path: "tmux.session", default: "" },
-    // Host identity — which machine this session is on, and whether the user
-    // arrived over SSH. All three come through the augmented payload rather
-    // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
-    //
-    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
-    //     DAEMON, which is detached and serves every session for this user at
-    //     once — its `SSH_*` env describes whichever shell happened to spawn
-    //     it. The fact is captured by the live client and carried as a wire
-    //     hint (the `termCols` pattern); the payload is the only honest source.
-    //   • `host.name`/`host.user` are machine facts the daemon reads directly,
-    //     so they cost two syscalls instead of a per-render subprocess.
-    //
-    // Defaults are the "unknown" values, and for `ssh` that is `false`: an
-    // absent field (a client too old to send the hint) renders as local, which
-    // is the pre-feature behavior, while the input-fallback chain records a
-    // `last_error` so `cc-candybar vars` can still tell the two apart.
-    "host.name": { kind: "input", path: "host.name", default: "" },
-    "host.user": { kind: "input", path: "host.user", default: "" },
-    "host.ssh": {
-      kind: "input",
-      path: "host.ssh",
-      type: "boolean",
-      default: false
-    },
-    // Git — every field flows from the daemon's projected GitInfo payload.
-    "git.repoName": {
-      kind: "input",
-      path: "git.repoName",
-      default: ""
-    },
-    "git.branch": { kind: "input", path: "git.branch", default: "" },
-    "git.sha": { kind: "input", path: "git.sha", default: "" },
-    "git.ahead": {
-      kind: "input",
-      path: "git.ahead",
-      type: "number",
-      default: 0
-    },
-    "git.behind": {
-      kind: "input",
-      path: "git.behind",
-      type: "number",
-      default: 0
-    },
-    "git.staged": {
-      kind: "input",
-      path: "git.staged",
-      type: "number",
-      default: 0
-    },
-    "git.unstaged": {
-      kind: "input",
-      path: "git.unstaged",
-      type: "number",
-      default: 0
-    },
-    "git.untracked": {
-      kind: "input",
-      path: "git.untracked",
-      type: "number",
-      default: 0
-    },
-    "git.conflicts": {
-      kind: "input",
-      path: "git.conflicts",
-      type: "number",
-      default: 0
-    },
-    "git.upstream": { kind: "input", path: "git.upstream", default: "" },
-    // `none` | `gone` | `tracked` — only `tracked` makes ahead/behind real
-    // counts (their 0 default stands for "unknown" too); "" when git could
-    // not be read.
-    "git.tracking": { kind: "input", path: "git.tracking", default: "" },
-    "git.stash": {
-      kind: "input",
-      path: "git.stash",
-      type: "number",
-      default: 0
-    },
-    "git.status": { kind: "input", path: "git.status", default: "clean" },
-    "git.operation": { kind: "input", path: "git.operation", default: "" },
-    // The last commit's date, epoch seconds; 0 when git could not read it.
-    "git.committedAt": {
-      kind: "input",
-      path: "git.committedAt",
-      type: "number",
-      default: 0
-    },
-    // [LAW:one-source-of-truth] Its age in seconds, against the instant the
-    // frame is drawn at — a projection, so a frame between two git reads shows
-    // the age it is drawn at. 0 when the date is unknown.
-    "git.timeSinceCommit": {
-      kind: "template",
-      type: "number",
-      template: "{{ if gt .git.committedAt 0 }}{{ sub (int (unixEpoch now)) .git.committedAt }}{{ else }}0{{ end }}"
-    },
-    // The palette role each git fact is painted in — data a user overrides one
-    // fact at a time (`"git.color.behind": { kind: "literal", value: "error" }`).
-    // staged/ahead are `success` (ready to commit / unpushed work),
-    // unstaged/behind `warning` (needs attention), untracked/stash `accent`
-    // (told apart from unstaged by glyph, not colour), conflicts `error`.
-    "git.color.branch": { kind: "literal", value: "primary" },
-    "git.color.staged": { kind: "literal", value: "success" },
-    "git.color.unstaged": { kind: "literal", value: "warning" },
-    "git.color.untracked": { kind: "literal", value: "accent" },
-    "git.color.conflicts": { kind: "literal", value: "error" },
-    "git.color.ahead": { kind: "literal", value: "success" },
-    "git.color.behind": { kind: "literal", value: "warning" },
-    "git.color.stash": { kind: "literal", value: "accent" },
-    // Which of its two forms `gitaculous` shows — per session, flipped by the
-    // arrow at its right edge (the `gitDetail` action). The default is the form
-    // every session starts in: redeclare this variable with
-    // `default: "expanded"` to start with the full line.
-    "git.detail": { kind: "state", key: "git-detail", default: "collapsed" },
-    // Forge PR/MR — the daemon's git provider resolves the branch's newest PR
-    // via gh/glab and projects it here; prState is `open`, `merged` or
-    // `closed`. Declaring any of these turns on the network lookup.
-    // [LAW:no-silent-failure] prError is non-empty ONLY when the forge was
-    // asked but couldn't answer (auth/network) — distinct from "no PR" (every
-    // field empty). prNumber 0 (default) ⇒ the branch has no PR.
-    "git.prNumber": {
-      kind: "input",
-      path: "git.prNumber",
-      type: "number",
-      default: 0
-    },
-    "git.prState": { kind: "input", path: "git.prState", default: "" },
-    "git.prUrl": { kind: "input", path: "git.prUrl", default: "" },
-    "git.prError": { kind: "input", path: "git.prError", default: "" },
-    // Prompt-cache expiry — epoch seconds, projected by the cache provider.
-    // Same unit/shape as block/weekly resetsAt so the cacheTimer segment
-    // composes `minutesUntilReset` identically. 0 (default) ⇒ no cache
-    // activity found ⇒ segment's `when` hides it.
-    "cache.expiresAt": {
-      kind: "input",
-      path: "cache.expiresAt",
-      type: "number",
-      default: 0
-    },
-    // Usage / cost — daemon folds from the SessionUsageStore; numeric.
-    "session.cost": {
-      kind: "input",
-      path: "session.cost",
-      type: "number",
-      default: 0
-    },
-    "session.tokens": {
-      kind: "input",
-      path: "session.tokens",
-      type: "number",
-      default: 0
-    },
-    // Today — daemon folds today's cross-session total from the SessionUsageStore.
-    "today.cost": {
-      kind: "input",
-      path: "today.cost",
-      type: "number",
-      default: 0
-    },
-    "today.tokens": {
-      kind: "input",
-      path: "today.tokens",
-      type: "number",
-      default: 0
-    },
-    // Block — daemon projects directly from hookData.rate_limits.five_hour;
-    // resetsAt is raw epoch seconds
-    // so the template can compose `minutesUntilReset .block.resetsAt` (the
-    // same chain weekly uses, single composition point).
-    "block.nativeUtilization": {
-      kind: "input",
-      path: "block.nativeUtilization",
-      type: "number",
-      default: 0
-    },
-    "block.resetsAt": {
-      kind: "input",
-      path: "block.resetsAt",
-      type: "number",
-      default: 0
-    },
-    // Weekly — direct projection of hookData.rate_limits.seven_day.
-    "weekly.percentage": {
-      kind: "input",
-      path: "weekly.percentage",
-      type: "number",
-      default: 0
-    },
-    "weekly.resetsAt": {
-      kind: "input",
-      path: "weekly.resetsAt",
-      type: "number",
-      default: 0
-    },
-    // Burn rate — daemon-derived (see render-payload.ts). ABSENT when not
-    // projectable; the var-system fills the -1 default, a structurally-
-    // impossible value the burnrate helpers read as "—" [LAW:no-silent-failure]
-    // ($0/hr is a real, displayable value, so it cannot double as the absence
-    // marker).
-    "burn.costPerHour": {
-      kind: "input",
-      path: "burn.costPerHour",
-      type: "number",
-      default: -1
-    },
-    // Minutes until each window's use reaches its cap at the rate it has run
-    // since it opened (5 h and 7 d windows), against the instant the frame is
-    // drawn at; -1 when too young to project or unused.
-    "block.etaMinutes": {
-      kind: "template",
-      type: "number",
-      template: "{{ etaMinutes .block.nativeUtilization .block.resetsAt 300 }}"
-    },
-    "weekly.etaMinutes": {
-      kind: "template",
-      type: "number",
-      template: "{{ etaMinutes .weekly.percentage .weekly.resetsAt 10080 }}"
-    },
-    // Token throughput for the active turn — daemon-derived tok/s on three lanes
-    // (render-payload.ts: successive-render delta over the SessionUsageStore).
-    // Same absence idiom as burn: -1 is the structurally-impossible default the
-    // `formatSpeed` helper reads as "—" [LAW:no-silent-failure] (0 tok/s is a
-    // real reading, so it cannot double as the absence marker). Each lane is
-    // independently absent — `input` reads "—" mid-stream while `output` flows.
-    "speed.input": {
-      kind: "input",
-      path: "speed.input",
-      type: "number",
-      default: -1
-    },
-    "speed.output": {
-      kind: "input",
-      path: "speed.output",
-      type: "number",
-      default: -1
-    },
-    "speed.total": {
-      kind: "input",
-      path: "speed.total",
-      type: "number",
-      default: -1
-    },
-    // Recent burn-rate trend: a comma-delimited series of total-lane tok/s the
-    // daemon folds from its sample ring (render-payload.ts). A series cannot
-    // cross the scalar var-system seam, so it travels as a string the
-    // `sparkline` helper decodes. Default "" is the genuine "no history yet"
-    // form (the helper renders nothing); the segment gates on it being present.
-    "speed.history": {
-      kind: "input",
-      path: "speed.history",
-      type: "string",
-      default: ""
-    },
-    // Context — daemon fetches via ContextProvider; contextLeftPercentage.
-    "context.totalTokens": {
-      kind: "input",
-      path: "context.totalTokens",
-      type: "number",
-      default: 0
-    },
-    "context.contextLeft": {
-      kind: "input",
-      path: "context.contextLeft",
-      type: "number",
-      default: 100
-    },
-    // Metrics — daemon fetches via MetricsProvider; numeric.
-    "metrics.lastResponseTime": {
-      kind: "input",
-      path: "metrics.lastResponseTime",
-      type: "number",
-      default: 0
-    },
-    "metrics.responseTime": {
-      kind: "input",
-      path: "metrics.responseTime",
-      type: "number",
-      default: 0
-    },
-    "metrics.sessionDuration": {
-      kind: "input",
-      path: "metrics.sessionDuration",
-      type: "number",
-      default: 0
-    },
-    "metrics.messageCount": {
-      kind: "input",
-      path: "metrics.messageCount",
-      type: "number",
-      default: 0
-    },
-    "metrics.linesAdded": {
-      kind: "input",
-      path: "metrics.linesAdded",
-      type: "number",
-      default: 0
-    },
-    "metrics.linesRemoved": {
-      kind: "input",
-      path: "metrics.linesRemoved",
-      type: "number",
-      default: 0
-    },
-    // Activity — daemon fetches via ActivityProvider (brandon-activity-ue7).
-    // The one non-quantity family: what Claude is DOING rather than how much of
-    // it there has been. Every field is absent in the payload when there is
-    // nothing real to say, so these defaults are also the "nothing happening"
-    // reading the `when` gates test.
-    "activity.command": {
-      kind: "input",
-      path: "activity.command",
-      type: "string",
-      default: ""
-    },
-    "activity.todo.total": {
-      kind: "input",
-      path: "activity.todo.total",
-      type: "number",
-      default: 0
-    },
-    "activity.todo.completed": {
-      kind: "input",
-      path: "activity.todo.completed",
-      type: "number",
-      default: 0
-    },
-    "activity.todo.position": {
-      kind: "input",
-      path: "activity.todo.position",
-      type: "number",
-      default: 0
-    },
-    "activity.todo.active": {
-      kind: "input",
-      path: "activity.todo.active",
-      type: "string",
-      default: ""
-    },
-    // `"Bash:3,Read:1"` — tools by name and count; `formatToolTally` reads it
-    // back. Note there is deliberately NO variable named `activity.todo` or
-    // `activity.tool`: a scalar at a prefix would shadow every leaf under it.
-    "activity.tool.running": {
-      kind: "input",
-      path: "activity.tool.running",
-      type: "string",
-      default: ""
-    },
-    "activity.tool.done": {
-      kind: "input",
-      path: "activity.tool.done",
-      type: "string",
-      default: ""
-    }
-    // No page-cursor var: a {{ menu }} synthesizes its own page
-    // cursor (state var + int action, named by menuPageKey) under the reserved
-    // menupages.* namespace, beside its open-state.
-  },
-  // ─── Segments ──────────────────────────────────────────────────────────────
-  // Every built-in. Templates ported from the parity bindings; `fg:` (and the
-  // few `bg:`) are palette spec names resolved against the active theme.
-  //
-  // [LAW:dataflow-not-control-flow] A segment authors a `bg:` only when the
-  // colour STATES something — a threshold (context/block/weekly/burnrate) or
-  // an alert (host). Every other cell wears the vocabulary tint its address
-  // selects (src/themes/decor.ts, candybar-render-ai7.5); naming `surface` /
-  // `panel` / `surface-active` for looks alone was hand-curated variety, and
-  // the theme now supplies variety by position. `when` predicates
-  // hide a segment when its primary signal is absent (no git repo, no version
-  // field, no env var, no tmux, no rate-limit window).
-  //
-  // [LAW:one-source-of-truth] Templates author CONTENT only — the intra-cell
-  // padding (the space each side of a cell) is render chrome synthesized
-  // structurally from the one resolved globals.padding (default 1), never
-  // authored here. A template with leading/trailing spaces would render them
-  // IN ADDITION to the structural padding.
-  segments: {
-    directory: {
-      group: "location",
-      description: "The main checkout's path, shortened fish-style \u2014 `~` under home \u2014 plus the subpath and, in a linked worktree, the worktree's name. Click to copy the full path.",
-      template: DIR_TEMPLATE,
-      fg: GIT_QUIET_FG
-    },
-    model: {
-      group: "model-context",
-      description: "The active model's display name, followed by the effort gauge (a chevron ladder, climbing on a bubble at max) when an effort level is set.",
-      template: '\u2731 {{ formatModelName .model.display_name }}{{ if ne .effort.level "" }} {{ template "effortGauge" . }}{{ end }}',
-      when: '{{ ne .model.display_name "" }}'
-    },
-    sessionId: {
-      group: "session-tools",
-      description: "The session id, truncated to 8 characters.",
-      template: "\u2317{{ trunc 8 .session.id }}",
-      when: '{{ ne .session.id "" }}'
-    },
-    version: {
-      group: "model-context",
-      description: "The Claude Code version reported in the hook payload.",
-      template: "\u25C8 v{{ .version }}",
-      when: '{{ ne .version "" }}'
-    },
-    tmux: {
-      group: "location",
-      description: "The tmux session name; hidden when not inside tmux.",
-      template: 'tmux:{{ .tmux.session | default "none" }}',
-      when: '{{ ne .tmux.session "" }}'
-    },
-    // "You are not on your own machine." Modelled on the git-taculous zsh
-    // theme, which prepends `(%n@%m)` to the prompt under SSH and shows
-    // nothing locally — you already know your own hostname.
-    //
-    // [LAW:dataflow-not-control-flow] Presence IS the signal. There is no SSH
-    // "mode" and no force-on flag (git-taculous's GITTACULOUS_ENABLE_SSH_THEME
-    // would be a flag with no deletion date, [LAW:no-mode-explosion]); the cell
-    // exists exactly when the value says so, like tmux/block/weekly. A user who
-    // wants it always-on overrides this one segment's `when` to `"true"`.
-    //
-    // `bg: "warning"` is load-bearing, not decoration: warning is one of the
-    // hue-ANCHORED palette roots, so it survives every theme and style still
-    // reading as an alert. Any other slot could land camouflaged against its
-    // neighbours — exactly what a "wrong machine" warning must never do.
-    // No `fg:`: the text is chosen on whatever that resolves to, like every
-    // unauthored cell's, rather than betting a fixed `foreground` stays legible.
-    //
-    // Each half falls back to "?" so a failed hostname/username read renders
-    // `⇄ ?@?` — still unmistakably "remote", and legibly missing its identity
-    // rather than a blank that reads as a rendering bug ([LAW:no-silent-failure]).
-    host: {
-      group: "location",
-      description: "user@host on a warning background, shown only over SSH.",
-      template: '\u21C4 {{ .host.user | default "?" }}@{{ .host.name | default "?" }}',
-      bg: "warning",
-      when: "{{ .host.ssh }}"
-    },
-    // [LAW:one-source-of-truth] One git segment, two forms: `gitCollapsed` (the
-    // summary) and `gitExpanded` (every fact), each a composition of the named
-    // `git*` pieces below, so a fact has one spelling and one colour in both
-    // forms, and a user reshapes either by overriding one piece, one form, or
-    // one `git.color.*` variable. The arrow is the segment's last cell content:
-    // a `cycle` action over the session's `git.detail`, so each Claude session
-    // keeps its own choice — nothing here a user config cannot also write.
-    // Everything no piece paints — the "(git)" label, repo name, brackets, sha,
-    // the elapsed-time annotation, the arrow — renders in the quiet `fg:`
-    // below, a template evaluating to a colour: `bgOf` is available there
-    // because a segment's background is resolved before its foreground, so
-    // structural text sits a fixed distance from THIS cell whatever theme or
-    // style is in effect, and the eye lands on the painted facts first.
-    gitaculous: {
-      group: "git",
-      description: "The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at its right edge expands to every fact \u2014 repo, in-progress operation, sha, upstream \xB1, stash count, time since the last commit.",
-      // [LAW:dataflow-not-control-flow] `directory` is the request fact and
-      // draws unconditionally; this segment is the git lane alone, so it
-      // draws nothing — not even a placeholder — until git answers with a
-      // branch, rather than blanking the whole bar on a pending read.
-      template: `{{ if ne .git.branch "" }}{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}{{ else }}{{ template "gitCollapsed" . }}{{ end }} {{ action "gitDetail" "\u25B8" "\u25C2" }}{{ end }}{{ if or .location.noRepo ${GIT_INIT.armed} }}{{ if ne .git.branch "" }} {{ end }}${GIT_INIT.template}{{ end }}`,
-      fg: GIT_QUIET_FG,
-      // [LAW:dataflow-not-control-flow] Which optional facts THIS copy shows
-      // (brandon-segment-settings-i4n.u36): each is read by its own piece
-      // below, so a fact leaves both forms at once, the same as overriding
-      // the piece with an empty body does, but per placement and from the bar.
-      settings: {
-        aheadBehind: { label: "ahead/behind", domain: "bool", default: true },
-        flags: { label: "dirty flags", domain: "bool", default: true },
-        operation: { label: "operation", domain: "bool", default: true },
-        repo: { label: "repo name", domain: "bool", default: true },
-        sha: { label: "commit hash", domain: "bool", default: true },
-        stash: { label: "stash", domain: "bool", default: true },
-        upstream: { label: "upstream", domain: "bool", default: true },
-        age: { label: "time since commit", domain: "bool", default: true }
-      }
-    },
-    // Git PR/MR — the branch's open pull/merge request as a clickable link.
-    // OPT-IN: declared but NOT in the default root (it adds a network gh/glab
-    // call). Add "gitPr" to a container's children to enable it. The `{{ link
-    // url text }}` emits ONE OSC-8 region carrying the https PR url, so the
-    // CLICK is handled by the terminal/OS (opens the browser) — no daemon verb.
-    // [LAW:no-silent-failure] Three render states from the data: an open PR
-    // renders the link; a lookup FAILURE (prError set) renders a distinct ⚠
-    // marker so an outage is not mistaken for "no PR"; no PR, or one already
-    // merged or closed, leaves the `when` gate false and the segment absent.
-    gitPr: {
-      group: "git",
-      description: "The pull request open for this branch, as a link; `\u26A0 PR` when the forge lookup failed.",
-      // The pad spaces are structural chrome now, OUTSIDE the OSC-8 link
-      // region — the clickable area is the glyph text itself.
-      template: '{{ if eq .git.prState "open" }}{{ link .git.prUrl (printf "\u21C6 #%v" .git.prNumber) }}{{ else }}\u26A0 PR{{ end }}',
-      when: '{{ or (eq .git.prState "open") (ne .git.prError "") }}'
-    },
-    toolbar: {
-      group: "session-tools",
-      description: "Quick actions: copy the session id, and open the project, transcript or repo.",
-      template: quickActions("").template
-    },
-    // OPT-IN, like `toolbar`: the settings menu carries its own instance.
-    commands: {
-      group: "session-tools",
-      description: "Type /compact, /model or /clear into this session; /clear asks for a second click. Hidden when not inside tmux.",
-      template: COMMAND_TRAY.template,
-      when: COMMAND_TRAY.when
-    },
-    session: {
-      group: "cost-limits",
-      description: "This session's cost and token total, with a budget warning once a budget is configured.",
-      template: '\xA7 {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }}){{ template "budgetStatus" (dict "cost" .session.cost "budget" .settings.budget "warn" .settings.warnAt) }}',
-      // [LAW:dataflow-not-control-flow] A budget of 0 is budgetStatus's
-      // non-displayable value, so a placement with no budget renders no
-      // suffix through the same unconditional template — opt-in is a value.
-      settings: budgetSettings(0)
-    },
-    today: {
-      group: "cost-limits",
-      description: "Today's cost and tokens across every session, with a budget warning once a budget is configured.",
-      template: '\u2609 {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }}){{ template "budgetStatus" (dict "cost" .today.cost "budget" .settings.budget "warn" .settings.warnAt) }}',
-      settings: budgetSettings(50)
-    },
-    block: {
-      group: "cost-limits",
-      description: "The 5-hour rate-limit block: percent used and time to reset, heating to warning then error.",
-      template: '\u25F1 {{ round .block.nativeUtilization }}% ({{ template "formatResetCountdown" .block.resetsAt }})',
-      bg: '{{ ramp (round .block.nativeUtilization) "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}',
-      settings: QUOTA_SETTINGS,
-      // No `fg:`: an unauthored foreground is the theme pole that reads on the
-      // background this ramp resolves to, at every stop. The hand-paired
-      // `button-color-foreground` it replaces measured 1.55:1 on rose-pine's
-      // warning (brandon-theme-picker-bgw.b2g).
-      // Hide unless we have a five-hour-window snapshot.
-      when: "{{ gt .block.resetsAt 0 }}"
-    },
-    weekly: {
-      group: "cost-limits",
-      description: "The weekly rate-limit quota: percent used and time to reset, heating to warning then error.",
-      template: '\u25D1 {{ round .weekly.percentage }}% ({{ template "formatResetCountdown" .weekly.resetsAt }})',
-      bg: '{{ ramp (round .weekly.percentage) "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}',
-      settings: QUOTA_SETTINGS,
-      when: "{{ gt .weekly.resetsAt 0 }}"
-    },
-    // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
-    // number of a usage monitor — how fast you are spending and when you hit
-    // the wall. The rate is daemon-side (render-payload.ts), the ETAs the
-    // draw's (`block.etaMinutes`); the template only formats. Heats as the 5h
-    // cap NEARS — the ramp runs over minutes-to-cap, smaller = hotter, the inverse of block's fuller-is-hotter — and the -1
-    // "cannot project" sentinel sits calm at the first stop. Shown when either
-    // rate-limit window is active — the same signal block/weekly gate on.
-    burnrate: {
-      group: "cost-limits",
-      description: "Spend per hour, with the projected time to the 5-hour and weekly limits.",
-      template: '\u26A1 {{ template "formatRate" .burn.costPerHour }} \xB7 {{ template "formatEta" .block.etaMinutes }} to 5h \xB7 {{ template "formatEta" .weekly.etaMinutes }} to wk',
-      bg: '{{ ramp .block.etaMinutes "step" -1 (tint) 0 "error" .settings.errorWithin "warning" .settings.warnWithin (tint) }}',
-      // Minutes to the 5h cap, so the nearer threshold is the hotter one:
-      // error inside `errorWithin`, warning inside `warnWithin`.
-      settings: {
-        errorWithin: {
-          label: "error within (min)",
-          domain: { min: 0, max: 300, step: 5 },
-          default: 30
-        },
-        warnWithin: {
-          label: "warning within (min)",
-          domain: { min: 0, max: 300, step: 5, atLeast: "errorWithin" },
-          default: 60
-        }
-      },
-      when: "{{ or (gt .block.resetsAt 0) (gt .weekly.resetsAt 0) }}"
-    },
-    // Token throughput for the active turn — output / input / total tok/s, each a
-    // successive-render delta computed daemon-side (render-payload.ts); the
-    // template only formats. Declared-but-opt-in (NOT in the default root, like
-    // block/weekly/burnrate): a user adds `speed` to their layout. Each lane reads
-    // "—" when idle/between turns ([LAW:no-silent-failure] — never a stale or
-    // divide-by-zero number). Visible once the session has done any work (stable,
-    // no layout flicker); `output` is the live generation rate, `input` spikes at
-    // turn start, `total` is their sum.
-    speed: {
-      group: "activity",
-      description: "Token throughput for the latest exchange: output, input, and total.",
-      template: '\u21C5 out {{ template "formatSpeed" .speed.output }} \xB7 in {{ template "formatSpeed" .speed.input }} \xB7 tot {{ template "formatSpeed" .speed.total }}',
-      when: "{{ gt .session.tokens 0 }}"
-    },
-    // Burn-rate sparkline: the recent total-lane tok/s trend as a unicode
-    // mini-graph. Declared-but-opt-in (NOT in the default root, like speed /
-    // block / weekly): a user adds `tokenSparkline` to their layout. The
-    // `sparkline` helper decodes the daemon-owned series and draws it; `24`
-    // caps the glyph count to the cell, showing the live tail of the ring. The
-    // segment's fg colors the whole graph (no per-glyph color). Gated on the
-    // history being present so the cell never renders empty (the series needs
-    // two samples before its first bar). [LAW:effects-at-boundaries] — all the
-    // history lives in the daemon ring, the template only draws.
-    tokenSparkline: {
-      group: "activity",
-      description: "A sparkline of recent token throughput.",
-      template: "\u26A1 {{ sparkline .speed.history 24 }}",
-      when: '{{ ne .speed.history "" }}'
-    },
-    // Prompt-cache warmth countdown. minutesUntilReset clamps a past expiry
-    // to 0, so an expired cache renders "cold" (and reads red via the ≤8
-    // arm) rather than a negative number. [LAW:dataflow-not-control-flow]
-    // glyph + "cold"/"Nm" + color all derive from the one expiry value; the
-    // provider supplies no display state. No `bg:` — the cell keeps its
-    // vocabulary tint and the threshold rides the fg alone, mirroring the
-    // legacy inline-colored text (warm = normal, ≤20m = warning, ≤8m/cold =
-    // error).
-    cacheTimer: {
-      group: "activity",
-      description: "Minutes until the prompt cache expires, or `cold` once it has.",
-      template: "\u25F4 {{ if le (minutesUntilReset .cache.expiresAt) 0 }}cold{{ else }}{{ minutesUntilReset .cache.expiresAt }}m{{ end }}",
-      // brandon-template-funcs-jku: this was a three-level `if` chain over the same
-      // value, which is a threshold cascade that could not be read as one. `cascade`
-      // is `ramp`'s decision with a text result, so the thresholds are visible as
-      // numbers here the way the block/weekly `bg:` cascades are. The bands are the
-      // chain's own: <= 8 error, <= 20 warning, above that foreground
-      // (test/cascade.test.ts pins the two against each other at every boundary).
-      // The cascade picks the role; the floor keeps it legible on this cell's
-      // tint, exactly as a git accent is (`accent` above).
-      fg: `{{ readableOn (color (cascade (minutesUntilReset .cache.expiresAt) "0:error" "9:warning" "21:foreground")) (bgOf) ${TEXT_MIN_CONTRAST} }}`,
-      when: "{{ gt .cache.expiresAt 0 }}"
-    },
-    context: {
-      group: "model-context",
-      description: "Context used, in tokens and percent remaining, heating as it fills.",
-      template: "\u25D4 {{ formatInteger .context.totalTokens }} ({{ .context.contextLeft }}%)",
-      // contextLeft is an integer (src/segments/context.ts rounds it), so the
-      // "≤ 20 / ≤ 40" edges are the stops at 21 and 41 exactly.
-      bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 (tint) }}',
-      when: "{{ gt .context.totalTokens 0 }}"
-    },
-    // Beside `context`: where Claude Code itself will summarize the context.
-    autocompact: {
-      group: "model-context",
-      description: "Claude Code's auto-compact window: \u2212 and + move it by 100K, \u21BA returns it to auto. Clicks type /autocompact into this session, so the controls show only inside tmux.",
-      template: AUTOCOMPACT2.template,
-      bg: AUTOCOMPACT2.bg,
-      when: AUTOCOMPACT2.when
-    },
-    metrics: {
-      group: "activity",
-      description: "Response times, session duration, message count, and lines added/removed.",
-      // [LAW:dataflow-not-control-flow] Each part guards on its own value
-      // rather than gating the whole segment on a single dimension. With
-      // MetricsPayload's fields independently optional and pickNonNull
-      // dropping nulls (see src/renderer/render-payload.ts), an absent field
-      // resolves through the var-system fallback chain to 0 — the same
-      // falsy shape the per-part `if` test treats as hidden. The segment-
-      // level `when` survives as a weak any-present check so a payload
-      // with zero metrics data renders no cell at all (an empty template
-      // would otherwise produce a single-space bg-styled cell).
-      //
-      // [LAW:one-source-of-truth] exception: each arm's leading space is the
-      // SEPARATOR between present parts (only data can decide which part is
-      // first, so no static strip can remove just the first one), and the
-      // trailing space mirrors it for symmetry. At the default padding this
-      // cell therefore reads one space wider per side than its siblings.
-      template: '{{ if .metrics.lastResponseTime }} \u0394 {{ template "formatResponseTime" .metrics.lastResponseTime }}{{ end }}{{ if .metrics.responseTime }} \u29D6 {{ template "formatResponseTime" .metrics.responseTime }}{{ end }}{{ if .metrics.sessionDuration }} \u29D7 {{ template "formatDuration" .metrics.sessionDuration }}{{ end }}{{ if .metrics.messageCount }} \u25C6 {{ .metrics.messageCount }}{{ end }}{{ if .metrics.linesAdded }} + {{ .metrics.linesAdded }}{{ end }}{{ if .metrics.linesRemoved }} - {{ .metrics.linesRemoved }}{{ end }} ',
-      // [LAW:no-silent-failure] Each arm is a BOOLEAN, not the value itself.
-      // `evaluateWhen` hides a segment only on the literal text "false", so
-      // `{{ or <numbers> }}` over all-zero fields renders "0" — visible, an empty
-      // bg-styled cell, the exact outcome the paragraph above says this gate
-      // prevents. Found while adding `activity`, which copied this shape
-      // (brandon-activity-ue7).
-      when: "{{ or (gt .metrics.lastResponseTime 0.0) (gt .metrics.responseTime 0.0) (gt .metrics.sessionDuration 0.0) (gt .metrics.messageCount 0) (gt .metrics.linesAdded 0) (gt .metrics.linesRemoved 0) }}"
-    },
-    // What Claude is doing right now (brandon-activity-ue7) — the only segment
-    // on the bar whose content is not a quantity. Three parts, each gated on its
-    // own value exactly as `metrics` is, and the whole cell gated off when the
-    // session is idle, so a bar at rest is unchanged from before this existed.
-    //
-    // The todo part has two readings of one list: the in-progress item with its
-    // position while there is one, and the completed-of-total tally when there is
-    // not. `completed` (not `position`) is what distinguishes a finished list
-    // from an all-pending one — `☑ 7/7` and `☑ 0/7` are both true statements.
-    // `abbrev` bounds the task text, since an `activeForm` is a sentence.
-    activity: {
-      group: "activity",
-      description: "What Claude is doing: the slash command that opened the turn, the in-progress todo, and the tools in flight.",
-      template: '{{ if .activity.command }} \u2318 {{ .activity.command }}{{ end }}{{ if .activity.todo.total }}{{ if .activity.todo.active }} \u2610 {{ .activity.todo.position }}/{{ .activity.todo.total }} {{ abbrev 32 .activity.todo.active }}{{ else }} \u2611 {{ .activity.todo.completed }}/{{ .activity.todo.total }}{{ end }}{{ end }}{{ if .activity.tool.running }} \u27F3 {{ template "formatToolTally" .activity.tool.running }}{{ end }}{{ if .activity.tool.done }} \u2713 {{ template "formatToolTally" .activity.tool.done }}{{ end }} ',
-      // Boolean arms, for the reason spelled on `metrics` above: a `when` is
-      // hidden only by the literal text "false".
-      when: '{{ or (ne .activity.command "") (gt .activity.todo.total 0) (ne .activity.tool.running "") (ne .activity.tool.done "") }}'
-    }
-  },
-  // Default layout — the canonical Root: a map of NAMED rows (`satisfies
-  // DslConfig` requires the lowered node form inside each row; the terse
-  // Option-A `{ h/v/seg }` grammar is the loader's authoring surface for user
-  // JSON, not this typed literal).
-  //
-  // [LAW:one-source-of-truth] The row NAMES are the merge keys. A user file's
-  // `root: { rows: { status: { h: [...] } } }` replaces exactly the row it
-  // names and inherits the other in place — the same by-name cascade every
-  // other section merges with — and `status: { h: [] }` removes one. This
-  // literal is read both as JSON (parsed like a user file) and as the typed
-  // base it merges onto, so the canonical shape and the authoring shape are
-  // one object by construction.
-  //
-  // Two always-visible rows: an IDENTITY row (where am I — the host, the
-  // directory and the verbose `gitaculous` line) over a STATUS row (what's
-  // happening now — model, context-window fill, prompt-cache warmth, and the
-  // 5h / 7d rate-limit quotas). Every setting lives behind the settings-menu
-  // door the loader leads the first row with (src/config/settings-menu.ts),
-  // not on the bar. Each row zips its segments through the powerline joiner;
-  // `\n` separates the rows.
-  //
-  // [LAW:dataflow-not-control-flow] Every status segment is when-gated on its
-  // own signal (no repo → the identity row is just the directory; no
-  // active rate-limit window → block/weekly drop; no cache activity → cacheTimer
-  // drops). A row therefore only ever shows the segments that have real data —
-  // the layout is chosen by the data, not by branches — so the default never
-  // paints an empty or placeholder cell, but for one: a value whose source has
-  // not answered yet draws `…`, and only at the width its placement already
-  // held (src/dsl/node-registry.ts, loadingSegment). The directory has no
-  // `when`, so row 1 always anchors the bar.
-  root: {
-    rows: {
-      identity: {
-        kind: "container",
-        direction: "horizontal",
-        children: [
-          // Leads the identity row: the first thing to read is WHICH MACHINE,
-          // because it reframes every path and branch to its right. Same
-          // placement git-taculous gives `(%n@%m)` — ahead of the directory.
-          // Gated off entirely on a local session, so the row still opens with
-          // `directory` where it always has.
-          { kind: "segment", name: "host" },
-          { kind: "segment", name: "directory" },
-          { kind: "segment", name: "gitaculous" }
-        ]
-      },
-      status: {
-        kind: "container",
-        direction: "horizontal",
-        children: [
-          { kind: "segment", name: "model" },
-          // The auto-compact window reads against the context use beside it,
-          // so the two are placed together; like any two cells side by side,
-          // each takes its own place in the row's colours.
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "context" },
-              { kind: "segment", name: "autocompact" }
-            ]
-          },
-          { kind: "segment", name: "cacheTimer" },
-          { kind: "segment", name: "block" },
-          { kind: "segment", name: "weekly" },
-          // Last on the row on purpose: it is the most volatile cell on the bar
-          // (it appears, changes width, and drops again within one turn), so
-          // trailing it means nothing to its left ever reflows.
-          { kind: "segment", name: "activity" }
-        ]
-      }
-    }
-  },
-  // [LAW:locality-or-seam] The quick-action tray's behaviors, decoupled by NAME
-  // from the `toolbar` segment's glyphs above. copy/open evaluate a Go-template
-  // against the live render scope at click time and write NO SessionState, so
-  // they derive no state validator (no gate) — they are pure click effects.
-  //
-  // [LAW:single-enforcer] Each template emits a RAW value; the click-wire codec
-  // (effectsUrl → encodeSegments) owns ALL percent-encoding and the verb's
-  // `oneArg` owns the single matching decode — so the template never hand-rolls
-  // a `urlEncode`, and the path round-trips untouched through one codec.
-  //
-  // open* route through the open-vscode verb (`open -a "Visual Studio Code"
-  // <path>`), so they pass a bare filesystem path — a directory or a file the
-  // editor opens directly — NOT a `vscode://` URL (which `open -a` would treat
-  // as a literal filename, not a deep link).
-  actions: {
-    ...quickActions("").actions,
-    ...COMMAND_TRAY.actions,
-    // The `directory` cell's click: the full path its abbreviation hides.
-    copyDir: { copy: "{{ .current_dir }}" },
-    // Runs where the session is, whatever directory the action's home names.
-    // The loader fills in the rest of a run; this table is what it parses.
-    "gitInit.run": {
-      run: ["git", "-C", "{{ .current_dir }}", "init"]
-    },
-    ...GIT_INIT.actions,
-    // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
-    gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
-    ...AUTOCOMPACT2.actions
-  },
-  // ─── Styles ───────────────────────────────────────────────────────────────
-  // Named theme ADAPTATIONS — each is a full rich-js ThemeKey applied on top
-  // of whatever base theme is active (a transform, not a palette), so every
-  // style composes with every theme: pick theme, then pick style. Selected per
-  // session via the `style` SessionState key (an action `{ set: "style", from:
-  // "styles" }` + a `{{ menu }}`), exactly the theme/endcaps selection seam.
-  // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
-  // stdlib — including the "none" identity floor effectiveStyleName collapses
-  // to — is present in every merged config by construction.
-  styles: {
-    // [LAW:dataflow-not-control-flow] "none" is just the identity style — the
-    // resolution floor as a value, not a special case (rich-js's isIdentityKey
-    // fast-path makes it free). Spelled literally (not rich-js IDENTITY /
-    // INVERT_LIGHTNESS) so the bundled default remains inert JSON-shaped data
-    // a user file can mirror axis-for-axis; the loader normalizes user specs
-    // onto the same identity axes.
-    none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
-    // Saturation up/down — chroma is multiplicative, hue and lightness held.
-    vivid: {
-      hueShift: 0,
-      chromaScale: 1.35,
-      lightnessScale: 1,
-      lightnessShift: 0
-    },
-    muted: {
-      hueShift: 0,
-      chromaScale: 0.55,
-      lightnessScale: 1,
-      lightnessShift: 0
-    },
-    // Lightness down (scale) / up (shift) — dim compresses toward black,
-    // bright lifts everything a step; anchors stay hue-locked by rich-js.
-    dim: {
-      hueShift: 0,
-      chromaScale: 1,
-      lightnessScale: 0.85,
-      lightnessShift: 0
-    },
-    bright: {
-      hueShift: 0,
-      chromaScale: 1,
-      lightnessScale: 1,
-      lightnessShift: 0.08
-    },
-    // The dark↔light "octave" flip (rich-js INVERT_LIGHTNESS: L' = 1 - L) —
-    // errors stay red, dark-on-light becomes light-on-dark.
-    inverted: {
-      hueShift: 0,
-      chromaScale: 1,
-      lightnessScale: -1,
-      lightnessShift: 1
-    }
-  },
-  // ─── Presets ─────────────────────────────────────────────────────────────
-  // Named config FRAGMENTS — each an alternative `root` + display `globals`,
-  // i.e. a whole arrangement of the bar rather than one knob. A preset is to
-  // configuration what a style is to a theme, and rides the identical seam:
-  // selected per session via the `preset` SessionState key — or pinned as the
-  // durable default via `globals.preset` — through the settings menu's preset
-  // control and its save (src/config/settings-menu.ts), resolved as session
-  // pick over globals.preset over this floor.
-  // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
-  // stdlib is present in every merged config by construction, exactly as
-  // styles' "none"/"vivid"/"muted"/… is — a user redefining "compact" or
-  // "verbose" wins per name; the floor cannot be shadowed by anything but an
-  // empty fragment, because that IS what it already is.
-  //
-  // [LAW:carrying-cost] Each library preset stages only real deltas from the
-  // bundled default's own root (declared above) — no preset here restates a
-  // segment's template, bg, or fg, only which of the ALREADY-declared
-  // segments appear and in what arrangement, per the field cap
-  // (brandon-presets-0yk.1's premise note): a bundled preset can only STAGE
-  // segments DEFAULT_DSL_CONFIG.segments already declares, never introduce
-  // one.
-  //
-  // [LAW:verifiable-goals] Every entry here is asserted error-cell-free at
-  // 80/120/200 columns against a RICH payload in
-  // test/default-dsl-config.test.ts (the same checkPayload fixture check.ts
-  // uses) — curated by actually rendering each arrangement, not by reading
-  // the segment names off the page.
-  // Each bundled theme's default look — data in its own file
-  // (src/config/bundled-theme-defaults.ts), since it is chosen theme by theme
-  // in the bar rather than authored with the rest of this literal.
-  themeDefaults: BUNDLED_THEME_DEFAULTS,
-  presets: {
-    // [LAW:dataflow-not-control-flow] "default" is just the identity fragment
-    // — the resolution floor as a value, not a special case. An empty fragment
-    // declares no `root` and no `globals`, so it stages the config's own, which
-    // is precisely what "no preset chosen" means. This is the bundled default's
-    // OWN two-row (identity / status) arrangement declared as `root` above —
-    // it needs no entry of its own here beyond the floor, because staging it
-    // AS a named fragment would be a byte-for-byte copy of `root` that could
-    // silently drift from it the moment either changed.
-    default: {},
-    // Single-row arrangement for narrow terminals and split panes — the
-    // situation where a user most wants a different arrangement and least
-    // wants to hand-write one. Keeps only the three facts a split pane most
-    // needs at a glance (where am I / what's the git state / how much context
-    // is left), and `padding: 0` to buy back the chrome a narrow column can't
-    // spare. `gitaculous` starts collapsed here as everywhere, so the git state
-    // costs a narrow column only the summary until someone asks for more.
-    //
-    // [LAW:no-silent-failure] A session that switches TO compact is never
-    // stranded: synthesizeSettingsMenu splices the global settings menu — and
-    // with it the preset switcher — into EVERY preset root, so one click back
-    // to "default" restores everything compact traded away for width. That is
-    // why this root carries no preset control of its own: one guaranteed door
-    // per root, minted once and referenced, not a segment each preset must
-    // remember to carry [LAW:one-source-of-truth].
-    compact: {
-      root: {
-        kind: "container",
-        direction: "horizontal",
-        children: [
-          { kind: "segment", name: "directory" },
-          { kind: "segment", name: "gitaculous" },
-          { kind: "segment", name: "context" }
-        ]
-      },
-      globals: { padding: 0 }
-    },
-    // Verbose arrangement surfacing four segments that are declared but NOT in
-    // the default root (gitPr, burnrate, speed, tokenSparkline — see each
-    // segment's own "declared-but-opt-in" comment above) alongside the
-    // default's own two rows, for a user who wants the full usage-monitor
-    // picture rather than the quiet default. A third row carries the two
-    // per-turn throughput segments, which read "—" between turns
-    // ([LAW:no-silent-failure] on speed/tokenSparkline) rather than an empty
-    // or stale row. Like `compact`, it carries no preset control of its own —
-    // the global settings menu is spliced into every preset root and is the
-    // one door back.
-    verbose: {
-      root: {
-        kind: "container",
-        direction: "vertical",
-        children: [
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "directory" },
-              { kind: "segment", name: "gitaculous" },
-              { kind: "segment", name: "gitPr" }
-            ]
-          },
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "model" },
-              {
-                kind: "container",
-                direction: "horizontal",
-                children: [
-                  { kind: "segment", name: "context" },
-                  { kind: "segment", name: "autocompact" }
-                ]
-              },
-              { kind: "segment", name: "cacheTimer" },
-              { kind: "segment", name: "block" },
-              { kind: "segment", name: "weekly" },
-              { kind: "segment", name: "burnrate" }
-            ]
-          },
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "speed" },
-              { kind: "segment", name: "tokenSparkline" }
-            ]
-          }
-        ]
-      }
-    },
-    // For heads-down work where the bar should stay out of the way: one row,
-    // only where you are and how much context is left, powerline chrome traded
-    // for plain text and the whole bar receded under the `dim` style. It is the
-    // quiet end of the library the way `verbose` is the loud one — `compact`
-    // saves width, this saves attention.
-    zen: {
-      root: {
-        kind: "container",
-        direction: "horizontal",
-        children: [
-          { kind: "segment", name: "directory" },
-          { kind: "segment", name: "context" }
-        ]
-      },
-      globals: { endcaps: "plain", style: "dim" }
-    },
-    // For branch-and-PR work — juggling reviews, rebases, several branches:
-    // the identity row gains the open PR (`gitPr`, which the default leaves
-    // out) beside the git state, and the status row keeps only what that work
-    // checks between pushes (model, context, what Claude is doing), dropping
-    // the rate-limit windows that matter to a long solo session instead.
-    git: {
-      root: {
-        kind: "container",
-        direction: "vertical",
-        children: [
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "host" },
-              { kind: "segment", name: "directory" },
-              { kind: "segment", name: "gitaculous" },
-              { kind: "segment", name: "gitPr" }
-            ]
-          },
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "model" },
-              { kind: "segment", name: "context" },
-              { kind: "segment", name: "activity" }
-            ]
-          }
-        ]
-      }
-    },
-    // For watching spend and limits — a long session near a budget or a rate
-    // limit: every cost and limit segment the bundled library declares, one
-    // concern per row. Row 1 is this conversation (context, cache), row 2 the
-    // rate-limit windows and how fast they are burning, row 3 money (this
-    // session, today across every session) and throughput. It is the one
-    // preset that stages `today`.
-    usage: {
-      root: {
-        kind: "container",
-        direction: "vertical",
-        children: [
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "model" },
-              {
-                kind: "container",
-                direction: "horizontal",
-                children: [
-                  { kind: "segment", name: "context" },
-                  { kind: "segment", name: "autocompact" }
-                ]
-              },
-              { kind: "segment", name: "cacheTimer" }
-            ]
-          },
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "block" },
-              { kind: "segment", name: "weekly" },
-              { kind: "segment", name: "burnrate" }
-            ]
-          },
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "session" },
-              { kind: "segment", name: "today" },
-              { kind: "segment", name: "speed" },
-              { kind: "segment", name: "tokenSparkline" }
-            ]
-          }
-        ]
-      }
-    },
-    // For a wide terminal that should give the bar as few lines as possible:
-    // the default's two rows, plus spend, poured into ONE row with no padding,
-    // which the width-based auto-wrap folds only where the terminal actually
-    // runs out — so a wide window gets one line and a narrow one still gets
-    // every segment. `activity` stays last for the same reason it does in the
-    // default: it is the cell that reflows.
-    dense: {
-      root: {
-        kind: "container",
-        direction: "horizontal",
-        children: [
-          { kind: "segment", name: "host" },
-          { kind: "segment", name: "directory" },
-          { kind: "segment", name: "gitaculous" },
-          { kind: "segment", name: "model" },
-          {
-            kind: "container",
-            direction: "horizontal",
-            children: [
-              { kind: "segment", name: "context" },
-              { kind: "segment", name: "autocompact" }
-            ]
-          },
-          { kind: "segment", name: "cacheTimer" },
-          { kind: "segment", name: "block" },
-          { kind: "segment", name: "weekly" },
-          { kind: "segment", name: "session" },
-          { kind: "segment", name: "activity" }
-        ]
-      },
-      globals: { padding: 0 }
-    }
-  },
-  // [LAW:one-source-of-truth] What edit mode LOOKS like, as config a user can
-  // retune — the whole point of candybar-settings-ui-aok.5, whose predecessor
-  // was renderer constants. Powerline chrome exists to make adjacent segments
-  // read as one continuous strip, which is precisely the wrong signal while a
-  // user is trying to see where one segment ends and the next begins; `plain`
-  // trades the caps for a visible separator between every cell.
-  //
-  // The separator is stated rather than left to the bundled `plain` joiner's
-  // glyph: this fragment layers over the user's globals, so a config that set
-  // `default_separator` for its own powerline bar would otherwise carry that
-  // choice into edit mode, where the separator is the entire affordance.
-  editGlobals: {
-    endcaps: "plain",
-    default_separator: " | "
-  },
-  // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy
-  // for the cost/token/budget family lives here as named template helpers, each
-  // DEFINED ONCE and called from every segment via `{{ template "name" .arg }}`
-  // — so how a cost/token string looks is data a user overrides by name, not
-  // compiled JS. The K/M token-scale rule has a SINGLE home (`formatTokenCount`);
-  // `formatTokens` suffixes " tokens" onto it and `formatTokenBreakdown` calls it
-  // per part, so the scale policy can never drift between the three.
-  // [LAW:dataflow-not-control-flow] A multi-input helper (budgetStatus,
-  // formatTokenBreakdown) receives its inputs as one `dict` value through its
-  // single dot arg — variability flows as data across one boundary, not as a
-  // bespoke multi-arg signature.
-  helpers: {
-    // The effort gauge: the `effort.glyphs` rung for the level, in quiet text
-    // at low (the inactive colour, the same recipe the menu's inert controls
-    // wear) and in the theme's `accent` from medium to xhigh. Max climbs the
-    // ladder — one chevron, two, three, a second each — on a bubble 40% of the
-    // way from the cell to accent, stepping through the decorative roles as it
-    // climbs. The bubble is what keeps a frame of the climb from reading as
-    // low, high or xhigh. A second a frame because Claude Code redraws at most
-    // once a second (`statusLine.refreshInterval: 1`); a shorter hold would
-    // only alias. Every colour is floored at TEXT_MIN_CONTRAST on its ground:
-    // the cell wears the accent hue, where the raw accent measured 1.00:1 on
-    // `textual-ansi`. Effort is a choice, not an alert, so no rung wears
-    // `warning`/`error` — those hues keep their meaning for the cells that
-    // measure danger.
-    // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once,
-    // and every level computes max's bubble. Max's climbing colour and frames
-    // are computed only where max draws them: a stepped colour tells the frame
-    // when it next changes as it is evaluated, drawn or not, so computed at
-    // every level it would make a still rung claim to move. The one branch is
-    // the domain's own, and it chooses what is drawn: max its bubble, every
-    // other level its rung on the cell as the cell is filled — which may be no
-    // fill at all (`bg: "none"`), so below max nothing paints a background. A level
-    // outside the five known names is ordinal 0: the ladder's `?`, visible
-    // rather than blank. The ladder is split on runs of spaces, so a doubled
-    // space shifts no rung. Called with the scope as dot.
-    effortGauge: `{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}{{ $glyphs := compact (splitList " " .effort.glyphs) }}{{ $bubble := readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST} }}{{ if eq $ord 5 }}{{ $climbing := readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST} }}{{ $climb := frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4) }}{{ fg $bubble "\uE0B6" }}{{ bg $bubble (fg $climbing $climb) }}{{ fg $bubble "\uE0B4" }}{{ else }}{{ fg (ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST})) (index $glyphs $ord) }}{{ end }}`,
-    // Text in a palette colour, floored at TEXT_MIN_CONTRAST against the cell
-    // it sits on: a theme's `success`/`warning`/`accent` is designed against
-    // its own background, not the tint a bar cell wears (the raw role measured
-    // 1.01:1 on `textual-light`, brandon-theme-picker-bgw.b2g). `readableOn` moves only
-    // OKLCH lightness, so the hue — the part that says "staged" — survives.
-    // Called with a dict: `(dict "color" <palette name or hex> "text" <text>)`.
-    gitPaint: `{{ fg (readableOn (color .color) (bgOf) ${TEXT_MIN_CONTRAST}) .text }}`,
-    // ─── Git forms and pieces ──────────────────────────────────────────────
-    // The two forms `gitaculous` switches between, each composed of the pieces
-    // below. Override one to change what that form shows.
-    gitCollapsed: '{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
-    gitExpanded: '(git){{ template "gitRepo" . }}{{ template "gitOperation" . }}{{ template "gitSha" . }}{{ template "gitFlags" . }} {{ template "gitBranch" . }}{{ template "gitUpstream" . }}{{ template "gitStash" . }}{{ template "gitAge" . }}',
-    // The named parts the two forms compose, each called
-    // with the root scope (`{{ template "gitFlags" . }}`). Every optional piece
-    // renders ` <fact>` with its OWN leading space, or nothing — only the piece
-    // knows whether it exists — so pieces reorder and drop without leaving a
-    // doubled or dangling space. `gitBranch` is the exception: the segment is
-    // gated on a branch, so it is always present and carries no space. A piece
-    // whose fact is optional reads that fact's `.settings.<name>` too, so a
-    // segment of your own that calls it declares the same setting (the loader
-    // names that segment, the setting, and the helper when it does not).
-    gitBranch: '\u2387 {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
-    gitRepo: '{{ if and .settings.repo (ne .git.repoName "") }} {{ .git.repoName }}{{ end }}',
-    gitOperation: '{{ if and .settings.operation (ne .git.operation "") }} [{{ .git.operation }}]{{ end }}',
-    gitSha: '{{ if and .settings.sha (ne .git.sha "") }} {{ .git.sha }}{{ end }}',
-    gitFlags: '{{ if and .settings.flags (or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0)) }} {{ if gt .git.staged 0 }}{{ template "gitPaint" (dict "color" .git.color.staged "text" "S") }}{{ end }}{{ if gt .git.unstaged 0 }}{{ template "gitPaint" (dict "color" .git.color.unstaged "text" "U") }}{{ end }}{{ if gt .git.untracked 0 }}{{ template "gitPaint" (dict "color" .git.color.untracked "text" "?") }}{{ end }}{{ if gt .git.conflicts 0 }}{{ template "gitPaint" (dict "color" .git.color.conflicts "text" (printf "!%v" .git.conflicts)) }}{{ end }}{{ end }}',
-    gitAheadBehind: '{{ if and .settings.aheadBehind (or (gt .git.ahead 0) (gt .git.behind 0)) }} {{ if gt .git.ahead 0 }}{{ template "gitPaint" (dict "color" .git.color.ahead "text" (printf "+%v" .git.ahead)) }}{{ end }}{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}{{ if gt .git.behind 0 }}{{ template "gitPaint" (dict "color" .git.color.behind "text" (printf "-%v" .git.behind)) }}{{ end }}{{ end }}',
-    gitUpstream: '{{ if and .settings.upstream (ne .git.upstream "") }} [{{ .git.upstream }}{{ template "gitAheadBehind" . }}]{{ end }}',
-    gitStash: '{{ if and .settings.stash (gt .git.stash 0) }} {{ template "gitPaint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
-    gitAge: '{{ $age := .git.timeSinceCommit }}{{ if and .settings.age (gt $age 0) }} \u25F7 {{ template "formatTimeSince" $age }}{{ end }}',
-    // Cost: under a cent reads "<$0.01"; otherwise "$" + two decimals. (Null is
-    // unrepresentable through the var-system — type:number with a numeric default
-    // owns "missing" upstream — so no null branch is needed here.)
-    formatCost: '{{ if lt . 0.01 }}<$0.01{{ else }}${{ printf "%.2f" . }}{{ end }}',
-    // The single home of the K/M token-scale rule. >=1e6 → "X.YM", >=1e3 → "X.YK",
-    // else the integer verbatim (0 and negatives fall through to this arm, exactly
-    // as the retired JS did). No " tokens" suffix — that is formatTokens' job.
-    formatTokenCount: formatTokenCount("."),
-    formatTokens: '{{ template "formatTokenCount" . }} tokens',
-    // A tool tally — `"Bash:3,Read:1"`, the payload's one encoding for both
-    // running and completed tools — read back as `Bash×3 Read`, capped at the
-    // first two names with a `+N` overflow for the rest. A count of 1 shows no
-    // multiplier, so the common case reads as a plain tool name.
-    // [LAW:one-source-of-truth] ONE helper for both fields, because the payload
-    // gives them one shape; a second spelling would be a second policy for
-    // "how a tool tally reads". The caller must gate on the value being
-    // non-empty — an empty tally is absent in the payload, and `splitList` on ""
-    // yields one positionless member.
-    formatToolTally: '{{ $names := splitList "," . }}{{ range $i, $pair := $names }}{{ if lt $i 2 }}{{ if $i }} {{ end }}{{ $kv := splitList ":" $pair }}{{ index $kv 0 }}{{ if ne (index $kv 1) "1" }}\xD7{{ index $kv 1 }}{{ end }}{{ end }}{{ end }}{{ if gt (len $names) 2 }} +{{ sub (len $names) 2 }}{{ end }}',
-    // Burn rate: "$X.XX/hr" when projectable, "—/hr" otherwise. The daemon
-    // emits -1 (a structurally-impossible rate) for not-projectable, so the
-    // branch reads a VALUE, never a hidden control-flow flag. Reuses formatCost
-    // so the dollar policy has one home.
-    formatRate: '{{ if lt . 0 }}\u2014/hr{{ else }}{{ template "formatCost" . }}/hr{{ end }}',
-    // ETA to a rate-limit cap: humanized minutes when projectable, "—" when it
-    // cannot be projected (-1 sentinel). Reuses the long-remaining cascade.
-    formatEta: '{{ if lt . 0 }}\u2014{{ else }}{{ template "formatLongTimeRemaining" . }}{{ end }}',
-    // Token throughput: "N/s" (K/M-scaled, rounded) when measured (>= 0), "—"
-    // when the daemon had no projectable sample (-1). Branches on the VALUE, like
-    // formatRate; reuses formatTokenCount so the K/M scale policy has one home.
-    formatSpeed: '{{ if lt . 0 }}\u2014{{ else }}{{ template "formatTokenCount" (round .) }}/s{{ end }}',
-    // Breakdown over a dict {input, output, cacheCreation, cacheRead}; each present
-    // part is formatted by the shared formatTokenCount and joined with " + ". A
-    // `$first` flag (reassigned across if-frames) inserts the separator before all
-    // but the first present part; all-zero collapses to "0 tokens".
-    formatTokenBreakdown: '{{ $first := true }}{{ if gt .input 0 }}{{ template "formatTokenCount" .input }} in{{ $first = false }}{{ end }}{{ if gt .output 0 }}{{ if not $first }} + {{ end }}{{ template "formatTokenCount" .output }} out{{ $first = false }}{{ end }}{{ if or (gt .cacheCreation 0) (gt .cacheRead 0) }}{{ if not $first }} + {{ end }}{{ template "formatTokenCount" (add .cacheCreation .cacheRead) }} cached{{ $first = false }}{{ end }}{{ if $first }}0 tokens{{ end }}',
-    // Budget suffix over a dict {cost, budget, warn}. Non-displayable (budget<=0 or
-    // cost<0) → "". Otherwise pct = min(100, cost/budget*100), rendered " !N%" at/above
-    // warn, " +N%" at/above 50, " N%" below.
-    budgetStatus: '{{ if or (le .budget 0) (lt .cost 0) }}{{ else }}{{ $pct := minf 100 (mulf (divf .cost .budget) 100) }}{{ $p := printf "%.0f%%" $pct }}{{ if ge $pct .warn }} !{{ $p }}{{ else }}{{ if ge $pct 50 }} +{{ $p }}{{ else }} {{ $p }}{{ end }}{{ end }}{{ end }}',
-    // ─── Duration / time-remaining family (bdi.4) ──────────────────────────
-    // Display policy for elapsed/remaining times, each DEFINED ONCE and called
-    // from every segment via `{{ template "name" .x }}`. Input domain is a
-    // non-negative number (seconds, or minutes for formatLongTimeRemaining); the
-    // var-system owns "missing" as a numeric default upstream, so no null arm.
-    //
-    // The cascades branch on the VALUE (which unit threshold it falls in), never
-    // on control flow [LAW:dataflow-not-control-flow]. `div`/`mod` are Go int64
-    // (truncate toward zero == Math.floor for the non-negative domain); `printf
-    // "%.Nf"` is the toFixed(N) stand-in (rounds, matching JS toFixed).
-    // Compact "since" stamp: <1m → "Ns"; then floored m/h/d/w. `div` truncates
-    // exactly like Math.floor here (seconds ≥ 0). Used by the git segment's
-    // time-since-commit affordance — verbatim seconds under a minute.
-    formatTimeSince: "{{ if lt . 60 }}{{ . }}s{{ else if lt . 3600 }}{{ div . 60 }}m{{ else if lt . 86400 }}{{ div . 3600 }}h{{ else if lt . 604800 }}{{ div . 86400 }}d{{ else }}{{ div . 604800 }}w{{ end }}",
-    // Elapsed duration: <1m toFixed(0)+s; <1h (/60).toFixed(0)+m; <1d
-    // (/3600).toFixed(1)+h; else (/86400).toFixed(1)+d. printf rounds (not
-    // truncates), reproducing toFixed.
-    formatDuration: '{{ if lt . 60 }}{{ printf "%.0f" . }}s{{ else if lt . 3600 }}{{ printf "%.0f" (divf . 60) }}m{{ else if lt . 86400 }}{{ printf "%.1f" (divf . 3600) }}h{{ else }}{{ printf "%.1f" (divf . 86400) }}d{{ end }}',
-    // Response time: one-decimal seconds under a minute, else one-decimal
-    // minutes.
-    formatResponseTime: '{{ if lt . 60 }}{{ printf "%.1f" . }}s{{ else }}{{ printf "%.1f" (divf . 60) }}m{{ end }}',
-    // Long remaining (input = whole minutes): ≥1day → "Nd"/"Nd Nh"; ≥1hour →
-    // "Nh"/"Nh Nm"; else "Nm". The lower unit is appended only when non-zero,
-    // matching the JS hours>0/minutes>0 guards. `$d`/`$h`/`$m` declared in the
-    // branch frame and read by the inner if (lexical scope reads enclosing
-    // frames) — go-template-js cannot capture a value any other way.
-    formatLongTimeRemaining: "{{ if ge . 1440 }}{{ $d := div . 1440 }}{{ $h := div (mod . 1440) 60 }}{{ if gt $h 0 }}{{ $d }}d {{ $h }}h{{ else }}{{ $d }}d{{ end }}{{ else if ge . 60 }}{{ $h := div . 60 }}{{ $m := mod . 60 }}{{ if gt $m 0 }}{{ $h }}h {{ $m }}m{{ else }}{{ $h }}h{{ end }}{{ else }}{{ . }}m{{ end }}",
-    // Reset countdown (input = epoch seconds): the minute in progress counts,
-    // so a reset seconds away reads "1m" and the bar never shows "0m" while
-    // time remains. A uniform +1 over the rounded whole minutes, deliberately
-    // not a floor at 1 — a floor is a special case on the last minute, and the
-    // one bias reads the same at every distance. The block/weekly segments
-    // are its only callers; the cacheTimer keeps the raw minutesUntilReset,
-    // where 0 means cold.
-    formatResetCountdown: '{{ template "formatLongTimeRemaining" (add 1 (minutesUntilReset .)) }}'
-  }
-};
-var AUTHORED_PALETTE_NAMES = new Set(
-  [
-    RAW_DEFAULT_DSL_CONFIG.globals.palette,
-    ...Object.keys(RAW_DEFAULT_DSL_CONFIG.themeDefaults),
-    ...Object.values(RAW_DEFAULT_DSL_CONFIG.segments).map(
-      (s) => s.palette
-    )
-  ].filter((name) => name !== void 0)
-);
-var DEFAULT_DSL_CONFIG = mergeWithDefault(
-  parseDslConfig(
-    "<default>",
-    JSON.stringify(RAW_DEFAULT_DSL_CONFIG),
-    AUTHORED_PALETTE_NAMES
-  ),
-  RAW_DEFAULT_DSL_CONFIG
-);
-
-// src/renderer/bundled-presets.ts
-var BUNDLED_PRESETS = presetNames(
-  DEFAULT_DSL_CONFIG.presets
-);
-function isBundledPreset(name) {
-  return BUNDLED_PRESETS.includes(name);
-}
-
-// src/renderer/setting-drafts.ts
-function spelled(e, name) {
-  const value = e[name];
-  switch (typeof value) {
-    case "boolean":
-      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
-    case "number":
-      return String(value);
-    case "string":
-      return value;
-    default:
-      return value.kind === "decided" ? value.name : null;
-  }
-}
-var SETTING_ROWS = Object.entries(SETTINGS);
-var SETTING_KEYS = new Set(
-  SETTING_PROJECTIONS.map((p2) => p2.sessionKey)
-);
-var NOT_CUSTOMIZED = () => false;
-function sessionGlobals(config2, sessionPick) {
-  return resolveEffectiveGlobals(
-    config2,
-    (key) => SETTING_KEYS.has(key) ? sessionPick(key) : null,
-    NOT_CUSTOMIZED
-  );
-}
-var SELECTORS = ["preset", "theme"];
-function fileThrough(config2, sessionPick, depth) {
-  const held = new Set(
-    SELECTORS.slice(0, depth).map((name) => SETTINGS[name].sessionKey)
-  );
-  return resolveEffectiveGlobals(
-    config2,
-    (key) => held.has(key) ? sessionPick(key) : null,
-    NOT_CUSTOMIZED
-  );
-}
-function baseOf(config2, sessionPick) {
-  const bases = Array.from(
-    { length: SELECTORS.length + 1 },
-    (_, depth) => fileThrough(config2, sessionPick, depth)
-  );
-  return (name) => {
-    const depth = SELECTORS.indexOf(name);
-    return bases[depth === -1 ? SELECTORS.length : depth];
-  };
-}
-function differing(rows, session, baseOf2, targetOf) {
-  return rows.flatMap(([name, row2]) => {
-    const value = spelled(session, name);
-    return value === null || value === spelled(baseOf2(name), name) ? [] : [{ ...row2, value, target: targetOf(row2) }];
-  });
-}
-function sessionSettingValue(config2, sessionPick, name) {
-  return spelled(sessionGlobals(config2, sessionPick), name);
-}
-function settingDrafts(config2, sessionPick) {
-  const session = sessionGlobals(config2, sessionPick);
-  return differing(
-    SETTING_ROWS,
-    session,
-    baseOf(config2, sessionPick),
-    (row2) => landingKey(config2, session.preset, row2.configKey)
-  );
-}
-function landingKey(config2, preset, field) {
-  return field in (presetByName(config2.presets, preset).globals ?? {}) ? presetGlobalsKey(preset, field) : field;
-}
-function durableLanding(config2, sessionPick, key) {
-  const preset = effectivePresetName(
-    sessionPick(SETTINGS.preset.sessionKey),
-    config2.globals.preset,
-    config2.presets
-  );
-  const target = parsePersistTarget(key);
-  return {
-    key: target?.scope === "globals" ? landingKey(config2, preset, target.field) : key,
-    globals: presetGlobals(config2, preset)
-  };
-}
-function placementDrafts(config2, sessionPick) {
-  const { preset } = sessionGlobals(config2, sessionPick);
-  return slotsOf(config2, preset).flatMap(
-    ({ id: id2, setting, key, decl, saved }) => {
-      const pick2 = sessionPick(key);
-      const value = pick2 === null ? void 0 : parseSettingSpelling(decl, pick2);
-      return value === void 0 || settingSpelling(value) === settingSpelling(saved) ? [] : [{ preset, id: id2, setting, key, value }];
-    }
-  );
-}
-function placementPickProblems(config2, sessionPick, writes) {
-  const written2 = new Map(writes.map((w) => [w.key, w.value]));
-  return presetNames(config2.presets).flatMap((preset) => {
-    const slots = slotsOf(config2, preset);
-    const touched = new Set(
-      slots.filter((s) => written2.has(s.key)).map((s) => s.id)
-    );
-    return [...touched].flatMap((id2) => {
-      const own2 = slots.filter((s) => s.id === id2);
-      const decls = Object.fromEntries(own2.map((s) => [s.setting, s.decl]));
-      const values2 = Object.fromEntries(
-        own2.map((s) => {
-          const pick2 = written2.get(s.key) ?? sessionPick(s.key);
-          const value = pick2 === null ? void 0 : parseSettingSpelling(s.decl, pick2);
-          return [s.setting, value ?? s.saved];
-        })
-      );
-      return settingOrderProblems(decls, values2).map(
-        ({ message }) => `placement "${id2}": ${message}`
-      );
-    });
-  });
-}
-var SLOTS = /* @__PURE__ */ new WeakMap();
-function slotsOf(config2, preset) {
-  const byPreset = SLOTS.get(config2) ?? /* @__PURE__ */ new Map();
-  SLOTS.set(config2, byPreset);
-  const known = byPreset.get(preset);
-  if (known !== void 0) return known;
-  const facts = [...walkNodes(presetRoot(config2, preset).node)].flatMap(
-    (node) => node.kind !== "segment" || node.drafts === void 0 ? [] : Object.entries(node.drafts).map(([setting, { id: id2, key }]) => {
-      const decl = settingsOf(config2.segments[node.name])[setting];
-      return {
-        id: id2,
-        setting,
-        key,
-        decl,
-        saved: node.settings?.[setting] ?? decl.default
-      };
-    })
-  );
-  const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
-  byPreset.set(preset, slots);
-  return slots;
-}
-function presetSnapshot(config2, sessionPick) {
-  const session = sessionGlobals(config2, sessionPick);
-  return {
-    from: session.preset,
-    globals: presetByName(config2.presets, session.preset).globals ?? {},
-    // [LAW:types-are-the-program] A preset cannot select a preset: its
-    // globals schema refuses `preset`, so the row is not offered.
-    picks: differing(
-      SETTING_ROWS.filter(([n]) => n !== "preset"),
-      session,
-      baseOf(config2, sessionPick),
-      (row2) => row2.configKey
-    ),
-    placements: placementDrafts(config2, sessionPick)
-  };
-}
-function themeOwnLook(config2, theme24) {
-  return resolveEffectiveGlobals(
-    { ...config2, globals: { palette: theme24 }, presets: {} },
-    () => null,
-    NOT_CUSTOMIZED
-  );
-}
-function themeDefaultSave(config2, sessionPick) {
-  const session = sessionGlobals(config2, sessionPick);
-  const theme24 = spelled(session, "theme");
-  if (theme24 === null) return { kind: "rule" };
-  const own2 = themeOwnLook(config2, theme24);
-  const declared = presetGlobals(config2, session.preset);
-  const look = Object.fromEntries(
-    THEME_DEFAULT_FIELDS.map((f) => [
-      f,
-      spelled(declared[f] === void 0 ? session : own2, f)
-    ])
-  );
-  return {
-    kind: "look",
-    theme: theme24,
-    look,
-    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== spelled(own2, f))
-  };
-}
-function resetLayers(key) {
-  const settings = SETTING_PROJECTIONS.filter((p2) => p2.configKey === key);
-  return {
-    sessionKeys: settings.map((p2) => p2.sessionKey),
-    fileKeys: [
-      key,
-      ...isPresetGlobalsField(key) ? BUNDLED_PRESETS.map((preset) => presetGlobalsKey(preset, key)) : [],
-      ...isThemeDefaultField(key) ? listResolvablePaletteNames().map(
-        (theme24) => themeDefaultKey(theme24, key)
-      ) : []
-    ]
-  };
-}
-function fileHeldSettings(raw) {
-  return new Set(
-    SETTING_PROJECTIONS.map((p2) => p2.configKey).filter(
-      (key) => resetLayers(key).fileKeys.some(
-        (fileKey) => holds(raw, filePath(fileKey))
-      )
-    )
-  );
-}
-function settingCounts(config2, fileHeld, sessionPick) {
-  const drafts = settingDrafts(config2, sessionPick);
-  const drafted = new Set(drafts.map((d) => d.configKey));
-  const resettable = perSetting(
-    (name) => drafted.has(SETTINGS[name].configKey) || fileHeld.has(SETTINGS[name].configKey)
-  );
-  const themeDefault = themeDefaultSave(config2, sessionPick);
-  return {
-    unsaved: drafts.length + placementDrafts(config2, sessionPick).length,
-    resettable,
-    themeDefault: themeDefault.kind === "look" && themeDefault.differs ? { differs: true, theme: themeDefault.theme } : { differs: false }
-  };
-}
-function filePath(fileKey) {
-  const target = parsePersistTarget(fileKey);
-  if (target === null || target.scope === "preset-root") {
-    throw new Error(`reset layer "${fileKey}" is not a value path`);
-  }
-  return persistPath(target);
-}
-function holds(doc, path43) {
-  const [step4, ...rest2] = path43;
-  if (step4 === void 0) return doc !== void 0;
-  return typeof doc === "object" && doc !== null && holds(doc[step4], rest2);
-}
-
-// src/renderer/verbs/key-seeds.ts
-function stateKeySeed(config2, sessionPick, key) {
-  const setting = SESSION_KEY_TO_SETTING.get(key);
-  if (setting !== void 0) {
-    return sessionSettingValue(config2, sessionPick, setting);
-  }
-  for (const [, decl] of stateVarDecls(config2)) {
-    if (decl.key === key) return decl.default ?? null;
-  }
-  return null;
-}
-function configKeySeed(globals, key) {
-  const seed = numericGlobalsSeeds(globals).get(key);
-  return seed === void 0 ? null : String(seed);
-}
-
-// src/config/disclosure-nest.ts
-init_globals();
-var NO_NEST = {
-  inside: () => [],
-  defaultOf: () => DISCLOSURE_CLOSED,
-  menus: []
-};
-var idOf2 = (d) => `${d.key}\0${d.member}`;
-function buildDisclosureNest(config2) {
-  const menus = /* @__PURE__ */ new Map();
-  const hostedBy = (node) => {
-    const id2 = `${node.name}\0${placementId(node)}`;
-    const memo = menus.get(id2);
-    if (memo !== void 0) return memo;
-    const template = config2.segments[node.name]?.template;
-    const found2 = template === void 0 ? [] : hostedMenus(template, placementId(node));
-    menus.set(id2, found2);
-    return found2;
-  };
-  const triggeredBy = (node) => [
-    ...node.opens === void 0 ? [] : [node.opens.ref],
-    ...hostedBy(node)
-  ];
-  const defaults = /* @__PURE__ */ new Map();
-  const declaredWithin = /* @__PURE__ */ new Map();
-  for (const decl of Object.values(config2.variables)) {
-    if (decl.kind !== "state") continue;
-    if (decl.default !== void 0) defaults.set(decl.key, decl.default);
-    if (decl.within !== void 0) declaredWithin.set(decl.key, decl.within);
-  }
-  const inside = /* @__PURE__ */ new Map();
-  const members = /* @__PURE__ */ new Map();
-  const hung = /* @__PURE__ */ new Map();
-  const known = (d) => {
-    members.set(d.key, (members.get(d.key) ?? /* @__PURE__ */ new Set()).add(d.member));
-  };
-  const note = (parent, child) => {
-    const children2 = inside.get(idOf2(parent)) ?? /* @__PURE__ */ new Map();
-    children2.set(idOf2(child), child);
-    inside.set(idOf2(parent), children2);
-  };
-  const walk3 = (node, enclosing) => {
-    if (node.kind === "container") {
-      for (const child of node.children) walk3(child, enclosing);
-      return;
-    }
-    for (const child of triggeredBy(node)) {
-      known(child);
-      hung.set(idOf2(child), child);
-      for (const parent of enclosing) note(parent, child);
-    }
-    if (node.opens !== void 0) {
-      walk3(node.opens.body, [...enclosing, node.opens.ref]);
-    }
-  };
-  for (const preset of presetNames(config2.presets)) {
-    walk3(presetRoot(config2, preset).node, []);
-  }
-  for (const decl of Object.values(config2.actions)) {
-    const toggled = disclosureOfAction(decl);
-    if (toggled !== void 0) known(toggled);
-  }
-  for (const [key, parents] of declaredWithin) {
-    for (const member of members.get(key) ?? []) {
-      for (const parent of parents) note(parent, { key, member });
-    }
-  }
-  const closures = /* @__PURE__ */ new Map();
-  const closure = (parent) => {
-    const memo = closures.get(idOf2(parent));
-    if (memo !== void 0) return memo;
-    const found2 = /* @__PURE__ */ new Map();
-    const visit = (d) => {
-      for (const [id2, child] of inside.get(idOf2(d)) ?? []) {
-        if (found2.has(id2)) continue;
-        found2.set(id2, child);
-        visit(child);
-      }
-    };
-    visit(parent);
-    const within4 = /* @__PURE__ */ new Map();
-    for (const { key, member } of found2.values()) {
-      within4.set(key, (within4.get(key) ?? /* @__PURE__ */ new Set()).add(member));
-    }
-    const keys2 = [...within4].map(([key, held]) => ({
-      key,
-      outside: new Set([...members.get(key)].filter((m) => !held.has(m)))
-    }));
-    closures.set(idOf2(parent), keys2);
-    return keys2;
-  };
-  return {
-    inside: closure,
-    menus: [...hung.values()],
-    // A disclosure that declares no default starts closed: its toggle counts
-    // an unknown value as its first member, `closed`.
-    defaultOf: (key) => defaults.get(key) ?? DISCLOSURE_CLOSED
-  };
-}
-var NESTS = /* @__PURE__ */ new WeakMap();
-function disclosureNest(config2) {
-  const memo = NESTS.get(config2);
-  if (memo !== void 0) return memo;
-  const nest = buildDisclosureNest(config2);
-  NESTS.set(config2, nest);
-  return nest;
-}
-function closeNested(nest, read2, writes) {
-  const written2 = new Set(writes.map((w) => w.key));
-  const held = (key) => read2(key) ?? nest.defaultOf(key);
-  const folds = /* @__PURE__ */ new Set();
-  for (const { key, value } of writes) {
-    const was = held(key);
-    if (was === value) continue;
-    for (const nested of nest.inside({ key, member: was })) {
-      const now2 = held(nested.key);
-      const closes = now2 !== nest.defaultOf(nested.key) && !nested.outside.has(now2) && !written2.has(nested.key);
-      if (closes) folds.add(nested.key);
-    }
-  }
-  return [...folds];
-}
-function openRoots(nest, read2) {
-  const open2 = ({ key, member }) => (read2(key) ?? nest.defaultOf(key)) === member;
-  const within4 = (child, parent) => nest.inside(parent).some(
-    ({ key, outside }) => key === child.key && !outside.has(child.member)
-  );
-  return nest.menus.filter(open2).filter((d) => {
-    const parents = nest.menus.filter((p2) => p2 !== d && within4(d, p2));
-    const leftByParent = parents.length > 0 && nest.defaultOf(d.key) === d.member;
-    return !parents.some(open2) && !leftByParent;
-  });
-}
-
-// src/renderer/closing-view.ts
-init_globals();
-function closingView(store, nestOf2, log) {
-  const write = (sessionId2, writes, land) => {
-    const folds = closeNested(
-      nestOf2(sessionId2),
-      (key) => store.get(sessionId2, key),
-      writes
-    );
-    runInAction(() => {
-      land();
-      for (const key of folds) store.clear(sessionId2, key);
-    });
-    if (folds.length > 0) {
-      log(`close-nested: folded=${folds.join(",")} (session=${sessionId2})`);
-    }
-  };
-  const setBatch = (sessionId2, pairs2) => write(sessionId2, pairs2, () => store.setBatch(sessionId2, pairs2));
-  return {
-    get: (sessionId2, key) => store.get(sessionId2, key),
-    revision: (sessionId2) => store.revision(sessionId2),
-    set: (sessionId2, key, value) => setBatch(sessionId2, [{ key, value }]),
-    setBatch,
-    // A cleared key reads its default, so it closes what its old value held.
-    clear: (sessionId2, key) => write(
-      sessionId2,
-      [{ key, value: nestOf2(sessionId2).defaultOf(key) }],
-      () => store.clear(sessionId2, key)
-    )
-  };
-}
-
-// src/daemon/foundations/session-keys.ts
-init_globals();
-var SESSION_RENDER_ORIGIN_KEY = "render-origin";
-var SESSION_CLIENT_HINTS_KEY = "client-hints";
-var SESSION_CONFIG_OVERRIDE_KEY = "config-override";
-
-// src/renderer/config-file-store.ts
-init_globals();
-var import_json54 = __toESM(require_dist(), 1);
-var BOOLEAN_TRUTHY2 = /* @__PURE__ */ new Set(["1", "true"]);
-var BOOLEAN_FALSY2 = /* @__PURE__ */ new Set(["0", "false", ""]);
-function persistValueText(key, raw) {
-  const target = requireValueTarget(key);
-  const kind = target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
-  if (kind === "string") return JSON.stringify(raw);
-  if (kind === "number") {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) {
-      throw new Error(
-        `persistValueText: "${key}" expects a number, got "${raw}"`
-      );
-    }
-    return String(n);
-  }
-  if (BOOLEAN_TRUTHY2.has(raw)) return "true";
-  if (BOOLEAN_FALSY2.has(raw)) return "false";
-  throw new Error(
-    `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`
-  );
-}
-function readConfigText(file) {
-  try {
-    return fs_default.readFileSync(file, "utf8");
-  } catch (e) {
-    if (e.code === "ENOENT") return null;
-    throw e;
-  }
-}
-function writeConfigText(file, text4, logger) {
-  try {
-    if (text4 === null) {
-      fs_default.rmSync(resolvedTarget(file), { force: true });
-      return;
-    }
-    writeAtomic(file, text4);
-  } catch (e) {
-    const message = `config write failed (${file}): ${e.message}`;
-    logger("error", message);
-    throw new Error(message);
-  }
-}
-function docOf(text4) {
-  return /^\s*$/.test(text4) ? null : parseDocument(text4);
-}
-function has2(doc, p2) {
-  return doc !== null && nodeAt(doc, p2) !== void 0;
-}
-function authoredLayout(node) {
-  if (node.kind === "segment") {
-    return node.when === void 0 ? node.name : { seg: node.name, when: node.when };
-  }
-  if (node.kind === "container") {
-    const { kind, direction, children: children2, ...own2 } = node;
-    return {
-      [direction === "horizontal" ? "h" : "v"]: children2.map(authoredLayout),
-      ...own2
-    };
-  }
-  return node;
-}
-function authoredFragment(fragment) {
-  if (!isRowsFragment(fragment)) return authoredLayout(fragment);
-  const { rows, ...own2 } = fragment;
-  return {
-    rows: Object.fromEntries(
-      Object.entries(rows).map(([name, row2]) => [name, authoredLayout(row2)])
-    ),
-    ...own2
-  };
-}
-var RAW = RAW_DEFAULT_DSL_CONFIG;
-var RAW_SEGMENTS = RAW.segments;
-var RAW_PRESETS = RAW.presets;
-var RAW_ROOT = RAW.root;
-function requireDeclared(doc, own2, bundled, key) {
-  if (!has2(doc, own2) && bundled === void 0) {
-    throw new BadVerbArgs(
-      `cannot edit ${key}: neither the config file nor the bundled default declares ${own2.join(".")}`
-    );
-  }
-}
-function valuePathOf(doc, target) {
-  const path43 = persistPath(target);
-  if (target.scope === "segment-palette") {
-    requireDeclared(
-      doc,
-      ["segments", target.segment],
-      RAW_SEGMENTS[target.segment],
-      path43.join(".")
-    );
-  }
-  return path43;
-}
-function bundledDoc(value) {
-  return parseDocument(json5Text(value));
-}
-function bundledRowLayers() {
-  return Object.entries(RAW_ROOT.rows).map(([name, row2]) => {
-    const authored = authoredLayout(row2);
-    return {
-      path: ["root"],
-      fragment: bundledDoc({ rows: { [name]: authored } }),
-      unit: { path: ["root", "rows", name], value: authored }
-    };
-  });
-}
-function fileLayer(doc, path43) {
-  const fragment = doc === null ? void 0 : nodeAt(doc, path43);
-  return fragment === void 0 ? null : { path: path43, fragment, unit: null };
-}
-function bundledRootLayer(path43, root) {
-  if (root === void 0) return null;
-  const authored = authoredFragment(root);
-  return {
-    path: path43,
-    fragment: bundledDoc(authored),
-    unit: { path: path43, value: authored }
-  };
-}
-function presetLayer(doc, preset) {
-  const own2 = ["presets", preset];
-  const path43 = [...own2, "root"];
-  const bundled = RAW_PRESETS[preset];
-  requireDeclared(doc, own2, bundled, path43.join("."));
-  const layer = fileLayer(doc, path43) ?? bundledRootLayer(path43, bundled?.root);
-  return layer !== null && restagesFragment(layer.fragment) ? layer : null;
-}
-var TREE_BLOCK = "#";
-function applyLayer(base, layer) {
-  const rows = rowEntriesOf(layer.fragment);
-  return rows === null ? /* @__PURE__ */ new Map([
-    [
-      TREE_BLOCK,
-      { path: layer.path, unit: layer.unit, node: layer.fragment }
-    ]
-  ]) : new Map([
-    ...base,
-    ...rows.map(
-      (row2) => [
-        row2.key,
-        {
-          path: [...layer.path, "rows", row2.key],
-          unit: layer.unit,
-          node: row2.value
-        }
-      ]
-    )
-  ]);
-}
-function cascadeOf(doc, preset) {
-  const layers = [
-    ...bundledRowLayers(),
-    fileLayer(doc, ["root"]),
-    presetLayer(doc, preset)
-  ].filter((layer) => layer !== null);
-  return layers.reduce(applyLayer, /* @__PURE__ */ new Map());
-}
-function layoutPlacementOf(doc, preset, id2) {
-  for (const { node, ...placement } of cascadeOf(doc, preset).values()) {
-    if (hasSegmentRef(node, id2)) return placement;
-  }
-  throw new BadVerbArgs(
-    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id2}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
-  );
-}
-function stagedPathOf(doc, preset) {
-  return presetLayer(doc, preset)?.path ?? ["root"];
-}
-function resetPathOf(doc, target) {
-  return target.scope === "preset-root" ? stagedPathOf(doc, target.preset) : persistPath(target);
-}
-function ensureAuthored(text4, { unit }) {
-  return unit === null ? text4 : setValue(text4, unit.path, json5Text(unit.value), JSON5_DIALECT);
-}
-function requireTarget(key) {
-  const target = parsePersistTarget(key);
-  if (target === null) {
-    throw new Error(`"${key}" is not a valid persist target`);
-  }
-  return target;
-}
-function requireValueTarget(key) {
-  const target = requireTarget(key);
-  if (target.scope === "preset-root") {
-    throw new Error(`"${key}" names a layout, not a value`);
-  }
-  return target;
-}
-function commit2(store, home, before, after, refuse4) {
-  const will = loadOrRefuse(home, after);
-  let held;
-  const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
-  refuseNewDrops(home, was, will);
-  refuse4(home, was, will);
-  writeConfigText(home.path, after, store.logger);
-  store.record(home.path, before, after);
-}
-function refuseHidden(home, was, will) {
-  const hidden = hiddenBy(home, was(), will);
-  if (hidden.length > 0) {
-    throw new BadVerbArgs(
-      `refused: ${home.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar \u2014 edit it there`
-    );
-  }
-}
-var releases = () => {
-};
-function homeOnly(home, read2) {
-  try {
-    return read2();
-  } catch (e) {
-    if (!(e instanceof BadVerbArgs) || home.above.length === 0) throw e;
-    throw new BadVerbArgs(
-      `${e.message} \u2014 or it is declared by ${home.above.map((l) => l.path).join(", ")}, which the bar does not edit`
-    );
-  }
-}
-function hiddenBy(home, was, will) {
-  if (was === null) return [];
-  const drawn = new Set(changedPaths(topConfig(was), topConfig(will)));
-  return changedPaths(homeConfig(home, was), homeConfig(home, will)).filter(
-    (p2) => !drawn.has(p2)
-  );
-}
-function loadedOrNull(home, text4) {
-  try {
-    return chainOver(home, text4);
-  } catch (e) {
-    if (e instanceof ConfigError) return null;
-    throw e;
-  }
-}
-function chainOver(home, text4) {
-  return loadConfigChain(
-    home.locs,
-    text4 !== null ? [homeLayer(home.path), ...home.above] : home.above,
-    DEFAULT_DSL_CONFIG,
-    { warned: () => {
-    } },
-    { repo: home.repo, cwd: home.cwd },
-    (p2) => p2 === home.path && text4 !== null ? text4 : fs_default.readFileSync(p2, "utf8")
-  );
-}
-function homeConfig(home, chain2) {
-  const [bottom] = chain2.layers;
-  return bottom?.path === home.path ? bottom.config : chain2.base;
-}
-function topConfig(chain2) {
-  return chain2.layers.at(-1)?.config ?? chain2.base;
-}
-function changedPaths(a, b, at = "") {
-  if (!isPlainObject4(a) || !isPlainObject4(b)) {
-    return JSON.stringify(a) === JSON.stringify(b) ? [] : [at];
-  }
-  return [.../* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)])].flatMap(
-    (k) => changedPaths(a[k], b[k], at === "" ? k : `${at}.${k}`)
-  );
-}
-function isPlainObject4(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function loadOrRefuse(home, text4) {
-  try {
-    return chainOver(home, text4);
-  } catch (e) {
-    if (!(e instanceof ConfigError)) throw e;
-    throw new BadVerbArgs(
-      `refused: the config file would not load after this click \u2014 ${e.message}`
-    );
-  }
-}
-function refuseNewDrops(home, was, will) {
-  if (will.dropped.length === 0) return;
-  const prior = was();
-  if (prior === null) return;
-  const issuesOf = (chain2) => chain2.dropped.flatMap(
-    (e) => e.issues.map((issue3) => ({ file: e.file, issue: issue3 }))
-  );
-  const held = new Set(
-    issuesOf(prior).map(({ file, issue: issue3 }) => `${file}\0${issue3.message}`)
-  );
-  const added = issuesOf(will).filter(
-    ({ file, issue: issue3 }) => !held.has(`${file}\0${issue3.message}`)
-  );
-  if (added.length > 0) {
-    throw new BadVerbArgs(
-      `refused: this click would leave a placement of a segment nothing declares \u2014 ${added.map(({ file, issue: issue3 }) => new ConfigError(file, [issue3]).message).join("\n")}`
-    );
-  }
-}
-function readValue(file, key) {
-  const target = requireValueTarget(key);
-  const doc = docOf(readConfigText(file) ?? "");
-  const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
-  return node !== void 0 && "value" in node ? node.value : void 0;
-}
-function writeValues(store, home, pairs2) {
-  writeDrafts(store, home, pairs2, []);
-}
-function writeDrafts(store, home, pairs2, placements) {
-  const before = readConfigText(home.path);
-  const valued = pairs2.reduce(
-    (text4, [key, raw]) => setValue(
-      text4,
-      valuePathOf(docOf(text4), requireValueTarget(key)),
-      persistValueText(key, raw),
-      JSON5_DIALECT
-    ),
-    before ?? ""
-  );
-  commit2(
-    store,
-    home,
-    before,
-    homeOnly(
-      home,
-      () => withPlacements(valued, home.path, placements, (text4) => text4)
-    ),
-    refuseHidden
-  );
-}
-function withPlacements(text4, file, placements, own2) {
-  return placements.reduce((prior, { preset, id: id2, setting, value }) => {
-    const acc = own2(prior, preset, id2);
-    const placement = layoutPlacementOf(docOf(acc), preset, id2);
-    const set2 = setPlacementSetting(
-      ensureAuthored(acc, placement),
-      placement.path,
-      id2,
-      setting,
-      json5Text(value)
-    );
-    if (set2 === null) {
-      throw new BadVerbArgs(
-        `${placement.path.join(".")} in ${file} has no placement "${id2}" \u2014 the bar you clicked is stale (it reloads on the next render)`
-      );
-    }
-    return set2;
-  }, text4);
-}
-function ownRow(text4, preset, id2) {
-  const doc = docOf(text4);
-  const own2 = ["presets", preset, "root"];
-  for (const [row2, { path: path43, unit, node }] of cascadeOf(doc, preset)) {
-    if (!hasSegmentRef(node, id2)) continue;
-    if (own2.every((key, i2) => path43[i2] === key)) return text4;
-    const rowText = unit === null ? movableTextOf(text4, node) : json5Text(unit.value);
-    if (row2 !== TREE_BLOCK) {
-      return setValue(text4, [...own2, "rows", row2], rowText, JSON5_DIALECT);
-    }
-    if (presetLayer(doc, preset) !== null) {
-      throw new BadVerbArgs(
-        `cannot give preset "${preset}" its own copy of ${path43.join(".")}: it already stages rows of its own over that tree`
-      );
-    }
-    return setValue(text4, own2, rowText, JSON5_DIALECT);
-  }
-  return text4;
-}
-function deleteAtPath(text4, path43) {
-  const ownPreset = path43[0] === "presets" && path43.length > 2 && !isBundledPreset(path43[1]);
-  return deleteValue(text4, path43, ownPreset ? 2 : 0);
-}
-function deleteValues(store, home, keys2) {
-  const targets = keys2.map(requireTarget);
-  const before = readConfigText(home.path);
-  if (before === null) return;
-  const after = targets.reduce(
-    (text4, target) => deleteAtPath(text4, resetPathOf(docOf(text4), target)),
-    before
-  );
-  if (after === before) return;
-  commit2(store, home, before, after, releases);
-}
-var SAVED_PRESET_PREFIX = "custom-";
-function presetKeys(doc) {
-  const declared = doc === null ? void 0 : nodeAt(doc, ["presets"]);
-  return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
-}
-function freePresetName(doc, home) {
-  const taken = new Set(
-    [
-      ...BUNDLED_PRESETS,
-      ...presetKeys(doc),
-      // Each layer above as the loader reads it (JSON5, duplicate keys and
-      // all) — the editor refuses files the loader renders.
-      ...home.above.flatMap(
-        (l) => Object.keys(
-          import_json54.default.parse(fs_default.readFileSync(l.path, "utf8")).presets ?? {}
-        )
-      )
-    ].map(ident)
-  );
-  return Array.from(
-    { length: taken.size + 1 },
-    (_, i2) => `${SAVED_PRESET_PREFIX}${i2 + 1}`
-  ).find((candidate) => !taken.has(ident(candidate)));
-}
-function writePreset(store, home, from, globals, picks, placements) {
-  const before = readConfigText(home.path);
-  const doc = docOf(before ?? "");
-  const name = freePresetName(doc, home);
-  const own2 = ["presets", name];
-  const staged = homeOnly(home, () => presetLayer(doc, from));
-  const copied = [
-    ...staged === null ? [] : [
-      [
-        [...own2, "root"],
-        staged.unit === null ? movableTextOf(before ?? "", staged.fragment) : json5Text(staged.unit.value)
-      ]
-    ],
-    ...Object.keys(globals).length === 0 ? [] : [[[...own2, "globals"], json5Text(globals)]]
-  ];
-  const pinned = picks.map(([field, raw]) => {
-    const key = presetGlobalsKey(name, field);
-    return [
-      valuePathOf(doc, requireValueTarget(key)),
-      persistValueText(key, raw)
-    ];
-  });
-  const after = [...copied, ...pinned].reduce(
-    (text4, [at, value]) => setValue(text4, at, value, JSON5_DIALECT),
-    setValue(before ?? "", own2, "{}", JSON5_DIALECT)
-  );
-  const placed2 = homeOnly(
-    home,
-    () => withPlacements(
-      after,
-      home.path,
-      placements.map((p2) => ({ ...p2, preset: name })),
-      ownRow
-    )
-  );
-  commit2(store, home, before, placed2, refuseHidden);
-  return name;
-}
-function writeThemeDefault(store, home, theme24, look) {
-  const before = readConfigText(home.path);
-  const after = setValue(
-    before ?? "",
-    ["themeDefaults", theme24],
-    json5Text(look),
-    JSON5_DIALECT
-  );
-  commit2(store, home, before, after, refuseHidden);
-}
-function deletePreset(store, home, name) {
-  if (isBundledPreset(name)) {
-    throw new BadVerbArgs(
-      `cannot delete preset "${name}": it is bundled \u2014 reset its settings instead`
-    );
-  }
-  const own2 = ["presets", name];
-  const before = readConfigText(home.path);
-  const doc = docOf(before ?? "");
-  if (before === null || doc === null || nodeAt(doc, own2) === void 0) {
-    throw new BadVerbArgs(
-      `cannot delete preset "${name}": ${home.path} declares no ${own2.join(".")} \u2014 the bar you clicked is stale; it reloads on the next render`
-    );
-  }
-  const selected = nodeAt(doc, ["globals", "preset"]);
-  const paths2 = [
-    own2,
-    ...selected?.kind === "string" && selected.value === name ? [["globals", "preset"]] : []
-  ];
-  commit2(
-    store,
-    home,
-    before,
-    paths2.reduce((text4, at) => deleteAtPath(text4, at), before),
-    releases
-  );
-}
-function applyLayoutOp(store, home, key, op) {
-  const target = requireTarget(key);
-  if (target.scope !== "preset-root") {
-    throw new Error(`"${key}" is not a "presets.<name>.root" target`);
-  }
-  const before = readConfigText(home.path);
-  const subject = op.op === "remove" ? op.target : op.anchor;
-  const placement = homeOnly(
-    home,
-    () => layoutPlacementOf(docOf(before ?? ""), target.preset, subject)
-  );
-  const authored = ensureAuthored(before ?? "", placement);
-  const { after, placed: placed2 } = spliceOp(authored, placement.path, op, () => {
-    const config2 = loadOrRefuse(home, authored).config;
-    return presetNames(config2.presets).map(
-      (preset) => presetRoot(config2, preset).node
-    );
-  });
-  if (after === null) {
-    throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${home.path} has no placement "${subject}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
-    );
-  }
-  commit2(store, home, before, after, refuseHidden);
-  return placed2;
-}
-function spliceOp(text4, path43, op, rendered) {
-  switch (op.op) {
-    case "remove":
-      return { after: removeSegmentRef(text4, path43, op.target), placed: null };
-    case "insert": {
-      const placed2 = mintPlacement(op.segment, op.anchor, rendered());
-      return {
-        after: insertSegmentRef(text4, path43, placed2, op.anchor, op.relation),
-        placed: placed2
-      };
-    }
-  }
-}
-
-// src/renderer/settings-history.ts
-init_globals();
-
-// src/renderer/session-state.ts
-init_globals();
-function recordingView(store, records, onChange) {
-  const recorded2 = (sessionId2, keys2, write) => {
-    const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
-    write();
-    for (const { key, before: b } of before) {
-      onChange(sessionId2, key, b, store.get(sessionId2, key));
-    }
-  };
-  return {
-    get: (sessionId2, key) => store.get(sessionId2, key),
-    revision: (sessionId2) => store.revision(sessionId2),
-    set: (sessionId2, key, value) => recorded2(sessionId2, [key], () => store.set(sessionId2, key, value)),
-    setBatch: (sessionId2, pairs2) => recorded2(
-      sessionId2,
-      pairs2.map((p2) => p2.key),
-      () => store.setBatch(sessionId2, pairs2)
-    ),
-    clear: (sessionId2, key) => recorded2(sessionId2, [key], () => store.clear(sessionId2, key))
-  };
-}
-var EPHEMERAL_SESSION_STORAGE = {
-  load: () => /* @__PURE__ */ new Map(),
-  save: () => {
-  },
-  flush: () => {
-  }
-};
-var DEFAULT_MAX_SESSIONS = 256;
-var SessionState = class {
-  constructor(storage = EPHEMERAL_SESSION_STORAGE, maxSessions = DEFAULT_MAX_SESSIONS) {
-    this.maxSessions = maxSessions;
-    this.storage = storage;
-    this.sessions = /* @__PURE__ */ new Map();
-    this.hydrateFromStorage();
-  }
-  maxSessions;
-  // [LAW:types-are-the-program] Insertion order is recency order: the store
-  // cannot hold more than maxSessions, so "bounded on disk" is structural, not
-  // dependent on an external prune caller.
-  sessions;
-  storage;
-  // [LAW:single-enforcer] The store's revision: counts every change any
-  // writer makes, so it never repeats while the store lives.
-  head = 0;
-  // [LAW:single-enforcer] One atom; every read reports observed against it,
-  // every mutation reports changed. Coarse-grained reactivity is correct for
-  // session-state's load — mutations are rare and computeds are cheap.
-  atom = createAtom("SessionState");
-  hydrateFromStorage() {
-    this.sessions = new Map(
-      Array.from(this.storage.load(), ([id2, kv]) => [
-        id2,
-        { values: new Map(Object.entries(kv)), revision: ++this.head }
-      ])
-    );
-    this.evictOldest();
-    this.persist();
-  }
-  get(sessionId2, key) {
-    this.atom.reportObserved();
-    const session = this.sessions.get(sessionId2);
-    if (!session) return null;
-    this.touch(sessionId2, session);
-    return session.values.get(key) ?? null;
-  }
-  revision(sessionId2) {
-    this.atom.reportObserved();
-    return this.sessions.get(sessionId2)?.revision ?? 0;
-  }
-  // How many derivations are subscribed to this store right now — every
-  // computed that read session state and has not been released. Live configs
-  // keep a bounded number; a count that climbs while the render cache does not
-  // is a disposed store still held (brandon-unfiled-3248.t14 was found in a
-  // heap snapshot because nothing reported this). [LAW:nothing-unseen]
-  // The atom's own observer set (`IDepTreeNode.observers_`, the field MobX's
-  // dependency-tree API reads), `null` once nothing observes it. The other
-  // public view, `getObserverTree`, materialises the whole recursive tree —
-  // one node per observer per path — to answer this direct count, on the
-  // daemon's request thread.
-  observers() {
-    return this.atom.observers_?.size ?? 0;
-  }
-  // The store's revision: how many changes any writer has made to it.
-  latestRevision() {
-    return this.head;
-  }
-  // How many sessions the store holds.
-  size() {
-    return this.sessions.size;
-  }
-  // [LAW:one-source-of-truth] set is the degenerate single-pair form of
-  // setBatch — one write path through the store. The previous shape (a
-  // standalone set body) split the write semantics across two routes
-  // once setBatch was introduced; collapsing keeps mutation, persistence,
-  // and notification in exactly one place.
-  set(sessionId2, key, value) {
-    this.setBatch(sessionId2, [{ key, value }]);
-  }
-  // [LAW:no-silent-failure] Atomic commit of N pairs: every write
-  // lands BEFORE the single reportChanged() that scheduler-visibly
-  // marks the transaction complete. Observers cannot see an
-  // intermediate "half-applied" snapshot — `runInAction` defers
-  // reaction scheduling until the outermost call exits, and we hold
-  // ALL writes inside this one block. Previously, the verb's "loop and
-  // call set N times" pattern fired reportChanged() N times, which
-  // scheduled autoruns between pairs (visible to consumers as the menu
-  // value changing while toolbar-expanded was still old). The batch
-  // method is the structural fix: there is no way to get half-applied
-  // state because there is no intermediate scheduler tick.
-  //
-  // [LAW:dataflow-not-control-flow] An empty pairs array is no-work-
-  // to-do, returned without firing reportChanged or persisting. The
-  // verb body validates that pairs is non-empty before calling, so
-  // this is the public-API safety net rather than the hot path.
-  setBatch(sessionId2, pairs2) {
-    if (pairs2.length === 0) return;
-    runInAction(() => {
-      const session = this.sessions.get(sessionId2) ?? {
-        values: /* @__PURE__ */ new Map(),
-        revision: 0
-      };
-      if (pairs2.some(({ key, value }) => session.values.get(key) !== value))
-        session.revision = ++this.head;
-      for (const { key, value } of pairs2) session.values.set(key, value);
-      this.touch(sessionId2, session);
-      this.evictOldest();
-      this.persist();
-      this.atom.reportChanged();
-    });
-  }
-  clear(sessionId2, key) {
-    runInAction(() => {
-      const session = this.sessions.get(sessionId2);
-      if (session) {
-        if (session.values.delete(key)) session.revision = ++this.head;
-        if (session.values.size === 0) this.sessions.delete(sessionId2);
-        else this.touch(sessionId2, session);
-      }
-      this.persist();
-      this.atom.reportChanged();
-    });
-  }
-  // [LAW:one-source-of-truth] Drop state for sessions that no longer exist.
-  prune(activeSessionIds) {
-    runInAction(() => {
-      for (const id2 of this.sessions.keys()) {
-        if (!activeSessionIds.has(id2)) this.sessions.delete(id2);
-      }
-      this.persist();
-      this.atom.reportChanged();
-    });
-  }
-  // Move-to-end: re-inserting at the tail makes this the most-recently-used.
-  touch(sessionId2, session) {
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, session);
-  }
-  evictOldest() {
-    let overflow = this.sessions.size - this.maxSessions;
-    if (overflow <= 0) return;
-    for (const id2 of this.sessions.keys()) {
-      this.sessions.delete(id2);
-      if (--overflow === 0) break;
-    }
-  }
-  // Synchronous write of any debounced-pending snapshot. Called on daemon
-  // shutdown so a pending pick isn't lost when the process exits.
-  flush() {
-    this.storage.flush();
-  }
-  // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
-  // lands, and anything that lands later (a render that was awaiting, a run
-  // settling) stays in memory, so it can never write over the file a next
-  // daemon has taken up.
-  close() {
-    this.flush();
-    this.storage = EPHEMERAL_SESSION_STORAGE;
-  }
-  persist() {
-    this.storage.save(this.serialize());
-  }
-  serialize() {
-    const snapshot = /* @__PURE__ */ Object.create(null);
-    for (const [sessionId2, { values: values2 }] of this.sessions) {
-      snapshot[sessionId2] = Object.fromEntries(values2);
-    }
-    return snapshot;
-  }
-};
-
-// src/renderer-interface/history-storage.ts
-init_globals();
-var SETTING_SESSION_KEYS = new Set(
-  SETTING_PROJECTIONS.map((s) => s.sessionKey)
-);
-var isSettingKey = (key) => SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
-
-// src/renderer/settings-history.ts
-var EPHEMERAL_HISTORY_STORAGE = {
-  load: () => /* @__PURE__ */ new Map(),
-  save: () => {
-  }
-};
-var MAX_STEPS = 50;
-var MAX_SESSIONS4 = 32;
-var MAX_BYTES = 8 * 1024 * 1024;
-var EMPTY3 = { past: [], future: [] };
-var identity = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
-var SettingsHistory = class {
-  // `loaded` is what the storage held, read before the renderer starts.
-  constructor(sessionState, logger, storage = EPHEMERAL_HISTORY_STORAGE, loaded = storage.load()) {
-    this.sessionState = sessionState;
-    this.logger = logger;
-    this.storage = storage;
-    this.state = new Map(loaded);
-  }
-  sessionState;
-  logger;
-  storage;
-  // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
-  // session's depth (`↶`/`↷`) is recomputed in the turn a step lands — a
-  // refused `↶` that drops steps included, which moves no pick. Per key: a
-  // whole next state is adopted by `replace`, which keeps its order (the
-  // recency) and moves only the sessions whose history changed, so one
-  // session's click recomputes no other session's payload.
-  held = observable.map(void 0, {
-    deep: false
-  });
-  get state() {
-    return this.held;
-  }
-  set state(next) {
-    runInAction(() => this.held.replace(next));
-  }
-  depth(sessionId2) {
-    const { past, future, savepoint } = this.state.get(sessionId2) ?? EMPTY3;
-    return {
-      undo: past.length,
-      redo: future.length,
-      sinceEdit: savepoint?.net.length ?? 0
-    };
-  }
-  history(sessionId2) {
-    return this.state.get(sessionId2) ?? EMPTY3;
-  }
-  begin() {
-    const pending2 = /* @__PURE__ */ new Map();
-    let written2 = false;
-    const note = (sessionId2, change) => {
-      written2 = true;
-      const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
-      const earlier = changes.get(identity(change));
-      changes.set(
-        identity(change),
-        earlier === void 0 ? change : { ...change, before: earlier.before }
-      );
-      pending2.set(sessionId2, changes);
-    };
-    const toggles = /* @__PURE__ */ new Map();
-    const sessionState = recordingView(
-      this.sessionState,
-      // Every key, since a write of any can move a lane: only settings are steps.
-      () => true,
-      (sessionId2, key, before, after) => {
-        written2 = true;
-        if (!isSettingKey(key) && key !== EDIT_MODE_KEY) return;
-        if (key === EDIT_MODE_KEY) {
-          const earlier = toggles.get(sessionId2);
-          toggles.set(sessionId2, {
-            before: earlier === void 0 ? before : earlier.before,
-            after
-          });
-          return;
-        }
-        note(sessionId2, { kind: "session", key, before, after });
-      }
-    );
-    return {
-      sessionState,
-      file: (sessionId2, file, before, after) => note(sessionId2, { kind: "file", file, before, after }),
-      wrote: () => {
-        written2 = true;
-      },
-      written: () => written2,
-      commit: () => {
-        const committing = new Map(pending2);
-        const toggled = new Map(toggles);
-        pending2.clear();
-        toggles.clear();
-        for (const sessionId2 of /* @__PURE__ */ new Set([
-          ...committing.keys(),
-          ...toggled.keys()
-        ])) {
-          const step4 = [...committing.get(sessionId2)?.values() ?? []].filter(
-            (c) => c.before !== c.after
-          );
-          const current2 = this.history(sessionId2);
-          const appended = step4.length === 0 ? current2 : afterAppend(current2, step4);
-          const toggle = toggled.get(sessionId2);
-          const next = toggle === void 0 ? appended : withToggle(appended, toggle);
-          if (next !== current2) this.put(sessionId2, next);
-        }
-      }
-    };
-  }
-  // Returns the step it restored, so the caller can say what changed.
-  undo(sessionId2) {
-    const history = this.history(sessionId2);
-    const step4 = history.past.at(-1);
-    if (step4 === void 0) {
-      throw new BadVerbArgs("undo: nothing to undo");
-    }
-    this.apply(sessionId2, step4, "before", "undo", afterUndo(history, step4));
-    return step4;
-  }
-  // [LAW:no-silent-failure] Cancel for edit mode: put every target edit mode
-  // changed back to what it held when edit mode opened — one step, landing
-  // whole or not at all (`apply`) — then give the stack back the shape it had,
-  // with nothing to redo, so neither `↶` nor `↷` can bring back what was
-  // discarded. A target changed since by anything else (a hand edit, another
-  // session) is not put back: overwriting it would destroy that change, and no
-  // later cancel could put it back either. Every other target is, and then the
-  // refusal names what was kept, loudly. Edit mode stays where it is — the
-  // click that cancels also leaves — so the savepoint is taken again at the
-  // stack as it now stands. Returns what it put back.
-  rewind(sessionId2) {
-    const history = this.history(sessionId2);
-    const { savepoint } = history;
-    if (savepoint === void 0) {
-      throw new BadVerbArgs(
-        "rewind: edit mode has no savepoint \u2014 nothing to cancel"
-      );
-    }
-    const stale = savepoint.net.filter(
-      (c) => this.read(sessionId2, c) !== c.after
-    );
-    const gone = new Set(stale.map(identity));
-    const putBack = savepoint.net.filter((c) => !gone.has(identity(c)));
-    const past = capped(without2(pastAt(history, savepoint), gone));
-    this.apply(sessionId2, putBack, "before", "rewind", {
-      past,
-      future: [],
-      savepoint: { at: past.length, net: [], below: [] }
-    });
-    if (stale.length > 0) {
-      throw new BadVerbArgs(
-        `rewind: ${stale.map(describe3).join(", ")} changed since edit mode opened \u2014 kept as it is; everything else edit mode changed was put back`
-      );
-    }
-    return putBack;
-  }
-  redo(sessionId2) {
-    const history = this.history(sessionId2);
-    const { past, future } = history;
-    const step4 = future.at(-1);
-    if (step4 === void 0) {
-      throw new BadVerbArgs("redo: nothing to redo");
-    }
-    const all2 = [...past, step4];
-    const kept = capped(all2);
-    this.apply(sessionId2, step4, "after", "redo", {
-      past: kept,
-      future: future.slice(0, -1),
-      ...savepointAfter(history.savepoint, all2.length - kept.length, step4)
-    });
-    return step4;
-  }
-  // [LAW:no-silent-failure] A step lands whole, together with the history
-  // that records it, or not at all: every change is checked before any is
-  // written, and a failure while writing it or saving `then` puts back what
-  // was already written before the error goes on. A stale target is refused
-  // by name, and its now-unreachable changes leave both stacks (see the
-  // header).
-  apply(sessionId2, step4, to, verb, then) {
-    const from = to === "before" ? "after" : "before";
-    const stale = step4.filter((c) => this.read(sessionId2, c) !== c[from]);
-    if (stale.length > 0) {
-      const gone = new Set(stale.map(identity));
-      const { past, future, savepoint } = this.history(sessionId2);
-      this.put(sessionId2, {
-        past: without2(past, gone),
-        future: without2(future, gone),
-        ...savepoint !== void 0 && {
-          savepoint: {
-            // A step left empty leaves the stack, so the position counts the
-            // steps below it that survive.
-            at: without2(
-              [...past, ...[...future].reverse()].slice(0, savepoint.at),
-              gone
-            ).length,
-            net: savepoint.net.filter((c) => !gone.has(identity(c))),
-            below: without2(savepoint.below, gone)
-          }
-        }
-      });
-      throw new BadVerbArgs(
-        `${verb}: ${stale.map(describe3).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
-      );
-    }
-    const written2 = [];
-    try {
-      for (const change of step4) {
-        this.write(sessionId2, change, change[to]);
-        written2.push(change);
-      }
-      this.put(sessionId2, then);
-    } catch (e) {
-      try {
-        for (const change of written2.reverse()) {
-          this.write(sessionId2, change, change[from]);
-        }
-      } catch (restoring) {
-        throw new Error(
-          `${e.message}; and putting the step back failed, so it is half-applied: ${restoring.message}`
-        );
-      }
-      throw e;
-    }
-  }
-  read(sessionId2, change) {
-    return change.kind === "session" ? this.sessionState.get(sessionId2, change.key) : readConfigText(change.file);
-  }
-  write(sessionId2, change, value) {
-    if (change.kind === "file") {
-      writeConfigText(change.file, value, this.logger);
-    } else if (value === null) {
-      this.sessionState.clear(sessionId2, change.key);
-    } else {
-      this.sessionState.set(sessionId2, change.key, value);
-    }
-  }
-  // Move-to-end keeps insertion order as recency, so the bounds drop the
-  // session that changed least recently. The new state is adopted only once
-  // it is saved, so memory never holds a step the file could not.
-  put(sessionId2, history) {
-    const next = new Map(this.state);
-    next.delete(sessionId2);
-    if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
-      next.set(sessionId2, history);
-    }
-    while (next.size > MAX_SESSIONS4 || weight(next) > MAX_BYTES) {
-      const [oldest, h] = next.entries().next().value;
-      if (next.size > 1) next.delete(oldest);
-      else if (h.past.length + h.future.length > 0) {
-        next.set(oldest, withoutOldestStep(h));
-      } else {
-        this.logger(
-          "warn",
-          `settings-history: edit mode's changes for session ${oldest} exceed ${MAX_BYTES} bytes; cancel is no longer available`
-        );
-        next.delete(oldest);
-      }
-    }
-    this.storage.save(Object.fromEntries(next));
-    this.state = next;
-  }
-};
-function weight(state) {
-  let bytes = 0;
-  for (const { past, future, savepoint } of state.values()) {
-    for (const step4 of [
-      ...past,
-      ...future,
-      ...savepoint === void 0 ? [] : [savepoint.net, ...savepoint.below]
-    ]) {
-      for (const c of step4) {
-        bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
-      }
-    }
-  }
-  return bytes;
-}
-function withoutOldestStep({
-  past,
-  future,
-  savepoint
-}) {
-  return past.length > 0 ? { past: past.slice(1), future, ...savepointAfter(savepoint, 1, []) } : { past, future: future.slice(1), ...savepointAfter(savepoint, 0, []) };
-}
-function capped(steps2) {
-  return steps2.slice(-MAX_STEPS);
-}
-var isOpen = (value) => value === EDIT_MODE_REF.member;
-function savepointAfter(savepoint, dropped, step4) {
-  return savepoint === void 0 ? {} : {
-    savepoint: {
-      at: Math.max(0, savepoint.at - dropped),
-      net: withNet(savepoint.net, step4),
-      below: savepoint.below
-    }
-  };
-}
-function withNet(net, step4) {
-  const byTarget = new Map(net.map((c) => [identity(c), c]));
-  for (const c of step4) {
-    const first2 = byTarget.get(identity(c));
-    byTarget.set(
-      identity(c),
-      first2 === void 0 ? c : { ...first2, after: c.after }
-    );
-  }
-  return [...byTarget.values()].filter((c) => c.before !== c.after);
-}
-var reversed = (step4) => step4.map((c) => ({ ...c, before: c.after, after: c.before }));
-function afterAppend(history, step4) {
-  const all2 = [...history.past, step4];
-  const past = capped(all2);
-  const { savepoint } = history;
-  const abandonedBelow = savepoint === void 0 ? 0 : Math.max(0, savepoint.at - history.past.length);
-  return {
-    past,
-    future: [],
-    ...savepointAfter(
-      savepoint && {
-        at: Math.min(savepoint.at, history.past.length),
-        net: savepoint.net,
-        below: [...redone(history.future, abandonedBelow), ...savepoint.below]
-      },
-      all2.length - past.length,
-      step4
-    )
-  };
-}
-function redone(future, count) {
-  const n = Math.min(count, future.length);
-  return future.slice(future.length - n).reverse();
-}
-function afterUndo(history, step4) {
-  return {
-    past: history.past.slice(0, -1),
-    future: capped([...history.future, step4]),
-    ...savepointAfter(history.savepoint, 0, reversed(step4))
-  };
-}
-function pastAt(history, savepoint) {
-  const { past, future } = history;
-  const kept = past.slice(0, savepoint.at);
-  return [
-    ...kept,
-    ...redone(future, savepoint.at - kept.length),
-    ...savepoint.below
-  ];
-}
-function withToggle(history, toggle) {
-  if (isOpen(toggle.after) && !isOpen(toggle.before)) {
-    return {
-      ...history,
-      savepoint: { at: history.past.length, net: [], below: [] }
-    };
-  }
-  if (!isOpen(toggle.after) && isOpen(toggle.before)) {
-    const { past, future } = history;
-    return { past, future };
-  }
-  return history;
-}
-function without2(steps2, gone) {
-  return steps2.map((step4) => step4.filter((c) => !gone.has(identity(c)))).filter((step4) => step4.length > 0);
-}
-function describeStep(step4) {
-  return step4.map(describe3).join(", ");
-}
-function describe3(change) {
-  return change.kind === "session" ? `session setting "${change.key}"` : change.file;
-}
-
-// src/daemon/foundations/session-env.ts
-init_globals();
-var SESSION_FACT_VARIABLES = [
-  "CLAUDE_CODE_SESSION_ID",
-  "CLAUDE_PROJECT_DIR",
-  "CLAUDE_CONFIG_DIR",
-  "TMUX",
-  "TMUX_PANE"
-];
-function sessionEnv(facts) {
-  return {
-    ...Object.fromEntries(SESSION_FACT_VARIABLES.map((name) => [name, null])),
-    CLAUDE_CODE_SESSION_ID: facts.sessionId,
-    CLAUDE_PROJECT_DIR: facts.projectDir,
-    ...facts.claudeConfigDir !== void 0 && {
-      CLAUDE_CONFIG_DIR: facts.claudeConfigDir
-    }
-  };
-}
-
-// src/doctor/mark-book.ts
-init_globals();
-var isRecord2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-function parseMarkBook(doc) {
-  const fault = (reason) => ({
-    kind: "failed",
-    reason
-  });
-  if (!isRecord2(doc)) return fault("is not an object");
-  for (const [check, sightings] of Object.entries(doc)) {
-    if (!isRecord2(sightings)) {
-      return fault(
-        `holds ${JSON.stringify(check)} as something other than its sightings`
-      );
-    }
-    for (const [id2, mark] of Object.entries(sightings)) {
-      if (!GLYPH_MARKS.includes(mark)) {
-        return fault(
-          `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
-        );
-      }
-    }
-  }
-  return { kind: "ok", value: doc };
-}
-function withMark(book, check, sighting, mark) {
-  return { ...book, [check]: { ...book[check], [sighting]: mark } };
-}
-var fileMarkBook = (dir) => stateFile(dir, "doctor-marks.json", {}, parseMarkBook);
-
-// src/doctor/clicked-terminals.ts
-init_globals();
-var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typeof t2 === "string") ? { kind: "ok", value: doc } : { kind: "failed", reason: "is not a list of terminals" };
-var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
-var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
-
-// src/renderer/verbs/index.ts
-var inTurn = (handler) => ({
-  gathers: false,
-  prepare: async (value) => (ctx) => handler(value, ctx)
-});
-function requireSessionId(value) {
-  const parsed2 = parseSessionId(value);
-  if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
-  return parsed2.id;
-}
-function oneArg(value) {
-  return decodeWire(() => decodeURIComponent(value));
-}
-async function clickLaunch(launch, opts, what, log) {
-  const result = await launch(opts);
-  if (result.ok) return;
-  clickFailed(result, what, log);
-}
-function pbcopy(text4, ctx) {
-  return ctx.launch(
-    {
-      bin: "/usr/bin/pbcopy",
-      stdinInput: text4,
-      category: "click.pbcopy"
-    },
-    "pbcopy"
-  );
-}
-var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
-var DRAWERS = /* @__PURE__ */ new Set([
-  "request",
-  "feed"
-]);
-function requireDrawer(by) {
-  if (!DRAWERS.has(by))
-    throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
-  return by;
-}
-var copyDiagnostic = async (value, ctx) => {
-  const [sessionId2 = "", by = "", key = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
-  const text4 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
-  if (text4 === void 0)
-    throw new BadVerbArgs(
-      `that message is no longer listed in session ${sid}'s diagnostics \u2014 open the indicator beside the settings door again and copy from there`
-    );
-  await pbcopy(text4, ctx);
-};
-var openVscode = (value, ctx) => ctx.launch(
-  {
-    bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", oneArg(value)],
-    category: "click.open"
-  },
-  'open -a "Visual Studio Code"'
-);
-var toolbarToggle = async (value, ctx) => {
-  const sessionId2 = requireSessionId(oneArg(value));
-  const expanded = ctx.navigating.get(sessionId2, "toolbar-expanded");
-  if (expanded) ctx.navigating.clear(sessionId2, "toolbar-expanded");
-  else ctx.navigating.set(sessionId2, "toolbar-expanded", "1");
-};
-var setState = async (rawValue, ctx) => {
-  const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
-  const sid = requireSessionId(sessionId2);
-  const gate2 = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
-  if (rest2.length === 0)
-    throw new BadVerbArgs(
-      `set-state: <key>/<value> is required (have keys: ${gate2.listKeys().join(", ")})`
-    );
-  if (rest2.length % 2 !== 0) {
-    throw new BadVerbArgs(
-      `set-state: expected even-count <key>/<value> pairs, got ${rest2.length} segment(s) after session id (have keys: ${gate2.listKeys().join(", ")})`
-    );
-  }
-  const validated = [];
-  for (let i2 = 0; i2 < rest2.length; i2 += 2) {
-    const key = rest2[i2];
-    const incoming = rest2[i2 + 1];
-    if (!key) {
-      throw new BadVerbArgs(
-        `set-state: empty key at pair ${i2 / 2 + 1} (expected <sessionId>/<key>/<value>[/<key>/<value>...] segments)`
-      );
-    }
-    const result = gate2.validate(key, incoming);
-    if (!result.ok) {
-      throw new BadVerbArgs(`set-state: pair ${i2 / 2 + 1}: ${result.reason}`);
-    }
-    validated.push({ key, value: result.value });
-  }
-  refuseDisorderedPicks(ctx, sid, "set-state", validated);
-  ctx.navigating.setBatch(sid, validated);
-  const summary = validated.map((p2) => `${p2.key}=${p2.value}`).join(" ");
-  ctx.log("info", `set-state: ${summary} (session=${sid})`);
-};
-var STEP_INT_RE = /^-?\d+$/;
-function stepWithin(current2, by, min3, max3) {
-  const n = current2 + by;
-  if (n > max3) return current2 === max3 ? min3 : max3;
-  if (n < min3) return current2 === min3 ? max3 : min3;
-  return n;
-}
-var stepState = async (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
-  if (!key) {
-    throw new BadVerbArgs(
-      "step-state: <key> is required (shape: <sessionId>/<key>/<by>)"
-    );
-  }
-  if (!STEP_INT_RE.test(byRaw)) {
-    throw new BadVerbArgs(
-      `step-state: delta must be an integer, got "${byRaw}"`
-    );
-  }
-  const by = parseInt(byRaw, 10);
-  const config2 = sessionConfig(ctx, sid);
-  const gate2 = ctx.gates.state.gateFor(config2);
-  const params = gate2.rangeParamsFor(key);
-  if (!params) {
-    throw new BadVerbArgs(
-      `step-state: key "${key}" is not a bounded (range) state key (have keys: ${gate2.listKeys().join(", ")})`
-    );
-  }
-  const stored = ctx.sessionState.get(sid, key);
-  const clamped = stored && STEP_INT_RE.test(stored) ? clampTo(params, parseInt(stored, 10)) : stepFrom(
-    "step-state",
-    key,
-    params,
-    stateKeySeed(config2, (k) => ctx.sessionState.get(sid, k), key)
-  );
-  const next = stepWithin(clamped, by, params.min, params.max);
-  const result = gate2.validate(key, String(next));
-  if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
-  refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
-  ctx.navigating.set(sid, key, result.value);
-  ctx.log(
-    "info",
-    `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
-  );
-};
-function refuseDisorderedPicks(ctx, sid, verb, writes) {
-  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
-  if (picks.length === 0) return;
-  const problems = placementPickProblems(
-    sessionConfig(ctx, sid),
-    (k) => ctx.sessionState.get(sid, k),
-    picks
-  );
-  if (problems.length > 0) {
-    throw new BadVerbArgs(`${verb}: refused \u2014 ${problems.join("; ")}`);
-  }
-}
-function clampTo(params, n) {
-  return Math.max(params.min, Math.min(params.max, n));
-}
-function stepFrom(verb, key, params, declared) {
-  if (declared === null) return params.min;
-  if (!STEP_INT_RE.test(declared)) {
-    throw new BadVerbArgs(
-      `${verb}: "${key}" shows ${JSON.stringify(declared)} before any click, not an integer to step`
-    );
-  }
-  return clampTo(params, parseInt(declared, 10));
-}
-function sessionRenderOrigin(requested, state, sid) {
-  const pick2 = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
-  return pick2 === null ? requested : { ...requested, target: { source: "pick", path: pick2 } };
-}
-function recordedTarget(source, configFile) {
-  if (configFile === null) return { source: "search" };
-  return source === "argument" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
-}
-function parseRenderOrigin(raw) {
-  let parsed2;
-  try {
-    parsed2 = JSON.parse(raw);
-  } catch {
-    throw new BadVerbArgs(`render origin is not JSON: ${raw}`);
-  }
-  if (parsed2 === null || typeof parsed2 !== "object") {
-    throw new BadVerbArgs(`render origin is not an object: ${raw}`);
-  }
-  const { projectDir, cwd: cwd2, configFile, source } = parsed2;
-  if (typeof projectDir !== "string" || typeof cwd2 !== "string" || configFile !== null && typeof configFile !== "string") {
-    throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
-  }
-  return { projectDir, cwd: cwd2, target: recordedTarget(source, configFile) };
-}
-function sessionOrigin(ctx, sid) {
-  const origin = recordedOrigin(ctx, sid);
-  if (origin === null) {
-    throw new BadVerbArgs(
-      `session ${sid} has not rendered yet \u2014 no config to act on`
-    );
-  }
-  return origin;
-}
-function requestedOrigin(ctx, sid) {
-  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
-  return raw === null ? null : parseRenderOrigin(raw);
-}
-function recordedOrigin(ctx, sid) {
-  const requested = requestedOrigin(ctx, sid);
-  return requested === null ? null : sessionRenderOrigin(requested, ctx.sessionState, sid);
-}
-function reloadIfWritten(ctx, sid, step4) {
-  const origin = recordedOrigin(ctx, sid);
-  if (origin === null) return;
-  const { path: path43 } = originHome(ctx, origin);
-  if (step4.some((c) => c.kind === "file" && c.file === path43)) {
-    ctx.reloadConfig(origin);
-  }
-}
-function sessionConfig(ctx, sid) {
-  return ctx.configFor(sessionOrigin(ctx, sid));
-}
-function laneMeter(ctx, sid, latest) {
-  const requested = requestedOrigin(ctx, sid);
-  if (requested === null) return null;
-  const read2 = () => ctx.lanes.of(
-    sessionRenderOrigin(requested, ctx.sessionState, sid),
-    sid,
-    latest
-  );
-  return { sessionId: sid, latest, before: read2(), read: read2 };
-}
-function nestOf(ctx, sid) {
-  const origin = recordedOrigin(ctx, sid);
-  return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
-}
-function originHome(ctx, origin) {
-  return durableConfig(
-    ctx.locations,
-    repoConfigs(ctx.stateDir).read(),
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path
-  );
-}
-function editStore(ctx, sid) {
-  return {
-    record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.log
-  };
-}
-var setConfig = async (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", incoming = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
-  const origin = sessionOrigin(ctx, sid);
-  const config2 = ctx.configFor(origin);
-  const gate2 = ctx.gates.config.gateFor(config2);
-  if (!key) {
-    throw new BadVerbArgs(
-      `set-config: <key>/<value> is required (have keys: ${gate2.listKeys().join(", ")})`
-    );
-  }
-  const result = gate2.validate(key, incoming);
-  if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const home = originHome(ctx, origin);
-  const landing = durableLanding(
-    config2,
-    (k) => ctx.sessionState.get(sid, k),
-    key
-  );
-  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
-  ctx.reloadConfig(origin);
-  ctx.log(
-    "info",
-    `set-config: ${landing.key}=${result.value} \u2192 ${home.path} (session=${sid})`
-  );
-};
-var stepConfig = async (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
-  if (!key) {
-    throw new BadVerbArgs(
-      "step-config: <key> is required (shape: <sessionId>/<key>/<by>)"
-    );
-  }
-  if (!STEP_INT_RE.test(byRaw)) {
-    throw new BadVerbArgs(
-      `step-config: delta must be an integer, got "${byRaw}"`
-    );
-  }
-  const by = parseInt(byRaw, 10);
-  const origin = sessionOrigin(ctx, sid);
-  const config2 = ctx.configFor(origin);
-  const gate2 = ctx.gates.config.gateFor(config2);
-  const params = gate2.rangeParamsFor(key);
-  if (!params) {
-    throw new BadVerbArgs(
-      `step-config: key "${key}" is not a bounded (range) config key (have keys: ${gate2.listKeys().join(", ")})`
-    );
-  }
-  const home = originHome(ctx, origin);
-  const landing = durableLanding(
-    config2,
-    (k) => ctx.sessionState.get(sid, k),
-    key
-  );
-  const stored = readValue(home.path, landing.key);
-  const current2 = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
-    "step-config",
-    key,
-    params,
-    configKeySeed(landing.globals, key)
-  );
-  const next = stepWithin(current2, by, params.min, params.max);
-  const result = gate2.validate(key, String(next));
-  if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
-  ctx.reloadConfig(origin);
-  ctx.log(
-    "info",
-    `step-config: ${landing.key} ${current2}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
-  );
-};
-var save = async (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
-  const origin = sessionOrigin(ctx, sid);
-  const config2 = ctx.configFor(origin);
-  const pick2 = (key) => ctx.sessionState.get(sid, key);
-  const drafts = settingDrafts(config2, pick2);
-  const placements = placementDrafts(config2, pick2);
-  if (drafts.length + placements.length === 0) {
-    ctx.log("info", `save: nothing unsaved (session=${sid})`);
-    return;
-  }
-  const gate2 = ctx.gates.state.gateFor(config2);
-  const pairs2 = drafts.map((d) => {
-    const result = gate2.validate(d.sessionKey, d.value);
-    if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
-    return [d.target, result.value];
-  });
-  gatePlacements("save", gate2, placements);
-  const home = originHome(ctx, origin);
-  writeDrafts(editStore(ctx, sid), home, pairs2, placements);
-  ctx.reloadConfig(origin);
-  for (const key of [
-    ...drafts.map((d) => d.sessionKey),
-    ...placements.map((p2) => p2.key)
-  ]) {
-    ctx.sessionState.clear(sid, key);
-  }
-  ctx.log(
-    "info",
-    `save: ${[
-      ...pairs2.map(([k, v]) => `${k}=${v}`),
-      ...placements.map(placementLog)
-    ].join(" ")} \u2192 ${home.path} (session=${sid})`
-  );
-};
-var placementLog = (p2) => `${p2.preset}/${p2.id}.settings.${p2.setting}=${settingSpelling(p2.value)}`;
-function gatePlacements(verb, gate2, placements) {
-  for (const p2 of placements) {
-    const result = gate2.validate(p2.key, settingSpelling(p2.value));
-    if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
-  }
-}
-var savePreset = async (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
-  const origin = sessionOrigin(ctx, sid);
-  const config2 = ctx.configFor(origin);
-  const snapshot = presetSnapshot(
-    config2,
-    (key) => ctx.sessionState.get(sid, key)
-  );
-  const gate2 = ctx.gates.state.gateFor(config2);
-  const picks = snapshot.picks.map((d) => {
-    const result = gate2.validate(d.sessionKey, d.value);
-    if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
-    return [d.configKey, result.value];
-  });
-  gatePlacements("save-preset", gate2, snapshot.placements);
-  const home = originHome(ctx, origin);
-  const name = writePreset(
-    editStore(ctx, sid),
-    home,
-    snapshot.from,
-    snapshot.globals,
-    picks,
-    snapshot.placements
-  );
-  ctx.reloadConfig(origin);
-  for (const key of [
-    ...SETTING_PROJECTIONS.map((p2) => p2.sessionKey),
-    ...snapshot.placements.map((p2) => p2.key)
-  ]) {
-    ctx.sessionState.clear(sid, key);
-  }
-  ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
-  ctx.log(
-    "info",
-    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
-  );
-};
-var saveThemeDefault = async (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
-  const origin = sessionOrigin(ctx, sid);
-  const config2 = ctx.configFor(origin);
-  const save2 = themeDefaultSave(
-    config2,
-    (key) => ctx.sessionState.get(sid, key)
-  );
-  if (save2.kind === "rule") {
-    throw new BadVerbArgs(
-      "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default \u2014 pick one in the menu first"
-    );
-  }
-  const home = originHome(ctx, origin);
-  writeThemeDefault(editStore(ctx, sid), home, save2.theme, save2.look);
-  ctx.reloadConfig(origin);
-  const pick2 = (key) => ctx.sessionState.get(sid, key);
-  const drafted = new Set(
-    settingDrafts(ctx.configFor(origin), pick2).map((d) => d.sessionKey)
-  );
-  const released = THEME_DEFAULT_FIELDS.map(
-    (f) => SETTINGS[f].sessionKey
-  ).filter((key) => !drafted.has(key));
-  for (const key of released) ctx.sessionState.clear(sid, key);
-  ctx.log(
-    "info",
-    `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
-  );
-};
-var deletePreset2 = async (value, ctx) => {
-  const [sessionId2 = "", name = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
-  if (!name) {
-    throw new BadVerbArgs(
-      "delete-preset: <name> is required (shape: <sessionId>/<name>)"
-    );
-  }
-  const origin = sessionOrigin(ctx, sid);
-  const home = originHome(ctx, origin);
-  deletePreset(editStore(ctx, sid), home, name);
-  ctx.reloadConfig(origin);
-  const key = SETTINGS.preset.sessionKey;
-  if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
-};
-var resetConfig = async (value, ctx) => {
-  const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
-  const origin = sessionOrigin(ctx, sid);
-  const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
-  const unknown = keys2.length === 0 ? [""] : keys2.filter((k) => !known.includes(k));
-  if (unknown.length > 0) {
-    throw new BadVerbArgs(
-      `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`
-    );
-  }
-  const home = originHome(ctx, origin);
-  const layers = keys2.map(resetLayers);
-  const fileKeys = layers.flatMap((l) => l.fileKeys);
-  const sessionKeys = layers.flatMap((l) => l.sessionKeys);
-  deleteValues(editStore(ctx, sid), home, fileKeys);
-  ctx.reloadConfig(origin);
-  for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
-  ctx.log(
-    "info",
-    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${home.path} (session=${sid})`
-  );
-};
-function endedPlacements(before, after) {
-  const placed2 = (config2, preset) => [...walkNodes(presetRoot(config2, preset).node)].filter(
-    (n) => n.kind === "segment"
-  );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap(
-      (preset) => placed2(after, preset).map(
-        (n) => configureMember(ident(preset), placementId(n))
-      )
-    )
-  );
-  return presetNames(before.presets).flatMap(
-    (preset) => placed2(before, preset).map((node) => ({
-      member: configureMember(ident(preset), placementId(node)),
-      node
-    })).filter(({ member }) => !survivors.has(member))
-  );
-}
-function endedSessionKeys(ended, configuring) {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
-  ]);
-}
-var applyLayoutOp2 = async (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", opToken = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
-  const origin = sessionOrigin(ctx, sid);
-  const before = ctx.configFor(origin);
-  const gate2 = ctx.gates.config.gateFor(before);
-  if (!key) {
-    throw new BadVerbArgs(
-      `apply-layout-op: <key>/<op> is required (have: ${gate2.listKeys().join(", ")})`
-    );
-  }
-  const result = gate2.validate(key, opToken);
-  if (!result.ok) throw new BadVerbArgs(`apply-layout-op: ${result.reason}`);
-  const op = decodeLayoutOp(result.value);
-  if (op === null) {
-    throw new BadVerbArgs(
-      `apply-layout-op: "${result.value}" is not a layout op token`
-    );
-  }
-  const home = originHome(ctx, origin);
-  const placed2 = applyLayoutOp(editStore(ctx, sid), home, key, op);
-  ctx.reloadConfig(origin);
-  const released = endedSessionKeys(
-    endedPlacements(before, ctx.configFor(origin)),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
-  ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
-  for (const key2 of released) ctx.sessionState.clear(sid, key2);
-  ctx.log(
-    "info",
-    `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
-  );
-};
-var undo = async (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
-  ctx.journal.commit();
-  const step4 = ctx.history.undo(sid);
-  ctx.journal.wrote();
-  reloadIfWritten(ctx, sid, step4);
-  ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
-};
-var back = async (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
-  const { step: step4, discarded } = ctx.navigation.back(
-    sid,
-    ctx.sessionState,
-    ctx.gates.state.gateFor(sessionConfig(ctx, sid))
-  );
-  const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
-  ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
-};
-var rewind = async (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
-  ctx.journal.commit();
-  ctx.journal.wrote();
-  const restored = ctx.history.rewind(sid);
-  reloadIfWritten(ctx, sid, restored);
-  ctx.log(
-    "info",
-    `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
-  );
-};
-var redo = async (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
-  ctx.journal.commit();
-  const step4 = ctx.history.redo(sid);
-  ctx.journal.wrote();
-  reloadIfWritten(ctx, sid, step4);
-  ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
-};
-var applyUpdate = async (value, ctx) => {
-  requireSessionId(oneArg(value));
-  await ctx.applyUpdate();
-};
-function sessionHints(ctx, sid) {
-  const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
-  if (raw === null) {
-    throw new BadVerbArgs(
-      `session ${sid} has not rendered yet \u2014 no client facts are recorded for it`
-    );
-  }
-  let parsed2;
-  try {
-    parsed2 = JSON.parse(raw);
-  } catch {
-    throw new BadVerbArgs(`client hints record is not JSON: ${raw}`);
-  }
-  if (typeof parsed2 !== "object" || parsed2 === null) {
-    throw new BadVerbArgs(`client hints record is not an object: ${raw}`);
-  }
-  return parseClientHints(parsed2);
-}
-function writeReport(ctx, sid, facts) {
-  const reports = runDoctor(facts);
-  ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
-  ctx.log(
-    "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
-  );
-}
-async function clickGather(ctx, sid, doctor, load) {
-  const scope = {
-    kind: "clicked",
-    sessionId: sid,
-    via: ctx.arrival.via
-  };
-  const [said, serving] = await Promise.all([
-    ctx.clients.ofSession(sid, ctx.now()),
-    ctx.serving()
-  ]);
-  let facts;
-  let install2;
-  try {
-    [facts, install2] = await Promise.all([
-      gatherFacts(
-        { ...doctor, loadConfig: () => load },
-        sessionHints(ctx, sid),
-        sessionOrigin(ctx, sid),
-        (key) => ctx.sessionState.get(sid, key),
-        { kind: "ok", value: serving },
-        { kind: "ok", value: said.map((s) => s.rateLimits) },
-        { kind: "ok", value: said.map((s) => s.transcript) },
-        scope,
-        { kind: "ok", value: barsOf(scope, said) },
-        sessionWidth(sid, said),
-        readStores(ctx.doctorStores)
-      ),
-      // The client that drew the bar this click came from, and the daemon the
-      // click reached — this process.
-      ctx.installFacts(
-        ctx.bundle,
-        said.map((s) => s.client)
-      )
-    ]);
-  } catch (e) {
-    if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
-    throw e;
-  }
-  const gathered = {
-    facts,
-    install: install2,
-    current: async (now2) => {
-      const stands = doctor.loadConfig(sessionOrigin(now2, sid));
-      const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
-      return same2 ? gathered : clickGather(now2, sid, doctor, stands);
-    }
-  };
-  return gathered;
-}
-var gatherClick = (ctx, sid) => {
-  const doctor = oneAskPerClick(ctx.doctor);
-  return clickGather(
-    ctx,
-    sid,
-    doctor,
-    doctor.loadConfig(sessionOrigin(ctx, sid))
-  );
-};
-async function clickFacts(ctx, sid, gathered) {
-  const { facts, install: install2 } = await ctx.gather(gathered.current);
-  const stores = readStores(ctx.doctorStores);
-  const read2 = {
-    ...facts,
-    marks: stores.marks,
-    clicked: stores.clicked,
-    daemon: { ...facts.daemon, read: stores.postMortemsRead }
-  };
-  return {
-    ...read2,
-    urlHandler: clickArrived(ctx.arrival),
-    install: install2,
-    clicked: clickedFrom(ctx, read2)
-  };
-}
-function clickedFrom(ctx, { terminal, clicked }) {
-  const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-  if (sighting === null || ctx.arrival.via !== "link") return clicked;
-  try {
-    return ctx.doctorStores.clicked.update(
-      (list2) => withClicked(list2, sighting)
-    );
-  } catch (e) {
-    ctx.log(
-      "warn",
-      `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`
-    );
-    return clicked;
-  }
-}
-var doctorRun = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const sid = requireSessionId(oneArg(value));
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
-  }
-};
-var doctorFix = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const [sessionId2 = "", checkName = ""] = decodeWire(
-      () => decodeSegments(value)
-    );
-    const sid = requireSessionId(sessionId2);
-    const check = checkByName(checkName);
-    if (check === void 0) {
-      throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
-    }
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => {
-      const facts = await clickFacts(c, sid, gathered);
-      const verdict = check.probe(facts);
-      if (verdict.ok || verdict.fix === void 0) {
-        throw new BadVerbArgs(
-          `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
-        );
-      }
-      const after = applyFix(c.doctorStores, verdict.fix, facts);
-      if (after.kind === "failed") {
-        throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
-      }
-      c.log(
-        "info",
-        `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
-      );
-      writeReport(c, sid, after.value);
-    };
-  }
-};
-var doctorMark = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
-      () => decodeSegments(value)
-    );
-    const sid = requireSessionId(sessionId2);
-    const check = checkByName(checkName);
-    if (check === void 0) {
-      throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
-    }
-    if (!GLYPH_MARKS.includes(mark)) {
-      throw new BadVerbArgs(
-        `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
-      );
-    }
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => {
-      const facts = await clickFacts(c, sid, gathered);
-      const verdict = check.probe(facts);
-      if (verdict.ok || verdict.sighting === void 0) {
-        throw new BadVerbArgs(
-          `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
-        );
-      }
-      const made = [
-        check.name,
-        verdict.sighting.id,
-        mark
-      ];
-      const marks = c.doctorStores.marks.update(
-        (book) => withMark(book, ...made)
-      );
-      if (marks.kind === "failed") {
-        throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
-      }
-      c.log(
-        "info",
-        `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
-      );
-      writeReport(c, sid, { ...facts, marks });
-    };
-  }
-};
-var slash = async (value, ctx) => {
-  const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
-  const declared = Object.values(
-    ctx.configFor(sessionOrigin(ctx, sid)).actions
-  ).filter((a) => "slash" in a);
-  const action2 = declared.find((a) => a.slash === line);
-  if (action2 === void 0) {
-    throw new BadVerbArgs(
-      `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
-    );
-  }
-  const result = await ctx.typing(sessionHints(ctx, sid).tmux, action2.slash);
-  if (result.kind === "refused") {
-    ctx.log(
-      "warn",
-      `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
-    );
-    throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
-  }
-  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
-};
-function runOf2([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
-  const sid = requireSessionId(sessionId2);
-  const origin = sessionOrigin(ctx, sid);
-  const actions = ctx.configFor(origin).actions;
-  const decl = Object.hasOwn(actions, action2) ? actions[action2] : void 0;
-  if (decl === void 0 || !("run" in decl)) {
-    throw new BadVerbArgs(
-      `"${action2}" is not a run action this session's config declares`
-    );
-  }
-  const declaration = runDeclaration(decl);
-  if (!ctx.links.verify({ sessionId: sid, action: action2, declaration, evaluated: evaluated2 }, mac)) {
-    throw new BadVerbArgs(
-      "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn"
-    );
-  }
-  let drawn;
-  try {
-    drawn = JSON.parse(evaluated2);
-  } catch {
-    throw new BadVerbArgs(`run ${action2}: what the link carries is not JSON`);
-  }
-  const [program, ...args] = drawn.run;
-  if (program === void 0 || program === "") {
-    throw new BadVerbArgs(`run ${action2}: the program evaluated to nothing`);
-  }
-  const sources = ctx.sourcesFor(origin);
-  return {
-    sessionId: sid,
-    action: action2,
-    argv: [program, ...args],
-    // [LAW:single-enforcer] The session's process environment, the action's
-    // own variables over it.
-    envOverlay: {
-      ...sessionEnv({
-        sessionId: sid,
-        projectDir: origin.projectDir,
-        claudeConfigDir: sessionHints(ctx, sid).claudeConfigDir
-      }),
-      ...drawn.env
-    },
-    // The bundled config's runs go in the user's home.
-    cwd: decl.cwd ?? ctx.locations.home,
-    // The loader proved every name a declared source of this config, whose
-    // state holds its folder.
-    refreshes: decl.refreshes.map((name) => ({
-      name,
-      folder: sources.get(name)
-    }))
-  };
-}
-var run2 = async (value, ctx) => {
-  let named3 = { sessionId: "-", action: "-" };
-  let request2;
-  try {
-    const parts = decodeWire(() => decodeSegments(value));
-    named3 = { sessionId: parts[0] || "-", action: parts[1] || "-" };
-    request2 = runOf2(parts, ctx);
-  } catch (e) {
-    if (e instanceof BadVerbArgs) {
-      ctx.runs.refused(named3.sessionId, named3.action, e.message);
-    }
-    throw e;
-  }
-  ctx.runs.start(request2);
-};
-var repoConfig = async (value, ctx) => {
-  const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
-  const answered = REPO_ANSWERS.find((known) => known === answer2);
-  if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
-    throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: it was not drawn by this daemon"
-    );
-  }
-  const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);
-  if (filed.kind === "failed") {
-    throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
-  }
-  ctx.journal.wrote();
-  const { superseded, absent, unchecked } = filed.value;
-  ctx.log(
-    "info",
-    `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`
-  );
-  ctx.reloadConfig(sessionOrigin(ctx, sid));
-};
-var loadConfig = async (value, ctx) => {
-  const slash2 = value.indexOf("/");
-  if (slash2 === -1) {
-    throw new BadVerbArgs(
-      "load-config: expected <sessionId>/<path> (missing separator)"
-    );
-  }
-  const sid = requireSessionId(
-    decodeWire(() => decodeURIComponent(value.slice(0, slash2)))
-  );
-  const p2 = decodeWire(() => decodeURIComponent(value.slice(slash2 + 1))).trim();
-  if (p2 !== "") {
-    if (!p2.startsWith("/")) {
-      throw new BadVerbArgs(`load-config: path must be absolute, got "${p2}"`);
-    }
-    if (!/\.(json5?|json)$/.test(p2)) {
-      throw new BadVerbArgs(
-        `load-config: path must end with .json5 or .json, got "${p2}"`
-      );
-    }
-  }
-  if (p2 === "") {
-    ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.log("info", `load-config: override cleared (session=${sid})`);
-  } else {
-    ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p2);
-    ctx.log("info", `load-config: ${p2} (session=${sid})`);
-  }
-};
-var LEAF_VERBS = /* @__PURE__ */ new Map([
-  [VERB_COPY, inTurn(copy)],
-  [VERB_LOAD_CONFIG, inTurn(loadConfig)],
-  [VERB_OPEN_VSCODE, inTurn(openVscode)],
-  [VERB_SET_STATE, inTurn(setState)],
-  [VERB_STEP_STATE, inTurn(stepState)],
-  [VERB_SET_CONFIG, inTurn(setConfig)],
-  [VERB_STEP_CONFIG, inTurn(stepConfig)],
-  [VERB_RESET_CONFIG, inTurn(resetConfig)],
-  [VERB_SAVE, inTurn(save)],
-  [VERB_SAVE_PRESET, inTurn(savePreset)],
-  [VERB_SAVE_THEME_DEFAULT, inTurn(saveThemeDefault)],
-  [VERB_DELETE_PRESET, inTurn(deletePreset2)],
-  [VERB_APPLY_LAYOUT_OP, inTurn(applyLayoutOp2)],
-  [VERB_UNDO, inTurn(undo)],
-  [VERB_REDO, inTurn(redo)],
-  [VERB_BACK, inTurn(back)],
-  [VERB_REWIND, inTurn(rewind)],
-  [VERB_TOOLBAR_TOGGLE, inTurn(toolbarToggle)],
-  [VERB_APPLY_UPDATE, inTurn(applyUpdate)],
-  [VERB_DOCTOR_RUN, doctorRun],
-  [VERB_DOCTOR_FIX, doctorFix],
-  [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_SLASH, inTurn(slash)],
-  [VERB_RUN, inTurn(run2)],
-  [VERB_REPO_CONFIG, inTurn(repoConfig)],
-  [VERB_COPY_DIAGNOSTIC, inTurn(copyDiagnostic)]
-]);
-var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepare(value, ctx)).catch(
-  (e) => () => Promise.reject(e)
-);
-async function perform(verb, value, ctx, gathered) {
-  const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
-  await step4(ctx);
-}
-async function headGather(rawValue, ctx) {
-  const [head] = batchAdjacentWrites(parseEffects(rawValue));
-  const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
-  return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
-}
-async function foldEffects(rawValue, ctx, gathered) {
-  const errors2 = [];
-  let operational = false;
-  const effects = parseEffects(rawValue);
-  const session = sessionOfEffects(effects);
-  for (const [i2, { verb, value }] of batchAdjacentWrites(effects).entries()) {
-    const leaf = LEAF_VERBS.get(verb);
-    if (!leaf) {
-      errors2.push(`unknown effect verb "${verb}"`);
-      continue;
-    }
-    try {
-      await perform(leaf, value, ctx, i2 === 0 ? gathered : void 0);
-    } catch (e) {
-      if (e instanceof DaemonClosing) {
-        if (errors2.length > 0)
-          ctx.log("warn", `dispatch: ${errors2.join("; ")}`);
-        throw e;
-      }
-      if (!(e instanceof BadVerbArgs)) operational = true;
-      errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  if (errors2.length > 0) {
-    if (session?.ok) {
-      holdClickError(
-        ctx.sessionState,
-        session.id,
-        errors2.join("\n"),
-        ctx.now()
-      );
-    }
-    const message = `dispatch: ${errors2.join("; ")}`;
-    throw operational ? new Error(message) : new BadVerbArgs(message);
-  }
-}
-function throwAll(failures) {
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1) {
-    throw new Error(
-      failures.map((e) => String(e.message ?? e)).join("; ")
-    );
-  }
-}
-async function journaled(sid, latest, ctx, turn, handler) {
-  const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
-  const journal = ctx.history.begin();
-  const navigation = ctx.navigation.begin(journal.sessionState);
-  const commit3 = turn.holds(() => {
-    const failed3 = [];
-    for (const step4 of [navigation, journal]) {
-      try {
-        step4.commit();
-      } catch (e) {
-        failed3.push(e);
-      }
-    }
-    throwAll(failed3);
-  });
-  const failures = [];
-  const closing = (store) => closingView(
-    store,
-    (sid2) => nestOf(ctx, sid2),
-    (line) => ctx.log("info", line)
-  );
-  const journaling = {
-    ...ctx,
-    sessionState: closing(journal.sessionState),
-    journal,
-    navigating: closing(navigation.sessionState)
-  };
-  const launches = {
-    launch: (opts, what) => turn.landed(clickLaunch(ctx.launch, opts, what, ctx.log)),
-    typing: (hint, line) => turn.landed(typeSlash(ctx.typeSlash, hint, line)),
-    applyUpdate: () => turn.landed(ctx.applyUpdate())
-  };
-  try {
-    await handler({
-      ...journaling,
-      ...launches,
-      gather: (work) => turn.landed(work(journaling))
-    });
-  } catch (e) {
-    failures.push(e);
-  }
-  let live = true;
-  try {
-    live = commit3();
-  } catch (e) {
-    failures.push(e);
-  }
-  if (live && lanes !== null) {
-    try {
-      const after = lanes.read();
-      ctx.lanes.clicked(
-        lanes.sessionId,
-        lanes.latest,
-        journal.written() ? lanes.before : after,
-        after
-      );
-    } catch (e) {
-      failures.push(e);
-    }
-  }
-  if (live && sid !== null) {
-    try {
-      const origin = recordedOrigin(ctx, sid);
-      if (origin !== null) ctx.views.follow(sid, origin);
-    } catch (e) {
-      failures.push(e);
-    }
-  }
-  throwAll(failures);
-}
-function click(verb, gather, handler) {
-  return async (value, ctx) => {
-    const session = clickSessionOf(verb, value);
-    const sid = session?.ok ? session.id : null;
-    return ctx.journalTurns.click(
-      verb,
-      sid,
-      {
-        placed: ctx.placeWaited,
-        waited: ctx.turnWaited,
-        gone: ctx.clientGone,
-        gathered: ctx.gatherTook
-      },
-      () => gather(value, ctx),
-      (gathered, turn) => journaled(sid, ctx.latest, ctx, turn, async (c) => {
-        try {
-          await handler(value, c, gathered);
-        } finally {
-          if (sid !== null) ctx.clickLanded(sid);
-        }
-      })
-    );
-  };
-}
-var VERBS = new Map([
-  ...[...LEAF_VERBS].map(
-    ([verb, leaf]) => [
-      verb,
-      click(
-        verb,
-        async (value, ctx) => leaf.gathers ? hoisted(leaf, value, ctx) : void 0,
-        (value, ctx, gathered) => perform(leaf, value, ctx, gathered)
-      )
-    ]
-  ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)]
-]);
-var VERB_NAMES = Object.freeze([
-  ...VERBS.keys()
-]);
-function closeIdleMenus(sid, latest, idle, ctx) {
-  return ctx.journalTurns.take(
-    "menu-idle",
-    {
-      waited: (ms) => ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
-      gone: async () => false
-    },
-    (turn) => journaled(sid, latest, ctx, turn, async (c) => {
-      if (!await turn.landed(idle.confirm())) {
-        c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
-        return;
-      }
-      const roots = openRoots(
-        nestOf(c, sid),
-        (key) => c.navigating.get(sid, key)
-      );
-      c.navigating.setBatch(
-        sid,
-        roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
-      );
-      c.log(
-        "info",
-        `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
-      );
-    })
-  );
-}
-
-// src/daemon/foundations/render-origin.ts
-init_globals();
-function encodeRenderOrigin({
-  projectDir,
-  cwd: cwd2,
-  target
-}) {
-  return JSON.stringify({
-    projectDir,
-    cwd: cwd2,
-    configFile: target.path ?? null,
-    source: target.source
-  });
-}
-
-// src/dsl/render.ts
-init_globals();
-
-// src/var-system/sources.ts
-init_globals();
-
 // src/template-engine/scope.ts
 init_globals();
 function buildScope(store) {
@@ -82633,7 +75987,7 @@ function canonical(value) {
 }
 
 // src/facts/source-identity.ts
-var runOf3 = (identity2) => ({ digest: digestOf2(identity2), identity: identity2 });
+var runOf2 = (identity2) => ({ digest: digestOf2(identity2), identity: identity2 });
 function keyHashOf(value) {
   return crypto_default.createHash("sha256").update(value).digest("hex");
 }
@@ -82657,12 +76011,12 @@ function parseDuration(s) {
       throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
   }
 }
-function parserIdOf(parse3) {
-  switch (parse3.kind) {
+function parserIdOf(parse4) {
+  switch (parse4.kind) {
     case "text":
       return { kind: "text" };
     case "regex":
-      return { kind: "regex", pattern: parse3.pattern };
+      return { kind: "regex", pattern: parse4.pattern };
     case "json":
       return { kind: "json" };
   }
@@ -83002,14 +76356,14 @@ var SourceRegistry = class _SourceRegistry {
   // it holds the old run's answer until the new run's lands — the old `ok` is
   // simply not overwritten yet, so a key change draws no pending flash (spec
   // section 19).
-  declareSource(name, read2, cache2, parse3) {
-    const publish = this.publisherFor(name, parse3);
+  declareSource(name, read2, cache2, parse4) {
+    const publish = this.publisherFor(name, parse4);
     const refreshOf = this.registerCachePolicy(name, cache2);
     const run3 = computed(
       () => {
         const refresh = refreshOf();
         return refresh.kind === "ok" ? ok(
-          runOf3({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
+          runOf2({ read: read2, parse: parserIdOf(parse4), refresh: refresh.value })
         ) : refresh;
       },
       // A failure is a failure whatever it says: its text is the variable's
@@ -83056,13 +76410,13 @@ var SourceRegistry = class _SourceRegistry {
   // document. Selected once, at declaration — the pipeline never asks again.
   // The run parsed by the arm's own parser (source-runs.ts), so its value is
   // the arm's type.
-  publisherFor(name, parse3) {
-    switch (parse3.kind) {
+  publisherFor(name, parse4) {
+    switch (parse4.kind) {
       case "text":
       case "regex":
-        return this.scalarPublisher(name, parse3.default);
+        return this.scalarPublisher(name, parse4.default);
       case "json":
-        return this.documentPublisher(name, parse3.default);
+        return this.documentPublisher(name, parse4.default);
     }
   }
   scalarPublisher(name, varDefault) {
@@ -83168,10 +76522,10 @@ var SourceRegistry = class _SourceRegistry {
           this.lastErrors.delete(name);
           throw pending2;
         }
-        const message = e instanceof Error ? e.message : String(e);
-        this.recordError(name, message);
+        const message2 = e instanceof Error ? e.message : String(e);
+        this.recordError(name, message2);
         if (fallback === void 0) {
-          throw new Error(`variable "${name}": ${message}`);
+          throw new Error(`variable "${name}": ${message2}`);
         }
         return fallback;
       }
@@ -83354,10 +76708,10 @@ var SourceRegistry = class _SourceRegistry {
       return this.defaultEmptyValue;
     return "";
   }
-  recordError(name, message) {
+  recordError(name, message2) {
     this.lastErrors.set(name, {
       timestamp: this.store.clock.now(),
-      message
+      message: message2
     });
   }
   // The one fold from an outcome (whether the policy can fire, whether the
@@ -83642,7 +76996,7 @@ function bindRender(runtime, binding) {
     }
   };
 }
-function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
+function compileActions(parse4, actions, stateKeyToVar, perConfigDomains) {
   const out = /* @__PURE__ */ new Map();
   const entries = Object.entries(actions);
   for (const [name, action2] of [
@@ -83651,12 +77005,12 @@ function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
   ]) {
     out.set(
       name,
-      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
+      compileAction(parse4, name, action2, stateKeyToVar, perConfigDomains, out)
     );
   }
   return out;
 }
-function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
+function compileAction(parse4, name, action2, stateKeyToVar, perConfigDomains, compiled) {
   if ("set" in action2) {
     const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
     if ("to" in action2) {
@@ -83770,13 +77124,13 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
   if ("copy" in action2) {
     return {
       kind: "copy",
-      text: parseActionTemplate(parse3, action2.copy, name)
+      text: parseActionTemplate(parse4, action2.copy, name)
     };
   }
   if ("open" in action2) {
     return {
       kind: "open",
-      target: parseActionTemplate(parse3, action2.open, name)
+      target: parseActionTemplate(parse4, action2.open, name)
     };
   }
   if ("reset" in action2) {
@@ -83798,9 +77152,9 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
       kind: "run",
       name,
       declaration: runDeclaration(action2),
-      argv: action2.run.map((item) => parseActionTemplate(parse3, item, name)),
+      argv: action2.run.map((item) => parseActionTemplate(parse4, item, name)),
       env: Object.entries(action2.env).map(
-        ([variable, value]) => [variable, parseActionTemplate(parse3, value, name)]
+        ([variable, value]) => [variable, parseActionTemplate(parse4, value, name)]
       )
     };
   }
@@ -83812,7 +77166,7 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
   if ("preset" in action2) {
     return action2.preset === "save" ? { kind: "preset-save" } : {
       kind: "preset-delete",
-      name: parseActionTemplate(parse3, action2.name, name)
+      name: parseActionTemplate(parse4, action2.name, name)
     };
   }
   if ("themeDefault" in action2) return { kind: "theme-default-save" };
@@ -83865,9 +77219,9 @@ function bindsTemplateValue(c) {
       return false;
   }
 }
-function parseActionTemplate(parse3, src, name) {
+function parseActionTemplate(parse4, src, name) {
   try {
-    return parse3(src);
+    return parse4(src);
   } catch (e) {
     throw new Error(
       `Template parse error in actions.${name}: ${e.message}`,
@@ -85773,9 +79127,9 @@ function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
 function cellsWidth(cells) {
   return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
 }
-function brokenSegment(node, scope, ctx, message) {
-  ctx.onSegmentError?.(node.id, message);
-  const oneLine = message.replace(/\s*\n\s*/g, " ");
+function brokenSegment(node, scope, ctx, message2) {
+  ctx.onSegmentError?.(node.id, message2);
+  const oneLine = message2.replace(/\s*\n\s*/g, " ");
   return [
     {
       cells: applySegmentLayout(
@@ -85896,8 +79250,8 @@ var ViewParts = class {
     this.view = observable.box(view, { deep: false });
     this.scope = buildScope(store);
     this.depth = store.derive("drawn depth", "computed", () => {
-      const said = this.inputAt(COLOR_PATH);
-      return said.kind === "found" && typeof said.value === "string" && isColorCompatibility(said.value) ? said.value : COLOR_FLOOR;
+      const said2 = this.inputAt(COLOR_PATH);
+      return said2.kind === "found" && typeof said2.value === "string" && isColorCompatibility(said2.value) ? said2.value : COLOR_FLOOR;
     });
     const drawn = observable(UNDRAWN, void 0, { deep: false });
     this.facts = drawn;
@@ -86445,6 +79799,114 @@ function decoratedStyles(ref, node, palette, region, drawnAt) {
 // src/dsl/view-source.ts
 init_globals();
 
+// src/config/loader/projections.ts
+init_globals();
+function instantRead(template, basis) {
+  for (const name of basis.reads.calls(template)) {
+    if (basis.clock.has(name)) return `calls "${name}"`;
+  }
+  for (const { reaches } of basis.reads.ofTemplate(template)) {
+    for (const name of reaches) {
+      const why2 = basis.projections.get(name);
+      if (why2 !== void 0) return `reads "${name}", which ${why2}`;
+    }
+  }
+  return null;
+}
+var FOLDS2 = /* @__PURE__ */ new WeakMap();
+function foldOf(config2) {
+  let fold = FOLDS2.get(config2);
+  if (fold === void 0) {
+    fold = foldProjections(config2);
+    FOLDS2.set(config2, fold);
+  }
+  return fold;
+}
+function projectionsOf(config2) {
+  return foldOf(config2).projections;
+}
+function foldProjections(config2) {
+  const declared = new Map(declaredVariables(config2));
+  const projections = /* @__PURE__ */ new Map();
+  const basis = {
+    reads: valueReadsOf(config2),
+    projections,
+    clock: CLOCK_FUNCTIONS
+  };
+  for (const [name, decl] of declared) {
+    if (decl.kind === "time") projections.set(name, "is a time variable");
+    const at = payloadPathOf(name, decl);
+    const drawn = at === void 0 ? null : drawProjectionAt(at);
+    if (drawn)
+      projections.set(
+        name,
+        `reads the draw's "${drawn}" (${DRAW_PROJECTIONS[drawn]})`
+      );
+  }
+  const rules = rulesOf(config2);
+  const slotReads = /* @__PURE__ */ new Map();
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [name, decl] of declared) {
+      if (decl.kind !== "template" || projections.has(name)) continue;
+      const why2 = instantRead(decl.template, basis);
+      if (why2 !== null) {
+        projections.set(name, why2);
+        grew = true;
+      }
+    }
+    for (const slot of EXPRESSION_SLOTS) {
+      if (slotReads.has(slot)) continue;
+      for (const rule of rules[slot]) {
+        const why2 = instantRead(rule, basis);
+        if (why2 === null) continue;
+        slotReads.set(slot, why2);
+        grew = true;
+        break;
+      }
+    }
+    for (const [name, decl] of declared) {
+      const at = payloadPathOf(name, decl);
+      if (at === void 0 || projections.has(name)) continue;
+      const slot = slotAt(at);
+      const why2 = slot === void 0 ? void 0 : slotReads.get(slot);
+      if (why2 === void 0) continue;
+      projections.set(name, `reads the ${slot} rule, which ${why2}`);
+      grew = true;
+    }
+  }
+  return basis;
+}
+function authoredRules(config2) {
+  const fragments = [
+    [["globals"], config2.globals],
+    ...Object.entries(config2.presets ?? {}).map(
+      ([name, preset]) => [["presets", name, "globals"], preset.globals ?? {}]
+    )
+  ];
+  return fragments.flatMap(
+    ([at, globals]) => EXPRESSION_SLOTS.flatMap((slot) => {
+      const rule = globals[slot];
+      return isExpression(rule) ? [{ at: [...at, slot], slot, rule }] : [];
+    })
+  );
+}
+function rulesOf(config2) {
+  const rules = authoredRules(config2);
+  const rulesIn = (slot) => rules.flatMap((r) => r.slot === slot ? [r.rule] : []);
+  return {
+    style: rulesIn("style"),
+    palette: rulesIn("palette"),
+    effect: rulesIn("effect")
+  };
+}
+function instantReadOf(template, config2) {
+  return instantRead(template, foldOf(config2));
+}
+function templateInstants(basis) {
+  return (template) => instantRead(template, basis) !== null;
+}
+
 // src/dsl/render.ts
 function toCachePolicy(cache2) {
   if ("ttl" in cache2)
@@ -86459,14 +79921,14 @@ function toCachePolicy(cache2) {
     `Unknown CacheDecl discriminator \u2014 loader invariant violated: ${JSON.stringify(cache2)}`
   );
 }
-function toSourceParse(parse3, dflt) {
-  switch (parseArm(parse3)) {
+function toSourceParse(parse4, dflt) {
+  switch (parseArm(parse4)) {
     case "json":
       return { kind: "json", default: dflt };
     case "regex":
       return {
         kind: "regex",
-        pattern: parse3.regex,
+        pattern: parse4.regex,
         default: dflt
       };
     case "text":
@@ -86662,7 +80124,7 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
   });
   const helpers = compileHelpers(engine, config2.helpers, "helpers");
   const sources = /* @__PURE__ */ new Map();
-  const parse3 = (src) => {
+  const parse4 = (src) => {
     const parsed2 = engine.parse(src, helpers);
     sources.set(parsed2, src);
     return parsed2;
@@ -86671,13 +80133,13 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
   const parseShared = (src) => {
     const known = nodeTemplates.get(src);
     if (known !== void 0) return known;
-    const parsed2 = parse3(src);
+    const parsed2 = parse4(src);
     nodeTemplates.set(src, parsed2);
     return parsed2;
   };
   const stateKeyToVar = new Map(stateReads);
   actionRuntime.compiled = compileActions(
-    parse3,
+    parse4,
     config2.actions,
     stateKeyToVar,
     perConfigDomains
@@ -86769,7 +80231,7 @@ function compileDslConfig({ config: config2, stateReads, projections }, signer) 
     const seen2 = rules.get(authored);
     rules.set(
       authored,
-      seen2 === void 0 ? { where, template: parseExpressionSlot(parse3, where, authored) } : { where: `${seen2.where}, ${where}`, template: seen2.template }
+      seen2 === void 0 ? { where, template: parseExpressionSlot(parse4, where, authored) } : { where: `${seen2.where}, ${where}`, template: seen2.template }
     );
   }
   const instantNames = new Set(projections.map(([name]) => name));
@@ -86842,17 +80304,17 @@ var layoutGates = (segments) => (root) => {
     ...node.kind === "segment" && segments[node.name].when !== void 0 ? [segments[node.name].when] : []
   ]);
 };
-function parseExpressionSlot(parse3, path43, source) {
+function parseExpressionSlot(parse4, path43, source) {
   try {
-    return parse3(source);
+    return parse4(source);
   } catch (e) {
     throw new Error(
       `${path43} is not a valid template: ${e instanceof Error ? e.message : String(e)}`
     );
   }
 }
-var unreachable = (message) => {
-  throw new Error(`a slot settled on a name its domain refuses: ${message}`);
+var unreachable = (message2) => {
+  throw new Error(`a slot settled on a name its domain refuses: ${message2}`);
 };
 function evalRule(slot, rule, parts, warn, frame2) {
   const name = ruleName(slot, rule, parts.rule(rule.template), warn, frame2);
@@ -86948,7 +80410,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         slot,
         evalRule(slot, state.rule, parts, warn, ruleFrame),
         state.rule.where,
-        (message) => warn({ kind: "rule", slot, message })
+        (message2) => warn({ kind: "rule", slot, message: message2 })
       );
       parts.drawnSlot(slot, name);
       return name;
@@ -87106,6 +80568,4045 @@ init_globals();
 var RESERVED_CHARS = 2;
 function applyClaudeCodeReserve(rawCols) {
   return Math.max(1, rawCols - RESERVED_CHARS);
+}
+
+// src/renderer/bundled-presets.ts
+init_globals();
+
+// src/config/default-dsl-config.ts
+init_globals();
+
+// src/config/dsl-loader.ts
+init_globals();
+var import_json54 = __toESM(require_dist(), 1);
+
+// src/config/loader/layout.ts
+init_globals();
+var LAYOUT_NODE_REF = "#/definitions/LayoutNode";
+var ROOT_FRAGMENT_REF = "#/definitions/RootFragment";
+var EMPTY_VERTICAL_NODE = {
+  kind: "container",
+  direction: "vertical",
+  children: []
+};
+function literalSpec(value) {
+  return { required: true, json: { const: value }, parse: () => value };
+}
+function segmentNameSpec() {
+  return {
+    // Mandatory in the schema (a missing/empty name pushes an issue → throw); the
+    // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path43, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && v.length > 0) return v;
+      ctx.issues.push({
+        path: `${path43}.${field}`,
+        message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue2(v)}`,
+        line: findKeyLine(ctx.source, ["root"])
+      });
+      return "";
+    }
+  };
+}
+function directionSpec() {
+  return {
+    // Mandatory in the schema (a missing/invalid direction pushes an issue →
+    // throw); the parse recovers to "vertical", a no-op for `fields`. See
+    // `cellsSegmentsSpec`.
+    required: true,
+    json: { enum: [...DIRECTIONS] },
+    parse: (ctx, path43, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && DIRECTIONS.includes(v)) {
+        return v;
+      }
+      ctx.issues.push({
+        path: `${path43}.${field}`,
+        message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(v)})`,
+        line: findKeyLine(ctx.source, ["root"])
+      });
+      return "vertical";
+    }
+  };
+}
+function childrenSpec(node) {
+  return {
+    // Mandatory in the schema (a missing/non-array `children` pushes an issue →
+    // throw); the parse recovers to [], a no-op for `fields`. See `cellsSegmentsSpec`.
+    required: true,
+    // [LAW:one-source-of-truth] The recursive field points at the node definition
+    // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
+    // self-reference. The runtime recursion and the schema recursion break the
+    // same cycle, declared in one place.
+    json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
+    parse: (ctx, path43, field, raw) => {
+      const v = raw[field];
+      if (!Array.isArray(v)) {
+        ctx.issues.push({
+          path: `${path43}.${field}`,
+          message: `a container must have a "children" array of layout nodes, got ${describeType2(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+        return [];
+      }
+      return v.map((child, i2) => node(ctx, `${path43}.${field}[${i2}]`, child));
+    }
+  };
+}
+var SEGMENT_NODE_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("segment"),
+    name: segmentNameSpec(),
+    when: optionalStringSpec(),
+    id: placementIdSpec(),
+    settings: placementSettingsSpec()
+  }
+};
+var distributionSpec = () => optionalEnumSpec(DISTRIBUTION_NAMES);
+var CONTAINER_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("container"),
+    direction: directionSpec(),
+    children: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+function segArmSpec() {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path43, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && v.length > 0) return v;
+      ctx.issues.push({
+        path: `${path43}.${field}`,
+        message: `a "seg" node must have a non-empty segment name, got ${describeValue2(v)}`,
+        line: findKeyLine(ctx.source, [...path43.split("."), field])
+      });
+      return "";
+    }
+  };
+}
+var SEG_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    seg: segArmSpec(),
+    when: optionalStringSpec(),
+    id: placementIdSpec(),
+    settings: placementSettingsSpec()
+  }
+};
+var H_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    h: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+var V_ARM_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    v: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+var validateRoot = (ctx, path43, raw) => {
+  if (typeof raw === "string") {
+    if (raw.length === 0) {
+      ctx.issues.push({
+        path: path43,
+        message: `a bare-string layout node must be a non-empty segment name`,
+        line: findKeyLine(ctx.source, ["root"])
+      });
+      return EMPTY_VERTICAL_NODE;
+    }
+    return { kind: "segment", name: raw };
+  }
+  if (!isPlainObject3(raw)) {
+    ctx.issues.push({
+      path: path43,
+      message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType2(raw)}`,
+      line: findKeyLine(ctx.source, ["root"])
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "container") {
+    return record(ctx, CONTAINER_SCHEMA, path43, raw) ?? EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "segment") {
+    return record(ctx, SEGMENT_NODE_SCHEMA, path43, raw) ?? EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "cells") {
+    ctx.issues.push({
+      path: path43,
+      message: `kind: "cells" is no longer supported \u2014 use the h-arm spelling instead:
+  Old: { kind: "cells", segments: ["seg1", "seg2"] }
+  New: { h: ["seg1", "seg2"] }`,
+      line: findKeyLine(ctx.source, ["root"])
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "group") {
+    const group = record(ctx, GROUP_SCHEMA, path43, raw);
+    if (group === null) return EMPTY_VERTICAL_NODE;
+    ctx.groups.push({
+      name: group.name,
+      label: group.label,
+      ...group.open !== void 0 && { open: group.open },
+      ...group.direction !== void 0 && { direction: group.direction },
+      ...group.key !== void 0 && { key: group.key },
+      ...group.bg !== void 0 && { bg: group.bg },
+      ...group.fg !== void 0 && { fg: group.fg },
+      ...group.when !== void 0 && { when: group.when },
+      path: path43
+    });
+    return lowerGroup(group);
+  }
+  const hasH = "h" in raw;
+  const hasV = "v" in raw;
+  const hasSeg = "seg" in raw;
+  const armCount = (hasH ? 1 : 0) + (hasV ? 1 : 0) + (hasSeg ? 1 : 0);
+  if (armCount > 1) {
+    const present = ["seg", "h", "v"].filter((k) => k in raw);
+    ctx.issues.push({
+      path: path43,
+      message: `a layout node may have exactly one of "seg", "h", or "v" \u2014 got ${present.map((k) => `"${k}"`).join(" and ")} together`,
+      line: findKeyLine(ctx.source, ["root"])
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (hasSeg) {
+    const arm2 = record(ctx, SEG_ARM_SCHEMA, path43, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "segment",
+      name: arm2.seg,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.id !== void 0 && { id: arm2.id },
+      ...arm2.settings !== void 0 && { settings: arm2.settings }
+    };
+  }
+  if (hasH) {
+    const arm2 = record(ctx, H_ARM_SCHEMA, path43, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: arm2.h,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
+    };
+  }
+  if (hasV) {
+    const arm2 = record(ctx, V_ARM_SCHEMA, path43, raw);
+    if (arm2 === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "container",
+      direction: "vertical",
+      children: arm2.v,
+      ...arm2.when !== void 0 && { when: arm2.when },
+      ...arm2.distribution !== void 0 && { distribution: arm2.distribution }
+    };
+  }
+  ctx.issues.push({
+    path: `${path43}.kind`,
+    message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
+    line: findKeyLine(ctx.source, ["root"])
+  });
+  return EMPTY_VERTICAL_NODE;
+};
+function rowsSpec() {
+  return {
+    required: true,
+    json: {
+      type: "object",
+      propertyNames: { pattern: ROW_NAME_RE.source },
+      additionalProperties: { $ref: LAYOUT_NODE_REF }
+    },
+    parse: (ctx, path43, field, raw) => {
+      const v = raw[field];
+      if (!isPlainObject3(v)) {
+        ctx.issues.push({
+          path: `${path43}.${field}`,
+          message: `"rows" must be an object of row name \u2192 layout node, got ${describeType2(v)}`,
+          line: findKeyLine(ctx.source, [...path43.split("."), field])
+        });
+        return {};
+      }
+      const rows = {};
+      for (const [name, node] of Object.entries(v)) {
+        if (!ROW_NAME_RE.test(name)) {
+          ctx.issues.push({
+            path: `${path43}.${field}.${name}`,
+            message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) \u2014 it names the row in the config file and merges by name over the bundled default's rows`,
+            line: findKeyLine(ctx.source, [...path43.split("."), field, name])
+          });
+          continue;
+        }
+        rows[name] = validateRoot(ctx, `${path43}.${field}.${name}`, node);
+      }
+      return rows;
+    }
+  };
+}
+var ROWS_SCHEMA = {
+  noun: "root key",
+  fields: {
+    rows: rowsSpec(),
+    when: optionalStringSpec(),
+    distribution: distributionSpec()
+  }
+};
+function validateRootFragment(ctx, path43, raw) {
+  if (isPlainObject3(raw) && "rows" in raw) {
+    return record(ctx, ROWS_SCHEMA, path43, raw) ?? { rows: {} };
+  }
+  return validateRoot(ctx, path43, raw);
+}
+var INSERT_SCHEMA = {
+  noun: "insert key",
+  fields: {
+    seg: segArmSpec(),
+    id: placementIdSpec(),
+    before: optionalStringSpec(),
+    after: optionalStringSpec()
+  }
+};
+function validateInsert(ctx, raw, file) {
+  if (!Array.isArray(raw)) {
+    ctx.issues.push({
+      path: "insert",
+      message: `"insert" must be a list of cells like { seg: "name", after: "placement" }, got ${describeType2(raw)}`,
+      line: findKeyLine(ctx.source, ["insert"])
+    });
+    return [];
+  }
+  return raw.flatMap((entry, i2) => {
+    const path43 = `insert.${i2}`;
+    const arm2 = record(ctx, INSERT_SCHEMA, path43, entry);
+    if (arm2 === null) return [];
+    const sides = ["before", "after"].filter(
+      (side) => arm2[side] !== void 0
+    );
+    if (sides.length !== 1) {
+      ctx.issues.push({
+        path: path43,
+        message: `an insert cell names exactly one of "before" or "after" (the placement id it sits beside), got ${sides.length === 0 ? "neither" : "both"}`,
+        line: findKeyLine(ctx.source, path43.split("."))
+      });
+      return [];
+    }
+    if (isReservedName(arm2.seg)) {
+      ctx.issues.push({
+        path: `${path43}.seg`,
+        message: `an insert cell places a segment, and "${arm2.seg}" is the bar's own chrome \u2014 name a segment instead`,
+        line: findKeyLine(ctx.source, [...path43.split("."), "seg"])
+      });
+      return [];
+    }
+    const relation = sides[0];
+    const anchor = arm2[relation];
+    if (isReservedName(anchor)) {
+      ctx.issues.push({
+        path: `${path43}.${relation}`,
+        message: `an insert cell sits beside a placement, and "${anchor}" is the bar's own chrome \u2014 anchor on a placement id instead`,
+        line: findKeyLine(ctx.source, [...path43.split("."), relation])
+      });
+      return [];
+    }
+    return [
+      {
+        seg: arm2.seg,
+        ...arm2.id !== void 0 && { id: arm2.id },
+        anchor,
+        relation,
+        by: { file, entry: path43 }
+      }
+    ];
+  });
+}
+function groupNameSpec() {
+  return {
+    required: true,
+    json: { type: "string", pattern: ROW_NAME_RE.source },
+    parse: (ctx, path43, field, raw) => {
+      const v = raw[field];
+      if (typeof v !== "string" || !ROW_NAME_RE.test(v) || v === DISCLOSURE_CLOSED) {
+        ctx.issues.push({
+          path: `${path43}.${field}`,
+          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue2(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function groupKeySpec() {
+  return {
+    required: false,
+    json: { type: "string", minLength: 1 },
+    parse: (ctx, path43, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "string" || v === "" || v.includes("/")) {
+        ctx.issues.push({
+          path: `${path43}.${field}`,
+          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue2(v)}`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function groupLabelSpec() {
+  return {
+    required: true,
+    json: { type: "string", pattern: "^[^\\n\\r]*$" },
+    parse: (ctx, path43, field, raw) => {
+      const s = requireString(ctx, path43, raw, field);
+      if (s === null) return void 0;
+      if (/[\n\r]/.test(s)) {
+        ctx.issues.push({
+          path: `${path43}.${field}`,
+          message: `${path43}.${field}: group label must not contain newlines`,
+          line: findKeyLine(ctx.source, [...path43.split("."), field])
+        });
+        return void 0;
+      }
+      return s;
+    }
+  };
+}
+var GROUP_SCHEMA = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("group"),
+    name: groupNameSpec(),
+    label: groupLabelSpec(),
+    open: optionalBooleanSpec(),
+    direction: optionalEnumSpec(DIRECTIONS),
+    key: groupKeySpec(),
+    bg: optionalStringSpec(),
+    fg: optionalStringSpec(),
+    when: optionalStringSpec(),
+    distribution: distributionSpec(),
+    children: childrenSpec(lazy(() => validateRoot))
+  }
+};
+function groupStateKey(g) {
+  return g.key ?? GROUP_NS + g.name;
+}
+function lowerGroup(g) {
+  const ref = GROUP_NS + g.name;
+  return disclosureNode(
+    ref,
+    { variable: ref, key: groupStateKey(g), member: g.name },
+    {
+      kind: "container",
+      direction: g.direction ?? "vertical",
+      children: g.children,
+      ...g.distribution !== void 0 && { distribution: g.distribution }
+    },
+    "drop",
+    g.when
+  );
+}
+function groupIssue(ctx, path43, message2) {
+  ctx.issues.push({
+    path: path43,
+    message: message2,
+    line: findKeyLine(ctx.source, ["root"])
+  });
+}
+function synthesizeGroupDecls(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
+  const groups = ctx.groups;
+  if (groups.length === 0) return;
+  const seen2 = /* @__PURE__ */ new Set();
+  for (const g of groups) {
+    if (seen2.has(g.name)) {
+      groupIssue(
+        ctx,
+        g.path,
+        `duplicate group name "${g.name}" \u2014 group names must be unique (they name the synthesized state var, action, and toggle segment)`
+      );
+    }
+    seen2.add(g.name);
+  }
+  for (const inner of groups) {
+    for (const outer of groups) {
+      if (inner !== outer && inner.path.startsWith(`${outer.path}.`) && groupStateKey(inner) === groupStateKey(outer)) {
+        groupIssue(
+          ctx,
+          inner.path,
+          `group "${inner.name}" shares key "${groupStateKey(inner)}" with its ancestor group "${outer.name}" \u2014 a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.`
+        );
+      }
+    }
+  }
+  const defaultByKey = /* @__PURE__ */ new Map();
+  for (const g of groups) {
+    const key = groupStateKey(g);
+    if (!defaultByKey.has(key)) defaultByKey.set(key, DISCLOSURE_CLOSED);
+    if (g.open === true) {
+      const prior = defaultByKey.get(key);
+      if (prior !== DISCLOSURE_CLOSED) {
+        groupIssue(
+          ctx,
+          g.path,
+          `groups "${prior}" and "${g.name}" share key "${key}" and both declare open: true \u2014 a shared key holds one open group; pick one`
+        );
+      }
+      defaultByKey.set(key, g.name);
+    }
+  }
+  const variables = {};
+  const actions = {};
+  const segments = {};
+  for (const g of groups) {
+    const name = GROUP_NS + g.name;
+    const key = groupStateKey(g);
+    const depth = groups.filter(
+      (other) => other !== g && g.path.startsWith(other.path + ".")
+    ).length;
+    const indent2 = "  ".repeat(depth);
+    variables[name] = disclosureStateVar(key, defaultByKey.get(key));
+    actions[name] = disclosureCycleAction(key, g.name);
+    segments[name] = {
+      template: disclosureTrigger(
+        name,
+        `${indent2}${g.label} ${DISCLOSURE_GLYPH_CLOSED}`,
+        `${indent2}${g.label} ${DISCLOSURE_GLYPH_OPEN}`
+      ),
+      ...g.bg !== void 0 && { bg: g.bg },
+      ...g.fg !== void 0 && { fg: g.fg }
+    };
+  }
+  out.variables = { ...out.variables ?? {}, ...variables };
+  out.actions = { ...out.actions ?? {}, ...actions };
+  out.segments = { ...out.segments ?? {}, ...segments };
+}
+
+// src/config/loader/menu-synth.ts
+init_globals();
+var MENU_FUNC = "menu";
+var MIGRATION = `a menu binds its trigger text the way a cycle action binds a display \u2014 write {{ menu "applyTheme" "\u25B8" "\u25BE" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "\u25B8" "\u25BE" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends \u25B8/\u25BE of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed \u2014 the page cursor is synthesized from the menu's identity`;
+var isDictCall = (e) => e.kind === "call" && e.name === "dict";
+var isNonObjectLiteral = (e) => e.kind === "literal" && typeof e.value !== "object";
+var legalDisplayCount = (count) => cycleDisplayIssue("", count, 2) === void 0;
+function analyzeMenuCall(call) {
+  const issue3 = (message2) => ({ kind: "issue", message: message2 });
+  const [applyArg, ...tail] = call.argExprs;
+  if (applyArg === void 0) {
+    return issue3(
+      `with no arguments \u2014 it takes an apply-action name and its trigger text (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
+    );
+  }
+  if (applyArg.kind !== "literal" || typeof applyArg.value !== "string") {
+    return issue3(
+      `whose apply action is not a string literal \u2014 a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "\u25B8" "\u25BE" }})`
+    );
+  }
+  const last2 = tail[tail.length - 1];
+  const optsArg = last2 !== void 0 && isDictCall(last2) ? last2 : void 0;
+  const displays = optsArg === void 0 ? tail : tail.slice(0, -1);
+  if (displays.some(isDictCall)) {
+    return issue3(
+      `whose options (dict \u2026) is not its last argument \u2014 ${MIGRATION}`
+    );
+  }
+  if (last2 !== void 0 && optsArg === void 0 && !isNonObjectLiteral(last2) && legalDisplayCount(displays.length - 1)) {
+    return issue3(
+      `whose last argument is neither a literal nor a literal (dict \u2026) \u2014 the renderer tells a display from the options dict by the value it evaluates to, so this call could be read as ${displays.length} displays or as ${displays.length - 1} plus options, and both are legal. Make the options explicit as a trailing (dict \u2026) \u2014 {{ menu "${applyArg.value}" (printf "\u2026") (printf "\u2026") (dict) }} binds dynamic displays unambiguously \u2014 or bind the trigger text as literals`
+    );
+  }
+  const arity = cycleDisplayIssue("whose trigger", displays.length, 2);
+  if (arity !== void 0) return issue3(`${arity} \u2014 ${MIGRATION}`);
+  const entries = optsArg === void 0 ? {} : staticDictEntries(optsArg);
+  if (entries === null) {
+    return issue3(
+      `whose options (dict \u2026) is not fully literal \u2014 every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)`
+    );
+  }
+  let options;
+  try {
+    options = parseMenuOptions(entries);
+  } catch (e) {
+    return issue3(`with invalid options \u2014 ${e.message}`);
+  }
+  const sharedKey = options.key;
+  if (sharedKey !== void 0) {
+    const reserved = reservedNamespaceOf(sharedKey);
+    if (reserved !== void 0) {
+      return issue3(
+        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace \u2014 a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes "${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the synthesized accordion that owns that namespace instead of grouping only your own menus. Name the group without the reserved prefix`
+      );
+    }
+  }
+  return { kind: "ok", apply: applyArg.value, options };
+}
+function parseCalls(template) {
+  const engine = createEngine({ fromString: (s) => s });
+  try {
+    return engine.parse(template).referencedCalls().filter((c) => c.name === MENU_FUNC).map(analyzeMenuCall);
+  } catch {
+    return "parse-failed";
+  }
+}
+function hostedMenus(template, placement) {
+  const calls = parseCalls(template);
+  return calls === "parse-failed" ? [] : calls.flatMap(
+    (call) => call.kind === "ok" ? [
+      {
+        key: menuStateKey(placement, call.apply, call.options.key),
+        member: menuMember(call.apply)
+      }
+    ] : []
+  );
+}
+function segmentReferencesMenu(template) {
+  const engine = createEngine({ fromString: (s) => s });
+  try {
+    return engine.parse(template).referencedFunctions().has(MENU_FUNC);
+  } catch {
+    return false;
+  }
+}
+function menuIssue(ctx, path43, message2) {
+  ctx.issues.push({ path: path43, message: message2, line: findKeyLine(ctx.source, ["root"]) });
+}
+function checkMenuDecls(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
+  reservedNamespaceCollisions(ctx, out, MENU_PAGE_NS, "{{ menu }} helpers");
+  for (const [name, body] of Object.entries(out.helpers ?? {})) {
+    if (segmentReferencesMenu(body)) {
+      ctx.issues.push({
+        path: `helpers.${name}`,
+        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template \u2014 its identity is derived from the segment it sits in, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
+        line: findKeyLine(ctx.source, ["helpers", name])
+      });
+    }
+  }
+  const segments = out.segments ?? {};
+  for (const [segName, seg2] of Object.entries(segments)) {
+    for (const field of ["bg", "fg", "when"]) {
+      const tpl = seg2[field];
+      if (typeof tpl === "string" && segmentReferencesMenu(tpl)) {
+        menuIssue(
+          ctx,
+          `segments.${segName}.${field}`,
+          `segment "${segName}" uses {{ menu }} in its "${field}" \u2014 a menu is only valid in a segment's "template" (its placement is published only there; "${field}" needs a ${field === "when" ? "predicate" : "color"}). Move the {{ menu }} into the template.`
+        );
+      }
+    }
+    for (const [name, body] of Object.entries(seg2.partials ?? {})) {
+      if (segmentReferencesMenu(body)) {
+        ctx.issues.push({
+          path: `segments.${segName}.partials.${name}`,
+          message: `segments.${segName}.partials.${name} uses {{ menu }}, but a menu must live directly in a segment's "template" string \u2014 the synthesis pass that wires its state never follows a {{ template }} call into a partial. Inline the {{ menu }} call into the template itself.`,
+          line: findKeyLine(ctx.source, [
+            "segments",
+            segName,
+            "partials",
+            name
+          ])
+        });
+      }
+    }
+  }
+  if (out.root !== void 0) {
+    for (const node of walkNodes(fragmentNode(out.root))) {
+      if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
+        menuIssue(
+          ctx,
+          "root",
+          `a layout node's "when" predicate uses {{ menu }} \u2014 a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`
+        );
+      }
+    }
+  }
+  for (const [segName, { template }] of Object.entries(segments)) {
+    if (template === void 0 || !segmentReferencesMenu(template)) continue;
+    const calls = parseCalls(template);
+    if (calls === "parse-failed") continue;
+    for (const call of calls) {
+      const message2 = call.kind === "issue" ? call.message : identityIssue(call.apply);
+      if (message2 !== void 0) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} ${message2}.`
+        );
+      }
+    }
+  }
+}
+function identityIssue(apply) {
+  if (apply === "") {
+    return `with an empty apply-action name \u2014 an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action`;
+  }
+  if (menuMember(apply) === DISCLOSURE_CLOSED) {
+    return `whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action`;
+  }
+  return void 0;
+}
+function synthesizePlacementMenus(config2, issues) {
+  const variables = {};
+  const actions = {};
+  const callsOf = /* @__PURE__ */ new Map();
+  const reported = /* @__PURE__ */ new Set();
+  const issue3 = (segName, message2) => {
+    const path43 = `segments.${segName}`;
+    if (reported.has(`${path43}\0${message2}`)) return;
+    reported.add(`${path43}\0${message2}`);
+    issues.push({ path: path43, message: message2 });
+  };
+  for (const preset of presetNames(config2.presets)) {
+    const ownerBySynthKey = /* @__PURE__ */ new Map();
+    const claimed = /* @__PURE__ */ new Map();
+    for (const node of walkNodes(presetRoot(config2, preset).node)) {
+      if (node.kind !== "segment") continue;
+      const seg2 = config2.segments[node.name];
+      if (seg2 === void 0) continue;
+      if (!callsOf.has(node.name)) {
+        callsOf.set(node.name, parseCalls(seg2.template));
+      }
+      const calls = callsOf.get(node.name);
+      if (calls === "parse-failed") continue;
+      const id2 = placementId(node);
+      for (const [index, call] of calls.entries()) {
+        if (call.kind === "issue" || identityIssue(call.apply) !== void 0) {
+          continue;
+        }
+        const { apply, options } = call;
+        const member = menuMember(apply);
+        const stateKey = menuStateKey(id2, apply, options.key);
+        const pageKey = menuPageKey(stateKey);
+        const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
+        const clashKey = [stateKey, pageKey].find((k) => {
+          const prior2 = ownerBySynthKey.get(k);
+          return prior2 !== void 0 && prior2 !== owner;
+        });
+        if (clashKey !== void 0) {
+          issue3(
+            node.name,
+            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently \u2014 distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`
+          );
+          continue;
+        }
+        ownerBySynthKey.set(stateKey, owner);
+        ownerBySynthKey.set(pageKey, owner);
+        const identity2 = menuActionName(stateKey, member);
+        const claimant = `${node.name}\0${index}`;
+        const prior = claimed.get(identity2);
+        if (prior !== void 0 && prior !== claimant) {
+          issue3(
+            node.name,
+            `two {{ menu }} disclosures resolve to the same identity ("${identity2}") \u2014 ${options.key !== void 0 ? `menus sharing key "${options.key}" must have distinct apply actions` : `a segment cannot contain two menus over the same apply action "${apply}"`}.`
+          );
+          continue;
+        }
+        claimed.set(identity2, claimant);
+        actions[identity2] = disclosureCycleAction(stateKey, member);
+        variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
+        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+        actions[pageKey] = { set: pageKey, int: true };
+      }
+    }
+  }
+  return {
+    ...config2,
+    variables: { ...config2.variables, ...variables },
+    actions: { ...config2.actions, ...actions }
+  };
+}
+
+// src/config/loader/styles.ts
+init_globals();
+function endcapsNameMessage(at, name, endcapsAt) {
+  return `${at}: "${name}" is an endcaps shape, not a style \u2014 endcaps were renamed from "style" to "endcaps"; write ${endcapsAt}: "${name}"`;
+}
+var STYLE_SCHEMA = {
+  noun: "style key",
+  fields: {
+    hueShift: optionalNumberSpec(),
+    chromaScale: optionalNumberSpec({ min: 0 }),
+    lightnessScale: optionalNumberSpec(),
+    lightnessShift: optionalNumberSpec()
+  }
+};
+function validateStyles(ctx, raw) {
+  if (!isPlainObject3(raw)) {
+    ctx.issues.push({
+      path: "styles",
+      message: `styles must be an object mapping style names to adaptation objects, got ${describeType2(raw)}`,
+      line: findKeyLine(ctx.source, ["styles"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (name === "" || name.includes("/")) {
+      ctx.issues.push({
+        path: `styles.${name}`,
+        message: `style name ${JSON.stringify(name)} must be non-empty and slash-free \u2014 a style picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        line: findKeyLine(ctx.source, ["styles", name])
+      });
+      continue;
+    }
+    if (isStyleEraEndcaps(name)) {
+      ctx.issues.push({
+        path: `styles.${name}`,
+        message: endcapsNameMessage(`styles.${name}`, name, "globals.endcaps"),
+        line: findKeyLine(ctx.source, ["styles", name])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, STYLE_SCHEMA, `styles.${name}`, value);
+    if (parsed2 !== null) out[name] = { ...IDENTITY, ...parsed2 };
+  }
+  return out;
+}
+
+// src/config/loader/presets.ts
+init_globals();
+var presetRootSpec = {
+  required: false,
+  json: { $ref: ROOT_FRAGMENT_REF },
+  parse: (ctx, path43, field, raw) => raw[field] === void 0 ? void 0 : validateRootFragment(ctx, `${path43}.${field}`, raw[field])
+};
+var presetGlobalsSpec = {
+  required: false,
+  json: presetGlobalsJson(),
+  parse: (ctx, path43, field, raw) => raw[field] === void 0 ? void 0 : validatePresetGlobals(ctx, `${path43}.${field}`, raw[field])
+};
+var PRESET_SCHEMA = {
+  noun: "preset key",
+  fields: { root: presetRootSpec, globals: presetGlobalsSpec }
+};
+function validatePresets(ctx, raw) {
+  if (!isPlainObject3(raw)) {
+    ctx.issues.push({
+      path: "presets",
+      message: `presets must be an object mapping preset names to config fragments, got ${describeType2(raw)}`,
+      line: findKeyLine(ctx.source, ["presets"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
+      ctx.issues.push({
+        path: `presets.${name}`,
+        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free \u2014 a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
+        line: findKeyLine(ctx.source, ["presets", name])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, PRESET_SCHEMA, `presets.${name}`, value);
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+
+// src/config/loader/cross-ref.ts
+init_globals();
+
+// src/config/loader/unplaced.ts
+init_globals();
+function presenceOf(segments, rendering) {
+  const owners = [...rendering].map(
+    ([ns, definition]) => [ownedBy(ns), definition]
+  );
+  return (name) => {
+    if (isSettingsAnchor(name) || Object.hasOwn(segments, name))
+      return { kind: "declared" };
+    const owner = owners.find(([owns]) => owns(name));
+    if (owner !== void 0) return { kind: "plugin", definition: owner[1] };
+    const scope = scopeOf(name);
+    return scope !== void 0 && scope !== name ? { kind: "absent" } : { kind: "missing" };
+  };
+}
+function reportable(presence2) {
+  return presence2.kind === "plugin" || presence2.kind === "missing";
+}
+function absentPlacement(config2, cells, presence2) {
+  const placed2 = /* @__PURE__ */ new Map();
+  const add2 = (id2, at) => {
+    placed2.set(id2, [...placed2.get(id2) ?? [], at]);
+  };
+  const trees = (f) => isRowsFragment(f) ? Object.values(f.rows) : [f];
+  const fragments = [
+    config2.root,
+    ...Object.values(config2.presets).flatMap(
+      (p2) => p2.root === void 0 ? [] : [p2.root]
+    )
+  ];
+  for (const tree of fragments.flatMap(trees))
+    for (const node of walkNodes(tree))
+      if (node.kind === "segment") add2(placementId(node), { seg: node.name });
+  for (const cell3 of cells)
+    add2(cell3.id ?? cell3.seg, { seg: cell3.seg, anchor: cell3.anchor });
+  const absent = /* @__PURE__ */ new Set();
+  const standsOnAbsent = (at) => presence2(at.seg).kind === "absent" || at.anchor !== void 0 && absent.has(at.anchor);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [id2, at] of placed2)
+      if (!absent.has(id2) && at.every(standsOnAbsent)) {
+        absent.add(id2);
+        grew = true;
+      }
+  }
+  return (id2) => absent.has(id2);
+}
+function withoutUnplaced(config2) {
+  let removed = 0;
+  const declared = presenceOf(config2.segments, /* @__PURE__ */ new Map());
+  const placed2 = (name) => {
+    const keep2 = declared(name).kind === "declared";
+    if (!keep2) removed += 1;
+    return keep2;
+  };
+  const container = (node) => ({
+    ...node,
+    children: node.children.flatMap((child) => nodes(child))
+  });
+  const nodes = (node) => node.kind === "container" ? [container(node)] : placed2(node.name) ? [mapOpens(node, container)] : [];
+  const tree = (node) => nodes(node)[0] ?? EMPTY_ROW;
+  const root = (r) => ({
+    ...r,
+    rows: Object.fromEntries(
+      Object.entries(r.rows).map(([name, row2]) => [name, tree(row2)])
+    )
+  });
+  const fragment = (f) => isRowsFragment(f) ? root(f) : tree(f);
+  const preset = (p2) => p2.root === void 0 ? p2 : { ...p2, root: fragment(p2.root) };
+  const result = {
+    ...config2,
+    root: root(config2.root),
+    presets: Object.fromEntries(
+      Object.entries(config2.presets).map(([name, p2]) => [name, preset(p2)])
+    )
+  };
+  return removed === 0 ? config2 : result;
+}
+var EMPTY_ROW = {
+  kind: "container",
+  direction: "horizontal",
+  children: []
+};
+
+// src/config/loader/cross-ref.ts
+var UNREAD_DISTRIBUTION = {
+  nested: (nodePath2) => `${nodePath2} sets "distribution" on a container inside a row \u2014 the row's own container places every cell along it, through any { h } or { v } nested in it, so this one would place nothing. Set it on the row (the outermost horizontal container), or, on the bar, on the root, which places the rows.`,
+  bar: (nodePath2) => `${nodePath2} sets "distribution" on a vertical container none of whose children is a segment or a horizontal container \u2014 a bar row's hue is placed by the innermost vertical container it stacks through, so it would place nothing. Set it on that container, or on the row whose children are the cells (the horizontal container).`,
+  band: (nodePath2) => `${nodePath2} sets "distribution" on a vertical container in a disclosure body \u2014 a body's items are placed along their rows, never by which row they sit on, so it would place nothing. Set it on the row whose children are the items (the horizontal container), or give a group \`direction: 'horizontal'\`.`
+};
+function presetIdentCollisions(ctx, presets) {
+  const byIdent = /* @__PURE__ */ new Map();
+  for (const name of Object.keys(presets)) {
+    const id2 = ident(name);
+    const names = byIdent.get(id2);
+    if (names) names.push(name);
+    else byIdent.set(id2, [name]);
+  }
+  for (const [id2, names] of byIdent) {
+    if (names.length < 2) continue;
+    ctx.issues.push({
+      path: "presets",
+      message: `preset names ${names.map((n) => JSON.stringify(n)).join(" and ")} both collapse to the same synthesis identifier "${id2}" \u2014 edit mode's synthesized reset affordance would silently steal one preset's action for the other. Rename one.`,
+      line: findKeyLine(ctx.source, ["presets"])
+    });
+  }
+}
+function authoredPlacement(raw, name) {
+  const layouts = [
+    ["root", raw.root],
+    ...Object.entries(raw.presets ?? {}).map(
+      ([preset, p2]) => [`presets.${preset}.root`, p2.root]
+    )
+  ];
+  for (const [layoutKey, fragment] of layouts) {
+    if (fragment === void 0) continue;
+    for (const [node, path43] of fragmentNodePaths(fragment, layoutKey)) {
+      if (node.kind === "segment" && node.name === name)
+        return { layoutKey, path: path43 };
+    }
+  }
+  return void 0;
+}
+var unplacedMessage = (layoutKey, name, segments, presence2) => presence2.kind === "plugin" ? `${layoutKey} entry "${name}" does not match any segment plugin "${pluginNs(presence2.definition)}" declares \u2014 the plugin loaded from ${presence2.definition.path} declares: ${pluginDeclares(pluginNs(presence2.definition), segments)}${missingSegmentHint(name, segments)}` : `${layoutKey} entry "${name}" does not match any declared segment${missingSegmentHint(name, segments)}`;
+function pluginDeclares(ns, segments) {
+  const owned = Object.keys(segments).filter(ownedBy(ns)).sort();
+  if (owned.length === 0) return "no segments";
+  return owned.map((seg2) => {
+    const settings = Object.keys(segments[seg2].settings ?? {});
+    return `${seg2} (${settings.length === 0 ? "no settings" : `settings: ${settings.join(", ")}`})`;
+  }).join(", ");
+}
+function missingSegmentHint(name, segments) {
+  return renamedHint(name) + otherScopeHint(name, (other) => Object.hasOwn(segments, other));
+}
+function validateCrossReferences(ctx, cfg, authored, presence2) {
+  const styleFragments = [
+    [["globals"], cfg.globals.style, "globals.endcaps"],
+    [["editGlobals"], cfg.editGlobals.style, "editGlobals.endcaps"],
+    ...Object.entries(cfg.presets).map(
+      ([name, preset]) => [
+        ["presets", name, "globals"],
+        preset.globals?.style,
+        `presets.${name}.globals.endcaps`
+      ]
+    ),
+    ...Object.entries(cfg.themeDefaults).map(
+      ([theme24, fragment]) => [["themeDefaults", theme24], fragment.style, "globals.endcaps"]
+    )
+  ];
+  for (const [at, name, endcapsAt] of styleFragments) {
+    if (name === void 0 || isExpression(name) || Object.prototype.hasOwnProperty.call(cfg.styles, name))
+      continue;
+    const where = `${at.join(".")}.style`;
+    ctx.issues.push({
+      path: where,
+      message: isStyleEraEndcaps(name) ? endcapsNameMessage(where, name, endcapsAt) : `${where} "${name}" does not match any declared style (have: ${Object.keys(cfg.styles).join(", ")})`,
+      line: findKeyLine(ctx.source, [...at, "style"])
+    });
+  }
+  if (cfg.globals.preset !== void 0 && !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)) {
+    ctx.issues.push({
+      path: "globals.preset",
+      message: `globals.preset "${cfg.globals.preset}" does not match any declared preset (have: ${Object.keys(cfg.presets).join(", ")})`,
+      line: findKeyLine(ctx.source, ["globals", "preset"])
+    });
+  }
+  presetIdentCollisions(ctx, cfg.presets);
+  const templateScope = templateScopeOf(cfg);
+  for (const name of templateScope.names) {
+    if (name !== "settings" && !name.startsWith(SETTINGS_SCOPE_PREFIX))
+      continue;
+    ctx.issues.push({
+      path: "variables",
+      message: `variable "${name}" is named under "settings", which a segment's templates read as its placement's own settings (.settings.<name>) \u2014 rename it`,
+      line: findKeyLine(ctx.source, ["variables", name])
+    });
+  }
+  const checkPlacementCounts = (tree, layoutKey, layoutLine) => {
+    if (countAnchors(tree) > 1) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" ${countAnchors(tree)} times \u2014 it may appear at most once per layout (it is one disclosure, and one state key holds one open state). Remove all but the placement you want; removing every placement puts the menu at its default position.`,
+        line: layoutLine
+      });
+    }
+    if (anchorUnderGate(tree)) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" under a \`when\` or inside a disclosure body \u2014 the menu is visible under every condition, so its placement may not be gated. Move it to an ungated position, or remove it to put the menu at its default position.`,
+        line: layoutLine
+      });
+    }
+    const rootUnread = unreadAt(tree, "bar");
+    if (rootUnread !== void 0) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: UNREAD_DISTRIBUTION[rootUnread](layoutKey),
+        line: layoutLine
+      });
+    }
+    const byId = /* @__PURE__ */ new Map();
+    for (const node of walkNodes(tree)) {
+      if (node.kind !== "segment" || presence2(node.name).kind !== "declared")
+        continue;
+      const id2 = placementId(node);
+      byId.set(id2, [...byId.get(id2) ?? [], node]);
+    }
+    for (const [id2, nodes] of byId) {
+      if (nodes.length < 2) continue;
+      const seg2 = nodes[1].name;
+      const free = freePlacementId(seg2, new Set(byId.keys()));
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} has ${nodes.length} placements with the id "${id2}" \u2014 an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${seg2}", id: "${free}" }. A placement without an "id" takes its segment's name.`,
+        line: layoutLine
+      });
+    }
+  };
+  function unreadAt(node, where) {
+    if (node.kind === "segment" || node.distribution === void 0)
+      return void 0;
+    if (where === "nested") return "nested";
+    const placesRows = where === "bar" && node.children.some(
+      (child) => child.kind === "segment" || AXIS_OF[child.direction] === "cell"
+    );
+    return AXIS_OF[node.direction] === "row" && !placesRows ? where : void 0;
+  }
+  const whereBelow = (node, where) => node.kind === "segment" ? "band" : AXIS_OF[node.direction] === "cell" ? "nested" : where;
+  const childPaths = (node, path43) => node.kind === "container" ? node.children.map((child, i2) => [child, childPath(path43, i2)]) : node.opens === void 0 ? [] : [[node.opens.body, bodyPath(path43)]];
+  function* unreadBelow(children2, where) {
+    for (const [child, path43] of children2) {
+      const own2 = unreadAt(child, where);
+      if (own2 !== void 0) yield [own2, path43];
+      yield* unreadBelow(childPaths(child, path43), whereBelow(child, where));
+    }
+  }
+  const reported = /* @__PURE__ */ new Set();
+  const checkLayoutTree = (root, layoutKey) => {
+    const top = fragmentNode(root);
+    const rows = isRowsFragment(root) ? Object.entries(root.rows).map(
+      ([name, row2]) => [row2, `${layoutKey}.rows.${name}`]
+    ) : childPaths(top, layoutKey);
+    for (const [where, path43] of unreadBelow(rows, whereBelow(top, "bar"))) {
+      ctx.issues.push({
+        path: path43,
+        message: UNREAD_DISTRIBUTION[where](path43),
+        line: findKeyLine(ctx.source, path43.split("."))
+      });
+    }
+    for (const [node, path43] of fragmentNodePaths(root, layoutKey)) {
+      const line = findKeyLine(ctx.source, path43.split("."));
+      if (node.when !== void 0) {
+        checkTemplateRefs(ctx, `${path43}.when`, node.when, templateScope, {
+          line
+        });
+        checkWhenParses(ctx, `${path43}.when`, node.when, line);
+        checkActionRefs(ctx, cfg, `${path43}.when`, node.when, line);
+      }
+      if (node.kind !== "segment") continue;
+      if (isSettingsAnchor(node.name)) {
+        if (node.id !== void 0 || node.settings !== void 0) {
+          ctx.issues.push({
+            path: path43,
+            message: `${layoutKey} gives the global settings menu anchor "${SETTINGS_ANCHOR}" an id or settings \u2014 the anchor only marks where the menu goes, so place it as the bare name "${SETTINGS_ANCHOR}"`,
+            line
+          });
+        }
+        continue;
+      }
+      const placed2 = presence2(node.name);
+      if (reportable(placed2)) {
+        reported.add(node.name);
+        ctx.unplaced.push({
+          path: path43,
+          message: unplacedMessage(layoutKey, node.name, cfg.segments, placed2),
+          line
+        });
+      }
+      checkPlacementSettings(ctx, cfg, node, path43, line);
+    }
+  };
+  if (authored.root !== void 0) checkLayoutTree(authored.root, "root");
+  for (const [name, preset] of Object.entries(authored.presets ?? {})) {
+    if (preset.root !== void 0) {
+      checkLayoutTree(preset.root, `presets.${name}.root`);
+    }
+  }
+  const rendered = /* @__PURE__ */ new Map([["root", rootNode(cfg.root)]]);
+  for (const name of presetNames(cfg.presets)) {
+    const { node, path: path43 } = presetRoot(cfg, name);
+    rendered.set(path43, node);
+  }
+  for (const [key, tree] of rendered) {
+    checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
+  }
+  for (const [key, tree] of rendered) {
+    for (const [node] of walkNodePaths(tree, key)) {
+      if (node.kind !== "segment" || reported.has(node.name)) continue;
+      const placed2 = presence2(node.name);
+      if (!reportable(placed2)) continue;
+      reported.add(node.name);
+      ctx.inherited.push({
+        name: node.name,
+        path: key,
+        message: unplacedMessage(
+          `${key} inherits from a config layer below whose`,
+          node.name,
+          cfg.segments,
+          placed2
+        ),
+        line: findKeyLine(ctx.source, key.split("."))
+      });
+    }
+  }
+  validateDeclarations(ctx, cfg, templateScope, () => true);
+}
+var TREE_OP_ARMS = [
+  "removeSegment",
+  "insertSegment",
+  "insertSegmentFrom"
+];
+function checkPresetRootTarget(ctx, cfg, name, discriminator, key, presetName, a) {
+  const at = `actions.${name}.${discriminator}`;
+  const line = findKeyLine(ctx.source, ["actions", name, discriminator]);
+  if (!presetNames(cfg.presets).includes(presetName)) {
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: "${key}" names preset "${presetName}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
+      line
+    });
+    return;
+  }
+  if (discriminator === "reset") return;
+  const hasRemove = "removeSegment" in a;
+  const hasInsert = "insertSegment" in a;
+  const hasInsertFrom = "insertSegmentFrom" in a;
+  if (!hasRemove && !hasInsert && !hasInsertFrom) {
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: "${key}" is a "presets.<name>.root" target and can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom" (not "to"/"from"/"cycle"/bounded \u2014 those have no meaning as a tree op)`,
+      line
+    });
+    return;
+  }
+  const checkDeclared = (role, segName) => {
+    if (Object.prototype.hasOwnProperty.call(cfg.segments, segName)) return;
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: ${role} "${segName}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})${renamedHint(segName)}`,
+      line
+    });
+  };
+  const placed2 = new Set(placementIds(presetRoot(cfg, presetName).node));
+  const checkRetired = (role, id2) => {
+    if (!RENAMED_SEGMENTS.has(id2) || placed2.has(id2) || Object.prototype.hasOwnProperty.call(cfg.segments, id2)) {
+      return;
+    }
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: ${role} "${id2}" names no placement${renamedHint(id2)}`,
+      line
+    });
+  };
+  if ("removeSegment" in a) checkRetired("removeSegment", a.removeSegment);
+  if ("insertSegment" in a) checkDeclared("insertSegment", a.insertSegment);
+  if ("insertSegment" in a || "insertSegmentFrom" in a) {
+    checkRetired("anchor", a.anchor);
+  }
+}
+var SETTINGS_SCOPE_PREFIX = "settings.";
+function withSettingsScope(scope, settings) {
+  return {
+    ...scope,
+    names: /* @__PURE__ */ new Set([
+      ...scope.names,
+      ...Object.keys(settings).map((n) => SETTINGS_SCOPE_PREFIX + n)
+    ])
+  };
+}
+function checkSettingOrder(ctx, segName, settings) {
+  const at = (name) => `segments.${segName}.settings.${name}`;
+  const push = (name, message2) => {
+    ctx.issues.push({
+      path: at(name),
+      message: `${at(name)}: ${message2}`,
+      line: findKeyLine(ctx.source, ["segments", segName, "settings", name])
+    });
+  };
+  const broken = floorProblems(settings);
+  for (const { setting, message: message2 } of broken) push(setting, message2);
+  if (broken.length > 0) return;
+  for (const { setting, message: message2 } of settingOrderProblems(
+    settings,
+    defaultsOf(settings)
+  )) {
+    push(setting, `the defaults do not stand together: ${message2}`);
+  }
+}
+function relationsReported(settings) {
+  return floorProblems(settings).length > 0 || settingOrderProblems(settings, defaultsOf(settings)).length > 0;
+}
+function defaultsOf(settings) {
+  return Object.fromEntries(
+    Object.entries(settings).map(([n, d]) => [n, d.default])
+  );
+}
+function floorProblems(settings) {
+  const floorOf3 = (name) => rangeOf(own(settings, name))?.atLeast;
+  return Object.keys(settings).flatMap((name) => {
+    const floor3 = floorOf3(name);
+    if (floor3 === void 0) return [];
+    if (floor3 === name || rangeOf(own(settings, floor3)) === void 0) {
+      return [
+        {
+          setting: name,
+          message: `atLeast "${floor3}" must name another range setting of this segment (its range settings: ${rangeSettingNames(settings, name).join(", ") || "none"})`
+        }
+      ];
+    }
+    const chain2 = [name];
+    for (let next = floor3; next !== void 0; next = floorOf3(next)) {
+      if (next === name) {
+        return chain2.every((member) => name <= member) ? [
+          {
+            setting: name,
+            message: `atLeast closes a cycle (${[...chain2, name].join(" \u2265 ")}) \u2014 every setting on it could only ever equal the rest`
+          }
+        ] : [];
+      }
+      if (chain2.includes(next)) return [];
+      chain2.push(next);
+    }
+    return [];
+  });
+}
+function own(settings, name) {
+  return Object.prototype.hasOwnProperty.call(settings, name) ? settings[name] : void 0;
+}
+function rangeSettingNames(settings, except) {
+  return Object.entries(settings).filter(([n, decl]) => n !== except && rangeOf(decl) !== void 0).map(([n]) => n);
+}
+function checkPlacementSettings(ctx, cfg, node, layoutKey, line) {
+  const seg2 = Object.prototype.hasOwnProperty.call(cfg.segments, node.name) ? cfg.segments[node.name] : void 0;
+  if (seg2 === void 0) return;
+  const declared = settingsOf(seg2);
+  const where = `${layoutKey}: placement "${placementId(node)}" of segment "${node.name}"`;
+  for (const [setting, value] of Object.entries(node.settings ?? {})) {
+    const decl = Object.prototype.hasOwnProperty.call(declared, setting) ? declared[setting] : void 0;
+    const problem = decl === void 0 ? `sets "${setting}", which segment "${node.name}" does not declare (it has: ${Object.keys(declared).join(", ")})` : inSettingDomain(decl, value) ? void 0 : `sets "${setting}" to ${JSON.stringify(value)}${decl.domain === "theme" ? retiredThemeNote(value) : ""}, but it must be ${describeSettingDomain(decl)}`;
+    if (problem !== void 0) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${where} ${problem}`,
+        line
+      });
+    }
+  }
+  const resolved = Object.fromEntries(
+    Object.entries(declared).map(([n, d]) => [
+      n,
+      node.settings?.[n] ?? d.default
+    ])
+  );
+  const members = Object.entries(resolved).every(
+    ([n, v]) => inSettingDomain(declared[n], v)
+  );
+  if (!members || relationsReported(declared)) return;
+  for (const { message: message2 } of settingOrderProblems(declared, resolved)) {
+    ctx.issues.push({ path: layoutKey, message: `${where}: ${message2}`, line });
+  }
+}
+function checkVarRefs(ctx, declPath, v, scope, segCtx) {
+  for (const [field, template] of variableTemplates(v)) {
+    checkTemplateRefs(ctx, `${declPath}.${field}`, template, scope, {
+      segCtx
+    });
+  }
+}
+function checkDependsOn(ctx, declPath, v, scope, segCtx) {
+  if (!hasCacheField(v) || !("depends_on" in v.cache)) return;
+  for (let i2 = 0; i2 < v.cache.depends_on.length; i2++) {
+    const target = v.cache.depends_on[i2];
+    if (scope.names.has(target)) continue;
+    const namespaced = segCtx !== void 0 ? `${segCtx}.${target}` : void 0;
+    const hint = namespaced !== void 0 && scope.names.has(namespaced) ? ` (segment-local vars are namespaced \u2014 write "${namespaced}")` : "";
+    ctx.issues.push({
+      path: `${declPath}.cache.depends_on[${i2}]`,
+      message: `cache.depends_on references unknown variable "${target}"${hint}`,
+      line: findKeyLine(ctx.source, [
+        ...declPath.split("."),
+        "cache",
+        "depends_on"
+      ])
+    });
+  }
+}
+var INSTANT_POLICY = 'it reads the instant a frame is drawn at, which changes every frame, and a cache policy re-runs its source when a stored value changes \u2014 re-run it on a period instead: cache: { ttl: "<duration>" }';
+function checkPolicyInstant(ctx, declPath, v, cfg) {
+  if (!hasCacheField(v)) return;
+  const line = (field) => findKeyLine(ctx.source, [...declPath.split("."), "cache", field]);
+  if ("key" in v.cache) {
+    const why2 = instantReadOf(v.cache.key, cfg);
+    if (why2 !== null) {
+      ctx.issues.push({
+        path: `${declPath}.cache.key`,
+        message: `cache.key ${why2}: ${INSTANT_POLICY}`,
+        line: line("key")
+      });
+    }
+  }
+  if ("depends_on" in v.cache) {
+    const projections = projectionsOf(cfg);
+    v.cache.depends_on.forEach((target, i2) => {
+      const why2 = projections.get(target);
+      if (why2 === void 0) return;
+      ctx.issues.push({
+        path: `${declPath}.cache.depends_on[${i2}]`,
+        message: `cache.depends_on names "${target}", which ${why2}: ${INSTANT_POLICY}`,
+        line: line("depends_on")
+      });
+    });
+  }
+}
+function checkRuleSlotReads(ctx, cfg) {
+  const declared = new Map(declaredVariables(cfg));
+  const fold = valueReadsOf(cfg);
+  const slotRead = (reads, seen2) => {
+    for (const { path: path43, reaches } of reads) {
+      const atSlot = EXPRESSION_SLOTS.find(
+        (slot) => SLOT_PATHS[slot] === path43 || SLOT_PATHS[slot].startsWith(`${path43}.`)
+      );
+      if (atSlot !== void 0)
+        return `reads "${SLOT_PATHS[atSlot]}", the ${atSlot}'s own name`;
+      for (const name of reaches) {
+        const through = nameRead(name, seen2);
+        if (through !== null) return through;
+      }
+    }
+    return null;
+  };
+  const nameRead = (name, seen2) => {
+    if (seen2.has(name)) return null;
+    seen2.add(name);
+    const decl = declared.get(name);
+    const at = payloadPathOf(name, decl);
+    const slot = at === void 0 ? void 0 : slotAt(at);
+    if (slot !== void 0) return `reads "${name}", the ${slot}'s own name`;
+    for (const read2 of fold.ofVariable(decl)) {
+      const through = slotRead([read2], seen2);
+      if (through === null) continue;
+      return read2.field === "template" ? `reads "${name}", which ${through}` : `reads "${name}", whose ${read2.field} ${through}`;
+    }
+    return null;
+  };
+  for (const { at, rule } of authoredRules(cfg)) {
+    const why2 = slotRead(fold.ofTemplate(rule), /* @__PURE__ */ new Set());
+    if (why2 === null) continue;
+    const path43 = at.join(".");
+    ctx.issues.push({
+      path: path43,
+      message: `${path43} ${why2}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
+      line: findKeyLine(ctx.source, [...at])
+    });
+  }
+}
+function checkWhenParses(ctx, path43, when2, line) {
+  try {
+    SYNTAX_ENGINE.parse(when2);
+  } catch (e) {
+    ctx.issues.push({
+      path: path43,
+      message: `Template parse error in ${path43}: ${e.message}`,
+      line
+    });
+  }
+}
+function checkActionRefs(ctx, cfg, path43, template, line, helpers = cfg.helpers, segment) {
+  const field = path43.slice(path43.lastIndexOf(".") + 1);
+  for (const { name: aref, site, via } of templateActionRefs(
+    template,
+    helpers
+  )) {
+    if (Object.prototype.hasOwnProperty.call(cfg.actions, aref)) continue;
+    const inOptions = site === "options" ? " (in a picker, menu, carousel, swatch, swatches or themePreview)" : "";
+    if (via !== null) {
+      checkHelperIssue(
+        ctx,
+        via,
+        `Template references unknown action "${aref}"${inOptions}`,
+        helperKeyPath(via, segment)
+      );
+      continue;
+    }
+    ctx.issues.push({
+      path: path43,
+      message: `${field} references unknown action "${aref}"${inOptions}`,
+      line
+    });
+  }
+}
+function checkTemplateRefs(ctx, declPath, template, scope, opts) {
+  for (const [ref, via] of templateReads(template, scope.helpers)) {
+    if (refResolves(ref, scope)) continue;
+    if (ref.startsWith(SETTINGS_SCOPE_PREFIX)) {
+      const through = via === null ? "" : ` through helper "${via}"`;
+      const setting = ref.slice(SETTINGS_SCOPE_PREFIX.length);
+      const message2 = opts?.segCtx === void 0 || opts.settings === void 0 ? `Template reads ".${ref}"${through}, but only a segment's own templates have settings \u2014 call it from a segment that declares "${setting}"` : `Template reads ".${ref}"${through}, but segment "${opts.segCtx}" has no setting "${setting}" (it has: ${Object.keys(opts.settings).join(", ")}) \u2014 declare it under segments.${opts.segCtx}.settings`;
+      ctx.issues.push({
+        path: declPath,
+        message: message2,
+        line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
+      });
+      continue;
+    }
+    if (via !== null) {
+      checkHelperIssue(
+        ctx,
+        via,
+        `Template references unknown variable ".${ref}"${retiredReadHint(ref)}`,
+        helperKeyPath(
+          via,
+          opts?.segCtx === void 0 ? void 0 : { name: opts.segCtx, partials: opts.partials }
+        )
+      );
+      continue;
+    }
+    const namespaced = opts?.segCtx !== void 0 ? `${opts.segCtx}.${ref}` : void 0;
+    const hint = namespaced !== void 0 && refResolves(namespaced, scope) ? ` (segment-local vars are namespaced \u2014 write ".${namespaced}")` : retiredReadHint(ref);
+    ctx.issues.push({
+      path: declPath,
+      message: `Template references unknown variable ".${ref}"${hint}`,
+      line: opts?.line ?? findKeyLine(ctx.source, declPath.split("."))
+    });
+  }
+}
+function helperKeyPath(name, segment) {
+  return segment?.partials !== void 0 && Object.hasOwn(segment.partials, name) ? ["segments", segment.name, "partials", name] : ["helpers", name];
+}
+function checkHelperIssue(ctx, helper, message2, keyPath = ["helpers", helper]) {
+  const path43 = keyPath.join(".");
+  if (ctx.issues.some((i2) => i2.path === path43 && i2.message === message2)) return;
+  ctx.issues.push({
+    path: path43,
+    message: message2,
+    line: findKeyLine(ctx.source, keyPath)
+  });
+}
+function checkSettingWrites(ctx, name, a, setting, optionDomains) {
+  const key = a.set;
+  const domain = settingControlDomain(SETTINGS[setting].configKey);
+  const takes = `${key} takes ${describeControlDomain(domain, optionDomains)}`;
+  if ("min" in a && (domain === "bool" || !("min" in domain))) {
+    ctx.issues.push({
+      path: `actions.${name}.min`,
+      message: `actions.${name}: a stepper writes the integers from ${a.min} to ${a.max}, and ${key} is not an integer range; ${takes}`,
+      line: findKeyLine(ctx.source, ["actions", name, "min"])
+    });
+    return;
+  }
+  const writes = setWrites(a, optionDomains);
+  if (writes === ANY_INTEGER) {
+    ctx.issues.push({
+      path: `actions.${name}.int`,
+      message: `actions.${name}.int: an int cursor writes whatever integer the template binds, and a click outside the ${key} domain would change nothing; ${takes}`,
+      line: findKeyLine(ctx.source, ["actions", name, "int"])
+    });
+    return;
+  }
+  const outside = writes.filter(
+    (w) => !controlDomainAdmits(domain, w.value, optionDomains)
+  );
+  if (outside.length === 0) return;
+  if (key === SETTINGS.style.sessionKey && ("from" in a && a.from === "endcaps" || writes.every((w) => isStyleEraEndcaps(w.value)))) {
+    const endcaps = SETTINGS.endcaps.sessionKey;
+    ctx.issues.push(
+      "to" in a ? {
+        path: `actions.${name}.to`,
+        message: endcapsNameMessage(
+          `actions.${name}.to`,
+          a.to,
+          `set: "${endcaps}", to`
+        ),
+        line: findKeyLine(ctx.source, ["actions", name, "to"])
+      } : {
+        path: `actions.${name}.set`,
+        message: `actions.${name}.set: "${key}" here writes only endcaps shapes, not styles \u2014 endcaps were renamed from "style" to "endcaps"; write set: "${endcaps}"`,
+        line: findKeyLine(ctx.source, ["actions", name, "set"])
+      }
+    );
+    return;
+  }
+  for (const field of new Set(outside.map((w) => w.field))) {
+    const values2 = outside.filter((w) => w.field === field).map((w) => JSON.stringify(w.value));
+    const shown = values2.length <= REPORTED_VALUES ? values2.join(", ") : `${values2.slice(0, REPORTED_VALUES).join(", ")} and ${values2.length - REPORTED_VALUES} more`;
+    const where = `actions.${name}.${field}`;
+    ctx.issues.push({
+      path: where,
+      message: `${where}: ${shown} ${values2.length === 1 ? "is" : "are"} outside the ${key} domain \u2014 a click would write it and nothing would change; ${takes}`,
+      line: findKeyLine(ctx.source, ["actions", name, field])
+    });
+  }
+}
+var REPORTED_VALUES = 3;
+var ANY_INTEGER = /* @__PURE__ */ Symbol("any integer");
+function setWrites(a, optionDomains) {
+  if ("to" in a) return [{ field: "to", value: a.to }];
+  if ("cycle" in a) return a.cycle.map((value) => ({ field: "cycle", value }));
+  if ("from" in a) {
+    return resolveOptionDomain(a.from, optionDomains).members.map((value) => ({
+      field: "from",
+      value
+    }));
+  }
+  if ("min" in a) {
+    return [
+      { field: "min", value: String(a.min) },
+      { field: "max", value: String(a.max) }
+    ];
+  }
+  return ANY_INTEGER;
+}
+function subjects(record2, subject) {
+  return Object.entries(record2).filter(([name]) => subject(name));
+}
+function validateDeclarations(ctx, cfg, templateScope, subject) {
+  const optionDomains = configOptionDomains(cfg);
+  const knownDomains = knownOptionDomainNames(optionDomains);
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    const [field, from] = "from" in a ? ["from", a.from] : "insertSegmentFrom" in a ? ["insertSegmentFrom", a.insertSegmentFrom] : [null, null];
+    if (field !== null && typeof from === "string" && !knownDomains.includes(from)) {
+      ctx.issues.push({
+        path: `actions.${name}.${field}`,
+        message: `actions.${name} ${field}: references ${unknownOptionDomain(from, optionDomains)}`,
+        line: findKeyLine(ctx.source, ["actions", name, field])
+      });
+      continue;
+    }
+    if (!("set" in a)) continue;
+    if (CONFIG_ONLY_KEYS.has(a.set)) {
+      ctx.issues.push({
+        path: `actions.${name}.set`,
+        message: `actions.${name} sets "${a.set}", which has no session pick \u2014 globals.${a.set} is set in the config file only, so a click would change nothing; write it with { persist: "${a.set}", \u2026 } instead`,
+        line: findKeyLine(ctx.source, ["actions", name, "set"])
+      });
+    }
+    const setting = SESSION_KEY_TO_SETTING.get(a.set);
+    if (setting !== void 0) {
+      checkSettingWrites(ctx, name, a, setting, optionDomains);
+    }
+  }
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    if (!("do" in a)) continue;
+    a.do.forEach((member, i2) => {
+      const target = Object.prototype.hasOwnProperty.call(cfg.actions, member) ? cfg.actions[member] : void 0;
+      const problem = target === void 0 ? `references unknown action "${member}"` : "do" in target ? `"${member}" is itself a do action \u2014 list its members here instead` : a.do.indexOf(member) !== i2 ? `"${member}" is listed twice \u2014 each member fires once per click` : i2 > 0 && actionBindsTemplateValue(target) ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member \u2014 only the first is bound the region's display` : void 0;
+      if (problem !== void 0) {
+        ctx.issues.push({
+          path: `actions.${name}.do`,
+          message: `actions.${name} do: ${problem}`,
+          line: findKeyLine(ctx.source, ["actions", name, "do"])
+        });
+      }
+    });
+  }
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    if (!("run" in a)) continue;
+    for (const ref of a.refreshes) {
+      const decl = Object.hasOwn(cfg.variables, ref) ? cfg.variables[ref] : void 0;
+      if (decl?.kind === "source") continue;
+      ctx.issues.push({
+        path: `actions.${name}.refreshes`,
+        message: `actions.${name} refreshes "${ref}", which ${decl === void 0 ? "is not declared" : `is a ${decl.kind} variable`}: a run refreshes only a declared source (by its full name, <scope>.<plugin>.<source> where the scope is plugins or repo; a plugin names its own sources bare)`,
+        line: findKeyLine(ctx.source, ["actions", name, "refreshes"])
+      });
+    }
+  }
+  for (const [name, a] of subjects(cfg.actions, subject)) {
+    const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
+    if (key === null) continue;
+    const discriminator = "persist" in a ? "persist" : "reset";
+    const target = parsePersistTarget(key);
+    if (target === null) {
+      const removed = removedGlobalPointer(key);
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: removed !== void 0 ? `actions.${name}: the globals field "${key}" was removed: ${removed}` : `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, a "presets.<name>.globals.<field>" target, a "themeDefaults.<theme>.<shade|variation|style>" target, or a "presets.<name>.root" target`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator])
+      });
+      continue;
+    }
+    const treeOps = TREE_OP_ARMS.filter((arm2) => arm2 in a);
+    if (target.scope !== "preset-root" && treeOps.length > 0) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" is not a "presets.<name>.root" target \u2014 ${treeOps.map((arm2) => `"${arm2}"`).join("/")} is a tree op and applies only to one`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator])
+      });
+      continue;
+    }
+    if (target.scope === "preset-root") {
+      checkPresetRootTarget(
+        ctx,
+        cfg,
+        name,
+        discriminator,
+        key,
+        target.preset,
+        a
+      );
+      continue;
+    }
+    if (target.scope === "preset-globals" && !presetNames(cfg.presets).includes(target.preset)) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" names preset "${target.preset}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator])
+      });
+      continue;
+    }
+    if (target.scope === "theme-default" && !ctx.allowedPalettes.has(target.theme)) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${[...ctx.allowedPalettes].sort().join(", ")})`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator])
+      });
+      continue;
+    }
+    if (target.scope !== "segment-palette") continue;
+    if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})${renamedHint(target.segment)}`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator])
+      });
+      continue;
+    }
+    if ("min" in a) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" is a segment palette target and cannot use a bounded stepper (min/max/by) \u2014 use "to", "from", or "cycle" instead`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator])
+      });
+    }
+  }
+  for (const [name, v] of subjects(cfg.variables, subject)) {
+    checkVarRefs(ctx, `variables.${name}`, v, templateScope);
+    const retired = retiredVariableMessage(name);
+    if (retired !== void 0) {
+      ctx.issues.push({
+        path: `variables.${name}`,
+        message: retired,
+        line: findKeyLine(ctx.source, ["variables", name])
+      });
+    }
+  }
+  for (const [segName, seg2] of subjects(cfg.segments, subject)) {
+    if (seg2.vars) {
+      for (const [vName, vDecl] of Object.entries(seg2.vars)) {
+        checkVarRefs(
+          ctx,
+          `segments.${segName}.vars.${vName}`,
+          vDecl,
+          templateScope,
+          segName
+        );
+      }
+    }
+    const settings = settingsOf(seg2);
+    checkSettingOrder(ctx, segName, settings);
+    if (seg2.partials !== void 0) {
+      for (const name of Object.keys(seg2.partials)) {
+        if (!Object.hasOwn(templateScope.helpers, name)) continue;
+        ctx.issues.push({
+          path: `segments.${segName}.partials.${name}`,
+          message: `segments.${segName}.partials.${name} reuses the name of a global helper (helpers.${name}) \u2014 partials and helpers share one define chain, so pick a name no helper already uses`,
+          line: findKeyLine(ctx.source, [
+            "segments",
+            segName,
+            "partials",
+            name
+          ])
+        });
+      }
+    }
+    const segHelpers = seg2.partials === void 0 ? templateScope.helpers : { ...templateScope.helpers, ...seg2.partials };
+    const segScope = withSettingsScope(
+      { ...templateScope, helpers: segHelpers },
+      settings
+    );
+    for (const field of SEGMENT_TEMPLATE_FIELDS) {
+      const tpl = seg2[field];
+      if (typeof tpl !== "string") continue;
+      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope, {
+        segCtx: segName,
+        settings,
+        partials: seg2.partials
+      });
+      checkActionRefs(
+        ctx,
+        cfg,
+        `segments.${segName}.${field}`,
+        tpl,
+        findKeyLine(ctx.source, ["segments", segName, field]),
+        segHelpers,
+        { name: segName, partials: seg2.partials }
+      );
+    }
+  }
+  for (const [name, v] of subjects(cfg.variables, subject)) {
+    checkDependsOn(ctx, `variables.${name}`, v, templateScope);
+    checkPolicyInstant(ctx, `variables.${name}`, v, cfg);
+  }
+  checkRuleSlotReads(ctx, cfg);
+  for (const [segName, seg2] of subjects(cfg.segments, subject)) {
+    if (!seg2.vars) continue;
+    for (const [vName, vDecl] of Object.entries(seg2.vars)) {
+      checkDependsOn(
+        ctx,
+        `segments.${segName}.vars.${vName}`,
+        vDecl,
+        templateScope,
+        segName
+      );
+      checkPolicyInstant(ctx, `segments.${segName}.vars.${vName}`, vDecl, cfg);
+    }
+  }
+}
+
+// src/config/loader/cycles.ts
+init_globals();
+function validateNoCycles(ctx, cfg, within4 = () => true) {
+  const { graph, nodeInfo } = buildTemplateGraph(cfg);
+  const WHITE2 = 0;
+  const GRAY = 1;
+  const BLACK = 2;
+  const color = /* @__PURE__ */ new Map();
+  const stack = [];
+  for (const node of graph.keys()) color.set(node, WHITE2);
+  for (const start of graph.keys()) {
+    if (!within4(start) || color.get(start) !== WHITE2) continue;
+    if (dfs(start)) return;
+  }
+  function dfs(node) {
+    color.set(node, GRAY);
+    stack.push(node);
+    for (const next of graph.get(node) ?? []) {
+      if (!within4(next)) continue;
+      const c = color.get(next);
+      if (c === GRAY) {
+        const cycleStart = stack.indexOf(next);
+        const cycle = [...stack.slice(cycleStart), next];
+        const firstNode = cycle[0];
+        const info = nodeInfo.get(firstNode);
+        ctx.issues.push({
+          path: info?.declarationPath ?? `variables.${firstNode}`,
+          message: `Dependency cycle: ${cycle.join(" \u2192 ")}`,
+          line: findKeyLine(
+            ctx.source,
+            info?.linePathParts ?? ["variables", firstNode]
+          )
+        });
+        return true;
+      }
+      if (c === WHITE2 && dfs(next)) return true;
+    }
+    color.set(node, BLACK);
+    stack.pop();
+    return false;
+  }
+}
+function buildTemplateGraph(cfg) {
+  const nodeInfo = /* @__PURE__ */ new Map();
+  const graph = /* @__PURE__ */ new Map();
+  const reads = valueReadsOf(cfg);
+  const addNode = (name, v, linePathParts) => {
+    nodeInfo.set(name, {
+      declarationPath: linePathParts.join("."),
+      linePathParts
+    });
+    graph.set(
+      name,
+      new Set(reads.ofVariable(v).flatMap(({ reaches }) => reaches))
+    );
+  };
+  for (const [name, v] of Object.entries(cfg.variables)) {
+    addNode(name, v, ["variables", name]);
+  }
+  for (const [segName, seg2] of Object.entries(cfg.segments)) {
+    for (const [vName, v] of Object.entries(seg2.vars ?? {})) {
+      addNode(`${segName}.${vName}`, v, ["segments", segName, "vars", vName]);
+    }
+  }
+  return { graph, nodeInfo };
+}
+
+// src/config/loader/nesting.ts
+init_globals();
+function validateNoNesting(ctx, cfg, names) {
+  const declaredAt = new Map(
+    [...declarationsAt(cfg)].map(([name, , at]) => [name, at])
+  );
+  for (const [inner, innerAt] of declaredAt) {
+    const parts = inner.split(".");
+    for (let n = 1; n < parts.length; n++) {
+      const outer = parts.slice(0, n).join(".");
+      const outerAt = declaredAt.get(outer);
+      if (outerAt === void 0 || !(names.checked(inner) || names.checked(outer))) {
+        continue;
+      }
+      const [mine, theirs, at] = names.authored(inner) ? [inner, outer, innerAt] : [outer, inner, outerAt];
+      const fix = names.authored(inner) === names.authored(outer) ? "Rename one so neither name starts with the other." : `"${theirs}" is declared outside this file (the bundled default, a plugin, a control the bar builds, or the daemon's payload), so rename "${mine}".`;
+      ctx.issues.push({
+        path: at.join("."),
+        message: `variable "${inner}" is declared under the variable "${outer}" \u2014 a read of ".${inner}" would name both, "${inner}" and a field of "${outer}". ${fix}`,
+        line: findKeyLine(ctx.source, [...at])
+      });
+    }
+  }
+}
+
+// src/config/loader/plugin-folders.ts
+init_globals();
+var import_node_path37 = __toESM(require_path_browserify(), 1);
+function pluginRoots(locs, repo2) {
+  const installed = [
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path37.default.join(d, "cc-candybar", "plugins")),
+    userPluginRoot(locs)
+  ];
+  return [
+    ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
+    ...repo2 === null ? [] : [{ dir: import_node_path37.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+  ];
+}
+function userPluginRoot(locs) {
+  return import_node_path37.default.join(locs.dataHome, "cc-candybar", "plugins");
+}
+var REPO_PLUGIN_DIR = import_node_path37.default.join(".cc-candybar", "plugins");
+function installedPlugins(locs, repo2) {
+  const roots = pluginRoots(locs, repo2);
+  const byNs = /* @__PURE__ */ new Map();
+  const unchecked = [];
+  const strays = [];
+  for (const { dir: root, scope } of roots) {
+    const listed = listFolders(root);
+    if ("error" in listed) {
+      unchecked.push(listed);
+      continue;
+    }
+    for (const name of listed.folders) {
+      const definition = pluginDefinition(
+        import_node_path37.default.join(root, name, DEFINITION_FILE),
+        scope
+      );
+      const key = `${scope}\0${name}`;
+      byNs.delete(key);
+      byNs.set(key, definition);
+    }
+    for (const file of listed.files) {
+      strays.push({
+        path: import_node_path37.default.join(root, file),
+        scope,
+        name: void 0,
+        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path37.default.join(root, "<name>", DEFINITION_FILE)}`
+      });
+    }
+  }
+  return {
+    roots: roots.map((r) => r.dir),
+    definitions: [...byNs.values()],
+    unchecked,
+    strays
+  };
+}
+function listFolders(root) {
+  try {
+    const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    const isFolder = (e) => e.isDirectory() || isDirectoryLink(root, e);
+    return {
+      folders: entries.filter(isFolder).map((e) => e.name),
+      files: entries.filter((e) => !isFolder(e)).map((e) => e.name)
+    };
+  } catch (e) {
+    return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
+  }
+}
+function isDirectoryLink(root, e) {
+  if (!e.isSymbolicLink()) return false;
+  try {
+    return fs_default.statSync(import_node_path37.default.join(root, e.name)).isDirectory();
+  } catch {
+    return true;
+  }
+}
+
+// src/config/loader/discovery.ts
+init_globals();
+var import_node_path38 = __toESM(require_path_browserify(), 1);
+var CONFIG_EXTENSIONS = ["json5", "json"];
+function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
+  if (configFile !== void 0) return [configFile];
+  const effectiveCwd = cwd2 ?? process.cwd();
+  return [
+    .../* @__PURE__ */ new Set([
+      ...projectDir ? CONFIG_EXTENSIONS.map(
+        (ext) => import_node_path38.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
+      ) : [],
+      ...CONFIG_EXTENSIONS.map(
+        (ext) => import_node_path38.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
+      ),
+      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
+    ])
+  ];
+}
+var REPO_CONFIG_BASE = ".cc-candybar";
+function xdgConfigBase(locs) {
+  return import_node_path38.default.join(locs.configHome, "cc-candybar", "config");
+}
+function homeLayer(path43) {
+  return { path: path43, scope: "plugins" };
+}
+function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
+  const unchecked = [];
+  const atLocation = /* @__PURE__ */ new Map();
+  for (const candidate of dslConfigCandidatePaths(
+    locs,
+    projectDir,
+    cwd2,
+    configFile
+  )) {
+    const p2 = presence(candidate);
+    if (p2 === "absent") continue;
+    if (p2 !== "present") {
+      unchecked.push(p2);
+      continue;
+    }
+    const dir = fs_default.realpathSync.native(import_node_path38.default.dirname(candidate));
+    const location = import_node_path38.default.join(
+      dir,
+      import_node_path38.default.basename(candidate).replace(/\.(json5|json)$/, "")
+    );
+    if (!atLocation.has(location)) {
+      atLocation.set(location, {
+        file: candidate,
+        repo: configFile !== void 0 || isUserFile(locs, candidate) ? null : { dir, link: worktreeLink(dir) }
+      });
+    }
+  }
+  const found2 = [...atLocation.values()];
+  const repos = gateRepos(
+    answers,
+    found2.flatMap((f) => f.repo === null ? [] : [f.repo]),
+    repoProject(projectDir)
+  );
+  const kept = found2.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
+  const layers = kept.map(
+    (f) => ({
+      path: f.file,
+      scope: f.repo === null ? "plugins" : "repo"
+    })
+  );
+  if (configFile === void 0) {
+    return {
+      kind: "chain",
+      layers,
+      home: userHome(locs, layers),
+      unchecked,
+      repos
+    };
+  }
+  const [own2] = unchecked;
+  const home = configFile;
+  if (layers.length > 0) {
+    return { kind: "chain", layers, home, unchecked, repos };
+  }
+  return own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos };
+}
+function isUserFile(locs, candidate) {
+  return CONFIG_EXTENSIONS.some(
+    (e) => candidate === `${xdgConfigBase(locs)}.${e}`
+  );
+}
+function repoProject(projectDir) {
+  if (projectDir === void 0 || presence(projectDir) !== "present") {
+    return null;
+  }
+  const listed = listFolders(import_node_path38.default.join(projectDir, REPO_PLUGIN_DIR));
+  const dir = fs_default.realpathSync.native(projectDir);
+  return {
+    dir,
+    link: worktreeLink(dir),
+    path: projectDir,
+    ships: !("error" in listed) && listed.folders.length > 0
+  };
+}
+function userHome(locs, layers) {
+  return layers.find((l) => isUserFile(locs, l.path))?.path ?? `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`;
+}
+function durableConfig(locs, answers, projectDir, cwd2, configFile) {
+  const resolved = resolveDslConfig(locs, answers, projectDir, cwd2, configFile);
+  const layers = resolved.kind === "chain" ? resolved.layers : [];
+  return {
+    path: resolved.home,
+    above: layers.filter((l) => l.path !== resolved.home),
+    repo: resolved.repos.plugins,
+    cwd: cwd2 ?? null,
+    locs
+  };
+}
+function configResolutionNotice(resolution) {
+  return noticeLines(resolution).join("\n") || null;
+}
+function noticeLines(resolution) {
+  switch (resolution.kind) {
+    case "chain":
+      return resolution.unchecked.map(
+        (u) => `Config location could not be checked: ${u.path} \u2014 ${u.error}`
+      );
+    case "missing":
+      return [
+        `Config file not found: ${resolution.path} \u2014 rendering the bundled default until it appears`
+      ];
+    case "unreadable":
+      return [
+        `Config file could not be read: ${resolution.path} \u2014 ${resolution.error} \u2014 rendering the bundled default until it can be`
+      ];
+  }
+}
+function detectConfigCollisions(locs, projectDir, cwd2) {
+  const existing = dslConfigCandidatePaths(locs, projectDir, cwd2).filter(
+    (candidate) => presence(candidate) === "present"
+  );
+  const groups = /* @__PURE__ */ new Map();
+  for (const candidate of existing) {
+    const dir = import_node_path38.default.dirname(candidate);
+    const base = import_node_path38.default.basename(candidate).replace(/\.(json5|json)$/, "");
+    const key = import_node_path38.default.join(dir, base);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(candidate);
+  }
+  const collisions = [...groups.values()].filter((g) => g.length > 1);
+  if (collisions.length === 0) return null;
+  const lines2 = collisions.map((g) => {
+    const [winner, ...shadowed] = g;
+    return `${winner} shadows ${shadowed.join(", ")}`;
+  });
+  return `config-extension collision: ${lines2.join("; ")} \u2014 remove the duplicate`;
+}
+
+// src/config/dsl-loader.ts
+function noFile(dflt) {
+  return { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) };
+}
+function loadConfigSource(path43, source, dflt, ctx, allowedPalettes) {
+  const parsed2 = parseDslFile(path43, source, allowedPalettes, (refs, names) => {
+    const layer = applyPlugins(
+      // [LAW:one-source-of-truth] The layer's scope, decided where the
+      // layer was discovered, rides on every definition it lists.
+      listedPlugins(refs, path43, ctx.scope, ctx.home),
+      ctx,
+      { config: dflt, rendering: ctx.beneath.rendering },
+      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path43, allowedPalettes)
+    );
+    const owning2 = dropsOwning(layer, ctx.beneath.dropped);
+    return {
+      inherited: /* @__PURE__ */ new Set([
+        ...inheritableSegmentNames(layer.config),
+        ...names.filter((n) => owning2(n).length > 0)
+      ]),
+      layer: { plugins: layer, owning: owning2 }
+    };
+  });
+  const { plugins: plugins2, owning } = parsed2.layer;
+  const standing2 = withDroppedPlacements(
+    mergeWithDefault(parsed2.raw, plugins2.config),
+    owning,
+    (parsed2.raw.insert ?? []).map((cell3) => cell3.seg)
+  );
+  return {
+    source,
+    raw: parsed2.raw,
+    warnings: [...parsed2.warnings, ...plugins2.dropped.map(droppedPluginNotice)],
+    plugins: {
+      loaded: plugins2.loaded,
+      dropped: plugins2.dropped,
+      reached: standing2.reached,
+      rendering: plugins2.rendering
+    },
+    config: standing2.config
+  };
+}
+var installedMemo = /* @__PURE__ */ new WeakMap();
+function installedLayer(definitions, ctx, dflt, allowedPalettes) {
+  const key = JSON.stringify([
+    [...allowedPalettes ?? []].sort(),
+    definitions.map((d) => [d.path, d.scope, statKey(d.path)])
+  ]);
+  const byProject = installedMemo.get(dflt) ?? /* @__PURE__ */ new Map();
+  installedMemo.set(dflt, byProject);
+  const slot = JSON.stringify([ctx.repo, ctx.checkout?.root ?? null]);
+  const hit = byProject.get(slot);
+  if (hit?.key === key) return hit.layer;
+  const layer = applyPlugins(
+    definitions,
+    ctx,
+    { config: dflt, rendering: /* @__PURE__ */ new Map() },
+    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes)
+  );
+  byProject.set(slot, { key, layer });
+  return layer;
+}
+function statKey(file) {
+  try {
+    const st = fs_default.statSync(file);
+    return `${st.ino}:${st.size}:${st.mtimeMs}`;
+  } catch (e) {
+    return e.code ?? "unreadable";
+  }
+}
+function loadConfigChain(locs, chain2, dflt, trace, session, read2 = (p2) => fs_default.readFileSync(p2, "utf-8"), allowedPalettes) {
+  const ctx = {
+    repo: session.repo,
+    checkout: session.cwd === null ? null : checkoutOf(session.cwd),
+    home: locs.home
+  };
+  const found2 = installedPlugins(locs, ctx.repo);
+  const merged = installedLayer(found2.definitions, ctx, dflt, allowedPalettes);
+  const plugins2 = {
+    ...merged,
+    dropped: [...merged.dropped, ...found2.strays]
+  };
+  trace.warned(
+    found2.unchecked.map(
+      (u) => `Plugin folder could not be listed: ${u.path} \u2014 ${u.error}`
+    )
+  );
+  const base = plugins2.config;
+  const layers = [];
+  for (const { path: path43, scope } of chain2) {
+    const below = layers.at(-1)?.plugins;
+    const loaded = loadConfigSource(
+      path43,
+      read2(path43),
+      layers.at(-1)?.config ?? base,
+      {
+        ...ctx,
+        // [LAW:one-source-of-truth] A layer's scope is where discovery found
+        // it, carried here as data — never read off the file's name.
+        scope,
+        beneath: {
+          dropped: [
+            ...plugins2.dropped,
+            ...layers.flatMap((l) => l.plugins.dropped)
+          ],
+          rendering: below?.rendering ?? plugins2.rendering
+        }
+      },
+      allowedPalettes
+    );
+    trace.warned(loaded.warnings);
+    layers.push({ ...loaded, path: path43 });
+  }
+  const reached = new Set(layers.flatMap((l) => [...l.plugins.reached]));
+  const isReached = (d) => reached.has(d.path);
+  const surfaced = plugins2.dropped.filter(isReached);
+  const unreached = plugins2.dropped.filter((d) => !isReached(d));
+  trace.warned(surfaced.map(droppedPluginNotice));
+  const rendering = layers.at(-1)?.plugins.rendering ?? plugins2.rendering;
+  const installed = {
+    checkout: ctx.checkout,
+    roots: found2.roots,
+    loaded: plugins2.loaded,
+    dropped: surfaced,
+    unreached,
+    reached,
+    rendering
+  };
+  const top = layers.at(-1);
+  const renderable = ({
+    warnings,
+    ...rest2
+  }) => {
+    trace.warned(warnings);
+    return rest2;
+  };
+  if (top === void 0) {
+    return {
+      layers,
+      base,
+      installed,
+      ...renderable(
+        validateRenderable(
+          noFile(base),
+          rendering,
+          "<default>",
+          allowedPalettes
+        )
+      )
+    };
+  }
+  try {
+    return {
+      layers,
+      base,
+      installed,
+      ...renderable(
+        validateRenderable(
+          top,
+          rendering,
+          top.path,
+          allowedPalettes,
+          layers.slice(0, -1).reverse()
+        )
+      )
+    };
+  } catch (e) {
+    for (const [i2, layer] of layers.slice(0, -1).entries())
+      validateRenderable(
+        layer,
+        layer.plugins.rendering,
+        layer.path,
+        allowedPalettes,
+        layers.slice(0, i2).reverse()
+      );
+    throw e;
+  }
+}
+function checkPlugin(config2, ns, replaces, filePath2, allowedPalettes) {
+  if (replaces) {
+    validateRenderable(
+      unauthored(config2),
+      /* @__PURE__ */ new Map(),
+      filePath2,
+      allowedPalettes
+    );
+    return;
+  }
+  const owned = ownedBy(ns);
+  const issues = [];
+  const ctx = {
+    source: "",
+    issues,
+    allowedPalettes: /* @__PURE__ */ new Set(),
+    groups: [],
+    unplaced: [],
+    inherited: []
+  };
+  validateDeclarations(ctx, config2, templateScopeOf(config2), owned);
+  validateNoCycles(ctx, config2, owned);
+  validateNoNesting(ctx, config2, { checked: owned, authored: owned });
+  if (issues.length > 0) throw new ConfigError(filePath2, issues);
+}
+function unauthored(config2) {
+  return {
+    config: config2,
+    raw: { root: config2.root, presets: config2.presets },
+    source: ""
+  };
+}
+var NO_FILE = {
+  raw: {},
+  source: "",
+  warnings: [],
+  plugins: {
+    loaded: [],
+    dropped: [],
+    reached: /* @__PURE__ */ new Set(),
+    rendering: /* @__PURE__ */ new Map()
+  }
+};
+function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
+  const presence2 = presenceOf(authoredConfig.config.segments, rendering);
+  const written2 = layerInserts(
+    { ...authoredConfig, path: filePath2 },
+    beneath,
+    presence2
+  );
+  const judge = (cells, refused) => {
+    const inserted = placeInserts(
+      authoredConfig.config,
+      cells,
+      written2.authored
+    );
+    return judgeRenderable(
+      authoredConfig,
+      filePath2,
+      allowedPalettes,
+      beneath,
+      inserted.config,
+      presence2,
+      written2.dropped,
+      [...inserted.notices, ...refused]
+    );
+  };
+  try {
+    return judge(written2.cells, []);
+  } catch (e) {
+    if (!(e instanceof ConfigError) || written2.cells.length === 0) throw e;
+    const bare = judge([], []);
+    const own2 = new Set(
+      bare.dropped.flatMap((d) => d.issues.map((i2) => i2.message))
+    );
+    const { taken, refused } = written2.cells.reduce(
+      (acc, cell3) => {
+        try {
+          judge([...acc.taken, cell3], []);
+          return { ...acc, taken: [...acc.taken, cell3] };
+        } catch (err) {
+          if (!(err instanceof ConfigError)) throw err;
+          const why2 = err.issues.filter((issue3) => !own2.has(issue3.message)).map((issue3) => issue3.message).join("; ");
+          return {
+            ...acc,
+            refused: [
+              ...acc.refused,
+              insertNotice(
+                cell3,
+                `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why2}`
+              )
+            ]
+          };
+        }
+      },
+      { taken: [], refused: [] }
+    );
+    return judge(taken, refused);
+  }
+}
+function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
+  const issues = [];
+  const ctx = {
+    source,
+    issues,
+    allowedPalettes,
+    groups: [],
+    unplaced: [],
+    inherited: []
+  };
+  const refuseIfIssues = () => {
+    if (issues.length > 0) {
+      throw new ConfigError(
+        filePath2,
+        [...issues, ...ctx.unplaced, ...ctx.inherited],
+        notices
+      );
+    }
+  };
+  validateCrossReferences(ctx, merged, raw, presence2);
+  validateNoCycles(ctx, merged);
+  refuseIfIssues();
+  const dropped = droppedByFile(
+    filePath2,
+    merged.segments,
+    ctx,
+    presence2,
+    beneath,
+    filed
+  );
+  const config2 = withoutUnplaced(merged);
+  const withMenus = synthesizePlacementMenus(config2, issues);
+  refuseIfIssues();
+  const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(withMenus));
+  const authored = new Set(
+    [
+      ...declarationsAt({
+        variables: raw.variables ?? {},
+        segments: raw.segments ?? {}
+      })
+    ].map(([name]) => name)
+  );
+  validateNoNesting(ctx, withChrome, {
+    checked: () => true,
+    authored: (name) => authored.has(name)
+  });
+  refuseIfIssues();
+  return {
+    config: withChrome,
+    dropped,
+    placed: merged,
+    warnings: notices
+  };
+}
+function layerInserts(top, beneath, presence2) {
+  const layers = [...beneath].reverse().concat(top);
+  const standsOnAbsent = absentPlacement(
+    top.config,
+    layers.flatMap((layer) => layer.raw.insert ?? []),
+    presence2
+  );
+  const anchored2 = (cell3) => !standsOnAbsent(cell3.anchor);
+  const declared = (cell3) => presence2(cell3.seg).kind === "declared";
+  const broken = (cell3) => reportable(presence2(cell3.seg));
+  const own2 = (layer) => (layer.raw.insert ?? []).filter(anchored2);
+  return {
+    cells: layers.flatMap((layer) => own2(layer).filter(declared)),
+    authored: {
+      root: layers.some((layer) => layer.raw.root !== void 0),
+      presets: new Set(
+        layers.flatMap((layer) => Object.keys(layer.raw.presets ?? {}))
+      )
+    },
+    // One locator per layer, so its source is parsed at most once.
+    dropped: layers.flatMap((layer) => {
+      const lineOf = keyLocator(layer.source);
+      return (layer.raw.insert ?? []).filter(broken).map((cell3) => ({
+        file: layer.path,
+        issue: {
+          path: cell3.by.entry,
+          message: unplacedMessage(
+            cell3.by.entry,
+            cell3.seg,
+            top.config.segments,
+            presence2(cell3.seg)
+          ),
+          line: lineOf(cell3.by.entry.split("."))
+        }
+      }));
+    })
+  };
+}
+function droppedByFile(filePath2, segments, ctx, presence2, beneath, filed) {
+  const byFile = /* @__PURE__ */ new Map();
+  const add2 = (file, issue3) => {
+    byFile.set(file, [...byFile.get(file) ?? [], issue3]);
+  };
+  for (const { file, issue: issue3 } of filed) add2(file, issue3);
+  for (const issue3 of ctx.unplaced) add2(filePath2, issue3);
+  for (const { name, ...issue3 } of ctx.inherited) {
+    const author = beneath.flatMap((layer) => {
+      const at = authoredPlacement(layer.raw, name);
+      return at === void 0 ? [] : [{ layer, ...at }];
+    })[0];
+    if (author === void 0) add2(filePath2, issue3);
+    else
+      add2(author.layer.path, {
+        path: author.path,
+        message: unplacedMessage(
+          author.layoutKey,
+          name,
+          segments,
+          presence2(name)
+        ),
+        line: findKeyLine(author.layer.source, author.path.split("."))
+      });
+  }
+  return [...byFile].map(
+    ([file, issues]) => new DroppedFileError(file, issues)
+  );
+}
+function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolvablePaletteNames()), inheritedSegments = NO_INHERITED_SEGMENTS) {
+  return parseDslFile(filePath2, source, allowedPalettes, () => ({
+    inherited: inheritedSegments,
+    layer: null
+  })).raw;
+}
+function parseDslFile(filePath2, source, allowedPalettes, under3) {
+  const json2 = parseJson5OrThrow(filePath2, source);
+  const notice = editabilityNotice(filePath2, source);
+  const warnings = [
+    ...notice === null ? [] : [notice],
+    ...payloadDeclarationNotices(
+      filePath2,
+      source,
+      isPlainObject3(json2) && isPlainObject3(json2.variables) ? Object.keys(json2.variables) : []
+    )
+  ];
+  const issues = [];
+  const ctx = {
+    source,
+    issues,
+    allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
+    groups: [],
+    unplaced: [],
+    inherited: []
+  };
+  if (!isPlainObject3(json2)) {
+    throw new ConfigError(
+      filePath2,
+      [
+        {
+          path: "",
+          message: `Config root must be an object, got ${describeType2(json2)}`
+        }
+      ],
+      warnings
+    );
+  }
+  const { inherited, layer } = under3(
+    json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
+    isPlainObject3(json2.segments) ? Object.keys(json2.segments) : []
+  );
+  const raw = validateTopLevel(
+    ctx,
+    json2,
+    inherited,
+    actionHomeOf(filePath2),
+    filePath2
+  );
+  if (issues.length > 0) {
+    throw new ConfigError(filePath2, issues, warnings);
+  }
+  return { raw, warnings, layer };
+}
+var NO_INHERITED_SEGMENTS = /* @__PURE__ */ new Set();
+function parseJson5OrThrow(filePath2, source) {
+  try {
+    return import_json54.default.parse(source);
+  } catch (err) {
+    const e = err;
+    throw new ConfigError(filePath2, [
+      {
+        path: "",
+        message: `JSON5 syntax error: ${e.message}`,
+        line: e.lineNumber,
+        col: e.columnNumber
+      }
+    ]);
+  }
+}
+function validateTopLevel(ctx, raw, inheritedSegments, home, file) {
+  for (const key of Object.keys(raw)) {
+    if (!TOP_LEVEL_KEYS.has(key)) {
+      ctx.issues.push({
+        path: key,
+        message: `Unknown top-level key "${key}". Expected one of: ${[...TOP_LEVEL_KEYS].join(", ")}`,
+        line: findKeyLine(ctx.source, [key])
+      });
+    }
+  }
+  const out = {};
+  if (raw.globals !== void 0)
+    out.globals = validateGlobals(ctx, "globals", raw.globals);
+  if (raw.variables !== void 0)
+    out.variables = validateVariables(ctx, "variables", raw.variables);
+  if (raw.segments !== void 0)
+    out.segments = validateSegments(ctx, raw.segments, inheritedSegments);
+  if (raw.layout !== void 0) {
+    ctx.issues.push({
+      path: "layout",
+      message: `"layout" is no longer supported \u2014 use "root" with the A-grammar instead.
+  Replace:  layout: [["seg1", "seg2"], ["seg3"]]
+  With:     root: { v: [{ h: ["seg1", "seg2"] }, "seg3"] }
+  Single-row example:  root: { h: ["seg1", "seg2"] }`,
+      line: findKeyLine(ctx.source, ["layout"])
+    });
+  }
+  if (raw.root !== void 0)
+    out.root = validateRootFragment(ctx, "root", raw.root);
+  if (raw.insert !== void 0)
+    out.insert = validateInsert(ctx, raw.insert, file);
+  if (raw.actions !== void 0)
+    out.actions = validateActions(ctx, raw.actions, home);
+  if (raw.looks !== void 0) {
+    ctx.issues.push({
+      path: "looks",
+      message: `"looks" was renamed "styles" \u2014 move the block under styles: { \u2026 } (and globals.look to globals.style)`,
+      line: findKeyLine(ctx.source, ["looks"])
+    });
+  }
+  if (raw.styles !== void 0) out.styles = validateStyles(ctx, raw.styles);
+  if (raw.themeDefaults !== void 0)
+    out.themeDefaults = validateThemeDefaults(ctx, raw.themeDefaults);
+  if (raw.presets !== void 0)
+    out.presets = validatePresets(ctx, raw.presets);
+  if (raw.editGlobals !== void 0)
+    out.editGlobals = validateEditGlobals(ctx, "editGlobals", raw.editGlobals);
+  if (raw.helpers !== void 0)
+    out.helpers = validateHelpers(ctx, raw.helpers);
+  if (raw.plugins !== void 0)
+    out.plugins = validatePluginRefs(ctx, raw.plugins);
+  synthesizeGroupDecls(ctx, out);
+  checkMenuDecls(ctx, out);
+  synthesizeEditModeToggle(ctx, out);
+  reservedNamespaceCollisions(
+    ctx,
+    out,
+    SETTINGS_NS,
+    "the global settings menu"
+  );
+  pluginScopeCollisions(ctx, out, inheritedSegments);
+  return out;
+}
+var TOP_LEVEL_KEYS = /* @__PURE__ */ new Set([
+  "globals",
+  "variables",
+  "segments",
+  "layout",
+  "looks",
+  "root",
+  "insert",
+  "actions",
+  "styles",
+  "themeDefaults",
+  "presets",
+  "editGlobals",
+  "helpers",
+  "plugins"
+]);
+function validatePluginRefs(ctx, raw) {
+  if (Array.isArray(raw) && raw.every((p2) => typeof p2 === "string" && p2 !== "")) {
+    return raw;
+  }
+  ctx.issues.push({
+    path: "plugins",
+    message: `"plugins" must be a list of plugin definition paths, got ${describeType2(raw)}`,
+    line: findKeyLine(ctx.source, ["plugins"])
+  });
+  return void 0;
+}
+
+// src/config/bundled-theme-defaults.ts
+init_globals();
+var BUNDLED_THEME_DEFAULTS = {};
+
+// src/config/default-dsl-config.ts
+var COMMAND_TRAY = commandTray("commands.");
+var AUTOCOMPACT2 = autocompactControl(
+  "autocompact.",
+  (n) => `{{ template "formatTokenCount" ${n} }}`
+);
+var GIT_INIT = confirmStep(
+  "gitInit",
+  { arm: "init", confirm: "init \u2713 confirm" },
+  [{ action: "gitInit.run", when: "true" }]
+);
+var DIR_TEMPLATE = '{{ $dir := ternary .location.main .current_dir (ne .location.main "") }}{{ if and (ne .home "") (or (eq .home $dir) (hasPrefix (printf "%s/" .home) $dir)) }}{{ $dir = printf "~%s" (trimPrefix .home $dir) }}{{ end }}{{ $text := printf "%s%s" (abbreviatePath $dir) .location.subpath }}{{ if ne .location.worktree "" }}{{ $text = printf "%s (%s %s)" $text .glyph.worktree .location.worktree }}{{ end }}{{ action "copyDir" $text }}';
+var GIT_QUIET_FG = `{{ ${QUIET_TEXT} }}`;
+var EFFORT_BUBBLE_CONTRAST = 1.08;
+var PERCENT = { min: 0, max: 100, step: 5 };
+var QUOTA_SETTINGS = {
+  warnAt: { label: "warning at %", domain: PERCENT, default: 50 },
+  errorAt: {
+    label: "error at %",
+    domain: { ...PERCENT, atLeast: "warnAt" },
+    default: 80
+  }
+};
+function budgetSettings(budget) {
+  return {
+    budget: {
+      label: "budget $",
+      domain: { min: 0, max: 1e4, step: 5 },
+      default: budget
+    },
+    warnAt: { label: "warning at %", domain: PERCENT, default: 80 }
+  };
+}
+var RAW_DEFAULT_DSL_CONFIG = {
+  globals: {
+    // Picked by the daemon's basePalette resolution; user overrides in their
+    // own config. Every registry theme ships the same derived spec set
+    // (surface, panel, surface-active, foreground — see rich-js
+    // buildPalette), so this is a pure taste call, not a compatibility one.
+    // tokyo-night chosen (brandon-theming-8uj.2) over the prior
+    // catppuccin-latte — a light palette that landed as a drive-by in an
+    // unrelated formatting-cleanup commit and read poorly on the dark
+    // terminals most users run — after live-clicking every registry theme
+    // through the settings menu's theme picker: it stays legible where
+    // warmer bases (gruvbox, dracula) drifted toward mud and the pastel
+    // ones (rose-pine, atom-one) washed out at this contrast.
+    palette: "tokyo-night"
+  },
+  // ─── Variables ─────────────────────────────────────────────────────────────
+  // Every value the segment templates read. Sources:
+  //   • input — daemon's augmented payload (see src/renderer/render-payload.ts)
+  //   • env   — process environment
+  //   • shell — subprocess; cached
+  //   • state — per-session daemon state
+  variables: {
+    ...COMMAND_TRAY.variables,
+    // From hookData, pass-through.
+    current_dir: {
+      kind: "input",
+      path: "workspace.current_dir",
+      default: "?"
+    },
+    "model.display_name": {
+      kind: "input",
+      path: "model.display_name",
+      default: ""
+    },
+    // The session's reasoning-effort setting (`/effort`): one of
+    // low|medium|high|xhigh|max, or "" when Claude Code sends none.
+    "effort.level": {
+      kind: "input",
+      path: "effort.level",
+      default: ""
+    },
+    // The effort gauge's glyph ladder, space-separated, one entry per ordinal
+    // the `effortGauge` helper folds a level to: unknown, low, medium, high,
+    // xhigh — the Nerd Font chevron_up / chevron_double_up / chevron_triple_up
+    // icons (nf-md, U+F0143 / U+F013F / U+F0DBC). Max has no entry: it climbs
+    // the low, high and xhigh rungs. Low and medium share the single chevron
+    // on purpose and are told apart by colour: low is quiet. A font without
+    // the icons overrides this variable (e.g. `"? ↑ ↑ ⇈ ⤊"`) — and, for max,
+    // the `effortGauge` helper, which draws the bubble's caps (U+E0B6/U+E0B4).
+    "effort.glyphs": {
+      kind: "literal",
+      value: "? \u{F0143} \u{F0143} \u{F013F} \u{F0DBC}"
+    },
+    // What marks a linked worktree in `directory`'s parenthetical.
+    "glyph.worktree": { kind: "literal", value: "\u22AB" },
+    ...GIT_INIT.variables,
+    version: { kind: "input", path: "version", default: "" },
+    // home flows through the augmented payload (projectPayload reads
+    // HOME, falling back to USERPROFILE on Windows where HOME is often
+    // unset). Sourcing via `kind: "input"` rather than `kind: "env",
+    // name: "HOME"` makes the directory `~` collapse work on every
+    // platform without per-platform config edits.
+    home: { kind: "input", path: "home", default: "" },
+    // The tmux session name of the pane this session's client reported flows
+    // through the daemon's augmented payload (TmuxService asks at most once
+    // per pane per 30 s, so this stays cheap; `tmux.pane` itself is in
+    // PAYLOAD_INPUTS). A `kind: "shell"` declaration would spawn the
+    // subprocess at every cache-entry creation, where the daemon's one owner
+    // asks once per pane for every session on it.
+    "tmux.session": { kind: "input", path: "tmux.session", default: "" },
+    // Host identity — which machine this session is on, and whether the user
+    // arrived over SSH. All three come through the augmented payload rather
+    // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
+    //
+    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
+    //     DAEMON, which is detached and serves every session for this user at
+    //     once — its `SSH_*` env describes whichever shell happened to spawn
+    //     it. The fact is captured by the live client and carried as a wire
+    //     hint (the `termCols` pattern); the payload is the only honest source.
+    //   • `host.name`/`host.user` are machine facts the daemon reads directly,
+    //     so they cost two syscalls instead of a per-render subprocess.
+    //
+    // Defaults are the "unknown" values, and for `ssh` that is `false`: an
+    // absent field (a client too old to send the hint) renders as local, which
+    // is the pre-feature behavior, while the input-fallback chain records a
+    // `last_error` so `cc-candybar vars` can still tell the two apart.
+    "host.name": { kind: "input", path: "host.name", default: "" },
+    "host.user": { kind: "input", path: "host.user", default: "" },
+    "host.ssh": {
+      kind: "input",
+      path: "host.ssh",
+      type: "boolean",
+      default: false
+    },
+    // Git — every field flows from the daemon's projected GitInfo payload.
+    "git.repoName": {
+      kind: "input",
+      path: "git.repoName",
+      default: ""
+    },
+    "git.branch": { kind: "input", path: "git.branch", default: "" },
+    "git.sha": { kind: "input", path: "git.sha", default: "" },
+    "git.ahead": {
+      kind: "input",
+      path: "git.ahead",
+      type: "number",
+      default: 0
+    },
+    "git.behind": {
+      kind: "input",
+      path: "git.behind",
+      type: "number",
+      default: 0
+    },
+    "git.staged": {
+      kind: "input",
+      path: "git.staged",
+      type: "number",
+      default: 0
+    },
+    "git.unstaged": {
+      kind: "input",
+      path: "git.unstaged",
+      type: "number",
+      default: 0
+    },
+    "git.untracked": {
+      kind: "input",
+      path: "git.untracked",
+      type: "number",
+      default: 0
+    },
+    "git.conflicts": {
+      kind: "input",
+      path: "git.conflicts",
+      type: "number",
+      default: 0
+    },
+    "git.upstream": { kind: "input", path: "git.upstream", default: "" },
+    // `none` | `gone` | `tracked` — only `tracked` makes ahead/behind real
+    // counts (their 0 default stands for "unknown" too); "" when git could
+    // not be read.
+    "git.tracking": { kind: "input", path: "git.tracking", default: "" },
+    "git.stash": {
+      kind: "input",
+      path: "git.stash",
+      type: "number",
+      default: 0
+    },
+    "git.status": { kind: "input", path: "git.status", default: "clean" },
+    "git.operation": { kind: "input", path: "git.operation", default: "" },
+    // The last commit's date, epoch seconds; 0 when git could not read it.
+    "git.committedAt": {
+      kind: "input",
+      path: "git.committedAt",
+      type: "number",
+      default: 0
+    },
+    // [LAW:one-source-of-truth] Its age in seconds, against the instant the
+    // frame is drawn at — a projection, so a frame between two git reads shows
+    // the age it is drawn at. 0 when the date is unknown.
+    "git.timeSinceCommit": {
+      kind: "template",
+      type: "number",
+      template: "{{ if gt .git.committedAt 0 }}{{ sub (int (unixEpoch now)) .git.committedAt }}{{ else }}0{{ end }}"
+    },
+    // The palette role each git fact is painted in — data a user overrides one
+    // fact at a time (`"git.color.behind": { kind: "literal", value: "error" }`).
+    // staged/ahead are `success` (ready to commit / unpushed work),
+    // unstaged/behind `warning` (needs attention), untracked/stash `accent`
+    // (told apart from unstaged by glyph, not colour), conflicts `error`.
+    "git.color.branch": { kind: "literal", value: "primary" },
+    "git.color.staged": { kind: "literal", value: "success" },
+    "git.color.unstaged": { kind: "literal", value: "warning" },
+    "git.color.untracked": { kind: "literal", value: "accent" },
+    "git.color.conflicts": { kind: "literal", value: "error" },
+    "git.color.ahead": { kind: "literal", value: "success" },
+    "git.color.behind": { kind: "literal", value: "warning" },
+    "git.color.stash": { kind: "literal", value: "accent" },
+    // Which of its two forms `gitaculous` shows — per session, flipped by the
+    // arrow at its right edge (the `gitDetail` action). The default is the form
+    // every session starts in: redeclare this variable with
+    // `default: "expanded"` to start with the full line.
+    "git.detail": { kind: "state", key: "git-detail", default: "collapsed" },
+    // Forge PR/MR — the daemon's git provider resolves the branch's newest PR
+    // via gh/glab and projects it here; prState is `open`, `merged` or
+    // `closed`. Declaring any of these turns on the network lookup.
+    // [LAW:no-silent-failure] prError is non-empty ONLY when the forge was
+    // asked but couldn't answer (auth/network) — distinct from "no PR" (every
+    // field empty). prNumber 0 (default) ⇒ the branch has no PR.
+    "git.prNumber": {
+      kind: "input",
+      path: "git.prNumber",
+      type: "number",
+      default: 0
+    },
+    "git.prState": { kind: "input", path: "git.prState", default: "" },
+    "git.prUrl": { kind: "input", path: "git.prUrl", default: "" },
+    "git.prError": { kind: "input", path: "git.prError", default: "" },
+    // Prompt-cache expiry — epoch seconds, projected by the cache provider.
+    // Same unit/shape as block/weekly resetsAt so the cacheTimer segment
+    // composes `minutesUntilReset` identically. 0 (default) ⇒ no cache
+    // activity found ⇒ segment's `when` hides it.
+    "cache.expiresAt": {
+      kind: "input",
+      path: "cache.expiresAt",
+      type: "number",
+      default: 0
+    },
+    // Usage / cost — daemon folds from the SessionUsageStore; numeric.
+    "session.cost": {
+      kind: "input",
+      path: "session.cost",
+      type: "number",
+      default: 0
+    },
+    "session.tokens": {
+      kind: "input",
+      path: "session.tokens",
+      type: "number",
+      default: 0
+    },
+    // Today — daemon folds today's cross-session total from the SessionUsageStore.
+    "today.cost": {
+      kind: "input",
+      path: "today.cost",
+      type: "number",
+      default: 0
+    },
+    "today.tokens": {
+      kind: "input",
+      path: "today.tokens",
+      type: "number",
+      default: 0
+    },
+    // Block — daemon projects directly from hookData.rate_limits.five_hour;
+    // resetsAt is raw epoch seconds
+    // so the template can compose `minutesUntilReset .block.resetsAt` (the
+    // same chain weekly uses, single composition point).
+    "block.nativeUtilization": {
+      kind: "input",
+      path: "block.nativeUtilization",
+      type: "number",
+      default: 0
+    },
+    "block.resetsAt": {
+      kind: "input",
+      path: "block.resetsAt",
+      type: "number",
+      default: 0
+    },
+    // Weekly — direct projection of hookData.rate_limits.seven_day.
+    "weekly.percentage": {
+      kind: "input",
+      path: "weekly.percentage",
+      type: "number",
+      default: 0
+    },
+    "weekly.resetsAt": {
+      kind: "input",
+      path: "weekly.resetsAt",
+      type: "number",
+      default: 0
+    },
+    // Burn rate — daemon-derived (see render-payload.ts). ABSENT when not
+    // projectable; the var-system fills the -1 default, a structurally-
+    // impossible value the burnrate helpers read as "—" [LAW:no-silent-failure]
+    // ($0/hr is a real, displayable value, so it cannot double as the absence
+    // marker).
+    "burn.costPerHour": {
+      kind: "input",
+      path: "burn.costPerHour",
+      type: "number",
+      default: -1
+    },
+    // Minutes until each window's use reaches its cap at the rate it has run
+    // since it opened (5 h and 7 d windows), against the instant the frame is
+    // drawn at; -1 when too young to project or unused.
+    "block.etaMinutes": {
+      kind: "template",
+      type: "number",
+      template: "{{ etaMinutes .block.nativeUtilization .block.resetsAt 300 }}"
+    },
+    "weekly.etaMinutes": {
+      kind: "template",
+      type: "number",
+      template: "{{ etaMinutes .weekly.percentage .weekly.resetsAt 10080 }}"
+    },
+    // Token throughput for the active turn — daemon-derived tok/s on three lanes
+    // (render-payload.ts: successive-render delta over the SessionUsageStore).
+    // Same absence idiom as burn: -1 is the structurally-impossible default the
+    // `formatSpeed` helper reads as "—" [LAW:no-silent-failure] (0 tok/s is a
+    // real reading, so it cannot double as the absence marker). Each lane is
+    // independently absent — `input` reads "—" mid-stream while `output` flows.
+    "speed.input": {
+      kind: "input",
+      path: "speed.input",
+      type: "number",
+      default: -1
+    },
+    "speed.output": {
+      kind: "input",
+      path: "speed.output",
+      type: "number",
+      default: -1
+    },
+    "speed.total": {
+      kind: "input",
+      path: "speed.total",
+      type: "number",
+      default: -1
+    },
+    // Recent burn-rate trend: a comma-delimited series of total-lane tok/s the
+    // daemon folds from its sample ring (render-payload.ts). A series cannot
+    // cross the scalar var-system seam, so it travels as a string the
+    // `sparkline` helper decodes. Default "" is the genuine "no history yet"
+    // form (the helper renders nothing); the segment gates on it being present.
+    "speed.history": {
+      kind: "input",
+      path: "speed.history",
+      type: "string",
+      default: ""
+    },
+    // Context — daemon fetches via ContextProvider; contextLeftPercentage.
+    "context.totalTokens": {
+      kind: "input",
+      path: "context.totalTokens",
+      type: "number",
+      default: 0
+    },
+    "context.contextLeft": {
+      kind: "input",
+      path: "context.contextLeft",
+      type: "number",
+      default: 100
+    },
+    // Metrics — daemon fetches via MetricsProvider; numeric.
+    "metrics.lastResponseTime": {
+      kind: "input",
+      path: "metrics.lastResponseTime",
+      type: "number",
+      default: 0
+    },
+    "metrics.responseTime": {
+      kind: "input",
+      path: "metrics.responseTime",
+      type: "number",
+      default: 0
+    },
+    "metrics.sessionDuration": {
+      kind: "input",
+      path: "metrics.sessionDuration",
+      type: "number",
+      default: 0
+    },
+    "metrics.messageCount": {
+      kind: "input",
+      path: "metrics.messageCount",
+      type: "number",
+      default: 0
+    },
+    "metrics.linesAdded": {
+      kind: "input",
+      path: "metrics.linesAdded",
+      type: "number",
+      default: 0
+    },
+    "metrics.linesRemoved": {
+      kind: "input",
+      path: "metrics.linesRemoved",
+      type: "number",
+      default: 0
+    },
+    // Activity — daemon fetches via ActivityProvider (brandon-activity-ue7).
+    // The one non-quantity family: what Claude is DOING rather than how much of
+    // it there has been. Every field is absent in the payload when there is
+    // nothing real to say, so these defaults are also the "nothing happening"
+    // reading the `when` gates test.
+    "activity.command": {
+      kind: "input",
+      path: "activity.command",
+      type: "string",
+      default: ""
+    },
+    "activity.todo.total": {
+      kind: "input",
+      path: "activity.todo.total",
+      type: "number",
+      default: 0
+    },
+    "activity.todo.completed": {
+      kind: "input",
+      path: "activity.todo.completed",
+      type: "number",
+      default: 0
+    },
+    "activity.todo.position": {
+      kind: "input",
+      path: "activity.todo.position",
+      type: "number",
+      default: 0
+    },
+    "activity.todo.active": {
+      kind: "input",
+      path: "activity.todo.active",
+      type: "string",
+      default: ""
+    },
+    // `"Bash:3,Read:1"` — tools by name and count; `formatToolTally` reads it
+    // back. Note there is deliberately NO variable named `activity.todo` or
+    // `activity.tool`: a scalar at a prefix would shadow every leaf under it.
+    "activity.tool.running": {
+      kind: "input",
+      path: "activity.tool.running",
+      type: "string",
+      default: ""
+    },
+    "activity.tool.done": {
+      kind: "input",
+      path: "activity.tool.done",
+      type: "string",
+      default: ""
+    }
+    // No page-cursor var: a {{ menu }} synthesizes its own page
+    // cursor (state var + int action, named by menuPageKey) under the reserved
+    // menupages.* namespace, beside its open-state.
+  },
+  // ─── Segments ──────────────────────────────────────────────────────────────
+  // Every built-in. Templates ported from the parity bindings; `fg:` (and the
+  // few `bg:`) are palette spec names resolved against the active theme.
+  //
+  // [LAW:dataflow-not-control-flow] A segment authors a `bg:` only when the
+  // colour STATES something — a threshold (context/block/weekly/burnrate) or
+  // an alert (host). Every other cell wears the vocabulary tint its address
+  // selects (src/themes/decor.ts, candybar-render-ai7.5); naming `surface` /
+  // `panel` / `surface-active` for looks alone was hand-curated variety, and
+  // the theme now supplies variety by position. `when` predicates
+  // hide a segment when its primary signal is absent (no git repo, no version
+  // field, no env var, no tmux, no rate-limit window).
+  //
+  // [LAW:one-source-of-truth] Templates author CONTENT only — the intra-cell
+  // padding (the space each side of a cell) is render chrome synthesized
+  // structurally from the one resolved globals.padding (default 1), never
+  // authored here. A template with leading/trailing spaces would render them
+  // IN ADDITION to the structural padding.
+  segments: {
+    directory: {
+      group: "location",
+      description: "The main checkout's path, shortened fish-style \u2014 `~` under home \u2014 plus the subpath and, in a linked worktree, the worktree's name. Click to copy the full path.",
+      template: DIR_TEMPLATE,
+      fg: GIT_QUIET_FG
+    },
+    model: {
+      group: "model-context",
+      description: "The active model's display name, followed by the effort gauge (a chevron ladder, climbing on a bubble at max) when an effort level is set.",
+      template: '\u2731 {{ formatModelName .model.display_name }}{{ if ne .effort.level "" }} {{ template "effortGauge" . }}{{ end }}',
+      when: '{{ ne .model.display_name "" }}'
+    },
+    sessionId: {
+      group: "session-tools",
+      description: "The session id, truncated to 8 characters.",
+      template: "\u2317{{ trunc 8 .session.id }}",
+      when: '{{ ne .session.id "" }}'
+    },
+    version: {
+      group: "model-context",
+      description: "The Claude Code version reported in the hook payload.",
+      template: "\u25C8 v{{ .version }}",
+      when: '{{ ne .version "" }}'
+    },
+    tmux: {
+      group: "location",
+      description: "The tmux session name; hidden when not inside tmux.",
+      template: 'tmux:{{ .tmux.session | default "none" }}',
+      when: '{{ ne .tmux.session "" }}'
+    },
+    // "You are not on your own machine." Modelled on the git-taculous zsh
+    // theme, which prepends `(%n@%m)` to the prompt under SSH and shows
+    // nothing locally — you already know your own hostname.
+    //
+    // [LAW:dataflow-not-control-flow] Presence IS the signal. There is no SSH
+    // "mode" and no force-on flag (git-taculous's GITTACULOUS_ENABLE_SSH_THEME
+    // would be a flag with no deletion date, [LAW:no-mode-explosion]); the cell
+    // exists exactly when the value says so, like tmux/block/weekly. A user who
+    // wants it always-on overrides this one segment's `when` to `"true"`.
+    //
+    // `bg: "warning"` is load-bearing, not decoration: warning is one of the
+    // hue-ANCHORED palette roots, so it survives every theme and style still
+    // reading as an alert. Any other slot could land camouflaged against its
+    // neighbours — exactly what a "wrong machine" warning must never do.
+    // No `fg:`: the text is chosen on whatever that resolves to, like every
+    // unauthored cell's, rather than betting a fixed `foreground` stays legible.
+    //
+    // Each half falls back to "?" so a failed hostname/username read renders
+    // `⇄ ?@?` — still unmistakably "remote", and legibly missing its identity
+    // rather than a blank that reads as a rendering bug ([LAW:no-silent-failure]).
+    host: {
+      group: "location",
+      description: "user@host on a warning background, shown only over SSH.",
+      template: '\u21C4 {{ .host.user | default "?" }}@{{ .host.name | default "?" }}',
+      bg: "warning",
+      when: "{{ .host.ssh }}"
+    },
+    // [LAW:one-source-of-truth] One git segment, two forms: `gitCollapsed` (the
+    // summary) and `gitExpanded` (every fact), each a composition of the named
+    // `git*` pieces below, so a fact has one spelling and one colour in both
+    // forms, and a user reshapes either by overriding one piece, one form, or
+    // one `git.color.*` variable. The arrow is the segment's last cell content:
+    // a `cycle` action over the session's `git.detail`, so each Claude session
+    // keeps its own choice — nothing here a user config cannot also write.
+    // Everything no piece paints — the "(git)" label, repo name, brackets, sha,
+    // the elapsed-time annotation, the arrow — renders in the quiet `fg:`
+    // below, a template evaluating to a colour: `bgOf` is available there
+    // because a segment's background is resolved before its foreground, so
+    // structural text sits a fixed distance from THIS cell whatever theme or
+    // style is in effect, and the eye lands on the painted facts first.
+    gitaculous: {
+      group: "git",
+      description: "The git state: a summary (branch, ahead/behind, S/U/? flags) that the arrow at its right edge expands to every fact \u2014 repo, in-progress operation, sha, upstream \xB1, stash count, time since the last commit.",
+      // [LAW:dataflow-not-control-flow] `directory` is the request fact and
+      // draws unconditionally; this segment is the git lane alone, so it
+      // draws nothing — not even a placeholder — until git answers with a
+      // branch, rather than blanking the whole bar on a pending read.
+      template: `{{ if ne .git.branch "" }}{{ if eq .git.detail "expanded" }}{{ template "gitExpanded" . }}{{ else }}{{ template "gitCollapsed" . }}{{ end }} {{ action "gitDetail" "\u25B8" "\u25C2" }}{{ end }}{{ if or .location.noRepo ${GIT_INIT.armed} }}{{ if ne .git.branch "" }} {{ end }}${GIT_INIT.template}{{ end }}`,
+      fg: GIT_QUIET_FG,
+      // [LAW:dataflow-not-control-flow] Which optional facts THIS copy shows
+      // (brandon-segment-settings-i4n.u36): each is read by its own piece
+      // below, so a fact leaves both forms at once, the same as overriding
+      // the piece with an empty body does, but per placement and from the bar.
+      settings: {
+        aheadBehind: { label: "ahead/behind", domain: "bool", default: true },
+        flags: { label: "dirty flags", domain: "bool", default: true },
+        operation: { label: "operation", domain: "bool", default: true },
+        repo: { label: "repo name", domain: "bool", default: true },
+        sha: { label: "commit hash", domain: "bool", default: true },
+        stash: { label: "stash", domain: "bool", default: true },
+        upstream: { label: "upstream", domain: "bool", default: true },
+        age: { label: "time since commit", domain: "bool", default: true }
+      }
+    },
+    // Git PR/MR — the branch's open pull/merge request as a clickable link.
+    // OPT-IN: declared but NOT in the default root (it adds a network gh/glab
+    // call). Add "gitPr" to a container's children to enable it. The `{{ link
+    // url text }}` emits ONE OSC-8 region carrying the https PR url, so the
+    // CLICK is handled by the terminal/OS (opens the browser) — no daemon verb.
+    // [LAW:no-silent-failure] Three render states from the data: an open PR
+    // renders the link; a lookup FAILURE (prError set) renders a distinct ⚠
+    // marker so an outage is not mistaken for "no PR"; no PR, or one already
+    // merged or closed, leaves the `when` gate false and the segment absent.
+    gitPr: {
+      group: "git",
+      description: "The pull request open for this branch, as a link; `\u26A0 PR` when the forge lookup failed.",
+      // The pad spaces are structural chrome now, OUTSIDE the OSC-8 link
+      // region — the clickable area is the glyph text itself.
+      template: '{{ if eq .git.prState "open" }}{{ link .git.prUrl (printf "\u21C6 #%v" .git.prNumber) }}{{ else }}\u26A0 PR{{ end }}',
+      when: '{{ or (eq .git.prState "open") (ne .git.prError "") }}'
+    },
+    toolbar: {
+      group: "session-tools",
+      description: "Quick actions: copy the session id, and open the project, transcript or repo.",
+      template: quickActions("").template
+    },
+    // OPT-IN, like `toolbar`: the settings menu carries its own instance.
+    commands: {
+      group: "session-tools",
+      description: "Type /compact, /model or /clear into this session; /clear asks for a second click. Hidden when not inside tmux.",
+      template: COMMAND_TRAY.template,
+      when: COMMAND_TRAY.when
+    },
+    session: {
+      group: "cost-limits",
+      description: "This session's cost and token total, with a budget warning once a budget is configured.",
+      template: '\xA7 {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }}){{ template "budgetStatus" (dict "cost" .session.cost "budget" .settings.budget "warn" .settings.warnAt) }}',
+      // [LAW:dataflow-not-control-flow] A budget of 0 is budgetStatus's
+      // non-displayable value, so a placement with no budget renders no
+      // suffix through the same unconditional template — opt-in is a value.
+      settings: budgetSettings(0)
+    },
+    today: {
+      group: "cost-limits",
+      description: "Today's cost and tokens across every session, with a budget warning once a budget is configured.",
+      template: '\u2609 {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }}){{ template "budgetStatus" (dict "cost" .today.cost "budget" .settings.budget "warn" .settings.warnAt) }}',
+      settings: budgetSettings(50)
+    },
+    block: {
+      group: "cost-limits",
+      description: "The 5-hour rate-limit block: percent used and time to reset, heating to warning then error.",
+      template: '\u25F1 {{ round .block.nativeUtilization }}% ({{ template "formatResetCountdown" .block.resetsAt }})',
+      bg: '{{ ramp (round .block.nativeUtilization) "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}',
+      settings: QUOTA_SETTINGS,
+      // No `fg:`: an unauthored foreground is the theme pole that reads on the
+      // background this ramp resolves to, at every stop. The hand-paired
+      // `button-color-foreground` it replaces measured 1.55:1 on rose-pine's
+      // warning (brandon-theme-picker-bgw.b2g).
+      // Hide unless we have a five-hour-window snapshot.
+      when: "{{ gt .block.resetsAt 0 }}"
+    },
+    weekly: {
+      group: "cost-limits",
+      description: "The weekly rate-limit quota: percent used and time to reset, heating to warning then error.",
+      template: '\u25D1 {{ round .weekly.percentage }}% ({{ template "formatResetCountdown" .weekly.resetsAt }})',
+      bg: '{{ ramp (round .weekly.percentage) "step" 0 (tint) .settings.warnAt "warning" .settings.errorAt "error" }}',
+      settings: QUOTA_SETTINGS,
+      when: "{{ gt .weekly.resetsAt 0 }}"
+    },
+    // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
+    // number of a usage monitor — how fast you are spending and when you hit
+    // the wall. The rate is daemon-side (render-payload.ts), the ETAs the
+    // draw's (`block.etaMinutes`); the template only formats. Heats as the 5h
+    // cap NEARS — the ramp runs over minutes-to-cap, smaller = hotter, the inverse of block's fuller-is-hotter — and the -1
+    // "cannot project" sentinel sits calm at the first stop. Shown when either
+    // rate-limit window is active — the same signal block/weekly gate on.
+    burnrate: {
+      group: "cost-limits",
+      description: "Spend per hour, with the projected time to the 5-hour and weekly limits.",
+      template: '\u26A1 {{ template "formatRate" .burn.costPerHour }} \xB7 {{ template "formatEta" .block.etaMinutes }} to 5h \xB7 {{ template "formatEta" .weekly.etaMinutes }} to wk',
+      bg: '{{ ramp .block.etaMinutes "step" -1 (tint) 0 "error" .settings.errorWithin "warning" .settings.warnWithin (tint) }}',
+      // Minutes to the 5h cap, so the nearer threshold is the hotter one:
+      // error inside `errorWithin`, warning inside `warnWithin`.
+      settings: {
+        errorWithin: {
+          label: "error within (min)",
+          domain: { min: 0, max: 300, step: 5 },
+          default: 30
+        },
+        warnWithin: {
+          label: "warning within (min)",
+          domain: { min: 0, max: 300, step: 5, atLeast: "errorWithin" },
+          default: 60
+        }
+      },
+      when: "{{ or (gt .block.resetsAt 0) (gt .weekly.resetsAt 0) }}"
+    },
+    // Token throughput for the active turn — output / input / total tok/s, each a
+    // successive-render delta computed daemon-side (render-payload.ts); the
+    // template only formats. Declared-but-opt-in (NOT in the default root, like
+    // block/weekly/burnrate): a user adds `speed` to their layout. Each lane reads
+    // "—" when idle/between turns ([LAW:no-silent-failure] — never a stale or
+    // divide-by-zero number). Visible once the session has done any work (stable,
+    // no layout flicker); `output` is the live generation rate, `input` spikes at
+    // turn start, `total` is their sum.
+    speed: {
+      group: "activity",
+      description: "Token throughput for the latest exchange: output, input, and total.",
+      template: '\u21C5 out {{ template "formatSpeed" .speed.output }} \xB7 in {{ template "formatSpeed" .speed.input }} \xB7 tot {{ template "formatSpeed" .speed.total }}',
+      when: "{{ gt .session.tokens 0 }}"
+    },
+    // Burn-rate sparkline: the recent total-lane tok/s trend as a unicode
+    // mini-graph. Declared-but-opt-in (NOT in the default root, like speed /
+    // block / weekly): a user adds `tokenSparkline` to their layout. The
+    // `sparkline` helper decodes the daemon-owned series and draws it; `24`
+    // caps the glyph count to the cell, showing the live tail of the ring. The
+    // segment's fg colors the whole graph (no per-glyph color). Gated on the
+    // history being present so the cell never renders empty (the series needs
+    // two samples before its first bar). [LAW:effects-at-boundaries] — all the
+    // history lives in the daemon ring, the template only draws.
+    tokenSparkline: {
+      group: "activity",
+      description: "A sparkline of recent token throughput.",
+      template: "\u26A1 {{ sparkline .speed.history 24 }}",
+      when: '{{ ne .speed.history "" }}'
+    },
+    // Prompt-cache warmth countdown. minutesUntilReset clamps a past expiry
+    // to 0, so an expired cache renders "cold" (and reads red via the ≤8
+    // arm) rather than a negative number. [LAW:dataflow-not-control-flow]
+    // glyph + "cold"/"Nm" + color all derive from the one expiry value; the
+    // provider supplies no display state. No `bg:` — the cell keeps its
+    // vocabulary tint and the threshold rides the fg alone, mirroring the
+    // legacy inline-colored text (warm = normal, ≤20m = warning, ≤8m/cold =
+    // error).
+    cacheTimer: {
+      group: "activity",
+      description: "Minutes until the prompt cache expires, or `cold` once it has.",
+      template: "\u25F4 {{ if le (minutesUntilReset .cache.expiresAt) 0 }}cold{{ else }}{{ minutesUntilReset .cache.expiresAt }}m{{ end }}",
+      // brandon-template-funcs-jku: this was a three-level `if` chain over the same
+      // value, which is a threshold cascade that could not be read as one. `cascade`
+      // is `ramp`'s decision with a text result, so the thresholds are visible as
+      // numbers here the way the block/weekly `bg:` cascades are. The bands are the
+      // chain's own: <= 8 error, <= 20 warning, above that foreground
+      // (test/cascade.test.ts pins the two against each other at every boundary).
+      // The cascade picks the role; the floor keeps it legible on this cell's
+      // tint, exactly as a git accent is (`accent` above).
+      fg: `{{ readableOn (color (cascade (minutesUntilReset .cache.expiresAt) "0:error" "9:warning" "21:foreground")) (bgOf) ${TEXT_MIN_CONTRAST} }}`,
+      when: "{{ gt .cache.expiresAt 0 }}"
+    },
+    context: {
+      group: "model-context",
+      description: "Context used, in tokens and percent remaining, heating as it fills.",
+      template: "\u25D4 {{ formatInteger .context.totalTokens }} ({{ .context.contextLeft }}%)",
+      // contextLeft is an integer (src/segments/context.ts rounds it), so the
+      // "≤ 20 / ≤ 40" edges are the stops at 21 and 41 exactly.
+      bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 (tint) }}',
+      when: "{{ gt .context.totalTokens 0 }}"
+    },
+    // Beside `context`: where Claude Code itself will summarize the context.
+    autocompact: {
+      group: "model-context",
+      description: "Claude Code's auto-compact window: \u2212 and + move it by 100K, \u21BA returns it to auto. Clicks type /autocompact into this session, so the controls show only inside tmux.",
+      template: AUTOCOMPACT2.template,
+      bg: AUTOCOMPACT2.bg,
+      when: AUTOCOMPACT2.when
+    },
+    metrics: {
+      group: "activity",
+      description: "Response times, session duration, message count, and lines added/removed.",
+      // [LAW:dataflow-not-control-flow] Each part guards on its own value
+      // rather than gating the whole segment on a single dimension. With
+      // MetricsPayload's fields independently optional and pickNonNull
+      // dropping nulls (see src/renderer/render-payload.ts), an absent field
+      // resolves through the var-system fallback chain to 0 — the same
+      // falsy shape the per-part `if` test treats as hidden. The segment-
+      // level `when` survives as a weak any-present check so a payload
+      // with zero metrics data renders no cell at all (an empty template
+      // would otherwise produce a single-space bg-styled cell).
+      //
+      // [LAW:one-source-of-truth] exception: each arm's leading space is the
+      // SEPARATOR between present parts (only data can decide which part is
+      // first, so no static strip can remove just the first one), and the
+      // trailing space mirrors it for symmetry. At the default padding this
+      // cell therefore reads one space wider per side than its siblings.
+      template: '{{ if .metrics.lastResponseTime }} \u0394 {{ template "formatResponseTime" .metrics.lastResponseTime }}{{ end }}{{ if .metrics.responseTime }} \u29D6 {{ template "formatResponseTime" .metrics.responseTime }}{{ end }}{{ if .metrics.sessionDuration }} \u29D7 {{ template "formatDuration" .metrics.sessionDuration }}{{ end }}{{ if .metrics.messageCount }} \u25C6 {{ .metrics.messageCount }}{{ end }}{{ if .metrics.linesAdded }} + {{ .metrics.linesAdded }}{{ end }}{{ if .metrics.linesRemoved }} - {{ .metrics.linesRemoved }}{{ end }} ',
+      // [LAW:no-silent-failure] Each arm is a BOOLEAN, not the value itself.
+      // `evaluateWhen` hides a segment only on the literal text "false", so
+      // `{{ or <numbers> }}` over all-zero fields renders "0" — visible, an empty
+      // bg-styled cell, the exact outcome the paragraph above says this gate
+      // prevents. Found while adding `activity`, which copied this shape
+      // (brandon-activity-ue7).
+      when: "{{ or (gt .metrics.lastResponseTime 0.0) (gt .metrics.responseTime 0.0) (gt .metrics.sessionDuration 0.0) (gt .metrics.messageCount 0) (gt .metrics.linesAdded 0) (gt .metrics.linesRemoved 0) }}"
+    },
+    // What Claude is doing right now (brandon-activity-ue7) — the only segment
+    // on the bar whose content is not a quantity. Three parts, each gated on its
+    // own value exactly as `metrics` is, and the whole cell gated off when the
+    // session is idle, so a bar at rest is unchanged from before this existed.
+    //
+    // The todo part has two readings of one list: the in-progress item with its
+    // position while there is one, and the completed-of-total tally when there is
+    // not. `completed` (not `position`) is what distinguishes a finished list
+    // from an all-pending one — `☑ 7/7` and `☑ 0/7` are both true statements.
+    // `abbrev` bounds the task text, since an `activeForm` is a sentence.
+    activity: {
+      group: "activity",
+      description: "What Claude is doing: the slash command that opened the turn, the in-progress todo, and the tools in flight.",
+      template: '{{ if .activity.command }} \u2318 {{ .activity.command }}{{ end }}{{ if .activity.todo.total }}{{ if .activity.todo.active }} \u2610 {{ .activity.todo.position }}/{{ .activity.todo.total }} {{ abbrev 32 .activity.todo.active }}{{ else }} \u2611 {{ .activity.todo.completed }}/{{ .activity.todo.total }}{{ end }}{{ end }}{{ if .activity.tool.running }} \u27F3 {{ template "formatToolTally" .activity.tool.running }}{{ end }}{{ if .activity.tool.done }} \u2713 {{ template "formatToolTally" .activity.tool.done }}{{ end }} ',
+      // Boolean arms, for the reason spelled on `metrics` above: a `when` is
+      // hidden only by the literal text "false".
+      when: '{{ or (ne .activity.command "") (gt .activity.todo.total 0) (ne .activity.tool.running "") (ne .activity.tool.done "") }}'
+    }
+  },
+  // Default layout — the canonical Root: a map of NAMED rows (`satisfies
+  // DslConfig` requires the lowered node form inside each row; the terse
+  // Option-A `{ h/v/seg }` grammar is the loader's authoring surface for user
+  // JSON, not this typed literal).
+  //
+  // [LAW:one-source-of-truth] The row NAMES are the merge keys. A user file's
+  // `root: { rows: { status: { h: [...] } } }` replaces exactly the row it
+  // names and inherits the other in place — the same by-name cascade every
+  // other section merges with — and `status: { h: [] }` removes one. This
+  // literal is read both as JSON (parsed like a user file) and as the typed
+  // base it merges onto, so the canonical shape and the authoring shape are
+  // one object by construction.
+  //
+  // Two always-visible rows: an IDENTITY row (where am I — the host, the
+  // directory and the verbose `gitaculous` line) over a STATUS row (what's
+  // happening now — model, context-window fill, prompt-cache warmth, and the
+  // 5h / 7d rate-limit quotas). Every setting lives behind the settings-menu
+  // door the loader leads the first row with (src/config/settings-menu.ts),
+  // not on the bar. Each row zips its segments through the powerline joiner;
+  // `\n` separates the rows.
+  //
+  // [LAW:dataflow-not-control-flow] Every status segment is when-gated on its
+  // own signal (no repo → the identity row is just the directory; no
+  // active rate-limit window → block/weekly drop; no cache activity → cacheTimer
+  // drops). A row therefore only ever shows the segments that have real data —
+  // the layout is chosen by the data, not by branches — so the default never
+  // paints an empty or placeholder cell, but for one: a value whose source has
+  // not answered yet draws `…`, and only at the width its placement already
+  // held (src/dsl/node-registry.ts, loadingSegment). The directory has no
+  // `when`, so row 1 always anchors the bar.
+  root: {
+    rows: {
+      identity: {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          // Leads the identity row: the first thing to read is WHICH MACHINE,
+          // because it reframes every path and branch to its right. Same
+          // placement git-taculous gives `(%n@%m)` — ahead of the directory.
+          // Gated off entirely on a local session, so the row still opens with
+          // `directory` where it always has.
+          { kind: "segment", name: "host" },
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "gitaculous" }
+        ]
+      },
+      status: {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "model" },
+          // The auto-compact window reads against the context use beside it,
+          // so the two are placed together; like any two cells side by side,
+          // each takes its own place in the row's colours.
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "context" },
+              { kind: "segment", name: "autocompact" }
+            ]
+          },
+          { kind: "segment", name: "cacheTimer" },
+          { kind: "segment", name: "block" },
+          { kind: "segment", name: "weekly" },
+          // Last on the row on purpose: it is the most volatile cell on the bar
+          // (it appears, changes width, and drops again within one turn), so
+          // trailing it means nothing to its left ever reflows.
+          { kind: "segment", name: "activity" }
+        ]
+      }
+    }
+  },
+  // [LAW:locality-or-seam] The quick-action tray's behaviors, decoupled by NAME
+  // from the `toolbar` segment's glyphs above. copy/open evaluate a Go-template
+  // against the live render scope at click time and write NO SessionState, so
+  // they derive no state validator (no gate) — they are pure click effects.
+  //
+  // [LAW:single-enforcer] Each template emits a RAW value; the click-wire codec
+  // (effectsUrl → encodeSegments) owns ALL percent-encoding and the verb's
+  // `oneArg` owns the single matching decode — so the template never hand-rolls
+  // a `urlEncode`, and the path round-trips untouched through one codec.
+  //
+  // open* route through the open-vscode verb (`open -a "Visual Studio Code"
+  // <path>`), so they pass a bare filesystem path — a directory or a file the
+  // editor opens directly — NOT a `vscode://` URL (which `open -a` would treat
+  // as a literal filename, not a deep link).
+  actions: {
+    ...quickActions("").actions,
+    ...COMMAND_TRAY.actions,
+    // The `directory` cell's click: the full path its abbreviation hides.
+    copyDir: { copy: "{{ .current_dir }}" },
+    // Runs where the session is, whatever directory the action's home names.
+    // The loader fills in the rest of a run; this table is what it parses.
+    "gitInit.run": {
+      run: ["git", "-C", "{{ .current_dir }}", "init"]
+    },
+    ...GIT_INIT.actions,
+    // The `gitaculous` arrow: collapsed ↔ expanded, this session only.
+    gitDetail: { set: "git-detail", cycle: ["collapsed", "expanded"] },
+    ...AUTOCOMPACT2.actions
+  },
+  // ─── Styles ───────────────────────────────────────────────────────────────
+  // Named theme ADAPTATIONS — each is a full rich-js ThemeKey applied on top
+  // of whatever base theme is active (a transform, not a palette), so every
+  // style composes with every theme: pick theme, then pick style. Selected per
+  // session via the `style` SessionState key (an action `{ set: "style", from:
+  // "styles" }` + a `{{ menu }}`), exactly the theme/endcaps selection seam.
+  // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
+  // stdlib — including the "none" identity floor effectiveStyleName collapses
+  // to — is present in every merged config by construction.
+  styles: {
+    // [LAW:dataflow-not-control-flow] "none" is just the identity style — the
+    // resolution floor as a value, not a special case (rich-js's isIdentityKey
+    // fast-path makes it free). Spelled literally (not rich-js IDENTITY /
+    // INVERT_LIGHTNESS) so the bundled default remains inert JSON-shaped data
+    // a user file can mirror axis-for-axis; the loader normalizes user specs
+    // onto the same identity axes.
+    none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
+    // Saturation up/down — chroma is multiplicative, hue and lightness held.
+    vivid: {
+      hueShift: 0,
+      chromaScale: 1.35,
+      lightnessScale: 1,
+      lightnessShift: 0
+    },
+    muted: {
+      hueShift: 0,
+      chromaScale: 0.55,
+      lightnessScale: 1,
+      lightnessShift: 0
+    },
+    // Lightness down (scale) / up (shift) — dim compresses toward black,
+    // bright lifts everything a step; anchors stay hue-locked by rich-js.
+    dim: {
+      hueShift: 0,
+      chromaScale: 1,
+      lightnessScale: 0.85,
+      lightnessShift: 0
+    },
+    bright: {
+      hueShift: 0,
+      chromaScale: 1,
+      lightnessScale: 1,
+      lightnessShift: 0.08
+    },
+    // The dark↔light "octave" flip (rich-js INVERT_LIGHTNESS: L' = 1 - L) —
+    // errors stay red, dark-on-light becomes light-on-dark.
+    inverted: {
+      hueShift: 0,
+      chromaScale: 1,
+      lightnessScale: -1,
+      lightnessShift: 1
+    }
+  },
+  // ─── Presets ─────────────────────────────────────────────────────────────
+  // Named config FRAGMENTS — each an alternative `root` + display `globals`,
+  // i.e. a whole arrangement of the bar rather than one knob. A preset is to
+  // configuration what a style is to a theme, and rides the identical seam:
+  // selected per session via the `preset` SessionState key — or pinned as the
+  // durable default via `globals.preset` — through the settings menu's preset
+  // control and its save (src/config/settings-menu.ts), resolved as session
+  // pick over globals.preset over this floor.
+  // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
+  // stdlib is present in every merged config by construction, exactly as
+  // styles' "none"/"vivid"/"muted"/… is — a user redefining "compact" or
+  // "verbose" wins per name; the floor cannot be shadowed by anything but an
+  // empty fragment, because that IS what it already is.
+  //
+  // [LAW:carrying-cost] Each library preset stages only real deltas from the
+  // bundled default's own root (declared above) — no preset here restates a
+  // segment's template, bg, or fg, only which of the ALREADY-declared
+  // segments appear and in what arrangement, per the field cap
+  // (brandon-presets-0yk.1's premise note): a bundled preset can only STAGE
+  // segments DEFAULT_DSL_CONFIG.segments already declares, never introduce
+  // one.
+  //
+  // [LAW:verifiable-goals] Every entry here is asserted error-cell-free at
+  // 80/120/200 columns against a RICH payload in
+  // test/default-dsl-config.test.ts (the same checkPayload fixture check.ts
+  // uses) — curated by actually rendering each arrangement, not by reading
+  // the segment names off the page.
+  // Each bundled theme's default look — data in its own file
+  // (src/config/bundled-theme-defaults.ts), since it is chosen theme by theme
+  // in the bar rather than authored with the rest of this literal.
+  themeDefaults: BUNDLED_THEME_DEFAULTS,
+  presets: {
+    // [LAW:dataflow-not-control-flow] "default" is just the identity fragment
+    // — the resolution floor as a value, not a special case. An empty fragment
+    // declares no `root` and no `globals`, so it stages the config's own, which
+    // is precisely what "no preset chosen" means. This is the bundled default's
+    // OWN two-row (identity / status) arrangement declared as `root` above —
+    // it needs no entry of its own here beyond the floor, because staging it
+    // AS a named fragment would be a byte-for-byte copy of `root` that could
+    // silently drift from it the moment either changed.
+    default: {},
+    // Single-row arrangement for narrow terminals and split panes — the
+    // situation where a user most wants a different arrangement and least
+    // wants to hand-write one. Keeps only the three facts a split pane most
+    // needs at a glance (where am I / what's the git state / how much context
+    // is left), and `padding: 0` to buy back the chrome a narrow column can't
+    // spare. `gitaculous` starts collapsed here as everywhere, so the git state
+    // costs a narrow column only the summary until someone asks for more.
+    //
+    // [LAW:no-silent-failure] A session that switches TO compact is never
+    // stranded: synthesizeSettingsMenu splices the global settings menu — and
+    // with it the preset switcher — into EVERY preset root, so one click back
+    // to "default" restores everything compact traded away for width. That is
+    // why this root carries no preset control of its own: one guaranteed door
+    // per root, minted once and referenced, not a segment each preset must
+    // remember to carry [LAW:one-source-of-truth].
+    compact: {
+      root: {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "gitaculous" },
+          { kind: "segment", name: "context" }
+        ]
+      },
+      globals: { padding: 0 }
+    },
+    // Verbose arrangement surfacing four segments that are declared but NOT in
+    // the default root (gitPr, burnrate, speed, tokenSparkline — see each
+    // segment's own "declared-but-opt-in" comment above) alongside the
+    // default's own two rows, for a user who wants the full usage-monitor
+    // picture rather than the quiet default. A third row carries the two
+    // per-turn throughput segments, which read "—" between turns
+    // ([LAW:no-silent-failure] on speed/tokenSparkline) rather than an empty
+    // or stale row. Like `compact`, it carries no preset control of its own —
+    // the global settings menu is spliced into every preset root and is the
+    // one door back.
+    verbose: {
+      root: {
+        kind: "container",
+        direction: "vertical",
+        children: [
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "directory" },
+              { kind: "segment", name: "gitaculous" },
+              { kind: "segment", name: "gitPr" }
+            ]
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "model" },
+              {
+                kind: "container",
+                direction: "horizontal",
+                children: [
+                  { kind: "segment", name: "context" },
+                  { kind: "segment", name: "autocompact" }
+                ]
+              },
+              { kind: "segment", name: "cacheTimer" },
+              { kind: "segment", name: "block" },
+              { kind: "segment", name: "weekly" },
+              { kind: "segment", name: "burnrate" }
+            ]
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "speed" },
+              { kind: "segment", name: "tokenSparkline" }
+            ]
+          }
+        ]
+      }
+    },
+    // For heads-down work where the bar should stay out of the way: one row,
+    // only where you are and how much context is left, powerline chrome traded
+    // for plain text and the whole bar receded under the `dim` style. It is the
+    // quiet end of the library the way `verbose` is the loud one — `compact`
+    // saves width, this saves attention.
+    zen: {
+      root: {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "context" }
+        ]
+      },
+      globals: { endcaps: "plain", style: "dim" }
+    },
+    // For branch-and-PR work — juggling reviews, rebases, several branches:
+    // the identity row gains the open PR (`gitPr`, which the default leaves
+    // out) beside the git state, and the status row keeps only what that work
+    // checks between pushes (model, context, what Claude is doing), dropping
+    // the rate-limit windows that matter to a long solo session instead.
+    git: {
+      root: {
+        kind: "container",
+        direction: "vertical",
+        children: [
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "host" },
+              { kind: "segment", name: "directory" },
+              { kind: "segment", name: "gitaculous" },
+              { kind: "segment", name: "gitPr" }
+            ]
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "model" },
+              { kind: "segment", name: "context" },
+              { kind: "segment", name: "activity" }
+            ]
+          }
+        ]
+      }
+    },
+    // For watching spend and limits — a long session near a budget or a rate
+    // limit: every cost and limit segment the bundled library declares, one
+    // concern per row. Row 1 is this conversation (context, cache), row 2 the
+    // rate-limit windows and how fast they are burning, row 3 money (this
+    // session, today across every session) and throughput. It is the one
+    // preset that stages `today`.
+    usage: {
+      root: {
+        kind: "container",
+        direction: "vertical",
+        children: [
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "model" },
+              {
+                kind: "container",
+                direction: "horizontal",
+                children: [
+                  { kind: "segment", name: "context" },
+                  { kind: "segment", name: "autocompact" }
+                ]
+              },
+              { kind: "segment", name: "cacheTimer" }
+            ]
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "block" },
+              { kind: "segment", name: "weekly" },
+              { kind: "segment", name: "burnrate" }
+            ]
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "session" },
+              { kind: "segment", name: "today" },
+              { kind: "segment", name: "speed" },
+              { kind: "segment", name: "tokenSparkline" }
+            ]
+          }
+        ]
+      }
+    },
+    // For a wide terminal that should give the bar as few lines as possible:
+    // the default's two rows, plus spend, poured into ONE row with no padding,
+    // which the width-based auto-wrap folds only where the terminal actually
+    // runs out — so a wide window gets one line and a narrow one still gets
+    // every segment. `activity` stays last for the same reason it does in the
+    // default: it is the cell that reflows.
+    dense: {
+      root: {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "host" },
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "gitaculous" },
+          { kind: "segment", name: "model" },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "context" },
+              { kind: "segment", name: "autocompact" }
+            ]
+          },
+          { kind: "segment", name: "cacheTimer" },
+          { kind: "segment", name: "block" },
+          { kind: "segment", name: "weekly" },
+          { kind: "segment", name: "session" },
+          { kind: "segment", name: "activity" }
+        ]
+      },
+      globals: { padding: 0 }
+    }
+  },
+  // [LAW:one-source-of-truth] What edit mode LOOKS like, as config a user can
+  // retune — the whole point of candybar-settings-ui-aok.5, whose predecessor
+  // was renderer constants. Powerline chrome exists to make adjacent segments
+  // read as one continuous strip, which is precisely the wrong signal while a
+  // user is trying to see where one segment ends and the next begins; `plain`
+  // trades the caps for a visible separator between every cell.
+  //
+  // The separator is stated rather than left to the bundled `plain` joiner's
+  // glyph: this fragment layers over the user's globals, so a config that set
+  // `default_separator` for its own powerline bar would otherwise carry that
+  // choice into edit mode, where the separator is the entire affordance.
+  editGlobals: {
+    endcaps: "plain",
+    default_separator: " | "
+  },
+  // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy
+  // for the cost/token/budget family lives here as named template helpers, each
+  // DEFINED ONCE and called from every segment via `{{ template "name" .arg }}`
+  // — so how a cost/token string looks is data a user overrides by name, not
+  // compiled JS. The K/M token-scale rule has a SINGLE home (`formatTokenCount`);
+  // `formatTokens` suffixes " tokens" onto it and `formatTokenBreakdown` calls it
+  // per part, so the scale policy can never drift between the three.
+  // [LAW:dataflow-not-control-flow] A multi-input helper (budgetStatus,
+  // formatTokenBreakdown) receives its inputs as one `dict` value through its
+  // single dot arg — variability flows as data across one boundary, not as a
+  // bespoke multi-arg signature.
+  helpers: {
+    // The effort gauge: the `effort.glyphs` rung for the level, in quiet text
+    // at low (the inactive colour, the same recipe the menu's inert controls
+    // wear) and in the theme's `accent` from medium to xhigh. Max climbs the
+    // ladder — one chevron, two, three, a second each — on a bubble 40% of the
+    // way from the cell to accent, stepping through the decorative roles as it
+    // climbs. The bubble is what keeps a frame of the climb from reading as
+    // low, high or xhigh. A second a frame because Claude Code redraws at most
+    // once a second (`statusLine.refreshInterval: 1`); a shorter hold would
+    // only alias. Every colour is floored at TEXT_MIN_CONTRAST on its ground:
+    // the cell wears the accent hue, where the raw accent measured 1.00:1 on
+    // `textual-ansi`. Effort is a choice, not an alert, so no rung wears
+    // `warning`/`error` — those hues keep their meaning for the cells that
+    // measure danger.
+    // [LAW:dataflow-not-control-flow] The level is folded to an ordinal once,
+    // and every level computes max's bubble. Max's climbing colour and frames
+    // are computed only where max draws them: a stepped colour tells the frame
+    // when it next changes as it is evaluated, drawn or not, so computed at
+    // every level it would make a still rung claim to move. The one branch is
+    // the domain's own, and it chooses what is drawn: max its bubble, every
+    // other level its rung on the cell as the cell is filled — which may be no
+    // fill at all (`bg: "none"`), so below max nothing paints a background. A level
+    // outside the five known names is ordinal 0: the ladder's `?`, visible
+    // rather than blank. The ladder is split on runs of spaces, so a doubled
+    // space shifts no rung. Called with the scope as dot.
+    effortGauge: `{{ $ord := default 0 (get (dict "low" 1 "medium" 2 "high" 3 "xhigh" 4 "max" 5) .effort.level) }}{{ $glyphs := compact (splitList " " .effort.glyphs) }}{{ $bubble := readableOn (mix (bgOf) (color "accent") 40) (bgOf) ${EFFORT_BUBBLE_CONTRAST} }}{{ if eq $ord 5 }}{{ $climbing := readableOn (stepped 1 (color "primary") 1 (color "secondary") 1 (color "accent")) $bubble ${TEXT_MIN_CONTRAST} }}{{ $climb := frames 1 (index $glyphs 1) 1 (index $glyphs 3) 1 (index $glyphs 4) }}{{ fg $bubble "\uE0B6" }}{{ bg $bubble (fg $climbing $climb) }}{{ fg $bubble "\uE0B4" }}{{ else }}{{ fg (ramp $ord "step" 0 (${QUIET_TEXT}) 2 (readableOn (color "accent") (bgOf) ${TEXT_MIN_CONTRAST})) (index $glyphs $ord) }}{{ end }}`,
+    // Text in a palette colour, floored at TEXT_MIN_CONTRAST against the cell
+    // it sits on: a theme's `success`/`warning`/`accent` is designed against
+    // its own background, not the tint a bar cell wears (the raw role measured
+    // 1.01:1 on `textual-light`, brandon-theme-picker-bgw.b2g). `readableOn` moves only
+    // OKLCH lightness, so the hue — the part that says "staged" — survives.
+    // Called with a dict: `(dict "color" <palette name or hex> "text" <text>)`.
+    gitPaint: `{{ fg (readableOn (color .color) (bgOf) ${TEXT_MIN_CONTRAST}) .text }}`,
+    // ─── Git forms and pieces ──────────────────────────────────────────────
+    // The two forms `gitaculous` switches between, each composed of the pieces
+    // below. Override one to change what that form shows.
+    gitCollapsed: '{{ template "gitBranch" . }}{{ template "gitAheadBehind" . }}{{ template "gitFlags" . }}',
+    gitExpanded: '(git){{ template "gitRepo" . }}{{ template "gitOperation" . }}{{ template "gitSha" . }}{{ template "gitFlags" . }} {{ template "gitBranch" . }}{{ template "gitUpstream" . }}{{ template "gitStash" . }}{{ template "gitAge" . }}',
+    // The named parts the two forms compose, each called
+    // with the root scope (`{{ template "gitFlags" . }}`). Every optional piece
+    // renders ` <fact>` with its OWN leading space, or nothing — only the piece
+    // knows whether it exists — so pieces reorder and drop without leaving a
+    // doubled or dangling space. `gitBranch` is the exception: the segment is
+    // gated on a branch, so it is always present and carries no space. A piece
+    // whose fact is optional reads that fact's `.settings.<name>` too, so a
+    // segment of your own that calls it declares the same setting (the loader
+    // names that segment, the setting, and the helper when it does not).
+    gitBranch: '\u2387 {{ template "gitPaint" (dict "color" .git.color.branch "text" .git.branch) }}',
+    gitRepo: '{{ if and .settings.repo (ne .git.repoName "") }} {{ .git.repoName }}{{ end }}',
+    gitOperation: '{{ if and .settings.operation (ne .git.operation "") }} [{{ .git.operation }}]{{ end }}',
+    gitSha: '{{ if and .settings.sha (ne .git.sha "") }} {{ .git.sha }}{{ end }}',
+    gitFlags: '{{ if and .settings.flags (or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0)) }} {{ if gt .git.staged 0 }}{{ template "gitPaint" (dict "color" .git.color.staged "text" "S") }}{{ end }}{{ if gt .git.unstaged 0 }}{{ template "gitPaint" (dict "color" .git.color.unstaged "text" "U") }}{{ end }}{{ if gt .git.untracked 0 }}{{ template "gitPaint" (dict "color" .git.color.untracked "text" "?") }}{{ end }}{{ if gt .git.conflicts 0 }}{{ template "gitPaint" (dict "color" .git.color.conflicts "text" (printf "!%v" .git.conflicts)) }}{{ end }}{{ end }}',
+    gitAheadBehind: '{{ if and .settings.aheadBehind (or (gt .git.ahead 0) (gt .git.behind 0)) }} {{ if gt .git.ahead 0 }}{{ template "gitPaint" (dict "color" .git.color.ahead "text" (printf "+%v" .git.ahead)) }}{{ end }}{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}{{ if gt .git.behind 0 }}{{ template "gitPaint" (dict "color" .git.color.behind "text" (printf "-%v" .git.behind)) }}{{ end }}{{ end }}',
+    gitUpstream: '{{ if and .settings.upstream (ne .git.upstream "") }} [{{ .git.upstream }}{{ template "gitAheadBehind" . }}]{{ end }}',
+    gitStash: '{{ if and .settings.stash (gt .git.stash 0) }} {{ template "gitPaint" (dict "color" .git.color.stash "text" (printf "(%v stashed)" .git.stash)) }}{{ end }}',
+    gitAge: '{{ $age := .git.timeSinceCommit }}{{ if and .settings.age (gt $age 0) }} \u25F7 {{ template "formatTimeSince" $age }}{{ end }}',
+    // Cost: under a cent reads "<$0.01"; otherwise "$" + two decimals. (Null is
+    // unrepresentable through the var-system — type:number with a numeric default
+    // owns "missing" upstream — so no null branch is needed here.)
+    formatCost: '{{ if lt . 0.01 }}<$0.01{{ else }}${{ printf "%.2f" . }}{{ end }}',
+    // The single home of the K/M token-scale rule. >=1e6 → "X.YM", >=1e3 → "X.YK",
+    // else the integer verbatim (0 and negatives fall through to this arm, exactly
+    // as the retired JS did). No " tokens" suffix — that is formatTokens' job.
+    formatTokenCount: formatTokenCount("."),
+    formatTokens: '{{ template "formatTokenCount" . }} tokens',
+    // A tool tally — `"Bash:3,Read:1"`, the payload's one encoding for both
+    // running and completed tools — read back as `Bash×3 Read`, capped at the
+    // first two names with a `+N` overflow for the rest. A count of 1 shows no
+    // multiplier, so the common case reads as a plain tool name.
+    // [LAW:one-source-of-truth] ONE helper for both fields, because the payload
+    // gives them one shape; a second spelling would be a second policy for
+    // "how a tool tally reads". The caller must gate on the value being
+    // non-empty — an empty tally is absent in the payload, and `splitList` on ""
+    // yields one positionless member.
+    formatToolTally: '{{ $names := splitList "," . }}{{ range $i, $pair := $names }}{{ if lt $i 2 }}{{ if $i }} {{ end }}{{ $kv := splitList ":" $pair }}{{ index $kv 0 }}{{ if ne (index $kv 1) "1" }}\xD7{{ index $kv 1 }}{{ end }}{{ end }}{{ end }}{{ if gt (len $names) 2 }} +{{ sub (len $names) 2 }}{{ end }}',
+    // Burn rate: "$X.XX/hr" when projectable, "—/hr" otherwise. The daemon
+    // emits -1 (a structurally-impossible rate) for not-projectable, so the
+    // branch reads a VALUE, never a hidden control-flow flag. Reuses formatCost
+    // so the dollar policy has one home.
+    formatRate: '{{ if lt . 0 }}\u2014/hr{{ else }}{{ template "formatCost" . }}/hr{{ end }}',
+    // ETA to a rate-limit cap: humanized minutes when projectable, "—" when it
+    // cannot be projected (-1 sentinel). Reuses the long-remaining cascade.
+    formatEta: '{{ if lt . 0 }}\u2014{{ else }}{{ template "formatLongTimeRemaining" . }}{{ end }}',
+    // Token throughput: "N/s" (K/M-scaled, rounded) when measured (>= 0), "—"
+    // when the daemon had no projectable sample (-1). Branches on the VALUE, like
+    // formatRate; reuses formatTokenCount so the K/M scale policy has one home.
+    formatSpeed: '{{ if lt . 0 }}\u2014{{ else }}{{ template "formatTokenCount" (round .) }}/s{{ end }}',
+    // Breakdown over a dict {input, output, cacheCreation, cacheRead}; each present
+    // part is formatted by the shared formatTokenCount and joined with " + ". A
+    // `$first` flag (reassigned across if-frames) inserts the separator before all
+    // but the first present part; all-zero collapses to "0 tokens".
+    formatTokenBreakdown: '{{ $first := true }}{{ if gt .input 0 }}{{ template "formatTokenCount" .input }} in{{ $first = false }}{{ end }}{{ if gt .output 0 }}{{ if not $first }} + {{ end }}{{ template "formatTokenCount" .output }} out{{ $first = false }}{{ end }}{{ if or (gt .cacheCreation 0) (gt .cacheRead 0) }}{{ if not $first }} + {{ end }}{{ template "formatTokenCount" (add .cacheCreation .cacheRead) }} cached{{ $first = false }}{{ end }}{{ if $first }}0 tokens{{ end }}',
+    // Budget suffix over a dict {cost, budget, warn}. Non-displayable (budget<=0 or
+    // cost<0) → "". Otherwise pct = min(100, cost/budget*100), rendered " !N%" at/above
+    // warn, " +N%" at/above 50, " N%" below.
+    budgetStatus: '{{ if or (le .budget 0) (lt .cost 0) }}{{ else }}{{ $pct := minf 100 (mulf (divf .cost .budget) 100) }}{{ $p := printf "%.0f%%" $pct }}{{ if ge $pct .warn }} !{{ $p }}{{ else }}{{ if ge $pct 50 }} +{{ $p }}{{ else }} {{ $p }}{{ end }}{{ end }}{{ end }}',
+    // ─── Duration / time-remaining family (bdi.4) ──────────────────────────
+    // Display policy for elapsed/remaining times, each DEFINED ONCE and called
+    // from every segment via `{{ template "name" .x }}`. Input domain is a
+    // non-negative number (seconds, or minutes for formatLongTimeRemaining); the
+    // var-system owns "missing" as a numeric default upstream, so no null arm.
+    //
+    // The cascades branch on the VALUE (which unit threshold it falls in), never
+    // on control flow [LAW:dataflow-not-control-flow]. `div`/`mod` are Go int64
+    // (truncate toward zero == Math.floor for the non-negative domain); `printf
+    // "%.Nf"` is the toFixed(N) stand-in (rounds, matching JS toFixed).
+    // Compact "since" stamp: <1m → "Ns"; then floored m/h/d/w. `div` truncates
+    // exactly like Math.floor here (seconds ≥ 0). Used by the git segment's
+    // time-since-commit affordance — verbatim seconds under a minute.
+    formatTimeSince: "{{ if lt . 60 }}{{ . }}s{{ else if lt . 3600 }}{{ div . 60 }}m{{ else if lt . 86400 }}{{ div . 3600 }}h{{ else if lt . 604800 }}{{ div . 86400 }}d{{ else }}{{ div . 604800 }}w{{ end }}",
+    // Elapsed duration: <1m toFixed(0)+s; <1h (/60).toFixed(0)+m; <1d
+    // (/3600).toFixed(1)+h; else (/86400).toFixed(1)+d. printf rounds (not
+    // truncates), reproducing toFixed.
+    formatDuration: '{{ if lt . 60 }}{{ printf "%.0f" . }}s{{ else if lt . 3600 }}{{ printf "%.0f" (divf . 60) }}m{{ else if lt . 86400 }}{{ printf "%.1f" (divf . 3600) }}h{{ else }}{{ printf "%.1f" (divf . 86400) }}d{{ end }}',
+    // Response time: one-decimal seconds under a minute, else one-decimal
+    // minutes.
+    formatResponseTime: '{{ if lt . 60 }}{{ printf "%.1f" . }}s{{ else }}{{ printf "%.1f" (divf . 60) }}m{{ end }}',
+    // Long remaining (input = whole minutes): ≥1day → "Nd"/"Nd Nh"; ≥1hour →
+    // "Nh"/"Nh Nm"; else "Nm". The lower unit is appended only when non-zero,
+    // matching the JS hours>0/minutes>0 guards. `$d`/`$h`/`$m` declared in the
+    // branch frame and read by the inner if (lexical scope reads enclosing
+    // frames) — go-template-js cannot capture a value any other way.
+    formatLongTimeRemaining: "{{ if ge . 1440 }}{{ $d := div . 1440 }}{{ $h := div (mod . 1440) 60 }}{{ if gt $h 0 }}{{ $d }}d {{ $h }}h{{ else }}{{ $d }}d{{ end }}{{ else if ge . 60 }}{{ $h := div . 60 }}{{ $m := mod . 60 }}{{ if gt $m 0 }}{{ $h }}h {{ $m }}m{{ else }}{{ $h }}h{{ end }}{{ else }}{{ . }}m{{ end }}",
+    // Reset countdown (input = epoch seconds): the minute in progress counts,
+    // so a reset seconds away reads "1m" and the bar never shows "0m" while
+    // time remains. A uniform +1 over the rounded whole minutes, deliberately
+    // not a floor at 1 — a floor is a special case on the last minute, and the
+    // one bias reads the same at every distance. The block/weekly segments
+    // are its only callers; the cacheTimer keeps the raw minutesUntilReset,
+    // where 0 means cold.
+    formatResetCountdown: '{{ template "formatLongTimeRemaining" (add 1 (minutesUntilReset .)) }}'
+  }
+};
+var AUTHORED_PALETTE_NAMES = new Set(
+  [
+    RAW_DEFAULT_DSL_CONFIG.globals.palette,
+    ...Object.keys(RAW_DEFAULT_DSL_CONFIG.themeDefaults),
+    ...Object.values(RAW_DEFAULT_DSL_CONFIG.segments).map(
+      (s) => s.palette
+    )
+  ].filter((name) => name !== void 0)
+);
+var DEFAULT_DSL_CONFIG = mergeWithDefault(
+  parseDslConfig(
+    "<default>",
+    JSON.stringify(RAW_DEFAULT_DSL_CONFIG),
+    AUTHORED_PALETTE_NAMES
+  ),
+  RAW_DEFAULT_DSL_CONFIG
+);
+
+// src/renderer/bundled-presets.ts
+var BUNDLED_PRESETS = presetNames(
+  DEFAULT_DSL_CONFIG.presets
+);
+function isBundledPreset(name) {
+  return BUNDLED_PRESETS.includes(name);
 }
 
 // src/segments/session.ts
@@ -87601,6 +85102,41 @@ function projectGitInfo(info, pullRequest, pending2) {
   };
 }
 
+// src/daemon/foundations/click-error.ts
+init_globals();
+var KEY = "click.error";
+var CLICK_ERROR_HOLD_S = 5;
+function holdClickError(state, sessionId2, text4, at) {
+  const record2 = { text: text4, at, answered: false };
+  state.set(sessionId2, KEY, JSON.stringify(record2));
+}
+function answeredClickError(state, sessionId2, error) {
+  const last2 = lastClickError(state, sessionId2);
+  if (last2 === null || !answeredBy(last2, error)) return;
+  state.set(sessionId2, KEY, JSON.stringify({ ...last2, answered: true }));
+}
+function lastClickError(state, sessionId2) {
+  const raw = state.get(sessionId2, KEY);
+  return raw === null ? null : recordOf2(raw);
+}
+function clickErrorAt(state, sessionId2, at, render3) {
+  const last2 = lastClickError(state, sessionId2);
+  if (last2 === null) return { kind: "none" };
+  const kind = eventHoldAt(last2, CLICK_ERROR_HOLD_S, at, render3);
+  return kind === "over" ? { kind } : { kind, error: last2 };
+}
+function recordOf2(raw) {
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const { text: text4, at, answered } = value;
+  return typeof text4 === "string" && typeof at === "number" && (answered === void 0 || typeof answered === "boolean") ? { text: text4, at, answered: answered === true } : null;
+}
+
 // src/renderer/lane-handoff.ts
 init_globals();
 function handedOffTo(lanes, following) {
@@ -87683,7 +85219,7 @@ function renderFrame(parts, sessionId2, fps, at, feed2) {
     };
   }
 }
-function sessionGlobals2(parts, sessionId2, state) {
+function sessionGlobals(parts, sessionId2, state) {
   const { sessionState } = parts;
   return resolveEffectiveGlobals(
     state.config,
@@ -87716,7 +85252,7 @@ function lanesAt(parts, origin, sessionId2, latest) {
       origin.target.path
     ));
     return laneSwitches(
-      sessionGlobals2(parts, sessionId2, hold2.state),
+      sessionGlobals(parts, sessionId2, hold2.state),
       latest === null || inTmux(latest.hints.tmux)
     );
   } catch (_) {
@@ -87761,17 +85297,8 @@ function retireSession(parts, session) {
   });
 }
 function holdSessionAt(parts, req) {
-  const origin = sessionRenderOrigin(
-    req.requested,
-    parts.sessionState,
-    req.hookData.session_id
-  );
-  return parts.renderCache.holdSession(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    req
-  );
+  const { projectDir, cwd: cwd2, target } = req.requested;
+  return parts.renderCache.holdSession(projectDir, cwd2, target.path, req);
 }
 function setUpRender(parts, req, at, facts) {
   const hintsError = hintsErrorOf(req);
@@ -87855,10 +85382,10 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     text: text4,
     copy: text4
   });
-  const said = (text4) => sourced(text4 ?? "", text4);
+  const said2 = (text4) => sourced(text4 ?? "", text4);
   const errors2 = [
-    said(refusedArgsError(req.refusedArgs)),
-    said(hintsError),
+    said2(refusedArgsError(req.refusedArgs)),
+    said2(hintsError),
     sourced("load", entry.lastError),
     sourced("update-act", update.actsError),
     ...state.dropped.map((e) => ({
@@ -87866,7 +85393,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
       text: e.message,
       copy: e.prompt
     })),
-    said(clickShown?.text)
+    said2(clickShown?.text)
   ].flatMap(
     ({ about, text: text4, copy: copy3 }) => about && text4 && copy3 ? [{ about, text: text4, copy: copy3 }] : []
   );
@@ -88102,20 +85629,18 @@ function recordRequest(parts, req) {
 }
 function arrived2(parts, req, lanes) {
   const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(parts, req), lanes);
+  laneSetups.noted(laneSessionOf(req), lanes);
   tmuxStatusLines.observe({
     sessionId: req.hookData.session_id,
     tmux: req.hints.tmux,
     on: lanes.tmuxStatus
   });
 }
-function laneSessionOf(parts, req) {
-  const { sessionState } = parts;
-  const sessionId2 = req.hookData.session_id;
+function laneSessionOf(req) {
   return {
-    sessionId: sessionId2,
+    sessionId: req.hookData.session_id,
     hints: req.hints,
-    origin: sessionRenderOrigin(req.requested, sessionState, sessionId2),
+    origin: req.requested,
     transcript: req.hookData.transcript_path,
     answered: answeredOf(req.hookData)
   };
@@ -88124,7 +85649,7 @@ function laneClicked(parts, sessionId2, latest, before, after) {
   const { laneSetups, tmuxStatusLines } = parts;
   laneSetups.clicked(
     sessionId2,
-    latest === null ? null : laneSessionOf(parts, latest),
+    latest === null ? null : laneSessionOf(latest),
     before,
     after
   );
@@ -88228,7 +85753,7 @@ function statuslineOf(sessionId2, drawn, elsewhere) {
 
 // src/renderer/click.ts
 init_globals();
-async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, id: id2, latest }, record2) {
+async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, id: id2, latest }, record2, effects) {
   const handler = verbs.handler(verb);
   if (handler === void 0)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
@@ -88241,7 +85766,8 @@ async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, i
       gatherTook: (ms) => noteFacts(record2, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(record2, { turnWait: `${ms}ms` }),
       click: id2,
-      latest
+      latest,
+      effects
     });
   } finally {
     if (pending2 !== null) menuIdle.clickSettled(pending2);
@@ -88250,6 +85776,2733 @@ async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, i
 
 // src/renderer/verbs/port.ts
 init_globals();
+
+// src/renderer/verbs/index.ts
+init_globals();
+
+// src/renderer/verbs/key-seeds.ts
+init_globals();
+
+// src/renderer/setting-drafts.ts
+init_globals();
+function spelled(e, name) {
+  const value = e[name];
+  switch (typeof value) {
+    case "boolean":
+      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
+    case "number":
+      return String(value);
+    case "string":
+      return value;
+    default:
+      return value.kind === "decided" ? value.name : null;
+  }
+}
+var SETTING_ROWS = Object.entries(SETTINGS);
+var SETTING_KEYS = new Set(
+  SETTING_PROJECTIONS.map((p2) => p2.sessionKey)
+);
+var NOT_CUSTOMIZED = () => false;
+function sessionGlobals2(config2, sessionPick) {
+  return resolveEffectiveGlobals(
+    config2,
+    (key) => SETTING_KEYS.has(key) ? sessionPick(key) : null,
+    NOT_CUSTOMIZED
+  );
+}
+var SELECTORS = ["preset", "theme"];
+function fileThrough(config2, sessionPick, depth) {
+  const held = new Set(
+    SELECTORS.slice(0, depth).map((name) => SETTINGS[name].sessionKey)
+  );
+  return resolveEffectiveGlobals(
+    config2,
+    (key) => held.has(key) ? sessionPick(key) : null,
+    NOT_CUSTOMIZED
+  );
+}
+function baseOf(config2, sessionPick) {
+  const bases = Array.from(
+    { length: SELECTORS.length + 1 },
+    (_, depth) => fileThrough(config2, sessionPick, depth)
+  );
+  return (name) => {
+    const depth = SELECTORS.indexOf(name);
+    return bases[depth === -1 ? SELECTORS.length : depth];
+  };
+}
+function differing(rows, session, baseOf2, targetOf) {
+  return rows.flatMap(([name, row2]) => {
+    const value = spelled(session, name);
+    return value === null || value === spelled(baseOf2(name), name) ? [] : [{ ...row2, value, target: targetOf(row2) }];
+  });
+}
+function sessionSettingValue(config2, sessionPick, name) {
+  return spelled(sessionGlobals2(config2, sessionPick), name);
+}
+function settingDrafts(config2, sessionPick) {
+  const session = sessionGlobals2(config2, sessionPick);
+  return differing(
+    SETTING_ROWS,
+    session,
+    baseOf(config2, sessionPick),
+    (row2) => landingKey(config2, session.preset, row2.configKey)
+  );
+}
+function landingKey(config2, preset, field) {
+  return field in (presetByName(config2.presets, preset).globals ?? {}) ? presetGlobalsKey(preset, field) : field;
+}
+function durableLanding(config2, sessionPick, key) {
+  const preset = effectivePresetName(
+    sessionPick(SETTINGS.preset.sessionKey),
+    config2.globals.preset,
+    config2.presets
+  );
+  const target = parsePersistTarget(key);
+  return {
+    key: target?.scope === "globals" ? landingKey(config2, preset, target.field) : key,
+    globals: presetGlobals(config2, preset)
+  };
+}
+function placementDrafts(config2, sessionPick) {
+  const { preset } = sessionGlobals2(config2, sessionPick);
+  return slotsOf(config2, preset).flatMap(
+    ({ id: id2, setting, key, decl, saved }) => {
+      const pick2 = sessionPick(key);
+      const value = pick2 === null ? void 0 : parseSettingSpelling(decl, pick2);
+      return value === void 0 || settingSpelling(value) === settingSpelling(saved) ? [] : [{ preset, id: id2, setting, key, value }];
+    }
+  );
+}
+function placementPickProblems(config2, sessionPick, writes) {
+  const written2 = new Map(writes.map((w) => [w.key, w.value]));
+  return presetNames(config2.presets).flatMap((preset) => {
+    const slots = slotsOf(config2, preset);
+    const touched = new Set(
+      slots.filter((s) => written2.has(s.key)).map((s) => s.id)
+    );
+    return [...touched].flatMap((id2) => {
+      const own2 = slots.filter((s) => s.id === id2);
+      const decls = Object.fromEntries(own2.map((s) => [s.setting, s.decl]));
+      const values2 = Object.fromEntries(
+        own2.map((s) => {
+          const pick2 = written2.get(s.key) ?? sessionPick(s.key);
+          const value = pick2 === null ? void 0 : parseSettingSpelling(s.decl, pick2);
+          return [s.setting, value ?? s.saved];
+        })
+      );
+      return settingOrderProblems(decls, values2).map(
+        ({ message: message2 }) => `placement "${id2}": ${message2}`
+      );
+    });
+  });
+}
+var SLOTS = /* @__PURE__ */ new WeakMap();
+function slotsOf(config2, preset) {
+  const byPreset = SLOTS.get(config2) ?? /* @__PURE__ */ new Map();
+  SLOTS.set(config2, byPreset);
+  const known = byPreset.get(preset);
+  if (known !== void 0) return known;
+  const facts = [...walkNodes(presetRoot(config2, preset).node)].flatMap(
+    (node) => node.kind !== "segment" || node.drafts === void 0 ? [] : Object.entries(node.drafts).map(([setting, { id: id2, key }]) => {
+      const decl = settingsOf(config2.segments[node.name])[setting];
+      return {
+        id: id2,
+        setting,
+        key,
+        decl,
+        saved: node.settings?.[setting] ?? decl.default
+      };
+    })
+  );
+  const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
+  byPreset.set(preset, slots);
+  return slots;
+}
+function presetSnapshot(config2, sessionPick) {
+  const session = sessionGlobals2(config2, sessionPick);
+  return {
+    from: session.preset,
+    globals: presetByName(config2.presets, session.preset).globals ?? {},
+    // [LAW:types-are-the-program] A preset cannot select a preset: its
+    // globals schema refuses `preset`, so the row is not offered.
+    picks: differing(
+      SETTING_ROWS.filter(([n]) => n !== "preset"),
+      session,
+      baseOf(config2, sessionPick),
+      (row2) => row2.configKey
+    ),
+    placements: placementDrafts(config2, sessionPick)
+  };
+}
+function themeOwnLook(config2, theme24) {
+  return resolveEffectiveGlobals(
+    { ...config2, globals: { palette: theme24 }, presets: {} },
+    () => null,
+    NOT_CUSTOMIZED
+  );
+}
+function themeDefaultSave(config2, sessionPick) {
+  const session = sessionGlobals2(config2, sessionPick);
+  const theme24 = spelled(session, "theme");
+  if (theme24 === null) return { kind: "rule" };
+  const own2 = themeOwnLook(config2, theme24);
+  const declared = presetGlobals(config2, session.preset);
+  const look = Object.fromEntries(
+    THEME_DEFAULT_FIELDS.map((f) => [
+      f,
+      spelled(declared[f] === void 0 ? session : own2, f)
+    ])
+  );
+  return {
+    kind: "look",
+    theme: theme24,
+    look,
+    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== spelled(own2, f))
+  };
+}
+function resetLayers(key) {
+  const settings = SETTING_PROJECTIONS.filter((p2) => p2.configKey === key);
+  return {
+    sessionKeys: settings.map((p2) => p2.sessionKey),
+    fileKeys: [
+      key,
+      ...isPresetGlobalsField(key) ? BUNDLED_PRESETS.map((preset) => presetGlobalsKey(preset, key)) : [],
+      ...isThemeDefaultField(key) ? listResolvablePaletteNames().map(
+        (theme24) => themeDefaultKey(theme24, key)
+      ) : []
+    ]
+  };
+}
+function fileHeldSettings(raw) {
+  return new Set(
+    SETTING_PROJECTIONS.map((p2) => p2.configKey).filter(
+      (key) => resetLayers(key).fileKeys.some(
+        (fileKey) => holds(raw, filePath(fileKey))
+      )
+    )
+  );
+}
+function settingCounts(config2, fileHeld, sessionPick) {
+  const drafts = settingDrafts(config2, sessionPick);
+  const drafted = new Set(drafts.map((d) => d.configKey));
+  const resettable = perSetting(
+    (name) => drafted.has(SETTINGS[name].configKey) || fileHeld.has(SETTINGS[name].configKey)
+  );
+  const themeDefault = themeDefaultSave(config2, sessionPick);
+  return {
+    unsaved: drafts.length + placementDrafts(config2, sessionPick).length,
+    resettable,
+    themeDefault: themeDefault.kind === "look" && themeDefault.differs ? { differs: true, theme: themeDefault.theme } : { differs: false }
+  };
+}
+function filePath(fileKey) {
+  const target = parsePersistTarget(fileKey);
+  if (target === null || target.scope === "preset-root") {
+    throw new Error(`reset layer "${fileKey}" is not a value path`);
+  }
+  return persistPath(target);
+}
+function holds(doc, path43) {
+  const [step4, ...rest2] = path43;
+  if (step4 === void 0) return doc !== void 0;
+  return typeof doc === "object" && doc !== null && holds(doc[step4], rest2);
+}
+
+// src/renderer/verbs/key-seeds.ts
+function stateKeySeed(config2, sessionPick, key) {
+  const setting = SESSION_KEY_TO_SETTING.get(key);
+  if (setting !== void 0) {
+    return sessionSettingValue(config2, sessionPick, setting);
+  }
+  for (const [, decl] of stateVarDecls(config2)) {
+    if (decl.key === key) return decl.default ?? null;
+  }
+  return null;
+}
+function configKeySeed(globals, key) {
+  const seed = numericGlobalsSeeds(globals).get(key);
+  return seed === void 0 ? null : String(seed);
+}
+
+// src/config/disclosure-nest.ts
+init_globals();
+var NO_NEST = {
+  inside: () => [],
+  defaultOf: () => DISCLOSURE_CLOSED,
+  menus: []
+};
+var idOf2 = (d) => `${d.key}\0${d.member}`;
+function buildDisclosureNest(config2) {
+  const menus = /* @__PURE__ */ new Map();
+  const hostedBy = (node) => {
+    const id2 = `${node.name}\0${placementId(node)}`;
+    const memo = menus.get(id2);
+    if (memo !== void 0) return memo;
+    const template = config2.segments[node.name]?.template;
+    const found2 = template === void 0 ? [] : hostedMenus(template, placementId(node));
+    menus.set(id2, found2);
+    return found2;
+  };
+  const triggeredBy = (node) => [
+    ...node.opens === void 0 ? [] : [node.opens.ref],
+    ...hostedBy(node)
+  ];
+  const defaults = /* @__PURE__ */ new Map();
+  const declaredWithin = /* @__PURE__ */ new Map();
+  for (const decl of Object.values(config2.variables)) {
+    if (decl.kind !== "state") continue;
+    if (decl.default !== void 0) defaults.set(decl.key, decl.default);
+    if (decl.within !== void 0) declaredWithin.set(decl.key, decl.within);
+  }
+  const inside = /* @__PURE__ */ new Map();
+  const members = /* @__PURE__ */ new Map();
+  const hung = /* @__PURE__ */ new Map();
+  const known = (d) => {
+    members.set(d.key, (members.get(d.key) ?? /* @__PURE__ */ new Set()).add(d.member));
+  };
+  const note = (parent, child) => {
+    const children2 = inside.get(idOf2(parent)) ?? /* @__PURE__ */ new Map();
+    children2.set(idOf2(child), child);
+    inside.set(idOf2(parent), children2);
+  };
+  const walk3 = (node, enclosing) => {
+    if (node.kind === "container") {
+      for (const child of node.children) walk3(child, enclosing);
+      return;
+    }
+    for (const child of triggeredBy(node)) {
+      known(child);
+      hung.set(idOf2(child), child);
+      for (const parent of enclosing) note(parent, child);
+    }
+    if (node.opens !== void 0) {
+      walk3(node.opens.body, [...enclosing, node.opens.ref]);
+    }
+  };
+  for (const preset of presetNames(config2.presets)) {
+    walk3(presetRoot(config2, preset).node, []);
+  }
+  for (const decl of Object.values(config2.actions)) {
+    const toggled = disclosureOfAction(decl);
+    if (toggled !== void 0) known(toggled);
+  }
+  for (const [key, parents] of declaredWithin) {
+    for (const member of members.get(key) ?? []) {
+      for (const parent of parents) note(parent, { key, member });
+    }
+  }
+  const closures = /* @__PURE__ */ new Map();
+  const closure = (parent) => {
+    const memo = closures.get(idOf2(parent));
+    if (memo !== void 0) return memo;
+    const found2 = /* @__PURE__ */ new Map();
+    const visit = (d) => {
+      for (const [id2, child] of inside.get(idOf2(d)) ?? []) {
+        if (found2.has(id2)) continue;
+        found2.set(id2, child);
+        visit(child);
+      }
+    };
+    visit(parent);
+    const within4 = /* @__PURE__ */ new Map();
+    for (const { key, member } of found2.values()) {
+      within4.set(key, (within4.get(key) ?? /* @__PURE__ */ new Set()).add(member));
+    }
+    const keys2 = [...within4].map(([key, held]) => ({
+      key,
+      outside: new Set([...members.get(key)].filter((m) => !held.has(m)))
+    }));
+    closures.set(idOf2(parent), keys2);
+    return keys2;
+  };
+  return {
+    inside: closure,
+    menus: [...hung.values()],
+    // A disclosure that declares no default starts closed: its toggle counts
+    // an unknown value as its first member, `closed`.
+    defaultOf: (key) => defaults.get(key) ?? DISCLOSURE_CLOSED
+  };
+}
+var NESTS = /* @__PURE__ */ new WeakMap();
+function disclosureNest(config2) {
+  const memo = NESTS.get(config2);
+  if (memo !== void 0) return memo;
+  const nest = buildDisclosureNest(config2);
+  NESTS.set(config2, nest);
+  return nest;
+}
+function closeNested(nest, read2, writes) {
+  const written2 = new Set(writes.map((w) => w.key));
+  const held = (key) => read2(key) ?? nest.defaultOf(key);
+  const folds = /* @__PURE__ */ new Set();
+  for (const { key, value } of writes) {
+    const was = held(key);
+    if (was === value) continue;
+    for (const nested of nest.inside({ key, member: was })) {
+      const now2 = held(nested.key);
+      const closes = now2 !== nest.defaultOf(nested.key) && !nested.outside.has(now2) && !written2.has(nested.key);
+      if (closes) folds.add(nested.key);
+    }
+  }
+  return [...folds];
+}
+function openRoots(nest, read2) {
+  const open2 = ({ key, member }) => (read2(key) ?? nest.defaultOf(key)) === member;
+  const within4 = (child, parent) => nest.inside(parent).some(
+    ({ key, outside }) => key === child.key && !outside.has(child.member)
+  );
+  return nest.menus.filter(open2).filter((d) => {
+    const parents = nest.menus.filter((p2) => p2 !== d && within4(d, p2));
+    const leftByParent = parents.length > 0 && nest.defaultOf(d.key) === d.member;
+    return !parents.some(open2) && !leftByParent;
+  });
+}
+
+// src/renderer/closing-view.ts
+init_globals();
+function closingView(store, nestOf2, log) {
+  const write = (sessionId2, writes, land) => {
+    const folds = closeNested(
+      nestOf2(sessionId2),
+      (key) => store.get(sessionId2, key),
+      writes
+    );
+    runInAction(() => {
+      land();
+      for (const key of folds) store.clear(sessionId2, key);
+    });
+    if (folds.length > 0) {
+      log(`close-nested: folded=${folds.join(",")} (session=${sessionId2})`);
+    }
+  };
+  const setBatch = (sessionId2, pairs2) => write(sessionId2, pairs2, () => store.setBatch(sessionId2, pairs2));
+  return {
+    get: (sessionId2, key) => store.get(sessionId2, key),
+    revision: (sessionId2) => store.revision(sessionId2),
+    set: (sessionId2, key, value) => setBatch(sessionId2, [{ key, value }]),
+    setBatch,
+    // A cleared key reads its default, so it closes what its old value held.
+    clear: (sessionId2, key) => write(
+      sessionId2,
+      [{ key, value: nestOf2(sessionId2).defaultOf(key) }],
+      () => store.clear(sessionId2, key)
+    )
+  };
+}
+
+// src/renderer/config-file-store.ts
+init_globals();
+var import_json55 = __toESM(require_dist(), 1);
+var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
+var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
+function persistValueText(key, raw) {
+  const target = requireValueTarget(key);
+  const kind = target.scope === "segment-palette" ? "string" : wireKindOf(target.field);
+  if (kind === "string") return JSON.stringify(raw);
+  if (kind === "number") {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      throw new Error(
+        `persistValueText: "${key}" expects a number, got "${raw}"`
+      );
+    }
+    return String(n);
+  }
+  if (BOOLEAN_TRUTHY.has(raw)) return "true";
+  if (BOOLEAN_FALSY.has(raw)) return "false";
+  throw new Error(
+    `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`
+  );
+}
+function docOf(text4) {
+  return /^\s*$/.test(text4) ? null : parseDocument(text4);
+}
+function has2(doc, p2) {
+  return doc !== null && nodeAt(doc, p2) !== void 0;
+}
+function authoredLayout(node) {
+  if (node.kind === "segment") {
+    return node.when === void 0 ? node.name : { seg: node.name, when: node.when };
+  }
+  if (node.kind === "container") {
+    const { kind, direction, children: children2, ...own2 } = node;
+    return {
+      [direction === "horizontal" ? "h" : "v"]: children2.map(authoredLayout),
+      ...own2
+    };
+  }
+  return node;
+}
+function authoredFragment(fragment) {
+  if (!isRowsFragment(fragment)) return authoredLayout(fragment);
+  const { rows, ...own2 } = fragment;
+  return {
+    rows: Object.fromEntries(
+      Object.entries(rows).map(([name, row2]) => [name, authoredLayout(row2)])
+    ),
+    ...own2
+  };
+}
+var RAW = RAW_DEFAULT_DSL_CONFIG;
+var RAW_SEGMENTS = RAW.segments;
+var RAW_PRESETS = RAW.presets;
+var RAW_ROOT = RAW.root;
+function requireDeclared(doc, own2, bundled, key) {
+  if (!has2(doc, own2) && bundled === void 0) {
+    throw new BadVerbArgs(
+      `cannot edit ${key}: neither the config file nor the bundled default declares ${own2.join(".")}`
+    );
+  }
+}
+function valuePathOf(doc, target) {
+  const path43 = persistPath(target);
+  if (target.scope === "segment-palette") {
+    requireDeclared(
+      doc,
+      ["segments", target.segment],
+      RAW_SEGMENTS[target.segment],
+      path43.join(".")
+    );
+  }
+  return path43;
+}
+function bundledDoc(value) {
+  return parseDocument(json5Text(value));
+}
+function bundledRowLayers() {
+  return Object.entries(RAW_ROOT.rows).map(([name, row2]) => {
+    const authored = authoredLayout(row2);
+    return {
+      path: ["root"],
+      fragment: bundledDoc({ rows: { [name]: authored } }),
+      unit: { path: ["root", "rows", name], value: authored }
+    };
+  });
+}
+function fileLayer(doc, path43) {
+  const fragment = doc === null ? void 0 : nodeAt(doc, path43);
+  return fragment === void 0 ? null : { path: path43, fragment, unit: null };
+}
+function bundledRootLayer(path43, root) {
+  if (root === void 0) return null;
+  const authored = authoredFragment(root);
+  return {
+    path: path43,
+    fragment: bundledDoc(authored),
+    unit: { path: path43, value: authored }
+  };
+}
+function presetLayer(doc, preset) {
+  const own2 = ["presets", preset];
+  const path43 = [...own2, "root"];
+  const bundled = RAW_PRESETS[preset];
+  requireDeclared(doc, own2, bundled, path43.join("."));
+  const layer = fileLayer(doc, path43) ?? bundledRootLayer(path43, bundled?.root);
+  return layer !== null && restagesFragment(layer.fragment) ? layer : null;
+}
+var TREE_BLOCK = "#";
+function applyLayer(base, layer) {
+  const rows = rowEntriesOf(layer.fragment);
+  return rows === null ? /* @__PURE__ */ new Map([
+    [
+      TREE_BLOCK,
+      { path: layer.path, unit: layer.unit, node: layer.fragment }
+    ]
+  ]) : new Map([
+    ...base,
+    ...rows.map(
+      (row2) => [
+        row2.key,
+        {
+          path: [...layer.path, "rows", row2.key],
+          unit: layer.unit,
+          node: row2.value
+        }
+      ]
+    )
+  ]);
+}
+function cascadeOf(doc, preset) {
+  const layers = [
+    ...bundledRowLayers(),
+    fileLayer(doc, ["root"]),
+    presetLayer(doc, preset)
+  ].filter((layer) => layer !== null);
+  return layers.reduce(applyLayer, /* @__PURE__ */ new Map());
+}
+function layoutPlacementOf(doc, preset, id2) {
+  for (const { node, ...placement } of cascadeOf(doc, preset).values()) {
+    if (hasSegmentRef(node, id2)) return placement;
+  }
+  throw new BadVerbArgs(
+    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id2}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
+  );
+}
+function stagedPathOf(doc, preset) {
+  return presetLayer(doc, preset)?.path ?? ["root"];
+}
+function resetPathOf(doc, target) {
+  return target.scope === "preset-root" ? stagedPathOf(doc, target.preset) : persistPath(target);
+}
+function ensureAuthored(text4, { unit }) {
+  return unit === null ? text4 : setValue(text4, unit.path, json5Text(unit.value), JSON5_DIALECT);
+}
+function requireTarget(key) {
+  const target = parsePersistTarget(key);
+  if (target === null) {
+    throw new Error(`"${key}" is not a valid persist target`);
+  }
+  return target;
+}
+function requireValueTarget(key) {
+  const target = requireTarget(key);
+  if (target.scope === "preset-root") {
+    throw new Error(`"${key}" names a layout, not a value`);
+  }
+  return target;
+}
+function commit2(store, home, before, after, refuse4) {
+  const will = loadOrRefuse(home, after);
+  let held;
+  const was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
+  refuseNewDrops(home, was, will);
+  refuse4(home, was, will);
+  store.record(home.path, before, after);
+  return will.config;
+}
+function refuseHidden(home, was, will) {
+  const hidden = hiddenBy(home, was(), will);
+  if (hidden.length > 0) {
+    throw new BadVerbArgs(
+      `refused: ${home.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar \u2014 edit it there`
+    );
+  }
+}
+var releases = () => {
+};
+function homeOnly(home, read2) {
+  try {
+    return read2();
+  } catch (e) {
+    if (!(e instanceof BadVerbArgs) || home.above.length === 0) throw e;
+    throw new BadVerbArgs(
+      `${e.message} \u2014 or it is declared by ${home.above.map((l) => l.path).join(", ")}, which the bar does not edit`
+    );
+  }
+}
+function hiddenBy(home, was, will) {
+  if (was === null) return [];
+  const drawn = new Set(changedPaths(topConfig(was), topConfig(will)));
+  return changedPaths(homeConfig(home, was), homeConfig(home, will)).filter(
+    (p2) => !drawn.has(p2)
+  );
+}
+function loadedOrNull(home, text4) {
+  try {
+    return chainOver(home, text4);
+  } catch (e) {
+    if (e instanceof ConfigError) return null;
+    throw e;
+  }
+}
+function chainOver(home, text4) {
+  return loadConfigChain(
+    home.locs,
+    text4 !== null ? [homeLayer(home.path), ...home.above] : home.above,
+    DEFAULT_DSL_CONFIG,
+    { warned: () => {
+    } },
+    { repo: home.repo, cwd: home.cwd },
+    (p2) => p2 === home.path && text4 !== null ? text4 : fs_default.readFileSync(p2, "utf8")
+  );
+}
+function homeConfig(home, chain2) {
+  const [bottom] = chain2.layers;
+  return bottom?.path === home.path ? bottom.config : chain2.base;
+}
+function topConfig(chain2) {
+  return chain2.layers.at(-1)?.config ?? chain2.base;
+}
+function changedPaths(a, b, at = "") {
+  if (!isPlainObject4(a) || !isPlainObject4(b)) {
+    return JSON.stringify(a) === JSON.stringify(b) ? [] : [at];
+  }
+  return [.../* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)])].flatMap(
+    (k) => changedPaths(a[k], b[k], at === "" ? k : `${at}.${k}`)
+  );
+}
+function isPlainObject4(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function proveLoads(home, text4) {
+  loadOrRefuse(home, text4);
+}
+function loadOrRefuse(home, text4) {
+  try {
+    return chainOver(home, text4);
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    throw new BadVerbArgs(
+      `refused: the config file would not load after this click \u2014 ${e.message}`
+    );
+  }
+}
+function refuseNewDrops(home, was, will) {
+  if (will.dropped.length === 0) return;
+  const prior = was();
+  if (prior === null) return;
+  const issuesOf = (chain2) => chain2.dropped.flatMap(
+    (e) => e.issues.map((issue3) => ({ file: e.file, issue: issue3 }))
+  );
+  const held = new Set(
+    issuesOf(prior).map(({ file, issue: issue3 }) => `${file}\0${issue3.message}`)
+  );
+  const added = issuesOf(will).filter(
+    ({ file, issue: issue3 }) => !held.has(`${file}\0${issue3.message}`)
+  );
+  if (added.length > 0) {
+    throw new BadVerbArgs(
+      `refused: this click would leave a placement of a segment nothing declares \u2014 ${added.map(({ file, issue: issue3 }) => new ConfigError(file, [issue3]).message).join("\n")}`
+    );
+  }
+}
+function readValue(text4, key) {
+  const target = requireValueTarget(key);
+  const doc = docOf(text4 ?? "");
+  const node = doc === null ? void 0 : nodeAt(doc, persistPath(target));
+  return node !== void 0 && "value" in node ? node.value : void 0;
+}
+function writeValues(store, home, pairs2) {
+  writeDrafts(store, home, pairs2, []);
+}
+function writeDrafts(store, home, pairs2, placements) {
+  const before = store.read(home.path);
+  const valued = pairs2.reduce(
+    (text4, [key, raw]) => setValue(
+      text4,
+      valuePathOf(docOf(text4), requireValueTarget(key)),
+      persistValueText(key, raw),
+      JSON5_DIALECT
+    ),
+    before ?? ""
+  );
+  commit2(
+    store,
+    home,
+    before,
+    homeOnly(
+      home,
+      () => withPlacements(valued, home.path, placements, (text4) => text4)
+    ),
+    refuseHidden
+  );
+}
+function withPlacements(text4, file, placements, own2) {
+  return placements.reduce((prior, { preset, id: id2, setting, value }) => {
+    const acc = own2(prior, preset, id2);
+    const placement = layoutPlacementOf(docOf(acc), preset, id2);
+    const set2 = setPlacementSetting(
+      ensureAuthored(acc, placement),
+      placement.path,
+      id2,
+      setting,
+      json5Text(value)
+    );
+    if (set2 === null) {
+      throw new BadVerbArgs(
+        `${placement.path.join(".")} in ${file} has no placement "${id2}" \u2014 the bar you clicked is stale (it reloads on the next render)`
+      );
+    }
+    return set2;
+  }, text4);
+}
+function ownRow(text4, preset, id2) {
+  const doc = docOf(text4);
+  const own2 = ["presets", preset, "root"];
+  for (const [row2, { path: path43, unit, node }] of cascadeOf(doc, preset)) {
+    if (!hasSegmentRef(node, id2)) continue;
+    if (own2.every((key, i2) => path43[i2] === key)) return text4;
+    const rowText = unit === null ? movableTextOf(text4, node) : json5Text(unit.value);
+    if (row2 !== TREE_BLOCK) {
+      return setValue(text4, [...own2, "rows", row2], rowText, JSON5_DIALECT);
+    }
+    if (presetLayer(doc, preset) !== null) {
+      throw new BadVerbArgs(
+        `cannot give preset "${preset}" its own copy of ${path43.join(".")}: it already stages rows of its own over that tree`
+      );
+    }
+    return setValue(text4, own2, rowText, JSON5_DIALECT);
+  }
+  return text4;
+}
+function deleteAtPath(text4, path43) {
+  const ownPreset = path43[0] === "presets" && path43.length > 2 && !isBundledPreset(path43[1]);
+  return deleteValue(text4, path43, ownPreset ? 2 : 0);
+}
+function deleteValues(store, home, keys2) {
+  const targets = keys2.map(requireTarget);
+  const before = store.read(home.path);
+  if (before === null) return;
+  const after = targets.reduce(
+    (text4, target) => deleteAtPath(text4, resetPathOf(docOf(text4), target)),
+    before
+  );
+  if (after === before) return;
+  commit2(store, home, before, after, releases);
+}
+var SAVED_PRESET_PREFIX = "custom-";
+function presetKeys(doc) {
+  const declared = doc === null ? void 0 : nodeAt(doc, ["presets"]);
+  return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
+}
+function freePresetName(doc, home) {
+  const taken = new Set(
+    [
+      ...BUNDLED_PRESETS,
+      ...presetKeys(doc),
+      // Each layer above as the loader reads it (JSON5, duplicate keys and
+      // all) — the editor refuses files the loader renders.
+      ...home.above.flatMap(
+        (l) => Object.keys(
+          import_json55.default.parse(fs_default.readFileSync(l.path, "utf8")).presets ?? {}
+        )
+      )
+    ].map(ident)
+  );
+  return Array.from(
+    { length: taken.size + 1 },
+    (_, i2) => `${SAVED_PRESET_PREFIX}${i2 + 1}`
+  ).find((candidate) => !taken.has(ident(candidate)));
+}
+function writePreset(store, home, from, globals, picks, placements) {
+  const before = store.read(home.path);
+  const doc = docOf(before ?? "");
+  const name = freePresetName(doc, home);
+  const own2 = ["presets", name];
+  const staged = homeOnly(home, () => presetLayer(doc, from));
+  const copied = [
+    ...staged === null ? [] : [
+      [
+        [...own2, "root"],
+        staged.unit === null ? movableTextOf(before ?? "", staged.fragment) : json5Text(staged.unit.value)
+      ]
+    ],
+    ...Object.keys(globals).length === 0 ? [] : [[[...own2, "globals"], json5Text(globals)]]
+  ];
+  const pinned = picks.map(([field, raw]) => {
+    const key = presetGlobalsKey(name, field);
+    return [
+      valuePathOf(doc, requireValueTarget(key)),
+      persistValueText(key, raw)
+    ];
+  });
+  const after = [...copied, ...pinned].reduce(
+    (text4, [at, value]) => setValue(text4, at, value, JSON5_DIALECT),
+    setValue(before ?? "", own2, "{}", JSON5_DIALECT)
+  );
+  const placed2 = homeOnly(
+    home,
+    () => withPlacements(
+      after,
+      home.path,
+      placements.map((p2) => ({ ...p2, preset: name })),
+      ownRow
+    )
+  );
+  commit2(store, home, before, placed2, refuseHidden);
+  return name;
+}
+function writeThemeDefault(store, home, theme24, look) {
+  const before = store.read(home.path);
+  const after = setValue(
+    before ?? "",
+    ["themeDefaults", theme24],
+    json5Text(look),
+    JSON5_DIALECT
+  );
+  return commit2(store, home, before, after, refuseHidden);
+}
+function deletePreset(store, home, name) {
+  if (isBundledPreset(name)) {
+    throw new BadVerbArgs(
+      `cannot delete preset "${name}": it is bundled \u2014 reset its settings instead`
+    );
+  }
+  const own2 = ["presets", name];
+  const before = store.read(home.path);
+  const doc = docOf(before ?? "");
+  if (before === null || doc === null || nodeAt(doc, own2) === void 0) {
+    throw new BadVerbArgs(
+      `cannot delete preset "${name}": ${home.path} declares no ${own2.join(".")} \u2014 the bar you clicked is stale; it reloads on the next render`
+    );
+  }
+  const selected = nodeAt(doc, ["globals", "preset"]);
+  const paths2 = [
+    own2,
+    ...selected?.kind === "string" && selected.value === name ? [["globals", "preset"]] : []
+  ];
+  commit2(
+    store,
+    home,
+    before,
+    paths2.reduce((text4, at) => deleteAtPath(text4, at), before),
+    releases
+  );
+}
+function applyLayoutOp(store, home, key, op) {
+  const target = requireTarget(key);
+  if (target.scope !== "preset-root") {
+    throw new Error(`"${key}" is not a "presets.<name>.root" target`);
+  }
+  const before = store.read(home.path);
+  const subject = op.op === "remove" ? op.target : op.anchor;
+  const placement = homeOnly(
+    home,
+    () => layoutPlacementOf(docOf(before ?? ""), target.preset, subject)
+  );
+  const authored = ensureAuthored(before ?? "", placement);
+  const { after, placed: placed2 } = spliceOp(authored, placement.path, op, () => {
+    const config2 = loadOrRefuse(home, authored).config;
+    return presetNames(config2.presets).map(
+      (preset) => presetRoot(config2, preset).node
+    );
+  });
+  if (after === null) {
+    throw new BadVerbArgs(
+      `${placement.path.join(".")} in ${home.path} has no placement "${subject}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
+    );
+  }
+  return { placed: placed2, config: commit2(store, home, before, after, refuseHidden) };
+}
+function spliceOp(text4, path43, op, rendered) {
+  switch (op.op) {
+    case "remove":
+      return { after: removeSegmentRef(text4, path43, op.target), placed: null };
+    case "insert": {
+      const placed2 = mintPlacement(op.segment, op.anchor, rendered());
+      return {
+        after: insertSegmentRef(text4, path43, placed2, op.anchor, op.relation),
+        placed: placed2
+      };
+    }
+  }
+}
+
+// src/renderer/settings-history.ts
+init_globals();
+
+// src/renderer/session-state.ts
+init_globals();
+function recordingView(store, records, onChange) {
+  const recorded2 = (sessionId2, keys2, write) => {
+    const before = keys2.filter(records).map((key) => ({ key, before: store.get(sessionId2, key) }));
+    write();
+    for (const { key, before: b } of before) {
+      onChange(sessionId2, key, b, store.get(sessionId2, key));
+    }
+  };
+  return {
+    get: (sessionId2, key) => store.get(sessionId2, key),
+    revision: (sessionId2) => store.revision(sessionId2),
+    set: (sessionId2, key, value) => recorded2(sessionId2, [key], () => store.set(sessionId2, key, value)),
+    setBatch: (sessionId2, pairs2) => recorded2(
+      sessionId2,
+      pairs2.map((p2) => p2.key),
+      () => store.setBatch(sessionId2, pairs2)
+    ),
+    clear: (sessionId2, key) => recorded2(sessionId2, [key], () => store.clear(sessionId2, key))
+  };
+}
+var EPHEMERAL_SESSION_STORAGE = {
+  load: () => /* @__PURE__ */ new Map(),
+  save: () => {
+  },
+  flush: () => {
+  }
+};
+var DEFAULT_MAX_SESSIONS = 256;
+var SessionState = class {
+  constructor(storage = EPHEMERAL_SESSION_STORAGE, maxSessions = DEFAULT_MAX_SESSIONS) {
+    this.maxSessions = maxSessions;
+    this.storage = storage;
+    this.sessions = /* @__PURE__ */ new Map();
+    this.hydrateFromStorage();
+  }
+  maxSessions;
+  // [LAW:types-are-the-program] Insertion order is recency order: the store
+  // cannot hold more than maxSessions, so "bounded on disk" is structural, not
+  // dependent on an external prune caller.
+  sessions;
+  storage;
+  // [LAW:single-enforcer] The store's revision: counts every change any
+  // writer makes, so it never repeats while the store lives.
+  head = 0;
+  // [LAW:single-enforcer] One atom; every read reports observed against it,
+  // every mutation reports changed. Coarse-grained reactivity is correct for
+  // session-state's load — mutations are rare and computeds are cheap.
+  atom = createAtom("SessionState");
+  hydrateFromStorage() {
+    this.sessions = new Map(
+      Array.from(this.storage.load(), ([id2, kv]) => [
+        id2,
+        { values: new Map(Object.entries(kv)), revision: ++this.head }
+      ])
+    );
+    this.evictOldest();
+    this.persist();
+  }
+  get(sessionId2, key) {
+    this.atom.reportObserved();
+    const session = this.sessions.get(sessionId2);
+    if (!session) return null;
+    this.touch(sessionId2, session);
+    return session.values.get(key) ?? null;
+  }
+  revision(sessionId2) {
+    this.atom.reportObserved();
+    return this.sessions.get(sessionId2)?.revision ?? 0;
+  }
+  // How many derivations are subscribed to this store right now — every
+  // computed that read session state and has not been released. Live configs
+  // keep a bounded number; a count that climbs while the render cache does not
+  // is a disposed store still held (brandon-unfiled-3248.t14 was found in a
+  // heap snapshot because nothing reported this). [LAW:nothing-unseen]
+  // The atom's own observer set (`IDepTreeNode.observers_`, the field MobX's
+  // dependency-tree API reads), `null` once nothing observes it. The other
+  // public view, `getObserverTree`, materialises the whole recursive tree —
+  // one node per observer per path — to answer this direct count, on the
+  // daemon's request thread.
+  observers() {
+    return this.atom.observers_?.size ?? 0;
+  }
+  // The store's revision: how many changes any writer has made to it.
+  latestRevision() {
+    return this.head;
+  }
+  // How many sessions the store holds.
+  size() {
+    return this.sessions.size;
+  }
+  // [LAW:one-source-of-truth] set is the degenerate single-pair form of
+  // setBatch — one write path through the store. The previous shape (a
+  // standalone set body) split the write semantics across two routes
+  // once setBatch was introduced; collapsing keeps mutation, persistence,
+  // and notification in exactly one place.
+  set(sessionId2, key, value) {
+    this.setBatch(sessionId2, [{ key, value }]);
+  }
+  // [LAW:no-silent-failure] Atomic commit of N pairs: every write
+  // lands BEFORE the single reportChanged() that scheduler-visibly
+  // marks the transaction complete. Observers cannot see an
+  // intermediate "half-applied" snapshot — `runInAction` defers
+  // reaction scheduling until the outermost call exits, and we hold
+  // ALL writes inside this one block. Previously, the verb's "loop and
+  // call set N times" pattern fired reportChanged() N times, which
+  // scheduled autoruns between pairs (visible to consumers as the menu
+  // value changing while another key of the batch was still old). The batch
+  // method is the structural fix: there is no way to get half-applied
+  // state because there is no intermediate scheduler tick.
+  //
+  // [LAW:dataflow-not-control-flow] An empty pairs array is no-work-
+  // to-do, returned without firing reportChanged or persisting. The
+  // verb body validates that pairs is non-empty before calling, so
+  // this is the public-API safety net rather than the hot path.
+  setBatch(sessionId2, pairs2) {
+    if (pairs2.length === 0) return;
+    runInAction(() => {
+      const session = this.sessions.get(sessionId2) ?? {
+        values: /* @__PURE__ */ new Map(),
+        revision: 0
+      };
+      if (pairs2.some(({ key, value }) => session.values.get(key) !== value))
+        session.revision = ++this.head;
+      for (const { key, value } of pairs2) session.values.set(key, value);
+      this.touch(sessionId2, session);
+      this.evictOldest();
+      this.persist();
+      this.atom.reportChanged();
+    });
+  }
+  clear(sessionId2, key) {
+    runInAction(() => {
+      const session = this.sessions.get(sessionId2);
+      if (session) {
+        if (session.values.delete(key)) session.revision = ++this.head;
+        if (session.values.size === 0) this.sessions.delete(sessionId2);
+        else this.touch(sessionId2, session);
+      }
+      this.persist();
+      this.atom.reportChanged();
+    });
+  }
+  // [LAW:one-source-of-truth] Drop state for sessions that no longer exist.
+  prune(activeSessionIds) {
+    runInAction(() => {
+      for (const id2 of this.sessions.keys()) {
+        if (!activeSessionIds.has(id2)) this.sessions.delete(id2);
+      }
+      this.persist();
+      this.atom.reportChanged();
+    });
+  }
+  // Move-to-end: re-inserting at the tail makes this the most-recently-used.
+  touch(sessionId2, session) {
+    this.sessions.delete(sessionId2);
+    this.sessions.set(sessionId2, session);
+  }
+  evictOldest() {
+    let overflow = this.sessions.size - this.maxSessions;
+    if (overflow <= 0) return;
+    for (const id2 of this.sessions.keys()) {
+      this.sessions.delete(id2);
+      if (--overflow === 0) break;
+    }
+  }
+  // Synchronous write of any debounced-pending snapshot. Called on daemon
+  // shutdown so a pending pick isn't lost when the process exits.
+  flush() {
+    this.storage.flush();
+  }
+  // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
+  // lands, and anything that lands later (a render that was awaiting, a run
+  // settling) stays in memory, so it can never write over the file a next
+  // daemon has taken up.
+  close() {
+    this.flush();
+    this.storage = EPHEMERAL_SESSION_STORAGE;
+  }
+  persist() {
+    this.storage.save(this.serialize());
+  }
+  serialize() {
+    const snapshot = /* @__PURE__ */ Object.create(null);
+    for (const [sessionId2, { values: values2 }] of this.sessions) {
+      snapshot[sessionId2] = Object.fromEntries(values2);
+    }
+    return snapshot;
+  }
+};
+
+// src/renderer-interface/history-storage.ts
+init_globals();
+var SETTING_SESSION_KEYS = new Set(
+  SETTING_PROJECTIONS.map((s) => s.sessionKey)
+);
+var isSettingKey = (key) => SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
+
+// src/renderer/settings-history.ts
+var EPHEMERAL_HISTORY_STORAGE = {
+  load: () => /* @__PURE__ */ new Map(),
+  save: () => {
+  }
+};
+var MAX_STEPS = 50;
+var MAX_SESSIONS4 = 32;
+var MAX_BYTES = 8 * 1024 * 1024;
+var EMPTY3 = { past: [], future: [] };
+var identity = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
+var SettingsHistory = class {
+  // `loaded` is what the storage held, read before the renderer starts.
+  constructor(sessionState, logger, storage = EPHEMERAL_HISTORY_STORAGE, loaded = storage.load()) {
+    this.sessionState = sessionState;
+    this.logger = logger;
+    this.storage = storage;
+    this.state = new Map(loaded);
+  }
+  sessionState;
+  logger;
+  storage;
+  // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
+  // session's depth (`↶`/`↷`) is recomputed in the turn a step lands — a
+  // refused `↶` that drops steps included, which moves no pick. Per key: a
+  // whole next state is adopted by `replace`, which keeps its order (the
+  // recency) and moves only the sessions whose history changed, so one
+  // session's click recomputes no other session's payload.
+  held = observable.map(void 0, {
+    deep: false
+  });
+  get state() {
+    return this.held;
+  }
+  set state(next) {
+    runInAction(() => this.held.replace(next));
+  }
+  depth(sessionId2) {
+    const { past, future, savepoint } = this.state.get(sessionId2) ?? EMPTY3;
+    return {
+      undo: past.length,
+      redo: future.length,
+      sinceEdit: savepoint?.net.length ?? 0
+    };
+  }
+  history(sessionId2) {
+    return this.state.get(sessionId2) ?? EMPTY3;
+  }
+  begin(files) {
+    const held = heldWrites(this.sessionState);
+    const working = /* @__PURE__ */ new Map();
+    const click3 = {
+      held,
+      files,
+      historyOf: (sessionId2) => working.get(sessionId2) ?? this.history(sessionId2),
+      move: (sessionId2, history) => working.set(sessionId2, history)
+    };
+    const pending2 = /* @__PURE__ */ new Map();
+    let written2 = false;
+    const note = (sessionId2, change) => {
+      written2 = true;
+      const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
+      const earlier = changes.get(identity(change));
+      changes.set(
+        identity(change),
+        earlier === void 0 ? change : { ...change, before: earlier.before }
+      );
+      pending2.set(sessionId2, changes);
+    };
+    const toggles = /* @__PURE__ */ new Map();
+    const sessionState = recordingView(
+      held,
+      // Every key, since a write of any can move a lane: only settings are steps.
+      () => true,
+      (sessionId2, key, before, after) => {
+        written2 = true;
+        if (!isSettingKey(key) && key !== EDIT_MODE_KEY) return;
+        if (key === EDIT_MODE_KEY) {
+          const earlier = toggles.get(sessionId2);
+          toggles.set(sessionId2, {
+            before: earlier === void 0 ? before : earlier.before,
+            after
+          });
+          return;
+        }
+        note(sessionId2, { kind: "session", key, before, after });
+      }
+    );
+    const step4 = () => {
+      const committing = new Map(pending2);
+      const toggled = new Map(toggles);
+      pending2.clear();
+      toggles.clear();
+      for (const sessionId2 of /* @__PURE__ */ new Set([
+        ...committing.keys(),
+        ...toggled.keys()
+      ])) {
+        const changes = [...committing.get(sessionId2)?.values() ?? []].filter(
+          (c) => c.before !== c.after
+        );
+        const current2 = click3.historyOf(sessionId2);
+        const appended = changes.length === 0 ? current2 : afterAppend(current2, changes);
+        const toggle = toggled.get(sessionId2);
+        const next = toggle === void 0 ? appended : withToggle(appended, toggle);
+        if (next !== current2) click3.move(sessionId2, next);
+      }
+    };
+    return {
+      sessionState,
+      file: (sessionId2, file, before, after) => {
+        note(sessionId2, { kind: "file", file, before, after });
+        files.land(file, before, after);
+      },
+      wrote: () => {
+        written2 = true;
+      },
+      written: () => written2,
+      undo: (sessionId2) => {
+        step4();
+        return this.undo(click3, sessionId2);
+      },
+      redo: (sessionId2) => {
+        step4();
+        return this.redo(click3, sessionId2);
+      },
+      rewind: (sessionId2) => {
+        step4();
+        return this.rewind(click3, sessionId2);
+      },
+      commit: () => {
+        step4();
+        const moved = new Map(working);
+        working.clear();
+        for (const [sessionId2, history] of moved) this.put(sessionId2, history);
+        held.flush();
+      }
+    };
+  }
+  undo(click3, sessionId2) {
+    const history = click3.historyOf(sessionId2);
+    const step4 = history.past.at(-1);
+    if (step4 === void 0) {
+      throw new BadVerbArgs("undo: nothing to undo");
+    }
+    this.apply(
+      click3,
+      sessionId2,
+      step4,
+      "before",
+      "undo",
+      afterUndo(history, step4)
+    );
+    return step4;
+  }
+  // [LAW:no-silent-failure] Cancel for edit mode: put every target edit mode
+  // changed back to what it held when edit mode opened — one step, landing
+  // whole or not at all — then give the stack back the shape it had, with
+  // nothing to redo, so neither `↶` nor `↷` can bring back what was discarded.
+  // A target changed since by anything else (a session pick, or a file one of
+  // whose settings the cancel steps) is not put back: overwriting it would
+  // destroy that change, and no later cancel could put it back either. Every
+  // other target is, and then the refusal names what was kept, loudly. Edit
+  // mode stays where it is — the click
+  // that cancels also leaves — so the savepoint is taken again at the stack as
+  // it now stands. Returns what it put back.
+  rewind(click3, sessionId2) {
+    const history = click3.historyOf(sessionId2);
+    const { savepoint } = history;
+    if (savepoint === void 0) {
+      throw new BadVerbArgs(
+        "rewind: edit mode has no savepoint \u2014 nothing to cancel"
+      );
+    }
+    const stale = savepoint.net.flatMap((c) => {
+      const stepped2 = stepOf(click3, sessionId2, c, "before");
+      return stepped2.kind === "moved" ? [stepped2] : [];
+    });
+    const gone = new Set(stale.map((s) => s.target));
+    const putBack2 = savepoint.net.filter((c) => !gone.has(identity(c)));
+    const past = capped(without2(pastAt(history, savepoint), gone));
+    this.apply(click3, sessionId2, putBack2, "before", "rewind", {
+      past,
+      future: [],
+      savepoint: { at: past.length, net: [], below: [] }
+    });
+    if (stale.length > 0) {
+      throw new BadVerbArgs(
+        `rewind: ${stale.map((s) => s.what).join(", ")} changed since edit mode opened \u2014 kept as it is; everything else edit mode changed was put back`
+      );
+    }
+    return putBack2;
+  }
+  redo(click3, sessionId2) {
+    const history = click3.historyOf(sessionId2);
+    const { past, future } = history;
+    const step4 = future.at(-1);
+    if (step4 === void 0) {
+      throw new BadVerbArgs("redo: nothing to redo");
+    }
+    const all2 = [...past, step4];
+    const kept = capped(all2);
+    this.apply(click3, sessionId2, step4, "after", "redo", {
+      past: kept,
+      future: future.slice(0, -1),
+      ...savepointAfter(history.savepoint, all2.length - kept.length, step4)
+    });
+    return step4;
+  }
+  // [LAW:no-silent-failure] A step is refused whole when a target it steps
+  // has moved, a session pick or a setting of a file: what moved is named,
+  // and the target's now-unreachable changes leave both stacks (see the
+  // header). Otherwise each pick is written through the click, and each file
+  // is written as the changes between the texts the step recorded, applied
+  // over the file as the click reads it, so a write to another setting of the
+  // file never stops it. [LAW:single-enforcer] That text has not been loaded
+  // by anyone, so it passes the gate every click's write passes before it
+  // lands.
+  apply(click3, sessionId2, step4, to, verb, then) {
+    const stepped2 = step4.map((c) => stepOf(click3, sessionId2, c, to));
+    const stale = stepped2.flatMap((s) => s.kind === "moved" ? [s] : []);
+    if (stale.length > 0) {
+      click3.move(
+        sessionId2,
+        forgotten(
+          click3.historyOf(sessionId2),
+          new Set(stale.map((s) => s.target))
+        )
+      );
+      throw new BadVerbArgs(
+        `${verb}: ${stale.map((s) => s.what).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
+      );
+    }
+    const files = stepped2.flatMap((s) => s.kind === "file" ? [s] : []);
+    for (const { file, text: text4 } of files) click3.files.prove(file, text4);
+    for (const { file, text: text4 } of files)
+      click3.files.land(file, click3.files.read(file), text4);
+    for (const s of stepped2)
+      if (s.kind === "session")
+        if (s.value === null) click3.held.clear(sessionId2, s.key);
+        else click3.held.set(sessionId2, s.key, s.value);
+    click3.move(sessionId2, then);
+  }
+  // Move-to-end keeps insertion order as recency, so the bounds drop the
+  // session that changed least recently. The new state is adopted only once
+  // it is saved, so memory never holds a step the file could not.
+  put(sessionId2, history) {
+    const next = new Map(this.state);
+    next.delete(sessionId2);
+    if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
+      next.set(sessionId2, history);
+    }
+    while (next.size > MAX_SESSIONS4 || weight(next) > MAX_BYTES) {
+      const [oldest, h] = next.entries().next().value;
+      if (next.size > 1) next.delete(oldest);
+      else if (h.past.length + h.future.length > 0) {
+        next.set(oldest, withoutOldestStep(h));
+      } else {
+        this.logger(
+          "warn",
+          `settings-history: edit mode's changes for session ${oldest} exceed ${MAX_BYTES} bytes; cancel is no longer available`
+        );
+        next.delete(oldest);
+      }
+    }
+    this.storage.save(Object.fromEntries(next));
+    this.state = next;
+  }
+};
+function weight(state) {
+  let bytes = 0;
+  for (const { past, future, savepoint } of state.values()) {
+    for (const step4 of [
+      ...past,
+      ...future,
+      ...savepoint === void 0 ? [] : [savepoint.net, ...savepoint.below]
+    ]) {
+      for (const c of step4) {
+        bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
+      }
+    }
+  }
+  return bytes;
+}
+function withoutOldestStep({
+  past,
+  future,
+  savepoint
+}) {
+  return past.length > 0 ? { past: past.slice(1), future, ...savepointAfter(savepoint, 1, []) } : { past, future: future.slice(1), ...savepointAfter(savepoint, 0, []) };
+}
+function capped(steps2) {
+  return steps2.slice(-MAX_STEPS);
+}
+var isOpen = (value) => value === EDIT_MODE_REF.member;
+function savepointAfter(savepoint, dropped, step4) {
+  return savepoint === void 0 ? {} : {
+    savepoint: {
+      at: Math.max(0, savepoint.at - dropped),
+      net: withNet(savepoint.net, step4),
+      below: savepoint.below
+    }
+  };
+}
+function withNet(net, step4) {
+  const byTarget = new Map(net.map((c) => [identity(c), c]));
+  for (const c of step4) {
+    const first2 = byTarget.get(identity(c));
+    byTarget.set(
+      identity(c),
+      first2 === void 0 ? c : { ...first2, after: c.after }
+    );
+  }
+  return [...byTarget.values()].filter((c) => c.before !== c.after);
+}
+var reversed = (step4) => step4.map((c) => ({ ...c, before: c.after, after: c.before }));
+function afterAppend(history, step4) {
+  const all2 = [...history.past, step4];
+  const past = capped(all2);
+  const { savepoint } = history;
+  const abandonedBelow = savepoint === void 0 ? 0 : Math.max(0, savepoint.at - history.past.length);
+  return {
+    past,
+    future: [],
+    ...savepointAfter(
+      savepoint && {
+        at: Math.min(savepoint.at, history.past.length),
+        net: savepoint.net,
+        below: [...redone(history.future, abandonedBelow), ...savepoint.below]
+      },
+      all2.length - past.length,
+      step4
+    )
+  };
+}
+function redone(future, count) {
+  const n = Math.min(count, future.length);
+  return future.slice(future.length - n).reverse();
+}
+function afterUndo(history, step4) {
+  return {
+    past: history.past.slice(0, -1),
+    future: capped([...history.future, step4]),
+    ...savepointAfter(history.savepoint, 0, reversed(step4))
+  };
+}
+function pastAt(history, savepoint) {
+  const { past, future } = history;
+  const kept = past.slice(0, savepoint.at);
+  return [
+    ...kept,
+    ...redone(future, savepoint.at - kept.length),
+    ...savepoint.below
+  ];
+}
+function withToggle(history, toggle) {
+  if (isOpen(toggle.after) && !isOpen(toggle.before)) {
+    return {
+      ...history,
+      savepoint: { at: history.past.length, net: [], below: [] }
+    };
+  }
+  if (!isOpen(toggle.after) && isOpen(toggle.before)) {
+    const { past, future } = history;
+    return { past, future };
+  }
+  return history;
+}
+function without2(steps2, gone) {
+  return steps2.map((step4) => step4.filter((c) => !gone.has(identity(c)))).filter((step4) => step4.length > 0);
+}
+function describeStep(step4) {
+  return step4.map(describe3).join(", ");
+}
+function describe3(change) {
+  return change.kind === "session" ? `session setting "${change.key}"` : change.file;
+}
+function stepOf(click3, sessionId2, change, to) {
+  const from = to === "before" ? "after" : "before";
+  if (change.kind === "session")
+    return click3.held.get(sessionId2, change.key) === change[from] ? { kind: "session", key: change.key, value: change[to] } : {
+      kind: "moved",
+      target: identity(change),
+      what: `session setting "${change.key}"`
+    };
+  const applied3 = applyChanges(
+    click3.files.read(change.file),
+    diffChanges(change[from], change[to])
+  );
+  return applied3.kind === "applied" ? { kind: "file", file: change.file, text: applied3.text } : {
+    kind: "moved",
+    target: identity(change),
+    what: `${addressText(applied3.at)} in ${change.file}`
+  };
+}
+function forgotten({ past, future, savepoint }, gone) {
+  return {
+    past: without2(past, gone),
+    future: without2(future, gone),
+    ...savepoint !== void 0 && {
+      savepoint: {
+        // A step left empty leaves the stack, so the position counts the
+        // steps below it that survive.
+        at: without2(
+          [...past, ...[...future].reverse()].slice(0, savepoint.at),
+          gone
+        ).length,
+        net: savepoint.net.filter((c) => !gone.has(identity(c))),
+        below: without2(savepoint.below, gone)
+      }
+    }
+  };
+}
+function heldWrites(store) {
+  const held = /* @__PURE__ */ new Map();
+  const put = (sessionId2, key, value) => {
+    const writes = held.get(sessionId2) ?? /* @__PURE__ */ new Map();
+    writes.set(key, value);
+    held.set(sessionId2, writes);
+  };
+  return {
+    get: (sessionId2, key) => {
+      const writes = held.get(sessionId2);
+      return writes?.has(key) ? writes.get(key) : store.get(sessionId2, key);
+    },
+    revision: (sessionId2) => store.revision(sessionId2),
+    set: (sessionId2, key, value) => put(sessionId2, key, value),
+    setBatch: (sessionId2, pairs2) => {
+      for (const { key, value } of pairs2) put(sessionId2, key, value);
+    },
+    clear: (sessionId2, key) => put(sessionId2, key, null),
+    // One transaction, so no observer sees half a click.
+    flush: () => runInAction(() => {
+      for (const [sessionId2, writes] of held) {
+        const sets = [...writes].flatMap(
+          ([key, value]) => value === null ? [] : [{ key, value }]
+        );
+        if (sets.length > 0) store.setBatch(sessionId2, sets);
+        for (const [key, value] of writes)
+          if (value === null) store.clear(sessionId2, key);
+      }
+      held.clear();
+    })
+  };
+}
+
+// src/daemon/foundations/session-env.ts
+init_globals();
+var SESSION_FACT_VARIABLES = [
+  "CLAUDE_CODE_SESSION_ID",
+  "CLAUDE_PROJECT_DIR",
+  "CLAUDE_CONFIG_DIR",
+  "TMUX",
+  "TMUX_PANE"
+];
+function sessionEnv(facts) {
+  return {
+    ...Object.fromEntries(SESSION_FACT_VARIABLES.map((name) => [name, null])),
+    CLAUDE_CODE_SESSION_ID: facts.sessionId,
+    CLAUDE_PROJECT_DIR: facts.projectDir,
+    ...facts.claudeConfigDir !== void 0 && {
+      CLAUDE_CONFIG_DIR: facts.claudeConfigDir
+    }
+  };
+}
+
+// src/doctor/mark-book.ts
+init_globals();
+var isRecord2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function parseMarkBook(doc) {
+  const fault = (reason) => ({
+    kind: "failed",
+    reason
+  });
+  if (!isRecord2(doc)) return fault("is not an object");
+  for (const [check, sightings] of Object.entries(doc)) {
+    if (!isRecord2(sightings)) {
+      return fault(
+        `holds ${JSON.stringify(check)} as something other than its sightings`
+      );
+    }
+    for (const [id2, mark] of Object.entries(sightings)) {
+      if (!GLYPH_MARKS.includes(mark)) {
+        return fault(
+          `marks ${JSON.stringify(id2)} ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
+        );
+      }
+    }
+  }
+  return { kind: "ok", value: doc };
+}
+function withMark(book, check, sighting, mark) {
+  return { ...book, [check]: { ...book[check], [sighting]: mark } };
+}
+var fileMarkBook = (dir) => stateFile(dir, "doctor-marks.json", {}, parseMarkBook);
+
+// src/doctor/clicked-terminals.ts
+init_globals();
+var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typeof t2 === "string") ? { kind: "ok", value: doc } : { kind: "failed", reason: "is not a list of terminals" };
+var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
+var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
+
+// src/renderer/verbs/index.ts
+var inTurn = (handler) => ({
+  gathers: false,
+  prepare: async (value) => (ctx) => handler(value, ctx)
+});
+function requireSessionId(value) {
+  const parsed2 = parseSessionId(value);
+  if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
+  return parsed2.id;
+}
+function oneArg(value) {
+  return decodeWire(() => decodeURIComponent(value));
+}
+async function clickLaunch(launch, opts, what, log) {
+  const result = await launch(opts);
+  if (result.ok) return;
+  clickFailed(result, what, log);
+}
+function pbcopy(text4, ctx) {
+  return ctx.launch(
+    {
+      bin: "/usr/bin/pbcopy",
+      stdinInput: text4,
+      category: "click.pbcopy"
+    },
+    "pbcopy"
+  );
+}
+var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
+var DRAWERS = /* @__PURE__ */ new Set([
+  "request",
+  "feed"
+]);
+function requireDrawer(by) {
+  if (!DRAWERS.has(by))
+    throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
+  return by;
+}
+var copyDiagnostic = async (value, ctx) => {
+  const [sessionId2 = "", by = "", key = ""] = decodeWire(
+    () => decodeSegments(value)
+  );
+  const sid = requireSessionId(sessionId2);
+  const text4 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
+  if (text4 === void 0)
+    throw new BadVerbArgs(
+      `that message is no longer listed in session ${sid}'s diagnostics \u2014 open the indicator beside the settings door again and copy from there`
+    );
+  await pbcopy(text4, ctx);
+};
+var openVscode = (value, ctx) => ctx.launch(
+  {
+    bin: "/usr/bin/open",
+    args: ["-a", "Visual Studio Code", oneArg(value)],
+    category: "click.open"
+  },
+  'open -a "Visual Studio Code"'
+);
+var setState = async (rawValue, ctx) => {
+  const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
+  const sid = requireSessionId(sessionId2);
+  const gate2 = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
+  if (rest2.length === 0)
+    throw new BadVerbArgs(
+      `set-state: <key>/<value> is required (have keys: ${gate2.listKeys().join(", ")})`
+    );
+  if (rest2.length % 2 !== 0) {
+    throw new BadVerbArgs(
+      `set-state: expected even-count <key>/<value> pairs, got ${rest2.length} segment(s) after session id (have keys: ${gate2.listKeys().join(", ")})`
+    );
+  }
+  const validated = [];
+  for (let i2 = 0; i2 < rest2.length; i2 += 2) {
+    const key = rest2[i2];
+    const incoming = rest2[i2 + 1];
+    if (!key) {
+      throw new BadVerbArgs(
+        `set-state: empty key at pair ${i2 / 2 + 1} (expected <sessionId>/<key>/<value>[/<key>/<value>...] segments)`
+      );
+    }
+    const result = gate2.validate(key, incoming);
+    if (!result.ok) {
+      throw new BadVerbArgs(`set-state: pair ${i2 / 2 + 1}: ${result.reason}`);
+    }
+    validated.push({ key, value: result.value });
+  }
+  refuseDisorderedPicks(ctx, sid, "set-state", validated);
+  ctx.navigating.setBatch(sid, validated);
+  const summary = validated.map((p2) => `${p2.key}=${p2.value}`).join(" ");
+  ctx.log("info", `set-state: ${summary} (session=${sid})`);
+};
+var STEP_INT_RE = /^-?\d+$/;
+function stepWithin(current2, by, min3, max3) {
+  const n = current2 + by;
+  if (n > max3) return current2 === max3 ? min3 : max3;
+  if (n < min3) return current2 === min3 ? max3 : min3;
+  return n;
+}
+var stepState = async (rawValue, ctx) => {
+  const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
+    () => decodeSegments(rawValue)
+  );
+  const sid = requireSessionId(sessionId2);
+  if (!key) {
+    throw new BadVerbArgs(
+      "step-state: <key> is required (shape: <sessionId>/<key>/<by>)"
+    );
+  }
+  if (!STEP_INT_RE.test(byRaw)) {
+    throw new BadVerbArgs(
+      `step-state: delta must be an integer, got "${byRaw}"`
+    );
+  }
+  const by = parseInt(byRaw, 10);
+  const config2 = sessionConfig(ctx, sid);
+  const gate2 = ctx.gates.state.gateFor(config2);
+  const params = gate2.rangeParamsFor(key);
+  if (!params) {
+    throw new BadVerbArgs(
+      `step-state: key "${key}" is not a bounded (range) state key (have keys: ${gate2.listKeys().join(", ")})`
+    );
+  }
+  const stored = ctx.sessionState.get(sid, key);
+  const clamped = stored && STEP_INT_RE.test(stored) ? clampTo(params, parseInt(stored, 10)) : stepFrom(
+    "step-state",
+    key,
+    params,
+    stateKeySeed(config2, (k) => ctx.sessionState.get(sid, k), key)
+  );
+  const next = stepWithin(clamped, by, params.min, params.max);
+  const result = gate2.validate(key, String(next));
+  if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
+  refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
+  ctx.navigating.set(sid, key, result.value);
+  ctx.log(
+    "info",
+    `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
+  );
+};
+function refuseDisorderedPicks(ctx, sid, verb, writes) {
+  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
+  if (picks.length === 0) return;
+  const problems = placementPickProblems(
+    sessionConfig(ctx, sid),
+    (k) => ctx.sessionState.get(sid, k),
+    picks
+  );
+  if (problems.length > 0) {
+    throw new BadVerbArgs(`${verb}: refused \u2014 ${problems.join("; ")}`);
+  }
+}
+function clampTo(params, n) {
+  return Math.max(params.min, Math.min(params.max, n));
+}
+function stepFrom(verb, key, params, declared) {
+  if (declared === null) return params.min;
+  if (!STEP_INT_RE.test(declared)) {
+    throw new BadVerbArgs(
+      `${verb}: "${key}" shows ${JSON.stringify(declared)} before any click, not an integer to step`
+    );
+  }
+  return clampTo(params, parseInt(declared, 10));
+}
+function recordedTarget(source, configFile) {
+  if (configFile === null) return { source: "search" };
+  return source === "argument" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
+}
+function parseRenderOrigin(raw) {
+  let parsed2;
+  try {
+    parsed2 = JSON.parse(raw);
+  } catch {
+    throw new BadVerbArgs(`render origin is not JSON: ${raw}`);
+  }
+  if (parsed2 === null || typeof parsed2 !== "object") {
+    throw new BadVerbArgs(`render origin is not an object: ${raw}`);
+  }
+  const { projectDir, cwd: cwd2, configFile, source } = parsed2;
+  if (typeof projectDir !== "string" || typeof cwd2 !== "string" || configFile !== null && typeof configFile !== "string") {
+    throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
+  }
+  return { projectDir, cwd: cwd2, target: recordedTarget(source, configFile) };
+}
+function sessionOrigin(ctx, sid) {
+  const origin = recordedOrigin(ctx, sid);
+  if (origin === null) {
+    throw new BadVerbArgs(
+      `session ${sid} has not rendered yet \u2014 no config to act on`
+    );
+  }
+  return origin;
+}
+function recordedOrigin(ctx, sid) {
+  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  return raw === null ? null : parseRenderOrigin(raw);
+}
+function changeDone(ctx, id2, outcome) {
+  const landed = ctx.configWrites.settled(id2, outcome);
+  if (landed === void 0) return false;
+  if (landed !== "owed") changeLanded(ctx, landed);
+  return true;
+}
+function changeLanded(ctx, { session, files, consequence, outcome }) {
+  const failed3 = [];
+  const step4 = (work) => {
+    try {
+      work();
+    } catch (e) {
+      failed3.push(failureOf(e).message);
+    }
+  };
+  if (outcome.kind === "ok") {
+    step4(() => {
+      const origin = recordedOrigin(ctx, session);
+      if (origin !== null && files.includes(originHome(ctx, origin).path))
+        ctx.reloadConfig(origin);
+    });
+    step4(consequence);
+  } else failed3.push(outcome.reason);
+  if (failed3.length === 0) return;
+  const reason = failed3.join("\n");
+  ctx.log("warn", `config change: ${reason} (session=${session})`);
+  holdClickError(ctx.sessionState, session, reason, ctx.now());
+}
+function proveLoadsAsHome(ctx, sid, file, text4) {
+  const origin = sid === null ? null : recordedOrigin(ctx, sid);
+  const home = origin === null ? null : originHome(ctx, origin);
+  if (home?.path !== file)
+    throw new BadVerbArgs(
+      `${file} is not the config file this session renders from \u2014 its step is not taken`
+    );
+  proveLoads(home, text4);
+}
+function sessionConfig(ctx, sid) {
+  return ctx.configFor(sessionOrigin(ctx, sid));
+}
+function laneMeter(ctx, sid, latest) {
+  const origin = recordedOrigin(ctx, sid);
+  if (origin === null) return null;
+  const read2 = () => ctx.lanes.of(origin, sid, latest);
+  return { sessionId: sid, latest, before: read2(), read: read2 };
+}
+function nestOf(ctx, sid) {
+  const origin = recordedOrigin(ctx, sid);
+  return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
+}
+function originHome(ctx, origin) {
+  return durableConfig(
+    ctx.locations,
+    repoConfigs(ctx.stateDir).read(),
+    origin.projectDir,
+    origin.cwd,
+    origin.target.path
+  );
+}
+function editStore(ctx, sid) {
+  return {
+    read: (file) => ctx.configWrites.read(file),
+    record: (file, before, after) => ctx.journal.file(sid, file, before, after)
+  };
+}
+var setConfig = async (rawValue, ctx) => {
+  const [sessionId2 = "", key = "", incoming = ""] = decodeWire(
+    () => decodeSegments(rawValue)
+  );
+  const sid = requireSessionId(sessionId2);
+  const origin = sessionOrigin(ctx, sid);
+  const config2 = ctx.configFor(origin);
+  const gate2 = ctx.gates.config.gateFor(config2);
+  if (!key) {
+    throw new BadVerbArgs(
+      `set-config: <key>/<value> is required (have keys: ${gate2.listKeys().join(", ")})`
+    );
+  }
+  const result = gate2.validate(key, incoming);
+  if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
+  const home = originHome(ctx, origin);
+  const landing = durableLanding(
+    config2,
+    (k) => ctx.sessionState.get(sid, k),
+    key
+  );
+  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
+  ctx.log(
+    "info",
+    `set-config: ${landing.key}=${result.value} \u2192 ${home.path} (session=${sid})`
+  );
+};
+var stepConfig = async (rawValue, ctx) => {
+  const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
+    () => decodeSegments(rawValue)
+  );
+  const sid = requireSessionId(sessionId2);
+  if (!key) {
+    throw new BadVerbArgs(
+      "step-config: <key> is required (shape: <sessionId>/<key>/<by>)"
+    );
+  }
+  if (!STEP_INT_RE.test(byRaw)) {
+    throw new BadVerbArgs(
+      `step-config: delta must be an integer, got "${byRaw}"`
+    );
+  }
+  const by = parseInt(byRaw, 10);
+  const origin = sessionOrigin(ctx, sid);
+  const config2 = ctx.configFor(origin);
+  const gate2 = ctx.gates.config.gateFor(config2);
+  const params = gate2.rangeParamsFor(key);
+  if (!params) {
+    throw new BadVerbArgs(
+      `step-config: key "${key}" is not a bounded (range) config key (have keys: ${gate2.listKeys().join(", ")})`
+    );
+  }
+  const home = originHome(ctx, origin);
+  const landing = durableLanding(
+    config2,
+    (k) => ctx.sessionState.get(sid, k),
+    key
+  );
+  const store = editStore(ctx, sid);
+  const stored = readValue(store.read(home.path), landing.key);
+  const current2 = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
+    "step-config",
+    key,
+    params,
+    configKeySeed(landing.globals, key)
+  );
+  const next = stepWithin(current2, by, params.min, params.max);
+  const result = gate2.validate(key, String(next));
+  if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
+  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
+  ctx.log(
+    "info",
+    `step-config: ${landing.key} ${current2}\u2192${result.value} (by ${by}) \u2192 ${home.path} (session=${sid})`
+  );
+};
+var save = async (value, ctx) => {
+  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
+  const origin = sessionOrigin(ctx, sid);
+  const config2 = ctx.configFor(origin);
+  const pick2 = (key) => ctx.sessionState.get(sid, key);
+  const drafts = settingDrafts(config2, pick2);
+  const placements = placementDrafts(config2, pick2);
+  if (drafts.length + placements.length === 0) {
+    ctx.log("info", `save: nothing unsaved (session=${sid})`);
+    return;
+  }
+  const gate2 = ctx.gates.state.gateFor(config2);
+  const pairs2 = drafts.map((d) => {
+    const result = gate2.validate(d.sessionKey, d.value);
+    if (!result.ok) throw new BadVerbArgs(`save: ${result.reason}`);
+    return [d.target, result.value];
+  });
+  gatePlacements("save", gate2, placements);
+  const home = originHome(ctx, origin);
+  writeDrafts(editStore(ctx, sid), home, pairs2, placements);
+  for (const key of [
+    ...drafts.map((d) => d.sessionKey),
+    ...placements.map((p2) => p2.key)
+  ]) {
+    ctx.sessionState.clear(sid, key);
+  }
+  ctx.log(
+    "info",
+    `save: ${[
+      ...pairs2.map(([k, v]) => `${k}=${v}`),
+      ...placements.map(placementLog)
+    ].join(" ")} \u2192 ${home.path} (session=${sid})`
+  );
+};
+var placementLog = (p2) => `${p2.preset}/${p2.id}.settings.${p2.setting}=${settingSpelling(p2.value)}`;
+function gatePlacements(verb, gate2, placements) {
+  for (const p2 of placements) {
+    const result = gate2.validate(p2.key, settingSpelling(p2.value));
+    if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
+  }
+}
+var savePreset = async (value, ctx) => {
+  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
+  const origin = sessionOrigin(ctx, sid);
+  const config2 = ctx.configFor(origin);
+  const snapshot = presetSnapshot(
+    config2,
+    (key) => ctx.sessionState.get(sid, key)
+  );
+  const gate2 = ctx.gates.state.gateFor(config2);
+  const picks = snapshot.picks.map((d) => {
+    const result = gate2.validate(d.sessionKey, d.value);
+    if (!result.ok) throw new BadVerbArgs(`save-preset: ${result.reason}`);
+    return [d.configKey, result.value];
+  });
+  gatePlacements("save-preset", gate2, snapshot.placements);
+  const home = originHome(ctx, origin);
+  const name = writePreset(
+    editStore(ctx, sid),
+    home,
+    snapshot.from,
+    snapshot.globals,
+    picks,
+    snapshot.placements
+  );
+  for (const key of [
+    ...SETTING_PROJECTIONS.map((p2) => p2.sessionKey),
+    ...snapshot.placements.map((p2) => p2.key)
+  ]) {
+    ctx.sessionState.clear(sid, key);
+  }
+  ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
+  ctx.log(
+    "info",
+    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${home.path} (session=${sid})`
+  );
+};
+var saveThemeDefault = async (value, ctx) => {
+  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
+  const origin = sessionOrigin(ctx, sid);
+  const config2 = ctx.configFor(origin);
+  const save2 = themeDefaultSave(
+    config2,
+    (key) => ctx.sessionState.get(sid, key)
+  );
+  if (save2.kind === "rule") {
+    throw new BadVerbArgs(
+      "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default \u2014 pick one in the menu first"
+    );
+  }
+  const home = originHome(ctx, origin);
+  const written2 = writeThemeDefault(
+    editStore(ctx, sid),
+    home,
+    save2.theme,
+    save2.look
+  );
+  const pick2 = (key) => ctx.sessionState.get(sid, key);
+  const drafted = new Set(
+    settingDrafts(written2, pick2).map((d) => d.sessionKey)
+  );
+  const released = THEME_DEFAULT_FIELDS.map(
+    (f) => SETTINGS[f].sessionKey
+  ).filter((key) => !drafted.has(key));
+  for (const key of released) ctx.sessionState.clear(sid, key);
+  ctx.log(
+    "info",
+    `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${home.path} (session=${sid})`
+  );
+};
+var deletePreset2 = async (value, ctx) => {
+  const [sessionId2 = "", name = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
+  if (!name) {
+    throw new BadVerbArgs(
+      "delete-preset: <name> is required (shape: <sessionId>/<name>)"
+    );
+  }
+  const origin = sessionOrigin(ctx, sid);
+  const home = originHome(ctx, origin);
+  deletePreset(editStore(ctx, sid), home, name);
+  const key = SETTINGS.preset.sessionKey;
+  if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
+  ctx.log("info", `delete-preset: ${name} \u2190 ${home.path} (session=${sid})`);
+};
+var resetConfig = async (value, ctx) => {
+  const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
+  const origin = sessionOrigin(ctx, sid);
+  const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
+  const unknown = keys2.length === 0 ? [""] : keys2.filter((k) => !known.includes(k));
+  if (unknown.length > 0) {
+    throw new BadVerbArgs(
+      `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`
+    );
+  }
+  const home = originHome(ctx, origin);
+  const layers = keys2.map(resetLayers);
+  const fileKeys = layers.flatMap((l) => l.fileKeys);
+  const sessionKeys = layers.flatMap((l) => l.sessionKeys);
+  deleteValues(editStore(ctx, sid), home, fileKeys);
+  for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
+  ctx.log(
+    "info",
+    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${home.path} (session=${sid})`
+  );
+};
+function endedPlacements(before, after) {
+  const placed2 = (config2, preset) => [...walkNodes(presetRoot(config2, preset).node)].filter(
+    (n) => n.kind === "segment"
+  );
+  const survivors = new Set(
+    presetNames(after.presets).flatMap(
+      (preset) => placed2(after, preset).map(
+        (n) => configureMember(ident(preset), placementId(n))
+      )
+    )
+  );
+  return presetNames(before.presets).flatMap(
+    (preset) => placed2(before, preset).map((node) => ({
+      member: configureMember(ident(preset), placementId(node)),
+      node
+    })).filter(({ member }) => !survivors.has(member))
+  );
+}
+function endedSessionKeys(ended, configuring) {
+  return ended.flatMap(({ member, node }) => [
+    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
+    ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
+  ]);
+}
+var applyLayoutOp2 = async (rawValue, ctx) => {
+  const [sessionId2 = "", key = "", opToken = ""] = decodeWire(
+    () => decodeSegments(rawValue)
+  );
+  const sid = requireSessionId(sessionId2);
+  const origin = sessionOrigin(ctx, sid);
+  const before = ctx.configFor(origin);
+  const gate2 = ctx.gates.config.gateFor(before);
+  if (!key) {
+    throw new BadVerbArgs(
+      `apply-layout-op: <key>/<op> is required (have: ${gate2.listKeys().join(", ")})`
+    );
+  }
+  const result = gate2.validate(key, opToken);
+  if (!result.ok) throw new BadVerbArgs(`apply-layout-op: ${result.reason}`);
+  const op = decodeLayoutOp(result.value);
+  if (op === null) {
+    throw new BadVerbArgs(
+      `apply-layout-op: "${result.value}" is not a layout op token`
+    );
+  }
+  const home = originHome(ctx, origin);
+  const { placed: placed2, config: config2 } = applyLayoutOp(
+    editStore(ctx, sid),
+    home,
+    key,
+    op
+  );
+  const released = endedSessionKeys(
+    endedPlacements(before, config2),
+    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
+  ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
+  for (const key2 of released) ctx.sessionState.clear(sid, key2);
+  ctx.log(
+    "info",
+    `apply-layout-op: ${key} ${result.value} \u2192 ${home.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
+  );
+};
+var undo = async (value, ctx) => {
+  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
+  const step4 = ctx.journal.undo(sid);
+  ctx.journal.wrote();
+  ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
+};
+var back = async (value, ctx) => {
+  const sid = requireSessionId(oneArg(value));
+  const { step: step4, discarded } = ctx.navigation.back(
+    sid,
+    ctx.sessionState,
+    ctx.gates.state.gateFor(sessionConfig(ctx, sid))
+  );
+  const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
+  ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
+};
+var rewind = async (value, ctx) => {
+  const sid = requireSessionId(oneArg(value));
+  ctx.journal.wrote();
+  const restored = ctx.journal.rewind(sid);
+  ctx.log(
+    "info",
+    `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
+  );
+};
+var redo = async (value, ctx) => {
+  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
+  const step4 = ctx.journal.redo(sid);
+  ctx.journal.wrote();
+  ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
+};
+var applyUpdate = async (value, ctx) => {
+  requireSessionId(oneArg(value));
+  await ctx.applyUpdate();
+};
+function sessionHints(ctx, sid) {
+  const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
+  if (raw === null) {
+    throw new BadVerbArgs(
+      `session ${sid} has not rendered yet \u2014 no client facts are recorded for it`
+    );
+  }
+  let parsed2;
+  try {
+    parsed2 = JSON.parse(raw);
+  } catch {
+    throw new BadVerbArgs(`client hints record is not JSON: ${raw}`);
+  }
+  if (typeof parsed2 !== "object" || parsed2 === null) {
+    throw new BadVerbArgs(`client hints record is not an object: ${raw}`);
+  }
+  return parseClientHints(parsed2);
+}
+function writeReport(ctx, sid, facts) {
+  const reports = runDoctor(facts);
+  ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
+  ctx.log(
+    "info",
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
+  );
+}
+async function clickGather(ctx, sid, doctor, load) {
+  const scope = {
+    kind: "clicked",
+    sessionId: sid,
+    via: ctx.arrival.via
+  };
+  const [said2, serving] = await Promise.all([
+    ctx.clients.ofSession(sid, ctx.now()),
+    ctx.serving()
+  ]);
+  let facts;
+  let install2;
+  try {
+    [facts, install2] = await Promise.all([
+      gatherFacts(
+        { ...doctor, loadConfig: () => load },
+        sessionHints(ctx, sid),
+        sessionOrigin(ctx, sid),
+        (key) => ctx.sessionState.get(sid, key),
+        { kind: "ok", value: serving },
+        { kind: "ok", value: said2.map((s) => s.rateLimits) },
+        { kind: "ok", value: said2.map((s) => s.transcript) },
+        scope,
+        { kind: "ok", value: barsOf(scope, said2) },
+        sessionWidth(sid, said2),
+        readStores(ctx.doctorStores)
+      ),
+      // The client that drew the bar this click came from, and the daemon the
+      // click reached — this process.
+      ctx.installFacts(
+        ctx.bundle,
+        said2.map((s) => s.client)
+      )
+    ]);
+  } catch (e) {
+    if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
+    throw e;
+  }
+  const gathered = {
+    facts,
+    install: install2,
+    current: async (now2) => {
+      const stands = doctor.loadConfig(sessionOrigin(now2, sid));
+      const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
+      return same2 ? gathered : clickGather(now2, sid, doctor, stands);
+    }
+  };
+  return gathered;
+}
+var gatherClick = (ctx, sid) => {
+  const doctor = oneAskPerClick(ctx.doctor);
+  return clickGather(
+    ctx,
+    sid,
+    doctor,
+    doctor.loadConfig(sessionOrigin(ctx, sid))
+  );
+};
+async function clickFacts(ctx, sid, gathered) {
+  const { facts, install: install2 } = await ctx.gather(gathered.current);
+  const stores = readStores(ctx.doctorStores);
+  const read2 = {
+    ...facts,
+    marks: stores.marks,
+    clicked: stores.clicked,
+    daemon: { ...facts.daemon, read: stores.postMortemsRead }
+  };
+  return {
+    ...read2,
+    urlHandler: clickArrived(ctx.arrival),
+    install: install2,
+    clicked: clickedFrom(ctx, read2)
+  };
+}
+function clickedFrom(ctx, { terminal, clicked }) {
+  const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
+  if (sighting === null || ctx.arrival.via !== "link") return clicked;
+  try {
+    return ctx.doctorStores.clicked.update(
+      (list2) => withClicked(list2, sighting)
+    );
+  } catch (e) {
+    ctx.log(
+      "warn",
+      `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`
+    );
+    return clicked;
+  }
+}
+var doctorRun = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const sid = requireSessionId(oneArg(value));
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
+  }
+};
+var doctorFix = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const [sessionId2 = "", checkName = ""] = decodeWire(
+      () => decodeSegments(value)
+    );
+    const sid = requireSessionId(sessionId2);
+    const check = checkByName(checkName);
+    if (check === void 0) {
+      throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
+    }
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => {
+      const facts = await clickFacts(c, sid, gathered);
+      const verdict = check.probe(facts);
+      if (verdict.ok || verdict.fix === void 0) {
+        throw new BadVerbArgs(
+          `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
+        );
+      }
+      const after = applyFix(c.doctorStores, verdict.fix, facts);
+      if (after.kind === "failed") {
+        throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
+      }
+      c.log(
+        "info",
+        `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
+      );
+      writeReport(c, sid, after.value);
+    };
+  }
+};
+var doctorMark = {
+  gathers: true,
+  prepare: async (value, ctx) => {
+    const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
+      () => decodeSegments(value)
+    );
+    const sid = requireSessionId(sessionId2);
+    const check = checkByName(checkName);
+    if (check === void 0) {
+      throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
+    }
+    if (!GLYPH_MARKS.includes(mark)) {
+      throw new BadVerbArgs(
+        `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
+      );
+    }
+    const gathered = await gatherClick(ctx, sid);
+    return async (c) => {
+      const facts = await clickFacts(c, sid, gathered);
+      const verdict = check.probe(facts);
+      if (verdict.ok || verdict.sighting === void 0) {
+        throw new BadVerbArgs(
+          `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
+        );
+      }
+      const made = [
+        check.name,
+        verdict.sighting.id,
+        mark
+      ];
+      const marks = c.doctorStores.marks.update(
+        (book) => withMark(book, ...made)
+      );
+      if (marks.kind === "failed") {
+        throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
+      }
+      c.log(
+        "info",
+        `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
+      );
+      writeReport(c, sid, { ...facts, marks });
+    };
+  }
+};
+var slash = async (value, ctx) => {
+  const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
+  const declared = Object.values(
+    ctx.configFor(sessionOrigin(ctx, sid)).actions
+  ).filter((a) => "slash" in a);
+  const action2 = declared.find((a) => a.slash === line);
+  if (action2 === void 0) {
+    throw new BadVerbArgs(
+      `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
+    );
+  }
+  const result = await ctx.typing(sessionHints(ctx, sid).tmux, action2.slash);
+  if (result.kind === "refused") {
+    ctx.log(
+      "warn",
+      `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
+    );
+    throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
+  }
+  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+};
+function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
+  const sid = requireSessionId(sessionId2);
+  const origin = sessionOrigin(ctx, sid);
+  const actions = ctx.configFor(origin).actions;
+  const decl = Object.hasOwn(actions, action2) ? actions[action2] : void 0;
+  if (decl === void 0 || !("run" in decl)) {
+    throw new BadVerbArgs(
+      `"${action2}" is not a run action this session's config declares`
+    );
+  }
+  const declaration = runDeclaration(decl);
+  if (!ctx.links.verify({ sessionId: sid, action: action2, declaration, evaluated: evaluated2 }, mac)) {
+    throw new BadVerbArgs(
+      "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn"
+    );
+  }
+  let drawn;
+  try {
+    drawn = JSON.parse(evaluated2);
+  } catch {
+    throw new BadVerbArgs(`run ${action2}: what the link carries is not JSON`);
+  }
+  const [program, ...args] = drawn.run;
+  if (program === void 0 || program === "") {
+    throw new BadVerbArgs(`run ${action2}: the program evaluated to nothing`);
+  }
+  const sources = ctx.sourcesFor(origin);
+  return {
+    sessionId: sid,
+    action: action2,
+    argv: [program, ...args],
+    // [LAW:single-enforcer] The session's process environment, the action's
+    // own variables over it.
+    envOverlay: {
+      ...sessionEnv({
+        sessionId: sid,
+        projectDir: origin.projectDir,
+        claudeConfigDir: sessionHints(ctx, sid).claudeConfigDir
+      }),
+      ...drawn.env
+    },
+    // The bundled config's runs go in the user's home.
+    cwd: decl.cwd ?? ctx.locations.home,
+    // The loader proved every name a declared source of this config, whose
+    // state holds its folder.
+    refreshes: decl.refreshes.map((name) => ({
+      name,
+      folder: sources.get(name)
+    }))
+  };
+}
+var run2 = async (value, ctx) => {
+  let named3 = { sessionId: "-", action: "-" };
+  let request2;
+  try {
+    const parts = decodeWire(() => decodeSegments(value));
+    named3 = { sessionId: parts[0] || "-", action: parts[1] || "-" };
+    request2 = runOf3(parts, ctx);
+  } catch (e) {
+    if (e instanceof BadVerbArgs) {
+      ctx.runs.refused(named3.sessionId, named3.action, e.message);
+    }
+    throw e;
+  }
+  ctx.runs.start(request2);
+};
+var repoConfig = async (value, ctx) => {
+  const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
+    () => decodeSegments(value)
+  );
+  const sid = requireSessionId(sessionId2);
+  const answered = REPO_ANSWERS.find((known) => known === answer2);
+  if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon"
+    );
+  }
+  const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);
+  if (filed.kind === "failed") {
+    throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
+  }
+  ctx.journal.wrote();
+  const { superseded, absent, unchecked } = filed.value;
+  ctx.log(
+    "info",
+    `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`
+  );
+  ctx.reloadConfig(sessionOrigin(ctx, sid));
+};
+var LEAF_VERBS = /* @__PURE__ */ new Map([
+  [VERB_COPY, inTurn(copy)],
+  [VERB_OPEN_VSCODE, inTurn(openVscode)],
+  [VERB_SET_STATE, inTurn(setState)],
+  [VERB_STEP_STATE, inTurn(stepState)],
+  [VERB_SET_CONFIG, inTurn(setConfig)],
+  [VERB_STEP_CONFIG, inTurn(stepConfig)],
+  [VERB_RESET_CONFIG, inTurn(resetConfig)],
+  [VERB_SAVE, inTurn(save)],
+  [VERB_SAVE_PRESET, inTurn(savePreset)],
+  [VERB_SAVE_THEME_DEFAULT, inTurn(saveThemeDefault)],
+  [VERB_DELETE_PRESET, inTurn(deletePreset2)],
+  [VERB_APPLY_LAYOUT_OP, inTurn(applyLayoutOp2)],
+  [VERB_UNDO, inTurn(undo)],
+  [VERB_REDO, inTurn(redo)],
+  [VERB_BACK, inTurn(back)],
+  [VERB_REWIND, inTurn(rewind)],
+  [VERB_APPLY_UPDATE, inTurn(applyUpdate)],
+  [VERB_DOCTOR_RUN, doctorRun],
+  [VERB_DOCTOR_FIX, doctorFix],
+  [VERB_DOCTOR_MARK, doctorMark],
+  [VERB_SLASH, inTurn(slash)],
+  [VERB_RUN, inTurn(run2)],
+  [VERB_REPO_CONFIG, inTurn(repoConfig)],
+  [VERB_COPY_DIAGNOSTIC, inTurn(copyDiagnostic)]
+]);
+var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepare(value, ctx)).catch(
+  (e) => () => Promise.reject(e)
+);
+async function perform(verb, value, ctx, gathered) {
+  const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
+  await step4(ctx);
+}
+async function headGather(rawValue, ctx) {
+  const [head] = batchAdjacentWrites(parseEffects(rawValue));
+  const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
+  return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
+}
+async function foldEffects(rawValue, ctx, gathered) {
+  const errors2 = [];
+  let operational = false;
+  const effects = parseEffects(rawValue);
+  const session = sessionOfEffects(effects);
+  for (const [i2, { verb, value }] of batchAdjacentWrites(effects).entries()) {
+    const leaf = LEAF_VERBS.get(verb);
+    if (!leaf) {
+      errors2.push(`unknown effect verb "${verb}"`);
+      continue;
+    }
+    try {
+      await perform(leaf, value, ctx, i2 === 0 ? gathered : void 0);
+    } catch (e) {
+      if (e instanceof DaemonClosing) {
+        if (errors2.length > 0)
+          ctx.log("warn", `dispatch: ${errors2.join("; ")}`);
+        throw e;
+      }
+      if (!(e instanceof BadVerbArgs)) operational = true;
+      errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (errors2.length > 0) {
+    if (session?.ok) {
+      holdClickError(
+        ctx.sessionState,
+        session.id,
+        errors2.join("\n"),
+        ctx.now()
+      );
+    }
+    const message2 = `dispatch: ${errors2.join("; ")}`;
+    throw operational ? new Error(message2) : new BadVerbArgs(message2);
+  }
+}
+function throwAll(failures) {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new Error(
+      failures.map((e) => String(e.message ?? e)).join("; ")
+    );
+  }
+}
+async function journaled(sid, latest, ctx, effects, turn, handler) {
+  const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
+  const journal = ctx.history.begin({
+    read: (file) => ctx.configWrites.read(file),
+    land: (file, before, after) => ctx.configWrites.land(file, before, after),
+    prove: (file, text4) => proveLoadsAsHome(ctx, sid, file, text4)
+  });
+  const navigation = ctx.navigation.begin(journal.sessionState);
+  const failures = [];
+  const closing = (store) => closingView(
+    store,
+    (sid2) => nestOf(ctx, sid2),
+    (line) => ctx.log("info", line)
+  );
+  const journaling = {
+    ...ctx,
+    sessionState: closing(journal.sessionState),
+    journal,
+    navigating: closing(navigation.sessionState)
+  };
+  const launches = {
+    launch: (opts, what) => turn.landed(clickLaunch(ctx.launch, opts, what, ctx.log)),
+    typing: (hint, line) => turn.landed(typeSlash(ctx.typeSlash, hint, line)),
+    applyUpdate: () => turn.landed(ctx.applyUpdate())
+  };
+  try {
+    await handler({
+      ...journaling,
+      ...launches,
+      gather: (work) => turn.landed(work(journaling))
+    });
+  } catch (e) {
+    failures.push(e);
+  }
+  const consequence = () => {
+    const failed3 = [];
+    for (const step4 of [navigation, journal]) {
+      try {
+        step4.commit();
+      } catch (e) {
+        failed3.push(e);
+      }
+    }
+    if (lanes !== null) {
+      try {
+        const after = lanes.read();
+        ctx.lanes.clicked(
+          lanes.sessionId,
+          lanes.latest,
+          journal.written() ? lanes.before : after,
+          after
+        );
+      } catch (e) {
+        failed3.push(e);
+      }
+    }
+    throwAll(failed3);
+  };
+  try {
+    ctx.configWrites.seal(effects, sid, consequence);
+  } catch (e) {
+    failures.push(e);
+  }
+  throwAll(failures);
+}
+function click(verb, gather, handler) {
+  return async (value, ctx) => {
+    const session = clickSessionOf(verb, value);
+    const sid = session?.ok ? session.id : null;
+    return ctx.journalTurns.click(
+      verb,
+      sid,
+      {
+        placed: ctx.placeWaited,
+        waited: ctx.turnWaited,
+        gone: ctx.clientGone,
+        gathered: ctx.gatherTook
+      },
+      () => gather(value, ctx),
+      (gathered, turn) => journaled(sid, ctx.latest, ctx, ctx.effects, turn, async (c) => {
+        try {
+          await handler(value, c, gathered);
+        } finally {
+          if (sid !== null) ctx.clickLanded(sid);
+        }
+      })
+    );
+  };
+}
+var VERBS = new Map([
+  ...[...LEAF_VERBS].map(
+    ([verb, leaf]) => [
+      verb,
+      click(
+        verb,
+        async (value, ctx) => leaf.gathers ? hoisted(leaf, value, ctx) : void 0,
+        (value, ctx, gathered) => perform(leaf, value, ctx, gathered)
+      )
+    ]
+  ),
+  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)]
+]);
+var VERB_NAMES = Object.freeze([
+  ...VERBS.keys()
+]);
+function closeIdleMenus(sid, latest, idle, ctx, effects) {
+  return ctx.journalTurns.take(
+    "menu-idle",
+    {
+      waited: (ms) => ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
+      gone: async () => false
+    },
+    (turn) => journaled(sid, latest, ctx, effects, turn, async (c) => {
+      if (!await turn.landed(idle.confirm())) {
+        c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
+        return;
+      }
+      const roots = openRoots(
+        nestOf(c, sid),
+        (key) => c.navigating.get(sid, key)
+      );
+      c.navigating.setBatch(
+        sid,
+        roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
+      );
+      c.log(
+        "info",
+        `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
+      );
+    })
+  );
+}
+
+// src/renderer/verbs/port.ts
 function verbsOver(ctx, clicks) {
   return {
     handler: (verb) => {
@@ -88260,7 +88513,8 @@ function verbsOver(ctx, clicks) {
         clientGone: () => clicks.gone(click3)
       }));
     },
-    closeIdle: (sessionId2, latest, idle) => closeIdleMenus(sessionId2, latest, idle, ctx)
+    closeIdle: (sessionId2, latest, idle, effects) => closeIdleMenus(sessionId2, latest, idle, ctx, effects),
+    changeDone: (id2, outcome) => changeDone(ctx, id2, outcome)
   };
 }
 
@@ -89168,10 +89422,9 @@ var RenderCache = class {
   // a session is watched before it retires one.
   pins = /* @__PURE__ */ new Map();
   // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error and the request the opening was for, until a view opens for
-  // it: a frame draws that error, never the last bar it pushed, and a click
-  // that moves the origin retries by that request (`follow`). Written only by
-  // `opened`, which sets either this or the session's view, never both.
+  // the error, until a view opens for it: a frame draws that error, never the
+  // last bar it pushed. Written only by `opened`, which sets either this or
+  // the session's view, never both.
   openFailures = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -89338,36 +89591,9 @@ var RenderCache = class {
   openFailure(sessionId2) {
     return this.openFailures.get(sessionId2) ?? null;
   }
-  // [LAW:single-enforcer] A click that moved the session's origin — a
-  // load-config pick, or a history step restoring one — moves its view to the
-  // origin's entry, declared with the request the view draws by, as a
-  // request from there would (`journaled`, src/renderer/verbs/index.ts). A
-  // session whose last opening failed opens by the request that opening was
-  // for, so a pick that fixes it shows with no request after it. A session
-  // with neither has nothing to move: no feed draws it, and its next request
-  // opens one. A click that left the origin alone finds the view already on
-  // its entry and changes nothing, its use order included, so the latest
-  // rendered session stays the one that rendered.
-  follow(sessionId2, projectDir, cwd2, configFile) {
-    var _stack = [];
-    try {
-      const current2 = this.views.get(sessionId2);
-      const facts = current2?.facts() ?? this.openFailures.get(sessionId2)?.facts;
-      if (facts === void 0) return;
-      const origin = this.entries.get(cacheKey(projectDir, cwd2, configFile));
-      if (current2 !== void 0 && origin?.state === current2.state) return;
-      const held = __using(_stack, this.hold(projectDir, cwd2, configFile));
-      this.viewOf(held.entry, held.state, facts, "click");
-    } catch (_) {
-      var _error = _, _hasError = true;
-    } finally {
-      __callDispose(_stack, _error, _hasError);
-    }
-  }
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
-  // session, so it follows the view wherever a request, a reload or a click
-  // moves it.
+  // session, so it follows the view wherever a request or a reload moves it.
   pin(sessionId2) {
     this.pins.set(sessionId2, (this.pins.get(sessionId2) ?? 0) + 1);
     let released = false;
@@ -89412,7 +89638,7 @@ var RenderCache = class {
         log: this.log
       });
     } catch (error) {
-      this.openFailures.set(sessionId2, { error, facts });
+      this.openFailures.set(sessionId2, { error });
       throw error;
     }
     this.openFailures.delete(sessionId2);
@@ -89987,7 +90213,6 @@ var JournalTurns = class {
   sessions = new KeyedSerialQueue();
   gathers = new KeyedSerialQueue();
   open = true;
-  inFlight = null;
   holder = null;
   queued = 0;
   gathersInFlight = 0;
@@ -89998,6 +90223,7 @@ var JournalTurns = class {
     const asked2 = this.deps.monotonic();
     this.queued++;
     return this.queue.run(DAEMON_WIDE, async () => {
+      await this.deps.changesLanded();
       this.queued--;
       const since = this.deps.monotonic();
       waited(spanMs(asked2, since));
@@ -90007,11 +90233,6 @@ var JournalTurns = class {
         if (await gone()) throw new ClickAbandoned(verb);
         this.refuseClosed(verb);
         return await body({
-          holds: (commit3) => {
-            const held = { verb, commit: commit3 };
-            this.inFlight = held;
-            return () => this.commit(held);
-          },
           landed: (p2) => p2.finally(() => this.refuseClosed(verb))
         });
       } finally {
@@ -90068,33 +90289,102 @@ var JournalTurns = class {
   }
   close() {
     this.open = false;
-    if (this.inFlight === null) return;
-    this.deps.log(
-      "warn",
-      `journal: ${this.inFlight.verb} cut off by close, committing what landed`
-    );
-    this.commit(this.inFlight);
   }
   refuseClosed(verb) {
     if (!this.open) throw new DaemonClosing(verb);
   }
-  commit(held) {
-    if (this.inFlight !== held) return false;
-    this.inFlight = null;
-    held.commit();
-    return true;
+};
+
+// src/renderer/config-writes.ts
+init_globals();
+var ConfigWrites = class {
+  constructor(mint, disk) {
+    this.mint = mint;
+    this.disk = disk;
+  }
+  mint;
+  disk;
+  // The open click's writes, by file: what it read first, and wrote last.
+  open = /* @__PURE__ */ new Map();
+  landing = null;
+  waiting = [];
+  closed = false;
+  // [LAW:one-source-of-truth] `file` as the open click left it: its last
+  // write, else the disk, which holds every click ahead of it.
+  read(file) {
+    const written2 = this.open.get(file);
+    return written2 === void 0 ? this.disk(file) : written2.after;
+  }
+  // A write of the open click, from the file as the click read it (`read`):
+  // one change per file, from the click's first read of it to its last write.
+  land(file, before, after) {
+    const open2 = this.open.get(file);
+    this.open.set(file, {
+      before: open2 === void 0 ? before : open2.before,
+      after
+    });
+  }
+  // The open click is over. Its changes join its turn's effects, and its
+  // consequence waits for them; a click that changed no file has its
+  // consequence now.
+  seal(effects, session, consequence) {
+    if (this.closed) return this.open.clear();
+    const written2 = [...this.open].flatMap(([path43, { before, after }]) => {
+      const list2 = diffChanges(before, after);
+      return list2.length === 0 ? [] : [{ path: path43, list: list2 }];
+    });
+    const files = written2.map(({ path: path43 }) => path43);
+    this.open.clear();
+    if (written2.length === 0) return consequence();
+    if (session === null)
+      throw new Error(`a click with no session wrote ${files.join(", ")}`);
+    const changes = written2.map(
+      ({ path: path43, list: list2 }) => ({
+        kind: "change",
+        id: this.mint(),
+        session,
+        target: { kind: "layer", path: path43 },
+        changes: list2
+      })
+    );
+    this.landing = {
+      of: { session, files, consequence },
+      owed: new Set(changes.map((c) => c.id)),
+      missed: null
+    };
+    effects.push(...changes);
+  }
+  // A change's `effect-done`: the landing once its last change is settled,
+  // `owed` while others are still on their way, or undefined for an id no
+  // change of this renderer's holds.
+  settled(id2, outcome) {
+    const landing = this.landing;
+    if (landing === null || !landing.owed.delete(id2)) return void 0;
+    if (outcome.kind !== "ok") landing.missed ??= outcome;
+    if (landing.owed.size > 0) return "owed";
+    this.landing = null;
+    for (const resume of this.waiting.splice(0)) resume();
+    return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
+  }
+  // No click seals after this: the daemon is closing.
+  close() {
+    this.closed = true;
+  }
+  // Resolves once no click's changes are on their way.
+  landed() {
+    return this.landing === null ? Promise.resolve() : new Promise((resume) => this.waiting.push(resume));
   }
 };
 
 // src/renderer/main.ts
 function mainRenderer(parts, pushed) {
   const deliveries = /* @__PURE__ */ new Map();
-  let minted = 0;
-  const turn = async (event, at, record2) => {
+  let subscriptions = { sources: {} };
+  const turn = async (event, at, record2, effects) => {
     switch (event.kind) {
       case "config":
         configureSession(parts, event.context, event.worldState, at, record2);
-        return [];
+        return;
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
           parts,
@@ -90108,44 +90398,49 @@ function mainRenderer(parts, pushed) {
           },
           record2
         );
-        const id2 = ++minted;
+        const id2 = parts.mint();
         deliveries.set(id2, delivered);
-        return [
-          {
-            kind: "present",
-            id: id2,
-            session: event.context.hookData.session_id,
-            surface: "statusline",
-            request: event.id,
-            frame: frame2
-          }
-        ];
+        effects.push({
+          kind: "present",
+          id: id2,
+          session: event.context.hookData.session_id,
+          surface: "statusline",
+          request: event.id,
+          frame: frame2
+        });
+        return;
       }
       case "world-state":
         parts.worldStates.take(event.worldState);
-        return [];
+        return;
       case "retire":
         retireSession(parts, event.session);
-        return [];
+        return;
       case "effect-done": {
+        if (parts.verbs.changeDone(event.of, event.outcome)) return;
         const delivered = deliveries.get(event.of);
         if (delivered === void 0)
           throw new Error(
-            `effect-done for effect ${event.of}, which is not a present on its way`
+            `effect-done for effect ${event.of}, which is neither a present nor a change on its way`
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
-        return [];
+        return;
       }
       case "click":
-        await clickTurn(parts, event, record2);
-        return [];
+        await clickTurn(parts, event, record2, effects);
+        return;
       case "menu-idle":
-        await parts.verbs.closeIdle(event.session, event.latest, {
-          ...event.idle,
-          confirm: () => parts.menuIdle.confirmClose(event.session, event.idle.firedAt)
-        });
-        return [];
+        await parts.verbs.closeIdle(
+          event.session,
+          event.latest,
+          {
+            ...event.idle,
+            confirm: () => parts.menuIdle.confirmClose(event.session, event.idle.firedAt)
+          },
+          effects
+        );
+        return;
     }
   };
   return rendererOf({
@@ -90161,16 +90456,20 @@ function mainRenderer(parts, pushed) {
     event: async (input) => {
       const record2 = [];
       const from = parts.clock.monotonic();
-      const ended = await turn(input.event, input.at, record2).then(
-        (effects) => ({ kind: "answered", effects }),
+      const effects = [];
+      const ended = await turn(input.event, input.at, record2, effects).finally(() => {
+        subscriptions = parts.renderCache.subscriptions();
+      }).then(
+        () => ({ kind: "answered" }),
         // [LAW:single-enforcer] Classified here, where it was thrown: a
         // class crosses no process.
         (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
       );
       return {
         ...ended,
+        effects,
         record: record2,
-        subscriptions: parts.renderCache.subscriptions(),
+        subscriptions,
         turnMs: elapsedMs(parts.clock, from)
       };
     }
@@ -90192,9 +90491,12 @@ function startOver(inputs, sessionState, history, host) {
     inputs.storage.history,
     history
   );
+  let minted = 0;
+  const mint = () => ++minted;
+  const configWrites = new ConfigWrites(mint, readConfigText);
   const journalTurns = new JournalTurns({
-    log,
-    monotonic: () => clock.monotonic()
+    monotonic: () => clock.monotonic(),
+    changesLanded: () => configWrites.landed()
   });
   const navigationHistory = new NavigationHistory();
   const effectSessions = new EffectSessions();
@@ -90271,6 +90573,7 @@ function startOver(inputs, sessionState, history, host) {
     stateDir: inputs.stateDir,
     locations: inputs.locations,
     journalTurns,
+    configWrites,
     clickLanded: (sessionId2) => host.menuIdle.clicked(sessionId2, now2()),
     log,
     launch: host.launch,
@@ -90317,14 +90620,6 @@ function startOver(inputs, sessionState, history, host) {
     lanes: {
       of: (origin, sessionId2, latest) => lanesAt(parts, origin, sessionId2, latest),
       clicked: (sessionId2, latest, before, after) => laneClicked(parts, sessionId2, latest, before, after)
-    },
-    views: {
-      follow: (sessionId2, origin) => renderCache.follow(
-        sessionId2,
-        origin.projectDir,
-        origin.cwd,
-        origin.target.path
-      )
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
@@ -90402,10 +90697,11 @@ function startOver(inputs, sessionState, history, host) {
       case "reload-config":
         reloadConfig(push.origin);
         return { kind: "reload-config" };
-      // [LAW:no-ambient-temporal-coupling] The journal in flight commits what
-      // landed before the host's abort cuts it off.
+      // [LAW:no-ambient-temporal-coupling] No journal opens after this, and
+      // the one in flight stops at its next await once the host's abort lands.
       case "close-journal":
         journalTurns.close();
+        configWrites.close();
         return { kind: "close-journal" };
       case "close-views":
         renderCache.close();
@@ -90416,7 +90712,7 @@ function startOver(inputs, sessionState, history, host) {
     }
   };
   return mainRenderer(
-    { ...parts, verbs: verbsOver(verbCtx, host.clicks) },
+    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint },
     pushed
   );
 }
@@ -90555,10 +90851,10 @@ var TomlError = class _TomlError extends Error {
   line;
   column;
   codeblock;
-  constructor(message, options) {
+  constructor(message2, options) {
     const [line, column] = getLineColFromPtr(options.toml, options.ptr);
     const codeblock = makeCodeBlock(options.toml, line, column);
-    super(`Invalid TOML document: ${message}
+    super(`Invalid TOML document: ${message2}
 
 ${codeblock}`, options);
     this.line = line;
@@ -90566,8 +90862,8 @@ ${codeblock}`, options);
     this.codeblock = codeblock;
   }
   /** @internal */
-  static x(message, ctx, ptr) {
-    throw new _TomlError(message, { toml: ctx.s, ptr: ptr ?? ctx.p });
+  static x(message2, ctx, ptr) {
+    throw new _TomlError(message2, { toml: ctx.s, ptr: ptr ?? ctx.p });
   }
 };
 
@@ -91211,7 +91507,7 @@ function validateTablePeek(ctx, peek, ptr) {
   if (peek === null || ctx.uk === 2)
     TomlError.x(peek === null ? "trying to redefine an already defined table or value" : "document contains an unsafe property", ctx, ptr);
 }
-function parse2(toml, options = {}) {
+function parse3(toml, options = {}) {
   let ctx = {
     s: toml,
     p: 0,
@@ -91519,7 +91815,7 @@ function alacrittyFamilyIn(file, home, depth) {
   }
   let doc;
   try {
-    doc = parse2(text4);
+    doc = parse3(text4);
   } catch (e) {
     return {
       kind: "failed",
@@ -92485,8 +92781,8 @@ function createDaemon(inputs) {
     async close(atExit) {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
       const teardown = [
-        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
-        // the journal in flight commits what landed; none opens after.
+        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
+        // journal in flight, so none opens after.
         ["journalTurns close", rendererStep("close-journal")],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
@@ -93187,9 +93483,9 @@ function fileHistoryStorage(file, logger) {
         fs_default.mkdirSync(import_node_path45.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(state), 384);
       } catch (e) {
-        const message = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
-        logger("error", message);
-        throw new Error(message);
+        const message2 = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
+        logger("error", message2);
+        throw new Error(message2);
       }
     }
   };
@@ -93268,9 +93564,9 @@ function ran(what, result) {
 }
 function refusalOf3(stdout2) {
   try {
-    const said = JSON.parse(stdout2);
-    if (typeof said === "object" && said !== null && "ok" in said && said.ok === false && "reason" in said && typeof said.reason === "string") {
-      return "detail" in said && typeof said.detail === "string" ? `${said.reason}: ${said.detail}` : said.reason;
+    const said2 = JSON.parse(stdout2);
+    if (typeof said2 === "object" && said2 !== null && "ok" in said2 && said2.ok === false && "reason" in said2 && typeof said2.reason === "string") {
+      return "detail" in said2 && typeof said2.detail === "string" ? `${said2.reason}: ${said2.detail}` : said2.reason;
     }
   } catch {
   }
@@ -93934,7 +94230,7 @@ var PAUSE_AT_END_MS = 6e3;
 var sessionId = crypto.randomUUID();
 var transcript = "";
 var moment = INITIAL_MOMENT;
-var applied = 0;
+var applied2 = 0;
 var t = 0;
 var speed = 1;
 var playing = true;
@@ -94015,10 +94311,10 @@ function startAt(seconds) {
   endedAt = null;
   transcript = newTranscript(sessionId);
   moment = INITIAL_MOMENT;
-  applied = 0;
+  applied2 = 0;
   t = seconds;
   updateRepo(onClock(INITIAL_REPO));
-  while (applied < STEPS.length && STEPS[applied].at <= t) happen(STEPS[applied++]);
+  while (applied2 < STEPS.length && STEPS[applied2].at <= t) happen(STEPS[applied2++]);
 }
 function hookData() {
   const now2 = Math.floor(nowSec());
@@ -94108,7 +94404,7 @@ async function click2(url, size) {
 }
 var listeners = [];
 var notify = () => {
-  const state = { index: Math.max(0, applied - 1), playing, progress: Math.min(1, t / DURATION) };
+  const state = { index: Math.max(0, applied2 - 1), playing, progress: Math.min(1, t / DURATION) };
   for (const l of listeners) l(state);
 };
 var lastNotified = 0;
@@ -94122,9 +94418,9 @@ function advance(elapsed) {
     return true;
   }
   t = Math.min(DURATION, t + elapsed * speed);
-  const before = applied;
-  while (applied < STEPS.length && STEPS[applied].at <= t) happen(STEPS[applied++]);
-  return applied !== before;
+  const before = applied2;
+  while (applied2 < STEPS.length && STEPS[applied2].at <= t) happen(STEPS[applied2++]);
+  return applied2 !== before;
 }
 setInterval(() => {
   const elapsed = (Date.now() - lastTick) / 1e3;
