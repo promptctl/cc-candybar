@@ -4,15 +4,22 @@
     {
       "version": "pr-770",
       "ref": "refs/pull/770/merge",
-      "sha": "3c701a9431de94cca8df62a45597076c37daa060",
-      "timestamp": "2026-11-16T16:30:37.069Z",
+      "sha": "f73c4d1a0b50b7b34cfa3c556e216730ff4cf391",
+      "timestamp": "2026-11-16T16:46:12.087Z",
       "commits": [
         {
-          "sha": "3c701a9431de94cca8df62a45597076c37daa060",
+          "sha": "f73c4d1a0b50b7b34cfa3c556e216730ff4cf391",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T09:29:22-07:00",
-          "message": "Merge 9408579a05e0c70d7dcf16953fbb774ef014062f into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
+          "timestamp": "2026-11-16T16:45:16Z",
+          "message": "Merge 593100cfaa0601e3fa54516ec028d34259816cd6 into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
+        },
+        {
+          "sha": "593100cfaa0601e3fa54516ec028d34259816cd6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T09:45:03-07:00",
+          "message": "fix(click): a refused click leaves nothing behind, and every click is answered after its landing (candybar-host-renderer-x96a.axx)\n\n- Close no longer commits a click in flight: what a cut-off click wrote\n  lands whole with its consequence, or not at all, so a refused click is\n  never committed at shutdown.\n- A refused click forgets only the files of the history steps it took; a\n  landing names only the files its changes change.\n- A landed click's reload and consequence each run, and any failure shows\n  on the session's warning indicator.\n- A second write to a file the click already wrote is applied over what\n  the click wrote, and a contradiction is refused.\n- The interpreter reads a file an earlier change removed as absent.\n- The host answers a turn only after its effect-done turns, so a click is\n  answered after its landing, in process or out of it.\n- The renderer reads subscriptions as part of the turn, so a read that\n  throws still hands on the turn's effects.\n"
         },
         {
           "sha": "9408579a05e0c70d7dcf16953fbb774ef014062f",

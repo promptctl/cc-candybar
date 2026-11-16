@@ -74740,8 +74740,12 @@ function performChanges(changes) {
   try {
     for (const { target, changes: list2 } of changes) {
       const file = target.path;
-      const was = landings.get(file)?.was ?? readText(file);
-      const applied3 = applyChanges(landings.get(file)?.will ?? was, list2);
+      const prior = landings.get(file);
+      const was = prior === void 0 ? readText(file) : prior.was;
+      const applied3 = applyChanges(
+        prior === void 0 ? was : prior.will,
+        list2
+      );
       if (applied3.kind === "moved")
         return {
           kind: "refused",
@@ -74788,15 +74792,16 @@ function rendererHost(name, clock, renderer, log, collector) {
         (effect) => effect.kind === "change"
       );
       const landed = changes.length === 0 ? null : performChanges(changes);
-      for (const effect of output.effects) {
-        if (effect.kind === "change") settle3(effect, landed);
-        else if (input.event.kind !== "request")
+      const settled3 = output.effects.flatMap(
+        (effect) => effect.kind === "change" ? [settle3(effect, landed)] : input.event.kind === "request" ? [] : [
           settle3(effect, {
             kind: "failed",
             reason: `a ${input.event.kind} turn answers no request`
-          });
-      }
+          })
+        ]
+      );
       collector.subscribed(subscriptions);
+      await Promise.all(settled3);
       return output;
     } finally {
       release4();
@@ -74811,7 +74816,7 @@ function rendererHost(name, clock, renderer, log, collector) {
       hopMs: null
     })
   );
-  const settle3 = (effect, outcome) => void deliver(
+  const settle3 = (effect, outcome) => deliver(
     {
       kind: "event",
       at: instantAt(clock),
@@ -86942,11 +86947,18 @@ var SettingsHistory = class {
   begin(files) {
     const held = heldWrites(this.sessionState);
     const working = /* @__PURE__ */ new Map();
+    const stepped2 = /* @__PURE__ */ new Map();
     const click3 = {
       held,
       files,
       historyOf: (sessionId2) => working.get(sessionId2) ?? this.history(sessionId2),
-      move: (sessionId2, history) => working.set(sessionId2, history)
+      move: (sessionId2, history) => working.set(sessionId2, history),
+      stepped: (sessionId2, step5) => {
+        const files2 = stepped2.get(sessionId2) ?? /* @__PURE__ */ new Set();
+        for (const change of step5)
+          if (change.kind === "file") files2.add(change.file);
+        stepped2.set(sessionId2, files2);
+      }
     };
     const pending2 = /* @__PURE__ */ new Map();
     let written2 = false;
@@ -87026,6 +87038,10 @@ var SettingsHistory = class {
         working.clear();
         for (const [sessionId2, history] of moved2) this.put(sessionId2, history);
         held.flush();
+      },
+      refused: () => {
+        for (const [sessionId2, files2] of stepped2)
+          for (const file of files2) this.forgetFile(sessionId2, file);
       }
     };
   }
@@ -87122,6 +87138,7 @@ var SettingsHistory = class {
       else if (value === null) click3.held.clear(sessionId2, change.key);
       else click3.held.set(sessionId2, change.key, value);
     }
+    click3.stepped(sessionId2, step4);
     click3.move(sessionId2, then);
   }
   // [LAW:single-enforcer] A file a change of this session's did not land in
@@ -87580,24 +87597,30 @@ function changeDone(ctx, id2, outcome) {
   if (landed !== "owed") changeLanded(ctx, landed);
   return true;
 }
-function changeLanded(ctx, { session, files, consequence, outcome }) {
-  if (outcome.kind !== "ok") {
-    ctx.log("warn", `config change: ${outcome.reason} (session=${session})`);
-    if (outcome.kind === "refused")
-      for (const file of files) ctx.history.forgetFile(session, file);
-    holdClickError(ctx.sessionState, session, outcome.reason, ctx.now());
-    return;
+function changeLanded(ctx, { session, files, consequence, refused, outcome }) {
+  const failed3 = [];
+  const step4 = (work) => {
+    try {
+      work();
+    } catch (e) {
+      failed3.push(failureOf(e).message);
+    }
+  };
+  if (outcome.kind === "ok") {
+    step4(() => {
+      const origin = recordedOrigin(ctx, session);
+      if (origin !== null && files.includes(originHome(ctx, origin).path))
+        ctx.reloadConfig(origin);
+    });
+    step4(consequence);
+  } else {
+    failed3.push(outcome.reason);
+    if (outcome.kind === "refused") step4(refused);
   }
-  const origin = recordedOrigin(ctx, session);
-  if (origin !== null && files.includes(originHome(ctx, origin).path))
-    ctx.reloadConfig(origin);
-  try {
-    consequence();
-  } catch (e) {
-    const reason = failureOf(e).message;
-    ctx.log("warn", `config change landed: ${reason} (session=${session})`);
-    holdClickError(ctx.sessionState, session, reason, ctx.now());
-  }
+  if (failed3.length === 0) return;
+  const reason = failed3.join("\n");
+  ctx.log("warn", `config change: ${reason} (session=${session})`);
+  holdClickError(ctx.sessionState, session, reason, ctx.now());
 }
 function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
@@ -88347,17 +88370,6 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin(ctx.configWrites);
   const navigation = ctx.navigation.begin(journal.sessionState);
-  const commit3 = turn.holds(() => {
-    const failed3 = [];
-    for (const step4 of [navigation, journal]) {
-      try {
-        step4.commit();
-      } catch (e) {
-        failed3.push(e);
-      }
-    }
-    throwAll(failed3);
-  });
   const failures = [];
   const closing = (store) => closingView(
     store,
@@ -88386,13 +88398,14 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
   }
   const consequence = () => {
     const failed3 = [];
-    let live = true;
-    try {
-      live = commit3();
-    } catch (e) {
-      failed3.push(e);
+    for (const step4 of [navigation, journal]) {
+      try {
+        step4.commit();
+      } catch (e) {
+        failed3.push(e);
+      }
     }
-    if (live && lanes !== null) {
+    if (lanes !== null) {
       try {
         const after = lanes.read();
         ctx.lanes.clicked(
@@ -88408,7 +88421,10 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
     throwAll(failed3);
   };
   try {
-    ctx.configWrites.seal(effects, sid, consequence);
+    ctx.configWrites.seal(effects, sid, {
+      consequence,
+      refused: () => journal.refused()
+    });
   } catch (e) {
     failures.push(e);
   }
@@ -90193,7 +90209,6 @@ var JournalTurns = class {
   sessions = new KeyedSerialQueue();
   gathers = new KeyedSerialQueue();
   open = true;
-  inFlight = null;
   holder = null;
   queued = 0;
   gathersInFlight = 0;
@@ -90214,11 +90229,6 @@ var JournalTurns = class {
         if (await gone()) throw new ClickAbandoned(verb);
         this.refuseClosed(verb);
         return await body({
-          holds: (commit3) => {
-            const held = { verb, commit: commit3 };
-            this.inFlight = held;
-            return () => this.commit(held);
-          },
           landed: (p2) => p2.finally(() => this.refuseClosed(verb))
         });
       } finally {
@@ -90275,21 +90285,9 @@ var JournalTurns = class {
   }
   close() {
     this.open = false;
-    if (this.inFlight === null) return;
-    this.deps.log(
-      "warn",
-      `journal: ${this.inFlight.verb} cut off by close, committing what landed`
-    );
-    this.commit(this.inFlight);
   }
   refuseClosed(verb) {
     if (!this.open) throw new DaemonClosing(verb);
-  }
-  commit(held) {
-    if (this.inFlight !== held) return false;
-    this.inFlight = null;
-    held.commit();
-    return true;
   }
 };
 
@@ -90313,22 +90311,31 @@ var ConfigWrites = class {
     return written2 === void 0 ? this.disk(file) : written2.after;
   }
   // A write of the open click: one change per file, from the click's first
-  // read of it to its last write.
+  // read of it to its last write. A write from text other than the click's
+  // own (a history step, from what it recorded) lands as the changes between
+  // its two texts, applied over what the click already wrote.
   land(file, before, after) {
-    this.open.set(file, {
-      before: this.open.get(file)?.before ?? before,
-      after
-    });
+    const open2 = this.open.get(file);
+    if (open2 === void 0) {
+      this.open.set(file, { before, after });
+      return;
+    }
+    const applied3 = applyChanges(open2.after, diffChanges(before, after));
+    if (applied3.kind === "moved")
+      throw new BadVerbArgs(
+        `${addressText(applied3.at)} in ${file} was changed earlier in this click \u2014 nothing was written`
+      );
+    this.open.set(file, { before: open2.before, after: applied3.text });
   }
   // The open click is over. Its changes join its turn's effects, and its
   // consequence waits for them; a click that changed no file has its
   // consequence now.
-  seal(effects, session, consequence) {
+  seal(effects, session, { consequence, refused }) {
     const written2 = [...this.open].flatMap(([path43, { before, after }]) => {
       const list2 = diffChanges(before, after);
       return list2.length === 0 ? [] : [{ path: path43, list: list2 }];
     });
-    const files = [...this.open.keys()];
+    const files = written2.map(({ path: path43 }) => path43);
     this.open.clear();
     if (written2.length === 0) return consequence();
     if (session === null)
@@ -90343,7 +90350,7 @@ var ConfigWrites = class {
       })
     );
     this.landing = {
-      of: { session, files, consequence },
+      of: { session, files, consequence, refused },
       owed: new Set(changes.map((c) => c.id)),
       missed: null
     };
@@ -90370,6 +90377,7 @@ var ConfigWrites = class {
 // src/renderer/main.ts
 function mainRenderer(parts, pushed) {
   const deliveries = /* @__PURE__ */ new Map();
+  let subscriptions = { sources: {} };
   const turn = async (event, at, record2, effects) => {
     switch (event.kind) {
       case "config":
@@ -90447,7 +90455,9 @@ function mainRenderer(parts, pushed) {
       const record2 = [];
       const from = parts.clock.monotonic();
       const effects = [];
-      const ended = await turn(input.event, input.at, record2, effects).then(
+      const ended = await turn(input.event, input.at, record2, effects).finally(() => {
+        subscriptions = parts.renderCache.subscriptions();
+      }).then(
         () => ({ kind: "answered" }),
         // [LAW:single-enforcer] Classified here, where it was thrown: a
         // class crosses no process.
@@ -90457,7 +90467,7 @@ function mainRenderer(parts, pushed) {
         ...ended,
         effects,
         record: record2,
-        subscriptions: parts.renderCache.subscriptions(),
+        subscriptions,
         turnMs: elapsedMs(parts.clock, from)
       };
     }
@@ -90483,7 +90493,6 @@ function startOver(inputs, sessionState, history, host) {
   const mint = () => ++minted;
   const configWrites = new ConfigWrites(mint, readConfigText);
   const journalTurns = new JournalTurns({
-    log,
     monotonic: () => clock.monotonic(),
     changesLanded: () => configWrites.landed()
   });
@@ -90686,8 +90695,8 @@ function startOver(inputs, sessionState, history, host) {
       case "reload-config":
         reloadConfig(push.origin);
         return { kind: "reload-config" };
-      // [LAW:no-ambient-temporal-coupling] The journal in flight commits what
-      // landed before the host's abort cuts it off.
+      // [LAW:no-ambient-temporal-coupling] No journal opens after this, and
+      // the one in flight stops at its next await once the host's abort lands.
       case "close-journal":
         journalTurns.close();
         return { kind: "close-journal" };
@@ -92769,8 +92778,8 @@ function createDaemon(inputs) {
     async close(atExit) {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
       const teardown = [
-        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
-        // the journal in flight commits what landed; none opens after.
+        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
+        // journal in flight, so none opens after.
         ["journalTurns close", rendererStep("close-journal")],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
