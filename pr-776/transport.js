@@ -22532,11 +22532,11 @@ var require_dist = __commonJS({
           return final;
         }
       };
-      var JSON56 = {
+      var JSON55 = {
         parse: parse4,
         stringify: stringify2
       };
-      var lib = JSON56;
+      var lib = JSON55;
       var es5 = lib;
       return es5;
     }));
@@ -28520,7 +28520,7 @@ var SAYS = {
   [VERB_DELETE_PRESET]: ([, layer, name]) => [
     `delete preset ${name} from ${layer} config`
   ],
-  [VERB_RESET_CONFIG]: ([, layer, ...keys2]) => keys2.map((key) => `reset ${key} in ${layer} config`),
+  [VERB_RESET_CONFIG]: ([, ...keys2]) => keys2.map((key) => `reset ${key}`),
   [VERB_APPLY_LAYOUT_OP]: ([, layer, key, op]) => [
     `edit ${op} in ${key} of ${layer} config`
   ],
@@ -28567,7 +28567,7 @@ function parseEffects(rawValue) {
 }
 var BATCHED_VERBS = /* @__PURE__ */ new Map([
   [VERB_SET_STATE, 1],
-  [VERB_RESET_CONFIG, 2]
+  [VERB_RESET_CONFIG, 1]
 ]);
 function batchAdjacentWrites(effects) {
   return effects.reduce((out, e) => {
@@ -53294,7 +53294,6 @@ var ACTION_KEYS = [
 ];
 var LAYER_CHOICES = {
   persist: LAYER_ROLES,
-  reset: LAYER_ROLES,
   preset: LAYER_ROLES,
   themeDefault: LAYER_ROLES,
   save: [...LAYER_ROLES, "ask"]
@@ -69757,7 +69756,7 @@ function validateActionDecl(ctx, path44, raw, home) {
     issue2(
       ctx,
       `${path44}.layer`,
-      `a ${key} action writes no config, so it names no layer`
+      `a ${key} action names no layer \u2014 only ${Object.keys(LAYER_CHOICES).join(", ")} write one layer of the chain`
     );
     return null;
   }
@@ -75261,19 +75260,29 @@ function userHome(locs, layers) {
 }
 var rank = (role) => LAYER_ROLES.indexOf(role);
 function writeLayer(locs, answers, query, role) {
+  return writeLayers(locs, answers, query)[role];
+}
+function writeLayers(locs, answers, query) {
   const resolved = resolveDslConfig(locs, answers, query);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
-  const place = placeOf(resolved, layers, query, role);
-  if (place.kind === "refused") return place;
+  const writeOf = (role) => {
+    const place = placeOf(resolved, layers, query, role);
+    if (place.kind === "refused") return place;
+    return {
+      kind: "layer",
+      path: place.path,
+      role,
+      below: layers.filter((l) => rank(l.role) < rank(role)),
+      above: layers.filter((l) => rank(l.role) > rank(role)),
+      repo: resolved.repos.plugins,
+      cwd: query.cwd ?? null,
+      locs
+    };
+  };
   return {
-    kind: "layer",
-    path: place.path,
-    role,
-    below: layers.filter((l) => rank(l.role) < rank(role)),
-    above: layers.filter((l) => rank(l.role) > rank(role)),
-    repo: resolved.repos.plugins,
-    cwd: query.cwd ?? null,
-    locs
+    user: writeOf("user"),
+    project: writeOf("project"),
+    local: writeOf("local")
   };
 }
 function placeOf(resolved, layers, { projectDir, configFile }, role) {
@@ -75412,7 +75421,7 @@ function excludeRewrite(file, rewrites) {
   const was = prior === void 0 ? readConfigText(exclude) : prior.was;
   const text4 = prior === void 0 ? was ?? "" : prior.will ?? "";
   const entry = `/${import_node_path39.default.relative(root, file).split(import_node_path39.default.sep).join("/")}`;
-  if (text4.split("\n").includes(entry)) return ABSENT;
+  if (text4.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT;
   const lead = text4 === "" || text4.endsWith("\n") ? "" : "\n";
   return ok({ file: exclude, was, will: `${text4}${lead}${entry}
 ` });
@@ -77622,7 +77631,7 @@ function compileAction(parse4, name, action2, stateKeyToVar, perConfigDomains, c
     };
   }
   if ("reset" in action2) {
-    return { kind: "reset", key: action2.reset, layer: action2.layer ?? "user" };
+    return { kind: "reset", key: action2.reset };
   }
   if ("doctor" in action2) {
     switch (action2.doctor) {
@@ -77865,9 +77874,7 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     }
     case "reset":
       return {
-        effects: [
-          { verb: VERB_RESET_CONFIG, args: [sessionId2, c.layer, c.key] }
-        ],
+        effects: [{ verb: VERB_RESET_CONFIG, args: [sessionId2, c.key] }],
         active: false
       };
     // [LAW:one-source-of-truth] No key to carry — the click just says "step
@@ -85436,12 +85443,7 @@ function laneHandoff(sessionId2, lanes) {
   const reset = effectsUrl([
     {
       verb: VERB_RESET_CONFIG,
-      // In the user's own file, where the menu's switches write.
-      args: [
-        sessionId2,
-        "user",
-        ...lanes.map((lane) => LANES[lane].switch.setting)
-      ]
+      args: [sessionId2, ...lanes.map((lane) => LANES[lane].switch.setting)]
     }
   ]);
   return {
@@ -86237,11 +86239,11 @@ function resetLayers(key) {
     ]
   };
 }
-function fileHeldSettings(raw) {
+function fileHeldSettings(raws) {
   return new Set(
     SETTING_PROJECTIONS.map((p2) => p2.configKey).filter(
       (key) => resetLayers(key).fileKeys.some(
-        (fileKey) => holds(raw, filePath(fileKey))
+        (fileKey) => raws.some((raw) => holds(raw, filePath(fileKey)))
       )
     )
   );
@@ -86456,7 +86458,6 @@ function closingView(store, nestOf2, log) {
 
 // src/renderer/config-file-store.ts
 init_globals();
-var import_json55 = __toESM(require_dist(), 1);
 var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
 var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
 function persistValueText(key, raw) {
@@ -86507,38 +86508,47 @@ function authoredFragment(fragment) {
     ...own2
   };
 }
-var RAW = RAW_DEFAULT_DSL_CONFIG;
-var RAW_SEGMENTS = RAW.segments;
-var RAW_PRESETS = RAW.presets;
-var RAW_ROOT = RAW.root;
-function requireDeclared(doc, own2, bundled, key) {
-  if (!has2(doc, own2) && bundled === void 0) {
+function requireDeclared(doc, own2, inherited, key) {
+  if (!has2(doc, own2) && inherited === void 0) {
     throw new BadVerbArgs(
-      `cannot edit ${key}: neither the config file nor the bundled default declares ${own2.join(".")}`
+      `cannot edit ${key}: neither the config file nor the layers beneath it declare ${own2.join(".")}`
     );
   }
 }
-function valuePathOf(doc, target) {
+function valuePathOf(doc, under3, target) {
   const path44 = persistPath(target);
   if (target.scope === "segment-palette") {
     requireDeclared(
       doc,
       ["segments", target.segment],
-      RAW_SEGMENTS[target.segment],
+      under3.segments[target.segment],
       path44.join(".")
     );
   }
   return path44;
 }
-function bundledDoc(value) {
+function inheritedDoc(value) {
   return parseDocument(json5Text(value));
 }
-function bundledRowLayers() {
-  return Object.entries(RAW_ROOT.rows).map(([name, row2]) => {
+function inheritedRowLayers(under3) {
+  const named3 = Object.keys(under3.root.rows).every(
+    (name) => ROW_NAME_RE.test(name)
+  );
+  if (!named3) {
+    const authored = authoredLayout(rootNode(under3.root));
+    return [
+      {
+        path: ["root"],
+        fragment: inheritedDoc(authored),
+        unit: { path: ["root"], value: authored }
+      }
+    ];
+  }
+  return Object.entries(under3.root.rows).map(([name, row2]) => {
     const authored = authoredLayout(row2);
     return {
       path: ["root"],
-      fragment: bundledDoc({ rows: { [name]: authored } }),
+      fragment: inheritedDoc({ rows: { [name]: authored } }),
       unit: { path: ["root", "rows", name], value: authored }
     };
   });
@@ -86547,21 +86557,21 @@ function fileLayer(doc, path44) {
   const fragment = doc === null ? void 0 : nodeAt(doc, path44);
   return fragment === void 0 ? null : { path: path44, fragment, unit: null };
 }
-function bundledRootLayer(path44, root) {
+function inheritedRootLayer(path44, root) {
   if (root === void 0) return null;
   const authored = authoredFragment(root);
   return {
     path: path44,
-    fragment: bundledDoc(authored),
+    fragment: inheritedDoc(authored),
     unit: { path: path44, value: authored }
   };
 }
-function presetLayer(doc, preset) {
+function presetLayer(doc, under3, preset) {
   const own2 = ["presets", preset];
   const path44 = [...own2, "root"];
-  const bundled = RAW_PRESETS[preset];
-  requireDeclared(doc, own2, bundled, path44.join("."));
-  const layer = fileLayer(doc, path44) ?? bundledRootLayer(path44, bundled?.root);
+  const inherited = under3.presets[preset];
+  requireDeclared(doc, own2, inherited, path44.join("."));
+  const layer = fileLayer(doc, path44) ?? inheritedRootLayer(path44, inherited?.root);
   return layer !== null && restagesFragment(layer.fragment) ? layer : null;
 }
 var TREE_BLOCK = "#";
@@ -86586,27 +86596,27 @@ function applyLayer(base, layer) {
     )
   ]);
 }
-function cascadeOf(doc, preset) {
+function cascadeOf(doc, under3, preset) {
   const layers = [
-    ...bundledRowLayers(),
+    ...inheritedRowLayers(under3),
     fileLayer(doc, ["root"]),
-    presetLayer(doc, preset)
+    presetLayer(doc, under3, preset)
   ].filter((layer) => layer !== null);
   return layers.reduce(applyLayer, /* @__PURE__ */ new Map());
 }
-function layoutPlacementOf(doc, preset, id2) {
-  for (const { node, ...placement } of cascadeOf(doc, preset).values()) {
+function layoutPlacementOf(doc, under3, preset, id2) {
+  for (const { node, ...placement } of cascadeOf(doc, under3, preset).values()) {
     if (hasSegmentRef(node, id2)) return placement;
   }
   throw new BadVerbArgs(
-    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id2}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
+    `${stagedPathOf(doc, under3, preset).join(".")} holds no placement "${id2}" \u2014 the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`
   );
 }
-function stagedPathOf(doc, preset) {
-  return presetLayer(doc, preset)?.path ?? ["root"];
+function stagedPathOf(doc, under3, preset) {
+  return presetLayer(doc, under3, preset)?.path ?? ["root"];
 }
-function resetPathOf(doc, target) {
-  return target.scope === "preset-root" ? stagedPathOf(doc, target.preset) : persistPath(target);
+function resetPathOf(doc, under3, target) {
+  return target.scope === "preset-root" ? stagedPathOf(doc, under3, target.preset) : persistPath(target);
 }
 function ensureAuthored(text4, { unit }) {
   return unit === null ? text4 : setValue(text4, unit.path, json5Text(unit.value), JSON5_DIALECT);
@@ -86685,6 +86695,20 @@ function chainOver(into, text4) {
     (p2) => p2 === into.path && text4 !== null ? text4 : fs_default.readFileSync(p2, "utf8")
   );
 }
+function aroundOf(into) {
+  try {
+    const chain2 = chainOver(into, null);
+    return {
+      under: writtenConfig(into, chain2),
+      names: Object.keys(topConfig(chain2).presets)
+    };
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    throw new BadVerbArgs(
+      `refused: the layers around ${into.path} do not load \u2014 ${e.message}`
+    );
+  }
+}
 function writtenConfig(into, chain2) {
   const upTo = /* @__PURE__ */ new Set([...into.below.map((l) => l.path), into.path]);
   return chain2.layers.filter((l) => upTo.has(l.path)).at(-1)?.config ?? chain2.base;
@@ -86746,10 +86770,11 @@ function writeValues(store, into, pairs2) {
 }
 function writeDrafts(store, into, pairs2, placements) {
   const before = store.read(into.path);
+  const { under: under3 } = aroundOf(into);
   const valued = pairs2.reduce(
     (text4, [key, raw]) => setValue(
       text4,
-      valuePathOf(docOf(text4), requireValueTarget(key)),
+      valuePathOf(docOf(text4), under3, requireValueTarget(key)),
       persistValueText(key, raw),
       JSON5_DIALECT
     ),
@@ -86761,15 +86786,15 @@ function writeDrafts(store, into, pairs2, placements) {
     before,
     writtenOnly(
       into,
-      () => withPlacements(valued, into.path, placements, (text4) => text4)
+      () => withPlacements(valued, under3, into.path, placements, (text4) => text4)
     ),
     refuseHidden
   );
 }
-function withPlacements(text4, file, placements, own2) {
+function withPlacements(text4, under3, file, placements, own2) {
   return placements.reduce((prior, { preset, id: id2, setting, value }) => {
-    const acc = own2(prior, preset, id2);
-    const placement = layoutPlacementOf(docOf(acc), preset, id2);
+    const acc = own2(prior, under3, preset, id2);
+    const placement = layoutPlacementOf(docOf(acc), under3, preset, id2);
     const set2 = setPlacementSetting(
       ensureAuthored(acc, placement),
       placement.path,
@@ -86785,17 +86810,17 @@ function withPlacements(text4, file, placements, own2) {
     return set2;
   }, text4);
 }
-function ownRow(text4, preset, id2) {
+function ownRow(text4, under3, preset, id2) {
   const doc = docOf(text4);
   const own2 = ["presets", preset, "root"];
-  for (const [row2, { path: path44, unit, node }] of cascadeOf(doc, preset)) {
+  for (const [row2, { path: path44, unit, node }] of cascadeOf(doc, under3, preset)) {
     if (!hasSegmentRef(node, id2)) continue;
     if (own2.every((key, i2) => path44[i2] === key)) return text4;
     const rowText = unit === null ? movableTextOf(text4, node) : json5Text(unit.value);
     if (row2 !== TREE_BLOCK) {
       return setValue(text4, [...own2, "rows", row2], rowText, JSON5_DIALECT);
     }
-    if (presetLayer(doc, preset) !== null) {
+    if (presetLayer(doc, under3, preset) !== null) {
       throw new BadVerbArgs(
         `cannot give preset "${preset}" its own copy of ${path44.join(".")}: it already stages rows of its own over that tree`
       );
@@ -86804,16 +86829,17 @@ function ownRow(text4, preset, id2) {
   }
   return text4;
 }
-function deleteAtPath(text4, path44) {
-  const ownPreset = path44[0] === "presets" && path44.length > 2 && !isBundledPreset(path44[1]);
+function deleteAtPath(text4, under3, path44) {
+  const ownPreset = path44[0] === "presets" && path44.length > 2 && under3.presets[path44[1]] === void 0;
   return deleteValue(text4, path44, ownPreset ? 2 : 0);
 }
 function deleteValues(store, into, keys2) {
   const targets = keys2.map(requireTarget);
   const before = store.read(into.path);
   if (before === null) return;
+  const { under: under3 } = aroundOf(into);
   const after = targets.reduce(
-    (text4, target) => deleteAtPath(text4, resetPathOf(docOf(text4), target)),
+    (text4, target) => deleteAtPath(text4, under3, resetPathOf(docOf(text4), under3, target)),
     before
   );
   if (after === before) return;
@@ -86824,20 +86850,8 @@ function presetKeys(doc) {
   const declared = doc === null ? void 0 : nodeAt(doc, ["presets"]);
   return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
 }
-function freePresetName(doc, into) {
-  const taken = new Set(
-    [
-      ...BUNDLED_PRESETS,
-      ...presetKeys(doc),
-      // Each layer above as the loader reads it (JSON5, duplicate keys and
-      // all) — the editor refuses files the loader renders.
-      ...into.above.flatMap(
-        (l) => Object.keys(
-          import_json55.default.parse(fs_default.readFileSync(l.path, "utf8")).presets ?? {}
-        )
-      )
-    ].map(ident)
-  );
+function freePresetName(doc, around) {
+  const taken = new Set([...around, ...presetKeys(doc)].map(ident));
   return Array.from(
     { length: taken.size + 1 },
     (_, i2) => `${SAVED_PRESET_PREFIX}${i2 + 1}`
@@ -86846,9 +86860,10 @@ function freePresetName(doc, into) {
 function writePreset(store, into, from, globals, picks, placements) {
   const before = store.read(into.path);
   const doc = docOf(before ?? "");
-  const name = freePresetName(doc, into);
+  const { under: under3, names } = aroundOf(into);
+  const name = freePresetName(doc, names);
   const own2 = ["presets", name];
-  const staged = writtenOnly(into, () => presetLayer(doc, from));
+  const staged = writtenOnly(into, () => presetLayer(doc, under3, from));
   const copied = [
     ...staged === null ? [] : [
       [
@@ -86861,7 +86876,7 @@ function writePreset(store, into, from, globals, picks, placements) {
   const pinned = picks.map(([field, raw]) => {
     const key = presetGlobalsKey(name, field);
     return [
-      valuePathOf(doc, requireValueTarget(key)),
+      valuePathOf(doc, under3, requireValueTarget(key)),
       persistValueText(key, raw)
     ];
   });
@@ -86873,6 +86888,7 @@ function writePreset(store, into, from, globals, picks, placements) {
     into,
     () => withPlacements(
       after,
+      under3,
       into.path,
       placements.map((p2) => ({ ...p2, preset: name })),
       ownRow
@@ -86892,9 +86908,10 @@ function writeThemeDefault(store, into, theme24, look) {
   return commit2(store, into, before, after, refuseHidden);
 }
 function deletePreset(store, into, name) {
-  if (isBundledPreset(name)) {
+  const { under: under3 } = aroundOf(into);
+  if (under3.presets[name] !== void 0) {
     throw new BadVerbArgs(
-      `cannot delete preset "${name}": it is bundled \u2014 reset its settings instead`
+      `cannot delete preset "${name}": a layer beneath ${into.path} declares it \u2014 reset its settings instead`
     );
   }
   const own2 = ["presets", name];
@@ -86914,7 +86931,7 @@ function deletePreset(store, into, name) {
     store,
     into,
     before,
-    paths2.reduce((text4, at) => deleteAtPath(text4, at), before),
+    paths2.reduce((text4, at) => deleteAtPath(text4, under3, at), before),
     releases
   );
 }
@@ -86925,9 +86942,10 @@ function applyLayoutOp(store, into, key, op) {
   }
   const before = store.read(into.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
+  const { under: under3 } = aroundOf(into);
   const placement = writtenOnly(
     into,
-    () => layoutPlacementOf(docOf(before ?? ""), target.preset, subject)
+    () => layoutPlacementOf(docOf(before ?? ""), under3, target.preset, subject)
   );
   const authored = ensureAuthored(before ?? "", placement);
   const { after, placed: placed2 } = spliceOp(authored, placement.path, op, () => {
@@ -87746,7 +87764,7 @@ var stepState = async (rawValue, ctx) => {
   const sid = requireSessionId(sessionId2);
   if (!key) {
     throw new BadVerbArgs(
-      "step-state: <key> is required (shape: <sessionId>/<layer>/<key>/<by>)"
+      "step-state: <key> is required (shape: <sessionId>/<key>/<by>)"
     );
   }
   if (!STEP_INT_RE.test(byRaw)) {
@@ -87904,14 +87922,13 @@ function originLayer(ctx, origin, role) {
   return write;
 }
 function originLayers(ctx, origin) {
-  const answers = repoConfigs(ctx.stateDir).read();
-  const query = {
+  const writes = writeLayers(ctx.locations, repoConfigs(ctx.stateDir).read(), {
     projectDir: origin.projectDir,
     configFile: origin.target.path,
     cwd: origin.cwd
-  };
+  });
   return LAYER_ROLES.flatMap((role) => {
-    const write = writeLayer(ctx.locations, answers, query, role);
+    const write = writes[role];
     return write.kind === "layer" ? [write] : [];
   });
 }
@@ -88139,7 +88156,8 @@ var deletePreset2 = async (value, ctx) => {
   ctx.log("info", `delete-preset: ${name} \u2190 ${into.path} (session=${sid})`);
 };
 var resetConfig = async (value, ctx) => {
-  const { sid, role, args: keys2 } = configWire("reset-config", value);
+  const [sessionId2 = "", ...keys2] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId2);
   const origin = sessionOrigin(ctx, sid);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
   const unknown = keys2.length === 0 ? [""] : keys2.filter((k) => !known.includes(k));
@@ -88148,15 +88166,15 @@ var resetConfig = async (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const intos = originLayers(ctx, origin);
   const layers = keys2.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
-  deleteValues(editStore(ctx, sid), into, fileKeys);
+  for (const into of intos) deleteValues(editStore(ctx, sid), into, fileKeys);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
   ctx.log(
     "info",
-    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${into.path} (session=${sid})`
+    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${intos.map((l) => l.path).join(", ")} (session=${sid})`
   );
 };
 function endedPlacements(before, after) {
@@ -89484,10 +89502,12 @@ function configDisposeLine(teardown, released) {
 function cacheKey(projectDir, cwd2, configFile) {
   return projectDir + "\0" + cwd2 + "\0" + (configFile ?? "");
 }
-function authoredRoots(config2, raw) {
+function authoredRoots(config2, raws) {
   return new Set(
     presetNames(config2.presets).filter(
-      (name) => presetRoot(config2, name).path === "root" ? raw.root !== void 0 : raw.presets?.[name]?.root !== void 0
+      (name) => raws.some(
+        (raw) => presetRoot(config2, name).path === "root" ? raw.root !== void 0 : raw.presets?.[name]?.root !== void 0
+      )
     )
   );
 }
@@ -89609,7 +89629,7 @@ function buildRenderState(load, deps) {
   const { cwd: cwd2, chain: chain2, loaded } = load;
   const { layers, config: config2, installed, dropped } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
-  const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
+  const raws = layers.map((l) => l.raw);
   const inserted = layers.flatMap(
     (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
   );
@@ -89654,8 +89674,8 @@ function buildRenderState(load, deps) {
       registry,
       compiled: registration.compiled,
       // What a reset clears is the home's: resets write nowhere else.
-      authoredRoots: authoredRoots(merged, homeRaw),
-      fileHeldSettings: fileHeldSettings(homeRaw),
+      authoredRoots: authoredRoots(merged, raws),
+      fileHeldSettings: fileHeldSettings(raws),
       configPath: chain2.layers.some((l) => l.path === chain2.home) ? chain2.home : null,
       writable: chain2.writable,
       // One entry per declaration, however many layers declare it, judged

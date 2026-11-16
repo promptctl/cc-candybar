@@ -4,15 +4,22 @@
     {
       "version": "pr-776",
       "ref": "refs/pull/776/merge",
-      "sha": "9ed69475a9626927afa67443cd7e8782089aafab",
-      "timestamp": "2026-11-16T22:21:03.642Z",
+      "sha": "f544dcc3b060523190577d19478c00fdb32d9650",
+      "timestamp": "2026-11-16T22:40:26.617Z",
       "commits": [
         {
-          "sha": "9ed69475a9626927afa67443cd7e8782089aafab",
+          "sha": "f544dcc3b060523190577d19478c00fdb32d9650",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T15:19:56-07:00",
-          "message": "Merge 06e7862bf7176ccb322074145530e46814f94af2 into ef473125f81ac3346bc4f19160cb340e8bf8c5e1\n"
+          "timestamp": "2026-11-16T22:39:38Z",
+          "message": "Merge bc79a5cbe93bb068cc144598d68c51d0f521cec0 into ef473125f81ac3346bc4f19160cb340e8bf8c5e1\n"
+        },
+        {
+          "sha": "bc79a5cbe93bb068cc144598d68c51d0f521cec0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T15:39:04-07:00",
+          "message": "fix(config): a write to a layer inherits from the layers beneath it, and reset clears every layer (candybar-host-renderer-x96a.u2t)\n\nA write's structural reads (the row a placement sits in, the preset a save\ncopies, the names a new preset avoids, a segment a pin needs declared) came\nfrom the written file and the bundled default alone. Over a user file, a\nproject or local write refused placements the user's rows held, copied a\nbundled row over the user's own, missed presets the user declared, and could\nmint a name the user's file already held. They now come from what the layers\nbeneath the written file merge to, read once per click; a root lowered from a\ntree is copied whole, since its positional rows have no name to write under.\n\nReset means back to the default, which no single layer can deliver, so it no\nlonger names a layer: it clears the key from every layer the session can\nwrite. The lane handoff's escape button and the menu's ↺ follow, and the ↺\nand preset.customized read every file of the chain.\n\nAlso: every role's write is projected from one resolution; a CRLF exclude\nthat already names the local file is left as it is; stale comments and the\nstep-state shape message are fixed; the edit-mode save's law marker is back.\n"
         },
         {
           "sha": "06e7862bf7176ccb322074145530e46814f94af2",
