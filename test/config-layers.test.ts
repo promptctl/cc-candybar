@@ -157,6 +157,57 @@ test("save-as-preset never mints a name a project layer declares", () => {
   expect(name).toBe("custom-2");
 });
 
+// A file above the user's inherits what the user's file says: a structural
+// edit there finds and copies the user's rows and presets, never the bundled
+// default's in their place.
+describe("a write to a layer above the user's", () => {
+  const localFile = () => path.join(project, ".cc-candybar.local.json5");
+
+  test("a layout edit finds the user's row and copies it, not the bundled one", () => {
+    applyLayoutOp(EDITS_IN_PLACE, projectLayer("project"), "presets.default.root", {
+      op: "insert",
+      segment: "model",
+      anchor: "mine",
+      relation: "after",
+    });
+    const written = fs.readFileSync(projectFile, "utf8");
+    expect(written).toContain("mine");
+    expect(written).toContain("model");
+    expect(written).not.toContain("gitaculous");
+  });
+
+  test("save-as-preset copies a preset only the user's file declares", () => {
+    fs.writeFileSync(
+      userFile,
+      `{ segments: { mine: { template: "USERSEG" } }, presets: { own: { root: { h: ["mine"] } } } }`,
+    );
+    const name = writePreset(EDITS_IN_PLACE, projectLayer("local"), "own", {}, [], []);
+    const written = fs.readFileSync(localFile(), "utf8");
+    expect(written).toContain(name);
+    expect(written).toContain("mine");
+  });
+
+  test("save-as-preset never mints a name the user's file declares", () => {
+    fs.writeFileSync(userFile, `{ presets: { "custom-1": {} } }`);
+    expect(
+      writePreset(EDITS_IN_PLACE, projectLayer("project"), "default", {}, [], []),
+    ).toBe("custom-2");
+  });
+
+  // What a file inherits is the merge of the layers beneath it, never a
+  // chain with a layer taken out: a layer above that leans on the written
+  // file's declarations does not refuse the write.
+  test("a user write is not refused because the local file selects a preset the user's file declares", () => {
+    fs.writeFileSync(
+      userFile,
+      `{ segments: { mine: { template: "USERSEG" } }, presets: { own: {} }, root: { h: ["mine"] } }`,
+    );
+    fs.writeFileSync(localFile(), `{ globals: { preset: "own" } }`);
+    writeValues(EDITS_IN_PLACE, projectLayer("user"), [["menuGlyph", "Q"]]);
+    expect(fs.readFileSync(userFile, "utf8")).toContain("Q");
+  });
+});
+
 test("the user's file is a layer even when the session's project is its directory", () => {
   const xdgDir = path.dirname(userFile);
   const local = path.join(xdgDir, ".cc-candybar.json5");

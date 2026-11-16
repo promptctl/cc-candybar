@@ -536,7 +536,7 @@ interface SavePart {
 const SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"] as const;
 type SaveCount = (typeof SAVE_COUNTS)[number];
 const saveCountVar = (count: SaveCount): string => `${SETTINGS_NS}${count}`;
-// Exported for edit mode's `✓ save`, which reads the same count (see SAVE_SEG).
+// Exported for edit mode's `✓ save`, which reads the same count.
 export const UNSAVED_VAR = saveCountVar("unsaved");
 const counted = (count: SaveCount, body: string): SavePart => ({
   body,

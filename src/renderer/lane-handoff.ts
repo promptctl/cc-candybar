@@ -10,6 +10,7 @@
 // handed before this line replaces it (src/renderer/draw-bar.ts).
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
+import type { LayerRole } from "../config/layer-role.js";
 import {
   LANES,
   LANE_NAMES,
@@ -39,25 +40,27 @@ export const HANDOFF_BUTTON = "[⟲ claude]";
 
 // The handoff row for `lanes` (non-empty): the button alone; the error
 // indicator is laid after it where the row is drawn (src/render/diagnostics.ts).
-// The button resets each lane's switch at every layer (the settings menu's ↺
-// for it), which puts the renderer back to `claude` and turns a 🧪 lane off;
+// The button resets each lane's switch in every layer the session can write
+// (the settings menu's ↺ for it resets the user's alone): it is the way out
+// of a lane that took the bar wherever the switch was saved, so it puts the
+// renderer back to `claude` and turns a 🧪 lane off;
 // what the lane runs follows the switch (src/daemon/lane-setup.ts), so a pane
 // it opened closes.
 export function laneHandoff(
   sessionId: SessionId,
+  writable: readonly LayerRole[],
   lanes: readonly [Lane, ...Lane[]],
 ): ChannelMessage {
-  const reset = effectsUrl([
-    {
+  const reset = effectsUrl(
+    writable.map((layer) => ({
       verb: VERB_RESET_CONFIG,
-      // In the user's own file, where the menu's switches write.
       args: [
         sessionId,
-        "user",
+        layer,
         ...lanes.map((lane) => LANES[lane].switch.setting),
       ],
-    },
-  ]);
+    })),
+  );
   return {
     severity: HANDOFF_SEVERITY,
     lines: [[diagnosticSpan(HANDOFF_BUTTON, reset)]],

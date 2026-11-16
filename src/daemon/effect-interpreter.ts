@@ -145,8 +145,16 @@ function excludeRewrite(
   const prior = rewrites.get(exclude);
   const was = prior === undefined ? readConfigText(exclude) : prior.was;
   const text = prior === undefined ? (was ?? "") : (prior.will ?? "");
-  const entry = `/${path.relative(root, file).split(path.sep).join("/")}`;
-  if (text.split("\n").includes(entry)) return ABSENT;
+  // The path as a gitignore pattern names it: glob characters in a directory
+  // name are escaped, so the entry matches this file and only it.
+  const entry = `/${path
+    .relative(root, file)
+    .split(path.sep)
+    .join("/")
+    .replace(/[\\*?[]/g, "\\$&")}`;
+  // A line is an entry by its text, as git reads it: a CRLF file's `\r` and
+  // trailing spaces are not part of the pattern.
+  if (text.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT;
   const lead = text === "" || text.endsWith("\n") ? "" : "\n";
   return ok({ file: exclude, was, will: `${text}${lead}${entry}\n` });
 }

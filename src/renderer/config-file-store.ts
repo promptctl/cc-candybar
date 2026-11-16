@@ -27,11 +27,9 @@
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
 import fs from "node:fs";
 import JSON5 from "json5";
+import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import {
-  DEFAULT_DSL_CONFIG,
-  RAW_DEFAULT_DSL_CONFIG,
-} from "../config/default-dsl-config.js";
-import {
+  inheritedConfig,
   loadConfigChain,
   type WriteLayer,
   type LoadedChain,
@@ -42,7 +40,6 @@ import type {
   Globals,
   LayoutNode,
   PresetDecl,
-  Root,
   RootFragment,
   SettingValue,
 } from "../config/dsl-types.js";
@@ -50,7 +47,7 @@ import {
   wireKindOf,
   type ThemeDefaultField,
 } from "../config/globals-fields.js";
-import { isRowsFragment } from "../config/root.js";
+import { isRowsFragment, ROW_NAME_RE, rootNode } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import {
   deleteValue,
@@ -80,7 +77,6 @@ import {
   type ConfigPath,
   type PersistTarget,
 } from "../config/loader/persist-target.js";
-import { BUNDLED_PRESETS, isBundledPreset } from "./bundled-presets.js";
 import { ident } from "../config/ident.js";
 
 // [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
@@ -175,13 +171,8 @@ export function authoredFragment(fragment: RootFragment): unknown {
   };
 }
 
-const RAW = RAW_DEFAULT_DSL_CONFIG;
-const RAW_SEGMENTS: Readonly<Record<string, unknown>> = RAW.segments;
-const RAW_PRESETS: Readonly<Record<string, PresetDecl>> = RAW.presets;
-const RAW_ROOT: Root = RAW.root;
-
 // [LAW:no-silent-failure] A write under a by-name declaration NEITHER the
-// file nor the bundled default carries is the stale click: the gate admitted
+// file nor what it inherits carries is the stale click: the gate admitted
 // a key from a config this file no longer holds (a custom segment or preset
 // deleted by hand since the render, another session's file). It refuses,
 // never falls through — for a preset, "not declared" once read as "declares
@@ -189,12 +180,12 @@ const RAW_ROOT: Root = RAW.root;
 function requireDeclared(
   doc: Node | null,
   own: ConfigPath,
-  bundled: unknown,
+  inherited: unknown,
   key: string,
 ): void {
-  if (!has(doc, own) && bundled === undefined) {
+  if (!has(doc, own) && inherited === undefined) {
     throw new BadVerbArgs(
-      `cannot edit ${key}: neither the config file nor the bundled default declares ${own.join(".")}`,
+      `cannot edit ${key}: neither the config file nor the layers beneath it declare ${own.join(".")}`,
     );
   }
 }
@@ -206,13 +197,17 @@ type ValueTarget = Exclude<PersistTarget, { scope: "preset-root" }>;
 // The path a value write splices at. A globals field is always declared; a
 // segment field needs its segment declared somewhere, since the one field
 // the file would then hold is a delta over the bundled declaration.
-function valuePathOf(doc: Node | null, target: ValueTarget): ConfigPath {
+function valuePathOf(
+  doc: Node | null,
+  under: DslConfig,
+  target: ValueTarget,
+): ConfigPath {
   const path = persistPath(target);
   if (target.scope === "segment-palette") {
     requireDeclared(
       doc,
       ["segments", target.segment],
-      RAW_SEGMENTS[target.segment],
+      under.segments[target.segment],
       path.join("."),
     );
   }
@@ -222,12 +217,12 @@ function valuePathOf(doc: Node | null, target: ValueTarget): ConfigPath {
 // ─── The root cascade, as the file spells it ────────────────────────────────
 
 // [LAW:one-type-per-behavior] One layer of the root cascade a preset renders
-// (bundled root rows < file root < the preset's fragment — the order
-// mergeRoot folds in src/config/root.ts): its fragment in the AUTHORING
+// (the rows the layers beneath hold < file root < the preset's fragment — the
+// order mergeRoot folds in src/config/root.ts): its fragment in the AUTHORING
 // grammar, the config-file path a structural edit to it lands at, and what
 // the file must author first for that path to hold it — null for a layer the
 // file already authors. Every layer is spelled the way it would sit in the
-// file (a bundled one as the very text `ensureAuthored` would materialize),
+// file (an inherited one as the very text `ensureAuthored` would materialize),
 // so one grammar reader (json5-edit) answers "does this layer hold the
 // segment" for all of them [LAW:one-source-of-truth].
 interface RootLayer {
@@ -236,19 +231,30 @@ interface RootLayer {
   readonly unit: Placement["unit"];
 }
 
-function bundledDoc(value: unknown): Node {
+function inheritedDoc(value: unknown): Node {
   return parseDocument(json5Text(value));
 }
 
-// The bundled default's root, one layer PER ROW: a first edit on an inherited
-// row materializes `root.rows.<name>` alone, the by-name cascade's own unit,
-// never the whole tree.
-function bundledRowLayers(): readonly RootLayer[] {
-  return Object.entries(RAW_ROOT.rows).map(([name, row]) => {
+// The root the layers beneath merge to, one layer PER ROW: a first edit on an
+// inherited row materializes `root.rows.<name>` alone, the by-name cascade's
+// own unit, never the whole tree. A root a tree beneath lowered to positional
+// rows has no row a file can name, so it is one layer: the whole tree.
+function inheritedRowLayers(under: DslConfig): readonly RootLayer[] {
+  if (!Object.keys(under.root.rows).every((name) => ROW_NAME_RE.test(name))) {
+    const authored = authoredLayout(rootNode(under.root));
+    return [
+      {
+        path: ["root"],
+        fragment: inheritedDoc(authored),
+        unit: { path: ["root"], value: authored },
+      },
+    ];
+  }
+  return Object.entries(under.root.rows).map(([name, row]) => {
     const authored = authoredLayout(row);
     return {
       path: ["root"],
-      fragment: bundledDoc({ rows: { [name]: authored } }),
+      fragment: inheritedDoc({ rows: { [name]: authored } }),
       unit: { path: ["root", "rows", name], value: authored },
     };
   });
@@ -259,10 +265,11 @@ function fileLayer(doc: Node | null, path: ConfigPath): RootLayer | null {
   return fragment === undefined ? null : { path, fragment, unit: null };
 }
 
-// The bundled preset's root as a layer at its place in the file — a first
-// structural edit materializes `presets.<name>.root` alone, the one field
-// the edit lands in — or null for a preset that stages no root.
-function bundledRootLayer(
+// The preset's root as the layers beneath merge it, as a layer at its place
+// in the file — a first structural edit materializes `presets.<name>.root`
+// alone, the one field the edit lands in — or null for a preset that stages
+// no root.
+function inheritedRootLayer(
   path: ConfigPath,
   root: RootFragment | undefined,
 ): RootLayer | null {
@@ -270,25 +277,30 @@ function bundledRootLayer(
   const authored = authoredFragment(root);
   return {
     path,
-    fragment: bundledDoc(authored),
+    fragment: inheritedDoc(authored),
     unit: { path, value: authored },
   };
 }
 
 // [LAW:parse-dont-validate] The preset's fragment, by mergeWithDefault's own
-// rule, field by field: the file's `root` under that name wins, else the
-// bundled preset's, else the preset stages no root. A preset declared
-// nowhere is the stale click requireDeclared refuses.
+// rule, field by field: the file's `root` under that name wins, else the one
+// the layers beneath merge to, else the preset stages no root. A preset
+// declared nowhere is the stale click requireDeclared refuses.
 // [LAW:one-source-of-truth] A declared fragment that is the merge identity
 // stages the config's own root, exactly as presetRoot classifies it
 // (root.ts's `restages`), so every path this module names agrees with the
 // one the renderer reports.
-function presetLayer(doc: Node | null, preset: string): RootLayer | null {
+function presetLayer(
+  doc: Node | null,
+  under: DslConfig,
+  preset: string,
+): RootLayer | null {
   const own: ConfigPath = ["presets", preset];
   const path: ConfigPath = [...own, "root"];
-  const bundled = RAW_PRESETS[preset];
-  requireDeclared(doc, own, bundled, path.join("."));
-  const layer = fileLayer(doc, path) ?? bundledRootLayer(path, bundled?.root);
+  const inherited: PresetDecl | undefined = under.presets[preset];
+  requireDeclared(doc, own, inherited, path.join("."));
+  const layer =
+    fileLayer(doc, path) ?? inheritedRootLayer(path, inherited?.root);
   return layer !== null && restagesFragment(layer.fragment) ? layer : null;
 }
 
@@ -331,11 +343,15 @@ function applyLayer(base: Cascade, layer: RootLayer): Cascade {
       ]);
 }
 
-function cascadeOf(doc: Node | null, preset: string): Cascade {
+function cascadeOf(
+  doc: Node | null,
+  under: DslConfig,
+  preset: string,
+): Cascade {
   const layers = [
-    ...bundledRowLayers(),
+    ...inheritedRowLayers(under),
     fileLayer(doc, ["root"]),
-    presetLayer(doc, preset),
+    presetLayer(doc, under, preset),
   ].filter((layer): layer is RootLayer => layer !== null);
   return layers.reduce(applyLayer, new Map());
 }
@@ -346,27 +362,36 @@ function cascadeOf(doc: Node | null, preset: string): Cascade {
 // the row changed under it — loud, never a write somewhere plausible.
 function layoutPlacementOf(
   doc: Node | null,
+  under: DslConfig,
   preset: string,
   id: string,
 ): Placement {
-  for (const { node, ...placement } of cascadeOf(doc, preset).values()) {
+  for (const { node, ...placement } of cascadeOf(doc, under, preset).values()) {
     if (hasSegmentRef(node, id)) return placement;
   }
   throw new BadVerbArgs(
-    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
+    `${stagedPathOf(doc, under, preset).join(".")} holds no placement "${id}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
   );
 }
 
 // The path a preset's layout is authored at: the fragment it stages (the
 // file's, or the bundled one's place in the file), else the config's own
 // `root` — the same fact presetRoot's reported path projects.
-function stagedPathOf(doc: Node | null, preset: string): ConfigPath {
-  return presetLayer(doc, preset)?.path ?? ["root"];
+function stagedPathOf(
+  doc: Node | null,
+  under: DslConfig,
+  preset: string,
+): ConfigPath {
+  return presetLayer(doc, under, preset)?.path ?? ["root"];
 }
 
-function resetPathOf(doc: Node | null, target: PersistTarget): ConfigPath {
+function resetPathOf(
+  doc: Node | null,
+  under: DslConfig,
+  target: PersistTarget,
+): ConfigPath {
   return target.scope === "preset-root"
-    ? stagedPathOf(doc, target.preset)
+    ? stagedPathOf(doc, under, target.preset)
     : persistPath(target);
 }
 
@@ -455,7 +480,7 @@ function refuseHidden(into: WriteLayer, was: Was, will: LoadedChain): void {
 const releases = (): void => {};
 
 // [LAW:no-silent-failure] A structural read finds only what the written layer and the
-// bundled default declare; what it misses may be a layer above's, which no
+// layers beneath it declare; what it misses may be a layer above's, which no
 // click writes — the refusal says so rather than calling the bar stale.
 function writtenOnly<T>(into: WriteLayer, read: () => T): T {
   try {
@@ -495,6 +520,15 @@ function loadedOrNull(
     if (e instanceof ConfigError) return null;
     throw e;
   }
+}
+
+// What the written file inherits: the merge of every layer beneath it, which
+// each of its by-name reads looks through when the file itself is silent.
+function inheritedOf(into: WriteLayer): DslConfig {
+  return inheritedConfig(into.locs, into.below, DEFAULT_DSL_CONFIG, {
+    repo: into.repo,
+    cwd: into.cwd,
+  });
 }
 
 // The chain the written layer's text — or its absence — loads to, read from disk
@@ -638,11 +672,12 @@ export function writeDrafts(
   placements: readonly PlacementValue[],
 ): void {
   const before = store.read(into.path);
+  const under = inheritedOf(into);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
         text,
-        valuePathOf(docOf(text), requireValueTarget(key)),
+        valuePathOf(docOf(text), under, requireValueTarget(key)),
         persistValueText(key, raw),
         JSON5_DIALECT,
       ),
@@ -653,7 +688,7 @@ export function writeDrafts(
     into,
     before,
     writtenOnly(into, () =>
-      withPlacements(valued, into.path, placements, (text) => text),
+      withPlacements(valued, under, into.path, placements, (text) => text),
     ),
     refuseHidden,
   );
@@ -668,13 +703,14 @@ export function writeDrafts(
 // error, never a value written somewhere plausible.
 function withPlacements(
   text: string,
+  under: DslConfig,
   file: string,
   placements: readonly PlacementValue[],
-  own: (text: string, preset: string, id: string) => string,
+  own: (text: string, under: DslConfig, preset: string, id: string) => string,
 ): string {
   return placements.reduce((prior, { preset, id, setting, value }) => {
-    const acc = own(prior, preset, id);
-    const placement = layoutPlacementOf(docOf(acc), preset, id);
+    const acc = own(prior, under, preset, id);
+    const placement = layoutPlacementOf(docOf(acc), under, preset, id);
     const set = setPlacementSetting(
       ensureAuthored(acc, placement),
       placement.path,
@@ -692,16 +728,21 @@ function withPlacements(
 }
 
 // The row holding `id` in `preset`'s layout, copied into the preset's OWN root
-// when a layer other presets share supplies it — the file's `root` or a
-// bundled row — so a value written into it is this preset's alone. A named
+// when a layer other presets share supplies it — the file's `root` or an
+// inherited row — so a value written into it is this preset's alone. A named
 // row lands at `rows.<row>`, the unit the by-name cascade replaces; a whole
 // tree replaces the preset's root outright.
 // [LAW:no-silent-failure] A tree under a preset that already stages its own
 // rows cannot be copied without discarding them: refused, never clobbered.
-function ownRow(text: string, preset: string, id: string): string {
+function ownRow(
+  text: string,
+  under: DslConfig,
+  preset: string,
+  id: string,
+): string {
   const doc = docOf(text);
   const own: ConfigPath = ["presets", preset, "root"];
-  for (const [row, { path, unit, node }] of cascadeOf(doc, preset)) {
+  for (const [row, { path, unit, node }] of cascadeOf(doc, under, preset)) {
     if (!hasSegmentRef(node, id)) continue;
     if (own.every((key, i) => path[i] === key)) return text;
     const rowText =
@@ -709,7 +750,7 @@ function ownRow(text: string, preset: string, id: string): string {
     if (row !== TREE_BLOCK) {
       return setValue(text, [...own, "rows", row], rowText, JSON5_DIALECT);
     }
-    if (presetLayer(doc, preset) !== null) {
+    if (presetLayer(doc, under, preset) !== null) {
       throw new BadVerbArgs(
         `cannot give preset "${preset}" its own copy of ${path.join(".")}: it already stages rows of its own over that tree`,
       );
@@ -719,13 +760,19 @@ function ownRow(text: string, preset: string, id: string): string {
   return text;
 }
 
-// [LAW:one-source-of-truth] A preset the user authored is declared by its
+// [LAW:one-source-of-truth] A preset this file authored is declared by its
 // name alone — `presets.mine: {}` still offers `mine` — so a reset that empties
-// it keeps the name; under a bundled name the entry is a delta, and an empty
-// one prunes so the name tracks the bundled preset again.
-function deleteAtPath(text: string, path: ConfigPath): string {
+// it keeps the name; under a name the file inherits the entry is a delta, and
+// an empty one prunes so the name tracks the inherited preset again.
+function deleteAtPath(
+  text: string,
+  under: DslConfig,
+  path: ConfigPath,
+): string {
   const ownPreset =
-    path[0] === "presets" && path.length > 2 && !isBundledPreset(path[1]!);
+    path[0] === "presets" &&
+    path.length > 2 &&
+    under.presets[path[1]!] === undefined;
   return deleteValue(text, path, ownPreset ? 2 : 0);
 }
 
@@ -743,8 +790,10 @@ export function deleteValues(
   const targets = keys.map(requireTarget);
   const before = store.read(into.path);
   if (before === null) return;
+  const under = inheritedOf(into);
   const after = targets.reduce(
-    (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
+    (text, target) =>
+      deleteAtPath(text, under, resetPathOf(docOf(text), under, target)),
     before,
   );
   if (after === before) return;
@@ -759,14 +808,19 @@ function presetKeys(doc: Node | null): string[] {
 }
 
 // [LAW:single-enforcer] The name a saved preset takes: the first `custom-N`
-// no preset the chain will declare already holds — the bundled ones, the
-// file's own read from the very text the write lands in, and every layer's
-// above it (a name a project holds would merge the copy into its preset) —
-// compared by `ident`, the collapse the loader refuses two preset names sharing.
-function freePresetName(doc: Node | null, into: WriteLayer): string {
+// no preset the chain will declare already holds — every one the file
+// inherits, the file's own read from the very text the write lands in, and
+// every layer's above it (a name another layer holds would merge the copy
+// into its preset) — compared by `ident`, the collapse the loader refuses two
+// preset names sharing.
+function freePresetName(
+  doc: Node | null,
+  under: DslConfig,
+  into: WriteLayer,
+): string {
   const taken = new Set(
     [
-      ...BUNDLED_PRESETS,
+      ...Object.keys(under.presets),
       ...presetKeys(doc),
       // Each layer above as the loader reads it (JSON5, duplicate keys and
       // all) — the editor refuses files the loader renders.
@@ -803,9 +857,10 @@ export function writePreset(
 ): string {
   const before = store.read(into.path);
   const doc = docOf(before ?? "");
-  const name = freePresetName(doc, into);
+  const under = inheritedOf(into);
+  const name = freePresetName(doc, under, into);
   const own: ConfigPath = ["presets", name];
-  const staged = writtenOnly(into, () => presetLayer(doc, from));
+  const staged = writtenOnly(into, () => presetLayer(doc, under, from));
   const copied: ReadonlyArray<readonly [ConfigPath, string]> = [
     ...(staged === null
       ? []
@@ -824,7 +879,7 @@ export function writePreset(
   const pinned = picks.map(([field, raw]) => {
     const key = presetGlobalsKey(name, field);
     return [
-      valuePathOf(doc, requireValueTarget(key)),
+      valuePathOf(doc, under, requireValueTarget(key)),
       persistValueText(key, raw),
     ] as const;
   });
@@ -837,6 +892,7 @@ export function writePreset(
   const placed = writtenOnly(into, () =>
     withPlacements(
       after,
+      under,
       into.path,
       placements.map((p) => ({ ...p, preset: name })),
       ownRow,
@@ -873,19 +929,20 @@ export function writeThemeDefault(
 /**
  * Delete a preset the file authors, as ONE tracked write — and the file's
  * `globals.preset` with it when that names it, since a default naming no
- * declared preset fails the load. Never a bundled preset: the file's entry
- * there is a delta the bundled preset survives, which `reset` owns. Never a
- * name the file does not declare: the stale click. What else the file says
- * about the preset (an action targeting it) is commit's to refuse.
+ * declared preset fails the load. Never a preset the file inherits: its
+ * entry there is a delta the inherited preset survives, which `reset` owns.
+ * Never a name the file does not declare: the stale click. What else the file
+ * says about the preset (an action targeting it) is commit's to refuse.
  */
 export function deletePreset(
   store: EditStore,
   into: WriteLayer,
   name: string,
 ): void {
-  if (isBundledPreset(name)) {
+  const under = inheritedOf(into);
+  if (under.presets[name] !== undefined) {
     throw new BadVerbArgs(
-      `cannot delete preset "${name}": it is bundled — reset its settings instead`,
+      `cannot delete preset "${name}": a layer beneath ${into.path} declares it — reset its settings instead`,
     );
   }
   const own: ConfigPath = ["presets", name];
@@ -907,7 +964,7 @@ export function deletePreset(
     store,
     into,
     before,
-    paths.reduce((text, at) => deleteAtPath(text, at), before),
+    paths.reduce((text, at) => deleteAtPath(text, under, at), before),
     releases,
   );
 }
@@ -931,8 +988,9 @@ export function applyLayoutOp(
   }
   const before = store.read(into.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
+  const under = inheritedOf(into);
   const placement = writtenOnly(into, () =>
-    layoutPlacementOf(docOf(before ?? ""), target.preset, subject),
+    layoutPlacementOf(docOf(before ?? ""), under, target.preset, subject),
   );
   const authored = ensureAuthored(before ?? "", placement);
   const { after, placed } = spliceOp(authored, placement.path, op, () => {

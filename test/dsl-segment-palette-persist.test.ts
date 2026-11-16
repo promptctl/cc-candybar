@@ -446,7 +446,7 @@ describe("config-file-store: segment-palette placement", () => {
         [["segments.ghost.palette", "nord"]],
       ),
     ).toThrow(
-      /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
+      /cannot edit segments\.ghost\.palette: neither the config file nor the layers beneath it declare segments\.ghost/,
     );
     expect(durable.text()).toBe(text);
   });

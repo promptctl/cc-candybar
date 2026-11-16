@@ -754,7 +754,7 @@ describe("apply-layout-op click → the config file", () => {
     expect(durable.parsed().presets).toEqual({});
 
     const undeclared =
-      /neither the config file nor the bundled default declares presets\.mine/;
+      /neither the config file nor the layers beneath it declare presets\.mine/;
     await expect(click(urls[0]!)).rejects.toThrow(undeclared);
     // The reset link is hand-built: the harness filters rendered preset-root
     // resets as edit chrome's own banner, and the verb is what is under test.

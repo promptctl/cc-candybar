@@ -981,8 +981,10 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     type: "number",
     default: 0,
   };
-  // Edit mode keeps what it made in the user's own file, as its layout edits
-  // are: the save it ends with names that layer, where the menu's asks.
+  // [LAW:one-type-per-behavior] Saving is the settings menu's own `save`
+  // action, so the two write the same drafts; only the layer is a different
+  // value. Edit mode keeps what it made in the user's own file, as its layout
+  // edits are, where the menu's asks.
   artifacts.actions[EDIT_SAVE_ACTION] = { save: true, layer: "user" };
   artifacts.actions[EDIT_DONE_SEG] = {
     do: [EDIT_SAVE_ACTION, EDIT_TOGGLE_ACTION],

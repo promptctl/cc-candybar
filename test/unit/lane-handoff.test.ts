@@ -49,13 +49,13 @@ describe("laneSwitches", () => {
 
 describe("laneHandoff", () => {
   test("is one row holding the button alone", () => {
-    const row = laneHandoff(S1, ["tmuxStatus"]);
+    const row = laneHandoff(S1, ["user"], ["tmuxStatus"]);
     expect(row.lines).toHaveLength(1);
     expect(row.lines[0]!.map((span) => span.text)).toEqual([HANDOFF_BUTTON]);
   });
 
   test("its button resets the switch of each lane it hands off to: the renderer, and a 🧪 toggle", () => {
-    const row = laneHandoff(S1, ["band", "tmuxStatus"]);
+    const row = laneHandoff(S1, ["user"], ["band", "tmuxStatus"]);
     expect(row.lines[0]![0]!.link).toBe(
       effectsUrl([
         {
@@ -63,6 +63,19 @@ describe("laneHandoff", () => {
           args: ["s1", "user", "experimentalBand", "renderer"],
         },
       ]),
+    );
+  });
+
+  // The way out of a lane holds wherever the switch was saved.
+  test("its button resets the switches in every layer the session can write", () => {
+    const row = laneHandoff(S1, ["user", "project", "local"], ["band"]);
+    expect(row.lines[0]![0]!.link).toBe(
+      effectsUrl(
+        (["user", "project", "local"] as const).map((layer) => ({
+          verb: VERB_RESET_CONFIG,
+          args: ["s1", layer, "experimentalBand"],
+        })),
+      ),
     );
   });
 });

@@ -331,7 +331,8 @@ empty cell at zero.
 
 The click carries nothing but your session id and the layer — which settings are drafts, and
 their values, are read at the moment of the click, so the save writes what the
-button counted. The file is the one a `persist` click would write (below). Each
+button counted. The file is the layer the link binds, resolved as any write's
+is (below). Each
 value is checked again against the gate that admitted it as a pick; a value
 that gate no longer accepts, or a file that cannot be written, refuses the
 whole save loudly, and every draft stays where it was. A save is one step in

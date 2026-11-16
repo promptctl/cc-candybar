@@ -5,7 +5,7 @@
 // (candybar-config-dqe). A click carries only a session id, so a render
 // request records — under this daemon-internal key — the INPUTS it named for
 // config resolution, and a durable verb runs the same resolution over them at
-// click time (durableConfig). The
+// click time (writeLayer). The
 // file it lands in is the one the NEXT reload reads, not a snapshot of the
 // one the last render read: RenderCache re-resolves the same chain whenever
 // a candidate appears (a higher-precedence file supersedes a lower one), so

@@ -1211,7 +1211,7 @@ describe("save as preset", () => {
     expect(textOf(r.render())).not.toContain(PRESET_DELETE_GLYPH);
     // The click a stale or hand-built URL could still carry.
     await expect(r.click(`cc-candybar://delete-preset/${SID}/user/compact`),
-    ).rejects.toThrow('cannot delete preset "compact": it is bundled');
+    ).rejects.toThrow('cannot delete preset "compact": a layer beneath');
     expect(durable.text()).toBe(source);
   });
 

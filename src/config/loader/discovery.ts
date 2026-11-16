@@ -33,17 +33,18 @@ interface ConfigLocation {
 }
 
 // [LAW:dataflow-not-control-flow] The locations, highest precedence first, as
-// the search reads them. A working directory inside the repository is the
-// project, so it has no location of its own: it could only repeat the
-// project's file.
+// the search reads them. The chain is user, project and local, as Claude
+// Code's own settings are: a working directory names no layer, so a config in
+// a subdirectory of the project, or in any other directory a session moves
+// to, is not read.
 function configLocations(
   locs: Locations,
   projectDir: string | undefined,
 ): readonly ConfigLocation[] {
   const project: readonly ConfigLocation[] = projectDir
     ? [
-        { role: "local", base: path.join(projectDir, LOCAL_CONFIG_BASE) },
-        { role: "project", base: path.join(projectDir, REPO_CONFIG_BASE) },
+        { role: "local", base: path.join(projectDir, PROJECT_BASES.local) },
+        { role: "project", base: path.join(projectDir, PROJECT_BASES.project) },
       ]
     : [];
   return [...project, { role: "user", base: xdgConfigBase(locs) }];
@@ -62,6 +63,8 @@ function configCandidates(
   locs: Locations,
   { projectDir, configFile }: ConfigQuery,
 ): ReadonlyArray<{ readonly file: string; readonly role: LayerRole }> {
+  // [LAW:dataflow-not-control-flow] An explicit override is the ONLY
+  // candidate — the precedence chain collapses to one entry.
   if (configFile !== undefined) return [{ file: configFile, role: "user" }];
   return configLocations(locs, projectDir).flatMap(({ role, base }) =>
     CONFIG_EXTENSIONS.map((ext) => ({ file: `${base}.${ext}`, role })),
@@ -98,13 +101,15 @@ export function dslConfigCandidatePaths(
 
 // [LAW:one-source-of-truth] The base names a project's config files carry: the
 // checked-in one, and the local one beside it.
-const REPO_CONFIG_BASE = ".cc-candybar";
-const LOCAL_CONFIG_BASE = ".cc-candybar.local";
+const PROJECT_BASES: Readonly<Record<Exclude<LayerRole, "user">, string>> = {
+  project: ".cc-candybar",
+  local: ".cc-candybar.local",
+};
 
 // Whether a file is a project's local layer, by the name it is found under.
 export function isLocalConfigFile(file: string): boolean {
   return CONFIG_EXTENSIONS.some(
-    (ext) => path.basename(file) === `${LOCAL_CONFIG_BASE}.${ext}`,
+    (ext) => path.basename(file) === `${PROJECT_BASES.local}.${ext}`,
   );
 }
 
@@ -155,8 +160,8 @@ export function homeLayer(path: string): ConfigLayer {
  *     not what the user asked for, and the render says so.
  *   • `unreadable` — an explicit file was named and stat could not see it
  *     (an unsearchable directory, a symlink loop); the errno rides the arm.
- * Every arm carries `home`: the one file a durable click writes
- * (`durableConfig`). `chain` carries `unchecked`: locations stat could not
+ * Every arm carries `home`: the user layer's file, where a durable click to
+ * the user role writes (`writeLayer`). `chain` carries `unchecked`: locations stat could not
  * see past; the search never stops on a guess, and the notice names each.
  *
  * Every arm carries `repos`: what the session's repositories contribute,
@@ -366,19 +371,35 @@ export function writeLayer(
   query: ConfigQuery & { readonly cwd?: string },
   role: LayerRole,
 ): LayerWrite {
+  return writeLayers(locs, answers, query)[role];
+}
+
+// Every role's write, projected from ONE resolution of the session's chain.
+export function writeLayers(
+  locs: Locations,
+  answers: RepoAnswers,
+  query: ConfigQuery & { readonly cwd?: string },
+): Readonly<Record<LayerRole, LayerWrite>> {
   const resolved = resolveDslConfig(locs, answers, query);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
-  const place = placeOf(resolved, layers, query, role);
-  if (place.kind === "refused") return place;
+  const writeOf = (role: LayerRole): LayerWrite => {
+    const place = placeOf(resolved, layers, query, role);
+    if (place.kind === "refused") return place;
+    return {
+      kind: "layer",
+      path: place.path,
+      role,
+      below: layers.filter((l) => rank(l.role) < rank(role)),
+      above: layers.filter((l) => rank(l.role) > rank(role)),
+      repo: resolved.repos.plugins,
+      cwd: query.cwd ?? null,
+      locs,
+    };
+  };
   return {
-    kind: "layer",
-    path: place.path,
-    role,
-    below: layers.filter((l) => rank(l.role) < rank(role)),
-    above: layers.filter((l) => rank(l.role) > rank(role)),
-    repo: resolved.repos.plugins,
-    cwd: query.cwd ?? null,
-    locs,
+    user: writeOf("user"),
+    project: writeOf("project"),
+    local: writeOf("local"),
   };
 }
 
@@ -399,12 +420,11 @@ function placeOf(
     return refused(
       `the ${role} layer is the project's, and this session has no approved project`,
     );
-  const base = role === "project" ? REPO_CONFIG_BASE : LOCAL_CONFIG_BASE;
   return {
     kind: "at",
     path:
       layers.find((l) => l.role === role)?.path ??
-      `${path.join(projectDir, base)}.${CONFIG_EXTENSIONS[0]}`,
+      `${path.join(projectDir, PROJECT_BASES[role])}.${CONFIG_EXTENSIONS[0]}`,
   };
 }
 

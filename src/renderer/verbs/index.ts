@@ -21,6 +21,7 @@
 import {
   type Locations,
   writeLayer,
+  writeLayers,
   type WriteLayer,
 } from "../../config/loader/discovery";
 import {
@@ -568,7 +569,7 @@ const stepState: VerbHandler = async (rawValue, ctx) => {
   const sid = requireSessionId(sessionId);
   if (!key) {
     throw new BadVerbArgs(
-      "step-state: <key> is required (shape: <sessionId>/<layer>/<key>/<by>)",
+      "step-state: <key> is required (shape: <sessionId>/<key>/<by>)",
     );
   }
   if (!STEP_INT_RE.test(byRaw)) {
@@ -874,14 +875,13 @@ function originLayers(
   ctx: Pick<ClickContext, "stateDir" | "locations">,
   origin: RenderOrigin,
 ): readonly WriteLayer[] {
-  const answers = repoConfigs(ctx.stateDir).read();
-  const query = {
+  const writes = writeLayers(ctx.locations, repoConfigs(ctx.stateDir).read(), {
     projectDir: origin.projectDir,
     configFile: origin.target.path,
     cwd: origin.cwd,
-  };
+  });
   return LAYER_ROLES.flatMap((role) => {
-    const write = writeLayer(ctx.locations, answers, query, role);
+    const write = writes[role];
     return write.kind === "layer" ? [write] : [];
   });
 }

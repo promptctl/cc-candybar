@@ -20,6 +20,7 @@ import {
   refusedHintsError,
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
+import type { LayerRole } from "../config/layer-role";
 import { repoQuestions } from "../config/repo-configs";
 import {
   type CacheEntry,
@@ -178,6 +179,7 @@ export function renderFrame(
     const answer = RENDER_ANSWERS.ansi(bar);
     const statusline = statuslineOf(
       sessionId,
+      setup.state.writable,
       drawn,
       handedOffTo(lanes, feed.following),
     );
@@ -1079,7 +1081,9 @@ export async function answerRequest(
   const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
   // [LAW:single-enforcer] Signed as it leaves the renderer, each link once.
   const frame = signingFrames(parts.linkSigner)(
-    toStatusline ? statuslineOf(sessionId, drawn, elsewhere) : drawn.body,
+    toStatusline
+      ? statuslineOf(sessionId, setup.state.writable, drawn, elsewhere)
+      : drawn.body,
   );
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
   // how long the turn after the wait took to make the frame: with the host's
@@ -1132,6 +1136,7 @@ function answerDelivered(
 // shows it, the same body the lanes draw.
 function statuslineOf(
   sessionId: SessionId,
+  writable: readonly LayerRole[],
   drawn: DrawnBar,
   elsewhere: readonly Lane[],
 ): Frame {
@@ -1141,7 +1146,7 @@ function statuslineOf(
     : standIn(
         drawn.body,
         handoffRows(
-          laneHandoff(sessionId, [first, ...rest]),
+          laneHandoff(sessionId, writable, [first, ...rest]),
           drawn.diagnostics,
           sessionId,
           drawn.geometry,
