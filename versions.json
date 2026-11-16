@@ -2,81 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-760",
-      "ref": "refs/pull/760/merge",
-      "sha": "e62a82a11661356cd95336e1ba9a6f6898931b82",
-      "timestamp": "2026-11-16T00:13:04.983Z",
-      "commits": [
-        {
-          "sha": "e62a82a11661356cd95336e1ba9a6f6898931b82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T00:12:02Z",
-          "message": "Merge a672c058bc1f754ee70d6d2c09983e36d825bea6 into d713171fe40d61af17150aa2f106f3e7104931cb\n"
-        },
-        {
-          "sha": "a672c058bc1f754ee70d6d2c09983e36d825bea6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T17:11:50-07:00",
-          "message": "fix(providers): one close ends every provider, so no rig leaves a transcript period re-arming (candybar-skeleton-wj0c.zhh)\n\nThe daemon, the demo and two test rigs each listed the providers to close by hand, and the lists drifted when the transcript lanes arrived: an entry still held keeps its 10 s period re-arming for the life of the jest worker, which another file's close-ends-everything ledger then counts. The providers' own close is now the one list; the rigs that build a transcript trigger of their own close it, and a test's holds close with it.\n"
-        },
-        {
-          "sha": "62d2b3ca869e2afb4f82ce315954cd405a5619cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T17:02:49-07:00",
-          "message": "test(daemon-value): a timer left over after close is shown with the daemon's log (candybar-skeleton-wj0c.zhh)\n"
-        },
-        {
-          "sha": "73856eae6eb8d3c042c659c241c771ab50e5bdab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T16:53:39-07:00",
-          "message": "test(e2e): a render that timed out on every attempt names what the daemon logged meanwhile (candybar-skeleton-wj0c.zhh)\n"
-        },
-        {
-          "sha": "8be6620609a668bf12b286fb11191af7fd514b57",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T16:42:21-07:00",
-          "message": "fix(ledger): a session lane's refresh is a step of its transcript entry's, which is the one line (candybar-skeleton-wj0c.zhh)\n\n- A source declares whether its refresh is a unit of work (its own line) or a\n  step of another's (a line only when it fails, still counted). The session\n  lanes are steps of their transcript entry's refresh, so a write costs one\n  line, and a session with no transcript yet one per period, not six.\n- Every draw, the demo's and check's included, projects today and speed\n  through one function, so the demo draws tok/s again.\n- The watch key is the entry's key; the awaited built-ins are listed once.\n"
-        },
-        {
-          "sha": "36bbe00de8a5151f23a093b7291694d9ce9b0d4e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T16:25:45-07:00",
-          "message": "fix(speed): tok/s is a projection of the draw's instant, so an idle session's rate ends (candybar-skeleton-wj0c.zhh)\n\nA sample is taken only when the transcript's stamp moves, so nothing ended the\nlast turn's rate once a session went idle: the bar kept it for hours. The rate\nis now drawn against the draw's own instant, like today, and ends a sample\nwindow after the last sample; the burn-rate history stays.\n"
-        },
-        {
-          "sha": "e8dca60bd09377f9b64ee84a6f0324e1cb908105",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T16:15:10-07:00",
-          "message": "fix(collector): a change heard while nobody holds an entry is read when its hold returns, and transcript holds show in stats (candybar-skeleton-wj0c.zhh)\n\n- A keyed entry owes one re-read for a change heard since its stored read\n  began; it runs once the entry is held and no read is out, so a session back\n  from idle draws the write it missed instead of waiting out its period.\n- The stats snapshot lists the transcript lanes' held entries.\n- The demo closes the transcript lanes with the other providers.\n- SOURCES-AND-FRAMES no longer names a request as a refresh trigger.\n"
-        },
-        {
-          "sha": "2a2782f46f561c9ea86a2c77a5760db65ad406ff",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T16:01:37-07:00",
-          "message": "feat(collector): a watch and a period refresh a session's transcript lanes, and a request waits on its world state (candybar-skeleton-wj0c.zhh)\n\nOne keyed entry per followed session reads every transcript lane (session,\nspeed, context, metrics, activity, cache, auto-compact). A watch on the\ntranscript and on Claude Code's settings file reads them again after a write,\nand a 10 s backstop period catches a dropped event. A request is no longer a\ntrigger: it waits only for its world state's first readings, so a warm\nsession draws at once.\n\n- Each lane's owner records its refresh under the trigger that caused it\n  (first, period, change), and every refresh writes its own line, so a lane\n  that never lands is the one whose line is missing.\n- `request` leaves the refresh triggers; the render event's `refreshed=` field,\n  the adapter's refresh reach and RefreshTimes are gone.\n- Speed takes a sample only when the transcript's stamp moved.\n- `today` leaves the transcript lanes: its fault is the session lane's.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "d713171fe40d61af17150aa2f106f3e7104931cb",
-      "timestamp": "2026-11-15T22:30:27.580Z",
+      "sha": "2f9cd5593479f304565f8e07630dd0ad4e8383b4",
+      "timestamp": "2026-11-16T00:15:29.141Z",
       "commits": [
         {
-          "sha": "d713171fe40d61af17150aa2f106f3e7104931cb",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-15T22:29:31Z",
-          "message": "chore(release): set `package.json` to 1.221.0\n\n## [1.221.0](https://github.com/promptctl/cc-candybar/compare/v1.220.0...v1.221.0) (2026-11-15)\n\n### Features\n\n* **renderer:** the renderer runs in a process of its own, which the host's supervisor starts and restarts (candybar-host-renderer-x96a.v58) ([#757](https://github.com/promptctl/cc-candybar/issues/757)) ([2079879](https://github.com/promptctl/cc-candybar/commit/2079879f1a0e087b16769463d6326609fb6ed589))\n\n### Bug Fixes\n\n* **click:** the host opens every link's signature before a renderer sees it, and tells the app its verdict at once (candybar-host-renderer-x96a.35o) ([#759](https://github.com/promptctl/cc-candybar/issues/759)) ([a7e8d92](https://github.com/promptctl/cc-candybar/commit/a7e8d92192edfafdbf0875132bfa65803bef6458)), closes [#fragment](https://github.com/promptctl/cc-candybar/issues/fragment)\n"
+          "sha": "2f9cd5593479f304565f8e07630dd0ad4e8383b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T17:14:31-07:00",
+          "message": "feat(collector): a watch and a period refresh a session's transcript lanes, and a request waits on its world state (candybar-skeleton-wj0c.zhh) (#760)\n\n* feat(collector): a watch and a period refresh a session's transcript lanes, and a request waits on its world state (candybar-skeleton-wj0c.zhh)\n\nOne keyed entry per followed session reads every transcript lane (session,\nspeed, context, metrics, activity, cache, auto-compact). A watch on the\ntranscript and on Claude Code's settings file reads them again after a write,\nand a 10 s backstop period catches a dropped event. A request is no longer a\ntrigger: it waits only for its world state's first readings, so a warm\nsession draws at once.\n\n- Each lane's owner records its refresh under the trigger that caused it\n  (first, period, change), and every refresh writes its own line, so a lane\n  that never lands is the one whose line is missing.\n- `request` leaves the refresh triggers; the render event's `refreshed=` field,\n  the adapter's refresh reach and RefreshTimes are gone.\n- Speed takes a sample only when the transcript's stamp moved.\n- `today` leaves the transcript lanes: its fault is the session lane's.\n\n* fix(collector): a change heard while nobody holds an entry is read when its hold returns, and transcript holds show in stats (candybar-skeleton-wj0c.zhh)\n\n- A keyed entry owes one re-read for a change heard since its stored read\n  began; it runs once the entry is held and no read is out, so a session back\n  from idle draws the write it missed instead of waiting out its period.\n- The stats snapshot lists the transcript lanes' held entries.\n- The demo closes the transcript lanes with the other providers.\n- SOURCES-AND-FRAMES no longer names a request as a refresh trigger.\n\n* fix(speed): tok/s is a projection of the draw's instant, so an idle session's rate ends (candybar-skeleton-wj0c.zhh)\n\nA sample is taken only when the transcript's stamp moves, so nothing ended the\nlast turn's rate once a session went idle: the bar kept it for hours. The rate\nis now drawn against the draw's own instant, like today, and ends a sample\nwindow after the last sample; the burn-rate history stays.\n\n* fix(ledger): a session lane's refresh is a step of its transcript entry's, which is the one line (candybar-skeleton-wj0c.zhh)\n\n- A source declares whether its refresh is a unit of work (its own line) or a\n  step of another's (a line only when it fails, still counted). The session\n  lanes are steps of their transcript entry's refresh, so a write costs one\n  line, and a session with no transcript yet one per period, not six.\n- Every draw, the demo's and check's included, projects today and speed\n  through one function, so the demo draws tok/s again.\n- The watch key is the entry's key; the awaited built-ins are listed once.\n\n* test(e2e): a render that timed out on every attempt names what the daemon logged meanwhile (candybar-skeleton-wj0c.zhh)\n\n* test(daemon-value): a timer left over after close is shown with the daemon's log (candybar-skeleton-wj0c.zhh)\n\n* fix(providers): one close ends every provider, so no rig leaves a transcript period re-arming (candybar-skeleton-wj0c.zhh)\n\nThe daemon, the demo and two test rigs each listed the providers to close by hand, and the lists drifted when the transcript lanes arrived: an entry still held keeps its 10 s period re-arming for the life of the jest worker, which another file's close-ends-everything ledger then counts. The providers' own close is now the one list; the rigs that build a transcript trigger of their own close it, and a test's holds close with it."
         }
       ]
     }

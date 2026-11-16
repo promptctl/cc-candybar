@@ -4028,7 +4028,7 @@ var require_path_browserify = __commonJS({
       _makeLong: function _makeLong(path43) {
         return path43;
       },
-      dirname: function dirname2(path43) {
+      dirname: function dirname3(path43) {
         assertPath(path43);
         if (path43.length === 0) return ".";
         var code = path43.charCodeAt(0);
@@ -4050,7 +4050,7 @@ var require_path_browserify = __commonJS({
         if (hasRoot && end === 1) return "//";
         return path43.slice(0, end);
       },
-      basename: function basename(path43, ext) {
+      basename: function basename2(path43, ext) {
         if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
         assertPath(path43);
         var start = 0;
@@ -4461,13 +4461,13 @@ var require_path2 = __commonJS({
     exports.pathRelative = path_1.posix ? path_1.posix.relative : path_1.relative;
     exports.pathDirname = path_1.posix ? path_1.posix.dirname : path_1.dirname;
     exports.pathNormalize = path_1.posix ? path_1.posix.normalize : path_1.normalize;
-    var basename = (path43, separator) => {
+    var basename2 = (path43, separator) => {
       if (path43[path43.length - 1] === separator)
         path43 = path43.slice(0, -1);
       const lastSlashIndex = path43.lastIndexOf(separator);
       return lastSlashIndex === -1 ? path43 : path43.slice(lastSlashIndex + 1);
     };
-    exports.basename = basename;
+    exports.basename = basename2;
   }
 });
 
@@ -7009,10 +7009,10 @@ var require_Superblock = __commonJS({
               err = (0, errors_1.createError)(err.code, "link", filename1, filename2);
             throw err;
           }
-          const dirname2 = (0, path_1.dirname)(filename2);
+          const dirname22 = (0, path_1.dirname)(filename2);
           let dir2;
           try {
-            dir2 = this.getLinkOrThrow(dirname2, "link");
+            dir2 = this.getLinkOrThrow(dirname22, "link");
           } catch (err) {
             if (err.code)
               err = (0, errors_1.createError)(err.code, "link", filename1, filename2);
@@ -8398,7 +8398,7 @@ var require_glob = __commonJS({
     var glob_to_regex_js_1 = require_lib();
     var util_1 = require_util3();
     var Dirent_1 = require_Dirent();
-    var { basename, dirname: dirname2, isAbsolute: isAbsolute3, join: join4, relative, resolve } = path_1.posix;
+    var { basename: basename2, dirname: dirname3, isAbsolute: isAbsolute3, join: join4, relative, resolve } = path_1.posix;
     var internalAssertionError = () => (0, argErrors_1.withCode)(new Error("This is caused by either a bug in Node.js or incorrect usage of Node.js internals.\nPlease open an issue with this stack trace at https://github.com/nodejs/node/issues\n"), "ERR_INTERNAL_ASSERTION");
     var validateStringArrayOrFunction = (value, name) => {
       if (Array.isArray(value)) {
@@ -8626,7 +8626,7 @@ var require_glob = __commonJS({
           return cached;
         let value = null;
         try {
-          value = direntOf(basename(path43), dirname2(path43), this.fs.lstatSync(path43).mode);
+          value = direntOf(basename2(path43), dirname3(path43), this.fs.lstatSync(path43).mode);
         } catch (error) {
           rethrowUnlessFsError(error);
         }
@@ -8639,7 +8639,7 @@ var require_glob = __commonJS({
           return cached;
         let value = null;
         try {
-          value = direntOf(basename(path43), dirname2(path43), this.fs.statSync(path43).mode);
+          value = direntOf(basename2(path43), dirname3(path43), this.fs.statSync(path43).mode);
         } catch (error) {
           rethrowUnlessFsError(error);
         }
@@ -8760,7 +8760,7 @@ var require_glob = __commonJS({
           return path43;
         const full = isAbsolute3(path43) ? path43 : join4(this.root, path43);
         const stat3 = this.cache.statSync(full);
-        return direntOf(basename(full), dirname2(full), stat3 ? stat3.mode : 0);
+        return direntOf(basename2(full), dirname3(full), stat3 ? stat3.mode : 0);
       }
       isDirectory(path43, stat3, pattern2) {
         if (stat3?.isDirectory())
@@ -28791,7 +28791,6 @@ var UNREAD_RUN = {
 var IDLE = { kind: "idle" };
 var REFRESH_LANES = [
   "session",
-  "today",
   "context",
   "metrics",
   "activity",
@@ -29702,7 +29701,8 @@ var KeyedSource = class {
     this.refreshes = spec.ledger.declare({
       name: spec.name,
       scope: spec.scope,
-      refresh: ["first", "period", "change", "supersede"]
+      refresh: ["first", "period", "change", "supersede"],
+      event: "own"
     });
   }
   spec;
@@ -29762,10 +29762,19 @@ var KeyedSource = class {
     }
   }
   // [LAW:single-enforcer] The one rule for a change under an entry, whether
-  // the owner's or the entry's own watch reports it: a held entry is read
-  // again; one nobody holds is not, since a hold's return re-reads it.
+  // the owner's or the entry's own watch reports it: the entry owes a re-read
+  // (`owed`). One nobody holds keeps the debt for its hold's return, so a
+  // session back from idle never draws a write it missed while away.
   heard(entry) {
-    if (entry.holders > 0) this.refresh(entry, "change");
+    entry.changed = true;
+    this.owed(entry);
+  }
+  // [LAW:no-ambient-temporal-coupling] The one place an owed change is read:
+  // whichever of a change, a landing or a hold's return finds the entry held
+  // and idle starts it, and starting any read pays the debt.
+  owed(entry) {
+    if (entry.changed && entry.holders > 0 && entry.flight === null)
+      this.refresh(entry, "change");
   }
   // Whether some home holds an entry `match` names now.
   isHeld(match) {
@@ -29832,10 +29841,11 @@ var KeyedSource = class {
       entry.changed ||= by === "change";
       return;
     }
+    entry.changed = false;
     const flight = new AbortController();
     entry.flight = flight;
     const startedAt = this.spec.clock.monotonic();
-    void attempt(() => this.spec.read(entry.input, flight.signal)).then((outcome) => {
+    void attempt(() => this.spec.read(entry.input, flight.signal, by)).then((outcome) => {
       const fields2 = this.spec.fields(entry.input, entry.holders);
       const ms = elapsedMs(this.spec.clock, startedAt);
       if (flight.signal.aborted) {
@@ -29860,15 +29870,13 @@ var KeyedSource = class {
       settle(entry, outcome);
     } finally {
       entry.revisit.landed(outcome);
-      if (entry.changed) {
-        entry.changed = false;
-        this.refresh(entry, "change");
-      }
+      this.owed(entry);
     }
   }
   hold(entry) {
     entry.holders++;
     entry.revisit.hold(true);
+    this.owed(entry);
     this.evict();
     return () => {
       entry.holders--;
@@ -29947,7 +29955,6 @@ var REFRESH_TRIGGERS = [
   "first",
   "period",
   "change",
-  "request",
   "supersede"
 ];
 var RefreshLedger = class {
@@ -29968,7 +29975,7 @@ var RefreshLedger = class {
     };
     for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
     this.tallies.set(key, tally);
-    return new Refreshes(tally, this.logger);
+    return new Refreshes(tally, declaration.event, this.logger);
   }
   // Every source declared, by scope then name.
   snapshot() {
@@ -29988,19 +29995,14 @@ var RefreshLedger = class {
     return sum2;
   }
 };
-var OWN_EVENT = {
-  first: true,
-  period: true,
-  change: true,
-  request: false,
-  supersede: true
-};
 var Refreshes = class {
-  constructor(tally, logger) {
+  constructor(tally, event, logger) {
     this.tally = tally;
+    this.event = event;
     this.logger = logger;
   }
   tally;
+  event;
   logger;
   // This source's record as the ledger holds it: what its owner's own stats
   // report, a view of the one tally rather than a count of its own.
@@ -30013,7 +30015,7 @@ var Refreshes = class {
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
     const failure = outcome.kind === "failed";
-    if (!failure && !OWN_EVENT[by]) return;
+    if (!failure && this.event === "step") return;
     const why2 = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure ? "warn" : "info",
@@ -30295,51 +30297,12 @@ function declareRuns(sourceRuns, holds2, runs, take) {
 function settingsPathOf(hints, home) {
   return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir, home));
 }
-var readingsHost = (deps) => ({
-  refresh: (facts, at) => refreshPayload({ ...facts, deps }, at)
-});
 function cacheTallyFacts(deps) {
   const tally = (t2) => `${t2.size}/${t2.hits}h/${t2.misses}m`;
   return {
     git: tally(deps.gitProvider.getStats()),
     usage: tally(deps.usageStore.getStats())
   };
-}
-async function refreshPayload(inputs, at) {
-  const { hookData: hookData2, deps, hints } = inputs;
-  const sessionId2 = hookData2.session_id;
-  const session = deps.usageStore.request(sessionId2, hookData2.transcript_path);
-  const lane = async (name, run3) => {
-    const startedAt = deps.clock.monotonic();
-    let threw2 = null;
-    try {
-      await run3();
-    } catch (e) {
-      deps.log("error", `${name} lane threw: ${inspect(e)}`);
-      threw2 = `${name}: ${String(e)}`;
-    }
-    deps.faults.refreshed(sessionId2, name, threw2);
-    return [name, elapsedMs(deps.clock, startedAt)];
-  };
-  const runs = {
-    session: () => session.usage(),
-    today: () => session.today(),
-    context: () => deps.contextProvider.refresh(sessionId2, hookData2.transcript_path),
-    metrics: () => deps.metricsProvider.refresh(sessionId2, hookData2.transcript_path),
-    activity: () => deps.activityProvider.getActivityInfo(sessionId2, hookData2),
-    // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
-    // seam, made only when the transcript's stamp moved.
-    cache: () => deps.cacheExpiry.refresh(sessionId2, hookData2.transcript_path),
-    // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
-    // lane reads, one sample per request: a frame takes none, so how often the
-    // bar is drawn moves no rate.
-    speed: () => session.speed(dateOf(at).getTime()),
-    autocompact: async () => deps.autoCompact.window(settingsPathOf(hints, deps.home))
-  };
-  const took = await Promise.all(
-    REFRESH_LANES.map((name) => lane(name, runs[name]))
-  );
-  return Object.fromEntries(took);
 }
 function settledLanes(outcome, { plugins: plugins2, runs }) {
   const lane = settledLane(outcome);
@@ -30349,6 +30312,7 @@ function settledLanes(outcome, { plugins: plugins2, runs }) {
     hostName: lane,
     hostUser: lane,
     today: lane,
+    transcript: lane,
     sources: new Map([...plugins2.keys()].map((name) => [name, lane])),
     runs: new Map(
       [...runs.keys()].map((digest2) => [
@@ -30390,6 +30354,14 @@ function declareLanes(owners, holds2, facts, sources) {
       "today",
       () => owners.usageStore.declareToday(holds2, facts.hints.claudeConfigDir)
     ),
+    transcript: declare(
+      "transcript",
+      () => owners.transcriptLanes.declare(holds2, {
+        session: facts.hookData.session_id,
+        transcript: facts.hookData.transcript_path,
+        settings: settingsPathOf(facts.hints, owners.home)
+      })
+    ),
     // [LAW:one-source-of-truth] Each source's hold at (its storage folder,
     // the session the checkpoint parsed).
     sources: new Map(
@@ -30423,14 +30395,16 @@ function declareLanes(owners, holds2, facts, sources) {
 function readingsOf(inputs, lanes) {
   const { deps } = inputs;
   const sessionId2 = inputs.hookData.session_id;
-  const read2 = (lane, value) => {
+  const entry = lanes.transcript.current();
+  const read2 = (lane, value, name = lane) => {
+    if (entry.kind === "failed") return entry;
     const fault = deps.faults.of(sessionId2, lane);
     if (fault !== void 0) return fault;
     try {
       return value();
     } catch (e) {
-      deps.log("error", `${lane} read threw: ${inspect(e)}`);
-      return failed(`${lane}: ${String(e)}`, "read");
+      deps.log("error", `${name} read threw: ${inspect(e)}`);
+      return failed(`${name}: ${String(e)}`, "read");
     }
   };
   const laneReadings = {
@@ -30463,9 +30437,12 @@ function readingsOf(inputs, lanes) {
   };
   return {
     lanes: laneReadings,
+    // The session's own days are its record's, so its lane's failure is
+    // today's.
     today: read2(
-      "today",
-      () => todayReading(lanes.today, deps.usageStore, sessionId2)
+      "session",
+      () => todayReading(lanes.today, deps.usageStore, sessionId2),
+      "today"
     ),
     faults: REFRESH_LANES.flatMap((lane) => {
       const fault = deps.faults.of(sessionId2, lane);
@@ -53791,6 +53768,7 @@ var PAYLOAD_INPUTS = {
 };
 var DRAW_PROJECTIONS = {
   today: "the day the draw is at",
+  speed: "a rate ends once the draw is a sample window past its last sample",
   feeds: "the frames a lane was sent up to the draw's instant",
   drawing: "who the draw is for",
   diagnostics: "the errors and warnings the draw owes its reader"
@@ -54670,7 +54648,8 @@ function sourceSnapshots(parts, cache2) {
       tmuxService,
       usageStore,
       managedStorage,
-      hostService
+      hostService,
+      transcriptLanes
     },
     refreshLedger
   } = parts;
@@ -54694,7 +54673,8 @@ function sourceSnapshots(parts, cache2) {
       tmux: tmux3.held,
       host: hostService.held(),
       today: today.held,
-      pluginStorage: storage.held
+      pluginStorage: storage.held,
+      transcript: transcriptLanes.stats().held
     },
     pluginStorage: {
       folders: storage.folders,
@@ -59289,12 +59269,14 @@ var GitDataProvider = class {
     this.gitRefreshes = ledger.declare({
       name: "git",
       scope: "repo",
-      refresh: ["first", "period", "change"]
+      refresh: ["first", "period", "change"],
+      event: "own"
     });
     this.prRefreshes = ledger.declare({
       name: "pr",
       scope: "repo",
-      refresh: ["first", "period"]
+      refresh: ["first", "period"],
+      event: "own"
     });
     if (opts.watchers) {
       this.watchers = opts.watchers;
@@ -61143,10 +61125,10 @@ var SessionUsageStore = class {
   // exactly once — so they return the same prev+cur and render identical,
   // deterministic throughput instead of the second clobbering the first.
   speedFlight = new SingleFlight();
-  // [LAW:single-enforcer] A request's refresh of a session is one unit of
-  // work per (session, observed stamp): the lanes of one request that read
-  // the record (session, speed, today) share it, so it records and logs once.
-  requestFlight = new SingleFlight();
+  // [LAW:single-enforcer] A refresh of a session is one unit of work per
+  // (session, observed stamp): the lanes that read the record (session,
+  // speed) share it, so it records and logs once.
+  refreshFlight = new SingleFlight();
   staleAgeMs;
   // The machine the store reads: where transcripts live, and where the
   // pricing table is cached.
@@ -61154,7 +61136,7 @@ var SessionUsageStore = class {
   log;
   renderTally = { hits: 0, misses: 0 };
   ledger;
-  // The session record's refresh, which its statusline request makes; a
+  // The session record's refresh, which its transcript lanes make; a
   // rescan's reads are its `today` scan's.
   usage;
   sweeps = 0;
@@ -61169,7 +61151,8 @@ var SessionUsageStore = class {
     this.usage = this.ledger.declare({
       name: "usage",
       scope: "session",
-      refresh: ["request"]
+      refresh: ["first", "period", "change"],
+      event: "step"
     });
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     this.scans = new KeyedSource({
@@ -61205,18 +61188,18 @@ var SessionUsageStore = class {
   scanStats() {
     return this.scans.stats();
   }
-  // [LAW:no-ambient-temporal-coupling] One statusline request's refresh of
-  // its session, as a value: the request's session, speed and today lanes
-  // read the one refresh it starts, whichever asks first and whenever the
-  // others land, so it reads, records and logs once per request.
-  request(sessionId2, transcriptPath) {
+  // [LAW:no-ambient-temporal-coupling] One refresh of a session, as a value:
+  // its session and speed lanes read the one ingest it starts, whichever asks
+  // first and whenever the other lands, so it reads, records and logs once.
+  // `by` is what asked for it (src/daemon/cache/transcript-lanes.ts).
+  refresh(sessionId2, transcriptPath, by) {
     let refresh = null;
     const once2 = () => {
       if (refresh !== null) return refresh;
       const stamp2 = statStamp(transcriptPath);
       refresh = {
         stamp: stamp2,
-        record: this.refreshed(sessionId2, transcriptPath, stamp2)
+        record: this.refreshed(sessionId2, transcriptPath, stamp2, by)
       };
       return refresh;
     };
@@ -61230,15 +61213,7 @@ var SessionUsageStore = class {
         if (record2.kind === "failed") return record2;
         return ok(record2.kind === "ok" ? record2.value.usage : EMPTY_USAGE);
       },
-      speed: (nowMs) => this.observed(sessionId2, once2, nowMs),
-      // [LAW:no-ambient-temporal-coupling] `today` sums the session's own
-      // record, so it waits for the request's one refresh of it and for
-      // nothing else: the directory set's scan is no part of the request,
-      // since the day sums are pending until it lands and land through the
-      // observable they are read from.
-      today: async () => {
-        await once2().record;
-      }
+      speed: (nowMs) => this.observed(sessionId2, once2, nowMs)
     };
   }
   // The `session` projection as the session's last refresh left it, for a
@@ -61252,10 +61227,10 @@ var SessionUsageStore = class {
     if (failure !== null) return failed(failure, "read");
     return ok(slot.record?.usage ?? EMPTY_USAGE);
   }
-  // A request's ingest of its own session, whose outcome the session's slot
-  // keeps for the draws until the next one.
-  refreshed(sessionId2, transcriptPath, stamp2) {
-    return this.requestFlight.run(`${sessionId2}:${stamp2}`, async () => {
+  // A refresh's ingest of its session, whose outcome the session's slot keeps
+  // for the draws until the next one.
+  refreshed(sessionId2, transcriptPath, stamp2, by) {
+    return this.refreshFlight.run(`${sessionId2}:${stamp2}`, async () => {
       const tally = { hits: 0, misses: 0 };
       const startedAt = this.clock.monotonic();
       const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
@@ -61264,7 +61239,7 @@ var SessionUsageStore = class {
       if (tally.misses > 0) {
         this.usage.recorded(
           `sid=${valueOf(sessionId2)}`,
-          "request",
+          by,
           record2,
           elapsedMs(this.clock, startedAt)
         );
@@ -61323,9 +61298,10 @@ var SessionUsageStore = class {
     }
     return ok(Object.fromEntries(record2.days));
   }
-  // A request's speed sample, over its one refresh of the session: ingest its current
-  // cumulative counts, return the prior sample alongside, and record this one as
-  // the new baseline. [LAW:no-silent-failure] A failed transcript parse flows out
+  // A refresh's speed sample, over its one ingest of the session: its current
+  // cumulative counts, the prior sample alongside, and this one recorded as the
+  // new baseline — taken only at a stamp no sample was taken at, so a period
+  // over an unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
   // as `failed` (the boundary logs it and the segment reads "—"); an unknown
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
@@ -61338,9 +61314,12 @@ var SessionUsageStore = class {
         answer(this.hold(sessionId2).speed, record2);
         return record2;
       }
+      const slot = this.hold(sessionId2);
+      const standing2 = slot.speed.get();
+      if (slot.sampledAt === stamp2 && standing2?.kind === "ok") return standing2;
       const breakdown = record2.kind === "ok" ? record2.value.usage.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
-      const { ring } = this.hold(sessionId2);
+      const { ring } = slot;
       let prev;
       for (const s of ring) {
         if (s.atMs < cur.atMs && (prev === void 0 || s.atMs > prev.atMs)) {
@@ -61350,16 +61329,17 @@ var SessionUsageStore = class {
       ring.push(cur);
       ring.sort((a, b) => a.atMs - b.atMs);
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
+      slot.sampledAt = stamp2;
       const observed = ok({
         ...prev !== void 0 && { prev },
         cur,
         samples: [...ring]
       });
-      answer(this.hold(sessionId2).speed, observed);
+      answer(slot.speed, observed);
       return observed;
     });
   }
-  // The session's speed as its last request observed it, for a draw: a frame
+  // The session's speed as its last refresh observed it, for a draw: a frame
   // takes no sample, so how often the bar is drawn moves no rate.
   speedOf(sessionId2) {
     return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
@@ -61431,6 +61411,7 @@ var SessionUsageStore = class {
       lastSeenAt: this.clock.now(),
       record: void 0,
       ring: [],
+      sampledAt: null,
       failure: observable.box(null),
       speed: observable.box(void 0, {
         deep: false
@@ -62208,7 +62189,7 @@ var TranscriptFold = class {
   sessions;
   // [LAW:effects-at-boundaries] The session's refresh: folds what was
   // appended since its last read, and stores what it answered.
-  async read(sessionId2, transcriptPath) {
+  async read(sessionId2, transcriptPath, by) {
     const held = this.sessions.get(sessionId2);
     const prior = held?.folded;
     const stamp2 = statStamp(transcriptPath);
@@ -62229,7 +62210,7 @@ var TranscriptFold = class {
     );
     this.refreshes.recorded(
       `sid=${valueOf(sessionId2)}`,
-      "request",
+      by,
       read2,
       elapsedMs(this.clock, startedAt)
     );
@@ -62275,7 +62256,8 @@ var ContextProvider = class {
       (opts.ledger ?? new RefreshLedger(logger)).declare({
         name: "context",
         scope: "session",
-        refresh: ["request"]
+        refresh: ["first", "period", "change"],
+        event: "step"
       }),
       opts.clock,
       logger
@@ -62285,8 +62267,8 @@ var ContextProvider = class {
   // main-chain usage entry.
   // [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
   // boundary logs it); a transcript with no usable usage entry is `absent`.
-  async refresh(sessionId2, transcriptPath) {
-    return tokensFrom(await this.fold.read(sessionId2, transcriptPath));
+  async refresh(sessionId2, transcriptPath, by) {
+    return tokensFrom(await this.fold.read(sessionId2, transcriptPath, by));
   }
   // The session's context tokens as its last refresh left them, for a draw.
   tokensOf(sessionId2) {
@@ -62386,7 +62368,8 @@ var MetricsProvider = class {
       (opts.ledger ?? new RefreshLedger(logger)).declare({
         name: "metrics",
         scope: "session",
-        refresh: ["request"]
+        refresh: ["first", "period", "change"],
+        event: "step"
       }),
       opts.clock,
       logger
@@ -62395,9 +62378,12 @@ var MetricsProvider = class {
   // The session's metrics fold, read from its transcript.
   // [LAW:no-silent-failure] A transcript parse error is `failed`, carried to
   // the payload boundary.
-  async refresh(sessionId2, transcriptPath) {
+  async refresh(sessionId2, transcriptPath, by) {
     debug(`Getting metrics from the transcript for session: ${sessionId2}`);
-    return foldFrom(sessionId2, await this.fold.read(sessionId2, transcriptPath));
+    return foldFrom(
+      sessionId2,
+      await this.fold.read(sessionId2, transcriptPath, by)
+    );
   }
   // The session's metrics fold as its last refresh left it, for a draw.
   foldOf(sessionId2) {
@@ -62505,7 +62491,8 @@ var ActivityProvider = class {
       (opts.ledger ?? new RefreshLedger(logger)).declare({
         name: "activity",
         scope: "session",
-        refresh: ["request"]
+        refresh: ["first", "period", "change"],
+        event: "step"
       }),
       opts.clock,
       logger
@@ -62516,10 +62503,10 @@ var ActivityProvider = class {
   // transcript yet, or one that has done nothing, is a real EMPTY record — and
   // the payload projection drops every field of an empty one, so "nothing is
   // happening" reaches the templates as absence either way.
-  async getActivityInfo(sessionId2, hookData2) {
+  async refresh(sessionId2, transcriptPath, by) {
     return activityFrom(
       sessionId2,
-      await this.fold.read(sessionId2, hookData2.transcript_path)
+      await this.fold.read(sessionId2, transcriptPath, by)
     );
   }
   // The session's activity as its last refresh left it, for a draw.
@@ -62688,7 +62675,8 @@ var AutoCompactProvider = class {
     this.refreshes = ledger.declare({
       name: "autocompact",
       scope: "configDir",
-      refresh: ["request"]
+      refresh: ["first", "period", "change"],
+      event: "step"
     });
   }
   clock;
@@ -62696,7 +62684,7 @@ var AutoCompactProvider = class {
   // it is stored.
   known = new ObservableLru(MAX_FILES);
   refreshes;
-  window(settingsPath) {
+  window(settingsPath, by) {
     const stamp2 = stampAt(settingsPath);
     const known = this.known.get(settingsPath);
     if (known !== void 0 && known.stamp === stamp2) {
@@ -62707,14 +62695,14 @@ var AutoCompactProvider = class {
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
       `path=${valueOf(settingsPath)} stamp=${valueOf(stamp2)}`,
-      "request",
+      by,
       outcome,
       elapsedMs(this.clock, startedAt)
     );
     this.known.set(settingsPath, { stamp: stamp2, outcome });
     return outcome;
   }
-  // The window as the last request left it, for a draw: the file is not
+  // The window as the last refresh left it, for a draw: the file is not
   // touched.
   stored(settingsPath) {
     return this.known.get(settingsPath)?.outcome ?? pendingOf("unread");
@@ -62769,7 +62757,8 @@ var CacheExpiryProvider = class {
     this.refreshes = ledger.declare({
       name: "cache",
       scope: "session",
-      refresh: ["request"]
+      refresh: ["first", "period", "change"],
+      event: "step"
     });
   }
   clock;
@@ -62779,15 +62768,15 @@ var CacheExpiryProvider = class {
   // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
   // warn; an answer believed under its stamp reads nothing, and logs nothing.
   refreshes;
-  // The session's refresh, which its statusline request makes.
-  async refresh(sessionId2, transcriptPath) {
+  // The session's refresh, which its transcript's watch and period make.
+  async refresh(sessionId2, transcriptPath, by) {
     const stamp2 = statStamp(transcriptPath);
     const prior = this.known.get(sessionId2);
     if (prior !== void 0 && stamp2 !== "" && prior.stamp === stamp2 && prior.outcome.kind !== "failed") {
       this.known.touch(sessionId2);
       return prior.outcome;
     }
-    const outcome = await this.read(sessionId2, transcriptPath, stamp2);
+    const outcome = await this.read(sessionId2, transcriptPath, stamp2, by);
     this.known.set(sessionId2, { stamp: stamp2, outcome });
     return outcome;
   }
@@ -62799,12 +62788,12 @@ var CacheExpiryProvider = class {
     const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
     return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
   }
-  async read(sessionId2, transcriptPath, stamp2) {
+  async read(sessionId2, transcriptPath, stamp2, by) {
     const startedAt = this.clock.monotonic();
     const outcome = await cacheExpiresAt(transcriptPath);
     this.refreshes.recorded(
       `sid=${valueOf(sessionId2)} stamp=${valueOf(stamp2)}`,
-      "request",
+      by,
       outcome,
       elapsedMs(this.clock, startedAt)
     );
@@ -65677,19 +65666,94 @@ var ManagedStorage = class {
   }
 };
 
+// src/daemon/cache/transcript-lanes.ts
+init_globals();
+var import_node_path31 = __toESM(require_path_browserify(), 1);
+var TRANSCRIPT_PERIOD = { okMs: 1e4, failedMs: 1e4 };
+var MAX_UNHELD = 16;
+var keyOfFollowed = ({ session, transcript: transcript2, settings }) => [session, transcript2, settings].join("\0");
+var TranscriptLanes = class {
+  constructor(deps) {
+    this.deps = deps;
+    this.source = new KeyedSource({
+      name: "transcript",
+      scope: "session",
+      keyOf: keyOfFollowed,
+      fields: ({ session }) => `sid=${valueOf(session)}`,
+      read: (followed, _signal, by) => this.read(followed, by),
+      every: () => deps.every ?? TRANSCRIPT_PERIOD,
+      watch: (followed, changed) => this.watch(followed, changed),
+      maxEntries: MAX_UNHELD,
+      logger: deps.logger,
+      ledger: deps.ledger,
+      clock: deps.clock
+    });
+  }
+  deps;
+  source;
+  // [LAW:single-enforcer] A session's declaration of its lanes: `holds` takes
+  // the entry, so a session no entry follows yet starts its first read now.
+  declare(holds2, followed) {
+    return this.source.declare(holds2, followed);
+  }
+  stats() {
+    return this.source.stats();
+  }
+  close() {
+    this.source.close();
+  }
+  // The transcript's directory heard for its name alone, and the settings
+  // file's likewise, under one key per entry.
+  watch(followed, changed) {
+    const { transcript: transcript2, settings } = followed;
+    const handle = this.deps.watchers.acquire(
+      `transcript-lanes:${keyOfFollowed(followed)}`,
+      {
+        dirs: [
+          { path: (0, import_node_path31.dirname)(transcript2), filenames: [(0, import_node_path31.basename)(transcript2)] },
+          { path: (0, import_node_path31.dirname)(settings), filenames: [(0, import_node_path31.basename)(settings)] }
+        ]
+      },
+      changed
+    );
+    return () => handle.release();
+  }
+  // Every lane, read at once.
+  // [LAW:no-silent-failure] A lane's contract is to answer, never to throw,
+  // so a throw is a bug its owner never saw: logged here, and kept as that
+  // lane's failure (RefreshFaults) until a read of it runs clean, so the
+  // world state reads it failed rather than not answered.
+  async read({ session, transcript: transcript2, settings }, by) {
+    const { owners, clock, logger } = this.deps;
+    const record2 = owners.usageStore.refresh(session, transcript2, by);
+    const reads = {
+      session: () => record2.usage(),
+      context: () => owners.contextProvider.refresh(session, transcript2, by),
+      metrics: () => owners.metricsProvider.refresh(session, transcript2, by),
+      activity: () => owners.activityProvider.refresh(session, transcript2, by),
+      cache: () => owners.cacheExpiry.refresh(session, transcript2, by),
+      speed: () => record2.speed(clock.now()),
+      autocompact: async () => owners.autoCompact.window(settings, by)
+    };
+    const lane = async (name) => {
+      let threw2 = null;
+      try {
+        await reads[name]();
+      } catch (e) {
+        logger("error", `${name} lane threw: ${inspect(e)}`);
+        threw2 = `${name}: ${String(e)}`;
+      }
+      owners.faults.refreshed(session, name, threw2);
+    };
+    await Promise.all(REFRESH_LANES.map(lane));
+    return ok(null);
+  }
+};
+
 // src/daemon/payload-providers.ts
 function createPayloadProviders(opts) {
   const { launcher, clock, logger, ledger } = opts;
-  return {
-    home: opts.host.home,
-    hostService: new HostService({ clock, logger, ledger }),
-    gitProvider: new GitDataProvider({
-      inner: new GitService(launcher),
-      watchers: opts.watchers,
-      clock,
-      logger,
-      ledger
-    }),
+  const lanes = {
     usageStore: new SessionUsageStore({
       host: opts.host,
       clock,
@@ -65699,20 +65763,53 @@ function createPayloadProviders(opts) {
     contextProvider: new ContextProvider({ clock, logger, ledger }),
     metricsProvider: new MetricsProvider({ clock, logger, ledger }),
     activityProvider: new ActivityProvider({ clock, logger, ledger }),
-    tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
     autoCompact: new AutoCompactProvider(clock, logger, ledger),
     cacheExpiry: new CacheExpiryProvider(clock, logger, ledger),
+    faults: new RefreshFaults()
+  };
+  const owners = {
+    hostService: new HostService({ clock, logger, ledger }),
+    gitProvider: new GitDataProvider({
+      inner: new GitService(launcher),
+      watchers: opts.watchers,
+      clock,
+      logger,
+      ledger
+    }),
+    tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
+    transcriptLanes: new TranscriptLanes({
+      owners: lanes,
+      watchers: opts.watchers,
+      clock,
+      logger,
+      ledger
+    }),
     managedStorage: new ManagedStorage({
       watchers: opts.watchers,
       fileEvents: opts.fileEvents,
       clock,
       logger,
       ledger
-    }),
+    })
+  };
+  return {
+    ...lanes,
+    ...owners,
+    home: opts.host.home,
     sourceRuns: opts.sourceRuns,
-    faults: new RefreshFaults(),
     log: opts.logger,
-    clock
+    // [LAW:single-enforcer] The one close of every owner built here: a held
+    // entry's period re-arms after every read, so an owner a caller forgets
+    // keeps its timers for good. The transcript lanes go before the usage
+    // store their reads fill.
+    close: () => {
+      owners.gitProvider.close();
+      owners.transcriptLanes.close();
+      lanes.usageStore.close();
+      owners.tmuxService.close();
+      owners.hostService.close();
+      owners.managedStorage.close();
+    }
   };
 }
 
@@ -65917,7 +66014,14 @@ var RuntimeStats = class _RuntimeStats {
           view: 0,
           pane: 0
         },
-        held: { git: 0, tmux: 0, host: 0, today: 0, pluginStorage: 0 },
+        held: {
+          git: 0,
+          tmux: 0,
+          host: 0,
+          today: 0,
+          pluginStorage: 0,
+          transcript: 0
+        },
         pluginStorage: {
           folders: 0,
           faults: { unusable: 0, refused: 0, error: 0 },
@@ -66217,7 +66321,7 @@ function failedStamp(prior, reason, daemon3) {
 
 // src/daemon/foundations/judge-run.ts
 init_globals();
-var import_node_path31 = __toESM(require_path_browserify(), 1);
+var import_node_path32 = __toESM(require_path_browserify(), 1);
 var MIN_SHELL_TTL_MS = 500;
 function judgeRun(run3) {
   const parser = parserOf(run3.identity.parse);
@@ -66242,7 +66346,7 @@ function refusalOf2({ identity: { read: read2, refresh } }) {
   return (read2.kind === "file" ? absolute("file.path", read2.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (read2.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
 }
 function absolute(where, path43) {
-  return (0, import_node_path31.isAbsolute)(path43) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path43)}`;
+  return (0, import_node_path32.isAbsolute)(path43) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path43)}`;
 }
 function capturing(pattern2) {
   let regex;
@@ -68111,11 +68215,11 @@ var typeInPane = (edge) => async (tmux3, line) => {
 
 // src/daemon/lane-setup.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
+var import_node_path34 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/claude-relaunch.ts
 init_globals();
-var import_node_path32 = __toESM(require_path_browserify(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 var keep = (arity) => ({ arity, keep: true });
 var drop = (arity) => ({ arity, keep: false });
 var FLAGS = {
@@ -68217,7 +68321,7 @@ function startPlace(startDir, cwd2) {
     args: ["--worktree", tree.name]
   };
 }
-var within2 = (dir, top) => dir === top || dir.startsWith(top + import_node_path32.default.sep);
+var within2 = (dir, top) => dir === top || dir.startsWith(top + import_node_path33.default.sep);
 function relaunchArgs(argv2) {
   const kept = [];
   const tokens = argv2.slice(1);
@@ -68249,14 +68353,14 @@ function relaunchArgs(argv2) {
   return { kind: "args", args: kept };
 }
 function worktreeOf(dir) {
-  const parts = dir.split(import_node_path32.default.sep);
+  const parts = dir.split(import_node_path33.default.sep);
   const at = parts.findLastIndex(
     (p2, i) => p2 === "worktrees" && parts[i - 1] === ".claude" && i + 1 < parts.length
   );
   return at === -1 ? null : {
     name: parts[at + 1].replaceAll("+", "/"),
-    top: parts.slice(0, at + 2).join(import_node_path32.default.sep),
-    repo: parts.slice(0, at - 1).join(import_node_path32.default.sep) || import_node_path32.default.sep
+    top: parts.slice(0, at + 2).join(import_node_path33.default.sep),
+    repo: parts.slice(0, at - 1).join(import_node_path33.default.sep) || import_node_path33.default.sep
   };
 }
 function takeWhile(xs, ok3) {
@@ -68266,7 +68370,7 @@ function takeWhile(xs, ok3) {
 
 // src/daemon/lane-setup.ts
 var BAND_PLUGIN = "candybar-band@cc-candybar";
-var BAND_CLIENT = import_node_path33.default.join("bin", "cc-candybar-native");
+var BAND_CLIENT = import_node_path34.default.join("bin", "cc-candybar-native");
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
@@ -68285,7 +68389,7 @@ var LANE_SETUP = {
           `${LANES.band.label} runs the band mod from a cc-candybar source checkout, and this daemon runs ${host.bundle} \u2014 run the daemon from a checkout (mod/README.md)`
         );
       }
-      const client = import_node_path33.default.join(checkout, BAND_CLIENT);
+      const client = import_node_path34.default.join(checkout, BAND_CLIENT);
       if (!edge.fileExists(client)) {
         throw new BadVerbArgs(
           `the band mod starts ${client}, which is not built \u2014 run \`just install-rust\` in ${checkout}`
@@ -68769,11 +68873,11 @@ init_globals();
 
 // src/renderer/repo-configs.ts
 init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
+var import_node_path38 = __toESM(require_path_browserify(), 1);
 
 // src/config/loader/discovery.ts
 init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
+var import_node_path36 = __toESM(require_path_browserify(), 1);
 
 // src/utils/presence.ts
 init_globals();
@@ -68787,21 +68891,21 @@ function presence(path43) {
 
 // src/config/loader/plugin-folders.ts
 init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path35 = __toESM(require_path_browserify(), 1);
 function pluginRoots(locs, repo2) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path34.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path35.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return [
     ...installed.filter((r, i) => installed.lastIndexOf(r) === i).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path34.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+    ...repo2 === null ? [] : [{ dir: import_node_path35.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
   ];
 }
 function userPluginRoot(locs) {
-  return import_node_path34.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path35.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path34.default.join(".cc-candybar", "plugins");
+var REPO_PLUGIN_DIR = import_node_path35.default.join(".cc-candybar", "plugins");
 function installedPlugins(locs, repo2) {
   const roots = pluginRoots(locs, repo2);
   const byNs = /* @__PURE__ */ new Map();
@@ -68815,7 +68919,7 @@ function installedPlugins(locs, repo2) {
     }
     for (const name of listed.folders) {
       const definition = pluginDefinition(
-        import_node_path34.default.join(root, name, DEFINITION_FILE),
+        import_node_path35.default.join(root, name, DEFINITION_FILE),
         scope
       );
       const key = `${scope}\0${name}`;
@@ -68824,10 +68928,10 @@ function installedPlugins(locs, repo2) {
     }
     for (const file of listed.files) {
       strays.push({
-        path: import_node_path34.default.join(root, file),
+        path: import_node_path35.default.join(root, file),
         scope,
         name: void 0,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path34.default.join(root, "<name>", DEFINITION_FILE)}`
+        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path35.default.join(root, "<name>", DEFINITION_FILE)}`
       });
     }
   }
@@ -68853,7 +68957,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path34.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path35.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -68932,10 +69036,10 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
   return [
     .../* @__PURE__ */ new Set([
       ...projectDir ? CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path35.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path36.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
       ) : [],
       ...CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path35.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
+        (ext) => import_node_path36.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
       ),
       ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
     ])
@@ -68943,7 +69047,7 @@ function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
 }
 var REPO_CONFIG_BASE = ".cc-candybar";
 function xdgConfigBase(locs) {
-  return import_node_path35.default.join(locs.configHome, "cc-candybar", "config");
+  return import_node_path36.default.join(locs.configHome, "cc-candybar", "config");
 }
 function homeLayer(path43) {
   return { path: path43, scope: "plugins" };
@@ -68963,10 +69067,10 @@ function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
       unchecked.push(p2);
       continue;
     }
-    const dir = fs_default.realpathSync.native(import_node_path35.default.dirname(candidate));
-    const location = import_node_path35.default.join(
+    const dir = fs_default.realpathSync.native(import_node_path36.default.dirname(candidate));
+    const location = import_node_path36.default.join(
       dir,
-      import_node_path35.default.basename(candidate).replace(/\.(json5|json)$/, "")
+      import_node_path36.default.basename(candidate).replace(/\.(json5|json)$/, "")
     );
     if (!atLocation.has(location)) {
       atLocation.set(location, {
@@ -69013,7 +69117,7 @@ function repoProject(projectDir) {
   if (projectDir === void 0 || presence(projectDir) !== "present") {
     return null;
   }
-  const listed = listFolders(import_node_path35.default.join(projectDir, REPO_PLUGIN_DIR));
+  const listed = listFolders(import_node_path36.default.join(projectDir, REPO_PLUGIN_DIR));
   const dir = fs_default.realpathSync.native(projectDir);
   return {
     dir,
@@ -69061,9 +69165,9 @@ function detectConfigCollisions(locs, projectDir, cwd2) {
   );
   const groups = /* @__PURE__ */ new Map();
   for (const candidate of existing) {
-    const dir = import_node_path35.default.dirname(candidate);
-    const base = import_node_path35.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path35.default.join(dir, base);
+    const dir = import_node_path36.default.dirname(candidate);
+    const base = import_node_path36.default.basename(candidate).replace(/\.(json5|json)$/, "");
+    const key = import_node_path36.default.join(dir, base);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(candidate);
   }
@@ -69078,9 +69182,9 @@ function detectConfigCollisions(locs, projectDir, cwd2) {
 
 // src/doctor/state-file.ts
 init_globals();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
+var import_node_path37 = __toESM(require_path_browserify(), 1);
 function stateFile(dir, name, empty2, parse3) {
-  const file = import_node_path36.default.join(dir, name);
+  const file = import_node_path37.default.join(dir, name);
   const read2 = () => {
     let text4;
     try {
@@ -69122,10 +69226,10 @@ function stateFile(dir, name, empty2, parse3) {
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path37.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path38.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path37.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path38.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 var repoConfigs = (dir) => {
   const book = stateFile(
@@ -81202,7 +81306,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
 
 // src/renderer/render-payload.ts
 init_globals();
-var import_node_path38 = __toESM(require_path_browserify(), 1);
+var import_node_path39 = __toESM(require_path_browserify(), 1);
 
 // src/utils/terminal-width.ts
 init_globals();
@@ -81335,22 +81439,31 @@ function projectSpeedHistory(obs) {
 function renderWidth(hints) {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
-function refreshedFact(refreshed) {
-  return refreshed === null ? "\u2026" : REFRESH_LANES.map((lane) => `${lane}:${refreshed[lane]}ms`).join(",");
-}
 function awaitsReading({ builtins, sources, runs }, named3) {
   return [
-    builtins.git,
-    builtins.tmux,
-    builtins.hostName,
-    builtins.hostUser,
+    ...AWAITED_BUILTINS.map((name) => builtins[name]),
     ...Object.values(sources),
     ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading)
   ].some(awaitedReading);
 }
+var AWAITED = {
+  session: true,
+  today: false,
+  speed: true,
+  context: true,
+  metrics: true,
+  activity: true,
+  cache: true,
+  autocompact: true,
+  git: true,
+  pr: false,
+  tmux: true,
+  hostName: true,
+  hostUser: true
+};
+var AWAITED_BUILTINS = Object.keys(AWAITED).filter((name) => AWAITED[name]);
 var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
-async function settleWorld(refresh, worldState, named3, signal) {
-  await refresh();
+async function settleWorld(worldState, named3, signal) {
   try {
     await when(() => !awaitsReading(worldState(), named3()), { signal });
   } catch (e) {
@@ -81385,7 +81498,6 @@ function composePayload(facts, inputs, draw2) {
     metrics: metricsOver(unstamped(built.metrics), hookData2),
     activity: unstamped(built.activity),
     cache: unstamped(built.cache),
-    speed: unstamped(built.speed),
     autoCompact: unstamped(built.autocompact),
     git: unstamped(built.git),
     pr: unstamped(built.pr),
@@ -81414,7 +81526,6 @@ function composePayload(facts, inputs, draw2) {
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
   const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(valueOf3(lanes.usage)?.cost, valueOf3(lanes.metrics)?.sessionDuration);
-  const speedPayload = over2(lanes.speed, speedPayloadOf);
   const sessionPayload = over2(
     lanes.usage,
     (usage) => pickNonNull({ cost: usage.cost, tokens: usage.tokens })
@@ -81490,7 +81601,6 @@ function composePayload(facts, inputs, draw2) {
     resumeCommand: resumeCommand(workspace, sessionId2, hints.claudeConfigDir),
     ...sessionPayload !== void 0 && { session: sessionPayload },
     ...burn !== void 0 && { burn },
-    ...speedPayload !== void 0 && { speed: speedPayload },
     ...fiveHour !== void 0 && {
       block: {
         // [LAW:one-source-of-truth] Both fields read straight from the
@@ -81559,10 +81669,20 @@ function burnOf(cost, duration2) {
   const costPerHour = cost != null && duration2 != null ? projectCostPerHour(cost, duration2) : void 0;
   return costPerHour === void 0 ? void 0 : { costPerHour };
 }
-function speedPayloadOf(obs) {
-  const rates = projectSpeed(obs);
+function speedOf(fact, at) {
+  if (fact.kind === "pending") return pendingOf(fact.why);
+  if (fact.kind !== "ok") return void 0;
+  const obs = fact.value;
+  const current2 = dateOf(at).getTime() - obs.cur.atMs <= MAX_SPEED_SAMPLE_MS;
+  const rates = current2 ? projectSpeed(obs) : void 0;
   const history = projectSpeedHistory(obs);
   return rates !== void 0 || history !== void 0 ? { ...rates, ...history !== void 0 && { history } } : void 0;
+}
+function instantFacts(builtins, at) {
+  return {
+    today: todayOf(builtins.today, at),
+    speed: speedOf(builtins.speed, at)
+  };
 }
 function todayOf(fact, at) {
   if (fact.kind === "pending") return pendingOf(fact.why);
@@ -81624,7 +81744,7 @@ function pickNonNull(src) {
 }
 function posixify(s) {
   if (s === void 0 || s.length === 0) return s;
-  if (import_node_path38.default.sep !== "\\") return s;
+  if (import_node_path39.default.sep !== "\\") return s;
   return s.replace(/\\/g, "/");
 }
 function projectGitInfo(info, pullRequest, pending2) {
@@ -81890,12 +82010,6 @@ function setUpFrame(parts, sessionId2, at, facts) {
 function setUpDraw(parts, hold2, req, hintsError, at, facts) {
   try {
     const { entry, state, view } = hold2;
-    const { hints } = req;
-    const viewFacts = {
-      hookData: req.hookData,
-      cwd: req.cwd,
-      hints
-    };
     return {
       req,
       at,
@@ -81905,7 +82019,6 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
       state,
       view,
       hintsError,
-      viewFacts,
       [Symbol.dispose]: () => hold2[Symbol.dispose]()
     };
   } catch (e) {
@@ -82018,7 +82131,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     diagnostics: diagnosticsProjection(diagnostics),
     drawing: drawing2,
     feeds,
-    today: todayOf(document.builtins.today, at)
+    ...instantFacts(document.builtins, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
   noteFacts(
@@ -82232,7 +82345,7 @@ function laneClicked(parts, sessionId2, latest, before, after) {
       on: after.tmuxStatus
     });
 }
-async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
+async function answerRequest(parts, req, at, waitMs, feed2, facts) {
   var _stack = [];
   try {
     const { clock, log } = parts;
@@ -82248,22 +82361,8 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
     noteFacts(facts, {
       deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
     });
-    let refreshed = null;
-    let answered = false;
     const ended = await waitWithin(
       (signal) => settleWorld(
-        () => parts.refresh(setup.viewFacts, at).then((took) => {
-          if (answered)
-            log(
-              "info",
-              eventLine("refreshed", [
-                ["req", String(id2)],
-                ["sid", setup.sessionId],
-                ["refreshed", refreshedFact(took)]
-              ])
-            );
-          else refreshed = took;
-        }),
         () => parts.worldStates.of(setup.sessionId),
         () => setup.view.registry.namedRuns().values(),
         signal
@@ -82279,11 +82378,9 @@ async function answerRequest(parts, id2, req, at, waitMs, feed2, facts) {
       parts.renderCache.closing
     );
     const drawFrom = clock.monotonic();
-    answered = true;
     noteFacts(facts, {
       waited: `${Math.round(drawFrom - waitFrom)}ms`,
-      ended,
-      refreshed: refreshedFact(refreshed)
+      ended
     });
     const sessionId2 = req.hookData.session_id;
     const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
@@ -82724,7 +82821,7 @@ function sessionSource(deps) {
 
 // src/renderer/render-cache.ts
 init_globals();
-var import_node_path39 = __toESM(require_path_browserify(), 1);
+var import_node_path40 = __toESM(require_path_browserify(), 1);
 
 // src/config/unused.ts
 init_globals();
@@ -82906,7 +83003,7 @@ function watchTargetsFor(entry, locs) {
   const roots = [
     .../* @__PURE__ */ new Set([
       ...entry.state.plugins.roots,
-      import_node_path39.default.join(entry.projectDir, REPO_PLUGIN_DIR)
+      import_node_path40.default.join(entry.projectDir, REPO_PLUGIN_DIR)
     ])
   ];
   return watchTargetsOf({
@@ -84211,7 +84308,6 @@ function mainRenderer(parts, pushed) {
       case "request": {
         const { frame: frame2, delivered } = await answerRequest(
           parts,
-          event.id,
           event.context,
           at,
           event.waitMs,
@@ -84566,7 +84662,6 @@ var REACH_KINDS = {
   typeSlash: "call",
   applyUpdate: "call",
   runs: { start: "notice", refused: "notice" },
-  refresh: "call",
   doctor: {
     probeTmux: "call",
     remoteLogin: "call",
@@ -84602,7 +84697,7 @@ var REACHES = reachesOf(REACH_KINDS);
 // src/doctor/edge.ts
 init_globals();
 init_os();
-var import_node_path41 = __toESM(require_path_browserify(), 1);
+var import_node_path42 = __toESM(require_path_browserify(), 1);
 
 // src/proc/process-table.ts
 init_globals();
@@ -84627,7 +84722,7 @@ function* lineage(procs, pid2) {
 
 // src/doctor/font-edge.ts
 init_globals();
-var import_node_path40 = __toESM(require_path_browserify(), 1);
+var import_node_path41 = __toESM(require_path_browserify(), 1);
 
 // node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
 init_globals();
@@ -85600,12 +85695,12 @@ function coverage(launcher, ref, glyphs) {
   return process_default.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
-  const xdg = xdgConfigHome || import_node_path40.default.join(home, ".config");
+  const xdg = xdgConfigHome || import_node_path41.default.join(home, ".config");
   return [
-    import_node_path40.default.join(xdg, "alacritty", "alacritty.toml"),
-    import_node_path40.default.join(xdg, "alacritty.toml"),
-    import_node_path40.default.join(home, ".config", "alacritty", "alacritty.toml"),
-    import_node_path40.default.join(home, ".alacritty.toml")
+    import_node_path41.default.join(xdg, "alacritty", "alacritty.toml"),
+    import_node_path41.default.join(xdg, "alacritty.toml"),
+    import_node_path41.default.join(home, ".config", "alacritty", "alacritty.toml"),
+    import_node_path41.default.join(home, ".alacritty.toml")
   ];
 }
 function alacrittyDefaultFamily(platform3) {
@@ -85647,7 +85742,7 @@ function alacrittyFamilyIn(file, home, depth) {
   if (depth === 5) return { kind: "ok", value: null };
   let found2 = null;
   for (const imported of own2.imports) {
-    const target = imported.startsWith("~/") ? import_node_path40.default.join(home, imported.slice(2)) : import_node_path40.default.resolve(import_node_path40.default.dirname(file), imported);
+    const target = imported.startsWith("~/") ? import_node_path41.default.join(home, imported.slice(2)) : import_node_path41.default.resolve(import_node_path41.default.dirname(file), imported);
     if (!fs_default.existsSync(target)) continue;
     const inner = alacrittyFamilyIn(target, home, depth + 1);
     if (inner.kind === "failed") return inner;
@@ -85723,7 +85818,7 @@ function installFacts(edge, daemonBundle, clients) {
         bundle: bundle.value,
         checkout: root === null ? null : {
           root,
-          rustSource: edge.digest(import_node_path41.default.join(root, "rust-client"))
+          rustSource: edge.digest(import_node_path42.default.join(root, "rust-client"))
         }
       },
       nativeShipped: edge.nativeShipped,
@@ -85820,7 +85915,7 @@ function ownsEntry(entry) {
     return false;
   }
   const root = DAEMON_ENTRY.exec(real)?.[1];
-  return root !== void 0 && fs_default.existsSync(import_node_path41.default.join(root, "bin", "cc-candybar"));
+  return root !== void 0 && fs_default.existsSync(import_node_path42.default.join(root, "bin", "cc-candybar"));
 }
 async function daemons(launcher) {
   const run3 = await launcher.launch({
@@ -86243,13 +86338,7 @@ function createDaemon(inputs) {
     ledger: refreshLedger,
     sourceRuns
   });
-  const {
-    gitProvider: gitService,
-    usageStore,
-    tmuxService,
-    hostService,
-    managedStorage
-  } = payloadProviders;
+  const { managedStorage } = payloadProviders;
   const menuIdle = new MenuIdle({
     clock,
     now: instant,
@@ -86439,7 +86528,6 @@ function createDaemon(inputs) {
   const rendererWatches = /* @__PURE__ */ new Map();
   const doctorEdge = inputs.doctorEdge(launcher, host);
   const claudeInput = inputs.claudeInput(launcher);
-  const readings = readingsHost(payloadProviders);
   const reaches = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice, or an awaited call.
@@ -86452,7 +86540,6 @@ function createDaemon(inputs) {
       start: (run3) => runs.start(run3),
       refused: (sessionId2, action2, reason) => runs.refused(sessionId2, action2, reason)
     },
-    refresh: readings.refresh,
     doctor: {
       ...doctorEdge,
       install: async (daemonBundle, clients) => installFacts(doctorEdge.install, daemonBundle, clients)
@@ -86626,15 +86713,11 @@ function createDaemon(inputs) {
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
         ["renderer views close", rendererStep("close-views")],
-        ["gitService close", () => gitService.close()],
-        ["usageStore close", () => usageStore.close()],
-        ["tmuxService close", () => tmuxService.close()],
-        ["hostService close", () => hostService.close()],
+        ["payloadProviders close", () => payloadProviders.close()],
         ["runs close", () => runs.close()],
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
-        ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.
@@ -86658,7 +86741,7 @@ function createDaemon(inputs) {
 
 // src/daemon/log.ts
 init_globals();
-var import_node_path42 = __toESM(require_path_browserify(), 1);
+var import_node_path43 = __toESM(require_path_browserify(), 1);
 var MAX_BYTES2 = 5 * 1024 * 1024;
 var KEEP_GENERATIONS = 3;
 var MAX_WAITING_BYTES = 4 * 1024 * 1024;
@@ -86809,7 +86892,7 @@ var DaemonLog = class {
       return { held: this.sink, size: st.size };
     }
     this.closeSink();
-    await fs_default.promises.mkdir(import_node_path42.default.dirname(this.filePath), { recursive: true });
+    await fs_default.promises.mkdir(import_node_path43.default.dirname(this.filePath), { recursive: true });
     const fd = await new Promise(
       (resolve, reject2) => fs_default.open(
         this.filePath,
@@ -86926,7 +87009,7 @@ var DaemonLog = class {
     if (first2.length === 0 && this.waiting.length === 0) return;
     const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(this.take())]);
     try {
-      fs_default.mkdirSync(import_node_path42.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path43.default.dirname(this.filePath), { recursive: true });
       fs_default.appendFileSync(this.filePath, lines2);
       if (stillOut !== null && out !== null && idOf3(fs_default.fstatSync(stillOut.fd)) === idOf3(fs_default.statSync(this.filePath))) {
         out.state = {
@@ -87054,7 +87137,7 @@ init_globals();
 
 // src/daemon/session-state-file.ts
 init_globals();
-var import_node_path43 = __toESM(require_path_browserify(), 1);
+var import_node_path44 = __toESM(require_path_browserify(), 1);
 function isSnapshot(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return false;
@@ -87160,7 +87243,7 @@ var FileSessionStorage = class {
     this.writing = true;
     const heldMs = elapsedMs(this.clock, started2);
     try {
-      await fs_default.promises.mkdir(import_node_path43.default.dirname(this.filePath), { recursive: true });
+      await fs_default.promises.mkdir(import_node_path44.default.dirname(this.filePath), { recursive: true });
       const file = await fs_default.promises.open(tmp, "w", 384);
       try {
         await file.writeFile(body);
@@ -87205,7 +87288,7 @@ var FileSessionStorage = class {
     const snapshot = this.pending;
     const started2 = this.clock.monotonic();
     try {
-      fs_default.mkdirSync(import_node_path43.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path44.default.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
       const body = JSON.stringify(snapshot);
       fs_default.writeFileSync(tmp, body, { mode: 384 });
@@ -87231,7 +87314,7 @@ var FileSessionStorage = class {
 
 // src/daemon/history-file.ts
 init_globals();
-var import_node_path44 = __toESM(require_path_browserify(), 1);
+var import_node_path45 = __toESM(require_path_browserify(), 1);
 function isChange(v) {
   if (v === null || typeof v !== "object") return false;
   const o = v;
@@ -87317,7 +87400,7 @@ function fileHistoryStorage(file, logger) {
     },
     save: (state) => {
       try {
-        fs_default.mkdirSync(import_node_path44.default.dirname(file), { recursive: true });
+        fs_default.mkdirSync(import_node_path45.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(state), 384);
       } catch (e) {
         const message = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
@@ -87341,11 +87424,11 @@ init_globals();
 
 // src/path-search.ts
 init_globals();
-var import_node_path45 = __toESM(require_path_browserify(), 1);
+var import_node_path46 = __toESM(require_path_browserify(), 1);
 function executableOn(name, pathVariable, isExecutable) {
-  for (const dir of (pathVariable ?? "").split(import_node_path45.default.delimiter)) {
-    if (!import_node_path45.default.isAbsolute(dir)) continue;
-    const file = import_node_path45.default.join(dir, name);
+  for (const dir of (pathVariable ?? "").split(import_node_path46.default.delimiter)) {
+    if (!import_node_path46.default.isAbsolute(dir)) continue;
+    const file = import_node_path46.default.join(dir, name);
     if (isExecutable(file)) return file;
   }
   return null;
@@ -87362,13 +87445,13 @@ function canonical2(file) {
   try {
     return fs_default.realpathSync(file);
   } catch {
-    return import_node_path45.default.resolve(file);
+    return import_node_path46.default.resolve(file);
   }
 }
 
 // src/attach-preload.ts
 init_globals();
-var import_node_path46 = __toESM(require_path_browserify(), 1);
+var import_node_path47 = __toESM(require_path_browserify(), 1);
 function launcherNode(pathVariable, isExecutable, canonical3) {
   const node = executableOn("node", pathVariable, isExecutable);
   if (node === null) {
@@ -87377,7 +87460,7 @@ function launcherNode(pathVariable, isExecutable, canonical3) {
       why: "no `node` on PATH to run the attach launcher"
     };
   }
-  return import_node_path46.default.basename(canonical3(node)) === "bun" ? {
+  return import_node_path47.default.basename(canonical3(node)) === "bun" ? {
     kind: "refused",
     why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`
   } : { kind: "node", file: node };
@@ -87663,9 +87746,9 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
 
 // src/daemon/link-key.ts
 init_globals();
-var import_node_path47 = __toESM(require_path_browserify(), 1);
+var import_node_path48 = __toESM(require_path_browserify(), 1);
 function linkKeyFile(dir) {
-  return import_node_path47.default.join(dir, "link.key");
+  return import_node_path48.default.join(dir, "link.key");
 }
 function linkKeyFromFile(file) {
   let key;
@@ -87695,7 +87778,7 @@ function readOrCreate(file) {
   return key;
 }
 function create(file) {
-  fs_default.mkdirSync(import_node_path47.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path48.default.dirname(file), { recursive: true });
   const written2 = `${file}.${process_default.pid}.${randomBytes(6).toString("hex")}`;
   fs_default.writeFileSync(written2, randomBytes(LINK_KEY_BYTES), {
     mode: 384,
