@@ -4,15 +4,22 @@
     {
       "version": "pr-770",
       "ref": "refs/pull/770/merge",
-      "sha": "1c87fef32854e421487bc680be1b44ea91b3fdf1",
-      "timestamp": "2026-11-16T16:59:54.260Z",
+      "sha": "d84a1760b63fd89c2cfe96b2b4e0fb0c70393e9e",
+      "timestamp": "2026-11-16T17:17:45.565Z",
       "commits": [
         {
-          "sha": "1c87fef32854e421487bc680be1b44ea91b3fdf1",
+          "sha": "d84a1760b63fd89c2cfe96b2b4e0fb0c70393e9e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T16:58:46Z",
-          "message": "Merge 6f77728b175cf32e87289789c3b4c6ff97c0a5ae into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
+          "timestamp": "2026-11-16T17:16:40Z",
+          "message": "Merge eb573710e127b2d60537ddd4980b8c9d6c0053ac into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
+        },
+        {
+          "sha": "eb573710e127b2d60537ddd4980b8c9d6c0053ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T10:16:28-07:00",
+          "message": "fix(history): a step's file is checked and proven at the click, so a hand edit is kept and named and no unloaded text is written (candybar-host-renderer-x96a.axx)\n\n- Undo, redo and cancel write a file as the changes between the texts the\n  step recorded, applied over the file as the click reads it. A setting\n  that moved is stale there, like a moved session pick: named in the\n  click's refusal, its file forgotten, and kept by cancel while everything\n  else is put back.\n- That text passes the loader gate every write passes before it lands,\n  refused when the session no longer renders from the file.\n- The refusal handler, the composition in the config writes, and the\n  history's forget-a-file entry point are deleted: a host refusal now\n  only meets a write that landed between the click's read and its landing.\n- A refusal over a whole-file read no longer quotes the file twice.\n- The spec's step 5 no longer schedules removing load-config.\n"
         },
         {
           "sha": "6f77728b175cf32e87289789c3b4c6ff97c0a5ae",

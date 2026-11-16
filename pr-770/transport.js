@@ -34936,12 +34936,12 @@ var WatcherRegistry = class {
   heard(dir, handle, changed) {
     const { state } = dir;
     if (!heldBy(state, handle)) return;
-    const moved2 = changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    const moved = changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
     for (const { slot, filter } of dir.listeners) {
-      if (filter === null || changed === null || filter.has(changed) || moved2)
+      if (filter === null || changed === null || filter.has(changed) || moved)
         this.fire(slot, namedOf(dir.path, changed));
     }
-    if (moved2) this.judged(dir, "moved");
+    if (moved) this.judged(dir, "moved");
   }
   tell(dir, invalidation) {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
@@ -45041,11 +45041,11 @@ var Animation = {
     return Animation.of({
       at: (t2) => animation.at(beat2.lastChange(t2)),
       nextChange(t2) {
-        const moved2 = animation.nextChange(beat2.lastChange(t2));
-        if (moved2 === Number.POSITIVE_INFINITY)
-          return moved2;
+        const moved = animation.nextChange(beat2.lastChange(t2));
+        if (moved === Number.POSITIVE_INFINITY)
+          return moved;
         const end = beat2.nextChange(t2);
-        return moved2 <= end ? end : beat2.lastChange(moved2) === moved2 ? moved2 : beat2.nextChange(moved2);
+        return moved <= end ? end : beat2.lastChange(moved) === moved ? moved : beat2.nextChange(moved);
       },
       // The value held now began at this hold's start at the latest: an early
       // answer where the animation had not moved by it, which the contract allows.
@@ -45206,8 +45206,8 @@ var ColorRamp = class _ColorRamp {
     const last2 = this.stops[this.stops.length - 1].at;
     const span = last2 - first2;
     const inside = first2 <= value && value <= last2;
-    const moved2 = inside ? value - this.scroll * span : value;
-    const read2 = this.unmoved(inside && moved2 < first2 ? moved2 + span : moved2);
+    const moved = inside ? value - this.scroll * span : value;
+    const read2 = this.unmoved(inside && moved < first2 ? moved + span : moved);
     return this.hue === 0 ? read2 : Oklch.fromRgba(read2).applyKey({ ...IDENTITY, hueShift: 360 * this.hue }).toRgba();
   }
   /** The colour at `value` with the ramp unmoved: the stops and the ease alone. */
@@ -45721,10 +45721,10 @@ var RichText = class _RichText {
         throw new Error("Style argument must not be provided when appending RichText");
       }
       const offset = this._text.get().length;
-      const moved2 = content._spans.get().map((span) => span.move(offset));
+      const moved = content._spans.get().map((span) => span.move(offset));
       this._text.set(this._text.get() + content._text.get());
       this._addSpan(offset, this._text.get().length, content._format.get().style);
-      for (const span of moved2)
+      for (const span of moved)
         this._spans.push(span);
       return this;
     }
@@ -46633,8 +46633,8 @@ var JoinedCell = class _JoinedCell {
     const reaches = (side) => moves[side]?.color !== void 0 && this.parts[side].has("fg") || moves[side]?.bgcolor !== void 0 && this.parts[side].has("bg");
     if (!reaches("left") && !reaches("right"))
       return void 0;
-    const moved2 = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
-    const edges = { left: moved2(this.edges.left, moves.left), right: moved2(this.edges.right, moves.right) };
+    const moved = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
+    const edges = { left: moved(this.edges.left, moves.left), right: moved(this.edges.right, moves.right) };
     const next = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
     const restamp2 = (level) => ({ ...level, owner: level.owner === this ? next : level.owner, inner: level.inner && restamp2(level.inner) });
     return { colors: next.style, style: style.withAnchor(style.anchor && restamp2(style.anchor)) };
@@ -46853,11 +46853,11 @@ var Recolored = class {
     }
   }
   /** `segment`'s cells drawn in the looks the effect painted them. */
-  *_repainted(segment, look, glyphs, moved2, depth) {
+  *_repainted(segment, look, glyphs, moved, depth) {
     const { style: base, wire, slots, pair, attributes } = look;
     const runs = [];
     for (const [k, { glyph }] of glyphs.entries()) {
-      const now2 = moved2[k];
+      const now2 = moved[k];
       const colors = onScreen(now2, pair.reverse);
       const last2 = runs[runs.length - 1];
       const writes = last2 !== void 0 && sameColors(last2.colors, colors) ? last2.drawn : this.respec(wire, slots, colors, depth);
@@ -46903,7 +46903,7 @@ var Recolored = class {
       terminals.add(own2);
       return own2;
     };
-    const moved2 = (from, to) => {
+    const moved = (from, to) => {
       const specs = movedSpecs(from, to, depth, theme24);
       return specs.fg === void 0 && specs.bg === void 0 ? void 0 : { color: edgeOf(specs.fg, true), bgcolor: edgeOf(specs.bg, false) };
     };
@@ -46911,14 +46911,14 @@ var Recolored = class {
       const wire2 = edge.drawnColors(depth);
       const slots2 = { fg: (wire2.color ?? DEFAULT).getTruecolor(theme24, true), bg: (wire2.bgcolor ?? DEFAULT).getTruecolor(theme24, false) };
       const terminal = { fg: wire2.color?.isDefault ?? true, bg: wire2.bgcolor?.isDefault ?? true };
-      return moved2(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
+      return moved(slots2, returned(frame2({ ...slots2, attributes: cellAttributes(edge) }, { ...at, seed: cellSeed(this.key, at.row, at.col), terminal, reverse: false })));
     };
     const moveOf = (side) => {
       const read2 = joined.reads[side];
       if (read2 === null)
         return void 0;
       const cell3 = beside2(cells, side, read2.owner);
-      return cell3 === void 0 ? unseen(read2.edge) : moved2(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
+      return cell3 === void 0 ? unseen(read2.edge) : moved(cell3.look.slots, onScreen(cell3.moved, cell3.look.pair.reverse));
     };
     const rederived = joined.rederived({ left: moveOf("left"), right: moveOf("right") }, look.style, depth);
     if (rederived === void 0)
@@ -46950,8 +46950,8 @@ var Recolored = class {
    * in, the rest as `wire` wrote them.
    */
   respec(wire, from, to, depth) {
-    const moved2 = movedSpecs(from, to, depth, this.theme);
-    return { color: moved2.fg ?? wire.color, bgcolor: moved2.bg ?? wire.bgcolor };
+    const moved = movedSpecs(from, to, depth, this.theme);
+    return { color: moved.fg ?? wire.color, bgcolor: moved.bg ?? wire.bgcolor };
   }
 };
 var Effected = class _Effected {
@@ -46997,8 +46997,8 @@ var Effected = class _Effected {
    */
   static shows(pair, to, depth, theme24) {
     const from = onScreen(pair, pair.reverse);
-    const moved2 = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
-    return onScreen({ fg: moved2.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved2.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
+    const moved = movedSpecs(from, onScreen(to, pair.reverse), depth, theme24);
+    return onScreen({ fg: moved.fg?.getTruecolor(theme24, true) ?? from.fg, bg: moved.bg?.getTruecolor(theme24, false) ?? from.bg }, pair.reverse);
   }
 };
 function cellSeed(key, row2, col) {
@@ -47049,12 +47049,12 @@ function edgesBeside(walked, drawings) {
       const drawing2 = drawings[i2];
       if (look === void 0 || drawing2 === void 0 || !("painted" in drawing2))
         return;
-      const moved2 = drawing2.painted;
+      const moved = drawing2.painted;
       glyphs.forEach(({ cell: cell3 }, k) => {
         if (cell3 === void 0)
           return;
         const row2 = byRow.get(cell3.row) ?? [];
-        row2.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved2[k] });
+        row2.push({ col: cell3.col, anchor: cell3.anchor, look, moved: moved[k] });
         byRow.set(cell3.row, row2);
       });
     });
@@ -47533,8 +47533,8 @@ function atShares(loop, share) {
       const field = loop.field(t2, drawn);
       return (look, cell3) => {
         const w = Math.round(clamp013(field(cell3)) * LEVELS) / LEVELS;
-        const moved2 = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
-        return { ...look, fg: moved2(look.fg, cell3.terminal.fg), bg: moved2(look.bg, cell3.terminal.bg) };
+        const moved = (color, terminal) => touchedAt(loop.touch, color, (terminal ? 0 : shared.get(color.hex) ?? 0) * w);
+        return { ...look, fg: moved(look.fg, cell3.terminal.fg), bg: moved(look.bg, cell3.terminal.bg) };
       };
     });
   };
@@ -48035,7 +48035,7 @@ function rewritten(text4, glyphs, shown) {
     from.push(from[i2] + glyph.length);
     to.push(to[i2] + shown[i2].length);
   });
-  const moved2 = (offset) => {
+  const moved = (offset) => {
     let i2 = 0;
     while (i2 + 1 < from.length && from[i2 + 1] <= offset)
       i2++;
@@ -48043,7 +48043,7 @@ function rewritten(text4, glyphs, shown) {
   };
   const result = text4.blankCopy(shown.join(""));
   for (const span of text4.spans)
-    result.stylize(span.style, moved2(span.start), moved2(span.end));
+    result.stylize(span.style, moved(span.start), moved(span.end));
   return result;
 }
 var BREAKS = pattern(/[\n\t]/);
@@ -50140,7 +50140,7 @@ function together(parts) {
         ({ timeline, effect }) => Timeline.run(timeline, effect(drawn))
       )
     ),
-    (frames) => (colors, cell3) => frames.reduce((moved2, part) => part(moved2, cell3), colors)
+    (frames) => (colors, cell3) => frames.reduce((moved, part) => part(moved, cell3), colors)
   );
 }
 var ASSUMED_TERMINAL = DEFAULT_TERMINAL_THEME;
@@ -72369,9 +72369,9 @@ var Collector = class {
   watch(session, stamped, reader) {
     const stop2 = reaction(
       () => reader.inputs.get(),
-      (moved2) => runInAction(() => {
-        if (moved2 === stamped.from) return;
-        if (this.stamp({ session, stamped }, moved2))
+      (moved) => runInAction(() => {
+        if (moved === stamped.from) return;
+        if (this.stamp({ session, stamped }, moved))
           void this.deps.deliver({
             kind: "world-state",
             worldState: stamped.document
@@ -72439,9 +72439,9 @@ var Collector = class {
   // one it replaces: the document itself when nothing it holds moved, and a
   // failed stamp keeps the prior readings and says why (`failedStamp`).
   // Answers whether the document moved.
-  stamp({ session, stamped }, moved2) {
+  stamp({ session, stamped }, moved) {
     const prior = stamped.document;
-    const { owners, daemon: daemon3 } = moved2;
+    const { owners, daemon: daemon3 } = moved;
     const next = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon3) : this.assembled(
       prior,
       owners.value,
@@ -72455,7 +72455,7 @@ var Collector = class {
         `world state sid=${JSON.stringify(session)}: ${failure}`
       );
     stamped.document = next;
-    stamped.from = moved2;
+    stamped.from = moved;
     return next !== prior;
   }
   assembled(prior, readings, daemon3, at) {
@@ -74468,17 +74468,17 @@ var LaneSetups = class {
   // `session` is the session as its latest request reported it, or null when
   // this daemon holds none yet.
   clicked(sessionId2, session, before, after) {
-    const moved2 = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
+    const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
     const owed = this.take(sessionId2);
-    for (const lane of moved2) if (!owed.has(lane)) owed.set(lane, before[lane]);
-    const byOf = (lane) => moved2.includes(lane) ? "click" : "owed";
+    for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
+    const byOf = (lane) => moved.includes(lane) ? "click" : "owed";
     if (session !== null) {
       this.settle(session, owed, after, byOf);
       return;
     }
     for (const [lane, from] of owed)
       if (from === after[lane]) owed.delete(lane);
-    if (moved2.length > 0) {
+    if (moved.length > 0) {
       const lanes = [...owed.keys()].map(
         (lane) => `${lane} ${after[lane] ? "on" : "off"}`
       );
@@ -74734,7 +74734,7 @@ function addressText(at) {
 
 // src/daemon/effect-interpreter.ts
 var writeText = (file, text4) => text4 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text4);
-var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.text;
+var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.kind === "file" ? "the file as it was read" : read2.text;
 function performChanges(changes) {
   const rewrites = /* @__PURE__ */ new Map();
   try {
@@ -86435,6 +86435,9 @@ function changedPaths(a, b, at = "") {
 function isPlainObject4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
+function proveLoads(home, text4) {
+  loadOrRefuse(home, text4);
+}
 function loadOrRefuse(home, text4) {
   try {
     return chainOver(home, text4);
@@ -86939,18 +86942,11 @@ var SettingsHistory = class {
   begin(files) {
     const held = heldWrites(this.sessionState);
     const working = /* @__PURE__ */ new Map();
-    const stepped2 = /* @__PURE__ */ new Map();
     const click3 = {
       held,
       files,
       historyOf: (sessionId2) => working.get(sessionId2) ?? this.history(sessionId2),
-      move: (sessionId2, history) => working.set(sessionId2, history),
-      stepped: (sessionId2, step5) => {
-        const files2 = stepped2.get(sessionId2) ?? /* @__PURE__ */ new Set();
-        for (const change of step5)
-          if (change.kind === "file") files2.add(change.file);
-        stepped2.set(sessionId2, files2);
-      }
+      move: (sessionId2, history) => working.set(sessionId2, history)
     };
     const pending2 = /* @__PURE__ */ new Map();
     let written2 = false;
@@ -87006,7 +87002,7 @@ var SettingsHistory = class {
       sessionState,
       file: (sessionId2, file, before, after) => {
         note(sessionId2, { kind: "file", file, before, after });
-        files.land([{ file, before, after }]);
+        files.land(file, before, after);
       },
       wrote: () => {
         written2 = true;
@@ -87026,14 +87022,10 @@ var SettingsHistory = class {
       },
       commit: () => {
         step4();
-        const moved2 = new Map(working);
+        const moved = new Map(working);
         working.clear();
-        for (const [sessionId2, history] of moved2) this.put(sessionId2, history);
+        for (const [sessionId2, history] of moved) this.put(sessionId2, history);
         held.flush();
-      },
-      refused: () => {
-        for (const [sessionId2, files2] of stepped2)
-          for (const file of files2) this.forgetFile(sessionId2, file);
       }
     };
   }
@@ -87057,11 +87049,11 @@ var SettingsHistory = class {
   // changed back to what it held when edit mode opened — one step, landing
   // whole or not at all — then give the stack back the shape it had, with
   // nothing to redo, so neither `↶` nor `↷` can bring back what was discarded.
-  // A session pick changed since by anything else is not put back:
-  // overwriting it would destroy that change, and no later cancel could put it
-  // back either. Every other target is, and then the refusal names what was
-  // kept, loudly. A file's settings are the host's to check, and a refusal
-  // there refuses the whole cancel. Edit mode stays where it is — the click
+  // A target changed since by anything else (a session pick, or a file one of
+  // whose settings the cancel steps) is not put back: overwriting it would
+  // destroy that change, and no later cancel could put it back either. Every
+  // other target is, and then the refusal names what was kept, loudly. Edit
+  // mode stays where it is — the click
   // that cancels also leaves — so the savepoint is taken again at the stack as
   // it now stands. Returns what it put back.
   rewind(click3, sessionId2) {
@@ -87072,10 +87064,11 @@ var SettingsHistory = class {
         "rewind: edit mode has no savepoint \u2014 nothing to cancel"
       );
     }
-    const stale = savepoint.net.filter(
-      (c) => moved(click3, sessionId2, c, "after")
-    );
-    const gone = new Set(stale.map(identity));
+    const stale = savepoint.net.flatMap((c) => {
+      const stepped2 = stepOf(click3, sessionId2, c, "before");
+      return stepped2.kind === "moved" ? [stepped2] : [];
+    });
+    const gone = new Set(stale.map((s) => s.target));
     const putBack2 = savepoint.net.filter((c) => !gone.has(identity(c)));
     const past = capped(without2(pastAt(history, savepoint), gone));
     this.apply(click3, sessionId2, putBack2, "before", "rewind", {
@@ -87085,7 +87078,7 @@ var SettingsHistory = class {
     });
     if (stale.length > 0) {
       throw new BadVerbArgs(
-        `rewind: ${stale.map(describe3).join(", ")} changed since edit mode opened \u2014 kept as it is; everything else edit mode changed was put back`
+        `rewind: ${stale.map((s) => s.what).join(", ")} changed since edit mode opened \u2014 kept as it is; everything else edit mode changed was put back`
       );
     }
     return putBack2;
@@ -87106,46 +87099,39 @@ var SettingsHistory = class {
     });
     return step4;
   }
-  // [LAW:no-silent-failure] A step is refused whole when a session pick it
-  // steps has moved: the pick is named, and its now-unreachable changes leave
-  // both stacks (see the header). Otherwise each pick is written through the
-  // click, and each file's step is a change the click returns, from what the
-  // step recorded, so the host refuses it when a setting in it moved.
+  // [LAW:no-silent-failure] A step is refused whole when a target it steps
+  // has moved, a session pick or a setting of a file: what moved is named,
+  // and the target's now-unreachable changes leave both stacks (see the
+  // header). Otherwise each pick is written through the click, and each file
+  // is written as the changes between the texts the step recorded, applied
+  // over the file as the click reads it, so a write to another setting of the
+  // file never stops it. [LAW:single-enforcer] That text has not been loaded
+  // by anyone, so it passes the gate every click's write passes before it
+  // lands.
   apply(click3, sessionId2, step4, to, verb, then) {
-    const from = to === "before" ? "after" : "before";
-    const stale = step4.filter((c) => moved(click3, sessionId2, c, from));
+    const stepped2 = step4.map((c) => stepOf(click3, sessionId2, c, to));
+    const stale = stepped2.flatMap((s) => s.kind === "moved" ? [s] : []);
     if (stale.length > 0) {
       click3.move(
         sessionId2,
-        forgotten(click3.historyOf(sessionId2), new Set(stale.map(identity)))
+        forgotten(
+          click3.historyOf(sessionId2),
+          new Set(stale.map((s) => s.target))
+        )
       );
       throw new BadVerbArgs(
-        `${verb}: ${stale.map(describe3).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
+        `${verb}: ${stale.map((s) => s.what).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
       );
     }
-    click3.files.land(
-      step4.flatMap(
-        (change) => change.kind === "file" ? [{ file: change.file, before: change[from], after: change[to] }] : []
-      )
-    );
-    for (const change of step4) {
-      if (change.kind === "file") continue;
-      const value = change[to];
-      if (value === null) click3.held.clear(sessionId2, change.key);
-      else click3.held.set(sessionId2, change.key, value);
-    }
-    click3.stepped(sessionId2, step4);
+    const files = stepped2.flatMap((s) => s.kind === "file" ? [s] : []);
+    for (const { file, text: text4 } of files) click3.files.prove(file, text4);
+    for (const { file, text: text4 } of files)
+      click3.files.land(file, click3.files.read(file), text4);
+    for (const s of stepped2)
+      if (s.kind === "session")
+        if (s.value === null) click3.held.clear(sessionId2, s.key);
+        else click3.held.set(sessionId2, s.key, s.value);
     click3.move(sessionId2, then);
-  }
-  // [LAW:single-enforcer] A file a change of this session's did not land in
-  // (the host refused it, or could not write it): its history no longer
-  // chains through that file, so every change it holds for the file leaves
-  // both stacks, as a stale target's does.
-  forgetFile(sessionId2, file) {
-    this.put(
-      sessionId2,
-      forgotten(this.history(sessionId2), /* @__PURE__ */ new Set([`file:${file}`]))
-    );
   }
   // Move-to-end keeps insertion order as recency, so the bounds drop the
   // session that changed least recently. The new state is adopted only once
@@ -87281,8 +87267,23 @@ function describeStep(step4) {
 function describe3(change) {
   return change.kind === "session" ? `session setting "${change.key}"` : change.file;
 }
-function moved(click3, sessionId2, change, from) {
-  return change.kind === "session" && click3.held.get(sessionId2, change.key) !== change[from];
+function stepOf(click3, sessionId2, change, to) {
+  const from = to === "before" ? "after" : "before";
+  if (change.kind === "session")
+    return click3.held.get(sessionId2, change.key) === change[from] ? { kind: "session", key: change.key, value: change[to] } : {
+      kind: "moved",
+      target: identity(change),
+      what: `session setting "${change.key}"`
+    };
+  const applied3 = applyChanges(
+    click3.files.read(change.file),
+    diffChanges(change[from], change[to])
+  );
+  return applied3.kind === "applied" ? { kind: "file", file: change.file, text: applied3.text } : {
+    kind: "moved",
+    target: identity(change),
+    what: `${addressText(applied3.at)} in ${change.file}`
+  };
 }
 function forgotten({ past, future, savepoint }, gone) {
   return {
@@ -87593,7 +87594,7 @@ function changeDone(ctx, id2, outcome) {
   if (landed !== "owed") changeLanded(ctx, landed);
   return true;
 }
-function changeLanded(ctx, { session, files, consequence, refused, outcome }) {
+function changeLanded(ctx, { session, files, consequence, outcome }) {
   const failed3 = [];
   const step4 = (work) => {
     try {
@@ -87609,14 +87610,20 @@ function changeLanded(ctx, { session, files, consequence, refused, outcome }) {
         ctx.reloadConfig(origin);
     });
     step4(consequence);
-  } else {
-    failed3.push(outcome.reason);
-    if (outcome.kind === "refused") step4(refused);
-  }
+  } else failed3.push(outcome.reason);
   if (failed3.length === 0) return;
   const reason = failed3.join("\n");
   ctx.log("warn", `config change: ${reason} (session=${session})`);
   holdClickError(ctx.sessionState, session, reason, ctx.now());
+}
+function proveLoadsAsHome(ctx, sid, file, text4) {
+  const origin = sid === null ? null : recordedOrigin(ctx, sid);
+  const home = origin === null ? null : originHome(ctx, origin);
+  if (home?.path !== file)
+    throw new BadVerbArgs(
+      `${file} is not the config file this session renders from \u2014 its step is not taken`
+    );
+  proveLoads(home, text4);
 }
 function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
@@ -88364,7 +88371,11 @@ function throwAll(failures) {
 }
 async function journaled(sid, latest, ctx, effects, turn, handler) {
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
-  const journal = ctx.history.begin(ctx.configWrites);
+  const journal = ctx.history.begin({
+    read: (file) => ctx.configWrites.read(file),
+    land: (file, before, after) => ctx.configWrites.land(file, before, after),
+    prove: (file, text4) => proveLoadsAsHome(ctx, sid, file, text4)
+  });
   const navigation = ctx.navigation.begin(journal.sessionState);
   const failures = [];
   const closing = (store) => closingView(
@@ -88417,10 +88428,7 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
     throwAll(failed3);
   };
   try {
-    ctx.configWrites.seal(effects, sid, {
-      consequence,
-      refused: () => journal.refused()
-    });
+    ctx.configWrites.seal(effects, sid, consequence);
   } catch (e) {
     failures.push(e);
   }
@@ -88791,9 +88799,9 @@ var Watches = class {
   pushed(id2, heard, deaf) {
     const watch2 = this.held.get(id2);
     if (watch2 === void 0) return;
-    const moved2 = !compareStructural(watch2.deaf, deaf);
+    const moved = !compareStructural(watch2.deaf, deaf);
     watch2.deaf = deaf;
-    const window2 = heard ?? (moved2 ? { kind: "unknown" } : null);
+    const window2 = heard ?? (moved ? { kind: "unknown" } : null);
     if (window2 !== null) watch2.heard(window2);
   }
 };
@@ -90307,29 +90315,19 @@ var ConfigWrites = class {
     const written2 = this.open.get(file);
     return written2 === void 0 ? this.disk(file) : written2.after;
   }
-  // Writes of the open click, landing together or not at all: one change per
-  // file, from the click's first read of it to its last write. A write from
-  // text other than the click's own (a history step, from what it recorded)
-  // lands as the changes between its two texts, applied over what the click
-  // already wrote.
-  land(writes) {
-    const landed = writes.map(({ file, before, after }) => {
-      const open2 = this.open.get(file);
-      if (open2 === void 0) return { file, before, after };
-      const applied3 = applyChanges(open2.after, diffChanges(before, after));
-      if (applied3.kind === "moved")
-        throw new BadVerbArgs(
-          `${addressText(applied3.at)} in ${file} was changed earlier in this click \u2014 nothing was written`
-        );
-      return { file, before: open2.before, after: applied3.text };
+  // A write of the open click, from the file as the click read it (`read`):
+  // one change per file, from the click's first read of it to its last write.
+  land(file, before, after) {
+    const open2 = this.open.get(file);
+    this.open.set(file, {
+      before: open2 === void 0 ? before : open2.before,
+      after
     });
-    for (const { file, before, after } of landed)
-      this.open.set(file, { before, after });
   }
   // The open click is over. Its changes join its turn's effects, and its
   // consequence waits for them; a click that changed no file has its
   // consequence now.
-  seal(effects, session, { consequence, refused }) {
+  seal(effects, session, consequence) {
     if (this.closed) return this.open.clear();
     const written2 = [...this.open].flatMap(([path43, { before, after }]) => {
       const list2 = diffChanges(before, after);
@@ -90350,7 +90348,7 @@ var ConfigWrites = class {
       })
     );
     this.landing = {
-      of: { session, files, consequence, refused },
+      of: { session, files, consequence },
       owed: new Set(changes.map((c) => c.id)),
       missed: null
     };
