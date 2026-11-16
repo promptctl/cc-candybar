@@ -423,7 +423,14 @@ describe("the daemon is a value", () => {
     const { armed, fired } = afterClose;
     afterClose = null;
     const origins = (held: Error[]) => held.map(({ stack }) => stack);
-    expect(origins(leftover())).toEqual([]);
+    // [LAW:nothing-unseen] A timer left over is shown with the daemon's log,
+    // whose refresh and close lines say which entry outlived its close.
+    const left = origins(leftover());
+    if (left.length > 0) await openLogs.at(-1)!.drained();
+    expect({
+      left,
+      log: left.length > 0 ? readFileSync(daemonPaths(hostNow()).log, "utf8") : "",
+    }).toEqual({ left: [], log: "" });
     expect(origins(armed)).toEqual([]);
     // A launch's SIGKILL escalation is the one timer a close means to leave
     // armed: on a slow turn it fires before the child's end clears it.
