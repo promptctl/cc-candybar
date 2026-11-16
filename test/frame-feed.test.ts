@@ -687,6 +687,25 @@ describe("a feed's draws and its summary", () => {
     expect(logged.getValueAtPercentile(99) / 1000).toBeCloseTo(5, 2);
   });
 
+  // [LAW:nothing-unseen] A draw that overruns its period makes the next frame
+  // late from the moment it fell due, not from when it was armed: with 60 ms
+  // renders and a 20 ms period, each frame falls due 20 ms after the last was
+  // drawn for, starts 40 ms past that, and lands 60 ms later.
+  test("a frame armed after it fell due is late from the moment it fell due", async () => {
+    const { feeds, note, log, clock } = harness({
+      motion: "moving",
+      renderMs: 60,
+    });
+    note(S, "bar");
+    const close = feeds.subscribe(
+      S,
+      sub(() => {}),
+    );
+    await clock.settle(1000);
+    close();
+    expect(log.at(-1)).toMatch(/ lateness=n:\d+,p50:100\.00,/);
+  });
+
   // [LAW:one-source-of-truth] A running summary states its distributions but
   // writes no histogram: each would hold every frame since the feed opened, so
   // a merge of a day's summaries would count early frames once a minute.

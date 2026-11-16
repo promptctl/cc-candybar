@@ -3,7 +3,11 @@
 // however long the daemon runs, read as one distribution. A render's time, a
 // launch's and a feed frame's lateness are spelled the same wherever they show.
 
-import { build as buildHistogram, type Histogram } from "hdr-histogram-js";
+import {
+  build as buildHistogram,
+  encodeIntoCompressedBase64,
+  type Histogram,
+} from "hdr-histogram-js";
 import type { Durations } from "./foundations/stats-snapshot.js";
 
 export type { Histogram };
@@ -15,7 +19,15 @@ export const recordMs = (h: Histogram, ms: number): void => {
   h.recordValue(Math.round(ms * 1000));
 };
 
+// To the hundredth of a ms. A percentile or the max rounds up, so it never
+// reads below the values it stands for; a mean or deviation is a sum's
+// quotient, rounded to nearest.
+const msUpOf = (us: number): number => Math.ceil(us / 10) / 100;
 const msOf = (us: number): number => Math.round(us / 10) / 100;
+
+// The whole histogram, compressed, as HdrHistogram's tools read and merge it.
+export const encodedOf = (h: Histogram): string =>
+  encodeIntoCompressedBase64(h);
 
 // A percentile is the highest value its bucket stands for, which can lie above
 // the largest value recorded; no recorded value lies above the largest, so that
@@ -24,14 +36,14 @@ const msOf = (us: number): number => Math.round(us / 10) / 100;
 export const durationsOf = (h: Histogram): Durations => {
   const max = h.maxValue;
   const at = (p: number): number =>
-    msOf(Math.min(h.getValueAtPercentile(p), max));
+    msUpOf(Math.min(h.getValueAtPercentile(p), max));
   return {
     count: h.totalCount,
     p50Ms: at(50),
     p90Ms: at(90),
     p99Ms: at(99),
     p999Ms: at(99.9),
-    maxMs: msOf(max),
+    maxMs: msUpOf(max),
     meanMs: msOf(h.mean),
     stddevMs: msOf(h.stdDeviation),
   };

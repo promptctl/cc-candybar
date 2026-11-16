@@ -409,11 +409,10 @@ The steps are the tickets under the epic `candybar-host-renderer-x96a`, in its r
 - At 30 fps, out of process, over about 30,000 requests: p50 3 ms, p99 6 ms. The hop to the renderer is p50 1 ms, p99 3 ms.
 - At 60 fps, over 21,863 requests: p50 8 ms, p99 30 ms, which is 19 ms over the baseline's p99. The draw itself is unchanged at p50 3 ms, p99 5 ms. The hop grew to p50 4 ms, p99 16 ms, because one animating feed keeps the renderer busy at 60 frames a second.
 
-**A-5 stands at 30 fps, the rate it names.** Every reading is the feed's own summary for a session animating in its pane.
+**A-5's falsifier names no tolerance, and read strictly it falls at both rates: frames fall short of the rate.** Every reading is the feed's own summary for a session animating in its pane. Each frame falls due a period after the instant the last was drawn for, so a late frame delays the ones after it, and the rate falls short by the frames' lateness.
 
-- At 30 fps, each minute drew 29.2 to 29.4 frames a second, with a mean draw of 9 ms and no failures.
-- At 60 fps, beyond that rate, frames fall short: over 89,134 frames in 26 minutes, 57.1 frames a second, and no failures. Each frame's lateness, from falling due to being drawn, was p50 6.0 ms, p99 13.3 ms, p99.9 34.4 ms, with a standard deviation of 3.0 ms. At least 99% of frames arrive within their 16.7 ms period, and at least one in a thousand is late by more than a period, which shows as a hitch. A closing summary's `latenessHistogram` gives the exact share.
-- A frame's lateness includes its draw, whose p99 was 12.4 ms, so a frame's evenness depends on what a draw costs.
+- At 30 fps, each minute drew 29.2 to 29.4 frames a second, 2 to 3% short, with a mean draw of 9 ms and no failures.
+- At 60 fps, over 89,134 frames in 26 minutes: 57.1 frames a second, 5% short, and no failures. Of the frames drawn, lateness from falling due to being drawn was p50 6.0 ms, p99 13.3 ms, p99.9 34.4 ms, with a standard deviation of 3.0 ms, and the draw's p99 was 12.4 ms. These readings understate any frame that fell due while the one before it was still drawing: lateness was then counted from when that frame's timer was set, not from when it fell due. A frame's lateness now counts from when it fell due.
 
 **A-4 falls as written and stands once `dbf` builds three conditions:** without them, launchd's host cannot find tmux, and after a boot it cannot write beside its socket. The probe was a user LaunchAgent with a `Sockets` entry at a path beside the installed socket, so the live daemon was untouched. It started its program on the first connect, started it again after it exited, and recreated the socket when the agent loaded with its directory missing, as after a boot.
 

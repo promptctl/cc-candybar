@@ -15,10 +15,10 @@ import {
   type RefreshTrigger,
 } from "../utils/refresh-ledger.js";
 import { inspect } from "node:util";
-import { encodeIntoCompressedBase64 } from "hdr-histogram-js";
 import {
   durationHistogram,
   durationsOf,
+  encodedOf,
   recordMs,
   type Histogram,
 } from "./durations.js";
@@ -272,7 +272,7 @@ const distributionOf = (h: Histogram): string => {
 const histogramsOf = (feed: Feed, state: "running" | "closed"): string =>
   state === "running"
     ? ""
-    : ` drawHistogram=${encodeIntoCompressedBase64(feed.drawTime)} latenessHistogram=${encodeIntoCompressedBase64(feed.lateness)}`;
+    : ` drawHistogram=${encodedOf(feed.drawTime)} latenessHistogram=${encodedOf(feed.lateness)}`;
 
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_MS = 60_000;
@@ -667,6 +667,9 @@ export class FrameFeeds<Req> {
     const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed.drawn++;
+    // [LAW:single-enforcer] exception: these spans skip the whole-ms span,
+    // since a frame is read against a period of a few ms; they are kept to the
+    // microsecond in their histograms.
     recordMs(feed.drawTime, finished - started);
     recordMs(feed.lateness, finished - dueMoment);
     feed.evaluated += frame.evaluated;
@@ -746,9 +749,18 @@ export class FrameFeeds<Req> {
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
   // its monotonic due time is what a wake compares against.
+  // [LAW:nothing-unseen] A frame already overdue when armed keeps the moment
+  // it fell due, in the past, and only its timer's wait is clamped: a draw
+  // that overran its period shows in the next frame's lateness, rather than
+  // the next frame counting from when it was armed.
   private arm(feed: Feed, due: Instant, wall: Instant): void {
-    const delay = Math.max(0, (due - wall) * 1000);
-    this.setTimer(feed, due, this.deps.clock.monotonic() + delay, delay);
+    const wait = (due - wall) * 1000;
+    this.setTimer(
+      feed,
+      due,
+      this.deps.clock.monotonic() + wait,
+      Math.max(0, wait),
+    );
   }
 
   private setTimer(

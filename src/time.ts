@@ -32,9 +32,7 @@ export interface Timekeeper {
 }
 
 // [LAW:single-enforcer] A span in whole milliseconds between two monotonic
-// readings: every duration src records or prints is one of these, but a feed
-// frame's draw and lateness, which are read against a period of a few ms and
-// kept to the microsecond in their histograms.
+// readings: every duration src records or prints is one of these.
 export function spanMs(from: Monotonic, to: Monotonic): number {
   return Math.round(to - from);
 }
