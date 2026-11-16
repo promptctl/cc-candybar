@@ -4,15 +4,22 @@
     {
       "version": "pr-774",
       "ref": "refs/pull/774/merge",
-      "sha": "c380d6c882b7b4274a3335be92a7b0bacd347992",
-      "timestamp": "2026-11-16T20:55:23.618Z",
+      "sha": "c6556ea0ad3c33250aefa86636563229ed4377ee",
+      "timestamp": "2026-11-16T20:58:36.883Z",
       "commits": [
         {
-          "sha": "c380d6c882b7b4274a3335be92a7b0bacd347992",
+          "sha": "c6556ea0ad3c33250aefa86636563229ed4377ee",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T20:54:27Z",
-          "message": "Merge fb2c175b111587e754f289a3107a9625cdd6dfe3 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+          "timestamp": "2026-11-16T20:57:36Z",
+          "message": "Merge 5b52376ad15cfa36808e4bc5ab7d2872d75ac8c4 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+        },
+        {
+          "sha": "5b52376ad15cfa36808e4bc5ab7d2872d75ac8c4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T13:57:25-07:00",
+          "message": "test(daemon): the fork-bomb test kills its daemons in its one teardown and pins the registry after the sweep\n\n- Every daemon booted is killed in afterAll, which jest runs after a\n  timeout too, before the directories it runs in are removed; the\n  in-test finally is gone.\n- After d4's admission the registry names d1 and d4 alone.\n- The liveness read uses the suite's process probe; a fixture is just\n  its environment.\n"
         },
         {
           "sha": "fb2c175b111587e754f289a3107a9625cdd6dfe3",
