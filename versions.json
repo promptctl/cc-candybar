@@ -4,15 +4,22 @@
     {
       "version": "pr-775",
       "ref": "refs/pull/775/merge",
-      "sha": "b3e8b6b590e112c2cc4a8cbc4b0c25dcfd5a07a2",
-      "timestamp": "2026-11-16T21:35:50.887Z",
+      "sha": "c011637e1d30c9908ddcfc156754f95fb4e949e5",
+      "timestamp": "2026-11-16T21:38:20.274Z",
       "commits": [
         {
-          "sha": "b3e8b6b590e112c2cc4a8cbc4b0c25dcfd5a07a2",
+          "sha": "c011637e1d30c9908ddcfc156754f95fb4e949e5",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:34:23-07:00",
-          "message": "Merge ac1fd1d5387945c381e28f185fadc7aff973f199 into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+          "timestamp": "2026-11-16T21:37:16Z",
+          "message": "Merge 2b4da1e9875bf4852c98c2bdc8560c302cc2c49e into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+        },
+        {
+          "sha": "2b4da1e9875bf4852c98c2bdc8560c302cc2c49e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T14:37:05-07:00",
+          "message": "test(daemon): the restore tests share one private tmux server, and the close test always ends its daemon\n"
         },
         {
           "sha": "ac1fd1d5387945c381e28f185fadc7aff973f199",
