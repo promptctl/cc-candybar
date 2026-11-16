@@ -8,10 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { LinkSigner, SignedFields } from "../click/link-signer.js";
 import { effectsUrl, VERB_REPO_CONFIG } from "../click/wire.js";
-import { repoProject } from "../config/loader/discovery.js";
 import {
   answerDir,
-  gateRepos,
   parseRepoConfigBook,
   REPO_ANSWERS,
   withAnswer,
@@ -52,7 +50,7 @@ export function repoConfigsPath(dir: string): string {
 // directly in the state directory, where the book used to live, is read
 // only while the folder holds none, and the first answer recorded writes it
 // into the folder with that answer: nothing is moved, so no answer is lost
-// to a move, and every reader — the daemon, `check`, the demo — reads the
+// to a move, and every reader — the daemon, `check`, the doctor — reads the
 // same answers.
 export const repoConfigs = (dir: string): StateFile<RepoConfigBook> => {
   const book = stateFile(
@@ -117,13 +115,6 @@ export function recordAnswer(
     return withAnswer(book, dir, answer, recorded.superseded);
   });
   return filed.kind === "failed" ? filed : ok(recorded);
-}
-
-// The gate a one-shot load outside the daemon (the demo, the gallery) runs
-// under. It loads the one file it was named, or none, never a searched chain,
-// so of a repository's it runs only the plugins the project at `cwd` ships.
-export function repoGateAt(stateDir: string, cwd: string): RepoGate {
-  return gateRepos(repoConfigs(stateDir).read(), [], repoProject(cwd));
 }
 
 // [LAW:single-enforcer] What an answer link signs: the session it was drawn

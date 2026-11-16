@@ -232,7 +232,7 @@ Tickets 21 to 30 are the ten pieces, each with the deliverables above. They need
 
 **21. Feeds.** `daemon-frame-feed-e2e` is the largest booting file, with 27 cases. `FrameFeeds` already takes its draw as an input, so the fake draw needs no other piece. Depends on 11, 12, 14 and 17.
 
-**22. Drawing.** Offers setup and draw as above. `src/check.ts` and `src/demo/dsl.ts` assemble this piece instead of their own rigs, which keeps one render path. `daemon-render-event-e2e` caused 8 of the 23 failed runs counted at 8da9964e, which ticket 5 recounts: name the logic it protects and unit-test it. Its click-event and `BAD_REQUEST` cases are written by `reply.ts`, so they go to ticket 29. The root's closures over `parts` and `renderCache` that `FrameFeeds` takes go here, because they reach Drawing. Depends on 8, 11 to 19, 23, 24, 27 and 28, because the draw reads the payload providers, the file events and the update watch.
+**22. Drawing.** Offers setup and draw as above. `src/check.ts` assembles this piece instead of its own rig, which keeps one render path. `daemon-render-event-e2e` caused 8 of the 23 failed runs counted at 8da9964e, which ticket 5 recounts: name the logic it protects and unit-test it. Its click-event and `BAD_REQUEST` cases are written by `reply.ts`, so they go to ticket 29. The root's closures over `parts` and `renderCache` that `FrameFeeds` takes go here, because they reach Drawing. Depends on 8, 11 to 19, 23, 24, 27 and 28, because the draw reads the payload providers, the file events and the update watch.
 
 **23. Config.** A load resolves and parses to a plain value that `RenderCache` takes, and reload stays in the cache. Depends on 14.
 

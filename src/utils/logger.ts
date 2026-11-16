@@ -4,7 +4,7 @@
 // when the channel is off. The message is a thunk, so what it costs to
 // compose (a byte count over a body) is paid only when the channel is on.
 // [LAW:no-shared-mutable-globals] The one owner of the switch is this module,
-// and a process main sets it once (src/index.ts, src/demo/*.ts) from its
+// and a process main sets it once (src/index.ts) from its
 // environment. Off until it does: debug text is diagnostics, not behaviour.
 let debugEnabled = false;
 const debugOn = (): boolean => debugEnabled;

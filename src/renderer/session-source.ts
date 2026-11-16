@@ -2,7 +2,7 @@
 // (brandon-unfiled-3248.8ro6, step 4e): its payload, composed from the
 // session's world state, the hook's fields, the client's hints, the session's
 // picks and the depths of its histories — and the globals those picks resolve
-// to. The daemon and the demo both build their views' sources here, so a view
+// to. Every view builds its sources here, so a view
 // is drawn from one derivation wherever it is drawn.
 //
 // [LAW:one-source-of-truth] The world state is the host's, stamped by its

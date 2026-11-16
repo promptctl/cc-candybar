@@ -2,8 +2,8 @@
 // daemon, which is detached and cannot observe any of it.
 //
 // [LAW:single-enforcer] One collection for every Node process that renders a
-// session — the statusline relay (src/index.ts) and the demo — so neither can
-// report a session differently from the other. The Rust client mirrors it.
+// session — the statusline relay (src/index.ts), `frames` and the doctor — so
+// none can report a session differently from another. The Rust client mirrors it.
 
 import type { Host } from "./host";
 import type { ClientHints } from "./daemon/foundations/protocol";

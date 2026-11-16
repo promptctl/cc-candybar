@@ -3,8 +3,8 @@
 // them, through the one step from a set of runs to its lanes the collector
 // takes (`declareRuns`), and answers the view's `run` from those lanes. It adds
 // no step of its own between them. candybar-host-renderer-x96a.f27 deletes it:
-// once `check` draws through `Renderer.answer` with a collector in process, as
-// the demo does, the collector holds these runs.
+// once `check` draws through `Renderer.answer` with a collector in process, the
+// collector holds these runs.
 
 import { observable, reaction, runInAction, when } from "mobx";
 import {

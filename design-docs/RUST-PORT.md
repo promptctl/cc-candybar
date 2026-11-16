@@ -68,7 +68,7 @@ The port changes no observable behaviour. Same socket path, same wire format and
 
 **Renderer and colour**
 
-- One renderer, `drawDsl`, called verbatim by the daemon, the demo, and the tests; no parallel render path `[LAW:one-source-of-truth]`.
+- One renderer, `drawDsl`, called verbatim by the daemon, `check`, and the tests; no parallel render path `[LAW:one-source-of-truth]`.
 - Decorative colour by tree address (`decorFor`), bands by disclosure (`bandFor`), state colour by hue; OKLCH and every other colour operation live in the styled-text library, never in the daemon.
 
 **Variable system and sources**

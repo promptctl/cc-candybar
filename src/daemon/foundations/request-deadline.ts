@@ -27,7 +27,7 @@ export const DRAW_RESERVE_MS = 60;
 
 // [LAW:parse-dont-validate] When the client hangs up, as the checkpoint
 // parsed it: the epoch milliseconds it stated, or nothing, from a client too
-// old to state one (and from the demo, which has no client).
+// old to state one.
 export type ClientDeadline =
   | { readonly kind: "stated"; readonly at: number }
   | { readonly kind: "unstated" };

@@ -197,7 +197,7 @@ export function linkSignerOver(key: () => Asked<Buffer>): LinkSigner {
 }
 
 // [LAW:single-enforcer] The signer of a draw that is only a preview (`check`,
-// the demo, the bench, the doctor's config draw): a key of its own, made once
+// the bench, the doctor's config draw): a key of its own, made once
 // per process and held nowhere, so a preview opens no key file and its links,
 // clicked, are refused loudly and prove nothing a real bar draws.
 let preview: LinkSigner | undefined;

@@ -178,14 +178,14 @@ export function parseRepoConfigBook(doc: unknown): RepoAnswers {
 }
 
 // [LAW:no-silent-failure] A book that cannot be read is said wherever the
-// gate is: the bar's strip, `check`, the demo.
+// gate is: the bar's strip and `check`.
 export function repoUnreadNotice(gate: RepoGate): string | null {
   return gate.unread === null
     ? null
     : `Repository config answers could not be read: ${gate.unread} — no repository's config runs until they can be`;
 }
 
-// What a verdict outside the bar (`check`, the demo) says of each repository
+// What a verdict outside the bar (`check`) says of each repository
 // it did not run. The bar asks instead.
 export function repoGateLines(gate: RepoGate): readonly string[] {
   const unread = repoUnreadNotice(gate);

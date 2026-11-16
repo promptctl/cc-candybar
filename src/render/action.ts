@@ -283,7 +283,7 @@ export interface ActionRuntime {
   bound: RenderBinding | undefined;
   compiled: CompiledActions;
   // [LAW:single-enforcer] What signs every `run` link this compile draws: the
-  // daemon's, check's and the demo's from the key file, a test's from a fixed
+  // daemon's and check's from the key file, a test's from a fixed
   // key. There is one render path, and it always signs.
   readonly signer: LinkSigner;
 }

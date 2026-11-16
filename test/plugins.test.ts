@@ -36,7 +36,9 @@ import { textOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoGateAt } from "../src/renderer/repo-configs";
+import { repoConfigs } from "../src/renderer/repo-configs";
+import { gateRepos } from "../src/config/loader/repo-gate";
+import { repoProject } from "../src/config/loader/discovery";
 import { installFromRepo } from "../src/plugin-install";
 import { bindSelf } from "../src/config/loader/refs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
@@ -823,7 +825,13 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [],
-      { repo: repoGateAt(stateDir(host), projectDir).plugins },
+      {
+        repo: gateRepos(
+          repoConfigs(stateDir(host)).read(),
+          [],
+          repoProject(projectDir),
+        ).plugins,
+      },
       projectDir,
       [],
       instantOf(new Date()),

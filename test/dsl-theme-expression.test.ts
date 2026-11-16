@@ -304,7 +304,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   test("an omitted theme selection renders what the CONFIG declares, not the floor", () => {
     // drawDsl takes no base-palette argument any more, so the default must be
     // the config's own declared theme — substituting the floor would silently
-    // repaint every compile-only render (the demo, `cc-candybar check`, tests).
+    // repaint every compile-only render (`cc-candybar check`, tests).
     const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,

@@ -53,7 +53,7 @@ export function sessionKeyed<V>(
   return keyed;
 }
 
-// A session id the program spells itself (the demo's), parsed by the same
+// A session id the program spells itself (check's), parsed by the same
 // checkpoint: one that fails is a bug in the program, thrown.
 export function sessionIdOf(raw: string): SessionId {
   const parsed = parseSessionId(raw);

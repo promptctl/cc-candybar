@@ -28,7 +28,7 @@ export interface ViewSource {
 
 // A source that answers one payload and one resolution for good, and its
 // caller's runs: what a caller drawing a fixed payload binds (`cc-candybar
-// check`, the demo, a test), so its draws read the same seam a session's do.
+// check`, a test), so its draws read the same seam a session's do.
 export function fixedSource(
   payload: unknown,
   selections: Selections,

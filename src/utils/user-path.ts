@@ -16,7 +16,7 @@ function expandHome(p: string, home: string): string {
 
 // [LAW:single-enforcer] The one rule for a path a user writes — the
 // `CC_CANDYBAR_CONFIG` a client reports, a statusline command's `--config`,
-// the `check`/`doctor`/gallery argument, a plugin list entry or data file:
+// the `check`/`doctor` argument, a plugin list entry or data file:
 // `~` expanded, then made absolute against `base`, the directory it was
 // written relative to. For a path named in a session that is the client's
 // cwd, never the detached daemon's (brandon-config-nuq6: a relative override

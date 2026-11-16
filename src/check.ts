@@ -578,9 +578,8 @@ export async function checkConfig(
 
 // A config loaded, validated, registered, and settled under the fresh
 // session's payload — the daemon's buildState, in the daemon's order
-// [LAW:single-enforcer]. `check` renders its verdict on it and the gallery
-// renders every theme on it, so neither can drift into a partial copy of the
-// other. The caller owns `registry` and disposes it; the register pass's
+// [LAW:single-enforcer]. `check` renders its verdict on it, so it cannot
+// drift into a partial copy of the daemon's. The caller owns `registry` and disposes it; the register pass's
 // advisory `loadWarnings` (partial declaration failures) land in `warnings` —
 // the same channel RenderCache merges them into. A source still running at
 // the deadline is named by the pass that draws without it (renderEffective),

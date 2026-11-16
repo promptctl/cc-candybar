@@ -567,7 +567,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   test("no render-walk branch: drawDsl's own source never mentions edit mode", () => {
     // [LAW:dataflow-not-control-flow] The chrome is spliced tree nodes with
     // an ordinary `when`; drawDsl (the ONE render path, called verbatim by
-    // the daemon and the demo alike) needed zero edits for this feature, and
+    // the daemon and check alike) needed zero edits for this feature, and
     // this asserts that structurally rather than by promise.
     const fs = require("node:fs") as typeof import("node:fs");
     const src = fs.readFileSync(
