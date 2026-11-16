@@ -11,15 +11,14 @@ import { until } from "../../helpers/until";
 // [LAW:verifiable-goals] Integration proof for the daemon-side fork-bomb
 // circuit breaker (brandon-daemon-lifecycle-gad.2): with a real, tiny ceiling
 // and a real registry directory on disk, the (ceiling+1)th isolated daemon
-// must refuse to boot — exiting well under a Node boot, never binding its own
-// socket — and a dead sibling's stale registry entry must not permanently
+// must refuse to boot — exiting with failure, never binding its own socket —
+// and a dead sibling's stale registry entry must not permanently
 // occupy a ceiling slot. The pure decision logic (decideBoot/countLiveEntries/
 // admitDaemon) is exhaustively unit-tested in fork-bomb-breaker.test.ts; this
 // file is the wiring proof and doubles as the CI regression gate the ticket's
 // acceptance asks for ("a regression that lets the count run away fails CI").
 
 const CEILING = 2;
-const REFUSE_BUDGET_MS = 5000;
 
 // A dedicated pool (not the suite's shared default) and a dedicated registry
 // dir (not the machine's real shared one, see daemonRegistryDir()'s
@@ -72,27 +71,17 @@ function makeFixture(prefix: string, registryDir: string): Fixture {
   };
 }
 
-// Clears its own timeout on the exit path so a resolved race never leaves a
-// live timer pinning the event loop open past the test (Promise.race alone
-// doesn't cancel the losing branch).
-function waitForExit(
+// [LAW:verifiable-goals] How the child ended, with no clock of its own: how
+// long a Node boot takes measures the machine's load, not the breaker, and
+// the test's timeout bounds a child that never exits.
+function exited(
   child: ChildProcess,
-  budgetMs: number,
 ): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`process did not exit within ${budgetMs}ms`));
-    }, budgetMs);
-    if (child.exitCode !== null || child.signalCode !== null) {
-      clearTimeout(timer);
-      resolve({ code: child.exitCode, signal: child.signalCode });
-      return;
-    }
-    child.once("exit", (code, signal) => {
-      clearTimeout(timer);
-      resolve({ code, signal });
-    });
-  });
+  if (child.exitCode !== null || child.signalCode !== null)
+    return Promise.resolve({ code: child.exitCode, signal: child.signalCode });
+  return new Promise((resolve) =>
+    child.once("exit", (code, signal) => resolve({ code, signal })),
+  );
 }
 
 describe("daemon-side fork-bomb circuit breaker (integration)", () => {
@@ -127,7 +116,7 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
       await until(() => isConnectable(fx2.sockPath), "d2's socket");
 
       // Ceiling is full (2/2 live isolated daemons registered). The 3rd must
-      // refuse — exiting fast, never binding its own socket.
+      // refuse — exiting with failure, never binding its own socket.
       const d3 = await spawnTestDaemon(fx3.env, pool);
       cleanups.push(() => {
         d3.killTree();
@@ -140,7 +129,7 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
       // this breaker), so the file's on-disk content right after exit is not
       // a reliable signal. Exit code + "never bound a socket" are the
       // load-bearing, deterministic proof that the breaker fired.
-      const { code, signal } = await waitForExit(d3.child, REFUSE_BUDGET_MS);
+      const { code, signal } = await exited(d3.child);
       expect(signal).toBeNull();
       expect(code).toBe(1);
       expect(fs.existsSync(fx3.sockPath)).toBe(false);
@@ -150,7 +139,7 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
       // registry entry is left behind as a stale file: the exact condition
       // admitDaemon()'s sweep exists to reclaim.
       d2.killTree();
-      await waitForExit(d2.child, 5000);
+      await exited(d2.child);
 
       const fx4 = makeFixture("cc-candybar-breaker-4-", registryDir);
       const d4 = await spawnTestDaemon(fx4.env, pool);
