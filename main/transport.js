@@ -73597,33 +73597,34 @@ var TmuxStatusLines = class {
     const session = server?.view?.sessionOf.get(held.pane);
     return session !== void 0 && server.layouts.has(session) && server.view.shownBy.get(session) === held.pane;
   }
-  // [LAW:single-enforcer] The daemon's shutdown: everything put back, now —
-  // a few synchronous tmux calls a server, whatever is in flight.
-  restoreAll(atExit) {
+  // [LAW:single-enforcer] The daemon's shutdown: everything it laid out put
+  // back. [LAW:no-ambient-temporal-coupling] Nothing new starts, and each
+  // server's tmux call already in flight lands first: a lay-out write is its
+  // own tmux client, which reaches the server whenever it does, so a restore
+  // that ran beside it could be laid out over again once the daemon is gone.
+  // Each server is put back on its own, so one slow or failing server holds
+  // up no other.
+  async close() {
     this.closed = true;
     for (const held of this.held.values()) held.unsubscribe?.();
     this.held.clear();
-    for (const [socket, server] of this.servers) {
-      for (const [session, layout] of [...server.layouts]) {
-        server.layouts.delete(session);
-        const answers = this.askSync(atExit, socket, RESTORE_QUERIES(session));
-        if (answers === null) continue;
-        const plan = restorePlan(session, layout.prior, answers);
-        this.writeSync(atExit, socket, plan.commands);
-        this.saidRestored(socket, session, plan.kept);
-      }
-      const binding = server.binding;
-      server.binding = { kind: "none" };
-      if (binding.kind === "ours" || binding.kind === "adopted") {
-        const answers = this.askSync(atExit, socket, ROOT_KEYS);
-        if (answers === null) continue;
-        this.writeBindingRestoreSync(
-          atExit,
-          socket,
-          binding.prior,
-          answers[0] ?? ""
-        );
-      }
+    await Promise.all(
+      [...this.servers].map(
+        ([socket, server]) => this.closeServer(socket, server)
+      )
+    );
+  }
+  async closeServer(socket, server) {
+    try {
+      await server.running;
+      for (const session of [...server.layouts.keys()])
+        await this.restore(socket, server, session);
+      await this.restoreBinding(socket, server);
+    } catch (error) {
+      this.deps.log(
+        "warn",
+        `tmux-status: socket=${JSON.stringify(socket)} restore at close threw: ${String(error)}`
+      );
     }
   }
   // A click on the range `<range>` of pane `%<n>` on the server `<socket>`
@@ -73745,7 +73746,7 @@ var TmuxStatusLines = class {
       }
       if (server.left.has(session)) continue;
       const layout = known ?? await this.install(socket, server, session);
-      if (layout === null) continue;
+      if (layout === null || this.closed) continue;
       const shown = panes.find((h) => h.pane === view.shownBy.get(session));
       const rows = shown?.frame?.rows.slice(0, MAX_STATUS_ROWS - layout.prior.base) ?? [];
       await this.draw(socket, session, layout, rows);
@@ -73932,15 +73933,6 @@ var TmuxStatusLines = class {
       `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`
     );
   }
-  writeBindingRestoreSync(atExit, socket, prior, listKeys) {
-    const plan = bindingRestorePlan(prior, listKeys);
-    for (const step4 of plan.steps)
-      this.writeSync(atExit, socket, [step4.command], step4.stdin);
-    this.deps.log(
-      "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`
-    );
-  }
   // ─── tmux, counted ───────────────────────────────────────────────────────
   // A failure is counted, and logged when it differs from the server's last.
   counted(socket, run3) {
@@ -73965,20 +73957,11 @@ var TmuxStatusLines = class {
     const run3 = await this.run(socket, readChain(queries));
     return run3.kind === "ok" ? answersOf(run3.stdout, queries.length) : null;
   }
-  askSync(atExit, socket, queries) {
-    const run3 = this.counted(socket, atExit(socket, readChain(queries)));
-    return run3.kind === "ok" ? answersOf(run3.stdout, queries.length) : null;
-  }
   // Whether tmux took the write.
   async write(socket, commands, stdin) {
     if (commands.length === 0) return true;
     this.writes++;
     return (await this.run(socket, chain(commands), stdin)).kind === "ok";
-  }
-  writeSync(atExit, socket, commands, stdin) {
-    if (commands.length === 0) return;
-    this.writes++;
-    this.counted(socket, atExit(socket, chain(commands), stdin));
   }
 };
 function segmentsOf2(value) {
@@ -93064,15 +93047,18 @@ function createDaemon(inputs) {
       limits.arm();
       link.arm();
     },
-    async close(atExit) {
+    async close() {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
       const teardown = [
+        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
+        // back before it goes (src/daemon/tmux-status.ts).
+        // [LAW:no-ambient-temporal-coupling] First, before any renderer step:
+        // one waits behind whatever turn the renderer is in, which can outlast
+        // shutdown's backstop, while this waits only on its own tmux calls.
+        ["tmuxStatusLines close", () => tmuxStatusLines.close()],
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
         // journal in flight, so none opens after.
         ["journalTurns close", rendererStep("close-journal")],
-        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts).
-        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.

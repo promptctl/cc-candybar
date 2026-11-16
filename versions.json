@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-775",
-      "ref": "refs/pull/775/merge",
-      "sha": "58fdc02f8299cb53c70534cf74136f6e4e1362fe",
-      "timestamp": "2026-11-16T21:55:20.411Z",
-      "commits": [
-        {
-          "sha": "58fdc02f8299cb53c70534cf74136f6e4e1362fe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T21:54:15Z",
-          "message": "Merge 6bddc10d4dca0b727239486df8c865b714f64a19 into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
-        },
-        {
-          "sha": "6bddc10d4dca0b727239486df8c865b714f64a19",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:54:04-07:00",
-          "message": "fix(daemon): each tmux server is put back on its own at close, and a closed reconcile draws nothing more\n"
-        },
-        {
-          "sha": "264468e5ead516770f8916efb688a045f28af2ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:49:03-07:00",
-          "message": "fix(daemon): the close lets tmux calls in flight land, then restores through the reconcile's own calls\n"
-        },
-        {
-          "sha": "2b4da1e9875bf4852c98c2bdc8560c302cc2c49e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:37:05-07:00",
-          "message": "test(daemon): the restore tests share one private tmux server, and the close test always ends its daemon\n"
-        },
-        {
-          "sha": "ac1fd1d5387945c381e28f185fadc7aff973f199",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:34:13-07:00",
-          "message": "test(daemon): the close test runs tmux at exit as a blocking call\n"
-        },
-        {
-          "sha": "a9d77b86cd0102910e2a5bcdb4097b4ba388faad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:33:05-07:00",
-          "message": "test(daemon): a close puts the tmux status lines back while its renderer has not answered\n"
-        },
-        {
-          "sha": "150cf33759b7e6db954576c5802045f17c050d06",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:26:46-07:00",
-          "message": "fix(daemon): a shutdown puts the tmux status lines back before it waits on the renderer\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f70ac8933da8b45a3b1df24110a27e5de909823d",
-      "timestamp": "2026-11-16T21:25:26.199Z",
+      "sha": "acbe8d7f00ff771cf71a9fa7c33723e6256ede7e",
+      "timestamp": "2026-11-16T22:06:08.866Z",
       "commits": [
         {
-          "sha": "f70ac8933da8b45a3b1df24110a27e5de909823d",
+          "sha": "acbe8d7f00ff771cf71a9fa7c33723e6256ede7e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:24:25-07:00",
-          "message": "test(daemon): the fork-bomb ceiling test boots through the suite's isolated-daemon helper (#774)\n\n* test(daemon): the fork-bomb ceiling test boots through the suite's isolated-daemon helper\n\nThe test hand-rolled its fixtures, a dedicated daemon pool, and a 5 s\nexit budget for the refused daemon. It failed main's Release run when a\nNode boot under fourteen parallel process suites ran past that budget.\n\nEvery daemon now boots through `spawnDaemonWithEnv`: the suite's one\nreadiness budget, the shared pool that caps how many daemons the suite\nruns, and a refusal named at once with the daemon's log and stderr. The\nrefused daemon is asserted by that helper's diagnosis: no socket, exited\nwith code 1. The reclaim waits until the killed worker's registered pid\nhas been reaped, since a zombie still counts live. d4 is d3's control: a\ndaemon set up as d3 was boots once a slot is free.\n\n* test(daemon): the fork-bomb test pins the breaker's own refusal, waits on its liveness read, and checks the sweep\n\n- d3's rejection must quote the breaker's refusal line, which the daemon\n  log writes out as the process exits, so a boot failing for another\n  reason no longer passes.\n- d2 is waited out by the breaker's own read, the registered pid and\n  start time, so a zombie or a reused pid answers as the breaker would.\n- d2's registration is asserted to be the one new entry, and d4's\n  admission is asserted to have swept it.\n\n* test(daemon): the fork-bomb test kills its daemons in its one teardown and pins the registry after the sweep\n\n- Every daemon booted is killed in afterAll, which jest runs after a\n  timeout too, before the directories it runs in are removed; the\n  in-test finally is gone.\n- After d4's admission the registry names d1 and d4 alone.\n- The liveness read uses the suite's process probe; a fixture is just\n  its environment.\n\n* test(daemon): the fork-bomb test's timeout covers its four boots, and d3's own environment is the control\n\n- The test's timeout is four of the helper's readiness budgets and the\n  reap's wait, so a hung step fails by the helper's diagnosis, and a boot\n  in flight is the helper's to kill, before jest's timeout.\n- d1 is asserted to be the registry's one entry; d4 boots on d3's\n  environment; the registry after the sweep holds d1 and d4 by identity.\n- A daemon killed mid-test leaves the teardown's list."
+          "timestamp": "2026-11-16T15:05:12-07:00",
+          "message": "fix(daemon): a shutdown puts the tmux status lines back after its own tmux calls land, before it waits on the renderer (#775)\n\n* fix(daemon): a shutdown puts the tmux status lines back before it waits on the renderer\n\n* test(daemon): a close puts the tmux status lines back while its renderer has not answered\n\n* test(daemon): the close test runs tmux at exit as a blocking call\n\n* test(daemon): the restore tests share one private tmux server, and the close test always ends its daemon\n\n* fix(daemon): the close lets tmux calls in flight land, then restores through the reconcile's own calls\n\n* fix(daemon): each tmux server is put back on its own at close, and a closed reconcile draws nothing more"
         }
       ]
     }
