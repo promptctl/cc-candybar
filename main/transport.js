@@ -29702,7 +29702,7 @@ var KeyedSource = class {
       name: spec.name,
       scope: spec.scope,
       refresh: ["first", "period", "change", "supersede"],
-      event: "own"
+      lines: spec.lines
     });
   }
   spec;
@@ -29975,7 +29975,7 @@ var RefreshLedger = class {
     };
     for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
     this.tallies.set(key, tally);
-    return new Refreshes(tally, declaration.event, this.logger);
+    return new Refreshes(tally, new Set(declaration.lines), this.logger);
   }
   // Every source declared, by scope then name.
   snapshot() {
@@ -29996,13 +29996,13 @@ var RefreshLedger = class {
   }
 };
 var Refreshes = class {
-  constructor(tally, event, logger) {
+  constructor(tally, lines2, logger) {
     this.tally = tally;
-    this.event = event;
+    this.lines = lines2;
     this.logger = logger;
   }
   tally;
-  event;
+  lines;
   logger;
   // This source's record as the ledger holds it: what its owner's own stats
   // report, a view of the one tally rather than a count of its own.
@@ -30015,7 +30015,7 @@ var Refreshes = class {
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
     const failure = outcome.kind === "failed";
-    if (!failure && this.event === "step") return;
+    if (!failure && !this.lines.has(by)) return;
     const why2 = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure ? "warn" : "info",
@@ -30244,6 +30244,7 @@ var SourceRuns = class {
       // the last release drops it, ending its child, its period and its
       // watch, so a key that moves every tick leaves no child behind.
       maxEntries: 0,
+      lines: REFRESH_TRIGGERS,
       logger,
       ledger,
       clock: deps.clock
@@ -53768,7 +53769,6 @@ var PAYLOAD_INPUTS = {
 };
 var DRAW_PROJECTIONS = {
   today: "the day the draw is at",
-  speed: "a rate ends once the draw is a sample window past its last sample",
   feeds: "the frames a lane was sent up to the draw's instant",
   drawing: "who the draw is for",
   diagnostics: "the errors and warnings the draw owes its reader"
@@ -59270,13 +59270,13 @@ var GitDataProvider = class {
       name: "git",
       scope: "repo",
       refresh: ["first", "period", "change"],
-      event: "own"
+      lines: ["first", "period", "change"]
     });
     this.prRefreshes = ledger.declare({
       name: "pr",
       scope: "repo",
       refresh: ["first", "period"],
-      event: "own"
+      lines: ["first", "period"]
     });
     if (opts.watchers) {
       this.watchers = opts.watchers;
@@ -60353,6 +60353,26 @@ function userEntryOf(parsed2) {
   if (text4.startsWith("[Request interrupted by user")) return "interrupt";
   return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
 }
+var TURN_GOES_ON = /* @__PURE__ */ new Set([
+  void 0,
+  "tool_use",
+  "pause_turn"
+]);
+function turnOpenAfter(open2, entry) {
+  if (entry.isSidechain) return open2;
+  switch (entry.userEntry) {
+    case "prompt":
+    case "turn":
+      return true;
+    case "interrupt":
+      return false;
+    case "tool-result":
+    case "claude-code":
+      return open2;
+    case void 0:
+      return entry.type === "assistant" ? TURN_GOES_ON.has(entry.message?.stopReason) : open2;
+  }
+}
 var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
 function firstBlockType(msg) {
   const content = msg?.content;
@@ -60371,7 +60391,8 @@ function makeEntry(parsed2) {
       model: typeof msg.model === "string" ? msg.model : void 0,
       usage,
       role: typeof msg.role === "string" ? msg.role : void 0,
-      type: typeof msg.type === "string" ? msg.type : void 0
+      type: typeof msg.type === "string" ? msg.type : void 0,
+      stopReason: typeof msg.stop_reason === "string" ? msg.stop_reason : void 0
     } : void 0,
     costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
     isSidechain: parsed2.isSidechain === true,
@@ -60976,10 +60997,10 @@ function projectToday(facts, at) {
 
 // src/daemon/cache/session-usage-store.ts
 var SPEED_RING_CAPACITY = 64;
-function speedSampleOf(breakdown, atMs) {
+function speedSampleOf(breakdown, turnOpen, atMs) {
   const input = breakdown ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead : 0;
   const output = breakdown ? breakdown.output : 0;
-  return { input, output, total: input + output, atMs };
+  return { input, output, total: input + output, atMs, turnOpen };
 }
 var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
 var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
@@ -61004,18 +61025,30 @@ var EMPTY_FILE_FOLD = {
   entries: 0,
   cost: 0,
   breakdown: emptyBreakdown(),
-  days: /* @__PURE__ */ new Map()
+  days: /* @__PURE__ */ new Map(),
+  turnOpen: false,
+  response: void 0
 };
+function responseOf(entry) {
+  const id2 = entry.message?.id;
+  return id2 === void 0 ? void 0 : `${id2}:${entry.raw.requestId ?? ""}`;
+}
 async function foldFile(state, entries, cacheRoot, clock) {
   const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
   let count = state.entries;
   let cost = state.cost;
+  let turnOpen = state.turnOpen;
+  let last2 = state.response;
   const breakdown = { ...state.breakdown };
   const days = /* @__PURE__ */ new Map();
   for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
   for (const entry of entries) {
+    turnOpen = turnOpenAfter(turnOpen, entry);
     const u = entry.message?.usage;
     if (!u) continue;
+    const response = responseOf(entry);
+    if (response !== void 0 && response === last2) continue;
+    last2 = response;
     count++;
     const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
     cost += priced;
@@ -61033,7 +61066,7 @@ async function foldFile(state, entries, cacheRoot, clock) {
     d.cacheRead += u.cache_read_input_tokens || 0;
     days.set(key, d);
   }
-  return { entries: count, cost, breakdown, days };
+  return { entries: count, cost, breakdown, days, turnOpen, response: last2 };
 }
 function mergeFolds(files) {
   let count = 0;
@@ -61134,7 +61167,7 @@ var SessionUsageStore = class {
   // pricing table is cached.
   host;
   log;
-  renderTally = { hits: 0, misses: 0 };
+  refreshTally = { hits: 0, misses: 0 };
   ledger;
   // The session record's refresh, which its transcript lanes make; a
   // rescan's reads are its `today` scan's.
@@ -61152,7 +61185,7 @@ var SessionUsageStore = class {
       name: "usage",
       scope: "session",
       refresh: ["first", "period", "change"],
-      event: "step"
+      lines: []
     });
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     this.scans = new KeyedSource({
@@ -61164,6 +61197,7 @@ var SessionUsageStore = class {
       every: () => opts.rescan ?? DEFAULT_RESCAN,
       watch: NO_WATCH,
       maxEntries: MAX_UNHELD_SCANS,
+      lines: REFRESH_TRIGGERS,
       logger: this.log,
       ledger: this.ledger,
       clock: this.clock
@@ -61178,8 +61212,8 @@ var SessionUsageStore = class {
   getStats() {
     return {
       size: this.sessions.size,
-      hits: this.renderTally.hits,
-      misses: this.renderTally.misses,
+      hits: this.refreshTally.hits,
+      misses: this.refreshTally.misses,
       sweeps: this.sweeps
     };
   }
@@ -61234,8 +61268,8 @@ var SessionUsageStore = class {
       const tally = { hits: 0, misses: 0 };
       const startedAt = this.clock.monotonic();
       const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
-      this.renderTally.hits += tally.hits;
-      this.renderTally.misses += tally.misses;
+      this.refreshTally.hits += tally.hits;
+      this.refreshTally.misses += tally.misses;
       if (tally.misses > 0) {
         this.usage.recorded(
           `sid=${valueOf(sessionId2)}`,
@@ -61299,9 +61333,9 @@ var SessionUsageStore = class {
     return ok(Object.fromEntries(record2.days));
   }
   // A refresh's speed sample, over its one ingest of the session: its current
-  // cumulative counts, the prior sample alongside, and this one recorded as the
-  // new baseline — taken only at a stamp no sample was taken at, so a period
-  // over an unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
+  // cumulative counts and whether its turn is open, added to the session's
+  // ring — taken only at a stamp no sample was taken at, so a period over an
+  // unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
   // as `failed` (the boundary logs it and the segment reads "—"); an unknown
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
@@ -61317,24 +61351,17 @@ var SessionUsageStore = class {
       const slot = this.hold(sessionId2);
       const standing2 = slot.speed.get();
       if (slot.sampledAt === stamp2 && standing2?.kind === "ok") return standing2;
-      const breakdown = record2.kind === "ok" ? record2.value.usage.tokenBreakdown : null;
-      const cur = speedSampleOf(breakdown, nowMs);
+      const cur = record2.kind === "ok" ? speedSampleOf(
+        record2.value.usage.tokenBreakdown,
+        record2.value.turnOpen,
+        nowMs
+      ) : speedSampleOf(null, false, nowMs);
       const { ring } = slot;
-      let prev;
-      for (const s of ring) {
-        if (s.atMs < cur.atMs && (prev === void 0 || s.atMs > prev.atMs)) {
-          prev = s;
-        }
-      }
       ring.push(cur);
       ring.sort((a, b) => a.atMs - b.atMs);
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
-      slot.sampledAt = stamp2;
-      const observed = ok({
-        ...prev !== void 0 && { prev },
-        cur,
-        samples: [...ring]
-      });
+      if (ring.at(-1) === cur) slot.sampledAt = stamp2;
+      const observed = ok({ samples: [...ring] });
       answer(slot.speed, observed);
       return observed;
     });
@@ -61374,11 +61401,10 @@ var SessionUsageStore = class {
     }
     const { prior, outcome } = refolded;
     if (outcome.kind !== "ok") return outcome;
+    const { mainStamp, ...folded2 } = outcome.value;
     const record2 = {
-      files: outcome.value.files,
-      usage: outcome.value.usage,
-      days: outcome.value.days,
-      transcriptStamp: outcome.value.mainStamp,
+      ...folded2,
+      transcriptStamp: mainStamp,
       transcriptPath
     };
     const landed = this.sessions.get(sessionId2)?.record;
@@ -61470,7 +61496,12 @@ var SessionUsageStore = class {
       newFiles.set(filePath2, folded2);
       if (filePath2 === transcriptPath) mainStamp = folded2.cursor.stamp;
     }
-    return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
+    return ok({
+      files: newFiles,
+      ...mergeFolds(newFiles),
+      mainStamp,
+      turnOpen: newFiles.get(transcriptPath)?.value.turnOpen ?? false
+    });
   }
   // The one whole-tree scan of a directory set — its seed, or a rescan:
   // ingest every session whose transcript was touched recently enough to hold
@@ -62257,7 +62288,7 @@ var ContextProvider = class {
         name: "context",
         scope: "session",
         refresh: ["first", "period", "change"],
-        event: "step"
+        lines: []
       }),
       opts.clock,
       logger
@@ -62369,7 +62400,7 @@ var MetricsProvider = class {
         name: "metrics",
         scope: "session",
         refresh: ["first", "period", "change"],
-        event: "step"
+        lines: []
       }),
       opts.clock,
       logger
@@ -62492,7 +62523,7 @@ var ActivityProvider = class {
         name: "activity",
         scope: "session",
         refresh: ["first", "period", "change"],
-        event: "step"
+        lines: []
       }),
       opts.clock,
       logger
@@ -62569,6 +62600,7 @@ ${hint.pane}`,
       every: () => ({ okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS }),
       watch: NO_WATCH,
       maxEntries: MAX_ENTRIES,
+      lines: REFRESH_TRIGGERS,
       logger,
       ledger: opts.ledger ?? new RefreshLedger(logger),
       clock: opts.clock
@@ -62635,6 +62667,7 @@ var HostService = class {
       every: () => HOST_EVERY,
       watch: NO_WATCH,
       maxEntries: 1,
+      lines: REFRESH_TRIGGERS,
       logger,
       ledger,
       clock: opts.clock
@@ -62676,7 +62709,7 @@ var AutoCompactProvider = class {
       name: "autocompact",
       scope: "configDir",
       refresh: ["first", "period", "change"],
-      event: "step"
+      lines: []
     });
   }
   clock;
@@ -62758,7 +62791,7 @@ var CacheExpiryProvider = class {
       name: "cache",
       scope: "session",
       refresh: ["first", "period", "change"],
-      event: "step"
+      lines: []
     });
   }
   clock;
@@ -65367,6 +65400,7 @@ var ManagedStorage = class {
       every: () => null,
       watch: NO_WATCH,
       maxEntries: MAX_ENTRIES2,
+      lines: REFRESH_TRIGGERS,
       logger: opts.logger,
       ledger: opts.ledger ?? new RefreshLedger(opts.logger),
       clock: opts.clock
@@ -65684,6 +65718,10 @@ var TranscriptLanes = class {
       every: () => deps.every ?? TRANSCRIPT_PERIOD,
       watch: (followed, changed) => this.watch(followed, changed),
       maxEntries: MAX_UNHELD,
+      // [LAW:nothing-unseen] The period is a backstop for a dropped event, and
+      // its clean read over a quiet session says nothing: it counts in the
+      // ledger and writes no line, while a write's read writes one.
+      lines: ["first", "change", "supersede"],
       logger: deps.logger,
       ledger: deps.ledger,
       clock: deps.clock
@@ -65798,19 +65836,35 @@ function createPayloadProviders(opts) {
     home: opts.host.home,
     sourceRuns: opts.sourceRuns,
     log: opts.logger,
-    // [LAW:single-enforcer] The one close of every owner built here: a held
+    // [LAW:single-enforcer] The one close of every owner built here, a named
+    // step each, which its caller's teardown runs (runTeardown): a held
     // entry's period re-arms after every read, so an owner a caller forgets
     // keeps its timers for good. The transcript lanes go before the usage
     // store their reads fill.
-    close: () => {
-      owners.gitProvider.close();
-      owners.transcriptLanes.close();
-      lanes.usageStore.close();
-      owners.tmuxService.close();
-      owners.hostService.close();
-      owners.managedStorage.close();
-    }
+    closes: [
+      ["gitProvider close", () => owners.gitProvider.close()],
+      ["transcriptLanes close", () => owners.transcriptLanes.close()],
+      ["usageStore close", () => lanes.usageStore.close()],
+      ["tmuxService close", () => owners.tmuxService.close()],
+      ["hostService close", () => owners.hostService.close()],
+      ["managedStorage close", () => owners.managedStorage.close()]
+    ]
   };
+}
+
+// src/utils/teardown.ts
+init_globals();
+async function runTeardown(steps2, log) {
+  const failed3 = [];
+  for (const [name, run3] of steps2) {
+    try {
+      await run3();
+    } catch (e) {
+      log("warn", `${name} failed: ${inspect(e)}`);
+      failed3.push(name);
+    }
+  }
+  return failed3;
 }
 
 // src/daemon/stats.ts
@@ -66231,7 +66285,7 @@ var Holds = class {
 
 // src/daemon/facts-assembly.ts
 init_globals();
-var FACTS_VERSION = 2;
+var FACTS_VERSION = 3;
 var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
 function prOf(git) {
   switch (git.kind) {
@@ -81374,22 +81428,36 @@ function prFactOf(git) {
 }
 var MIN_BURN_SECONDS = 60;
 var MIN_SPEED_SAMPLE_MS = 50;
-var MAX_SPEED_SAMPLE_MS = 10 * 1e3;
 function projectCostPerHour(cost, durationSeconds) {
   if (durationSeconds < MIN_BURN_SECONDS) return void 0;
   return cost * 3600 / durationSeconds;
 }
 function projectTokensPerSecond(prevTokens, prevMs, curTokens, nowMs) {
   const deltaMs = nowMs - prevMs;
-  if (deltaMs < MIN_SPEED_SAMPLE_MS || deltaMs > MAX_SPEED_SAMPLE_MS)
-    return void 0;
+  if (deltaMs < MIN_SPEED_SAMPLE_MS) return void 0;
   const deltaTokens = curTokens - prevTokens;
   if (deltaTokens <= 0) return void 0;
   return deltaTokens * 1e3 / deltaMs;
 }
+function turnIntervals(samples) {
+  return samples.slice(1).map((cur, i) => [samples[i], cur]).filter(
+    ([prev, cur]) => prev.turnOpen && cur.atMs - prev.atMs >= MIN_SPEED_SAMPLE_MS
+  );
+}
+function openTurn(samples) {
+  let start = samples.length;
+  while (start > 0 && samples[start - 1].turnOpen) start--;
+  return samples.slice(start);
+}
 function projectSpeed(obs) {
-  const { prev, cur } = obs;
-  if (prev === void 0) return void 0;
+  const intervals = turnIntervals(openTurn(obs.samples));
+  for (let i = intervals.length - 1; i >= 0; i--) {
+    const rates = intervalRates(intervals[i]);
+    if (rates !== void 0) return rates;
+  }
+  return void 0;
+}
+function intervalRates([prev, cur]) {
   const input = projectTokensPerSecond(
     prev.input,
     prev.atMs,
@@ -81417,22 +81485,9 @@ function projectSpeed(obs) {
   };
 }
 function projectSpeedHistory(obs) {
-  const { samples } = obs;
-  const rates = [];
-  for (let i = 1; i < samples.length; i++) {
-    const prev = samples[i - 1];
-    const cur = samples[i];
-    const deltaMs = cur.atMs - prev.atMs;
-    if (deltaMs < MIN_SPEED_SAMPLE_MS || deltaMs > MAX_SPEED_SAMPLE_MS)
-      continue;
-    const rate = projectTokensPerSecond(
-      prev.total,
-      prev.atMs,
-      cur.total,
-      cur.atMs
-    );
-    rates.push(rate ?? 0);
-  }
+  const rates = turnIntervals(obs.samples).map(
+    ([prev, cur]) => projectTokensPerSecond(prev.total, prev.atMs, cur.total, cur.atMs) ?? 0
+  );
   if (rates.length === 0) return void 0;
   return rates.join(",");
 }
@@ -81498,6 +81553,7 @@ function composePayload(facts, inputs, draw2) {
     metrics: metricsOver(unstamped(built.metrics), hookData2),
     activity: unstamped(built.activity),
     cache: unstamped(built.cache),
+    speed: unstamped(built.speed),
     autoCompact: unstamped(built.autocompact),
     git: unstamped(built.git),
     pr: unstamped(built.pr),
@@ -81526,6 +81582,7 @@ function composePayload(facts, inputs, draw2) {
   const fiveHour = hookData2.rate_limits?.five_hour;
   const sevenDay = hookData2.rate_limits?.seven_day;
   const burn = firstPending(lanes.usage, lanes.metrics) ?? burnOf(valueOf3(lanes.usage)?.cost, valueOf3(lanes.metrics)?.sessionDuration);
+  const speedPayload = over2(lanes.speed, speedPayloadOf);
   const sessionPayload = over2(
     lanes.usage,
     (usage) => pickNonNull({ cost: usage.cost, tokens: usage.tokens })
@@ -81601,6 +81658,7 @@ function composePayload(facts, inputs, draw2) {
     resumeCommand: resumeCommand(workspace, sessionId2, hints.claudeConfigDir),
     ...sessionPayload !== void 0 && { session: sessionPayload },
     ...burn !== void 0 && { burn },
+    ...speedPayload !== void 0 && { speed: speedPayload },
     ...fiveHour !== void 0 && {
       block: {
         // [LAW:one-source-of-truth] Both fields read straight from the
@@ -81669,20 +81727,13 @@ function burnOf(cost, duration2) {
   const costPerHour = cost != null && duration2 != null ? projectCostPerHour(cost, duration2) : void 0;
   return costPerHour === void 0 ? void 0 : { costPerHour };
 }
-function speedOf(fact, at) {
-  if (fact.kind === "pending") return pendingOf(fact.why);
-  if (fact.kind !== "ok") return void 0;
-  const obs = fact.value;
-  const current2 = dateOf(at).getTime() - obs.cur.atMs <= MAX_SPEED_SAMPLE_MS;
-  const rates = current2 ? projectSpeed(obs) : void 0;
+function speedPayloadOf(obs) {
+  const rates = projectSpeed(obs);
   const history = projectSpeedHistory(obs);
   return rates !== void 0 || history !== void 0 ? { ...rates, ...history !== void 0 && { history } } : void 0;
 }
 function instantFacts(builtins, at) {
-  return {
-    today: todayOf(builtins.today, at),
-    speed: speedOf(builtins.speed, at)
-  };
+  return { today: todayOf(builtins.today, at) };
 }
 function todayOf(fact, at) {
   if (fact.kind === "pending") return pendingOf(fact.why);
@@ -86713,7 +86764,7 @@ function createDaemon(inputs) {
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
         ["renderer views close", rendererStep("close-views")],
-        ["payloadProviders close", () => payloadProviders.close()],
+        ...payloadProviders.closes,
         ["runs close", () => runs.close()],
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
@@ -86726,13 +86777,7 @@ function createDaemon(inputs) {
         // ends with nothing left to flush.
         ["renderer process close", () => link.close()]
       ];
-      for (const [step4, run3] of teardown) {
-        try {
-          await run3();
-        } catch (e) {
-          log("warn", `${step4} failed: ${e.message}`);
-        }
-      }
+      await runTeardown(teardown, log);
       closed = true;
       return { settled: launcher.settled() };
     }
