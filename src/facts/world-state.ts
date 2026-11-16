@@ -163,7 +163,7 @@ export interface SpeedObservation {
 
 // The `today` fact and its projection, apart from the store that remembers the
 // records (session-usage-store.ts): a draw's day is a pure function of the
-// fact and the draw's instant, so what reads it (the draw, `check`, the demo)
+// fact and the draw's instant, so what reads it (the draw, `check`)
 // does not load the store's pricing, transcript reads or observables.
 
 // Per-(session, day) scalar contribution — the only granularity the today fold

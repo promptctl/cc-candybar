@@ -1,5 +1,5 @@
 // The stages of a draw, timed in-process through the seam the check command
-// and the gallery draw through: load a config, compile and bind it, draw it.
+// draws through: load a config, compile and bind it, draw it.
 //
 // This is NOT the cost of a tick. It has no render cache, no session state, no
 // client hints and no waiting on sources; it draws the check fixture's payload.

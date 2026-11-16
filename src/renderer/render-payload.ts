@@ -87,7 +87,7 @@ import type { ViewFacts } from "../renderer-interface/request-context";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
-// [LAW:one-source-of-truth] The daemon, `cc-candybar check` and the demo all
+// [LAW:one-source-of-truth] The daemon and `cc-candybar check` both
 // project THROUGH this, so a field added to EffectiveGlobals reaches every
 // renderer at once and no caller can leave one out — a hand copy of this
 // projection had already dropped `separator` (brandon-menu-ia-zyf).
@@ -118,7 +118,7 @@ export type ValuedInputs = {
 // The `.effective` inputs a render reads back — the resolved globals, as the
 // payload fields a settings label or a carousel reads.
 // [LAW:one-source-of-truth] The daemon's payload, `cc-candybar check`'s fixture
-// and the demo's payload all spread THIS, so a caller cannot render a label
+// both spread THIS, so a caller cannot render a label
 // blank by forgetting a field the daemon's payload carries.
 export type EffectiveInputs = ValuedInputs & Pick<RenderPayload, "preset">;
 
@@ -1133,7 +1133,7 @@ export function speedPayloadOf(
 }
 
 // [LAW:one-source-of-truth] The world state's facts every draw projects at
-// its own instant (DRAW_PROJECTIONS) — the daemon's, the demo's and check's
+// its own instant (DRAW_PROJECTIONS) — the daemon's and check's
 // alike, so none of them draws a projection another leaves out.
 export function instantFacts(
   builtins: { readonly today: Reading<TodayFacts> },

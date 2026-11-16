@@ -952,7 +952,7 @@ function layerInserts(
   };
 }
 
-// [LAW:single-enforcer] What `check` and the demo refuse that the bar draws
+// [LAW:single-enforcer] What `check` refuses that the bar draws
 // past: every dropped placement, each file's error in turn.
 export function refuseDrops(dropped: readonly DroppedFileError[]): void {
   if (dropped.length > 0) throw new DroppedPlacements(dropped);

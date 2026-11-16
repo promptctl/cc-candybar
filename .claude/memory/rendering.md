@@ -2,7 +2,7 @@
 
 ## One path
 
-The daemon draws every bar. The check command, the demo and the tests call the same functions. The demo pushes a faked hook event through the daemon's own state, payload and render functions, so it has no payload of its own to drift. The check command stamps a fixture document and composes its payload through the daemon's own composition, so a field the daemon's payload needs is a compile error in the fixture. There is no parallel renderer and no fallback computation.
+The daemon draws every bar. The check command and the tests call the same functions. The check command stamps a fixture document and composes its payload through the daemon's own composition, so a field the daemon's payload needs is a compile error in the fixture. There is no parallel renderer and no fallback computation.
 
 ## One instant per render
 
@@ -37,7 +37,7 @@ A session view's payload is composed from its session's world state, the hook, t
 
 ## Failures draw; they don't throw
 
-Nothing a config authors can make a render throw. A failing rule falls back to its slot's floor and warns. A failing placement draws ⚠. A placement of a segment nothing declares is dropped at load and reported as an error against the file that wrote it, so one bad name costs one cell, not the whole bar, and owns no placement id (two of one typo are two drops, not a duplicate); the check command and the demo still refuse it, since the author has to fix it. A container whose `when` throws hides its children and warns, naming them. Warnings go to the bar's diagnostics and the render event. The check command handles warning kinds in an exhaustive switch, so a new kind is a compile error there until someone decides what it means.
+Nothing a config authors can make a render throw. A failing rule falls back to its slot's floor and warns. A failing placement draws ⚠. A placement of a segment nothing declares is dropped at load and reported as an error against the file that wrote it, so one bad name costs one cell, not the whole bar, and owns no placement id (two of one typo are two drops, not a duplicate); the check command still refuses it, since the author has to fix it. A container whose `when` throws hides its children and warns, naming them. Warnings go to the bar's diagnostics and the render event. The check command handles warning kinds in an exhaustive switch, so a new kind is a compile error there until someone decides what it means.
 
 ## Diagnostics
 

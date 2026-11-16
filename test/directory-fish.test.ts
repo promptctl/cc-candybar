@@ -6,7 +6,7 @@
 // survivor fish-style (every segment but the leaf → its leading char),
 // append the subpath whole, and name a linked worktree in a parenthetical.
 // Rendered through the real spine (registerDslConfig + drawDsl), the same
-// two functions the daemon and demo call — not a synthetic in-process
+// two functions the daemon and check call — not a synthetic in-process
 // transform.
 
 import { drawPayload } from "./helpers/draw-payload";

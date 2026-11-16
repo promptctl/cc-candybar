@@ -62,7 +62,7 @@ export class DroppedFileError extends ConfigError {
   }
 }
 
-// [LAW:types-are-the-program] What `check` and the demo refuse that the bar
+// [LAW:types-are-the-program] What `check` refuses that the bar
 // draws past: every placement it dropped, as each writing file's own error.
 // An author's refusal like ConfigError, but over several files.
 export class DroppedPlacements extends Error {

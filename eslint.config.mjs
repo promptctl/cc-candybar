@@ -184,7 +184,6 @@ const OWNED_IMPORTS = {
     owners: [
       "src/daemon/production-adapters.ts",
       "src/check.ts",
-      "src/demo/dsl.ts",
       "src/doctor/cli.ts",
     ],
     message: "A daemon is handed its link signer (production-adapters.ts).",
@@ -200,8 +199,6 @@ const OWNED_IMPORTS = {
     group: PATHS,
     owners: [
       "src/check.ts",
-      "src/demo/dsl.ts",
-      "src/demo/gallery.ts",
       "src/doctor/cli.ts",
     ],
     message: "A daemon is handed its paths: take the value you are given.",
@@ -351,7 +348,6 @@ const ZONE_ROWS = {
   "src/renderer-process.ts": "root",
   "src/check.ts": "root",
   "src/check-runs.ts": "root",
-  "src/demo/": "root",
   "src/doctor/cli.ts": "root",
 };
 const ZONE_IMPORTS = {

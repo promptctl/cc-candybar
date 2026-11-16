@@ -19,7 +19,7 @@ import { followWatch } from "../foundations/watch-targets";
 
 // Logger callable used for watcher lifecycle / failure events. Daemon
 // injects its log (writes to daemon.log at the requested level); other
-// consumers (var-system tests, demo) take the default which routes
+// consumers (var-system tests) take the default which routes
 // through `debug` — present-but-quiet unless CC_CANDYBAR_DEBUG is set.
 // [LAW:no-defensive-null-guards] Default is always non-null; injection
 // replaces the implementation, never adds a "no logger" mode.

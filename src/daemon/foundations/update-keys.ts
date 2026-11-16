@@ -1,6 +1,6 @@
 // The keys the update notice's links write, and the gates a daemon holds them
 // in. Apart from update-notice.ts so that a process that builds a daemon's
-// gates (`check`, the demo) loads neither the notice nor the version stamp.
+// gates (`check`) loads neither the notice nor the version stamp.
 
 import type { Globals } from "../../config/dsl-types";
 import { SETTINGS } from "../../config/setting-projections";

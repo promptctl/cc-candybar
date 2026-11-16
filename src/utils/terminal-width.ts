@@ -26,8 +26,8 @@ const RESERVED_CHARS = 2;
 // [LAW:single-enforcer] The canonical raw-cols → usable-cols transform.
 // Every consumer that needs to honor Claude Code's statusline gutter routes
 // through here; there is no parallel `cols - N` math anywhere. Exposed so callers
-// that already have a raw width (e.g. the daemon's wire-fallback path,
-// the demo reading process.stdout.columns) can apply the reserve to a width
+// that already have a raw width (e.g. the daemon's wire-fallback path)
+// can apply the reserve to a width
 // they already hold.
 export function applyClaudeCodeReserve(rawCols: number): number {
   return Math.max(1, rawCols - RESERVED_CHARS);

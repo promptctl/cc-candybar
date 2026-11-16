@@ -848,9 +848,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(textOf(line)).not.toContain("↗ repo");
     });
 
-    // brandon-menu-ia-q30.ge5: `⎘ resume` copies the daemon's resume command
-    // and `↗ config` opens the file the bar renders from, each present
-    // exactly while the payload carries its value.
+    // brandon-menu-ia-q30.ge5: `⎘ resume` copies the daemon's resume command,
+    // which every payload carries, and `↗ config` opens the file the bar
+    // renders from, present exactly while the payload carries one.
     test("a resume command and a config file each get their glyph and click", () => {
       const resume = "cd /tmp && claude --resume sess-1";
       const line = renderToolbar(
@@ -866,10 +866,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
     });
 
-    test("no resume command and no config file render neither glyph", () => {
+    test("no config file renders no `↗ config`", () => {
       const line = renderToolbar({ branch: "main" });
       expect(textOf(line)).toContain("⎘ id");
-      expect(textOf(line)).not.toContain("⎘ resume");
       expect(textOf(line)).not.toContain("↗ config");
     });
   });

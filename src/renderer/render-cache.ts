@@ -348,8 +348,7 @@ export interface ConfigChain {
 // they declare between them, the data file each merged one reads, the checkout a `{ checkout }` path resolved against —
 // `git:<root>`, or `dir:<cwd>` for a directory in no checkout, `-` with no
 // session — which it dropped, and how long the load took: a drop is also on
-// the bar's message, but the rest is said nowhere else. The daemon's own sink —
-// buildRenderState is shared with the demo.
+// the bar's message, but the rest is said nowhere else. The daemon's own sink.
 export function pluginLoadLine(
   layers: readonly string[],
   {
@@ -831,7 +830,7 @@ export function resolveLoad(
 // timers/watchers from a half-constructed reload, and is the attempt's
 // `failed` arm carrying the advisories the build earned before it, so the
 // caller keeps its prior state and shows both.
-export function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
+function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const { cwd, chain, loaded } = load;
   // [LAW:dataflow-not-control-flow][LAW:single-enforcer] `validateRenderable`
   // (inside the resolve) is the sole producer of `ValidatedConfig`, and the
@@ -964,7 +963,7 @@ export interface LoadFrame {
 }
 
 // [LAW:single-enforcer] The one place a load's outcome is composed, for every
-// reader (the render cache, the doctor, the demo). The warning is the
+// reader (the render cache, the doctor). The warning is the
 // resolution's advisories, the resolve's, then the attempt's: a built or kept
 // state's own build warnings, or what a failed attempt earned before it threw,
 // so warnings earned before a failure reach the bar beside the error, and a
@@ -1012,7 +1011,7 @@ export function settle(
 // any (the render cache's reload): inputs that resolve to the key it was built
 // from keep it, since rebuilding it would reopen every session view and
 // restart its sources for nothing.
-export function loadChain(
+function loadChain(
   frame: LoadFrame,
   cwd: string,
   chain: ConfigChain,
@@ -1288,7 +1287,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
 
 // What a view needs read: each plugin source its config declares, at its
 // storage folder, then each run its registry names, in digest order.
-export const subscriptionsOf = ({
+const subscriptionsOf = ({
   state,
   registry,
 }: Pick<SessionView, "state" | "registry">): Subscription[] => [

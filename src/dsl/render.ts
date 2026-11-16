@@ -1196,7 +1196,7 @@ export interface RenderObservers {
   // says why it looks as it does.
   //
   // Optional for the same reason the two above are: a caller that passes none has
-  // said it is not listening (a compile-only test, the demo). Both shipping
+  // said it is not listening (a compile-only test). Both shipping
   // callers listen — the daemon records each for the bar's diagnostics
   // (src/renderer/render-warnings.ts), and `cc-candybar check` fails a globals rule, a gate or a
   // variable that cannot refresh, so each is visible whether or not anyone is
@@ -1282,7 +1282,7 @@ export type DrawSelection = Pick<
   // When the session's idle period began — its last click, or its first
   // render by this daemon (src/daemon/menu-idle.ts) — which the flash its open
   // menus wear before they close counts from. A caller with no such clock
-  // (check, the demo) never flashes.
+  // (check) never flashes.
   readonly idleSince?: Instant;
 };
 
