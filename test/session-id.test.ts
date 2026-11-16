@@ -33,22 +33,27 @@ describe("the session-id checkpoint", () => {
 });
 
 describe("a click's session id", () => {
-  const toggle = VERBS.get("toolbar-toggle")!;
   const stepState = VERBS.get("step-state")!;
+  const copyDiagnostic = VERBS.get("copy-diagnostic")!;
 
   test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState());
-    await expect(toggle(encodeURIComponent(raw), ctx)).rejects.toThrow(BadVerbArgs);
-    await expect(toggle(encodeURIComponent(raw), ctx)).rejects.toThrow(problem);
+    const step = stepState(encodeSegments([raw, "k", "1"]), ctx);
+    await expect(step).rejects.toThrow(BadVerbArgs);
     await expect(stepState(encodeSegments([raw, "k", "1"]), ctx)).rejects.toThrow(
       problem,
     );
   });
 
   test("passes a UUID", async () => {
-    const state = new SessionState();
     const uuid = sessionIdOf(randomUUID());
-    await toggle(encodeURIComponent(uuid), testVerbContext(state));
-    expect(state.get(uuid, "toolbar-expanded")).toBe("1");
+    // Past the session-id checkpoint, the click fails on what it asks for:
+    // this context's draws list no diagnostic.
+    await expect(
+      copyDiagnostic(
+        encodeSegments([uuid, "request", "k"]),
+        testVerbContext(new SessionState()),
+      ),
+    ).rejects.toThrow(`no longer listed in session ${uuid}'s diagnostics`);
   });
 });

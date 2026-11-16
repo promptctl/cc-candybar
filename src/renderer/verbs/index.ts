@@ -24,10 +24,7 @@ import {
   durableConfig,
   type ConfigHome,
 } from "../../config/loader/discovery";
-import type {
-  SessionStateReader,
-  SessionStateRW,
-} from "../../renderer-interface/session-state";
+import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
 import type { DaemonLogger } from "../../utils/logger";
@@ -48,7 +45,6 @@ import type {
 } from "../../daemon/foundations/validator-registry";
 import {
   SESSION_CLIENT_HINTS_KEY,
-  SESSION_CONFIG_OVERRIDE_KEY,
   SESSION_RENDER_ORIGIN_KEY,
 } from "../../daemon/foundations/session-keys";
 import {
@@ -109,7 +105,6 @@ import {
   VERB_COPY,
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
-  VERB_LOAD_CONFIG,
   VERB_REDO,
   VERB_BACK,
   VERB_REWIND,
@@ -122,7 +117,6 @@ import {
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
-  VERB_TOOLBAR_TOGGLE,
   VERB_UNDO,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
@@ -293,13 +287,6 @@ export interface DaemonContext {
       before: LaneSwitches,
       after: LaneSwitches,
     ) => void;
-  };
-  // [LAW:single-enforcer] Brings the session's view, if it has one, to the
-  // config `origin` resolves to: what a click that moved its load-config pick
-  // does after its commit (`journaled`), so a feed drawing the session shows
-  // the pick on its next frame with no request after it.
-  readonly views: {
-    readonly follow: (sessionId: SessionId, origin: RenderOrigin) => void;
   };
   // What the diagnostic the frame renderer `by` last delivered for the
   // session listed under `key` copies; undefined when it lists none under it.
@@ -482,16 +469,6 @@ const openVscode: VerbHandler = (value, ctx) =>
     },
     'open -a "Visual Studio Code"',
   );
-
-// [LAW:one-source-of-truth] SessionState is the canonical store for
-// toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
-// storage owned by the daemon process persists the change automatically.
-const toolbarToggle: VerbHandler = async (value, ctx) => {
-  const sessionId = requireSessionId(oneArg(value));
-  const expanded = ctx.navigating.get(sessionId, "toolbar-expanded");
-  if (expanded) ctx.navigating.clear(sessionId, "toolbar-expanded");
-  else ctx.navigating.set(sessionId, "toolbar-expanded", "1");
-};
 
 // [LAW:single-enforcer] One verb writes SessionState — for every key the
 // session's gate holds, for every pair in a batch. That gate
@@ -718,24 +695,6 @@ function stepFrom(
 
 // ─── The durable store: which file, and the history over it ─────────────────
 
-// [LAW:one-source-of-truth] The one place a load-config pick outranks the
-// path the request named: what the render draws from (draw-bar.ts) and what a
-// durable click resolves (sessionOrigin) both come through here, so a click
-// made right after a pick lands in the file the bar now draws from, without
-// waiting for the session's next request to record it.
-// [LAW:effects-at-boundaries] The load-config verb writes per-session config
-// overrides into SessionState; this is the one read point.
-export function sessionRenderOrigin(
-  requested: RenderOrigin,
-  state: SessionStateReader,
-  sid: SessionId,
-): RenderOrigin {
-  const pick = state.get(sid, SESSION_CONFIG_OVERRIDE_KEY);
-  return pick === null
-    ? requested
-    : { ...requested, target: { source: "pick", path: pick } };
-}
-
 // [LAW:parse-dont-validate] What a record's two fields say together. The path
 // is what a session reads and keeps its meaning across builds, so no path is a
 // search whichever build wrote it. The source only labels the path: one this
@@ -783,7 +742,7 @@ export function parseRenderOrigin(raw: string): RenderOrigin {
 // and therefore no config — a loud BadVerbArgs, not the daemon's own XDG
 // guess.
 function sessionOrigin(ctx: Unbound, sid: SessionId): RenderOrigin {
-  const origin = recordedOrigin(ctx, sid);
+  const origin = requestedOrigin(ctx, sid);
   if (origin === null) {
     throw new BadVerbArgs(
       `session ${sid} has not rendered yet — no config to act on`,
@@ -802,25 +761,13 @@ function requestedOrigin(
   return raw === null ? null : parseRenderOrigin(raw);
 }
 
-// The origin the session's last request recorded, under its load-config
-// pick; null for a session that has never rendered.
-function recordedOrigin(
-  ctx: Omit<DaemonContext, TurnBound>,
-  sid: SessionId,
-): RenderOrigin | null {
-  const requested = requestedOrigin(ctx, sid);
-  return requested === null
-    ? null
-    : sessionRenderOrigin(requested, ctx.sessionState, sid);
-}
-
 // [LAW:no-ambient-temporal-coupling] A history step that rewrote the file this
 // session renders from reloads it before the click answers, as save does; one
 // that wrote no such file rebuilds nothing (a reload restarts every source).
 // Another session's file reaches its render through the fs watcher.
 function reloadIfWritten(ctx: Unbound, sid: SessionId, step: Step): void {
   // A session with no recorded render has no cache entry to draw stale.
-  const origin = recordedOrigin(ctx, sid);
+  const origin = requestedOrigin(ctx, sid);
   if (origin === null) return;
   const { path } = originHome(ctx, origin);
   if (step.some((c) => c.kind === "file" && c.file === path)) {
@@ -836,9 +783,8 @@ function sessionConfig(ctx: Unbound, sid: SessionId): DslConfig {
 }
 
 // A session's lane switches as a click found them, and their read over the
-// config it renders with now — under its load-config pick as it stands at
-// each read, which a click can move. Null for a session that has never
-// rendered, which has no config to switch them.
+// config it renders with now. Null for a session that has never rendered,
+// which has no config to switch them.
 interface LaneMeter {
   readonly sessionId: SessionId;
   readonly latest: CheckedRenderRequest | null;
@@ -853,12 +799,7 @@ function laneMeter(
 ): LaneMeter | null {
   const requested = requestedOrigin(ctx, sid);
   if (requested === null) return null;
-  const read = (): LaneSwitches =>
-    ctx.lanes.of(
-      sessionRenderOrigin(requested, ctx.sessionState, sid),
-      sid,
-      latest,
-    );
+  const read = (): LaneSwitches => ctx.lanes.of(requested, sid, latest);
   return { sessionId: sid, latest, before: read(), read };
 }
 
@@ -868,7 +809,7 @@ function nestOf(
   ctx: Omit<DaemonContext, TurnBound>,
   sid: SessionId,
 ): DisclosureNest {
-  const origin = recordedOrigin(ctx, sid);
+  const origin = requestedOrigin(ctx, sid);
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
 
@@ -1813,39 +1754,8 @@ const repoConfig: VerbHandler = async (value, ctx) => {
 // plain object would be a truthy hit on Object.prototype that then throws on
 // invocation (RENDER_FAILED instead of BAD_REQUEST). Map makes the wrong
 // dispatch unrepresentable, matching src/renderer/session-state.ts.
-const loadConfig: VerbHandler = async (value, ctx) => {
-  const slash = value.indexOf("/");
-  if (slash === -1) {
-    throw new BadVerbArgs(
-      "load-config: expected <sessionId>/<path> (missing separator)",
-    );
-  }
-  const sid = requireSessionId(
-    decodeWire(() => decodeURIComponent(value.slice(0, slash))),
-  );
-  const p = decodeWire(() => decodeURIComponent(value.slice(slash + 1))).trim();
-  if (p !== "") {
-    if (!p.startsWith("/")) {
-      throw new BadVerbArgs(`load-config: path must be absolute, got "${p}"`);
-    }
-    if (!/\.(json5?|json)$/.test(p)) {
-      throw new BadVerbArgs(
-        `load-config: path must end with .json5 or .json, got "${p}"`,
-      );
-    }
-  }
-  if (p === "") {
-    ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
-    ctx.log("info", `load-config: override cleared (session=${sid})`);
-  } else {
-    ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p);
-    ctx.log("info", `load-config: ${p} (session=${sid})`);
-  }
-};
-
 const LEAF_VERBS = new Map<string, Verb>([
   [VERB_COPY, inTurn(copy)],
-  [VERB_LOAD_CONFIG, inTurn(loadConfig)],
   [VERB_OPEN_VSCODE, inTurn(openVscode)],
   [VERB_SET_STATE, inTurn(setState)],
   [VERB_STEP_STATE, inTurn(stepState)],
@@ -1861,7 +1771,6 @@ const LEAF_VERBS = new Map<string, Verb>([
   [VERB_REDO, inTurn(redo)],
   [VERB_BACK, inTurn(back)],
   [VERB_REWIND, inTurn(rewind)],
-  [VERB_TOOLBAR_TOGGLE, inTurn(toolbarToggle)],
   [VERB_APPLY_UPDATE, inTurn(applyUpdate)],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
@@ -1934,7 +1843,7 @@ async function headGather(
 // [LAW:one-source-of-truth] Per-effect errors are written to session state
 // so the bar shows WHICH effect(s) failed, for the hold src/daemon/foundations/click-error.ts
 // sets. Only possible when a session ID
-// is available from a set-state or toolbar-toggle effect in the same click.
+// is available from a set-state effect in the same click.
 async function foldEffects(
   rawValue: string,
   ctx: ClickContext,
@@ -2084,19 +1993,6 @@ async function journaled<C extends DaemonContext>(
         journal.written() ? lanes.before : after,
         after,
       );
-    } catch (e) {
-      failures.push(e);
-    }
-  }
-  // [LAW:single-enforcer] Every click passes here, so here is where a
-  // click that moved the session's origin — a load-config pick, or a
-  // history step restoring or clearing one — moves its view: a frame opens
-  // none (src/renderer/render-cache.ts `holdView`).
-  // A session that has never rendered has no origin, and no view.
-  if (live && sid !== null) {
-    try {
-      const origin = recordedOrigin(ctx, sid);
-      if (origin !== null) ctx.views.follow(sid, origin);
     } catch (e) {
       failures.push(e);
     }

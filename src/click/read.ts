@@ -14,7 +14,6 @@ import {
   VERB_COPY,
   VERB_COPY_DIAGNOSTIC,
   VERB_DISPATCH,
-  VERB_LOAD_CONFIG,
   VERB_OPEN_VSCODE,
   SEGMENTED_VERBS,
 } from "./wire";
@@ -55,19 +54,11 @@ export interface DecodedEffect {
 
 // [LAW:one-source-of-truth] Decode an effect's value the way its daemon handler
 // does, from the wire's own list (src/click/wire.ts SEGMENTED_VERBS): those
-// verbs' values are `/`-separated segments; load-config is `<session>/<path>`,
-// split at the first slash only, since a path has slashes; every other verb
-// takes ONE argument, the whole value decoded once, so a direct `copy/a/b`
+// verbs' values are `/`-separated segments; every other verb takes ONE
+// argument, the whole value decoded once, so a direct `copy/a/b`
 // reports one arg "a/b" (exactly what the copy handler copies).
 function decodeArgs(verb: string, value: string): string[] {
   if (SEGMENTED_VERBS.has(verb)) return decodeSegments(value);
-  const slash = value.indexOf("/");
-  if (verb === VERB_LOAD_CONFIG && slash !== -1) {
-    return [
-      decodeURIComponent(value.slice(0, slash)),
-      decodeURIComponent(value.slice(slash + 1)),
-    ];
-  }
   return [decodeURIComponent(value)];
 }
 

@@ -26,8 +26,8 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
   VERB_SET_CONFIG,
+  VERB_SET_STATE,
   VERB_SLASH,
-  VERB_TOOLBAR_TOGGLE,
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
@@ -118,6 +118,8 @@ function setup(over: Partial<DoctorEdge> = {}) {
     recordRender(sessionState, sid);
     sessionState.set(sid, SESSION_CLIENT_HINTS_KEY, "{}");
   }
+  // Rendered, so a session-state click has its config's gate to write through.
+  recordRender(sessionState, SESSION_C);
   const held = gate();
   const healthy = healthyDaemonEdge().daemons;
   const gathers: string[] = [];
@@ -139,11 +141,14 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const doctor = (sid: string, c: VerbContext = ctx) =>
     VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(sid), c);
   const toggle = (sid: string, c: VerbContext = ctx) =>
-    VERBS.get(VERB_TOOLBAR_TOGGLE)!(encodeURIComponent(sid), c);
+    VERBS.get(VERB_SET_STATE)!(
+      encodeSegments([sid, "toolbar-expanded", "1"]),
+      c,
+    );
   const doDoctorThen = (c: VerbContext = ctx) => {
     const url = effectsUrl([
       { verb: VERB_DOCTOR_RUN, args: [A] },
-      { verb: VERB_TOOLBAR_TOGGLE, args: [A] },
+      { verb: VERB_SET_STATE, args: [A, "toolbar-expanded", "1"] },
     ]);
     return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), c);
   };
