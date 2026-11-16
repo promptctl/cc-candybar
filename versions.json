@@ -4,15 +4,22 @@
     {
       "version": "pr-771",
       "ref": "refs/pull/771/merge",
-      "sha": "1dd639d9f63bdb824e7bdbb55e92c42ea6326893",
-      "timestamp": "2026-11-16T18:15:48.212Z",
+      "sha": "4d9639f3891d71e215f197ec49bf1d9383e24645",
+      "timestamp": "2026-11-16T18:48:36.782Z",
       "commits": [
         {
-          "sha": "1dd639d9f63bdb824e7bdbb55e92c42ea6326893",
+          "sha": "4d9639f3891d71e215f197ec49bf1d9383e24645",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T11:14:37-07:00",
-          "message": "Merge addc1c5d1e71bf927db64f1f82d2d0652015da91 into df316f23603ca5bd744a8963232d120351758895\n"
+          "timestamp": "2026-11-16T18:47:29Z",
+          "message": "Merge 1abcfb179f2d28965bc7d01d65953b00d99a0344 into df316f23603ca5bd744a8963232d120351758895\n"
+        },
+        {
+          "sha": "1abcfb179f2d28965bc7d01d65953b00d99a0344",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T11:47:15-07:00",
+          "message": "fix(effects): the close performs nothing, a repository answer lands with its click, and the tmux row is asked only when its switch moves (candybar-host-renderer-x96a.lhy)\n\n- An effect the daemon's close cut off answers `closing`: the host performs\n  no change or act once its close begins, a run the close aborted ends\n  `closing`, and neither holds an error on any bar. A click's acts the close\n  cut off answer its click `closing`, as its own steps do.\n- A repository answer is performed only once its click's changes landed, and\n  answered as they were otherwise, so the click lands whole.\n- An act's failure joins a click error no answer has carried yet, at the\n  input's instant, rather than replacing it.\n- The tmux row is asked of the host only when a session's switch differs from\n  the last ask. Once on, the host's adapter follows the session's pane at each\n  request and forgets it when the session retires, so a request costs no act,\n  no act line and no `effect-done` turn.\n- Whatever types into a pane (a slash line, a lane setup) waits in one queue\n  per pane.\n- The act interpreter classifies a performer's throw, a synchronous one\n  included; the act line is the one log of an outcome, and a reason names its\n  act once.\n- An act on a session reads it through a tagged result, not a structural guess.\n"
         },
         {
           "sha": "addc1c5d1e71bf927db64f1f82d2d0652015da91",

@@ -30074,10 +30074,15 @@ var Runs = class {
     );
     if (outcome === "timeout") this.timedOut++;
     if (result.ok) return { kind: "ok" };
-    if (outcome !== "timeout" && outcome !== "aborted") this.failed++;
+    if (outcome === "aborted")
+      return {
+        kind: "closing",
+        reason: `${run3.action}: the daemon closed before it ended`
+      };
+    if (outcome !== "timeout") this.failed++;
     return {
       kind: "failed",
-      reason: `run ${run3.action}: ${failureText(result)}`
+      reason: `${run3.action}: ${failureText(result)}`
     };
   }
 };
@@ -60274,6 +60279,10 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     if (checked.ok) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
+      parts.tmuxStatusLines.requested(
+        checked.req.hookData.session_id,
+        checked.req.hints.tmux
+      );
     }
     const recorded2 = (rendered) => {
       if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
@@ -72475,6 +72484,7 @@ var Collector = class {
   // or one retired again since, is not this retire's to remove.
   retire(record2, live) {
     release3(live);
+    this.deps.retired(record2.session);
     const retiring = { kind: "retiring" };
     record2.phase = retiring;
     this.deps.log(
@@ -73491,16 +73501,34 @@ var TmuxStatusLines = class {
   }
   deps;
   held = /* @__PURE__ */ new Map();
+  // The sessions whose `tmux-status` surface is on: each is held at its pane
+  // while it reports one.
+  wanted = /* @__PURE__ */ new Set();
   servers = /* @__PURE__ */ new Map();
   closed = false;
   writes = 0;
   failedWrites = 0;
-  // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival with its own hints, a click's commit with its session's latest —
-  // never at a draw: a session whose switch is on and that reported a tmux
-  // pane is held, any other is not. A daemon restart picks each session up at
-  // its next request.
+  // [LAW:dataflow-not-control-flow] The `tmux-status` surface turned on or off
+  // for the session, at its pane as its newest request reported it, never at
+  // a draw: a session whose surface is on and that reported a tmux pane is
+  // held, any other is not. A daemon restart picks each session up at its next
+  // request, which asks the surface on again.
   observe(sessionId2, tmux3, on2) {
+    if (on2) this.wanted.add(sessionId2);
+    else this.wanted.delete(sessionId2);
+    this.follow(sessionId2, tmux3);
+  }
+  // A request of the session arrived: a row that is on follows its pane, and
+  // one this owner released (its pane gone, its feed refused) is held again.
+  requested(sessionId2, tmux3) {
+    this.follow(sessionId2, tmux3);
+  }
+  // The session retired: its row is no longer asked for.
+  retired(sessionId2) {
+    this.wanted.delete(sessionId2);
+  }
+  follow(sessionId2, tmux3) {
+    const on2 = this.wanted.has(sessionId2);
     if (this.closed) return;
     const held = this.held.get(sessionId2);
     const where = on2 && tmux3 !== null && tmux3 !== void 0 ? tmux3 : null;
@@ -74453,21 +74481,21 @@ var LaneSetups = class {
     this.deps = deps;
   }
   deps;
-  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
-  setups = new KeyedSerialQueue();
   // Resolves once the setup has finished, however it ended.
   start(session, setup) {
-    return this.setups.run(session.sessionId, () => this.sync(session, setup));
+    return this.deps.panes.run(
+      session.sessionId,
+      () => this.sync(session, setup)
+    );
   }
   async sync(session, setup) {
     const where = `(session=${session.sessionId})`;
     const name = setupName(setup);
     const failed3 = (error) => {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.deps.log("warn", `lane: ${name}: ${reason} ${where}`);
+      const said2 = error instanceof Error ? error.message : String(error);
       return {
         kind: error instanceof BadVerbArgs ? "refused" : "failed",
-        reason
+        reason: setup.kind === "restart" ? said2 : `${name}: ${said2}`
       };
     };
     const plan = setup.kind === "restart" ? LANE_SETUP.restart : LANE_SETUP[setup.surface][setup.on ? "on" : "off"];
@@ -74488,19 +74516,26 @@ var LaneSetups = class {
 
 // src/daemon/act-interpreter.ts
 init_globals();
+function thrownOutcome(thrown2) {
+  const { kind, message: message2 } = failureOf(thrown2);
+  return {
+    kind: kind === "bad-request" ? "refused" : kind === "closing" ? "closing" : "failed",
+    reason: message2
+  };
+}
 function actInterpreter(performers, clock, log) {
   const performerOf = (act) => performers[act.kind];
   return {
     perform: async (act) => {
       const from = clock.monotonic();
-      const outcome = await performerOf(act).perform(act).catch(
-        (thrown2) => ({
-          kind: "failed",
-          reason: thrown2 instanceof Error ? thrown2.message : String(thrown2)
-        })
-      );
+      let outcome;
+      try {
+        outcome = await performerOf(act).perform(act);
+      } catch (thrown2) {
+        outcome = thrownOutcome(thrown2);
+      }
       log(
-        outcome.kind === "ok" ? "info" : "warn",
+        outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
         eventLine("effect", [
           ["kind", act.kind],
           ["sid", act.session ?? "-"],
@@ -74912,9 +74947,15 @@ function actsFailed(done2) {
   );
   if (failures.length === 0) return null;
   const message2 = failures.map(({ act, outcome }) => `${act.kind}: ${outcome.reason}`).join("; ");
-  return failures.some((f) => f.kind === "failed") ? { kind: "threw", message: message2, detail: message2 } : badRequest(message2);
+  const kinds = new Set(failures.map((f) => f.kind));
+  return kinds.has("failed") ? { kind: "threw", message: message2, detail: message2 } : kinds.has("closing") ? { kind: "closing", message: message2, detail: message2 } : badRequest(message2);
 }
+var CLOSING = {
+  kind: "closing",
+  reason: "the daemon closed before it was done"
+};
 function rendererHost(name, clock, renderer, log, collector, acts) {
+  let closed = false;
   const held = async (input) => {
     const session = sessionOf(input.event);
     const release4 = session === null ? () => {
@@ -74926,13 +74967,24 @@ function rendererHost(name, clock, renderer, log, collector, acts) {
       const changes = output.effects.filter(
         (effect) => effect.kind === "change"
       );
-      const landed = changes.length === 0 ? null : performChanges(changes);
+      const landed = closed ? CLOSING : performChanges(changes);
       const settled3 = [];
       const waited = [];
       for (const effect of output.effects) {
         switch (effect.kind) {
           case "change":
             settled3.push(settle3(effect, landed));
+            break;
+          // [LAW:single-enforcer] A repository answer lands with its click's
+          // changes (src/renderer/config-writes.ts): performed once they have
+          // landed, else answered as they were.
+          case "approve-repo":
+            waited.push(
+              performed(
+                effect,
+                landed.kind === "ok" ? acts.interpreter.perform(effect) : Promise.resolve(landed)
+              )
+            );
             break;
           case "present":
             if (input.event.kind !== "request")
@@ -74944,7 +74996,10 @@ function rendererHost(name, clock, renderer, log, collector, acts) {
               );
             break;
           default: {
-            const done2 = performed(effect);
+            const done2 = performed(
+              effect,
+              closed ? Promise.resolve(CLOSING) : acts.interpreter.perform(effect)
+            );
             if (acts.interpreter.endsInTurn(effect)) waited.push(done2);
           }
         }
@@ -74966,10 +75021,10 @@ function rendererHost(name, clock, renderer, log, collector, acts) {
       actsFailed: null
     })
   );
-  const performed = async (act) => {
-    const outcome = await acts.interpreter.perform(act);
+  const performed = async (act, performing) => {
+    const outcome = await performing;
     const delivered = await settle3(act, outcome);
-    if (outcome.kind !== "ok" && (act.session === null || delivered.kind === "threw"))
+    if ((outcome.kind === "failed" || outcome.kind === "refused") && (act.session === null || delivered.kind === "threw"))
       acts.unseen(`${act.kind}: ${outcome.reason}`);
     return { act, outcome };
   };
@@ -75036,7 +75091,16 @@ function rendererHost(name, clock, renderer, log, collector, acts) {
     const failure = failureOf(thrown2);
     if (failure.kind !== "down") log("error", failure.detail);
   });
-  return { name, answer: turn, deliver, ask, tell };
+  return {
+    name,
+    answer: turn,
+    deliver,
+    ask,
+    tell,
+    close: () => {
+      closed = true;
+    }
+  };
 }
 function sessionOf(event) {
   switch (event.kind) {
@@ -85100,7 +85164,13 @@ init_globals();
 var KEY = "click.error";
 var CLICK_ERROR_HOLD_S = 5;
 function holdClickError(state, sessionId2, text4, at) {
-  const record2 = { text: text4, at, answered: false };
+  const unseen = lastClickError(state, sessionId2);
+  const record2 = {
+    text: unseen === null || unseen.answered ? text4 : `${unseen.text}
+${text4}`,
+    at,
+    answered: false
+  };
   state.set(sessionId2, KEY, JSON.stringify(record2));
 }
 function answeredClickError(state, sessionId2, error) {
@@ -85288,6 +85358,7 @@ function retireSession(parts, session) {
     parts.worldStates.drop(session);
     parts.renderCache.retireSession(session);
   });
+  parts.laneSurfaces.retired(session);
 }
 function holdSessionAt(parts, req) {
   const { projectDir, cwd: cwd2, target } = req.requested;
@@ -87568,7 +87639,7 @@ function changeLanded(ctx, { session, files, answered, consequence, outcome }, e
         ctx.reloadConfig(origin);
     });
     step4(() => consequence(effects));
-  } else failed3.push(outcome.reason);
+  } else if (outcome.kind !== "closing") failed3.push(outcome.reason);
   if (failed3.length === 0) return;
   const reason = failed3.join("\n");
   ctx.log("warn", `config change: ${reason} (session=${session})`);
@@ -90321,18 +90392,20 @@ var Acts = class {
     this.owed.set(id2, { kind: act.kind, session: act.session });
     effects.push({ ...act, id: id2 });
   }
-  // An act's `effect-done`: false for an id no act of this renderer's holds.
-  // [LAW:no-silent-failure] A failed act with a bar shows there.
-  settled(id2, outcome) {
+  // An act's `effect-done`, at the input's instant: false for an id no act of
+  // this renderer's holds.
+  // [LAW:no-silent-failure] A failed or refused act with a bar shows there.
+  // One the close cut off is no failure of its own.
+  settled(id2, outcome, at) {
     const act = this.owed.get(id2);
     if (act === void 0) return false;
     this.owed.delete(id2);
-    if (outcome.kind !== "ok" && act.session !== null)
+    if ((outcome.kind === "failed" || outcome.kind === "refused") && act.session !== null)
       holdClickError(
         this.deps.sessionState,
         act.session,
         `${act.kind}: ${outcome.reason}`,
-        this.deps.now()
+        at
       );
     return true;
   }
@@ -90348,6 +90421,8 @@ var LaneSurfaces = class {
   deps;
   // Each session's owed lanes, least recently owed first.
   owed = /* @__PURE__ */ new Map();
+  // The sessions whose tmux row the host was last asked to hold.
+  rows = /* @__PURE__ */ new Set();
   // A click of `sessionId` moved its switches from `before` to `after`.
   // `held` is whether the host holds a request of the session to set it up by.
   clicked(sessionId2, held, before, after, effects) {
@@ -90356,7 +90431,8 @@ var LaneSurfaces = class {
     for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
     const byOf = (lane) => moved.includes(lane) ? "click" : "owed";
     if (held) {
-      this.settle(sessionId2, owed, after, byOf, effects);
+      const set2 = this.settle(sessionId2, owed, after, byOf, effects);
+      if (set2.has("tmuxStatus")) this.asked(sessionId2, after.tmuxStatus);
       return;
     }
     for (const [lane, from] of owed)
@@ -90381,8 +90457,8 @@ var LaneSurfaces = class {
     }
   }
   // A request of `sessionId` arrived, finding its switches at `switches`: the
-  // setups its clicks owe go now, and its tmux row is held while its switch is
-  // on.
+  // setups its clicks owe go now, and its tmux row is asked to its switch
+  // when that differs from what was last asked.
   noted(sessionId2, switches, effects) {
     const set2 = this.settle(
       sessionId2,
@@ -90391,13 +90467,26 @@ var LaneSurfaces = class {
       () => "owed",
       effects
     );
-    if (switches.tmuxStatus && !set2.has("tmuxStatus"))
+    const on2 = switches.tmuxStatus;
+    if (!set2.has("tmuxStatus") && this.rows.has(sessionId2) !== on2)
       this.deps.acts.add(effects, {
         kind: "surface",
         session: sessionId2,
         surface: "tmux-status",
-        on: true
+        on: on2
       });
+    this.asked(sessionId2, on2);
+  }
+  // The session retired: nothing of it is owed or asked.
+  retired(sessionId2) {
+    this.owed.delete(sessionId2);
+    this.rows.delete(sessionId2);
+  }
+  // [LAW:one-source-of-truth] What the host was last asked of the session's
+  // tmux row.
+  asked(sessionId2, on2) {
+    if (on2) this.rows.add(sessionId2);
+    else this.rows.delete(sessionId2);
   }
   take(sessionId2) {
     const owed = this.owed.get(sessionId2) ?? /* @__PURE__ */ new Map();
@@ -90481,7 +90570,7 @@ function mainRenderer(parts, pushed) {
         return;
       case "effect-done": {
         if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
-        if (parts.acts.settled(event.of, event.outcome)) return;
+        if (parts.acts.settled(event.of, event.outcome, at)) return;
         const delivered = deliveries.get(event.of);
         if (delivered === void 0)
           throw new Error(
@@ -90558,7 +90647,7 @@ function startOver(inputs, sessionState, history, host) {
   let minted = 0;
   const mint = () => ++minted;
   const configWrites = new ConfigWrites(mint, readConfigText);
-  const acts = new Acts({ mint, sessionState, now: now2 });
+  const acts = new Acts({ mint, sessionState });
   const journalTurns = new JournalTurns({
     monotonic: () => clock.monotonic(),
     changesLanded: () => configWrites.landed()
@@ -92502,7 +92591,9 @@ function createDaemon(inputs) {
     log,
     clock
   });
+  const panes = new KeyedSerialQueue();
   const laneSetups = new LaneSetups({
+    panes,
     edge: inputs.laneEdge(
       launcher,
       (sessionId2) => frameFeeds.following(sessionId2),
@@ -92655,19 +92746,18 @@ function createDaemon(inputs) {
     clock,
     watched: (sessionId2) => frameFeeds.feedOpen(sessionId2),
     deliver: (event) => parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
+    retired: (session) => tmuxStatusLines.retired(session),
     log
   });
   const clicks = new ClicksInFlight();
   const claudeLaunch = clickLaunchVia(launcher);
-  const typings = new KeyedSerialQueue();
   const sessionAt = (sessionId2) => {
     const latest = frameFeeds.latest(sessionId2);
     return latest === null ? {
       kind: "refused",
       reason: `session ${sessionId2} has sent this daemon no request yet \u2014 its pane is not known`
-    } : laneSessionOf(latest);
+    } : { kind: "session", session: laneSessionOf(latest) };
   };
-  const isOutcome = (at) => "kind" in at;
   const typeInto = typeInPane(inputs.claudeInput(launcher));
   const acts = actInterpreter(
     {
@@ -92698,9 +92788,9 @@ function createDaemon(inputs) {
       },
       "type-slash": {
         endsInTurn: true,
-        perform: ({ session, line }) => typings.run(session, async () => {
+        perform: ({ session, line }) => panes.run(session, async () => {
           const at = sessionAt(session);
-          return isOutcome(at) ? at : typeSlashAct(typeInto, at.hints.tmux, line);
+          return at.kind === "session" ? typeSlashAct(typeInto, at.session.hints.tmux, line) : at;
         })
       },
       run: {
@@ -92726,19 +92816,16 @@ function createDaemon(inputs) {
       },
       "apply-update": {
         endsInTurn: true,
-        perform: () => updateWatch.act().then(
-          () => ({ kind: "ok" }),
-          (e) => ({
-            kind: e instanceof BadVerbArgs ? "refused" : "failed",
-            reason: e instanceof Error ? e.message : String(e)
-          })
-        )
+        perform: async () => {
+          await updateWatch.act();
+          return { kind: "ok" };
+        }
       },
       "restart-claude": {
         endsInTurn: false,
         perform: async ({ session }) => {
           const at = sessionAt(session);
-          return isOutcome(at) ? at : laneSetups.start(at, { kind: "restart" });
+          return at.kind === "session" ? laneSetups.start(at.session, { kind: "restart" }) : at;
         }
       },
       surface: {
@@ -92752,7 +92839,7 @@ function createDaemon(inputs) {
             return { kind: "ok" };
           }
           const at = sessionAt(session);
-          return isOutcome(at) ? at : laneSetups.start(at, { kind: "surface", surface, on: on2 });
+          return at.kind === "session" ? laneSetups.start(at.session, { kind: "surface", surface, on: on2 }) : at;
         }
       }
     },
@@ -92922,6 +93009,9 @@ function createDaemon(inputs) {
     async close(atExit) {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind }, instant());
       const teardown = [
+        // [LAW:no-ambient-temporal-coupling] First: no change or act is
+        // performed under any step after it.
+        ["renderer effects close", () => parts.renderer.close()],
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
         // journal in flight, so none opens after.
         ["journalTurns close", rendererStep("close-journal")],
