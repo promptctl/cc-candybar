@@ -38,6 +38,12 @@ export function digestOf<T>(value: T & Plain<T>): string {
     .digest("hex");
 }
 
+// Whether two plain values are one value: equal JSON with keys sorted at
+// every level, the same identity `digestOf` takes.
+export function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+}
+
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
   if (typeof value === "object" && value !== null) {

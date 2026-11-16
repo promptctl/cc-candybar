@@ -862,3 +862,116 @@ export function setPlacementSetting(
     ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT)
     : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }
+
+// ─── Edits at an address ─────────────────────────────────────────────────────
+
+// [LAW:types-are-the-program] A place inside a document: the object keys and
+// array indexes from its root. The empty address is the document itself.
+export type Address = ReadonlyArray<string | number>;
+
+// A member of a container, by its key or its index: the span it occupies as a
+// member (an entry's key through its value; an element's value) and its value.
+interface Member {
+  readonly span: Span;
+  readonly value: Node;
+}
+
+function memberOf(node: Node, step: string | number): Member | undefined {
+  if (typeof step === "number") {
+    const element = node.kind === "array" ? node.elements[step] : undefined;
+    return element === undefined
+      ? undefined
+      : { span: element.span, value: element };
+  }
+  const entry = entryOf(node, step);
+  return entry === undefined
+    ? undefined
+    : { span: entry.span, value: entry.value };
+}
+
+/** The node at an address, or undefined where any step is absent. */
+export function nodeAtAddress(root: Node, at: Address): Node | undefined {
+  let node: Node | undefined = root;
+  for (const step of at) {
+    node = node === undefined ? undefined : memberOf(node, step)?.value;
+  }
+  return node;
+}
+
+// The container an edit at a non-empty address `at` lands in, and its last
+// step; refused when the container is absent.
+function containerAt(
+  doc: Node,
+  at: Address,
+  verb: string,
+): { readonly container: Node; readonly step: string | number } {
+  const step = at[at.length - 1];
+  const container = nodeAtAddress(doc, at.slice(0, -1));
+  if (step === undefined || container === undefined) {
+    throw new Json5EditError(
+      `cannot ${verb} ${addressText(at)}: there is no container there`,
+      0,
+    );
+  }
+  return { container, step };
+}
+
+/**
+ * Set the value at an address whose container exists: an existing member's
+ * value is replaced within its own span, nested at its line's indentation; a
+ * new key is appended to its object in the object's own style. Every other
+ * byte is kept.
+ */
+export function setAt(
+  text: string,
+  at: Address,
+  valueText: string,
+  dialect: Dialect,
+): string {
+  const { container, step } = containerAt(parseDocument(text), at, "set");
+  const member = memberOf(container, step);
+  if (member !== undefined) {
+    return splice(
+      text,
+      member.value.span.start,
+      member.value.span.end,
+      reindent(valueText, indentOfLine(text, member.span.start), eolOf(text)),
+    );
+  }
+  if (typeof step === "number" || container.kind !== "object") {
+    throw new Json5EditError(
+      `cannot set ${addressText(at)}: only an object takes a new member`,
+      container.span.start,
+    );
+  }
+  return appendMember(
+    text,
+    container,
+    entryText([step], valueText, dialect),
+    dialect,
+  );
+}
+
+/** Remove the member at an address, with its separator and, alone on its lines, its lines. */
+export function removeAt(text: string, at: Address): string {
+  const { container, step } = containerAt(parseDocument(text), at, "remove");
+  const member = memberOf(container, step);
+  if (member === undefined) {
+    throw new Json5EditError(
+      `cannot remove ${addressText(at)}: nothing is there`,
+      container.span.start,
+    );
+  }
+  return removeMember(text, member.span);
+}
+
+/** An address as a person reads it: `globals.theme`, `root.h[2]`. */
+export function addressText(at: Address): string {
+  return (
+    at
+      .map((step, i) =>
+        typeof step === "number" ? `[${step}]` : i === 0 ? step : `.${step}`,
+      )
+      .join("") || "the document"
+  );
+}
