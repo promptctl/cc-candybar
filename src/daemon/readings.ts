@@ -376,15 +376,17 @@ export function readingsOf(
   };
   return {
     lanes: laneReadings,
-    // The session's own days gate today only where the directory set does not
-    // already sum them, so no transcript lane fault gates it.
+    // The session's lane gates today only where the directory set does not
+    // already sum the session's days (todayReading).
     today: guarded("today", () =>
       todayReading(
         lanes.today,
         deps.usageStore,
         sessionId,
         inputs.hookData.transcript_path,
-        entry,
+        // The session lane as a lane read sees it: the entry's failure, then
+        // its refresh's fault, then the entry.
+        read("session", () => entry),
       ),
     ),
     faults: REFRESH_LANES.flatMap((lane) => {

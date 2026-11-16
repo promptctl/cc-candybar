@@ -227,19 +227,23 @@ describe("a frame's payload", () => {
     );
   });
 
-  // The directory set sums every transcript under its roots by its own scan,
-  // so a fault in this session's lanes is that lane's, never today's.
-  test("a `today` whose session lane's refresh threw still draws the set's sums", async () => {
+  // A transcript outside the set's roots is summed by no scan, so its days
+  // are the session's record alone, and a fault in the lane that refreshes
+  // that record is today's. (Under the roots the set's scan answers for
+  // them: test/today-facts.test.ts.)
+  test("a `today` whose session lane's refresh threw, outside the set's roots, is that fault", async () => {
     const { inputs, request, deps } = counted();
     await request();
-    const before = todayReadingOf(inputs());
+    expect(todayReadingOf(inputs())).toMatchObject({ kind: "ok" });
     deps.faults.refreshed(
       sessionIdOf(HOOK.session_id),
       "session",
       "ingest threw",
     );
-    expect(todayReadingOf(inputs())).toEqual(before);
-    expect(before).not.toMatchObject({ kind: "failed" });
+    expect(todayReadingOf(inputs())).toMatchObject({
+      kind: "failed",
+      reason: "ingest threw",
+    });
   });
 
   test("autocompact's controls are not answered while the context window they are capped to is not", async () => {
