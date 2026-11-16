@@ -97,7 +97,7 @@ export function processPort(
 
 function inProcessRenderer(
   loaded: LoadedMainRenderer,
-  { reaches, clock }: LinkOwner,
+  { reaches, clock, log }: LinkOwner,
 ): RendererLink {
   const renderer = loaded.start(reaches);
   return {
@@ -106,12 +106,24 @@ function inProcessRenderer(
     // [LAW:single-enforcer] The flush a process renderer runs as its stdin
     // ends (src/renderer-process.ts), here where it has no stdin.
     close: async (teardown) => {
-      await teardown();
-      await renderer.answer({
-        kind: "adapter",
-        push: { kind: "close-session-state" },
-        at: instantAt(clock),
-      });
+      try {
+        await teardown();
+      } finally {
+        // [LAW:no-silent-failure] A flush that fails is said, and the close
+        // still ends, as the process renderer's does.
+        await renderer
+          .answer({
+            kind: "adapter",
+            push: { kind: "close-session-state" },
+            at: instantAt(clock),
+          })
+          .catch((thrown: unknown) =>
+            log(
+              "warn",
+              `the session state did not flush: ${failureOf(thrown).detail}`,
+            ),
+          );
+      }
     },
     process: () => null,
   };
@@ -458,8 +470,16 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] An end in the close starts nothing:
     // the renderer flushed its own state on its way out, and a fresh one would
     // hold nothing to flush while the close's steps waited on its boot.
-    if (phase.kind === "closing") phase = { kind: "closed" };
-    if (phase.kind === "closed") return;
+    if (phase.kind === "closing" || phase.kind === "closed") {
+      phase = { kind: "closed" };
+      // [LAW:nothing-unseen] Said all the same: a crash or a grace kill here
+      // is a flush that may not have landed.
+      log(
+        how === "exited" ? "info" : "warn",
+        `renderer main[${link.generation}] ${how} in the daemon's close`,
+      );
+      return;
+    }
     const booted = phase.kind === "live";
     const queued = phase.kind === "starting" ? phase.queued : [];
     const lived = clock.monotonic() - link.spawnedAt;
@@ -503,7 +523,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       link.kill.abort(new Error("the renderer stopped answering"));
       return;
     }
-    if (phase.kind === "live" && link.pingSentAt === null) ping(link);
+    // A renderer the close still waits on is judged as a live one is.
+    if (phase.kind !== "starting" && link.pingSentAt === null) ping(link);
   };
   const ping = (link: Link): void => {
     link.pingSentAt = clock.monotonic();
@@ -605,18 +626,21 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       // ends now: it holds nothing to flush, and nothing waits on it.
       for (const send of queued) send();
       if (link !== null && phase.kind === "closed") link.channel.end();
-      stopPings();
-      await teardown();
-      phase = { kind: "closed" };
-      if (link !== null) {
-        link.channel.end();
-        const grace = clock.after(CLOSE_GRACE_MS, () =>
-          link.kill.abort(new Error("the daemon closed")),
-        );
-        await link.channel.ended;
-        grace();
+      try {
+        await teardown();
+      } finally {
+        stopPings();
+        phase = { kind: "closed" };
+        if (link !== null) {
+          link.channel.end();
+          const grace = clock.after(CLOSE_GRACE_MS, () =>
+            link.kill.abort(new Error("the daemon closed")),
+          );
+          await link.channel.ended;
+          grace();
+        }
+        releaseGone();
       }
-      releaseGone();
     },
     process: () => {
       const link = current();

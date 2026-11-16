@@ -11,6 +11,7 @@ import {
   PING_PERIOD_MS,
   YOUNG_MS,
   backoffMs,
+  inProcessPort,
   processRenderer,
   rendererNodeArgs,
 } from "../../src/daemon/renderer-process";
@@ -31,6 +32,7 @@ import type {
   EffectId,
   RendererOutput,
 } from "../../src/renderer-interface/interface";
+import { rendererOf } from "../../src/renderer-interface/interface";
 import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -696,6 +698,59 @@ describe("a renderer process's close", () => {
     );
   });
 
+  test("a renderer the teardown waits on is judged by its pings, and its end is said with no restart offered", async () => {
+    const { link, children, clock, logs, ends } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say({ kind: "started", pid: 9001 });
+    await settled();
+    let release = (): void => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const closed = link.close(() => released);
+    clock.advance(PING_PERIOD_MS + HUNG_AFTER_MS + PING_PERIOD_MS);
+    await settled();
+    expect(child.opts.signal?.aborted).toBe(true);
+    expect(logs).toContainEqual(
+      expect.stringMatching(
+        /^renderer main\[1\] stopped answering .* in the daemon's close$/,
+      ),
+    );
+    expect(ends).toEqual([]);
+    release();
+    await closed;
+  });
+
+  test("a renderer that exits as the close ends it says so", async () => {
+    const { link, children, logs } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say({ kind: "started", pid: 9001 });
+    await settled();
+    const closed = link.close(async () => {});
+    await settled();
+    child.exit(EXITED);
+    await closed;
+    expect(logs).toContain("renderer main[1] exited in the daemon's close");
+  });
+
+  test("a teardown that throws still ends the renderer, and the close fails with it", async () => {
+    const { link, children } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say({ kind: "started", pid: 9001 });
+    await settled();
+    const closed = link.close(async () => {
+      throw new Error("teardown broke");
+    });
+    await settled();
+    expect(child.stdinEnded).toBe(true);
+    child.exit(EXITED);
+    await expect(closed).rejects.toThrow("teardown broke");
+    await expect(link.renderer.answer(pin)).rejects.toThrow(
+      new RendererDown("renderer main is closed"),
+    );
+  });
+
   test("a call the renderer awaits is answered by the host's reach, its failure keeping its kind", async () => {
     const { link, children } = rig();
     link.arm();
@@ -714,5 +769,43 @@ describe("a renderer process's close", () => {
         },
       },
     });
+  });
+});
+
+describe("a renderer in the host's process", () => {
+  test("its close flushes after the teardown, and a flush that fails is said while the close still ends", async () => {
+    const logs: string[] = [];
+    const order: string[] = [];
+    const link = inProcessPort({
+      load: () => ({
+        start: () =>
+          rendererOf({
+            event: () => Promise.reject(new Error("no events in this rig")),
+            adapter: async (input) => {
+              order.push(input.push.kind);
+              throw new Error("disk full");
+            },
+          }),
+      }),
+      boot: () => {
+        throw new Error("no boot in process");
+      },
+      node: [],
+    }).start({
+      reaches: inertHost(),
+      log: (_level, msg) => logs.push(msg),
+      clock: heldClock(new Date("2026-11-15T00:00:00Z")),
+      start: async () => {},
+      ended: () => {},
+    });
+    await link.close(async () => {
+      order.push("teardown");
+    });
+    expect(order).toEqual(["teardown", "close-session-state"]);
+    expect(logs).toEqual([
+      expect.stringMatching(
+        /^the session state did not flush: Error: disk full/,
+      ),
+    ]);
   });
 });
