@@ -79,8 +79,8 @@ test("a project file that places one segment renders over the user's whole confi
   );
   const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
   expect(outcome.layers).toEqual([
-    { path: userFile, scope: "plugins" },
-    { path: projectFile, scope: "repo" },
+    { path: userFile, role: "user" },
+    { path: projectFile, role: "project" },
   ]);
   expect(textOf(outcome.rendered)).toContain("USERSEG");
   expect(textOf(outcome.rendered)).toContain("PROJSEG");
@@ -102,7 +102,7 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectHome();
-  expect(home).toEqual({ path: userFile, above: [{ path: projectFile, scope: "repo" }], repo: project, cwd: project, locs: locations(host) });
+  expect(home).toEqual({ path: userFile, above: [{ path: projectFile, role: "project" }], repo: project, cwd: project, locs: locations(host) });
   writeValues(EDITS_IN_PLACE, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -147,15 +147,15 @@ test("save-as-preset never mints a name a project layer declares", () => {
   expect(name).toBe("custom-2");
 });
 
-test("the user's file is a layer even when the session's cwd is its directory", () => {
+test("the user's file is a layer even when the session's project is its directory", () => {
   const xdgDir = path.dirname(userFile);
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
   answerRepo(xdgDir);
-  const resolved = resolveDslConfig(locations(host), repoConfigs(stateDir(host)).read(), undefined, xdgDir);
+  const resolved = resolveDslConfig(locations(host), repoConfigs(stateDir(host)).read(), { projectDir: xdgDir });
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
-    { path: userFile, scope: "plugins" },
-    { path: local, scope: "repo" },
+    { path: userFile, role: "user" },
+    { path: local, role: "project" },
   ]);
 });
 
@@ -422,7 +422,7 @@ describe("a project layer inserting into the user's row", () => {
   const barLoad = () => {
     const warnings: string[] = [];
     const loaded = loadConfigChain(locations(host), 
-      [homeLayer(userFile), { path: projectFile, scope: "repo" }],
+      [homeLayer(userFile), { path: projectFile, role: "project" }],
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
       { repo: null, cwd: project },

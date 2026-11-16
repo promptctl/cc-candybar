@@ -27,7 +27,11 @@
 
 import fs from "node:fs";
 import JSON5 from "json5";
-import type { Locations, ConfigLayer } from "./loader/discovery.js";
+import {
+  scopeOf,
+  type Locations,
+  type ConfigLayer,
+} from "./loader/discovery.js";
 import {
   type DslConfig,
   type InsertCell,
@@ -427,7 +431,8 @@ export function loadConfigChain(
   );
   const base = plugins.config;
   const layers: Array<LoadedFile & { path: string; config: DslConfig }> = [];
-  for (const { path, scope } of chain) {
+  for (const { path, role } of chain) {
+    const scope = scopeOf(role);
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,

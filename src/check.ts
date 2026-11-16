@@ -492,9 +492,7 @@ export async function checkConfig(
   const resolution = resolveDslConfig(
     locs,
     repoConfigs(stateDir(world.host)).read(),
-    cwd,
-    cwd,
-    configPath ?? undefined,
+    { projectDir: cwd, configFile: configPath ?? undefined },
   );
   warnings.push(...repoGateLines(resolution.repos));
   // An explicit file that is absent or unreadable is still the chain: its
@@ -529,7 +527,7 @@ export async function checkConfig(
   // [LAW:dataflow-not-control-flow] Collision detection runs independent of
   // load success: even if the .json5 fails to parse, the author still wants
   // to know a shadowed .json sibling exists.
-  const collision = detectConfigCollisions(locs, cwd, cwd);
+  const collision = detectConfigCollisions(locs, cwd);
   if (collision !== null) warnings.push(collision);
 
   try {

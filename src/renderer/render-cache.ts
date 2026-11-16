@@ -621,12 +621,10 @@ function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
   ];
   return watchTargetsOf({
     named: [
-      ...dslConfigCandidatePaths(
-        locs,
-        entry.projectDir,
-        entry.cwd,
-        entry.configFile,
-      ),
+      ...dslConfigCandidatePaths(locs, {
+        projectDir: entry.projectDir,
+        configFile: entry.configFile,
+      }),
       ...roots,
       ...loaded.map((d) => d.path),
       ...[...dropped, ...unreached].map((d) => d.path),
@@ -1049,9 +1047,7 @@ export function loadFromDisk(
   const resolution = resolveDslConfig(
     deps.locations,
     repoConfigs(deps.stateDir).read(),
-    projectDir,
-    cwd,
-    configFile,
+    { projectDir, configFile },
   );
   const { repos } = resolution;
   // `chain` loads its layers; `missing`/`unreadable` build the bundled
@@ -1071,7 +1067,7 @@ export function loadFromDisk(
   // appearing — triggers reload and re-detection automatically; nothing
   // else needs to invalidate this.
   const advisories = [
-    detectConfigCollisions(deps.locations, projectDir, cwd),
+    detectConfigCollisions(deps.locations, projectDir),
     configResolutionNotice(resolution),
     repoUnreadNotice(repos),
   ];

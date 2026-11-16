@@ -25,9 +25,57 @@ import type { PluginScope } from "./plugin-scope.js";
 // format > compatibility tail).
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 
+// [LAW:types-are-the-program] A layer's place in its session's chain, lowest
+// precedence first: the user's own file, the project's checked-in file, and
+// the local file beside it that holds one person's settings for the project.
+export type LayerRole = "user" | "project" | "local";
+export const LAYER_ROLES: readonly LayerRole[] = ["user", "project", "local"];
+
+// One place a config file can be: its role, and its path without extension.
+interface ConfigLocation {
+  readonly role: LayerRole;
+  readonly base: string;
+}
+
+// [LAW:dataflow-not-control-flow] The locations, highest precedence first, as
+// the search reads them. A working directory inside the repository is the
+// project, so it has no location of its own: it could only repeat the
+// project's file.
+function configLocations(
+  locs: Locations,
+  projectDir: string | undefined,
+): readonly ConfigLocation[] {
+  const project: readonly ConfigLocation[] = projectDir
+    ? [
+        { role: "local", base: path.join(projectDir, LOCAL_CONFIG_BASE) },
+        { role: "project", base: path.join(projectDir, REPO_CONFIG_BASE) },
+      ]
+    : [];
+  return [...project, { role: "user", base: xdgConfigBase(locs) }];
+}
+
+// What a session's config search starts from: its project, and the explicit
+// file its render origin names, which replaces the chain.
+export interface ConfigQuery {
+  readonly projectDir?: string;
+  readonly configFile?: string;
+}
+
+// Each candidate file and the role its location gives it, highest precedence
+// first. An explicit `configFile` is the user layer and the only candidate.
+function configCandidates(
+  locs: Locations,
+  { projectDir, configFile }: ConfigQuery,
+): ReadonlyArray<{ readonly file: string; readonly role: LayerRole }> {
+  if (configFile !== undefined) return [{ file: configFile, role: "user" }];
+  return configLocations(locs, projectDir).flatMap(({ role, base }) =>
+    CONFIG_EXTENSIONS.map((ext) => ({ file: `${base}.${ext}`, role })),
+  );
+}
+
 /**
  * The full ordered list of candidate paths the DSL config could live at,
- * for a given (projectDir, cwd). Returned regardless of which exist — the
+ * for a given project. Returned regardless of which exist — the
  * cache uses this to watch every candidate location so the creation of any
  * file in the resolution chain triggers hot-reload.
  *
@@ -45,43 +93,18 @@ const CONFIG_EXTENSIONS = ["json5", "json"] as const;
  * [LAW:dataflow-not-control-flow] Location is the dominant precedence axis;
  * extension breaks ties within a location. Encoded as a nested flat-map: each
  * location yields one path per extension in order. No branches on extension.
- *
- * Each path appears ONCE: when projectDir and cwd are the same directory (the
- * common case — the daemon often resolves both from one hook payload) the
- * project and cwd rungs spell identical strings, and a second occurrence is
- * a duplicate of *position in the chain*, not of a file on disk. Deduped
- * here so no consumer probes, watches, or reports one location twice.
  */
 export function dslConfigCandidatePaths(
   locs: Locations,
-  projectDir?: string,
-  cwd?: string,
-  configFile?: string,
+  query: ConfigQuery,
 ): readonly string[] {
-  // [LAW:dataflow-not-control-flow] An explicit override is the ONLY
-  // candidate — the precedence chain collapses to one entry.
-  if (configFile !== undefined) return [configFile];
-
-  const effectiveCwd = cwd ?? process.cwd();
-
-  return [
-    ...new Set([
-      ...(projectDir
-        ? CONFIG_EXTENSIONS.map((ext) =>
-            path.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`),
-          )
-        : []),
-      ...CONFIG_EXTENSIONS.map((ext) =>
-        path.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`),
-      ),
-      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`),
-    ]),
-  ];
+  return configCandidates(locs, query).map(({ file }) => file);
 }
 
-// [LAW:one-source-of-truth] The base name a repository's own config file
-// carries, at a project or working directory.
+// [LAW:one-source-of-truth] The base names a project's config files carry: the
+// checked-in one, and the local one beside it.
 const REPO_CONFIG_BASE = ".cc-candybar";
+const LOCAL_CONFIG_BASE = ".cc-candybar.local";
 
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
@@ -92,10 +115,9 @@ function xdgConfigBase(locs: Locations): string {
 }
 
 /**
- * One chain layer: its file, and whose plugins the file lists — a
- * repository's (`repo`) or the user's installed ones (`plugins`).
+ * One chain layer: its file, and its role in the chain.
  *
- * [LAW:one-source-of-truth] The scope is decided where the search finds the
+ * [LAW:one-source-of-truth] The role is decided where the search finds the
  * file, from which location supplied it, and rides with the path. A second
  * list of repository paths beside the layers drifts the moment a caller
  * builds or filters one list and not the other, and a repository's plugin
@@ -103,19 +125,23 @@ function xdgConfigBase(locs: Locations): string {
  */
 export interface ConfigLayer {
   readonly path: string;
-  readonly scope: PluginScope;
+  readonly role: LayerRole;
 }
+
+// Whose plugins a layer lists: the user's installed ones, or its repository's.
+export const scopeOf = (role: LayerRole): PluginScope =>
+  role === "user" ? "plugins" : "repo";
 
 // The user's own file or an explicit one: never a repository's, whatever its
 // name. The one way to state a layer outside the search.
 export function homeLayer(path: string): ConfigLayer {
-  return { path, scope: "plugins" };
+  return { path, role: "user" };
 }
 
 /**
  * What the config search found. Three outcomes:
  *   • `chain` — the files the config is merged from, lowest precedence
- *     first: the user's XDG file, then `<cwd>`'s, then `<projectDir>`'s, each
+ *     first: the user's XDG file, then the project's, then its local file, each
  *     layered over the ones before it through the same merge the bundled
  *     default takes (brandon-plugins-ktag.8th) — so a project file declares
  *     only what differs from the user's config, never a replacement of it.
@@ -132,7 +158,7 @@ export function homeLayer(path: string): ConfigLayer {
  * see past; the search never stops on a guess, and the notice names each.
  *
  * Every arm carries `repos`: what the session's repositories contribute,
- * as their answers decide it. A cwd or project layer whose directory is not
+ * as their answers decide it. A project or local layer whose directory is not
  * approved is not in the chain.
  *
  * [LAW:types-are-the-program] `string | null` collapsed `default` and
@@ -162,16 +188,15 @@ export type ConfigResolution = { readonly repos: RepoGate } & (
  *   1. `configFile` — the session's explicit path (`--config` > `configEnv`
  *      hint, absolute, from its render origin); the sole candidate when
  *      present
- *   2. `<projectDir>/.cc-candybar.json5`, then `.json`
- *   3. `<cwd>/.cc-candybar.json5`, then `.json`
+ *   2. `<projectDir>/.cc-candybar.local.json5`, then `.json`
+ *   3. `<projectDir>/.cc-candybar.json5`, then `.json`
  *   4. `$XDG_CONFIG_HOME/cc-candybar/config.json5`, then `.json`
  *      (defaulting to `~/.config/cc-candybar/`)
  * Each LOCATION contributes its first existing file (`.json5` wins a tie;
  * the sibling is the collision notice), and the chain is those files in
- * reverse — the user's at the bottom, the project's on top. A location is
- * its directory as the filesystem resolves it, so a project directory and a
- * cwd that spell one directory two ways (a symlinked checkout, macOS's
- * `/tmp`) contribute one layer, never a file over itself.
+ * reverse — the user's at the bottom, the local file on top. The local file
+ * loads under its project's approval, since it is in the same directory and
+ * a clone can commit a file by that name.
  *
  * [LAW:dataflow-not-control-flow] The locations array is data; the search is
  * one fold over `presence`. Adding a layer is a new array entry, not a new
@@ -186,23 +211,21 @@ export type ConfigResolution = { readonly repos: RepoGate } & (
 export function resolveDslConfig(
   locs: Locations,
   answers: RepoAnswers,
-  projectDir?: string,
-  cwd?: string,
-  configFile?: string,
+  query: ConfigQuery,
 ): ConfigResolution {
+  const { projectDir, configFile } = query;
   const unchecked: Unchecked[] = [];
-  // Each location's file, and the repository directory that supplies it —
-  // null for the user's own file or the explicit one.
+  // Each location's file, its role, and the repository directory that
+  // supplies it — null for the user's own file or the explicit one.
   const atLocation = new Map<
     string,
-    { readonly file: string; readonly repo: RepoDir | null }
+    {
+      readonly file: string;
+      readonly role: LayerRole;
+      readonly repo: RepoDir | null;
+    }
   >();
-  for (const candidate of dslConfigCandidatePaths(
-    locs,
-    projectDir,
-    cwd,
-    configFile,
-  )) {
+  for (const { file: candidate, role } of configCandidates(locs, query)) {
     const p = presence(candidate);
     if (p === "absent") continue;
     if (p !== "present") {
@@ -222,28 +245,25 @@ export function resolveDslConfig(
     if (!atLocation.has(location)) {
       atLocation.set(location, {
         file: candidate,
-        repo:
-          configFile !== undefined || isUserFile(locs, candidate)
-            ? null
-            : { dir, link: worktreeLink(dir) },
+        role,
+        repo: role === "user" ? null : { dir, link: worktreeLink(dir) },
       });
     }
   }
   const found = [...atLocation.values()];
+  // The project's file and its local one share a directory, and so an answer.
+  const repoDirs = new Map(
+    found.flatMap((f) => (f.repo === null ? [] : [[f.repo.dir, f.repo]])),
+  );
   const repos = gateRepos(
     answers,
-    found.flatMap((f) => (f.repo === null ? [] : [f.repo])),
+    [...repoDirs.values()],
     repoProject(projectDir),
   );
   const kept = found
     .filter((f) => f.repo === null || repos.approved.includes(f.repo.dir))
     .reverse();
-  const layers = kept.map(
-    (f): ConfigLayer => ({
-      path: f.file,
-      scope: f.repo === null ? "plugins" : "repo",
-    }),
-  );
+  const layers = kept.map((f): ConfigLayer => ({ path: f.file, role: f.role }));
   if (configFile === undefined) {
     return {
       kind: "chain",
@@ -334,7 +354,7 @@ export function durableConfig(
   cwd?: string,
   configFile?: string,
 ): ConfigHome {
-  const resolved = resolveDslConfig(locs, answers, projectDir, cwd, configFile);
+  const resolved = resolveDslConfig(locs, answers, { projectDir, configFile });
   const layers = resolved.kind === "chain" ? resolved.layers : [];
   return {
     path: resolved.home,
@@ -402,11 +422,8 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
 export function detectConfigCollisions(
   locs: Locations,
   projectDir?: string,
-  cwd?: string,
 ): string | null {
-  // The enumerator yields each path once, so an existing member here is a
-  // file on disk, never the same candidate seen from two chain positions.
-  const existing = dslConfigCandidatePaths(locs, projectDir, cwd).filter(
+  const existing = dslConfigCandidatePaths(locs, { projectDir }).filter(
     (candidate) => presence(candidate) === "present",
   );
   // Group by (dir + base-without-extension). A group with > 1 existing
