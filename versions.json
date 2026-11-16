@@ -4,15 +4,22 @@
     {
       "version": "pr-775",
       "ref": "refs/pull/775/merge",
-      "sha": "c011637e1d30c9908ddcfc156754f95fb4e949e5",
-      "timestamp": "2026-11-16T21:38:20.274Z",
+      "sha": "41a519f0a84c70b990a9a089549c535d4d4c28da",
+      "timestamp": "2026-11-16T21:50:10.038Z",
       "commits": [
         {
-          "sha": "c011637e1d30c9908ddcfc156754f95fb4e949e5",
+          "sha": "41a519f0a84c70b990a9a089549c535d4d4c28da",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T21:37:16Z",
-          "message": "Merge 2b4da1e9875bf4852c98c2bdc8560c302cc2c49e into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+          "timestamp": "2026-11-16T21:49:14Z",
+          "message": "Merge 264468e5ead516770f8916efb688a045f28af2ab into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+        },
+        {
+          "sha": "264468e5ead516770f8916efb688a045f28af2ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T14:49:03-07:00",
+          "message": "fix(daemon): the close lets tmux calls in flight land, then restores through the reconcile's own calls\n"
         },
         {
           "sha": "2b4da1e9875bf4852c98c2bdc8560c302cc2c49e",
