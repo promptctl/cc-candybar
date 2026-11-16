@@ -20,7 +20,6 @@ import {
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
-  VERB_LOAD_CONFIG,
   VERB_OPEN_VSCODE,
   VERB_REDO,
   VERB_REPO_CONFIG,
@@ -35,7 +34,6 @@ import {
   VERB_SLASH,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
-  VERB_TOOLBAR_TOGGLE,
   VERB_UNDO,
   batchAdjacentWrites,
   type Effect,
@@ -194,11 +192,6 @@ describe("a link says in words what its click does", () => {
     [
       { verb: VERB_OPEN_VSCODE, args: ["/tmp/a.ts"] },
       "open /tmp/a.ts in vs code",
-    ],
-    [{ verb: VERB_TOOLBAR_TOGGLE, args: [SID] }, "toggle the toolbar"],
-    [
-      { verb: VERB_LOAD_CONFIG, args: [SID, "/tmp/c.json5"] },
-      "load config /tmp/c.json5",
     ],
     [{ verb: VERB_SAVE, args: [SID] }, "save settings"],
     [{ verb: VERB_SAVE_PRESET, args: [SID] }, "save as a new preset"],
@@ -416,13 +409,9 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     expect(
       effectsOf(`cc-candybar://${VERB_DOCTOR_FIX}/s1/tmuxTruecolor`),
     ).toEqual([{ verb: VERB_DOCTOR_FIX, args: ["s1", "tmuxTruecolor"] }]);
-    // The preset verbs segment like set-state (their handlers split), and
-    // load-config splits once, since its path has slashes of its own.
+    // The preset verbs segment like set-state (their handlers split).
     expect(effectsOf("cc-candybar://delete-preset/s1/custom-1")).toEqual([
       { verb: "delete-preset", args: ["s1", "custom-1"] },
-    ]);
-    expect(effectsOf("cc-candybar://load-config/s1/%2Fhome%2Fa%2Fb.json5")).toEqual([
-      { verb: "load-config", args: ["s1", "/home/a/b.json5"] },
     ]);
   });
 });
@@ -538,14 +527,14 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
 
   test("a session-bearing step's malformed argument is that step's error: the click still finds its session and runs the rest", async () => {
     const sessionState = new SessionState();
-    // A load-config path carrying a bad percent escape (`%ZZ`).
+    // A step-state key carrying a bad percent escape (`%ZZ`).
     const url = effectsUrl([
-      { verb: VERB_LOAD_CONFIG, args: [SID, "BAD"] },
+      { verb: VERB_STEP_STATE, args: [SID, "BAD", "1"] },
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
     ]).replace("BAD", encodeURIComponent("%ZZ"));
     await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(BadVerbArgs);
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
-    expect(lastClickError(sessionState, SID)?.text).toMatch(/load-config:/);
+    expect(lastClickError(sessionState, SID)?.text).toMatch(/step-state:/);
   });
 
   test("click.error is not written when no session-bearing effect exists", async () => {

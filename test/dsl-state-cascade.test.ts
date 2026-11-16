@@ -461,25 +461,4 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
     expect(render()).toContain("calm");
   });
-
-  test("toolbar-toggle click verb cascades through state binding", async () => {
-    // Same pattern with a different verb / key — exercises the toggle
-    // semantics (set on first click, clear on second).
-    const { render, ctx } = cascadeBar(`{
-      globals: {},
-      variables: {
-        expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
-      },
-      segments: {
-        tb: { template: ' tb=[{{ .expanded }}] ', bg: 'surface', fg: 'foreground' },
-      },
-      root: 'tb',
-    }`);
-
-    expect(render()).toContain("tb=[]");
-    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
-    expect(render()).toContain("tb=[1]");
-    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
-    expect(render()).toContain("tb=[]");
-  });
 });

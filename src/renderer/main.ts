@@ -417,15 +417,6 @@ function startOver(
       clicked: (sessionId, latest, before, after) =>
         laneClicked(parts, sessionId, latest, before, after),
     },
-    views: {
-      follow: (sessionId, origin) =>
-        renderCache.follow(
-          sessionId,
-          origin.projectDir,
-          origin.cwd,
-          origin.target.path,
-        ),
-    },
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
