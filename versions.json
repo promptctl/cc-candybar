@@ -4,15 +4,22 @@
     {
       "version": "pr-761",
       "ref": "refs/pull/761/merge",
-      "sha": "169fac2452e999a53bec1e57cdb88247df31e02b",
-      "timestamp": "2026-11-16T00:40:32.364Z",
+      "sha": "1a7f50834080eba11e16520734a3413bafbed628",
+      "timestamp": "2026-11-16T00:55:33.651Z",
       "commits": [
         {
-          "sha": "169fac2452e999a53bec1e57cdb88247df31e02b",
+          "sha": "1a7f50834080eba11e16520734a3413bafbed628",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T17:39:34-07:00",
-          "message": "Merge 8be4ca9902383f6244bfe5ab31b478760a426a6d into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
+          "timestamp": "2026-11-16T00:54:36Z",
+          "message": "Merge 4c3c814c10f1599963022984c2363dc136420a22 into 797e5342a7d59f9f4819a5ec602e6c062895e3f0\n"
+        },
+        {
+          "sha": "4c3c814c10f1599963022984c2363dc136420a22",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T17:54:26-07:00",
+          "message": "fix(collector): a response's usage counts once, an unknown stop ends a turn, and today waits on a session outside its directory (candybar-host-renderer-x96a.xae)\n\nHigh review of #761:\n- Claude Code writes each content block of one response as its own entry,\n  each repeating the usage, so a fold counted tokens and cost 2-4 times and\n  every tok/s rate with them. The fold counts a response once, at the first\n  entry of its run.\n- A turn goes on only at tool_use, pause_turn or a block still streaming;\n  any other stop ends it, model_context_window_exceeded and later ones too.\n- Turn state is the main transcript's fold alone, not an OR over sidechains.\n- Outside the directory set's roots, today fails with or waits on the\n  session's transcript entry, so a failed declaration no longer draws a\n  total silently missing the session's work.\n- The providers hand back named close steps, and one teardown runner serves\n  the daemon and the demo, logging each failure with its stack.\n- Comments that still called speed a draw projection are fixed.\n"
         },
         {
           "sha": "8be4ca9902383f6244bfe5ab31b478760a426a6d",

@@ -28782,66 +28782,12 @@ function settledLane(outcome) {
   return { current: () => outcome };
 }
 
-// src/facts/world-state.ts
+// src/daemon/cache/session-usage-store.ts
 init_globals();
-var UNREAD_RUN = {
-  reading: pendingOf("unread"),
-  fault: null
-};
-var IDLE = { kind: "idle" };
-var REFRESH_LANES = [
-  "session",
-  "context",
-  "metrics",
-  "activity",
-  "cache",
-  "speed",
-  "autocompact"
-];
-function formatVersion(v) {
-  return v.join(".");
-}
-var SHORT_DIGEST_LENGTH = 7;
-var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-function stampFailureOf(document) {
-  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
-}
+var import_node_path5 = __toESM(require_path_browserify(), 1);
 
-// src/claude-settings.ts
+// src/segments/pricing.ts
 init_globals();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
-var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
-function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path3.default.join(home, ".claude");
-}
-function claudeSettingsPath(configDir) {
-  return import_node_path3.default.join(configDir, "settings.json");
-}
-function claudeManagedSettingsDir(platform3) {
-  switch (platform3) {
-    case "darwin":
-      return "/Library/Application Support/ClaudeCode";
-    case "win32":
-      return "C:\\Program Files\\ClaudeCode";
-    default:
-      return "/etc/claude-code";
-  }
-}
-var claudeManagedSettingsDirIn = (env2) => env2.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform);
-var projectLocalSettingsFile = (projectDir) => import_node_path3.default.join(projectDir, ".claude", "settings.local.json");
-var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-
-// src/daemon/source-runs.ts
-init_globals();
-
-// site/shims/fs-promises.ts
-init_globals();
-var p = fs.promises;
-var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
-
-// src/daemon/cache/watchers.ts
-init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
 
 // src/utils/logger.ts
 init_globals();
@@ -28862,774 +28808,1132 @@ function changeLogger(log) {
 }
 var quietLogger = (_level, message) => debug(message);
 
-// src/utils/folder-identity.ts
+// site/shims/unavailable.ts
 init_globals();
-var statIdentity = (folder) => {
-  try {
-    const st = fs_default.statSync(folder, { bigint: true });
-    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
-  } catch (e) {
-    const code = e.code;
-    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
-    throw e;
-  }
+var refuse = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
 };
-var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
-var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
-var boundOf = (folder) => {
-  try {
-    return statIdentity(folder);
-  } catch (e) {
-    return { unreadable: e.code ?? String(e) };
-  }
-};
-var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
-var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
+var connect = refuse("net.connect");
+var createServer = refuse("net.createServer");
+var createConnection = refuse("net.createConnection");
+var get = refuse("https.get");
+var request = refuse("https.request");
+var createInterface = refuse("readline.createInterface");
+var createRequire = refuse("module.createRequire");
+var json = refuse("stream/consumers.json");
+var text = refuse("stream/consumers.text");
+var writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
 
-// src/daemon/foundations/watch-targets.ts
-init_globals();
+// src/segments/pricing.ts
+init_url();
 
-// src/utils/atomic-write.ts
+// src/utils/cache.ts
 init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-function writeAtomic(at, text4, mode) {
-  const file = resolvedTarget(at);
-  fs_default.mkdirSync(import_node_path4.default.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
-  try {
-    fs_default.writeFileSync(
-      tmp,
-      text4,
-      fileMode === void 0 ? {} : { mode: fileMode }
-    );
-    fs_default.renameSync(tmp, file);
-  } catch (e) {
-    fs_default.rmSync(tmp, { force: true });
-    throw e;
+var import_node_path3 = __toESM(require_path_browserify(), 1);
+var CacheManager = class {
+  // [LAW:one-source-of-truth] Every method takes the cache's root directory
+  // (the host's `cacheDir`), so the layout under it is derived here alone.
+  static usageDir(root) {
+    return import_node_path3.default.join(root, "usage");
   }
-}
-function resolvedTarget(at) {
-  return linkChain(at).at(-1);
-}
-function linkChain(at) {
-  const { hops, stopped: stopped2 } = walkLinks(at);
-  if (stopped2 !== null) throw stopped2;
-  return hops;
-}
-function walkLinks(at) {
-  const hops = [at];
-  try {
-    for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next = linkTarget(hops[hops.length - 1]);
-      if (next === null) return { hops, stopped: null };
-      hops.push(next);
+  static locksDir(root) {
+    return import_node_path3.default.join(root, "locks");
+  }
+  static isLocked(root, name) {
+    const lockFile = import_node_path3.default.join(this.locksDir(root), name);
+    if (!fs_default.existsSync(lockFile)) {
+      return false;
     }
-    return {
-      hops,
-      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
+    try {
+      const lockContent = fs_default.readFileSync(lockFile, "utf-8");
+      const pid2 = parseInt(lockContent.trim(), 10);
+      if (isNaN(pid2)) {
+        debug(`Invalid PID in lock file ${name}, removing stale lock`);
+        fs_default.unlinkSync(lockFile);
+        return false;
+      }
+      try {
+        process_default.kill(pid2, 0);
+        return true;
+      } catch (error) {
+        if (error.code === "ESRCH") {
+          debug(`Removing stale lock file ${name} for dead process ${pid2}`);
+          fs_default.unlinkSync(lockFile);
+          return false;
+        }
+        debug(`Error checking process ${pid2} for lock ${name}:`, error);
+        return true;
+      }
+    } catch (error) {
+      debug(`Error reading lock file ${name}:`, error);
+      return true;
+    }
+  }
+  static async acquireLock(root, clock, name, timeout = 5e3) {
+    const RETRY_DELAY_MS = 50;
+    const FILE_CREATE_FLAG = "wx";
+    await this.ensureCacheDirectories(root);
+    const lockFile = import_node_path3.default.join(this.locksDir(root), name);
+    const startTime = clock.monotonic();
+    const lockContent = String(process_default.pid);
+    while (clock.monotonic() - startTime < timeout) {
+      try {
+        await fs_default.promises.writeFile(lockFile, lockContent, {
+          flag: FILE_CREATE_FLAG
+        });
+        debug(`Lock acquired for ${name}`);
+        return true;
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          await sleep(clock, RETRY_DELAY_MS);
+        } else {
+          throw error;
+        }
+      }
+    }
+    debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
+    return false;
+  }
+  static async releaseLock(root, name) {
+    const lockFile = import_node_path3.default.join(this.locksDir(root), name);
+    try {
+      await fs_default.promises.unlink(lockFile);
+      debug(`Lock released for ${name}`);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        debug(`Error releasing lock for ${name}:`, error);
+      }
+    }
+  }
+  static async ensureCacheDirectories(root) {
+    try {
+      await Promise.all([
+        fs_default.promises.mkdir(root, { recursive: true }),
+        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
+        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
+      ]);
+    } catch (error) {
+      debug("Failed to create cache directories:", error);
+    }
+  }
+  static createProjectHash(projectPath) {
+    return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
+  }
+  static async getUsageCache(root, clock, cacheType, latestMtime) {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 75;
+    const FILE_ENCODING = "utf-8";
+    await this.ensureCacheDirectories(root);
+    const cachePath = import_node_path3.default.join(this.usageDir(root), `${cacheType}.json`);
+    const lockName = `${cacheType}.usage.lock`;
+    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
+      const isCurrentlyLocked = this.isLocked(root, lockName);
+      if (isCurrentlyLocked) {
+        debug(`Cache for ${cacheType} is locked, waiting...`);
+        await sleep(clock, RETRY_DELAY_MS);
+        continue;
+      }
+      try {
+        const content = await fs_default.promises.readFile(cachePath, FILE_ENCODING);
+        const cached = JSON.parse(content);
+        const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
+        if (cacheIsValid) {
+          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
+          return this.deserializeDates(cached.data);
+        } else {
+          debug(
+            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
+          );
+          return null;
+        }
+      } catch (error) {
+        if (error.code === "ENOENT") {
+          debug(`No shared ${cacheType} usage cache found`);
+          return null;
+        }
+        const attemptNumber = attempt4 + 1;
+        debug(
+          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
+        );
+        await sleep(clock, RETRY_DELAY_MS);
+      }
+    }
+    debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
+    return null;
+  }
+  static deserializeDates(data) {
+    if (Array.isArray(data)) {
+      return data.map((entry) => ({
+        ...entry,
+        timestamp: new Date(entry.timestamp)
+      }));
+    }
+    return data;
+  }
+  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
+    const lockName = `${cacheType}.usage.lock`;
+    const lockAcquired = await this.acquireLock(root, clock, lockName);
+    if (!lockAcquired) {
+      debug(`Could not acquire lock to set usage cache for ${cacheType}`);
+      return;
+    }
+    try {
+      await this.ensureCacheDirectories(root);
+      const cachePath = import_node_path3.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cacheTimestamp = latestMtime || clock.now();
+      const cacheEntry = {
+        data,
+        timestamp: cacheTimestamp
+      };
+      const cacheContent = JSON.stringify(cacheEntry);
+      await fs_default.promises.writeFile(cachePath, cacheContent, "utf-8");
+      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
+    } catch (error) {
+      debug(`Failed to save ${cacheType} usage cache:`, error);
+    } finally {
+      await this.releaseLock(root, lockName);
+    }
+  }
+};
+
+// src/segments/pricing.ts
+var OFFLINE_PRICING_DATA = {
+  "claude-haiku-4-5-20251001": {
+    name: "Claude Haiku 4.5",
+    input: 1,
+    output: 5,
+    cache_write_5m: 1.25,
+    cache_write_1h: 2,
+    cache_read: 0.1
+  },
+  "claude-haiku-4-5": {
+    name: "Claude Haiku 4.5",
+    input: 1,
+    output: 5,
+    cache_write_5m: 1.25,
+    cache_write_1h: 2,
+    cache_read: 0.1
+  },
+  "claude-opus-4-20250514": {
+    name: "Claude Opus 4",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-opus-4-1": {
+    name: "Claude Opus 4.1",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-opus-4-1-20250805": {
+    name: "Claude Opus 4.1",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-sonnet-4-20250514": {
+    name: "Claude Sonnet 4",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-4-opus-20250514": {
+    name: "Claude 4 Opus",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-4-sonnet-20250514": {
+    name: "Claude 4 Sonnet",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-sonnet-4-5": {
+    name: "Claude Sonnet 4.5",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-sonnet-4-5-20250929": {
+    name: "Claude Sonnet 4.5",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-opus-4-5": {
+    name: "Claude Opus 4.5",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-5-20251101": {
+    name: "Claude Opus 4.5",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-6": {
+    name: "Claude Opus 4.6",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-6-20260205": {
+    name: "Claude Opus 4.6",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-sonnet-4-6": {
+    name: "Claude Sonnet 4.6",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  }
+};
+var PricingService = class {
+  static executionCache = null;
+  static modelPricingCache = /* @__PURE__ */ new Map();
+  static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
+  static async loadDiskCache(cacheRoot, clock) {
+    const TTL_24H = 24 * 60 * 60 * 1e3;
+    const minValidTime = clock.now() - TTL_24H;
+    return await CacheManager.getUsageCache(
+      cacheRoot,
+      clock,
+      "pricing",
+      minValidTime
+    );
+  }
+  static async saveDiskCache(cacheRoot, clock, data) {
+    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
+  }
+  static async fetchPricingData() {
+    return new Promise((resolve) => {
+      const parsedUrl = new U(this.GITHUB_PRICING_URL);
+      const request2 = get(
+        {
+          hostname: parsedUrl.hostname,
+          path: parsedUrl.pathname,
+          headers: {
+            "User-Agent": "cc-candybar",
+            "Cache-Control": "no-cache"
+          },
+          timeout: 5e3
+        },
+        (response) => {
+          if (response.statusCode !== 200) {
+            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
+            resolve(null);
+            return;
+          }
+          let data = "";
+          let size = 0;
+          const MAX_SIZE = 1024 * 1024;
+          response.setEncoding("utf8");
+          response.on("data", (chunk3) => {
+            size += import_buffer.Buffer.byteLength(chunk3);
+            if (size > MAX_SIZE) {
+              debug("Response too large");
+              request2.destroy();
+              resolve(null);
+              return;
+            }
+            data += chunk3;
+          });
+          response.on("end", () => {
+            try {
+              const json2 = JSON.parse(data);
+              const dataObj = json2;
+              const meta = dataObj._meta;
+              const pricingData = {};
+              for (const [key, value] of Object.entries(dataObj)) {
+                if (key !== "_meta") {
+                  pricingData[key] = value;
+                }
+              }
+              if (this.validatePricingData(pricingData)) {
+                debug(
+                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
+                );
+                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
+                resolve(pricingData);
+              } else {
+                debug("Invalid pricing data structure");
+                resolve(null);
+              }
+            } catch (error) {
+              debug("Failed to parse JSON:", error);
+              resolve(null);
+            }
+          });
+          response.on("error", (error) => {
+            debug("Response error:", error);
+            resolve(null);
+          });
+        }
+      );
+      request2.on("error", (error) => {
+        debug("Request error:", error);
+        resolve(null);
+      });
+      request2.on("timeout", () => {
+        debug("Request timeout");
+        request2.destroy();
+        resolve(null);
+      });
+      request2.end();
+    });
+  }
+  static async getCurrentPricing(cacheRoot, clock) {
+    if (this.executionCache !== null) {
+      debug(
+        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
+      );
+      return this.executionCache;
+    }
+    const diskCached = await this.loadDiskCache(cacheRoot, clock);
+    if (diskCached) {
+      debug(
+        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
+      );
+      this.executionCache = diskCached;
+      debug(
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
+      );
+      return diskCached;
+    }
+    const freshData = await this.fetchPricingData();
+    if (freshData) {
+      await this.saveDiskCache(cacheRoot, clock, freshData);
+      debug(
+        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
+      );
+      this.executionCache = freshData;
+      debug(
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
+      );
+      return freshData;
+    }
+    debug(
+      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+    );
+    this.executionCache = OFFLINE_PRICING_DATA;
+    debug(
+      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+    );
+    return OFFLINE_PRICING_DATA;
+  }
+  static validatePricingData(data) {
+    if (!data || typeof data !== "object") return false;
+    for (const [, value] of Object.entries(data)) {
+      if (!value || typeof value !== "object") return false;
+      const pricing = value;
+      if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number") {
+        return false;
+      }
+    }
+    return true;
+  }
+  static async getModelPricing(modelId, cacheRoot, clock) {
+    if (this.modelPricingCache.has(modelId)) {
+      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
+      return this.modelPricingCache.get(modelId);
+    }
+    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
+    let pricing;
+    if (allPricing[modelId]) {
+      pricing = allPricing[modelId];
+    } else {
+      pricing = this.fuzzyMatchModel(modelId, allPricing);
+    }
+    this.modelPricingCache.set(modelId, pricing);
+    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
+    return pricing;
+  }
+  static fuzzyMatchModel(modelId, allPricing) {
+    const lowerModelId = modelId.toLowerCase();
+    for (const [key, pricing] of Object.entries(allPricing)) {
+      if (key.toLowerCase() === lowerModelId) {
+        return pricing;
+      }
+    }
+    const patterns = [
+      {
+        pattern: ["opus-4-6", "claude-opus-4-6"],
+        fallback: "claude-opus-4-6-20260205"
+      },
+      {
+        pattern: ["opus-4-5", "claude-opus-4-5"],
+        fallback: "claude-opus-4-5-20251101"
+      },
+      {
+        pattern: ["opus-4-1", "claude-opus-4-1"],
+        fallback: "claude-opus-4-1-20250805"
+      },
+      {
+        pattern: ["opus-4", "claude-opus-4"],
+        fallback: "claude-opus-4-20250514"
+      },
+      {
+        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
+        fallback: "claude-sonnet-4-6"
+      },
+      {
+        pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
+        fallback: "claude-sonnet-4-5-20250929"
+      },
+      {
+        pattern: ["sonnet-4", "claude-sonnet-4"],
+        fallback: "claude-sonnet-4-20250514"
+      },
+      {
+        pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
+        fallback: "claude-haiku-4-5-20251001"
+      },
+      { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
+      { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
+      { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
+    ];
+    for (const { pattern: pattern2, fallback } of patterns) {
+      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
+        if (allPricing[fallback]) {
+          return allPricing[fallback];
+        }
+      }
+    }
+    return allPricing["claude-sonnet-4-5-20250929"] || {
+      name: `${modelId} (Unknown Model)`,
+      input: 3,
+      cache_write_5m: 3.75,
+      cache_write_1h: 6,
+      cache_read: 0.3,
+      output: 15
     };
-  } catch (e) {
-    return { hops, stopped: e };
+  }
+  static async calculateCostForEntry(entry, cacheRoot, clock) {
+    const usage = entry.message?.usage;
+    if (!usage) {
+      return 0;
+    }
+    const modelId = this.extractModelId(entry);
+    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
+    const inputTokens = usage.input_tokens || 0;
+    const outputTokens = usage.output_tokens || 0;
+    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+    const cacheReadTokens = usage.cache_read_input_tokens || 0;
+    const inputCost = inputTokens / 1e6 * pricing.input;
+    const outputCost = outputTokens / 1e6 * pricing.output;
+    const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
+    const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
+    return inputCost + outputCost + cacheCreationCost + cacheReadCost;
+  }
+  static extractModelId(entry) {
+    if (entry.model && typeof entry.model === "string") {
+      return entry.model;
+    }
+    const message = entry.message;
+    if (message?.model) {
+      const model = message.model;
+      if (typeof model === "string") {
+        return model;
+      }
+      const modelObj = model;
+      return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
+    }
+    if (entry.model_id && typeof entry.model_id === "string") {
+      return entry.model_id;
+    }
+    return "claude-sonnet-4-5-20250929";
+  }
+};
+
+// src/utils/claude.ts
+init_globals();
+
+// src/utils/transcript-fs.ts
+init_globals();
+
+// site/shims/fs-promises.ts
+init_globals();
+var p = fs.promises;
+var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
+// src/utils/limiter.ts
+init_globals();
+var Limiter = class {
+  slots;
+  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
+  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
+  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
+  // would be O(n²) on the render hot path). A dequeued node is immediately
+  // unreferenced, so a continuously-saturated queue retains only the waiters
+  // currently parked — no consumed-prefix accumulates, unlike a head-index
+  // array that only reclaims on full drain.
+  head = null;
+  tail = null;
+  constructor(max2) {
+    this.slots = max2;
+  }
+  async run(task) {
+    await this.acquire();
+    try {
+      return await task();
+    } finally {
+      this.release();
+    }
+  }
+  async acquire() {
+    if (this.slots > 0) {
+      this.slots--;
+      return;
+    }
+    await new Promise((wake) => {
+      const node = { wake, next: null };
+      if (this.tail) this.tail.next = node;
+      else this.head = node;
+      this.tail = node;
+    });
+  }
+  release() {
+    const node = this.head;
+    if (!node) {
+      this.slots++;
+      return;
+    }
+    this.head = node.next;
+    if (!this.head) this.tail = null;
+    node.wake();
+  }
+};
+
+// src/utils/transcript-fs.ts
+function statStamp(filePath2) {
+  if (!filePath2) return "";
+  try {
+    return stampOf(statSync(filePath2));
+  } catch {
+    return "";
   }
 }
-function linkTarget(file) {
+function stampOf(st) {
+  return `${st.mtimeMs}:${st.size}`;
+}
+var TRANSCRIPT_FS_CONCURRENCY = 8;
+var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
+function gated(fn) {
+  return ((...args) => gate.run(() => fn(...args)));
+}
+var readdir2 = gated(readdir);
+var stat2 = gated(stat);
+var FOLD_WINDOW_BYTES = 512 * 1024;
+var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
+function transcriptReads() {
+  return { ...totals };
+}
+var windows = [];
+function giveBack(window2) {
+  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
+}
+async function readAppended(path43, prior, until2) {
+  return gate.run(async () => {
+    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
+    const read2 = await readWholeLines(path43, prior, until2, window2);
+    if (read2.kind !== "ok") {
+      giveBack(window2);
+      return read2;
+    }
+    let lent = window2;
+    return ok({
+      ...read2.value,
+      [Symbol.dispose]: () => {
+        if (lent !== void 0) giveBack(lent);
+        lent = void 0;
+      }
+    });
+  });
+}
+function decodeLines(read2, decode) {
+  var _stack = [];
   try {
-    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
-    return import_node_path4.default.resolve(
-      fs_default.realpathSync(import_node_path4.default.dirname(file)),
-      fs_default.readlinkSync(file)
+    const lent = __using(_stack, read2);
+    return decode(lent.lines);
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
+}
+async function readWholeLines(path43, prior, until2, window2) {
+  let fh = null;
+  try {
+    fh = await open(path43, "r");
+    const st = await fh.stat();
+    const { size, ino } = st;
+    const stamp2 = stampOf(st);
+    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
+    const start = reset || prior === void 0 ? 0 : prior.offset;
+    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
+    let bytesRead = 0;
+    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
+    bytesRead += first2.length;
+    let lastNl = first2.lastIndexOf(10);
+    let reached = start + first2.length;
+    let shortRead = first2.length < Math.min(window2.length, end - start);
+    while (lastNl < 0 && reached < end && !shortRead) {
+      const next = await readInto(
+        fh,
+        window2.subarray(0, end - reached),
+        reached
+      );
+      bytesRead += next.length;
+      const nl = next.indexOf(10);
+      if (nl >= 0) lastNl = reached - start + nl;
+      shortRead = next.length < Math.min(window2.length, end - reached);
+      reached += next.length;
+    }
+    const bytes = lastNl + 1;
+    const longLine = bytes > window2.length ? bytes : 0;
+    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
+    bytesRead += longLine > 0 ? wholeLines.length : 0;
+    const complete = wholeLines.length === bytes;
+    totals.reads++;
+    totals.bytes += bytesRead;
+    totals.longLines += longLine > 0 ? 1 : 0;
+    totals.largestLine = Math.max(totals.largestLine, longLine);
+    return ok({
+      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
+      start,
+      // A long line was found by its newline alone, so lines after it may
+      // still be unread; otherwise the read saw everything up to its end.
+      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
+      size,
+      stamp: stamp2,
+      ino,
+      reset,
+      longLine
+    });
+  } catch (e) {
+    if (e.code === "ENOENT") return ABSENT;
+    return failed(
+      `readAppended ${path43}: ${e instanceof Error ? e.message : String(e)}`,
+      "read"
     );
+  } finally {
+    await fh?.close().catch((e) => {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    });
+  }
+}
+async function readInto(fh, buf, position) {
+  let off = 0;
+  while (off < buf.length) {
+    const { bytesRead } = await fh.read(
+      buf,
+      off,
+      buf.length - off,
+      position + off
+    );
+    if (bytesRead === 0) break;
+    off += bytesRead;
+  }
+  return buf.subarray(0, off);
+}
+async function readTail(path43, maxBytes) {
+  return gate.run(async () => {
+    let fh = null;
+    try {
+      fh = await open(path43, "r");
+      const { size } = await fh.stat();
+      const start = Math.max(0, size - maxBytes);
+      return ok({
+        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
+        fromStart: start === 0
+      });
+    } catch (e) {
+      if (e.code === "ENOENT") return ABSENT;
+      return failed(
+        `readTail ${path43}: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
+      );
+    } finally {
+      await fh?.close().catch((e) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+        );
+      });
+    }
+  });
+}
+function readTailSync(path43, maxBytes) {
+  let fd;
+  try {
+    fd = openSync(path43, constants.O_RDONLY | constants.O_NONBLOCK);
   } catch (e) {
     const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
+    return failed(e instanceof Error ? e.message : String(e), "read");
+  }
+  try {
+    const stat3 = fstatSync(fd, { bigint: true });
+    if (!stat3.isFile()) return failed("not a regular file", "read");
+    const size = Number(stat3.size);
+    const start = Math.max(0, size - maxBytes);
+    const buf = import_buffer.Buffer.alloc(size - start);
+    let off = 0;
+    while (off < buf.length) {
+      const n = readSync(fd, buf, off, buf.length - off, start + off);
+      if (n === 0) break;
+      off += n;
+    }
+    return ok({
+      buf: buf.subarray(0, off),
+      fromStart: start === 0,
+      file: `${stat3.dev}:${stat3.ino}`
+    });
+  } catch (e) {
+    return failed(e instanceof Error ? e.message : String(e), "read");
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (e) {
+      debug(
+        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
+      );
+    }
+  }
+}
+
+// src/utils/claude.ts
+var import_node_path4 = __toESM(require_path_browserify(), 1);
+
+// src/utils/transcript-activity.ts
+init_globals();
+var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
+function slashCommand(text4) {
+  if (typeof text4 !== "string") return void 0;
+  return COMMAND_NAME.exec(text4)?.[1];
+}
+function todoItems(input) {
+  const todos2 = input?.todos;
+  if (!Array.isArray(todos2)) return void 0;
+  const items = [];
+  for (const raw of todos2) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const { content, activeForm, status } = raw;
+    const active2 = status === "in_progress";
+    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
+    if (typeof text4 !== "string") continue;
+    items.push({ text: text4, active: active2, done: status === "completed" });
+  }
+  return items;
+}
+function turnText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const block = content.find(
+    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
+  );
+  return block?.text ?? "";
+}
+function entryActivity(parsed2, userEntry) {
+  const msg = parsed2.message;
+  const content = msg?.content;
+  const started2 = [];
+  const finished = [];
+  let todos2;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block !== "object" || block === null) continue;
+      const b = block;
+      switch (b.type) {
+        case "tool_use": {
+          const { id: id2, name } = b;
+          if (typeof id2 !== "string" || typeof name !== "string") break;
+          started2.push({ id: id2, name });
+          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
+          break;
+        }
+        case "tool_result": {
+          const id2 = b.tool_use_id;
+          if (typeof id2 === "string") finished.push(id2);
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
+  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
+    return void 0;
+  }
+  return {
+    ...started2.length > 0 && { started: started2 },
+    ...finished.length > 0 && { finished },
+    ...todos2 !== void 0 && { todos: todos2 },
+    ...command !== void 0 && { command }
+  };
+}
+
+// src/utils/claude.ts
+function getClaudePaths(detected, homeDir) {
+  if (detected !== void 0) return [detected];
+  return [(0, import_node_path4.join)(homeDir, ".config", "claude"), (0, import_node_path4.join)(homeDir, ".claude")].filter(
+    (dir) => existsSync(dir)
+  );
+}
+async function findProjectPaths(claudePaths) {
+  const projectPaths = [];
+  for (const claudePath of claudePaths) {
+    const projectsDir = (0, import_node_path4.join)(claudePath, "projects");
+    const entries = await unlessGone(
+      readdir2(projectsDir, { withFileTypes: true })
+    );
+    for (const entry of entries ?? []) {
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path4.join)(projectsDir, entry.name));
+    }
+  }
+  return projectPaths;
+}
+async function unlessGone(read2) {
+  try {
+    return await read2;
+  } catch (e) {
+    if (e.code === "ENOENT") return void 0;
     throw e;
   }
 }
-var MAX_LINK_HOPS = 40;
-
-// src/utils/watch-target.ts
-init_globals();
-var import_node_path5 = __toESM(require_path_browserify(), 1);
-function nearestWatchTarget(candidate) {
-  let name = import_node_path5.default.basename(candidate);
-  let dir = import_node_path5.default.dirname(candidate);
-  for (; ; ) {
-    const real = canonicalDirectory(dir);
-    if (real !== null)
-      return { dir: real, name, leaf: dir === import_node_path5.default.dirname(candidate) };
-    name = import_node_path5.default.basename(dir);
-    dir = import_node_path5.default.dirname(dir);
+async function findAgentTranscripts(sessionId2, projectPath, verified) {
+  const paths2 = [];
+  let longLines = [];
+  const subagentsDir = (0, import_node_path4.join)(projectPath, sessionId2, "subagents");
+  try {
+    const files = await readdir2(subagentsDir);
+    const agentFileNames = files.filter(
+      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
+    );
+    for (const fileName2 of agentFileNames) {
+      const filePath2 = (0, import_node_path4.join)(subagentsDir, fileName2);
+      if (verified?.has(filePath2)) {
+        paths2.push(filePath2);
+        continue;
+      }
+      const read2 = await readAppended(filePath2, void 0, void 0);
+      if (read2.kind !== "ok") {
+        debug(`Failed to check agent file ${filePath2}`);
+        continue;
+      }
+      longLines = longLinesWith(longLines, filePath2, read2.value);
+      const line = jsonLine(
+        decodeLines(
+          read2.value,
+          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
+        )
+      );
+      if (line.kind === "object" && line.value.sessionId === sessionId2) {
+        paths2.push(filePath2);
+      }
+    }
+  } catch (error) {
+    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
+  }
+  return { paths: paths2, longLines };
+}
+function userEntryOf(parsed2) {
+  const msg = parsed2.message;
+  const messageType = parsed2.type || msg?.role || msg?.type;
+  if (messageType !== "user") return void 0;
+  if (firstBlockType(msg) === "tool_result") return "tool-result";
+  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
+  if (origin !== void 0 && origin !== "human") return "turn";
+  const text4 = turnText(msg?.content).trimStart();
+  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
+  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
+}
+var TURN_GOES_ON = /* @__PURE__ */ new Set([
+  void 0,
+  "tool_use",
+  "pause_turn"
+]);
+function turnOpenAfter(open2, entry) {
+  if (entry.isSidechain) return open2;
+  switch (entry.userEntry) {
+    case "prompt":
+    case "turn":
+      return true;
+    case "interrupt":
+      return false;
+    case "tool-result":
+    case "claude-code":
+      return open2;
+    case void 0:
+      return entry.type === "assistant" ? TURN_GOES_ON.has(entry.message?.stopReason) : open2;
   }
 }
-function canonicalDirectory(p2) {
+var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
+function firstBlockType(msg) {
+  const content = msg?.content;
+  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
+}
+function makeEntry(parsed2) {
+  if (!parsed2.timestamp) return null;
+  const msg = parsed2.message;
+  const usage = msg?.usage;
+  const userEntry = userEntryOf(parsed2);
+  return {
+    timestamp: new Date(parsed2.timestamp),
+    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
+    message: msg ? {
+      id: typeof msg.id === "string" ? msg.id : void 0,
+      model: typeof msg.model === "string" ? msg.model : void 0,
+      usage,
+      role: typeof msg.role === "string" ? msg.role : void 0,
+      type: typeof msg.type === "string" ? msg.type : void 0,
+      stopReason: typeof msg.stop_reason === "string" ? msg.stop_reason : void 0
+    } : void 0,
+    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
+    isSidechain: parsed2.isSidechain === true,
+    userEntry,
+    activity: entryActivity(parsed2, userEntry),
+    raw: {
+      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
+      message: msg ? {
+        id: typeof msg.id === "string" ? msg.id : void 0,
+        model: typeof msg.model === "string" ? msg.model : void 0,
+        usage
+      } : void 0,
+      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
+    }
+  };
+}
+function jsonLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return { kind: "blank" };
   try {
-    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
-  } catch {
+    const value = JSON.parse(trimmed);
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
+  } catch (parseError) {
+    return { kind: "unparsed", reason: String(parseError) };
+  }
+}
+function entryOf(line) {
+  const read2 = jsonLine(line);
+  if (read2.kind === "unparsed") {
+    debug(`Failed to parse JSONL line: ${read2.reason}`);
+    return null;
+  }
+  if (read2.kind === "blank") return null;
+  try {
+    return makeEntry(read2.value);
+  } catch (projectionError) {
+    debug(`Failed to project JSONL line: ${projectionError}`);
     return null;
   }
 }
-
-// src/daemon/foundations/watch-targets.ts
-function watchTargetsOf(paths2) {
-  const unresolved = [];
-  let reached = true;
-  const byDir = /* @__PURE__ */ new Map();
-  for (const at of paths2.named) {
-    const { hops, stopped: stopped2 } = walkLinks(at);
-    if (stopped2 !== null)
-      unresolved.push({ path: at, reason: stopped2.message });
-    for (const hop of hops) {
-      const { dir, name, leaf } = nearestWatchTarget(hop);
-      reached &&= leaf;
-      const names = byDir.has(dir) ? byDir.get(dir) : /* @__PURE__ */ new Set();
-      names?.add(name);
-      byDir.set(dir, names);
-    }
+function parseJsonlLines(text4) {
+  const entries = [];
+  for (const line of text4.split("\n")) {
+    const entry = entryOf(line);
+    if (entry) entries.push(entry);
   }
-  for (const dir of paths2.whole.map(canonicalDirectory))
-    if (dir !== null) byDir.set(dir, null);
-  const targets = {
-    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
-      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
-    )
-  };
-  const bound = new Map(
-    targets.dirs.map((d) => {
-      const at = boundOf(d.path);
-      return [d.path, bindsFolder(at) ? boundKey(at) : null];
-    })
+  return entries;
+}
+function longLinesWith(longLines, path43, read2) {
+  return read2.longLine === 0 ? longLines : [...longLines, { path: path43, offset: read2.start, bytes: read2.longLine }];
+}
+function longLineLog(longLines) {
+  return longLines.map(
+    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
   );
-  return {
-    key: JSON.stringify([targets, [...bound]]),
-    targets,
-    unbound: [...bound.values()].includes(null),
-    bound,
-    reached,
-    unresolved
-  };
 }
-function watchFault(label2, watch2, beyond) {
-  const reasons = [
-    ...watch2.derived.unresolved.map(
-      // Every reason names the path it stopped at, the kernel's and the loop's.
-      (u) => `cannot follow a link chain \u2014 ${u.reason}`
-    ),
-    ...watch2.held.handle.deaf.map(
-      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
-    ),
-    ...beyond === null ? [] : [beyond]
-  ];
-  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
-}
-function followWatch(held, spec, acquire) {
-  if (held !== null && (held.key === spec.key || spec.unbound))
-    return { watch: held, move: "kept" };
-  const watch2 = { key: spec.key, handle: acquire(spec.key, spec.targets) };
-  held?.handle.release();
-  return { watch: watch2, move: "rebound" };
+async function foldAppended(filePath2, prior, empty2, step4) {
+  let longLines = [];
+  let cursor = prior?.cursor;
+  let value = prior?.value ?? empty2;
+  let end;
+  for (; ; ) {
+    const read2 = await readAppended(
+      filePath2,
+      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
+      end?.size
+    );
+    if (read2.kind !== "ok") return read2;
+    const window2 = read2.value;
+    if (window2.reset) value = empty2;
+    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
+    if (end === void 0 || window2.reset) {
+      end = { size: window2.size, stamp: window2.stamp };
+    }
+    const next = window2.start + window2.lines.length;
+    value = await step4(
+      value,
+      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
+    );
+    cursor = {
+      offset: next,
+      stamp: end.stamp,
+      ino: window2.ino
+    };
+    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
+  }
 }
 
-// src/daemon/cache/watchers.ts
-var defaultLogger = (_level, message) => debug(message);
-var DEBOUNCE_MS = 50;
-function folded(window2, next) {
-  if (next.kind === "failed") return next;
-  if (window2.kind !== "changed") return window2;
-  if (next.kind === "unknown") return next;
-  for (const p2 of next.paths) window2.paths.add(p2);
-  return window2;
-}
-var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path6.default.join(dir, filename)]) };
-var failedOf = (d) => ({
-  kind: "failed",
-  reason: `${d.path}: ${d.reason}`
-});
-var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
-var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var WatcherRegistry = class {
-  slots = /* @__PURE__ */ new Map();
-  dirs = /* @__PURE__ */ new Map();
-  counters;
-  logger;
-  clock;
-  closed = false;
-  constructor(opts) {
-    this.clock = opts.clock;
-    this.counters = opts.counters;
-    this.logger = opts.logger ?? defaultLogger;
-  }
-  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
-  // holder of one slot, and each holder's callback hears every window.
-  // `targets` from the first acquire wins; subsequent acquires keep the
-  // original target set (consumers must use a fresh key if they need different
-  // targets). A consumer that needs no more than "something changed" ignores
-  // the invalidation's value.
-  acquire(key, targets, onInvalidate) {
-    if (this.closed) {
-      return {
-        release: () => {
-        },
-        deaf: targets.dirs.map((d) => ({
-          kind: "refused",
-          path: d.path,
-          reason: "the watcher registry is closed"
-        }))
-      };
-    }
-    const shared = this.slots.get(key);
-    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
-    const slot = shared ?? this.opened(key, targets);
-    const holder = { onInvalidate };
-    slot.holders.add(holder);
-    return this.makeHandle(slot, holder);
-  }
-  // The held watch following `spec` (`followWatch`).
-  follow(held, spec, onInvalidate) {
-    return followWatch(
-      held,
-      spec,
-      (key, targets) => this.acquire(key, targets, onInvalidate)
-    );
-  }
-  opened(key, targets) {
-    const slot = {
-      key,
-      listeners: [],
-      holders: /* @__PURE__ */ new Set(),
-      debounce: null
-    };
-    for (const target of targets.dirs) {
-      const dir = this.dirFor(target);
-      const listener = {
-        slot,
-        dir,
-        filter: target.filenames ? new Set(target.filenames) : null
-      };
-      dir.listeners.add(listener);
-      slot.listeners.push(listener);
-    }
-    this.slots.set(key, slot);
-    if (this.counters) {
-      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
-        this.counters.watchersOpened++;
-      else this.counters.watchRefusals++;
-    }
-    return slot;
-  }
-  // The directory watch a new slot's target joins: the one already open
-  // there, judged, or a new one.
-  dirFor(target) {
-    const id2 = dirId(target);
-    const existing = this.dirs.get(id2);
-    if (existing !== void 0) {
-      this.judged(existing, "acquire");
-      return existing;
-    }
-    const where = { path: target.path, recursive: target.recursive === true };
-    const dir = {
-      id: id2,
-      ...where,
-      listeners: /* @__PURE__ */ new Set(),
-      state: this.open(where, () => dir, "acquire", null)
-    };
-    this.dirs.set(id2, dir);
-    return dir;
-  }
-  // [LAW:single-enforcer] The one rule that a directory watch names the
-  // folder at its path, applied whenever a holder acquires the directory,
-  // whenever an event says the folder there moved, and on every period
-  // (`judge`). A deaf one is opened again; a listening one whose path holds
-  // another folder than the one it bound (removed and made again, or a strict
-  // ancestor renamed away and another tree put at its path: inotify hears the
-  // old inode, and the bound folder is what an event naming the directory is
-  // judged against) is reopened in place. A path that binds nothing right now
-  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
-  // on the path hears the folder come back.
-  judged(dir, cause) {
-    if (dir.state.kind === "deaf") {
-      this.reopen(dir, cause);
-      return;
-    }
-    const now2 = boundOf(dir.path);
-    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
-      this.reopen(dir, "another folder is at its path");
-  }
-  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
-  // the disk, on the period the file-event delivery owner keeps (the daemon
-  // wires it). It is the one trigger for a replacement no event reaches a
-  // handle for (a strict ancestor renamed away and another tree put at its
-  // path: inotify reports a directory's own removal or self-move, never its
-  // parent's), and the retry of a directory the OS refused or whose handle
-  // errored while no holder newly acquires it. A directory staying as it is
-  // costs one stat, or one refused open, and tells nothing.
-  judge() {
-    for (const dir of this.dirs.values()) this.judged(dir, "period");
-  }
-  // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, or deaf for another reason, it hears the fault.
-  // Listening again, it hears an `unknown` window: whatever changed while the
-  // directory was deaf or bound to another folder went unheard, and a holder
-  // that re-derives on it reports its fault cleared. Deaf for the same reason
-  // is no change and tells nothing.
-  reopen(dir, cause) {
-    const was = dir.state;
-    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    const now2 = this.open(dir, () => dir, cause, was);
-    dir.state = now2;
-    if (now2.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening" || !compareStructural(was.deafness, now2.deafness))
-      this.tell(dir, failedOf(now2.deafness));
-  }
-  // `dirOf` names the watch the handle belongs to; its callbacks run only
-  // after the open returns, once the watch holds the state returned here.
-  open(where, dirOf, cause, was) {
-    const at = where.path;
-    const bound = boundKey(boundOf(at));
-    try {
-      fs_default.opendirSync(at).closeSync();
-      const handle = fs_default.watch(
-        at,
-        { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), handle, changed)
-      );
-      handle.on("error", (e) => {
-        this.logger("warn", `watcher error ${at}: ${e.message}`);
-        if (this.counters) this.counters.watchErrors++;
-        const dir = dirOf();
-        if (!heldBy(dir.state, handle)) return;
-        this.closeHandle(at, handle, "error");
-        const deafness = {
-          kind: "failed",
-          path: at,
-          reason: e.message
-        };
-        dir.state = { kind: "deaf", deafness };
-        this.tell(dir, failedOf(deafness));
-      });
-      if (this.counters) this.counters.dirWatchesOpened++;
-      this.logger(
-        "info",
-        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
-      );
-      return { kind: "listening", handle, bound };
-    } catch (e) {
-      const reason = e.message;
-      const deafness = { kind: "refused", path: at, reason };
-      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
-        this.logger("warn", `watch failed ${at}: ${reason}`);
-      return { kind: "deaf", deafness };
-    }
-  }
-  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
-  // it lists, an unnamed event (the OS may be reporting the filtered child),
-  // or the directory's own name while the folder at the path is no longer the
-  // one this handle bound (its removal or replacement, which macOS reports as
-  // a change and Linux as a rename) reaches the slot. The same name with the
-  // folder unchanged is macOS reporting a child that came or went, or a chmod,
-  // and is not. Judged once per event, for every listener. A move is then
-  // judged, so a handle never stays bound to a folder no longer at its path
-  // and every later event naming the directory is judged against the folder
-  // there.
-  heard(dir, handle, changed) {
-    const { state } = dir;
-    if (!heldBy(state, handle)) return;
-    const moved = changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
-    for (const { slot, filter } of dir.listeners) {
-      if (filter === null || changed === null || filter.has(changed) || moved)
-        this.fire(slot, namedOf(dir.path, changed));
-    }
-    if (moved) this.judged(dir, "moved");
-  }
-  tell(dir, invalidation) {
-    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
-  }
-  fire(slot, invalidation) {
-    if (slot.debounce !== null) {
-      slot.debounce.window = folded(slot.debounce.window, invalidation);
-      return;
-    }
-    const debounce = {
-      window: invalidation,
-      cancel: this.clock.after(
-        DEBOUNCE_MS,
-        () => {
-          slot.debounce = null;
-          const heard = heardOf(debounce.window);
-          for (const holder of slot.holders) {
-            try {
-              holder.onInvalidate(heard);
-            } catch (e) {
-              this.logger(
-                "warn",
-                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
-              );
-            }
-          }
-        },
-        { unref: true }
-      )
-    };
-    slot.debounce = debounce;
-  }
-  makeHandle(slot, holder) {
-    return {
-      get deaf() {
-        return slot.listeners.flatMap(
-          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
-        );
-      },
-      release: () => {
-        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.key) !== slot) return;
-        this.closeSlot(slot, "last release");
-        this.slots.delete(slot.key);
-      }
-    };
-  }
-  closeHandle(at, handle, cause) {
-    try {
-      handle.close();
-    } catch {
-    }
-    if (this.counters) this.counters.dirWatchesClosed++;
-    this.logger(
-      "info",
-      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
-    );
-  }
-  // A directory watch closes with the last slot on it.
-  closeSlot(slot, cause) {
-    if (slot.debounce !== null) {
-      slot.debounce.cancel();
-      slot.debounce = null;
-    }
-    for (const listener of slot.listeners) {
-      const { dir } = listener;
-      dir.listeners.delete(listener);
-      if (dir.listeners.size > 0) continue;
-      if (dir.state.kind === "listening")
-        this.closeHandle(dir.path, dir.state.handle, cause);
-      this.dirs.delete(dir.id);
-    }
-    if (this.counters) this.counters.watchersClosed++;
-  }
-  // The slots held now.
-  size() {
-    return this.slots.size;
-  }
-  // The OS directory watches open now.
-  dirWatches() {
-    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
-  }
-  // Every directory a held watch targets.
-  watchedDirs() {
-    return [...this.dirs.values()].map((d) => d.path);
-  }
-  closeAll() {
-    this.closed = true;
-    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
-    this.slots.clear();
-  }
-};
-
-// src/daemon/cache/file-events.ts
+// src/utils/single-flight.ts
 init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/foundations/file-events-warnings.ts
-init_globals();
-var iso = (at) => new Date(at).toISOString();
-var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
-function fileEventsWarnings(d) {
-  if (d.missedSince === null) return [];
-  const since = iso(d.missedSince);
-  const message = () => {
-    switch (d.kind) {
-      case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
-      case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
-      case "unmeasured":
-        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
-    }
-  };
-  return [{ kind: "file-events", state: d.kind, message: message() }];
-}
-
-// src/daemon/cache/file-events.ts
-var PROBE_EVERY_MS = 3e4;
-var STALL_AFTER = 2;
-var PROBE_FILE = "probe";
-var NO_FILE_EVENTS = {
-  delivery: () => ({
-    kind: "unmeasured",
-    since: 0,
-    reason: "outside the daemon",
-    missedSince: null
-  }),
-  subscribe: () => () => {
+var SingleFlight = class {
+  inflight = /* @__PURE__ */ new Map();
+  run(key, factory) {
+    return this.inflight.get(key) ?? this.start(key, factory);
+  }
+  start(key, factory) {
+    const promise = factory();
+    this.inflight.set(key, promise);
+    const deregister = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(deregister, deregister);
+    return promise;
+  }
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
+  get size() {
+    return this.inflight.size;
   }
 };
-var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
-var FileEventDelivery = class {
-  current;
-  instrument = { kind: "idle" };
-  listeners = /* @__PURE__ */ new Set();
-  stalls = 0;
-  catchUps = 0;
-  probes = 0;
-  probeFailures = 0;
-  watchers;
-  logger;
-  identityOf;
-  clock;
-  constructor(opts) {
-    this.watchers = opts.watchers;
-    this.logger = opts.logger;
-    this.clock = opts.clock;
-    this.identityOf = opts.identityOf ?? statIdentity;
-    this.current = {
-      kind: "unmeasured",
-      since: this.clock.now(),
-      reason: "not started",
-      missedSince: null
-    };
-  }
-  delivery() {
-    return this.current;
-  }
-  subscribe(listener) {
-    this.listeners.add(listener);
-    return () => void this.listeners.delete(listener);
-  }
-  // Only the daemon starts the owner, once it has won its socket: it makes
-  // the folder, opens the one watch, and arms the period.
-  start(folder) {
-    if (this.instrument.kind !== "idle") {
-      throw new Error("file events: the owner was started twice");
-    }
-    const stopPeriod = this.clock.every(
-      PROBE_EVERY_MS,
-      () => void this.tick(),
-      {
-        unref: true
-      }
-    );
-    let identity2;
-    try {
-      fs_default.mkdirSync(folder, { recursive: true });
-      identity2 = this.identityOf(folder);
-    } catch (e) {
-      this.end(
-        stopPeriod,
-        `the probe folder could not be made: ${e.message}`
-      );
-      return;
-    }
-    if (identity2 === "gone") {
-      this.end(stopPeriod, "the probe folder was removed as it was made");
-      return;
-    }
-    const probing = {
-      kind: "probing",
-      folder,
-      identity: identity2,
-      stopPeriod,
-      // [LAW:single-enforcer] The only acquirer of this registry key.
-      handle: this.watchers.acquire(
-        `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
-        (heard) => this.heard(probing, heard)
-      )
-    };
-    this.instrument = probing;
-    this.logger("info", `file events probing folder=${valueOf(folder)}`);
-    const [refusal] = probing.handle.deaf;
-    if (refusal !== void 0) {
-      this.end(
-        stopPeriod,
-        `the OS refused the probe folder's watch: ${refusal.reason}`
-      );
-      return;
-    }
-    this.move({ kind: "delivering", unreported: [], missedSince: null });
-    void this.tick();
-  }
-  stats() {
-    return {
-      delivery: this.current,
-      stalls: this.stalls,
-      catchUps: this.catchUps,
-      probes: this.probes,
-      probeFailures: this.probeFailures
-    };
-  }
-  close() {
-    const inst = this.instrument;
-    this.instrument = { kind: "idle" };
-    this.listeners.clear();
-    switch (inst.kind) {
-      case "probing":
-        inst.handle.release();
-        inst.stopPeriod();
-        return;
-      case "ended":
-        inst.stopPeriod();
-        return;
-      case "idle":
-        return;
-    }
-  }
-  // [LAW:dataflow-not-control-flow] The same steps at the start and every
-  // period after: tell subscribers the period passed; judge the probe folder
-  // against the one the watch opened on, first, so a folder replaced at its
-  // path never reads as a stall; judge the probes still unreported; write the
-  // next one.
-  async tick() {
-    this.notify({ kind: "period" });
-    const inst = this.instrument;
-    if (inst.kind !== "probing") return;
-    let now2;
-    try {
-      now2 = this.identityOf(inst.folder);
-    } catch (e) {
-      this.end(
-        inst.stopPeriod,
-        `the probe folder cannot be read: ${e.message}`
-      );
-      return;
-    }
-    if (now2 === "gone") {
-      this.end(inst.stopPeriod, "the probe folder was removed");
-      return;
-    }
-    if (!sameIdentity(now2, inst.identity)) {
-      this.end(inst.stopPeriod, "the probe folder was replaced");
-      return;
-    }
-    const d = this.current;
-    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
-      this.stalls++;
-      this.move({
-        kind: "stalled",
-        missedSince: d.missedSince ?? d.unreported[0]
-      });
-    }
-    await this.probe(inst);
-  }
-  // A delivering watch awaits the probe; a stalled one awaits none in
-  // particular, since any report recovers it. A write that lands while
-  // unmeasured measures again, awaiting that probe, so a transient failure
-  // (a full disk) measures once it clears. A write that fails is unmeasured
-  // with its error: it tests no watch. A probe still in flight when the
-  // instrument ends or closes judges nothing.
-  async probe(inst) {
-    const at = this.clock.now();
-    const before = this.current;
-    if (before.kind === "delivering") {
-      this.current = { ...before, unreported: [...before.unreported, at] };
-    }
-    try {
-      await fs_default.promises.writeFile(
-        import_node_path7.default.join(inst.folder, PROBE_FILE),
-        String(at)
-      );
-    } catch (e) {
-      this.probeFailures++;
-      const d2 = this.current;
-      if (this.instrument !== inst || d2.kind === "unmeasured") return;
-      this.move({
-        kind: "unmeasured",
-        since: at,
-        reason: `the probe could not be written: ${e.message}`,
-        missedSince: d2.missedSince ?? at
-      });
-      return;
-    }
-    this.probes++;
-    const d = this.current;
-    if (this.instrument !== inst || d.kind !== "unmeasured") return;
-    this.move({
-      kind: "delivering",
-      unreported: [at],
-      missedSince: d.missedSince
-    });
-  }
-  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
-  // OS refuses an immediate retry the way it refused the first (limits,
-  // permissions). Anything else it reports proves delivery.
-  heard(inst, heard) {
-    if (this.instrument !== inst) return;
-    if (heard.kind === "failed") {
-      this.end(
-        inst.stopPeriod,
-        `the probe folder's watch failed: ${heard.reason}`
-      );
-      return;
-    }
-    const d = this.current;
-    const delivering = {
-      kind: "delivering",
-      unreported: [],
-      missedSince: null
-    };
-    if (d.missedSince === null) {
-      this.move(delivering);
-      return;
-    }
-    this.current = delivering;
-    this.catchUps++;
-    this.logger(
-      "info",
-      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
-    );
-    this.notify({ kind: "caught-up", since: d.missedSince });
-  }
-  // [LAW:no-silent-failure] An ended instrument holds no watch and never
-  // measures again, so whatever ended it, only a restart can.
-  end(stopPeriod, reason) {
-    const inst = this.instrument;
-    if (inst.kind === "probing") inst.handle.release();
-    this.instrument = { kind: "ended", stopPeriod };
-    const at = this.clock.now();
-    this.move({
-      kind: "unmeasured",
-      since: at,
-      reason: `${reason}; restart the daemon`,
-      missedSince: this.current.missedSince ?? at
-    });
-  }
-  // [LAW:nothing-unseen] One line on each change of state, none per period.
-  move(next) {
-    const was = label(this.current);
-    this.current = next;
-    if (label(next) === was) return;
-    switch (next.kind) {
-      case "delivering":
-        this.logger("info", "file events delivering");
-        break;
-      case "stalled":
-        this.logger(
-          "warn",
-          `file events stalled since=${iso(next.missedSince)}`
-        );
-        break;
-      case "unmeasured":
-        this.logger(
-          "warn",
-          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
-        );
-        break;
-    }
-    this.notify({ kind: "moved" });
-  }
-  notify(notice) {
-    for (const listener of [...this.listeners]) listener(notice);
-  }
-};
-var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
 
 // src/utils/keyed-source.ts
 init_globals();
@@ -30033,6 +30337,2016 @@ var Refreshes = class {
     );
   }
 };
+
+// src/var-system/store.ts
+init_globals();
+
+// src/var-system/types.ts
+init_globals();
+function isJsonValue(value) {
+  if (value === null) return true;
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object": {
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      const proto = Object.getPrototypeOf(value);
+      return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue);
+    }
+    default:
+      return false;
+  }
+}
+function toDocument(value) {
+  if (Array.isArray(value)) return Object.freeze(value.map(toDocument));
+  if (value !== null && typeof value === "object") {
+    const out = /* @__PURE__ */ Object.create(null);
+    const entries = Object.entries(value).sort(
+      ([a], [b]) => a < b ? -1 : a > b ? 1 : 0
+    );
+    for (const [key, v] of entries) out[key] = toDocument(v);
+    return Object.freeze(out);
+  }
+  return value;
+}
+function typeOf(v) {
+  const t2 = typeof v;
+  if (t2 === "string" || t2 === "number" || t2 === "boolean") return t2;
+  throw new TypeError(
+    `Variable values must be string|number|boolean (got ${t2})`
+  );
+}
+function toString2(v) {
+  return typeof v === "string" ? v : String(v);
+}
+function toNumber(v) {
+  if (typeof v === "number") return v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  const trimmed = v.trim();
+  if (trimmed === "") {
+    throw new TypeError(`Cannot cast empty string to number`);
+  }
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) {
+    throw new TypeError(`Cannot cast ${JSON.stringify(v)} to number`);
+  }
+  return n;
+}
+function toBool(v) {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") {
+    if (v === 0 || v === 1) return v === 1;
+    throw new TypeError(
+      `Cannot cast number ${v} to bool (only 0 and 1 are accepted)`
+    );
+  }
+  if (v === "true") return true;
+  if (v === "false") return false;
+  throw new TypeError(
+    `Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`
+  );
+}
+var PendingValueError = class extends Error {
+  constructor(variable, message) {
+    super(message);
+    this.variable = variable;
+  }
+  variable;
+};
+function readPending(e) {
+  if (e instanceof PendingValueError) return e;
+  return e instanceof Error && e.cause !== void 0 ? readPending(e.cause) : void 0;
+}
+
+// src/var-system/store.ts
+var unwritten = (value) => isPending(value);
+var BoxNode = class {
+  constructor(name, type3, initial2, clock) {
+    this.name = name;
+    this.type = type3;
+    this.clock = clock;
+    if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
+    this.cell = observable.box(initial2, { deep: false });
+    this.lastChangedAt = unwritten(initial2) ? null : clock.now();
+  }
+  name;
+  type;
+  clock;
+  kind = "box";
+  cell;
+  // [LAW:single-enforcer] One write path (`set`) updates both the value and
+  // the timestamp; introspection reads from the same place renderers do.
+  //
+  // It records when the value last CHANGED, which is what debug.ts calls the
+  // node's age and what anyone reading that age is asking (brandon-var-system-
+  // 1tl). Stamping every write instead reported attempts, and reported them most
+  // misleadingly in the one situation where the age is consulted: a source
+  // re-running with no effect.
+  lastChangedAt;
+  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
+  // THE pending signal, which every place a template is evaluated takes as its
+  // own outcome.
+  read() {
+    const value = this.cell.get();
+    if (unwritten(value)) {
+      throw new PendingValueError(
+        this.name,
+        `variable "${this.name}" has no value yet: nothing has written it`
+      );
+    }
+    return value;
+  }
+  // A box written pending is not answered yet again: what its payload holds
+  // is a source that has not answered (src/renderer/render-payload.ts).
+  set(value) {
+    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
+    if (compareStructural(this.cell.get(), value)) return;
+    this.cell.set(value);
+    this.lastChangedAt = this.clock.now();
+  }
+  lastUpdatedMs() {
+    return this.lastChangedAt;
+  }
+  // The cell as written, pending included: what `stored` reads.
+  stored() {
+    return this.cell.get();
+  }
+};
+var Kept = class {
+  cell;
+  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
+  // `equals` is what counts as a change: MobX's own comparison unless given.
+  constructor(what, deriver, equals) {
+    this.cell = computed(deriver, {
+      keepAlive: true,
+      ...equals !== void 0 && { equals }
+    });
+    if (typeof this.cell.suspend_ !== "function") {
+      throw new TypeError(
+        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`
+      );
+    }
+    if (typeof this.cell.keepAlive_ !== "boolean") {
+      throw new TypeError(
+        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`
+      );
+    }
+  }
+  read() {
+    return this.cell.get();
+  }
+  // Unsubscribe from every dependency and drop the cached value. A keepAlive
+  // computed never does this on its own — MobX keeps it subscribed to whatever
+  // it read for as long as those observables live, which for a daemon-wide
+  // observable (the SessionState atom) is the life of the daemon, and that
+  // subscription kept every disposed config's whole store reachable
+  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
+  // computed, so this lifts the guard its own teardown checks and runs that
+  // teardown. Must run inside an action: the unobservation it cascades is
+  // settled when the outermost batch ends.
+  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
+  // `suspend_`) are reached here and nowhere else; the constructor refuses a
+  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
+  release() {
+    this.cell.keepAlive_ = false;
+    this.cell.suspend_();
+  }
+};
+var Projected = class {
+  constructor(deriver) {
+    this.deriver = deriver;
+  }
+  deriver;
+  read() {
+    return this.deriver();
+  }
+};
+var ComputedNode = class {
+  constructor(name, type3, deriver) {
+    this.name = name;
+    this.type = type3;
+    this.cell = new Kept(`Variable "${name}"`, () => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "computed result");
+      return v;
+    });
+  }
+  name;
+  type;
+  kind = "computed";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  release() {
+    this.cell.release();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+var ProjectionNode = class {
+  constructor(name, type3, deriver) {
+    this.name = name;
+    this.type = type3;
+    this.cell = new Projected(() => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "projection result");
+      return v;
+    });
+  }
+  name;
+  type;
+  kind = "projection";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+var DocumentCell = class {
+  constructor(name, initial2, clock) {
+    this.name = name;
+    this.clock = clock;
+    this.cell = observable.box(shaped(initial2), { deep: false });
+    this.lastChangedAt = initial2.kind === "pending" ? null : clock.now();
+  }
+  name;
+  clock;
+  kind = "document";
+  cell;
+  lastChangedAt;
+  read() {
+    return this.cell.get();
+  }
+  set(value) {
+    const next = shaped(value);
+    if (sameDocument(this.cell.get(), next)) return;
+    this.cell.set(next);
+    this.lastChangedAt = this.clock.now();
+  }
+  lastUpdatedMs() {
+    return this.lastChangedAt;
+  }
+};
+var DerivedDocument = class {
+  constructor(name, deriver) {
+    this.name = name;
+    this.cell = new Kept(
+      `Variable "${name}"`,
+      () => shaped(deriver()),
+      sameDocument
+    );
+  }
+  name;
+  kind = "document";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  release() {
+    this.cell.release();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+function documentKey(outcome) {
+  return JSON.stringify(outcome);
+}
+function sameDocument(a, b) {
+  return documentKey(a) === documentKey(b);
+}
+function shaped(outcome) {
+  return outcome.kind === "ok" ? { kind: "ok", value: toDocument(outcome.value) } : outcome;
+}
+function assertType(name, declared, value, context) {
+  const actual = typeOf(value);
+  if (actual !== declared) {
+    throw new TypeError(
+      `Variable "${name}": ${context} type ${actual} does not match declared type ${declared}`
+    );
+  }
+}
+var VariableStore = class {
+  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
+  // changed; a child store reads the same one as its parent.
+  constructor(clock, parent = null) {
+    this.clock = clock;
+    this.parent = parent;
+  }
+  clock;
+  parent;
+  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
+  // observable: a reaction that read a name before its declaration (a cache
+  // key over a variable declared after it) re-runs when it is declared, so
+  // what it sees does not depend on the order the config lists variables in.
+  // `deep: false` keeps each node the object it was declared as.
+  nodes = observable.map(void 0, {
+    deep: false
+  });
+  defineBox(name, type3, initial2) {
+    this.declare(name, new BoxNode(name, type3, initial2, this.clock));
+  }
+  defineDocument(name, initial2) {
+    this.declare(name, new DocumentCell(name, initial2, this.clock));
+  }
+  // A document whose reading the deriver computes from what it reads.
+  defineDerivedDocument(name, deriver) {
+    this.declare(name, new DerivedDocument(name, deriver));
+  }
+  // Computed deriver receives a `read` function that returns the value
+  // of any variable in the store. Calling `read(other)` from inside the
+  // deriver is what registers the dependency with MobX — the deriver's
+  // body is the dep graph.
+  defineComputed(name, type3, deriver) {
+    this.defineDerived(name, type3, "computed", deriver);
+  }
+  defineDerived(name, type3, derivation, deriver) {
+    const reader = (other) => this.read(other);
+    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
+    this.declare(name, new Node(name, type3, () => deriver(reader)));
+  }
+  // A derived value of this store that is no variable — a template a draw
+  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
+  // what it read changes, or derived at every read, and released with them.
+  derive(name, derivation, deriver) {
+    this.refuseDisposed(`Derived value "${name}"`);
+    if (derivation === "projection") return new Projected(deriver);
+    const kept = new Kept(`Derived value "${name}"`, deriver);
+    this.kept.push(kept);
+    return kept;
+  }
+  kept = [];
+  read(name) {
+    return this.requireVar(name).read();
+  }
+  readDocument(name) {
+    const node = this.requireNode(name);
+    if (node.kind !== "document") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a document`
+      );
+    }
+    return node.read();
+  }
+  // A written node's value as stored, pending included and nothing
+  // serialized: a box's value or a document's reading. Read in a reaction, it
+  // moves exactly when the node is written, which its own compare decides.
+  stored(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") return node.read();
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a written node`
+      );
+    }
+    return node.stored();
+  }
+  setDocument(name, value) {
+    const node = this.requireOwn(name);
+    if (!(node instanceof DocumentCell)) {
+      throw new TypeError(
+        node.kind === "document" ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it` : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`
+      );
+    }
+    runInAction(() => node.set(value));
+  }
+  setBox(name, value) {
+    const node = this.requireOwn(name);
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`
+      );
+    }
+    runInAction(() => node.set(value));
+  }
+  // Wrap multi-variable updates so dependents only invalidate once per
+  // batch. Used by the render path to push a whole input payload before
+  // any computed re-evaluates.
+  runInAction(fn) {
+    runInAction(fn);
+  }
+  has(name) {
+    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
+  }
+  getType(name) {
+    return this.requireVar(name).type;
+  }
+  getKind(name) {
+    return this.requireNode(name).kind;
+  }
+  // [LAW:one-source-of-truth] A string that changes exactly when the node's
+  // value does — the ONE spelling a change-driven reaction (a `depends_on`
+  // cache policy) compares, total over node kinds so a document can be
+  // depended on like a scalar — or pending, while the node has no value yet.
+  // Structural for documents: every stored document has sorted keys
+  // (toDocument), so a rescan yielding the same content in another key order
+  // is not a change. A failure is a key like any other, never a failed
+  // reading: a dependant re-reads when its dependency starts or stops failing.
+  changeKey(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      const doc = node.read();
+      return doc.kind === "pending" ? doc : ok(documentKey(doc));
+    }
+    try {
+      return ok(String(node.read()));
+    } catch (e) {
+      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
+  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
+  // returning the BoxNode directly would leak `.set` structurally even
+  // though VarNode does not advertise it. The returned wrapper is a fresh
+  // object exposing only the VarNode surface — `.set` is unreachable at
+  // any level (no structural escape, no plain-JS reach-through). The
+  // mutation path remains gated behind `setBox`, which wraps in
+  // runInAction to satisfy MobX strict-mode.
+  //
+  // [LAW:single-enforcer] One requireNode call per consumer-row — the
+  // round-1 dedup fix in introspectVars relies on the caller getting both
+  // type/kind and a read() in one go without paying for a second
+  // requireNode. The wrapper preserves that.
+  getNode(name) {
+    const node = this.requireNode(name);
+    return node.kind === "document" ? {
+      name: node.name,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs()
+    } : {
+      name: node.name,
+      type: node.type,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs()
+    };
+  }
+  names() {
+    return [...this.parent?.names() ?? [], ...this.nodes.keys()];
+  }
+  // Release every computed's subscriptions, so nothing outliving this store
+  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
+  // boxes and documents die with it; only the computeds hold references
+  // outward. Reads after dispose still answer — a released computed recomputes
+  // uncached, and outside a batch subscribes to nothing (inside one, MobX
+  // tracks it for the batch and unobserves again as the batch ends) — so a
+  // late reader cannot resubscribe the store to the world for good. A
+  // declaration after dispose would: it would mint a keepAlive computed with
+  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
+  // released, the fact the caller's log line carries (0 on a second call). One action, so the
+  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
+  // called by SourceRegistry.dispose, the one teardown of everything a config
+  // holds.
+  dispose() {
+    if (this.disposed) return 0;
+    this.disposed = true;
+    let released = 0;
+    runInAction(() => {
+      for (const node of this.nodes.values()) {
+        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
+          node.release();
+          released++;
+        }
+      }
+      for (const kept of this.kept) kept.release();
+    });
+    return released + this.kept.length;
+  }
+  disposed = false;
+  requireNode(name) {
+    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
+    if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
+    return node;
+  }
+  // [LAW:single-enforcer] The one door a write takes: a node of this store.
+  // A view writing its directory's node would write every session's value.
+  requireOwn(name) {
+    const node = this.nodes.get(name);
+    if (node !== void 0) return node;
+    if (this.parent?.has(name)) {
+      throw new Error(
+        `Variable "${name}" lives in the directory's store; a session's view cannot write it`
+      );
+    }
+    throw new ReferenceError(`Unknown variable "${name}"`);
+  }
+  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
+  // VarNode; a document reached through them is a caller asking a namespace
+  // for a scalar, said so by name rather than coerced to text.
+  requireVar(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      throw new TypeError(
+        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`
+      );
+    }
+    return node;
+  }
+  // [LAW:no-silent-failure] A computed declared after dispose has no release
+  // to come: it would subscribe to the world and hold this store exactly as
+  // before brandon-unfiled-3248.t14.
+  refuseDisposed(what) {
+    if (this.disposed) {
+      throw new Error(`${what}: cannot declare on a disposed store`);
+    }
+  }
+  declare(name, node) {
+    this.refuseDisposed(`Variable "${name}"`);
+    if (this.has(name)) {
+      throw new Error(`Variable "${name}" is already declared`);
+    }
+    runInAction(() => this.nodes.set(name, node));
+  }
+};
+
+// src/daemon/foundations/today-facts.ts
+init_globals();
+var EMPTY_DAY = {
+  cost: 0,
+  input: 0,
+  output: 0,
+  cacheCreation: 0,
+  cacheRead: 0
+};
+function addDay(into, d) {
+  into.cost += d.cost;
+  into.input += d.input;
+  into.output += d.output;
+  into.cacheCreation += d.cacheCreation;
+  into.cacheRead += d.cacheRead;
+}
+function dayKey(date2) {
+  const year = date2.getFullYear();
+  const month = String(date2.getMonth() + 1).padStart(2, "0");
+  const day = String(date2.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function projectToday(facts, at) {
+  const today = dayKey(dateOf(at));
+  const inSet = facts.sums[today];
+  const own2 = facts.own[today];
+  if (inSet === void 0 && own2 === void 0) return ABSENT;
+  const total = { ...EMPTY_DAY };
+  if (inSet !== void 0) addDay(total, inSet);
+  if (own2 !== void 0) addDay(total, own2);
+  return ok({
+    cost: total.cost,
+    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
+    tokenBreakdown: {
+      input: total.input,
+      output: total.output,
+      cacheCreation: total.cacheCreation,
+      cacheRead: total.cacheRead
+    },
+    date: today
+  });
+}
+
+// src/daemon/cache/session-usage-store.ts
+var SPEED_RING_CAPACITY = 64;
+function speedSampleOf(breakdown, turnOpen, atMs) {
+  const input = breakdown ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead : 0;
+  const output = breakdown ? breakdown.output : 0;
+  return { input, output, total: input + output, atMs, turnOpen };
+}
+var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
+var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
+var DEFAULT_RESCAN = { okMs: 60 * 1e3, failedMs: 10 * 1e3 };
+var MAX_UNHELD_SCANS = 8;
+var SEED_CONCURRENCY = 8;
+var EMPTY_USAGE = {
+  calculatedCost: null,
+  tokens: null,
+  tokenBreakdown: null
+};
+function seedCutoffMs(now2) {
+  const d = new Date(now2);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - 1);
+  return d.getTime();
+}
+function emptyBreakdown() {
+  return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
+}
+var EMPTY_FILE_FOLD = {
+  entries: 0,
+  cost: 0,
+  breakdown: emptyBreakdown(),
+  days: /* @__PURE__ */ new Map(),
+  turnOpen: false,
+  response: void 0
+};
+function responseOf(entry) {
+  const id2 = entry.message?.id;
+  return id2 === void 0 ? void 0 : `${id2}:${entry.raw.requestId ?? ""}`;
+}
+async function foldFile(state, entries, cacheRoot, clock) {
+  const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
+  let count = state.entries;
+  let cost = state.cost;
+  let turnOpen = state.turnOpen;
+  let last2 = state.response;
+  const breakdown = { ...state.breakdown };
+  const days = /* @__PURE__ */ new Map();
+  for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
+  for (const entry of entries) {
+    turnOpen = turnOpenAfter(turnOpen, entry);
+    const u = entry.message?.usage;
+    if (!u) continue;
+    const response = responseOf(entry);
+    if (response !== void 0 && response === last2) continue;
+    last2 = response;
+    count++;
+    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
+    cost += priced;
+    breakdown.input += u.input_tokens || 0;
+    breakdown.output += u.output_tokens || 0;
+    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
+    breakdown.cacheRead += u.cache_read_input_tokens || 0;
+    const key = dayKey(new Date(entry.timestamp));
+    if (key < keep2) continue;
+    const d = days.get(key) ?? { ...EMPTY_DAY };
+    d.cost += priced;
+    d.input += u.input_tokens || 0;
+    d.output += u.output_tokens || 0;
+    d.cacheCreation += u.cache_creation_input_tokens || 0;
+    d.cacheRead += u.cache_read_input_tokens || 0;
+    days.set(key, d);
+  }
+  return { entries: count, cost, breakdown, days, turnOpen, response: last2 };
+}
+function mergeFolds(files) {
+  let count = 0;
+  let cost = 0;
+  const bd = emptyBreakdown();
+  const days = /* @__PURE__ */ new Map();
+  for (const { value: f } of files.values()) {
+    count += f.entries;
+    cost += f.cost;
+    bd.input += f.breakdown.input;
+    bd.output += f.breakdown.output;
+    bd.cacheCreation += f.breakdown.cacheCreation;
+    bd.cacheRead += f.breakdown.cacheRead;
+    for (const [k, v] of f.days) {
+      const d = days.get(k) ?? { ...EMPTY_DAY };
+      addDay(d, v);
+      days.set(k, d);
+    }
+  }
+  if (count === 0) return { usage: EMPTY_USAGE, days };
+  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
+  return {
+    usage: {
+      calculatedCost: cost,
+      tokens,
+      tokenBreakdown: bd
+    },
+    days
+  };
+}
+function under(path43, roots) {
+  return path43 !== void 0 && roots.some((root) => path43.startsWith(root));
+}
+function daySumsOver(slots, roots) {
+  const sums = /* @__PURE__ */ new Map();
+  for (const { record: record2 } of slots) {
+    if (record2 === void 0 || !under(record2.transcriptPath, roots)) continue;
+    for (const [day, d] of record2.days) {
+      const sum2 = sums.get(day) ?? { ...EMPTY_DAY };
+      addDay(sum2, d);
+      sums.set(day, sum2);
+    }
+  }
+  return Object.fromEntries(sums);
+}
+async function mapPool(items, limit, fn) {
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await fn(item);
+    }
+  };
+  const width = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: width }, worker));
+}
+function answer(box, value) {
+  runInAction(() => box.set(value));
+}
+var SessionUsageStore = class {
+  // No count cap: `today` is a fold over every record, so a cap smaller than
+  // the day's sessions would drop work from it unseen. A record is a few
+  // scalars per file and retained day, and `sweepStale` bounds the map to the
+  // sessions seen within `staleAgeMs` plus those holding work done today.
+  // Observable, shallowly: a slot replaced is the change the day sums read.
+  sessions = observable.map(
+    void 0,
+    {
+      deep: false
+    }
+  );
+  // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
+  // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
+  // not a cache — the records map IS the cache).
+  flight = new SingleFlight();
+  // [LAW:single-enforcer] The one owner of when a directory set is scanned:
+  // its first read is the seed, and its period, which runs only while a home
+  // holds the set, is the rescan. Keyed by the directories themselves, so a
+  // default that resolves to one directory shares a scan with that directory
+  // named outright. Its answer is `today`'s, a failed scan included.
+  scans;
+  // Each directory set's day sums, derived from the records, kept for the
+  // store's life: there are as few as the Claude Code directories rendered
+  // from, and each reads only this store's own map.
+  daySets = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
+  // for the speed sample. Concurrent renders observing the SAME transcript state
+  // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
+  // exactly once — so they return the same prev+cur and render identical,
+  // deterministic throughput instead of the second clobbering the first.
+  speedFlight = new SingleFlight();
+  // [LAW:single-enforcer] A refresh of a session is one unit of work per
+  // (session, observed stamp): the lanes that read the record (session,
+  // speed) share it, so it records and logs once.
+  refreshFlight = new SingleFlight();
+  staleAgeMs;
+  // The machine the store reads: where transcripts live, and where the
+  // pricing table is cached.
+  host;
+  log;
+  refreshTally = { hits: 0, misses: 0 };
+  ledger;
+  // The session record's refresh, which its transcript lanes make; a
+  // rescan's reads are its `today` scan's.
+  usage;
+  sweeps = 0;
+  stopSweep = null;
+  closed = false;
+  clock;
+  constructor(opts) {
+    this.host = opts.host;
+    this.clock = opts.clock;
+    this.log = opts.logger ?? quietLogger;
+    this.ledger = opts.ledger ?? new RefreshLedger(this.log);
+    this.usage = this.ledger.declare({
+      name: "usage",
+      scope: "session",
+      refresh: ["first", "period", "change"],
+      lines: []
+    });
+    this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
+    this.scans = new KeyedSource({
+      name: "today",
+      scope: "configDir",
+      keyOf: (paths2) => paths2.join("\0"),
+      fields: (paths2) => `dirs=${valueOf(paths2.join(","))}`,
+      read: (paths2) => this.scan(paths2),
+      every: () => opts.rescan ?? DEFAULT_RESCAN,
+      watch: NO_WATCH,
+      maxEntries: MAX_UNHELD_SCANS,
+      lines: REFRESH_TRIGGERS,
+      logger: this.log,
+      ledger: this.ledger,
+      clock: this.clock
+    });
+    const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+    if (interval > 0) {
+      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
+        unref: true
+      });
+    }
+  }
+  getStats() {
+    return {
+      size: this.sessions.size,
+      hits: this.refreshTally.hits,
+      misses: this.refreshTally.misses,
+      sweeps: this.sweeps
+    };
+  }
+  // The scans as a source: the directory sets kept, those a home holds, the
+  // seeds (`first`) and rescans (`period`), and how many failed.
+  scanStats() {
+    return this.scans.stats();
+  }
+  // [LAW:no-ambient-temporal-coupling] One refresh of a session, as a value:
+  // its session and speed lanes read the one ingest it starts, whichever asks
+  // first and whenever the other lands, so it reads, records and logs once.
+  // `by` is what asked for it (src/daemon/cache/transcript-lanes.ts).
+  refresh(sessionId2, transcriptPath, by) {
+    let refresh = null;
+    const once2 = () => {
+      if (refresh !== null) return refresh;
+      const stamp2 = statStamp(transcriptPath);
+      refresh = {
+        stamp: stamp2,
+        record: this.refreshed(sessionId2, transcriptPath, stamp2, by)
+      };
+      return refresh;
+    };
+    return {
+      // [LAW:no-silent-failure] A failed transcript parse flows out as
+      // `failed`; an unknown or empty session is the all-null totals, whose
+      // fields the payload drops one by one, so the hook's cost still lands
+      // over a session with no record.
+      usage: async () => {
+        const record2 = await once2().record;
+        if (record2.kind === "failed") return record2;
+        return ok(record2.kind === "ok" ? record2.value.usage : EMPTY_USAGE);
+      },
+      speed: (nowMs) => this.observed(sessionId2, once2, nowMs)
+    };
+  }
+  // The `session` projection as the session's last refresh left it, for a
+  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
+  // dropped) is not answered yet; one whose refresh found no transcript is the
+  // empty record its refresh answers for it.
+  usageOf(sessionId2) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot === void 0) return pendingOf("unread");
+    const failure = slot.failure.get();
+    if (failure !== null) return failed(failure, "read");
+    return ok(slot.record?.usage ?? EMPTY_USAGE);
+  }
+  // A refresh's ingest of its session, whose outcome the session's slot keeps
+  // for the draws until the next one.
+  refreshed(sessionId2, transcriptPath, stamp2, by) {
+    return this.refreshFlight.run(`${sessionId2}:${stamp2}`, async () => {
+      const tally = { hits: 0, misses: 0 };
+      const startedAt = this.clock.monotonic();
+      const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
+      this.refreshTally.hits += tally.hits;
+      this.refreshTally.misses += tally.misses;
+      if (tally.misses > 0) {
+        this.usage.recorded(
+          `sid=${valueOf(sessionId2)}`,
+          by,
+          record2,
+          elapsedMs(this.clock, startedAt)
+        );
+      }
+      answer(
+        this.hold(sessionId2).failure,
+        record2.kind === "failed" ? record2.reason : null
+      );
+      return record2;
+    });
+  }
+  // The `today` projection, which declareToday and daysOutside below answer
+  // together: the cross-session sum of every record's today bucket.
+  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
+  // makes the whole projection `failed` — a total silently missing today's
+  // main work would be a confident wrong number, worse than a loud gap.
+  //
+  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
+  // the sum is that session plus every session whose transcript lives in THAT
+  // directory — the daemon's own env names none.
+  // [LAW:no-ambient-temporal-coupling] Whose `today` a record is in is read
+  // off where its transcript lives: a sum over every directory seen so far, or
+  // over the sessions that had asked, would move with which other sessions
+  // happened to have rendered.
+  // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
+  // src/renderer/render-payload.ts): the directory set's scans, held, so a set
+  // no scan has answered starts its first one now — before the request or the
+  // frame that reads it. The lane answers the set's day sums once a scan has
+  // answered; which day of them is the draw's (`projectToday`).
+  declareToday(holds2, claudeConfigDir2) {
+    if (this.closed) return settledLane(failed("usage store closed", "read"));
+    const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
+    const scans = this.scans.declare(holds2, claudePaths);
+    const set2 = this.daySet(claudePaths);
+    return {
+      current: () => {
+        const scan = scans.current();
+        return scan.kind === "ok" ? ok({ roots: set2.roots, sums: set2.sums.read() }) : scan;
+      }
+    };
+  }
+  // A session's own days as its record stands, for the `today` fact of a
+  // session whose transcript no directory set sums: no I/O, no fold.
+  // [LAW:no-silent-failure] Its last ingest failing is this read failing, so
+  // the fact fails with it and the draw shows a gap, never a total silently
+  // missing the session's own work.
+  daysOf(sessionId2) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot === void 0) return ABSENT;
+    const failure = slot.failure.get();
+    if (failure !== null) return failed(failure, "read");
+    return slot.record === void 0 ? ABSENT : ok(Object.fromEntries(slot.record.days));
+  }
+  // A refresh's speed sample, over its one ingest of the session: its current
+  // cumulative counts and whether its turn is open, added to the session's
+  // ring — taken only at a stamp no sample was taken at, so a period over an
+  // unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
+  // as `failed` (the boundary logs it and the segment reads "—"); an unknown
+  // session yields a zero-count sample, so a first-ever render establishes a
+  // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
+  // clock instant — the store never reads the clock for tok/s timing itself.
+  async observed(sessionId2, refresh, nowMs) {
+    const { stamp: stamp2, record: refreshed } = refresh();
+    return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
+      const record2 = await refreshed;
+      if (record2.kind === "failed") {
+        answer(this.hold(sessionId2).speed, record2);
+        return record2;
+      }
+      const slot = this.hold(sessionId2);
+      const standing2 = slot.speed.get();
+      if (slot.sampledAt === stamp2 && standing2?.kind === "ok") return standing2;
+      const cur = record2.kind === "ok" ? speedSampleOf(
+        record2.value.usage.tokenBreakdown,
+        record2.value.turnOpen,
+        nowMs
+      ) : speedSampleOf(null, false, nowMs);
+      const { ring } = slot;
+      ring.push(cur);
+      ring.sort((a, b) => a.atMs - b.atMs);
+      if (ring.length > SPEED_RING_CAPACITY) ring.shift();
+      slot.sampledAt = stamp2;
+      const observed = ok({ samples: [...ring] });
+      answer(slot.speed, observed);
+      return observed;
+    });
+  }
+  // The session's speed as its last refresh observed it, for a draw: a frame
+  // takes no sample, so how often the bar is drawn moves no rate.
+  speedOf(sessionId2) {
+    return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
+  }
+  // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
+  // `absent` is a session with no transcript to read, `failed` is a
+  // transcript that exists but couldn't be parsed — NOT cached (only ok
+  // records are stored; the next render retries, same rule as the git
+  // cache). This is the single write-path of a slot's record.
+  async ingest(sessionId2, transcriptPath, tally, stamp2) {
+    const existing = this.see(sessionId2)?.record;
+    if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
+      tally.hits++;
+      return ok(existing);
+    }
+    if (!transcriptPath) return existing ? ok(existing) : ABSENT;
+    tally.misses++;
+    let refolded;
+    try {
+      refolded = await this.flight.run(`${sessionId2}:${stamp2}`, async () => {
+        const prior2 = this.sessions.get(sessionId2)?.record;
+        return {
+          prior: prior2,
+          outcome: await this.refold(sessionId2, transcriptPath, prior2)
+        };
+      });
+    } catch (error) {
+      return failed(
+        `usage refold (${sessionId2}): ${error instanceof Error ? error.message : String(error)}`,
+        "read"
+      );
+    }
+    const { prior, outcome } = refolded;
+    if (outcome.kind !== "ok") return outcome;
+    const { mainStamp, ...folded2 } = outcome.value;
+    const record2 = {
+      ...folded2,
+      transcriptStamp: mainStamp,
+      transcriptPath
+    };
+    const landed = this.sessions.get(sessionId2)?.record;
+    if (landed === prior) {
+      this.stored(sessionId2, record2);
+      return ok(record2);
+    }
+    if (landed === void 0) return ok(record2);
+    return this.ingest(sessionId2, transcriptPath, tally, stamp2);
+  }
+  // [LAW:single-enforcer] The one write of a slot's record: the slot is
+  // replaced in the observable map, which is the change the day sums derive
+  // from.
+  stored(sessionId2, record2) {
+    const slot = this.hold(sessionId2);
+    runInAction(() => this.sessions.set(sessionId2, { ...slot, record: record2 }));
+  }
+  // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
+  // undefined while the store holds nothing for it — asking stores nothing.
+  see(sessionId2) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot) slot.lastSeenAt = this.clock.now();
+    return slot;
+  }
+  // The slot something is about to be stored in, created on the first store.
+  hold(sessionId2) {
+    const seen2 = this.see(sessionId2);
+    if (seen2) return seen2;
+    const slot = {
+      lastSeenAt: this.clock.now(),
+      record: void 0,
+      ring: [],
+      sampledAt: null,
+      failure: observable.box(null),
+      speed: observable.box(void 0, {
+        deep: false
+      })
+    };
+    runInAction(() => this.sessions.set(sessionId2, slot));
+    return slot;
+  }
+  // A directory set's day sums, derived on first ask and kept with the store.
+  daySet(claudePaths) {
+    const key = claudePaths.join("\0");
+    const known = this.daySets.get(key);
+    if (known !== void 0) return known;
+    const roots = claudePaths.map((dir) => (0, import_node_path5.join)(dir, "projects") + import_node_path5.sep);
+    const set2 = {
+      roots,
+      sums: new Kept(
+        `today over ${claudePaths.join(",")}`,
+        () => daySumsOver(this.sessions.values(), roots)
+      )
+    };
+    this.daySets.set(key, set2);
+    return set2;
+  }
+  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
+  // prior record — the transcript (and each agent sidechain) is append-only, so
+  // per-render work is O(new bytes), not O(file). The whole-file case (cold
+  // record, or a first-ever read) is the same path with an empty prior: the
+  // reader yields the whole file from offset 0. A `failed` read on any file
+  // fails the fold (the boundary logs it); an `absent` file (not yet written /
+  // agent removed) keeps its prior fold and contributes nothing new.
+  async refold(sessionId2, transcriptPath, prior) {
+    const agents = await findAgentTranscripts(
+      sessionId2,
+      (0, import_node_path5.dirname)(transcriptPath),
+      prior === void 0 ? void 0 : new Set(prior.files.keys())
+    );
+    for (const line of longLineLog(agents.longLines)) this.log("info", line);
+    const newFiles = /* @__PURE__ */ new Map();
+    let mainStamp = "";
+    for (const filePath2 of [transcriptPath, ...agents.paths]) {
+      const priorFold = prior?.files.get(filePath2);
+      const read2 = await foldAppended(
+        filePath2,
+        priorFold,
+        EMPTY_FILE_FOLD,
+        (state, entries) => foldFile(state, entries, cacheDir(this.host), this.clock)
+      );
+      if (read2.kind === "failed") return read2;
+      if (read2.kind === "absent") {
+        if (priorFold) newFiles.set(filePath2, priorFold);
+        continue;
+      }
+      const { folded: folded2, longLines } = read2.value;
+      for (const line of longLineLog(longLines)) this.log("info", line);
+      newFiles.set(filePath2, folded2);
+      if (filePath2 === transcriptPath) mainStamp = folded2.cursor.stamp;
+    }
+    return ok({
+      files: newFiles,
+      ...mergeFolds(newFiles),
+      mainStamp,
+      turnOpen: newFiles.get(transcriptPath)?.value.turnOpen ?? false
+    });
+  }
+  // The one whole-tree scan of a directory set — its seed, or a rescan:
+  // ingest every session whose transcript was touched recently enough to hold
+  // a today entry. A rescan is the same scan over warm records, so it costs a
+  // stat per transcript plus the bytes appended since the last one.
+  // [LAW:no-silent-failure] A scan that throws, or that could not read a
+  // session it found, answers as failed, which is `today`'s failure until a
+  // scan lands — never a sum silently missing the sessions it did not reach.
+  // Only a file or directory gone between the listing and its read (ENOENT) is
+  // absence.
+  async scan(claudePaths) {
+    try {
+      const cutoff = seedCutoffMs(this.clock.now());
+      const projectPaths = await findProjectPaths(claudePaths);
+      const candidates = [];
+      for (const dir of projectPaths) {
+        const files = await unlessGone(readdir2(dir));
+        for (const file of files ?? []) {
+          if (!file.endsWith(".jsonl")) continue;
+          const filePath2 = (0, import_node_path5.join)(dir, file);
+          const st = await unlessGone(stat2(filePath2));
+          if (st === void 0 || st.mtimeMs < cutoff) continue;
+          const id2 = parseSessionId(file.slice(0, -".jsonl".length));
+          if (!id2.ok) {
+            this.log(
+              "warn",
+              `usageStore scan: transcript ${JSON.stringify(file)} names no session: session id ${id2.problem}`
+            );
+            continue;
+          }
+          candidates.push({
+            sessionId: id2.id,
+            path: filePath2,
+            stamp: stampOf(st)
+          });
+        }
+      }
+      const failures = [];
+      const tally = { hits: 0, misses: 0 };
+      await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
+        const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
+        if (outcome.kind === "failed") {
+          failures.push(outcome.reason);
+          this.log("warn", `usageStore scan: ${outcome.reason}`);
+        }
+      });
+      this.log(
+        "info",
+        `usageStore scan dirs=${valueOf(claudePaths.join(","))} sessions=${candidates.length} read=${tally.misses} failed=${failures.length}`
+      );
+      if (failures.length > 0) {
+        return failed(
+          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read \u2014 ${failures[0]}`,
+          "read"
+        );
+      }
+      return ok({ sessions: candidates.length, read: tally.misses });
+    } catch (error) {
+      return failed(
+        `usage scan: ${error instanceof Error ? error.message : String(error)}`,
+        "read"
+      );
+    }
+  }
+  // Public for tests; called periodically from the timer. Drops what nothing
+  // reads any more: a session unseen for `staleAgeMs` holding no bucket for
+  // today. A stale record holding one is `held`, since `today` sums it — a
+  // session whose transcript the scans have stopped visiting is seen no more,
+  // and a day can run past `staleAgeMs` (a 25-hour DST day).
+  // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
+  // wall clock a frame's instant and the scan's cutoff read too.
+  sweepStale() {
+    const now2 = this.clock.now();
+    const today = dayKey(new Date(now2));
+    let dropped = 0;
+    let held = 0;
+    let noRecord = 0;
+    runInAction(() => {
+      for (const [sid, { lastSeenAt, record: record2 }] of [...this.sessions]) {
+        if (now2 - lastSeenAt <= this.staleAgeMs) continue;
+        if (record2?.days.has(today)) {
+          held++;
+          continue;
+        }
+        this.sessions.delete(sid);
+        dropped++;
+        if (record2 === void 0) noRecord++;
+      }
+    });
+    if (dropped > 0) this.sweeps++;
+    if (dropped > 0 || held > 0) {
+      this.log(
+        "info",
+        `usageStore sweep dropped=${dropped} noRecord=${noRecord} held=${held}`
+      );
+    }
+    return dropped;
+  }
+  close() {
+    this.closed = true;
+    this.stopSweep?.();
+    this.stopSweep = null;
+    this.scans.close();
+    runInAction(() => {
+      for (const { sums } of this.daySets.values()) sums.release();
+      this.sessions.clear();
+    });
+    this.daySets.clear();
+  }
+};
+
+// src/facts/world-state.ts
+init_globals();
+var UNREAD_RUN = {
+  reading: pendingOf("unread"),
+  fault: null
+};
+var IDLE = { kind: "idle" };
+var REFRESH_LANES = [
+  "session",
+  "context",
+  "metrics",
+  "activity",
+  "cache",
+  "speed",
+  "autocompact"
+];
+function formatVersion(v) {
+  return v.join(".");
+}
+var SHORT_DIGEST_LENGTH = 7;
+var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
+function stampFailureOf(document) {
+  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
+}
+
+// src/claude-settings.ts
+init_globals();
+var import_node_path6 = __toESM(require_path_browserify(), 1);
+var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function claudeConfigDir(detected, home) {
+  return detected ?? import_node_path6.default.join(home, ".claude");
+}
+function claudeSettingsPath(configDir) {
+  return import_node_path6.default.join(configDir, "settings.json");
+}
+function claudeManagedSettingsDir(platform3) {
+  switch (platform3) {
+    case "darwin":
+      return "/Library/Application Support/ClaudeCode";
+    case "win32":
+      return "C:\\Program Files\\ClaudeCode";
+    default:
+      return "/etc/claude-code";
+  }
+}
+var claudeManagedSettingsDirIn = (env2) => env2.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process_default.platform);
+var projectLocalSettingsFile = (projectDir) => import_node_path6.default.join(projectDir, ".claude", "settings.local.json");
+var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// src/daemon/source-runs.ts
+init_globals();
+
+// src/daemon/cache/watchers.ts
+init_globals();
+var import_node_path9 = __toESM(require_path_browserify(), 1);
+
+// src/utils/folder-identity.ts
+init_globals();
+var statIdentity = (folder) => {
+  try {
+    const st = fs_default.statSync(folder, { bigint: true });
+    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
+  } catch (e) {
+    const code = e.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return "gone";
+    throw e;
+  }
+};
+var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
+var boundOf = (folder) => {
+  try {
+    return statIdentity(folder);
+  } catch (e) {
+    return { unreadable: e.code ?? String(e) };
+  }
+};
+var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
+var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
+
+// src/daemon/foundations/watch-targets.ts
+init_globals();
+
+// src/utils/atomic-write.ts
+init_globals();
+var import_node_path7 = __toESM(require_path_browserify(), 1);
+function writeAtomic(at, text4, mode) {
+  const file = resolvedTarget(at);
+  fs_default.mkdirSync(import_node_path7.default.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  const fileMode = mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
+  try {
+    fs_default.writeFileSync(
+      tmp,
+      text4,
+      fileMode === void 0 ? {} : { mode: fileMode }
+    );
+    fs_default.renameSync(tmp, file);
+  } catch (e) {
+    fs_default.rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+function resolvedTarget(at) {
+  return linkChain(at).at(-1);
+}
+function linkChain(at) {
+  const { hops, stopped: stopped2 } = walkLinks(at);
+  if (stopped2 !== null) throw stopped2;
+  return hops;
+}
+function walkLinks(at) {
+  const hops = [at];
+  try {
+    for (let n = 0; n < MAX_LINK_HOPS; n++) {
+      const next = linkTarget(hops[hops.length - 1]);
+      if (next === null) return { hops, stopped: null };
+      hops.push(next);
+    }
+    return {
+      hops,
+      stopped: new Error(`${at}: more than ${MAX_LINK_HOPS} symbolic links`)
+    };
+  } catch (e) {
+    return { hops, stopped: e };
+  }
+}
+function linkTarget(file) {
+  try {
+    if (!fs_default.lstatSync(file).isSymbolicLink()) return null;
+    return import_node_path7.default.resolve(
+      fs_default.realpathSync(import_node_path7.default.dirname(file)),
+      fs_default.readlinkSync(file)
+    );
+  } catch (e) {
+    const { code } = e;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw e;
+  }
+}
+var MAX_LINK_HOPS = 40;
+
+// src/utils/watch-target.ts
+init_globals();
+var import_node_path8 = __toESM(require_path_browserify(), 1);
+function nearestWatchTarget(candidate) {
+  let name = import_node_path8.default.basename(candidate);
+  let dir = import_node_path8.default.dirname(candidate);
+  for (; ; ) {
+    const real = canonicalDirectory(dir);
+    if (real !== null)
+      return { dir: real, name, leaf: dir === import_node_path8.default.dirname(candidate) };
+    name = import_node_path8.default.basename(dir);
+    dir = import_node_path8.default.dirname(dir);
+  }
+}
+function canonicalDirectory(p2) {
+  try {
+    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/daemon/foundations/watch-targets.ts
+function watchTargetsOf(paths2) {
+  const unresolved = [];
+  let reached = true;
+  const byDir = /* @__PURE__ */ new Map();
+  for (const at of paths2.named) {
+    const { hops, stopped: stopped2 } = walkLinks(at);
+    if (stopped2 !== null)
+      unresolved.push({ path: at, reason: stopped2.message });
+    for (const hop of hops) {
+      const { dir, name, leaf } = nearestWatchTarget(hop);
+      reached &&= leaf;
+      const names = byDir.has(dir) ? byDir.get(dir) : /* @__PURE__ */ new Set();
+      names?.add(name);
+      byDir.set(dir, names);
+    }
+  }
+  for (const dir of paths2.whole.map(canonicalDirectory))
+    if (dir !== null) byDir.set(dir, null);
+  const targets = {
+    dirs: [...byDir.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
+      ([dirPath, names]) => names === null ? { path: dirPath } : { path: dirPath, filenames: [...names].sort() }
+    )
+  };
+  const bound = new Map(
+    targets.dirs.map((d) => {
+      const at = boundOf(d.path);
+      return [d.path, bindsFolder(at) ? boundKey(at) : null];
+    })
+  );
+  return {
+    key: JSON.stringify([targets, [...bound]]),
+    targets,
+    unbound: [...bound.values()].includes(null),
+    bound,
+    reached,
+    unresolved
+  };
+}
+function watchFault(label2, watch2, beyond) {
+  const reasons = [
+    ...watch2.derived.unresolved.map(
+      // Every reason names the path it stopped at, the kernel's and the loop's.
+      (u) => `cannot follow a link chain \u2014 ${u.reason}`
+    ),
+    ...watch2.held.handle.deaf.map(
+      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
+    ),
+    ...beyond === null ? [] : [beyond]
+  ];
+  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
+}
+function followWatch(held, spec, acquire) {
+  if (held !== null && (held.key === spec.key || spec.unbound))
+    return { watch: held, move: "kept" };
+  const watch2 = { key: spec.key, handle: acquire(spec.key, spec.targets) };
+  held?.handle.release();
+  return { watch: watch2, move: "rebound" };
+}
+
+// src/daemon/cache/watchers.ts
+var defaultLogger = (_level, message) => debug(message);
+var DEBOUNCE_MS = 50;
+function folded(window2, next) {
+  if (next.kind === "failed") return next;
+  if (window2.kind !== "changed") return window2;
+  if (next.kind === "unknown") return next;
+  for (const p2 of next.paths) window2.paths.add(p2);
+  return window2;
+}
+var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path9.default.join(dir, filename)]) };
+var failedOf = (d) => ({
+  kind: "failed",
+  reason: `${d.path}: ${d.reason}`
+});
+var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var WatcherRegistry = class {
+  slots = /* @__PURE__ */ new Map();
+  dirs = /* @__PURE__ */ new Map();
+  counters;
+  logger;
+  clock;
+  closed = false;
+  constructor(opts) {
+    this.clock = opts.clock;
+    this.counters = opts.counters;
+    this.logger = opts.logger ?? defaultLogger;
+  }
+  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
+  // holder of one slot, and each holder's callback hears every window.
+  // `targets` from the first acquire wins; subsequent acquires keep the
+  // original target set (consumers must use a fresh key if they need different
+  // targets). A consumer that needs no more than "something changed" ignores
+  // the invalidation's value.
+  acquire(key, targets, onInvalidate) {
+    if (this.closed) {
+      return {
+        release: () => {
+        },
+        deaf: targets.dirs.map((d) => ({
+          kind: "refused",
+          path: d.path,
+          reason: "the watcher registry is closed"
+        }))
+      };
+    }
+    const shared = this.slots.get(key);
+    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    const slot = shared ?? this.opened(key, targets);
+    const holder = { onInvalidate };
+    slot.holders.add(holder);
+    return this.makeHandle(slot, holder);
+  }
+  // The held watch following `spec` (`followWatch`).
+  follow(held, spec, onInvalidate) {
+    return followWatch(
+      held,
+      spec,
+      (key, targets) => this.acquire(key, targets, onInvalidate)
+    );
+  }
+  opened(key, targets) {
+    const slot = {
+      key,
+      listeners: [],
+      holders: /* @__PURE__ */ new Set(),
+      debounce: null
+    };
+    for (const target of targets.dirs) {
+      const dir = this.dirFor(target);
+      const listener = {
+        slot,
+        dir,
+        filter: target.filenames ? new Set(target.filenames) : null
+      };
+      dir.listeners.add(listener);
+      slot.listeners.push(listener);
+    }
+    this.slots.set(key, slot);
+    if (this.counters) {
+      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+        this.counters.watchersOpened++;
+      else this.counters.watchRefusals++;
+    }
+    return slot;
+  }
+  // The directory watch a new slot's target joins: the one already open
+  // there, judged, or a new one.
+  dirFor(target) {
+    const id2 = dirId(target);
+    const existing = this.dirs.get(id2);
+    if (existing !== void 0) {
+      this.judged(existing, "acquire");
+      return existing;
+    }
+    const where = { path: target.path, recursive: target.recursive === true };
+    const dir = {
+      id: id2,
+      ...where,
+      listeners: /* @__PURE__ */ new Set(),
+      state: this.open(where, () => dir, "acquire", null)
+    };
+    this.dirs.set(id2, dir);
+    return dir;
+  }
+  // [LAW:single-enforcer] The one rule that a directory watch names the
+  // folder at its path, applied whenever a holder acquires the directory,
+  // whenever an event says the folder there moved, and on every period
+  // (`judge`). A deaf one is opened again; a listening one whose path holds
+  // another folder than the one it bound (removed and made again, or a strict
+  // ancestor renamed away and another tree put at its path: inotify hears the
+  // old inode, and the bound folder is what an event naming the directory is
+  // judged against) is reopened in place. A path that binds nothing right now
+  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
+  // on the path hears the folder come back.
+  judged(dir, cause) {
+    if (dir.state.kind === "deaf") {
+      this.reopen(dir, cause);
+      return;
+    }
+    const now2 = boundOf(dir.path);
+    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
+      this.reopen(dir, "another folder is at its path");
+  }
+  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
+  // the disk, on the period the file-event delivery owner keeps (the daemon
+  // wires it). It is the one trigger for a replacement no event reaches a
+  // handle for (a strict ancestor renamed away and another tree put at its
+  // path: inotify reports a directory's own removal or self-move, never its
+  // parent's), and the retry of a directory the OS refused or whose handle
+  // errored while no holder newly acquires it. A directory staying as it is
+  // costs one stat, or one refused open, and tells nothing.
+  judge() {
+    for (const dir of this.dirs.values()) this.judged(dir, "period");
+  }
+  // [LAW:no-silent-failure] Every slot on the directory hears it change
+  // state. Going deaf, or deaf for another reason, it hears the fault.
+  // Listening again, it hears an `unknown` window: whatever changed while the
+  // directory was deaf or bound to another folder went unheard, and a holder
+  // that re-derives on it reports its fault cleared. Deaf for the same reason
+  // is no change and tells nothing.
+  reopen(dir, cause) {
+    const was = dir.state;
+    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
+    const now2 = this.open(dir, () => dir, cause, was);
+    dir.state = now2;
+    if (now2.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (was.kind === "listening" || !compareStructural(was.deafness, now2.deafness))
+      this.tell(dir, failedOf(now2.deafness));
+  }
+  // `dirOf` names the watch the handle belongs to; its callbacks run only
+  // after the open returns, once the watch holds the state returned here.
+  open(where, dirOf, cause, was) {
+    const at = where.path;
+    const bound = boundKey(boundOf(at));
+    try {
+      fs_default.opendirSync(at).closeSync();
+      const handle = fs_default.watch(
+        at,
+        { persistent: false, recursive: where.recursive },
+        (_event, changed) => this.heard(dirOf(), handle, changed)
+      );
+      handle.on("error", (e) => {
+        this.logger("warn", `watcher error ${at}: ${e.message}`);
+        if (this.counters) this.counters.watchErrors++;
+        const dir = dirOf();
+        if (!heldBy(dir.state, handle)) return;
+        this.closeHandle(at, handle, "error");
+        const deafness = {
+          kind: "failed",
+          path: at,
+          reason: e.message
+        };
+        dir.state = { kind: "deaf", deafness };
+        this.tell(dir, failedOf(deafness));
+      });
+      if (this.counters) this.counters.dirWatchesOpened++;
+      this.logger(
+        "info",
+        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
+      );
+      return { kind: "listening", handle, bound };
+    } catch (e) {
+      const reason = e.message;
+      const deafness = { kind: "refused", path: at, reason };
+      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
+        this.logger("warn", `watch failed ${at}: ${reason}`);
+      return { kind: "deaf", deafness };
+    }
+  }
+  // [LAW:dataflow-not-control-flow] Each listener's filter is a value: a name
+  // it lists, an unnamed event (the OS may be reporting the filtered child),
+  // or the directory's own name while the folder at the path is no longer the
+  // one this handle bound (its removal or replacement, which macOS reports as
+  // a change and Linux as a rename) reaches the slot. The same name with the
+  // folder unchanged is macOS reporting a child that came or went, or a chmod,
+  // and is not. Judged once per event, for every listener. A move is then
+  // judged, so a handle never stays bound to a folder no longer at its path
+  // and every later event naming the directory is judged against the folder
+  // there.
+  heard(dir, handle, changed) {
+    const { state } = dir;
+    if (!heldBy(state, handle)) return;
+    const moved = changed === import_node_path9.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound;
+    for (const { slot, filter } of dir.listeners) {
+      if (filter === null || changed === null || filter.has(changed) || moved)
+        this.fire(slot, namedOf(dir.path, changed));
+    }
+    if (moved) this.judged(dir, "moved");
+  }
+  tell(dir, invalidation) {
+    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
+  }
+  fire(slot, invalidation) {
+    if (slot.debounce !== null) {
+      slot.debounce.window = folded(slot.debounce.window, invalidation);
+      return;
+    }
+    const debounce = {
+      window: invalidation,
+      cancel: this.clock.after(
+        DEBOUNCE_MS,
+        () => {
+          slot.debounce = null;
+          const heard = heardOf(debounce.window);
+          for (const holder of slot.holders) {
+            try {
+              holder.onInvalidate(heard);
+            } catch (e) {
+              this.logger(
+                "warn",
+                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
+              );
+            }
+          }
+        },
+        { unref: true }
+      )
+    };
+    slot.debounce = debounce;
+  }
+  makeHandle(slot, holder) {
+    return {
+      get deaf() {
+        return slot.listeners.flatMap(
+          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
+        );
+      },
+      release: () => {
+        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
+        if (this.slots.get(slot.key) !== slot) return;
+        this.closeSlot(slot, "last release");
+        this.slots.delete(slot.key);
+      }
+    };
+  }
+  closeHandle(at, handle, cause) {
+    try {
+      handle.close();
+    } catch {
+    }
+    if (this.counters) this.counters.dirWatchesClosed++;
+    this.logger(
+      "info",
+      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
+    );
+  }
+  // A directory watch closes with the last slot on it.
+  closeSlot(slot, cause) {
+    if (slot.debounce !== null) {
+      slot.debounce.cancel();
+      slot.debounce = null;
+    }
+    for (const listener of slot.listeners) {
+      const { dir } = listener;
+      dir.listeners.delete(listener);
+      if (dir.listeners.size > 0) continue;
+      if (dir.state.kind === "listening")
+        this.closeHandle(dir.path, dir.state.handle, cause);
+      this.dirs.delete(dir.id);
+    }
+    if (this.counters) this.counters.watchersClosed++;
+  }
+  // The slots held now.
+  size() {
+    return this.slots.size;
+  }
+  // The OS directory watches open now.
+  dirWatches() {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
+  }
+  // Every directory a held watch targets.
+  watchedDirs() {
+    return [...this.dirs.values()].map((d) => d.path);
+  }
+  closeAll() {
+    this.closed = true;
+    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
+    this.slots.clear();
+  }
+};
+
+// src/daemon/cache/file-events.ts
+init_globals();
+var import_node_path10 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/foundations/file-events-warnings.ts
+init_globals();
+var iso = (at) => new Date(at).toISOString();
+var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
+function fileEventsWarnings(d) {
+  if (d.missedSince === null) return [];
+  const since = iso(d.missedSince);
+  const message = () => {
+    switch (d.kind) {
+      case "delivering":
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+      case "stalled":
+        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+      case "unmeasured":
+        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
+    }
+  };
+  return [{ kind: "file-events", state: d.kind, message: message() }];
+}
+
+// src/daemon/cache/file-events.ts
+var PROBE_EVERY_MS = 3e4;
+var STALL_AFTER = 2;
+var PROBE_FILE = "probe";
+var NO_FILE_EVENTS = {
+  delivery: () => ({
+    kind: "unmeasured",
+    since: 0,
+    reason: "outside the daemon",
+    missedSince: null
+  }),
+  subscribe: () => () => {
+  }
+};
+var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
+var FileEventDelivery = class {
+  current;
+  instrument = { kind: "idle" };
+  listeners = /* @__PURE__ */ new Set();
+  stalls = 0;
+  catchUps = 0;
+  probes = 0;
+  probeFailures = 0;
+  watchers;
+  logger;
+  identityOf;
+  clock;
+  constructor(opts) {
+    this.watchers = opts.watchers;
+    this.logger = opts.logger;
+    this.clock = opts.clock;
+    this.identityOf = opts.identityOf ?? statIdentity;
+    this.current = {
+      kind: "unmeasured",
+      since: this.clock.now(),
+      reason: "not started",
+      missedSince: null
+    };
+  }
+  delivery() {
+    return this.current;
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+  // Only the daemon starts the owner, once it has won its socket: it makes
+  // the folder, opens the one watch, and arms the period.
+  start(folder) {
+    if (this.instrument.kind !== "idle") {
+      throw new Error("file events: the owner was started twice");
+    }
+    const stopPeriod = this.clock.every(
+      PROBE_EVERY_MS,
+      () => void this.tick(),
+      {
+        unref: true
+      }
+    );
+    let identity2;
+    try {
+      fs_default.mkdirSync(folder, { recursive: true });
+      identity2 = this.identityOf(folder);
+    } catch (e) {
+      this.end(
+        stopPeriod,
+        `the probe folder could not be made: ${e.message}`
+      );
+      return;
+    }
+    if (identity2 === "gone") {
+      this.end(stopPeriod, "the probe folder was removed as it was made");
+      return;
+    }
+    const probing = {
+      kind: "probing",
+      folder,
+      identity: identity2,
+      stopPeriod,
+      // [LAW:single-enforcer] The only acquirer of this registry key.
+      handle: this.watchers.acquire(
+        `file-events:${folder}`,
+        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        (heard) => this.heard(probing, heard)
+      )
+    };
+    this.instrument = probing;
+    this.logger("info", `file events probing folder=${valueOf(folder)}`);
+    const [refusal] = probing.handle.deaf;
+    if (refusal !== void 0) {
+      this.end(
+        stopPeriod,
+        `the OS refused the probe folder's watch: ${refusal.reason}`
+      );
+      return;
+    }
+    this.move({ kind: "delivering", unreported: [], missedSince: null });
+    void this.tick();
+  }
+  stats() {
+    return {
+      delivery: this.current,
+      stalls: this.stalls,
+      catchUps: this.catchUps,
+      probes: this.probes,
+      probeFailures: this.probeFailures
+    };
+  }
+  close() {
+    const inst = this.instrument;
+    this.instrument = { kind: "idle" };
+    this.listeners.clear();
+    switch (inst.kind) {
+      case "probing":
+        inst.handle.release();
+        inst.stopPeriod();
+        return;
+      case "ended":
+        inst.stopPeriod();
+        return;
+      case "idle":
+        return;
+    }
+  }
+  // [LAW:dataflow-not-control-flow] The same steps at the start and every
+  // period after: tell subscribers the period passed; judge the probe folder
+  // against the one the watch opened on, first, so a folder replaced at its
+  // path never reads as a stall; judge the probes still unreported; write the
+  // next one.
+  async tick() {
+    this.notify({ kind: "period" });
+    const inst = this.instrument;
+    if (inst.kind !== "probing") return;
+    let now2;
+    try {
+      now2 = this.identityOf(inst.folder);
+    } catch (e) {
+      this.end(
+        inst.stopPeriod,
+        `the probe folder cannot be read: ${e.message}`
+      );
+      return;
+    }
+    if (now2 === "gone") {
+      this.end(inst.stopPeriod, "the probe folder was removed");
+      return;
+    }
+    if (!sameIdentity(now2, inst.identity)) {
+      this.end(inst.stopPeriod, "the probe folder was replaced");
+      return;
+    }
+    const d = this.current;
+    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
+      this.stalls++;
+      this.move({
+        kind: "stalled",
+        missedSince: d.missedSince ?? d.unreported[0]
+      });
+    }
+    await this.probe(inst);
+  }
+  // A delivering watch awaits the probe; a stalled one awaits none in
+  // particular, since any report recovers it. A write that lands while
+  // unmeasured measures again, awaiting that probe, so a transient failure
+  // (a full disk) measures once it clears. A write that fails is unmeasured
+  // with its error: it tests no watch. A probe still in flight when the
+  // instrument ends or closes judges nothing.
+  async probe(inst) {
+    const at = this.clock.now();
+    const before = this.current;
+    if (before.kind === "delivering") {
+      this.current = { ...before, unreported: [...before.unreported, at] };
+    }
+    try {
+      await fs_default.promises.writeFile(
+        import_node_path10.default.join(inst.folder, PROBE_FILE),
+        String(at)
+      );
+    } catch (e) {
+      this.probeFailures++;
+      const d2 = this.current;
+      if (this.instrument !== inst || d2.kind === "unmeasured") return;
+      this.move({
+        kind: "unmeasured",
+        since: at,
+        reason: `the probe could not be written: ${e.message}`,
+        missedSince: d2.missedSince ?? at
+      });
+      return;
+    }
+    this.probes++;
+    const d = this.current;
+    if (this.instrument !== inst || d.kind !== "unmeasured") return;
+    this.move({
+      kind: "delivering",
+      unreported: [at],
+      missedSince: d.missedSince
+    });
+  }
+  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
+  // OS refuses an immediate retry the way it refused the first (limits,
+  // permissions). Anything else it reports proves delivery.
+  heard(inst, heard) {
+    if (this.instrument !== inst) return;
+    if (heard.kind === "failed") {
+      this.end(
+        inst.stopPeriod,
+        `the probe folder's watch failed: ${heard.reason}`
+      );
+      return;
+    }
+    const d = this.current;
+    const delivering = {
+      kind: "delivering",
+      unreported: [],
+      missedSince: null
+    };
+    if (d.missedSince === null) {
+      this.move(delivering);
+      return;
+    }
+    this.current = delivering;
+    this.catchUps++;
+    this.logger(
+      "info",
+      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
+    );
+    this.notify({ kind: "caught-up", since: d.missedSince });
+  }
+  // [LAW:no-silent-failure] An ended instrument holds no watch and never
+  // measures again, so whatever ended it, only a restart can.
+  end(stopPeriod, reason) {
+    const inst = this.instrument;
+    if (inst.kind === "probing") inst.handle.release();
+    this.instrument = { kind: "ended", stopPeriod };
+    const at = this.clock.now();
+    this.move({
+      kind: "unmeasured",
+      since: at,
+      reason: `${reason}; restart the daemon`,
+      missedSince: this.current.missedSince ?? at
+    });
+  }
+  // [LAW:nothing-unseen] One line on each change of state, none per period.
+  move(next) {
+    const was = label(this.current);
+    this.current = next;
+    if (label(next) === was) return;
+    switch (next.kind) {
+      case "delivering":
+        this.logger("info", "file events delivering");
+        break;
+      case "stalled":
+        this.logger(
+          "warn",
+          `file events stalled since=${iso(next.missedSince)}`
+        );
+        break;
+      case "unmeasured":
+        this.logger(
+          "warn",
+          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
+        );
+        break;
+    }
+    this.notify({ kind: "moved" });
+  }
+  notify(notice) {
+    for (const listener of [...this.listeners]) listener(notice);
+  }
+};
+var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
 
 // src/daemon/source-runs.ts
 var SHELL_READ_TIMEOUT_MS = 1e4;
@@ -30441,15 +32755,16 @@ function readingsOf(inputs, lanes) {
   };
   return {
     lanes: laneReadings,
-    // The session's own days fail today only where the directory set does not
-    // already sum them (`daysOutside`), so no transcript lane gates it.
+    // The session's own days gate today only where the directory set does not
+    // already sum them, so no transcript lane fault gates it.
     today: guarded(
       "today",
       () => todayReading(
         lanes.today,
         deps.usageStore,
         sessionId2,
-        inputs.hookData.transcript_path
+        inputs.hookData.transcript_path,
+        entry
       )
     ),
     faults: REFRESH_LANES.flatMap((lane) => {
@@ -30458,10 +32773,14 @@ function readingsOf(inputs, lanes) {
     })
   };
 }
-function todayReading(lane, usage, sessionId2, transcriptPath) {
+function todayReading(lane, usage, sessionId2, transcriptPath, entry) {
   const set2 = lane.current();
   if (set2.kind !== "ok") return set2;
-  const own2 = usage.daysOutside(sessionId2, transcriptPath, set2.value.roots);
+  if (under(transcriptPath, set2.value.roots)) {
+    return ok({ sums: set2.value.sums, own: {} });
+  }
+  if (entry.kind !== "ok") return entry;
+  const own2 = usage.daysOf(sessionId2);
   if (own2.kind === "failed") return own2;
   return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
 }
@@ -30471,7 +32790,7 @@ init_globals();
 
 // src/daemon/foundations/protocol.ts
 init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
+var import_node_path11 = __toESM(require_path_browserify(), 1);
 
 // src/terminal-hint.ts
 init_globals();
@@ -30558,7 +32877,7 @@ function sanitizeTerminalEnv(v) {
   return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
 }
 function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path8.default.isAbsolute(v) ? v : void 0;
+  return typeof v === "string" && import_node_path11.default.isAbsolute(v) ? v : void 0;
 }
 function sanitizeTmux(v) {
   if (v === null) return null;
@@ -42380,7 +44699,7 @@ init_globals();
 function blank(glyph) {
   return " ".repeat(cellLen(glyph));
 }
-function text(cells) {
+function text2(cells) {
   const ends = /* @__PURE__ */ new Map();
   for (const cell3 of cells.filter((c) => inked(c.glyph)))
     ends.set(cell3.row, { first: ends.get(cell3.row)?.first ?? cell3.index, last: cell3.index });
@@ -42409,7 +44728,7 @@ function typewriter(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const typed = arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < typed ? cell3.glyph : blank(cell3.glyph);
@@ -42424,7 +44743,7 @@ function scramble(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const resolved = arrived(length, ease(phase(t2)));
       const step4 = flicker.at(t2);
@@ -42440,7 +44759,7 @@ function backspace(timing) {
   const phase = Phase.once(0, timing.seconds);
   const ease = settled(timing.ease);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const kept = length - arrived(length, ease(phase(t2)));
       return (cell3) => (place.get(cell3.index) ?? -1) < kept ? cell3.glyph : blank(cell3.glyph);
@@ -42454,7 +44773,7 @@ function scrambleOut(timing, z) {
   const ease = settled(timing.ease);
   const flicker = stepped(FLICKER)((step4) => step4, 0);
   return transition(timing.seconds, ({ cells }) => {
-    const { length, place } = text(cells);
+    const { length, place } = text2(cells);
     return Animation.continuous((t2) => {
       const p2 = ease(phase(t2));
       const churning = arrived(length, p2 / (1 - CHURN));
@@ -42964,26 +45283,26 @@ var RENDER_ANSWERS = {
 
 // src/daemon/statusline-answer.ts
 init_globals();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 
 // src/utils/git-root.ts
 init_globals();
-var import_node_path9 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path9.default.join(dir, ".git"));
+  return fs_default.existsSync(import_node_path12.default.join(dir, ".git"));
 }
 function gitRootOf(start) {
-  let dir = import_node_path9.default.resolve(start);
+  let dir = import_node_path12.default.resolve(start);
   for (; ; ) {
     if (holdsGit(dir)) return dir;
-    const parent = import_node_path9.default.dirname(dir);
+    const parent = import_node_path12.default.dirname(dir);
     if (parent === dir) return void 0;
     dir = parent;
   }
 }
 function checkoutOf(cwd2) {
   const root = gitRootOf(cwd2);
-  return root === void 0 ? { root: import_node_path9.default.resolve(cwd2), git: false } : { root, git: true };
+  return root === void 0 ? { root: import_node_path12.default.resolve(cwd2), git: false } : { root, git: true };
 }
 function probe(read2) {
   try {
@@ -42995,18 +45314,18 @@ function probe(read2) {
 var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
 var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
 function gitDirNamed(root) {
-  const text4 = probe(() => fs_default.readFileSync(import_node_path9.default.join(root, ".git"), "utf-8"));
+  const text4 = probe(() => fs_default.readFileSync(import_node_path12.default.join(root, ".git"), "utf-8"));
   if (text4.kind !== "ok") return text4;
   const named3 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named3 === void 0 ? failed(`${import_node_path9.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path9.default.resolve(root, named3));
+  return named3 === void 0 ? failed(`${import_node_path12.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path12.default.resolve(root, named3));
 }
 function commonDirOf(gitDir) {
   const text4 = probe(
-    () => fs_default.readFileSync(import_node_path9.default.join(gitDir, "commondir"), "utf-8")
+    () => fs_default.readFileSync(import_node_path12.default.join(gitDir, "commondir"), "utf-8")
   );
   if (text4.kind !== "ok") return text4;
   const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path9.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path9.default.resolve(gitDir, common));
+  return common === "" ? failed(`${import_node_path12.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path12.default.resolve(gitDir, common));
 }
 var UNLINKED = { kind: "unlinked" };
 var unproven = (reason) => ({
@@ -43016,7 +45335,7 @@ var unproven = (reason) => ({
 function worktreeLink(dir) {
   const root = gitRootOf(dir);
   if (root === void 0) return UNLINKED;
-  const dotGit = import_node_path9.default.join(root, ".git");
+  const dotGit = import_node_path12.default.join(root, ".git");
   const followed = probe(() => fs_default.statSync(dotGit));
   if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
   const entry = probe(() => fs_default.lstatSync(dotGit));
@@ -43031,34 +45350,34 @@ function worktreeLink(dir) {
   if (common.kind === "failed") return unproven(common.reason);
   const realCommon = realDir(common.value);
   if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
-  if (import_node_path9.default.dirname(gitDir.value) !== import_node_path9.default.join(realCommon.value, "worktrees")) {
+  if (import_node_path12.default.dirname(gitDir.value) !== import_node_path12.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
-  const backFile = import_node_path9.default.join(gitDir.value, "gitdir");
+  const backFile = import_node_path12.default.join(gitDir.value, "gitdir");
   const back2 = probe(() => fs_default.readFileSync(backFile, "utf-8"));
   if (back2.kind !== "ok") return unproven(why(backFile, back2));
-  const pointer = import_node_path9.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = realDir(import_node_path9.default.dirname(pointer));
-  if (import_node_path9.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+  const pointer = import_node_path12.default.resolve(gitDir.value, back2.value.trim());
+  const pointerDir = realDir(import_node_path12.default.dirname(pointer));
+  if (import_node_path12.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
   }
-  const main = import_node_path9.default.basename(realCommon.value) === ".git" ? import_node_path9.default.dirname(realCommon.value) : realCommon.value;
-  return { kind: "linked", main: import_node_path9.default.join(main, import_node_path9.default.relative(root, dir)) };
+  const main = import_node_path12.default.basename(realCommon.value) === ".git" ? import_node_path12.default.dirname(realCommon.value) : realCommon.value;
+  return { kind: "linked", main: import_node_path12.default.join(main, import_node_path12.default.relative(root, dir)) };
 }
 function checkoutLocation(dir) {
   const real = realDir(dir);
-  const at = real.kind === "ok" ? real.value : import_node_path9.default.resolve(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path12.default.resolve(dir);
   const root = gitRootOf(at);
   if (root === void 0)
     return { main: "", worktree: "", subpath: "", noRepo: true };
-  const sub2 = import_node_path9.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path9.default.sep).join("/")}`;
+  const sub2 = import_node_path12.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path12.default.sep).join("/")}`;
   const link = worktreeLink(at);
   return link.kind === "linked" ? {
-    main: import_node_path9.default.resolve(link.main, import_node_path9.default.relative(at, root)),
-    worktree: import_node_path9.default.basename(root),
+    main: import_node_path12.default.resolve(link.main, import_node_path12.default.relative(at, root)),
+    worktree: import_node_path12.default.basename(root),
     subpath,
     noRepo: false
   } : { main: root, worktree: "", subpath, noRepo: false };
@@ -43125,7 +45444,7 @@ function located(req) {
     ...req,
     hookData: {
       ...req.hookData,
-      ...dir !== void 0 && import_node_path10.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
+      ...dir !== void 0 && import_node_path13.default.isAbsolute(dir) && { location: checkoutLocation(dir) }
     }
   };
 }
@@ -43231,16 +45550,16 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
 
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 
 // src/utils/user-path.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
   return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
 }
 function resolveUserPath(base, p2, home) {
-  return import_node_path11.default.resolve(base, expandHome(p2, home));
+  return import_node_path14.default.resolve(base, expandHome(p2, home));
 }
 function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
@@ -43487,7 +45806,7 @@ function checkRenderRequest(req, stats, log, home) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path12.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path15.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
@@ -43537,7 +45856,7 @@ function checkRenderRequest(req, stats, log, home) {
 
 // src/daemon/click-handoff.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/click-launch.ts
 init_globals();
@@ -43559,13 +45878,13 @@ function clickFailed(r, what, log) {
 // src/daemon/click-handoff.ts
 var HANDOFF_POLL_MS = 50;
 async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
-  const dir = mkdtempSync(import_node_path13.default.join(tmp, "cc-candybar-handoff-"));
+  const dir = mkdtempSync(import_node_path16.default.join(tmp, "cc-candybar-handoff-"));
   try {
     const files = {
       // Unread, and a handed-off browser would write to it for its whole life.
       stdout: "/dev/null",
-      stderr: import_node_path13.default.join(dir, "stderr"),
-      status: import_node_path13.default.join(dir, "status")
+      stderr: import_node_path16.default.join(dir, "stderr"),
+      status: import_node_path16.default.join(dir, "status")
     };
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
@@ -43975,13 +46294,13 @@ var DISTRIBUTIONS = {
 };
 var DEFAULT_DISTRIBUTION = "van-der-corput";
 var placedBy = (name) => DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
-function entryOf(step4, size) {
+function entryOf2(step4, size) {
   if (step4 === void 0) return 0;
   const { place, quantize } = step4.distribution;
   return quantize(place(step4.index, step4.count), size);
 }
 function vocabularySelect(vocabulary, step4) {
-  const entry = vocabulary[entryOf(step4, vocabulary.length)];
+  const entry = vocabulary[entryOf2(step4, vocabulary.length)];
   if (entry === void 0)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
@@ -43992,7 +46311,7 @@ function rowAndCell(address) {
   const rows = at === -1 ? address : address.slice(0, at);
   return { row: rows.at(-1), cell: address.findLast(isCell) };
 }
-var rowStart = (variation, row2) => entryOf(row2, variation.hues.length);
+var rowStart = (variation, row2) => entryOf2(row2, variation.hues.length);
 function decorEntryFor(palette, decor, address, drawnAt) {
   const { row: row2, cell: cell3 } = rowAndCell(address);
   if (cell3 === void 0) return dealtAt(palette, decor, row2, cell3, drawnAt);
@@ -45937,262 +48256,12 @@ function openClick(signed, links2) {
   return link.ok ? { kind: "link", verb: link.verb, value: link.value, link: opened.value } : { kind: "refused", problem: link.problem };
 }
 
-// src/utils/transcript-fs.ts
-init_globals();
-
-// src/utils/limiter.ts
-init_globals();
-var Limiter = class {
-  slots;
-  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
-  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
-  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
-  // would be O(n²) on the render hot path). A dequeued node is immediately
-  // unreferenced, so a continuously-saturated queue retains only the waiters
-  // currently parked — no consumed-prefix accumulates, unlike a head-index
-  // array that only reclaims on full drain.
-  head = null;
-  tail = null;
-  constructor(max2) {
-    this.slots = max2;
-  }
-  async run(task) {
-    await this.acquire();
-    try {
-      return await task();
-    } finally {
-      this.release();
-    }
-  }
-  async acquire() {
-    if (this.slots > 0) {
-      this.slots--;
-      return;
-    }
-    await new Promise((wake) => {
-      const node = { wake, next: null };
-      if (this.tail) this.tail.next = node;
-      else this.head = node;
-      this.tail = node;
-    });
-  }
-  release() {
-    const node = this.head;
-    if (!node) {
-      this.slots++;
-      return;
-    }
-    this.head = node.next;
-    if (!this.head) this.tail = null;
-    node.wake();
-  }
-};
-
-// src/utils/transcript-fs.ts
-function statStamp(filePath2) {
-  if (!filePath2) return "";
-  try {
-    return stampOf(statSync(filePath2));
-  } catch {
-    return "";
-  }
-}
-function stampOf(st) {
-  return `${st.mtimeMs}:${st.size}`;
-}
-var TRANSCRIPT_FS_CONCURRENCY = 8;
-var gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
-function gated(fn) {
-  return ((...args) => gate.run(() => fn(...args)));
-}
-var readdir2 = gated(readdir);
-var stat2 = gated(stat);
-var FOLD_WINDOW_BYTES = 512 * 1024;
-var totals = { reads: 0, bytes: 0, longLines: 0, largestLine: 0 };
-function transcriptReads() {
-  return { ...totals };
-}
-var windows = [];
-function giveBack(window2) {
-  if (windows.length < TRANSCRIPT_FS_CONCURRENCY) windows.push(window2);
-}
-async function readAppended(path43, prior, until2) {
-  return gate.run(async () => {
-    const window2 = windows.pop() ?? import_buffer.Buffer.allocUnsafe(FOLD_WINDOW_BYTES);
-    const read2 = await readWholeLines(path43, prior, until2, window2);
-    if (read2.kind !== "ok") {
-      giveBack(window2);
-      return read2;
-    }
-    let lent = window2;
-    return ok({
-      ...read2.value,
-      [Symbol.dispose]: () => {
-        if (lent !== void 0) giveBack(lent);
-        lent = void 0;
-      }
-    });
-  });
-}
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
-async function readWholeLines(path43, prior, until2, window2) {
-  let fh = null;
-  try {
-    fh = await open(path43, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
-    const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
-    const start = reset || prior === void 0 ? 0 : prior.offset;
-    const end = reset || until2 === void 0 ? size : Math.min(size, until2);
-    let bytesRead = 0;
-    const first2 = await readInto(fh, window2.subarray(0, end - start), start);
-    bytesRead += first2.length;
-    let lastNl = first2.lastIndexOf(10);
-    let reached = start + first2.length;
-    let shortRead = first2.length < Math.min(window2.length, end - start);
-    while (lastNl < 0 && reached < end && !shortRead) {
-      const next = await readInto(
-        fh,
-        window2.subarray(0, end - reached),
-        reached
-      );
-      bytesRead += next.length;
-      const nl = next.indexOf(10);
-      if (nl >= 0) lastNl = reached - start + nl;
-      shortRead = next.length < Math.min(window2.length, end - reached);
-      reached += next.length;
-    }
-    const bytes = lastNl + 1;
-    const longLine = bytes > window2.length ? bytes : 0;
-    const wholeLines = longLine > 0 ? await readInto(fh, import_buffer.Buffer.allocUnsafe(bytes), start) : first2.subarray(0, bytes);
-    bytesRead += longLine > 0 ? wholeLines.length : 0;
-    const complete = wholeLines.length === bytes;
-    totals.reads++;
-    totals.bytes += bytesRead;
-    totals.longLines += longLine > 0 ? 1 : 0;
-    totals.largestLine = Math.max(totals.largestLine, longLine);
-    return ok({
-      lines: complete ? wholeLines : wholeLines.subarray(0, 0),
-      start,
-      // A long line was found by its newline alone, so lines after it may
-      // still be unread; otherwise the read saw everything up to its end.
-      atEnd: !complete || (longLine > 0 ? start + bytes >= end : reached >= end || shortRead),
-      size,
-      stamp: stamp2,
-      ino,
-      reset,
-      longLine
-    });
-  } catch (e) {
-    if (e.code === "ENOENT") return ABSENT;
-    return failed(
-      `readAppended ${path43}: ${e instanceof Error ? e.message : String(e)}`,
-      "read"
-    );
-  } finally {
-    await fh?.close().catch((e) => {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    });
-  }
-}
-async function readInto(fh, buf, position) {
-  let off = 0;
-  while (off < buf.length) {
-    const { bytesRead } = await fh.read(
-      buf,
-      off,
-      buf.length - off,
-      position + off
-    );
-    if (bytesRead === 0) break;
-    off += bytesRead;
-  }
-  return buf.subarray(0, off);
-}
-async function readTail(path43, maxBytes) {
-  return gate.run(async () => {
-    let fh = null;
-    try {
-      fh = await open(path43, "r");
-      const { size } = await fh.stat();
-      const start = Math.max(0, size - maxBytes);
-      return ok({
-        buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
-      });
-    } catch (e) {
-      if (e.code === "ENOENT") return ABSENT;
-      return failed(
-        `readTail ${path43}: ${e instanceof Error ? e.message : String(e)}`,
-        "read"
-      );
-    } finally {
-      await fh?.close().catch((e) => {
-        debug(
-          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-        );
-      });
-    }
-  });
-}
-function readTailSync(path43, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path43, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code } = e;
-    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file", "read");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
-
 // src/doctor/gather.ts
 init_globals();
 
 // src/claude-settings-read.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 
 // src/config/json5-edit.ts
 init_globals();
@@ -46368,13 +48437,13 @@ function parseDocument(text4) {
   if (s.pos !== text4.length) s.fail("trailing content after the document");
   return root;
 }
-function entryOf2(node, key) {
+function entryOf3(node, key) {
   return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
 }
 function nodeAt(root, path43) {
   let node = root;
   for (const key of path43) {
-    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
+    node = node === void 0 ? void 0 : entryOf3(node, key)?.value;
   }
   return node;
 }
@@ -46560,7 +48629,7 @@ function setBelow(text4, start, path43, valueText, dialect) {
         node.span.start
       );
     }
-    const entry = entryOf2(node, path43[i]);
+    const entry = entryOf3(node, path43[i]);
     if (entry === void 0) {
       return appendMember(
         text4,
@@ -46589,7 +48658,7 @@ function deleteValue(text4, path43, keep2 = 0) {
   if (/^\s*$/.test(text4)) return text4;
   const parentPath = path43.slice(0, -1);
   const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf2(parent, path43[path43.length - 1]);
+  const entry = parent === void 0 ? void 0 : entryOf3(parent, path43[path43.length - 1]);
   if (entry === void 0 || parent?.kind !== "object") return text4;
   const pruned = removeMember(text4, entry.span);
   return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
@@ -46598,22 +48667,22 @@ var CHILD_KEYS = ["h", "v", "children"];
 function placementIdOf(node) {
   if (node.kind === "string") return node.value;
   if (node.kind !== "object") return void 0;
-  const seg2 = entryOf2(node, "seg")?.value;
-  const kind = entryOf2(node, "kind")?.value;
-  const name = entryOf2(node, "name")?.value;
+  const seg2 = entryOf3(node, "seg")?.value;
+  const kind = entryOf3(node, "kind")?.value;
+  const name = entryOf3(node, "name")?.value;
   const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
   if (segName === void 0) return void 0;
-  const id2 = entryOf2(node, "id")?.value;
+  const id2 = entryOf3(node, "id")?.value;
   return id2?.kind === "string" ? id2.value : segName;
 }
 function childArraysOf(node) {
   if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
+  return CHILD_KEYS.map((k) => entryOf3(node, k)?.value).filter(
     (v) => v?.kind === "array"
   );
 }
 function rowEntriesOf(node) {
-  const rows = entryOf2(node, "rows")?.value;
+  const rows = entryOf3(node, "rows")?.value;
   return rows?.kind === "object" ? rows.entries : null;
 }
 function restagesFragment(node) {
@@ -46691,7 +48760,7 @@ function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
       `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
     );
   }
-  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+  return entryOf3(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }
 
 // src/claude-settings-read.ts
@@ -46738,15 +48807,15 @@ function parseSettings(settingsPath, text4) {
   return parsed2;
 }
 function readSettingsChain(at) {
-  const dropIns = import_node_path14.default.join(at.managedDir, "managed-settings.d");
+  const dropIns = import_node_path17.default.join(at.managedDir, "managed-settings.d");
   const located2 = [
     ...visibleJsonFiles(dropIns).reverse().map((name) => ({
       scope: "managed",
-      path: import_node_path14.default.join(dropIns, name)
+      path: import_node_path17.default.join(dropIns, name)
     })),
     {
       scope: "managed",
-      path: import_node_path14.default.join(at.managedDir, "managed-settings.json")
+      path: import_node_path17.default.join(at.managedDir, "managed-settings.json")
     },
     {
       scope: "project-local",
@@ -46754,7 +48823,7 @@ function readSettingsChain(at) {
     },
     {
       scope: "project",
-      path: import_node_path14.default.join(at.projectDir, ".claude", "settings.json")
+      path: import_node_path17.default.join(at.projectDir, ".claude", "settings.json")
     },
     { scope: "user", path: at.userFile }
   ];
@@ -47023,7 +49092,7 @@ function insertCells(root, cells) {
         return acc;
       const held = placed2.find((node2) => placementId(node2) === id2);
       if (held !== void 0)
-        return refuse(
+        return refuse2(
           acc,
           cell3,
           `as "${id2}", but placement "${id2}" is already segment "${held.name}" \u2014 give the cell its own id`
@@ -47049,7 +49118,7 @@ function insertCells(root, cells) {
             rows.map(([name, row2, placed3]) => [name, placed3 ?? row2])
           )
         }
-      } : refuse(
+      } : refuse2(
         acc,
         cell3,
         `${cell3.relation} "${cell3.anchor}", but there is no placement "${cell3.anchor}"`
@@ -47058,7 +49127,7 @@ function insertCells(root, cells) {
     { root, unplaced: [] }
   );
 }
-function refuse(acc, cell3, reason) {
+function refuse2(acc, cell3, reason) {
   return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
 }
 function besideRow(row2, anchor, cell3, relation) {
@@ -47909,10 +49978,10 @@ function parseGitlabMr(stdout2) {
 }
 
 // src/doctor/data-needs.ts
-var under = (paths2, prefix) => [...paths2].some((p2) => p2 === prefix || p2.startsWith(`${prefix}.`));
+var under2 = (paths2, prefix) => [...paths2].some((p2) => p2 === prefix || p2.startsWith(`${prefix}.`));
 var READS = {
   pullRequests: (paths2) => Object.keys(PR_FIELDS).some((field) => paths2.has(`git.${field}`)),
-  rateLimits: (paths2) => under(paths2, "block") || under(paths2, "weekly")
+  rateLimits: (paths2) => under2(paths2, "block") || under2(paths2, "weekly")
 };
 function segmentTemplates(config2, name) {
   const seg2 = config2.segments[name];
@@ -51487,7 +53556,7 @@ function staticDictEntries(arg) {
   }
   return dict(...values2);
 }
-function get(d, key) {
+function get2(d, key) {
   return d[key];
 }
 function hasKey(d, key) {
@@ -51544,7 +53613,7 @@ function sprigDicts() {
       }
     },
     get: {
-      fn: (d, k) => get(d, k),
+      fn: (d, k) => get2(d, k),
       argTypes: ["dict", "string"],
       arity: { kind: "exact" }
     },
@@ -52341,7 +54410,7 @@ function initials(s) {
   const enc = new TextEncoder();
   return s.split(/\s+/).filter((w) => w.length > 0).map((w) => String.fromCharCode(...enc.encode(w).slice(0, 1))).join("");
 }
-function join(sep2, list2) {
+function join3(sep2, list2) {
   const parts = [];
   for (const v of list2) {
     if (v !== null && v !== void 0 && typeof v === "object") throw bodyTypeMismatch("join", 2, "list of strings/primitives", `list element of type ${describe2(v)}`);
@@ -52544,7 +54613,7 @@ function sprigStrings() {
       arity: { kind: "exact" }
     },
     join: {
-      fn: (sep2, list2) => join(sep2, list2),
+      fn: (sep2, list2) => join3(sep2, list2),
       argTypes: ["string", "list"],
       arity: { kind: "exact" }
     },
@@ -52790,7 +54859,7 @@ function elementPathLine(source, document, pathParts) {
   let indexed = false;
   for (const part of pathParts) {
     const element = node.kind === "array" && /^\d+$/.test(part);
-    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
+    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf3(node, part)?.value;
     if (next === void 0) break;
     indexed ||= element;
     node = next;
@@ -53301,7 +55370,7 @@ function selection(sessionKey, spec, domain, shown, extra = {}) {
     themeDefault: extra.themeDefault ?? false
   };
 }
-var text2 = (spec) => ({
+var text3 = (spec) => ({
   kind: "text",
   spec
 });
@@ -53527,13 +55596,13 @@ var GLOBAL_FIELDS = {
     floor: "truecolor"
   },
   // The text segments render when their value is empty.
-  default_empty_value: text2(optionalStringSpec()),
+  default_empty_value: text3(optionalStringSpec()),
   // The cell separator `plain` draws between segments. Absent means the glyph
   // rich-js's bundled `plain` joiner owns — no floor here, since naming one
   // would be a second copy of a constant that lives in rich-js.
-  default_separator: text2(optionalStringSpec()),
+  default_separator: text3(optionalStringSpec()),
   // The settings menu's door glyph (🍫 by default, synthesized by the menu).
-  menuGlyph: text2(menuGlyphSpec)
+  menuGlyph: text3(menuGlyphSpec)
 };
 var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
@@ -54392,19 +56461,19 @@ var REPLY_KINDS = {
   click: true,
   debug: true
 };
-var refuse2 = (code, error) => replied(stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION }));
+var refuse3 = (code, error) => replied(stay({ ok: false, error, code, daemonV: PROTOCOL_VERSION }));
 function subscription(req) {
   const sessionId2 = parseSessionId(req.sessionId);
   if (!sessionId2.ok)
-    return refuse2("BAD_REQUEST", `subscribe's sessionId ${sessionId2.problem}`);
+    return refuse3("BAD_REQUEST", `subscribe's sessionId ${sessionId2.problem}`);
   if (req.lane === void 0)
-    return refuse2(
+    return refuse3(
       "VERSION_MISMATCH",
       `this client's subscribe names no lane (${LANE_NAMES.join(", ")}): it predates the lane toggles \u2014 update it`
     );
   const lane = parseLane(req.lane);
   if (lane === null)
-    return refuse2(
+    return refuse3(
       "BAD_REQUEST",
       `subscribe needs a lane, one of ${LANE_NAMES.join(", ")}: got ${JSON.stringify(req.lane)}`
     );
@@ -54415,7 +56484,7 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
     return urlClick(parts, inbound.frame, timedOut, accepted, clientLeft);
   const req = inbound.req;
   if (!req || typeof req !== "object" || typeof req.v !== "number") {
-    return refuse2("BAD_REQUEST", "malformed request");
+    return refuse3("BAD_REQUEST", "malformed request");
   }
   if (req.v !== PROTOCOL_VERSION) {
     if (req.v > PROTOCOL_VERSION) {
@@ -54446,7 +56515,7 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   }
   if (req.kind === "subscribe") return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
-    return refuse2("BAD_REQUEST", "unknown kind");
+    return refuse3("BAD_REQUEST", "unknown kind");
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
 async function replyTo(parts, req, timedOut, accepted, clientLeft) {
@@ -54891,10 +56960,10 @@ var refusedRender = (problems) => ({
 // src/daemon/update-act.ts
 init_globals();
 init_os();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
-  return import_node_path15.default.join(stateDir2, "update-act", key);
+  return import_node_path18.default.join(stateDir2, "update-act", key);
 }
 function judgeAct(facts) {
   if (facts === null) return IDLE;
@@ -54913,11 +56982,11 @@ function judgeAct(facts) {
   return { kind: "failed", act, identity: record2.identity, reason };
 }
 var filesOf = (actDir) => ({
-  stdout: import_node_path15.default.join(actDir, "stdout"),
-  stderr: import_node_path15.default.join(actDir, "stderr"),
-  status: import_node_path15.default.join(actDir, "status")
+  stdout: import_node_path18.default.join(actDir, "stdout"),
+  stderr: import_node_path18.default.join(actDir, "stderr"),
+  status: import_node_path18.default.join(actDir, "status")
 });
-var recordOf = (actDir) => import_node_path15.default.join(actDir, "record.json");
+var recordOf = (actDir) => import_node_path18.default.join(actDir, "record.json");
 function actNumbers(dir) {
   let names;
   try {
@@ -54941,9 +57010,9 @@ function lastLineOf(file) {
   }
 }
 function removeAct(dir, act) {
-  const leaving = import_node_path15.default.join(dir, `.removed-${act}-${process_default.pid}`);
+  const leaving = import_node_path18.default.join(dir, `.removed-${act}-${process_default.pid}`);
   try {
-    fs_default.renameSync(import_node_path15.default.join(dir, String(act)), leaving);
+    fs_default.renameSync(import_node_path18.default.join(dir, String(act)), leaving);
   } catch (err) {
     if (err.code === "ENOENT") return;
     throw err;
@@ -54968,7 +57037,7 @@ var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf(act) {
-    const actDir = import_node_path15.default.join(dir, String(act));
+    const actDir = import_node_path18.default.join(dir, String(act));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
@@ -54996,7 +57065,7 @@ function makeActReader(dir, read2, jobs, clock) {
         if (act === void 0) return null;
         if (act === vanished) {
           throw new Error(
-            `${import_node_path15.default.join(dir, String(act))}: an act with no record`
+            `${import_node_path18.default.join(dir, String(act))}: an act with no record`
           );
         }
         const facts = await factsOf(act);
@@ -55008,7 +57077,7 @@ function makeActReader(dir, read2, jobs, clock) {
 }
 function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
-  const staging = fs_default.mkdtempSync(import_node_path15.default.join(dir, ".claim-"));
+  const staging = fs_default.mkdtempSync(import_node_path18.default.join(dir, ".claim-"));
   try {
     fs_default.writeFileSync(recordOf(staging), JSON.stringify(record2));
     fs_default.renameSync(staging, actDir);
@@ -55023,7 +57092,7 @@ function stakeClaim(dir, actDir, record2) {
 }
 async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
   const act = (after ?? 0) + 1;
-  const actDir = import_node_path15.default.join(dir, String(act));
+  const actDir = import_node_path18.default.join(dir, String(act));
   const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
@@ -55056,7 +57125,7 @@ var CLAIMED_FIRST = {
   reason: "another act claimed this bundle first"
 };
 function endOverdue(dir, facts, jobs) {
-  const status = filesOf(import_node_path15.default.join(dir, String(facts.act))).status;
+  const status = filesOf(import_node_path18.default.join(dir, String(facts.act))).status;
   return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
@@ -55144,23 +57213,23 @@ var PACKAGE_VERSION = "1.222.0";
 
 // src/daemon/build-currency.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 init_url();
 
 // src/source-digest.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
 function entryBytes(p2, st) {
   return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
 }
 function sourceEntries(root, dir, keep2 = isSourceEntry) {
   return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path16.default.join(dir, name);
+    const p2 = import_node_path19.default.join(dir, name);
     const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
     if (st === void 0) return [];
     if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path16.default.relative(root, p2).split(import_node_path16.default.sep).join("/");
+    const rel = import_node_path19.default.relative(root, p2).split(import_node_path19.default.sep).join("/");
     return [[rel, entryBytes(p2, st)]];
   });
 }
@@ -55187,8 +57256,8 @@ function crateDigest(crateDir) {
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path17.default.dirname(import_node_path17.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path17.default.join(root, "src")) ? root : null;
+  const root = import_node_path20.default.dirname(import_node_path20.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path20.default.join(root, "src")) ? root : null;
 }
 function bundleStamp(digest2) {
   if (digest2 === null) {
@@ -55203,11 +57272,11 @@ function bakedDigest() {
 }
 function checkoutVersion(root) {
   const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path17.default.join(root, "package.json"), "utf8")
+    fs_default.readFileSync(import_node_path20.default.join(root, "package.json"), "utf8")
   );
   const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
   if (typeof version !== "string") {
-    throw new Error(`${import_node_path17.default.join(root, "package.json")} has no version string`);
+    throw new Error(`${import_node_path20.default.join(root, "package.json")} has no version string`);
   }
   return version;
 }
@@ -55216,7 +57285,7 @@ function assessBuild(entryUrl, runningStamp) {
     const root = sourceCheckoutOf(fileURLToPath(entryUrl));
     if (root === null) return { kind: "not-source-checkout" };
     const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path17.default.join(root, "src"));
+    const digest2 = sourceDigest(import_node_path20.default.join(root, "src"));
     if (digest2 === running.digest)
       return { kind: "current", root, stamp: running };
     return {
@@ -55232,88 +57301,6 @@ function assessBuild(entryUrl, runningStamp) {
 
 // src/facts/fact.ts
 init_globals();
-
-// src/var-system/types.ts
-init_globals();
-function isJsonValue(value) {
-  if (value === null) return true;
-  switch (typeof value) {
-    case "string":
-    case "boolean":
-      return true;
-    case "number":
-      return Number.isFinite(value);
-    case "object": {
-      if (Array.isArray(value)) return value.every(isJsonValue);
-      const proto = Object.getPrototypeOf(value);
-      return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue);
-    }
-    default:
-      return false;
-  }
-}
-function toDocument(value) {
-  if (Array.isArray(value)) return Object.freeze(value.map(toDocument));
-  if (value !== null && typeof value === "object") {
-    const out = /* @__PURE__ */ Object.create(null);
-    const entries = Object.entries(value).sort(
-      ([a], [b]) => a < b ? -1 : a > b ? 1 : 0
-    );
-    for (const [key, v] of entries) out[key] = toDocument(v);
-    return Object.freeze(out);
-  }
-  return value;
-}
-function typeOf(v) {
-  const t2 = typeof v;
-  if (t2 === "string" || t2 === "number" || t2 === "boolean") return t2;
-  throw new TypeError(
-    `Variable values must be string|number|boolean (got ${t2})`
-  );
-}
-function toString2(v) {
-  return typeof v === "string" ? v : String(v);
-}
-function toNumber(v) {
-  if (typeof v === "number") return v;
-  if (typeof v === "boolean") return v ? 1 : 0;
-  const trimmed = v.trim();
-  if (trimmed === "") {
-    throw new TypeError(`Cannot cast empty string to number`);
-  }
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) {
-    throw new TypeError(`Cannot cast ${JSON.stringify(v)} to number`);
-  }
-  return n;
-}
-function toBool(v) {
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number") {
-    if (v === 0 || v === 1) return v === 1;
-    throw new TypeError(
-      `Cannot cast number ${v} to bool (only 0 and 1 are accepted)`
-    );
-  }
-  if (v === "true") return true;
-  if (v === "false") return false;
-  throw new TypeError(
-    `Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`
-  );
-}
-var PendingValueError = class extends Error {
-  constructor(variable, message) {
-    super(message);
-    this.variable = variable;
-  }
-  variable;
-};
-function readPending(e) {
-  if (e instanceof PendingValueError) return e;
-  return e instanceof Error && e.cause !== void 0 ? readPending(e.cause) : void 0;
-}
-
-// src/facts/fact.ts
 function restamp(prior, next, at) {
   if (next.kind === "pending") return pendingOf(next.why);
   if (prior !== void 0 && prior.kind !== "pending") {
@@ -55661,7 +57648,7 @@ function unknownOptionDomain(from, perConfigDomains) {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path21 = __toESM(require_path_browserify(), 1);
 
 // src/config/setting-control.ts
 init_globals();
@@ -57527,7 +59514,7 @@ function editableUnit(child, spliced, first2, ctx) {
   ];
 }
 function fileLabel(file) {
-  return import_node_path18.default.join(import_node_path18.default.basename(import_node_path18.default.dirname(file)), import_node_path18.default.basename(file));
+  return import_node_path21.default.join(import_node_path21.default.basename(import_node_path21.default.dirname(file)), import_node_path21.default.basename(file));
 }
 function insertedUnit(child, insertedBy, spliced, ctx) {
   const decl = ctx.segments[child.name];
@@ -58627,7 +60614,7 @@ init_globals();
 
 // src/attach-launcher.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path22 = __toESM(require_path_browserify(), 1);
 
 // src/claude-command-line.ts
 init_globals();
@@ -58652,14 +60639,14 @@ function claudeCommandLine(command) {
 // src/attach-launcher.ts
 var ATTACH_DIR = "cc-extra";
 function attachLauncherOf(bundle) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+  return import_node_path22.default.join(import_node_path22.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
 }
 function moduleGraphReaderOf(launcher) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(launcher), "bun-graph.js");
+  return import_node_path22.default.join(import_node_path22.default.dirname(launcher), "bun-graph.js");
 }
 var ATTACH_PRELOAD = "attach-preload.cjs";
 function attachPreloadOf(bundle) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(bundle), ATTACH_PRELOAD);
+  return import_node_path22.default.join(import_node_path22.default.dirname(bundle), ATTACH_PRELOAD);
 }
 var PRELOAD_VARIABLE = "BUN_OPTIONS";
 function attachCommandLine(preload, command) {
@@ -58673,25 +60660,7 @@ function attachCommandLine(preload, command) {
 }
 
 // src/install/index.ts
-var import_node_path22 = __toESM(require_path_browserify(), 1);
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse3 = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse3("net.connect");
-var createServer = refuse3("net.createServer");
-var createConnection = refuse3("net.createConnection");
-var get2 = refuse3("https.get");
-var request = refuse3("https.request");
-var createInterface = refuse3("readline.createInterface");
-var createRequire = refuse3("module.createRequire");
-var json = refuse3("stream/consumers.json");
-var text3 = refuse3("stream/consumers.text");
-var writeHeapSnapshot = refuse3("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
+var import_node_path25 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/client.ts
 init_globals();
@@ -58707,11 +60676,11 @@ var CLICK_BUDGETS = {
 
 // src/daemon/acquire.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path24 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/limits.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path23 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/memory-report.ts
 init_globals();
@@ -58861,7 +60830,7 @@ function readCharge(probed, previous) {
 }
 function artifactFile(dir, kind, identity2) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path20.default.join(dir, `${prefix}${identity2}${suffix}`);
+  return import_node_path23.default.join(dir, `${prefix}${identity2}${suffix}`);
 }
 function breachArtifactOf(base) {
   for (const kind of Object.keys(BREACH_ARTIFACTS)) {
@@ -59030,7 +60999,7 @@ async function attempt2(log, what, body) {
 function postMortemsOf(files) {
   const byIdentity = /* @__PURE__ */ new Map();
   for (const file of files) {
-    const base = import_node_path20.default.basename(file);
+    const base = import_node_path23.default.basename(file);
     const kind = breachArtifactOf(base);
     if (kind === null) continue;
     const { prefix, suffix } = BREACH_ARTIFACTS[kind];
@@ -59079,7 +61048,7 @@ function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
         if (e.code === "ENOENT") return [];
         throw e;
       }
-      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path20.default.join(dir, f));
+      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path23.default.join(dir, f));
     },
     removeFile: (file) => fs_default.unlinkSync(file),
     shutdown,
@@ -59106,17 +61075,17 @@ function shipsNative(platform3, arch2) {
 // src/install/index.ts
 function supportDir(host) {
   if (process_default.platform === "darwin") {
-    return import_node_path22.default.join(host.home, "Library", "Application Support", "CCCandybar");
+    return import_node_path25.default.join(host.home, "Library", "Application Support", "CCCandybar");
   }
-  return import_node_path22.default.join(locations(host).dataHome, "cc-candybar");
+  return import_node_path25.default.join(locations(host).dataHome, "cc-candybar");
 }
 function stagedDistPath(dir) {
-  return import_node_path22.default.join(dir, "dist", "index.mjs");
+  return import_node_path25.default.join(dir, "dist", "index.mjs");
 }
 function stableAttachPreload(runningBundle, host) {
   const checkout = sourceCheckoutOf(runningBundle);
   return attachPreloadOf(
-    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path22.default.join(checkout, "dist", "index.mjs")
+    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path25.default.join(checkout, "dist", "index.mjs")
   );
 }
 
@@ -59125,7 +61094,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path23 = __toESM(require_path_browserify(), 1);
+var import_node_path26 = __toESM(require_path_browserify(), 1);
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -59206,7 +61175,7 @@ function holdKey(root) {
 function watchSpec(root, gitDir, commonDir) {
   const dirs = [
     { path: gitDir, filenames: ["HEAD", "index"] },
-    { path: import_node_path23.default.join(commonDir, "refs", "heads"), recursive: true }
+    { path: import_node_path26.default.join(commonDir, "refs", "heads"), recursive: true }
   ];
   const bounds = dirs.map((d) => boundOf(d.path));
   const named3 = dirs.map((d, i) => `${d.path}@${boundKey(bounds[i])}`);
@@ -59652,1959 +61621,6 @@ var GitDataProvider = class {
     this.repos.clear();
     this.resolutions.clear();
     if (this.ownsWatchers) this.watchers.closeAll();
-  }
-};
-
-// src/daemon/cache/session-usage-store.ts
-init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
-
-// src/segments/pricing.ts
-init_globals();
-init_url();
-
-// src/utils/cache.ts
-init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
-var CacheManager = class {
-  // [LAW:one-source-of-truth] Every method takes the cache's root directory
-  // (the host's `cacheDir`), so the layout under it is derived here alone.
-  static usageDir(root) {
-    return import_node_path24.default.join(root, "usage");
-  }
-  static locksDir(root) {
-    return import_node_path24.default.join(root, "locks");
-  }
-  static isLocked(root, name) {
-    const lockFile = import_node_path24.default.join(this.locksDir(root), name);
-    if (!fs_default.existsSync(lockFile)) {
-      return false;
-    }
-    try {
-      const lockContent = fs_default.readFileSync(lockFile, "utf-8");
-      const pid2 = parseInt(lockContent.trim(), 10);
-      if (isNaN(pid2)) {
-        debug(`Invalid PID in lock file ${name}, removing stale lock`);
-        fs_default.unlinkSync(lockFile);
-        return false;
-      }
-      try {
-        process_default.kill(pid2, 0);
-        return true;
-      } catch (error) {
-        if (error.code === "ESRCH") {
-          debug(`Removing stale lock file ${name} for dead process ${pid2}`);
-          fs_default.unlinkSync(lockFile);
-          return false;
-        }
-        debug(`Error checking process ${pid2} for lock ${name}:`, error);
-        return true;
-      }
-    } catch (error) {
-      debug(`Error reading lock file ${name}:`, error);
-      return true;
-    }
-  }
-  static async acquireLock(root, clock, name, timeout = 5e3) {
-    const RETRY_DELAY_MS = 50;
-    const FILE_CREATE_FLAG = "wx";
-    await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path24.default.join(this.locksDir(root), name);
-    const startTime = clock.monotonic();
-    const lockContent = String(process_default.pid);
-    while (clock.monotonic() - startTime < timeout) {
-      try {
-        await fs_default.promises.writeFile(lockFile, lockContent, {
-          flag: FILE_CREATE_FLAG
-        });
-        debug(`Lock acquired for ${name}`);
-        return true;
-      } catch (error) {
-        if (error.code === "EEXIST") {
-          await sleep(clock, RETRY_DELAY_MS);
-        } else {
-          throw error;
-        }
-      }
-    }
-    debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
-    return false;
-  }
-  static async releaseLock(root, name) {
-    const lockFile = import_node_path24.default.join(this.locksDir(root), name);
-    try {
-      await fs_default.promises.unlink(lockFile);
-      debug(`Lock released for ${name}`);
-    } catch (error) {
-      if (error.code !== "ENOENT") {
-        debug(`Error releasing lock for ${name}:`, error);
-      }
-    }
-  }
-  static async ensureCacheDirectories(root) {
-    try {
-      await Promise.all([
-        fs_default.promises.mkdir(root, { recursive: true }),
-        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
-        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
-      ]);
-    } catch (error) {
-      debug("Failed to create cache directories:", error);
-    }
-  }
-  static createProjectHash(projectPath) {
-    return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
-  }
-  static async getUsageCache(root, clock, cacheType, latestMtime) {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 75;
-    const FILE_ENCODING = "utf-8";
-    await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path24.default.join(this.usageDir(root), `${cacheType}.json`);
-    const lockName = `${cacheType}.usage.lock`;
-    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
-      const isCurrentlyLocked = this.isLocked(root, lockName);
-      if (isCurrentlyLocked) {
-        debug(`Cache for ${cacheType} is locked, waiting...`);
-        await sleep(clock, RETRY_DELAY_MS);
-        continue;
-      }
-      try {
-        const content = await fs_default.promises.readFile(cachePath, FILE_ENCODING);
-        const cached = JSON.parse(content);
-        const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
-        if (cacheIsValid) {
-          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
-          return this.deserializeDates(cached.data);
-        } else {
-          debug(
-            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
-          );
-          return null;
-        }
-      } catch (error) {
-        if (error.code === "ENOENT") {
-          debug(`No shared ${cacheType} usage cache found`);
-          return null;
-        }
-        const attemptNumber = attempt4 + 1;
-        debug(
-          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
-        );
-        await sleep(clock, RETRY_DELAY_MS);
-      }
-    }
-    debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
-    return null;
-  }
-  static deserializeDates(data) {
-    if (Array.isArray(data)) {
-      return data.map((entry) => ({
-        ...entry,
-        timestamp: new Date(entry.timestamp)
-      }));
-    }
-    return data;
-  }
-  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
-    const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(root, clock, lockName);
-    if (!lockAcquired) {
-      debug(`Could not acquire lock to set usage cache for ${cacheType}`);
-      return;
-    }
-    try {
-      await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path24.default.join(this.usageDir(root), `${cacheType}.json`);
-      const cacheTimestamp = latestMtime || clock.now();
-      const cacheEntry = {
-        data,
-        timestamp: cacheTimestamp
-      };
-      const cacheContent = JSON.stringify(cacheEntry);
-      await fs_default.promises.writeFile(cachePath, cacheContent, "utf-8");
-      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
-    } catch (error) {
-      debug(`Failed to save ${cacheType} usage cache:`, error);
-    } finally {
-      await this.releaseLock(root, lockName);
-    }
-  }
-};
-
-// src/segments/pricing.ts
-var OFFLINE_PRICING_DATA = {
-  "claude-haiku-4-5-20251001": {
-    name: "Claude Haiku 4.5",
-    input: 1,
-    output: 5,
-    cache_write_5m: 1.25,
-    cache_write_1h: 2,
-    cache_read: 0.1
-  },
-  "claude-haiku-4-5": {
-    name: "Claude Haiku 4.5",
-    input: 1,
-    output: 5,
-    cache_write_5m: 1.25,
-    cache_write_1h: 2,
-    cache_read: 0.1
-  },
-  "claude-opus-4-20250514": {
-    name: "Claude Opus 4",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-opus-4-1": {
-    name: "Claude Opus 4.1",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-opus-4-1-20250805": {
-    name: "Claude Opus 4.1",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-sonnet-4-20250514": {
-    name: "Claude Sonnet 4",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-4-opus-20250514": {
-    name: "Claude 4 Opus",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-4-sonnet-20250514": {
-    name: "Claude 4 Sonnet",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-sonnet-4-5": {
-    name: "Claude Sonnet 4.5",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-sonnet-4-5-20250929": {
-    name: "Claude Sonnet 4.5",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-opus-4-5": {
-    name: "Claude Opus 4.5",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-5-20251101": {
-    name: "Claude Opus 4.5",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-6": {
-    name: "Claude Opus 4.6",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-6-20260205": {
-    name: "Claude Opus 4.6",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-sonnet-4-6": {
-    name: "Claude Sonnet 4.6",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  }
-};
-var PricingService = class {
-  static executionCache = null;
-  static modelPricingCache = /* @__PURE__ */ new Map();
-  static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
-  static async loadDiskCache(cacheRoot, clock) {
-    const TTL_24H = 24 * 60 * 60 * 1e3;
-    const minValidTime = clock.now() - TTL_24H;
-    return await CacheManager.getUsageCache(
-      cacheRoot,
-      clock,
-      "pricing",
-      minValidTime
-    );
-  }
-  static async saveDiskCache(cacheRoot, clock, data) {
-    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
-  }
-  static async fetchPricingData() {
-    return new Promise((resolve) => {
-      const parsedUrl = new U(this.GITHUB_PRICING_URL);
-      const request2 = get2(
-        {
-          hostname: parsedUrl.hostname,
-          path: parsedUrl.pathname,
-          headers: {
-            "User-Agent": "cc-candybar",
-            "Cache-Control": "no-cache"
-          },
-          timeout: 5e3
-        },
-        (response) => {
-          if (response.statusCode !== 200) {
-            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
-            resolve(null);
-            return;
-          }
-          let data = "";
-          let size = 0;
-          const MAX_SIZE = 1024 * 1024;
-          response.setEncoding("utf8");
-          response.on("data", (chunk3) => {
-            size += import_buffer.Buffer.byteLength(chunk3);
-            if (size > MAX_SIZE) {
-              debug("Response too large");
-              request2.destroy();
-              resolve(null);
-              return;
-            }
-            data += chunk3;
-          });
-          response.on("end", () => {
-            try {
-              const json2 = JSON.parse(data);
-              const dataObj = json2;
-              const meta = dataObj._meta;
-              const pricingData = {};
-              for (const [key, value] of Object.entries(dataObj)) {
-                if (key !== "_meta") {
-                  pricingData[key] = value;
-                }
-              }
-              if (this.validatePricingData(pricingData)) {
-                debug(
-                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
-                );
-                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
-                resolve(pricingData);
-              } else {
-                debug("Invalid pricing data structure");
-                resolve(null);
-              }
-            } catch (error) {
-              debug("Failed to parse JSON:", error);
-              resolve(null);
-            }
-          });
-          response.on("error", (error) => {
-            debug("Response error:", error);
-            resolve(null);
-          });
-        }
-      );
-      request2.on("error", (error) => {
-        debug("Request error:", error);
-        resolve(null);
-      });
-      request2.on("timeout", () => {
-        debug("Request timeout");
-        request2.destroy();
-        resolve(null);
-      });
-      request2.end();
-    });
-  }
-  static async getCurrentPricing(cacheRoot, clock) {
-    if (this.executionCache !== null) {
-      debug(
-        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
-      );
-      return this.executionCache;
-    }
-    const diskCached = await this.loadDiskCache(cacheRoot, clock);
-    if (diskCached) {
-      debug(
-        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
-      );
-      this.executionCache = diskCached;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
-      );
-      return diskCached;
-    }
-    const freshData = await this.fetchPricingData();
-    if (freshData) {
-      await this.saveDiskCache(cacheRoot, clock, freshData);
-      debug(
-        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
-      );
-      this.executionCache = freshData;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
-      );
-      return freshData;
-    }
-    debug(
-      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    this.executionCache = OFFLINE_PRICING_DATA;
-    debug(
-      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    return OFFLINE_PRICING_DATA;
-  }
-  static validatePricingData(data) {
-    if (!data || typeof data !== "object") return false;
-    for (const [, value] of Object.entries(data)) {
-      if (!value || typeof value !== "object") return false;
-      const pricing = value;
-      if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number") {
-        return false;
-      }
-    }
-    return true;
-  }
-  static async getModelPricing(modelId, cacheRoot, clock) {
-    if (this.modelPricingCache.has(modelId)) {
-      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
-      return this.modelPricingCache.get(modelId);
-    }
-    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
-    let pricing;
-    if (allPricing[modelId]) {
-      pricing = allPricing[modelId];
-    } else {
-      pricing = this.fuzzyMatchModel(modelId, allPricing);
-    }
-    this.modelPricingCache.set(modelId, pricing);
-    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
-    return pricing;
-  }
-  static fuzzyMatchModel(modelId, allPricing) {
-    const lowerModelId = modelId.toLowerCase();
-    for (const [key, pricing] of Object.entries(allPricing)) {
-      if (key.toLowerCase() === lowerModelId) {
-        return pricing;
-      }
-    }
-    const patterns = [
-      {
-        pattern: ["opus-4-6", "claude-opus-4-6"],
-        fallback: "claude-opus-4-6-20260205"
-      },
-      {
-        pattern: ["opus-4-5", "claude-opus-4-5"],
-        fallback: "claude-opus-4-5-20251101"
-      },
-      {
-        pattern: ["opus-4-1", "claude-opus-4-1"],
-        fallback: "claude-opus-4-1-20250805"
-      },
-      {
-        pattern: ["opus-4", "claude-opus-4"],
-        fallback: "claude-opus-4-20250514"
-      },
-      {
-        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
-        fallback: "claude-sonnet-4-6"
-      },
-      {
-        pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
-        fallback: "claude-sonnet-4-5-20250929"
-      },
-      {
-        pattern: ["sonnet-4", "claude-sonnet-4"],
-        fallback: "claude-sonnet-4-20250514"
-      },
-      {
-        pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
-        fallback: "claude-haiku-4-5-20251001"
-      },
-      { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
-      { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
-      { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
-    ];
-    for (const { pattern: pattern2, fallback } of patterns) {
-      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
-        if (allPricing[fallback]) {
-          return allPricing[fallback];
-        }
-      }
-    }
-    return allPricing["claude-sonnet-4-5-20250929"] || {
-      name: `${modelId} (Unknown Model)`,
-      input: 3,
-      cache_write_5m: 3.75,
-      cache_write_1h: 6,
-      cache_read: 0.3,
-      output: 15
-    };
-  }
-  static async calculateCostForEntry(entry, cacheRoot, clock) {
-    const usage = entry.message?.usage;
-    if (!usage) {
-      return 0;
-    }
-    const modelId = this.extractModelId(entry);
-    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
-    const inputTokens = usage.input_tokens || 0;
-    const outputTokens = usage.output_tokens || 0;
-    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-    const cacheReadTokens = usage.cache_read_input_tokens || 0;
-    const inputCost = inputTokens / 1e6 * pricing.input;
-    const outputCost = outputTokens / 1e6 * pricing.output;
-    const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
-    const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
-    return inputCost + outputCost + cacheCreationCost + cacheReadCost;
-  }
-  static extractModelId(entry) {
-    if (entry.model && typeof entry.model === "string") {
-      return entry.model;
-    }
-    const message = entry.message;
-    if (message?.model) {
-      const model = message.model;
-      if (typeof model === "string") {
-        return model;
-      }
-      const modelObj = model;
-      return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
-    }
-    if (entry.model_id && typeof entry.model_id === "string") {
-      return entry.model_id;
-    }
-    return "claude-sonnet-4-5-20250929";
-  }
-};
-
-// src/utils/claude.ts
-init_globals();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
-
-// src/utils/transcript-activity.ts
-init_globals();
-var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
-function slashCommand(text4) {
-  if (typeof text4 !== "string") return void 0;
-  return COMMAND_NAME.exec(text4)?.[1];
-}
-function todoItems(input) {
-  const todos2 = input?.todos;
-  if (!Array.isArray(todos2)) return void 0;
-  const items = [];
-  for (const raw of todos2) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const { content, activeForm, status } = raw;
-    const active2 = status === "in_progress";
-    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
-    if (typeof text4 !== "string") continue;
-    items.push({ text: text4, active: active2, done: status === "completed" });
-  }
-  return items;
-}
-function turnText(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const block = content.find(
-    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
-  );
-  return block?.text ?? "";
-}
-function entryActivity(parsed2, userEntry) {
-  const msg = parsed2.message;
-  const content = msg?.content;
-  const started2 = [];
-  const finished = [];
-  let todos2;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (typeof block !== "object" || block === null) continue;
-      const b = block;
-      switch (b.type) {
-        case "tool_use": {
-          const { id: id2, name } = b;
-          if (typeof id2 !== "string" || typeof name !== "string") break;
-          started2.push({ id: id2, name });
-          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
-          break;
-        }
-        case "tool_result": {
-          const id2 = b.tool_use_id;
-          if (typeof id2 === "string") finished.push(id2);
-          break;
-        }
-        default:
-          break;
-      }
-    }
-  }
-  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
-  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
-    return void 0;
-  }
-  return {
-    ...started2.length > 0 && { started: started2 },
-    ...finished.length > 0 && { finished },
-    ...todos2 !== void 0 && { todos: todos2 },
-    ...command !== void 0 && { command }
-  };
-}
-
-// src/utils/claude.ts
-function getClaudePaths(detected, homeDir) {
-  if (detected !== void 0) return [detected];
-  return [(0, import_node_path25.join)(homeDir, ".config", "claude"), (0, import_node_path25.join)(homeDir, ".claude")].filter(
-    (dir) => existsSync(dir)
-  );
-}
-async function findProjectPaths(claudePaths) {
-  const projectPaths = [];
-  for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path25.join)(claudePath, "projects");
-    const entries = await unlessGone(
-      readdir2(projectsDir, { withFileTypes: true })
-    );
-    for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path25.join)(projectsDir, entry.name));
-    }
-  }
-  return projectPaths;
-}
-async function unlessGone(read2) {
-  try {
-    return await read2;
-  } catch (e) {
-    if (e.code === "ENOENT") return void 0;
-    throw e;
-  }
-}
-async function findAgentTranscripts(sessionId2, projectPath, verified) {
-  const paths2 = [];
-  let longLines = [];
-  const subagentsDir = (0, import_node_path25.join)(projectPath, sessionId2, "subagents");
-  try {
-    const files = await readdir2(subagentsDir);
-    const agentFileNames = files.filter(
-      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
-    );
-    for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path25.join)(subagentsDir, fileName2);
-      if (verified?.has(filePath2)) {
-        paths2.push(filePath2);
-        continue;
-      }
-      const read2 = await readAppended(filePath2, void 0, void 0);
-      if (read2.kind !== "ok") {
-        debug(`Failed to check agent file ${filePath2}`);
-        continue;
-      }
-      longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line = jsonLine(
-        decodeLines(
-          read2.value,
-          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
-        )
-      );
-      if (line.kind === "object" && line.value.sessionId === sessionId2) {
-        paths2.push(filePath2);
-      }
-    }
-  } catch (error) {
-    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
-  }
-  return { paths: paths2, longLines };
-}
-function userEntryOf(parsed2) {
-  const msg = parsed2.message;
-  const messageType = parsed2.type || msg?.role || msg?.type;
-  if (messageType !== "user") return void 0;
-  if (firstBlockType(msg) === "tool_result") return "tool-result";
-  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
-  if (origin !== void 0 && origin !== "human") return "turn";
-  const text4 = turnText(msg?.content).trimStart();
-  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
-  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
-}
-var TURN_ENDS = /* @__PURE__ */ new Set([
-  "end_turn",
-  "stop_sequence",
-  "max_tokens",
-  "refusal"
-]);
-function turnOpenAfter(open2, entry) {
-  if (entry.isSidechain) return open2;
-  switch (entry.userEntry) {
-    case "prompt":
-    case "turn":
-      return true;
-    case "interrupt":
-      return false;
-    case "tool-result":
-    case "claude-code":
-      return open2;
-    case void 0:
-      return entry.type === "assistant" ? !TURN_ENDS.has(entry.message?.stopReason ?? "") : open2;
-  }
-}
-var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
-function firstBlockType(msg) {
-  const content = msg?.content;
-  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
-}
-function makeEntry(parsed2) {
-  if (!parsed2.timestamp) return null;
-  const msg = parsed2.message;
-  const usage = msg?.usage;
-  const userEntry = userEntryOf(parsed2);
-  return {
-    timestamp: new Date(parsed2.timestamp),
-    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
-    message: msg ? {
-      id: typeof msg.id === "string" ? msg.id : void 0,
-      model: typeof msg.model === "string" ? msg.model : void 0,
-      usage,
-      role: typeof msg.role === "string" ? msg.role : void 0,
-      type: typeof msg.type === "string" ? msg.type : void 0,
-      stopReason: typeof msg.stop_reason === "string" ? msg.stop_reason : void 0
-    } : void 0,
-    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
-    isSidechain: parsed2.isSidechain === true,
-    userEntry,
-    activity: entryActivity(parsed2, userEntry),
-    raw: {
-      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
-      message: msg ? {
-        id: typeof msg.id === "string" ? msg.id : void 0,
-        model: typeof msg.model === "string" ? msg.model : void 0,
-        usage
-      } : void 0,
-      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
-    }
-  };
-}
-function jsonLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return { kind: "blank" };
-  try {
-    const value = JSON.parse(trimmed);
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
-  } catch (parseError) {
-    return { kind: "unparsed", reason: String(parseError) };
-  }
-}
-function entryOf3(line) {
-  const read2 = jsonLine(line);
-  if (read2.kind === "unparsed") {
-    debug(`Failed to parse JSONL line: ${read2.reason}`);
-    return null;
-  }
-  if (read2.kind === "blank") return null;
-  try {
-    return makeEntry(read2.value);
-  } catch (projectionError) {
-    debug(`Failed to project JSONL line: ${projectionError}`);
-    return null;
-  }
-}
-function parseJsonlLines(text4) {
-  const entries = [];
-  for (const line of text4.split("\n")) {
-    const entry = entryOf3(line);
-    if (entry) entries.push(entry);
-  }
-  return entries;
-}
-function longLinesWith(longLines, path43, read2) {
-  return read2.longLine === 0 ? longLines : [...longLines, { path: path43, offset: read2.start, bytes: read2.longLine }];
-}
-function longLineLog(longLines) {
-  return longLines.map(
-    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
-  );
-}
-async function foldAppended(filePath2, prior, empty2, step4) {
-  let longLines = [];
-  let cursor = prior?.cursor;
-  let value = prior?.value ?? empty2;
-  let end;
-  for (; ; ) {
-    const read2 = await readAppended(
-      filePath2,
-      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
-      end?.size
-    );
-    if (read2.kind !== "ok") return read2;
-    const window2 = read2.value;
-    if (window2.reset) value = empty2;
-    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
-    if (end === void 0 || window2.reset) {
-      end = { size: window2.size, stamp: window2.stamp };
-    }
-    const next = window2.start + window2.lines.length;
-    value = await step4(
-      value,
-      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
-    );
-    cursor = {
-      offset: next,
-      stamp: end.stamp,
-      ino: window2.ino
-    };
-    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
-  }
-}
-
-// src/utils/single-flight.ts
-init_globals();
-var SingleFlight = class {
-  inflight = /* @__PURE__ */ new Map();
-  run(key, factory) {
-    return this.inflight.get(key) ?? this.start(key, factory);
-  }
-  start(key, factory) {
-    const promise = factory();
-    this.inflight.set(key, promise);
-    const deregister = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
-    };
-    promise.then(deregister, deregister);
-    return promise;
-  }
-  // Number of computations currently in flight — a read-only observability
-  // surface for tests asserting the coalescing contract (one in-flight entry
-  // per key). Never read as control flow.
-  get size() {
-    return this.inflight.size;
-  }
-};
-
-// src/var-system/store.ts
-init_globals();
-var unwritten = (value) => isPending(value);
-var BoxNode = class {
-  constructor(name, type3, initial2, clock) {
-    this.name = name;
-    this.type = type3;
-    this.clock = clock;
-    if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
-    this.cell = observable.box(initial2, { deep: false });
-    this.lastChangedAt = unwritten(initial2) ? null : clock.now();
-  }
-  name;
-  type;
-  clock;
-  kind = "box";
-  cell;
-  // [LAW:single-enforcer] One write path (`set`) updates both the value and
-  // the timestamp; introspection reads from the same place renderers do.
-  //
-  // It records when the value last CHANGED, which is what debug.ts calls the
-  // node's age and what anyone reading that age is asking (brandon-var-system-
-  // 1tl). Stamping every write instead reported attempts, and reported them most
-  // misleadingly in the one situation where the age is consulted: a source
-  // re-running with no effect.
-  lastChangedAt;
-  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
-  // THE pending signal, which every place a template is evaluated takes as its
-  // own outcome.
-  read() {
-    const value = this.cell.get();
-    if (unwritten(value)) {
-      throw new PendingValueError(
-        this.name,
-        `variable "${this.name}" has no value yet: nothing has written it`
-      );
-    }
-    return value;
-  }
-  // A box written pending is not answered yet again: what its payload holds
-  // is a source that has not answered (src/renderer/render-payload.ts).
-  set(value) {
-    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
-    if (compareStructural(this.cell.get(), value)) return;
-    this.cell.set(value);
-    this.lastChangedAt = this.clock.now();
-  }
-  lastUpdatedMs() {
-    return this.lastChangedAt;
-  }
-  // The cell as written, pending included: what `stored` reads.
-  stored() {
-    return this.cell.get();
-  }
-};
-var Kept = class {
-  cell;
-  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
-  // `equals` is what counts as a change: MobX's own comparison unless given.
-  constructor(what, deriver, equals) {
-    this.cell = computed(deriver, {
-      keepAlive: true,
-      ...equals !== void 0 && { equals }
-    });
-    if (typeof this.cell.suspend_ !== "function") {
-      throw new TypeError(
-        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`
-      );
-    }
-    if (typeof this.cell.keepAlive_ !== "boolean") {
-      throw new TypeError(
-        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`
-      );
-    }
-  }
-  read() {
-    return this.cell.get();
-  }
-  // Unsubscribe from every dependency and drop the cached value. A keepAlive
-  // computed never does this on its own — MobX keeps it subscribed to whatever
-  // it read for as long as those observables live, which for a daemon-wide
-  // observable (the SessionState atom) is the life of the daemon, and that
-  // subscription kept every disposed config's whole store reachable
-  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
-  // computed, so this lifts the guard its own teardown checks and runs that
-  // teardown. Must run inside an action: the unobservation it cascades is
-  // settled when the outermost batch ends.
-  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
-  // `suspend_`) are reached here and nowhere else; the constructor refuses a
-  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
-  release() {
-    this.cell.keepAlive_ = false;
-    this.cell.suspend_();
-  }
-};
-var Projected = class {
-  constructor(deriver) {
-    this.deriver = deriver;
-  }
-  deriver;
-  read() {
-    return this.deriver();
-  }
-};
-var ComputedNode = class {
-  constructor(name, type3, deriver) {
-    this.name = name;
-    this.type = type3;
-    this.cell = new Kept(`Variable "${name}"`, () => {
-      const v = deriver();
-      assertType(this.name, this.type, v, "computed result");
-      return v;
-    });
-  }
-  name;
-  type;
-  kind = "computed";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  release() {
-    this.cell.release();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-var ProjectionNode = class {
-  constructor(name, type3, deriver) {
-    this.name = name;
-    this.type = type3;
-    this.cell = new Projected(() => {
-      const v = deriver();
-      assertType(this.name, this.type, v, "projection result");
-      return v;
-    });
-  }
-  name;
-  type;
-  kind = "projection";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-var DocumentCell = class {
-  constructor(name, initial2, clock) {
-    this.name = name;
-    this.clock = clock;
-    this.cell = observable.box(shaped(initial2), { deep: false });
-    this.lastChangedAt = initial2.kind === "pending" ? null : clock.now();
-  }
-  name;
-  clock;
-  kind = "document";
-  cell;
-  lastChangedAt;
-  read() {
-    return this.cell.get();
-  }
-  set(value) {
-    const next = shaped(value);
-    if (sameDocument(this.cell.get(), next)) return;
-    this.cell.set(next);
-    this.lastChangedAt = this.clock.now();
-  }
-  lastUpdatedMs() {
-    return this.lastChangedAt;
-  }
-};
-var DerivedDocument = class {
-  constructor(name, deriver) {
-    this.name = name;
-    this.cell = new Kept(
-      `Variable "${name}"`,
-      () => shaped(deriver()),
-      sameDocument
-    );
-  }
-  name;
-  kind = "document";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  release() {
-    this.cell.release();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-function documentKey(outcome) {
-  return JSON.stringify(outcome);
-}
-function sameDocument(a, b) {
-  return documentKey(a) === documentKey(b);
-}
-function shaped(outcome) {
-  return outcome.kind === "ok" ? { kind: "ok", value: toDocument(outcome.value) } : outcome;
-}
-function assertType(name, declared, value, context) {
-  const actual = typeOf(value);
-  if (actual !== declared) {
-    throw new TypeError(
-      `Variable "${name}": ${context} type ${actual} does not match declared type ${declared}`
-    );
-  }
-}
-var VariableStore = class {
-  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
-  // changed; a child store reads the same one as its parent.
-  constructor(clock, parent = null) {
-    this.clock = clock;
-    this.parent = parent;
-  }
-  clock;
-  parent;
-  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
-  // observable: a reaction that read a name before its declaration (a cache
-  // key over a variable declared after it) re-runs when it is declared, so
-  // what it sees does not depend on the order the config lists variables in.
-  // `deep: false` keeps each node the object it was declared as.
-  nodes = observable.map(void 0, {
-    deep: false
-  });
-  defineBox(name, type3, initial2) {
-    this.declare(name, new BoxNode(name, type3, initial2, this.clock));
-  }
-  defineDocument(name, initial2) {
-    this.declare(name, new DocumentCell(name, initial2, this.clock));
-  }
-  // A document whose reading the deriver computes from what it reads.
-  defineDerivedDocument(name, deriver) {
-    this.declare(name, new DerivedDocument(name, deriver));
-  }
-  // Computed deriver receives a `read` function that returns the value
-  // of any variable in the store. Calling `read(other)` from inside the
-  // deriver is what registers the dependency with MobX — the deriver's
-  // body is the dep graph.
-  defineComputed(name, type3, deriver) {
-    this.defineDerived(name, type3, "computed", deriver);
-  }
-  defineDerived(name, type3, derivation, deriver) {
-    const reader = (other) => this.read(other);
-    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
-    this.declare(name, new Node(name, type3, () => deriver(reader)));
-  }
-  // A derived value of this store that is no variable — a template a draw
-  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
-  // what it read changes, or derived at every read, and released with them.
-  derive(name, derivation, deriver) {
-    this.refuseDisposed(`Derived value "${name}"`);
-    if (derivation === "projection") return new Projected(deriver);
-    const kept = new Kept(`Derived value "${name}"`, deriver);
-    this.kept.push(kept);
-    return kept;
-  }
-  kept = [];
-  read(name) {
-    return this.requireVar(name).read();
-  }
-  readDocument(name) {
-    const node = this.requireNode(name);
-    if (node.kind !== "document") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a document`
-      );
-    }
-    return node.read();
-  }
-  // A written node's value as stored, pending included and nothing
-  // serialized: a box's value or a document's reading. Read in a reaction, it
-  // moves exactly when the node is written, which its own compare decides.
-  stored(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") return node.read();
-    if (node.kind !== "box") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a written node`
-      );
-    }
-    return node.stored();
-  }
-  setDocument(name, value) {
-    const node = this.requireOwn(name);
-    if (!(node instanceof DocumentCell)) {
-      throw new TypeError(
-        node.kind === "document" ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it` : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`
-      );
-    }
-    runInAction(() => node.set(value));
-  }
-  setBox(name, value) {
-    const node = this.requireOwn(name);
-    if (node.kind !== "box") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`
-      );
-    }
-    runInAction(() => node.set(value));
-  }
-  // Wrap multi-variable updates so dependents only invalidate once per
-  // batch. Used by the render path to push a whole input payload before
-  // any computed re-evaluates.
-  runInAction(fn) {
-    runInAction(fn);
-  }
-  has(name) {
-    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
-  }
-  getType(name) {
-    return this.requireVar(name).type;
-  }
-  getKind(name) {
-    return this.requireNode(name).kind;
-  }
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
-  changeKey(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") {
-      const doc = node.read();
-      return doc.kind === "pending" ? doc : ok(documentKey(doc));
-    }
-    try {
-      return ok(String(node.read()));
-    } catch (e) {
-      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
-  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
-  // returning the BoxNode directly would leak `.set` structurally even
-  // though VarNode does not advertise it. The returned wrapper is a fresh
-  // object exposing only the VarNode surface — `.set` is unreachable at
-  // any level (no structural escape, no plain-JS reach-through). The
-  // mutation path remains gated behind `setBox`, which wraps in
-  // runInAction to satisfy MobX strict-mode.
-  //
-  // [LAW:single-enforcer] One requireNode call per consumer-row — the
-  // round-1 dedup fix in introspectVars relies on the caller getting both
-  // type/kind and a read() in one go without paying for a second
-  // requireNode. The wrapper preserves that.
-  getNode(name) {
-    const node = this.requireNode(name);
-    return node.kind === "document" ? {
-      name: node.name,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs()
-    } : {
-      name: node.name,
-      type: node.type,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs()
-    };
-  }
-  names() {
-    return [...this.parent?.names() ?? [], ...this.nodes.keys()];
-  }
-  // Release every computed's subscriptions, so nothing outliving this store
-  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
-  // boxes and documents die with it; only the computeds hold references
-  // outward. Reads after dispose still answer — a released computed recomputes
-  // uncached, and outside a batch subscribes to nothing (inside one, MobX
-  // tracks it for the batch and unobserves again as the batch ends) — so a
-  // late reader cannot resubscribe the store to the world for good. A
-  // declaration after dispose would: it would mint a keepAlive computed with
-  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
-  // released, the fact the caller's log line carries (0 on a second call). One action, so the
-  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
-  // called by SourceRegistry.dispose, the one teardown of everything a config
-  // holds.
-  dispose() {
-    if (this.disposed) return 0;
-    this.disposed = true;
-    let released = 0;
-    runInAction(() => {
-      for (const node of this.nodes.values()) {
-        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
-          node.release();
-          released++;
-        }
-      }
-      for (const kept of this.kept) kept.release();
-    });
-    return released + this.kept.length;
-  }
-  disposed = false;
-  requireNode(name) {
-    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
-    if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
-    return node;
-  }
-  // [LAW:single-enforcer] The one door a write takes: a node of this store.
-  // A view writing its directory's node would write every session's value.
-  requireOwn(name) {
-    const node = this.nodes.get(name);
-    if (node !== void 0) return node;
-    if (this.parent?.has(name)) {
-      throw new Error(
-        `Variable "${name}" lives in the directory's store; a session's view cannot write it`
-      );
-    }
-    throw new ReferenceError(`Unknown variable "${name}"`);
-  }
-  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
-  // VarNode; a document reached through them is a caller asking a namespace
-  // for a scalar, said so by name rather than coerced to text.
-  requireVar(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") {
-      throw new TypeError(
-        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`
-      );
-    }
-    return node;
-  }
-  // [LAW:no-silent-failure] A computed declared after dispose has no release
-  // to come: it would subscribe to the world and hold this store exactly as
-  // before brandon-unfiled-3248.t14.
-  refuseDisposed(what) {
-    if (this.disposed) {
-      throw new Error(`${what}: cannot declare on a disposed store`);
-    }
-  }
-  declare(name, node) {
-    this.refuseDisposed(`Variable "${name}"`);
-    if (this.has(name)) {
-      throw new Error(`Variable "${name}" is already declared`);
-    }
-    runInAction(() => this.nodes.set(name, node));
-  }
-};
-
-// src/daemon/foundations/today-facts.ts
-init_globals();
-var EMPTY_DAY = {
-  cost: 0,
-  input: 0,
-  output: 0,
-  cacheCreation: 0,
-  cacheRead: 0
-};
-function addDay(into, d) {
-  into.cost += d.cost;
-  into.input += d.input;
-  into.output += d.output;
-  into.cacheCreation += d.cacheCreation;
-  into.cacheRead += d.cacheRead;
-}
-function dayKey(date2) {
-  const year = date2.getFullYear();
-  const month = String(date2.getMonth() + 1).padStart(2, "0");
-  const day = String(date2.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-function projectToday(facts, at) {
-  const today = dayKey(dateOf(at));
-  const inSet = facts.sums[today];
-  const own2 = facts.own[today];
-  if (inSet === void 0 && own2 === void 0) return ABSENT;
-  const total = { ...EMPTY_DAY };
-  if (inSet !== void 0) addDay(total, inSet);
-  if (own2 !== void 0) addDay(total, own2);
-  return ok({
-    cost: total.cost,
-    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
-    tokenBreakdown: {
-      input: total.input,
-      output: total.output,
-      cacheCreation: total.cacheCreation,
-      cacheRead: total.cacheRead
-    },
-    date: today
-  });
-}
-
-// src/daemon/cache/session-usage-store.ts
-var SPEED_RING_CAPACITY = 64;
-function speedSampleOf(breakdown, turnOpen, atMs) {
-  const input = breakdown ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead : 0;
-  const output = breakdown ? breakdown.output : 0;
-  return { input, output, total: input + output, atMs, turnOpen };
-}
-var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
-var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
-var DEFAULT_RESCAN = { okMs: 60 * 1e3, failedMs: 10 * 1e3 };
-var MAX_UNHELD_SCANS = 8;
-var SEED_CONCURRENCY = 8;
-var EMPTY_USAGE = {
-  calculatedCost: null,
-  tokens: null,
-  tokenBreakdown: null
-};
-function seedCutoffMs(now2) {
-  const d = new Date(now2);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - 1);
-  return d.getTime();
-}
-function emptyBreakdown() {
-  return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
-}
-var EMPTY_FILE_FOLD = {
-  entries: 0,
-  cost: 0,
-  breakdown: emptyBreakdown(),
-  days: /* @__PURE__ */ new Map(),
-  turnOpen: false
-};
-async function foldFile(state, entries, cacheRoot, clock) {
-  const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
-  let count = state.entries;
-  let cost = state.cost;
-  let turnOpen = state.turnOpen;
-  const breakdown = { ...state.breakdown };
-  const days = /* @__PURE__ */ new Map();
-  for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
-  for (const entry of entries) {
-    turnOpen = turnOpenAfter(turnOpen, entry);
-    const u = entry.message?.usage;
-    if (!u) continue;
-    count++;
-    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
-    cost += priced;
-    breakdown.input += u.input_tokens || 0;
-    breakdown.output += u.output_tokens || 0;
-    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
-    breakdown.cacheRead += u.cache_read_input_tokens || 0;
-    const key = dayKey(new Date(entry.timestamp));
-    if (key < keep2) continue;
-    const d = days.get(key) ?? { ...EMPTY_DAY };
-    d.cost += priced;
-    d.input += u.input_tokens || 0;
-    d.output += u.output_tokens || 0;
-    d.cacheCreation += u.cache_creation_input_tokens || 0;
-    d.cacheRead += u.cache_read_input_tokens || 0;
-    days.set(key, d);
-  }
-  return { entries: count, cost, breakdown, days, turnOpen };
-}
-function mergeFolds(files) {
-  let count = 0;
-  let cost = 0;
-  let turnOpen = false;
-  const bd = emptyBreakdown();
-  const days = /* @__PURE__ */ new Map();
-  for (const { value: f } of files.values()) {
-    count += f.entries;
-    cost += f.cost;
-    turnOpen ||= f.turnOpen;
-    bd.input += f.breakdown.input;
-    bd.output += f.breakdown.output;
-    bd.cacheCreation += f.breakdown.cacheCreation;
-    bd.cacheRead += f.breakdown.cacheRead;
-    for (const [k, v] of f.days) {
-      const d = days.get(k) ?? { ...EMPTY_DAY };
-      addDay(d, v);
-      days.set(k, d);
-    }
-  }
-  if (count === 0) return { usage: EMPTY_USAGE, days, turnOpen };
-  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
-  return {
-    usage: {
-      calculatedCost: cost,
-      tokens,
-      tokenBreakdown: bd
-    },
-    days,
-    turnOpen
-  };
-}
-function under2(path43, roots) {
-  return path43 !== void 0 && roots.some((root) => path43.startsWith(root));
-}
-function daySumsOver(slots, roots) {
-  const sums = /* @__PURE__ */ new Map();
-  for (const { record: record2 } of slots) {
-    if (record2 === void 0 || !under2(record2.transcriptPath, roots)) continue;
-    for (const [day, d] of record2.days) {
-      const sum2 = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum2, d);
-      sums.set(day, sum2);
-    }
-  }
-  return Object.fromEntries(sums);
-}
-async function mapPool(items, limit, fn) {
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < items.length) {
-      const item = items[cursor++];
-      await fn(item);
-    }
-  };
-  const width = Math.min(limit, items.length);
-  await Promise.all(Array.from({ length: width }, worker));
-}
-function answer(box, value) {
-  runInAction(() => box.set(value));
-}
-var SessionUsageStore = class {
-  // No count cap: `today` is a fold over every record, so a cap smaller than
-  // the day's sessions would drop work from it unseen. A record is a few
-  // scalars per file and retained day, and `sweepStale` bounds the map to the
-  // sessions seen within `staleAgeMs` plus those holding work done today.
-  // Observable, shallowly: a slot replaced is the change the day sums read.
-  sessions = observable.map(
-    void 0,
-    {
-      deep: false
-    }
-  );
-  // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
-  // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
-  // not a cache — the records map IS the cache).
-  flight = new SingleFlight();
-  // [LAW:single-enforcer] The one owner of when a directory set is scanned:
-  // its first read is the seed, and its period, which runs only while a home
-  // holds the set, is the rescan. Keyed by the directories themselves, so a
-  // default that resolves to one directory shares a scan with that directory
-  // named outright. Its answer is `today`'s, a failed scan included.
-  scans;
-  // Each directory set's day sums, derived from the records, kept for the
-  // store's life: there are as few as the Claude Code directories rendered
-  // from, and each reads only this store's own map.
-  daySets = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
-  // for the speed sample. Concurrent renders observing the SAME transcript state
-  // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
-  // exactly once — so they return the same prev+cur and render identical,
-  // deterministic throughput instead of the second clobbering the first.
-  speedFlight = new SingleFlight();
-  // [LAW:single-enforcer] A refresh of a session is one unit of work per
-  // (session, observed stamp): the lanes that read the record (session,
-  // speed) share it, so it records and logs once.
-  refreshFlight = new SingleFlight();
-  staleAgeMs;
-  // The machine the store reads: where transcripts live, and where the
-  // pricing table is cached.
-  host;
-  log;
-  refreshTally = { hits: 0, misses: 0 };
-  ledger;
-  // The session record's refresh, which its transcript lanes make; a
-  // rescan's reads are its `today` scan's.
-  usage;
-  sweeps = 0;
-  stopSweep = null;
-  closed = false;
-  clock;
-  constructor(opts) {
-    this.host = opts.host;
-    this.clock = opts.clock;
-    this.log = opts.logger ?? quietLogger;
-    this.ledger = opts.ledger ?? new RefreshLedger(this.log);
-    this.usage = this.ledger.declare({
-      name: "usage",
-      scope: "session",
-      refresh: ["first", "period", "change"],
-      lines: []
-    });
-    this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
-    this.scans = new KeyedSource({
-      name: "today",
-      scope: "configDir",
-      keyOf: (paths2) => paths2.join("\0"),
-      fields: (paths2) => `dirs=${valueOf(paths2.join(","))}`,
-      read: (paths2) => this.scan(paths2),
-      every: () => opts.rescan ?? DEFAULT_RESCAN,
-      watch: NO_WATCH,
-      maxEntries: MAX_UNHELD_SCANS,
-      lines: REFRESH_TRIGGERS,
-      logger: this.log,
-      ledger: this.ledger,
-      clock: this.clock
-    });
-    const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
-    if (interval > 0) {
-      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
-        unref: true
-      });
-    }
-  }
-  getStats() {
-    return {
-      size: this.sessions.size,
-      hits: this.refreshTally.hits,
-      misses: this.refreshTally.misses,
-      sweeps: this.sweeps
-    };
-  }
-  // The scans as a source: the directory sets kept, those a home holds, the
-  // seeds (`first`) and rescans (`period`), and how many failed.
-  scanStats() {
-    return this.scans.stats();
-  }
-  // [LAW:no-ambient-temporal-coupling] One refresh of a session, as a value:
-  // its session and speed lanes read the one ingest it starts, whichever asks
-  // first and whenever the other lands, so it reads, records and logs once.
-  // `by` is what asked for it (src/daemon/cache/transcript-lanes.ts).
-  refresh(sessionId2, transcriptPath, by) {
-    let refresh = null;
-    const once2 = () => {
-      if (refresh !== null) return refresh;
-      const stamp2 = statStamp(transcriptPath);
-      refresh = {
-        stamp: stamp2,
-        record: this.refreshed(sessionId2, transcriptPath, stamp2, by)
-      };
-      return refresh;
-    };
-    return {
-      // [LAW:no-silent-failure] A failed transcript parse flows out as
-      // `failed`; an unknown or empty session is the all-null totals, whose
-      // fields the payload drops one by one, so the hook's cost still lands
-      // over a session with no record.
-      usage: async () => {
-        const record2 = await once2().record;
-        if (record2.kind === "failed") return record2;
-        return ok(record2.kind === "ok" ? record2.value.usage : EMPTY_USAGE);
-      },
-      speed: (nowMs) => this.observed(sessionId2, once2, nowMs)
-    };
-  }
-  // The `session` projection as the session's last refresh left it, for a
-  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
-  // dropped) is not answered yet; one whose refresh found no transcript is the
-  // empty record its refresh answers for it.
-  usageOf(sessionId2) {
-    const slot = this.sessions.get(sessionId2);
-    if (slot === void 0) return pendingOf("unread");
-    const failure = slot.failure.get();
-    if (failure !== null) return failed(failure, "read");
-    return ok(slot.record?.usage ?? EMPTY_USAGE);
-  }
-  // A refresh's ingest of its session, whose outcome the session's slot keeps
-  // for the draws until the next one.
-  refreshed(sessionId2, transcriptPath, stamp2, by) {
-    return this.refreshFlight.run(`${sessionId2}:${stamp2}`, async () => {
-      const tally = { hits: 0, misses: 0 };
-      const startedAt = this.clock.monotonic();
-      const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
-      this.refreshTally.hits += tally.hits;
-      this.refreshTally.misses += tally.misses;
-      if (tally.misses > 0) {
-        this.usage.recorded(
-          `sid=${valueOf(sessionId2)}`,
-          by,
-          record2,
-          elapsedMs(this.clock, startedAt)
-        );
-      }
-      answer(
-        this.hold(sessionId2).failure,
-        record2.kind === "failed" ? record2.reason : null
-      );
-      return record2;
-    });
-  }
-  // The `today` projection, which declareToday and daysOutside below answer
-  // together: the cross-session sum of every record's today bucket.
-  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
-  // makes the whole projection `failed` — a total silently missing today's
-  // main work would be a confident wrong number, worse than a loud gap.
-  //
-  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
-  // the sum is that session plus every session whose transcript lives in THAT
-  // directory — the daemon's own env names none.
-  // [LAW:no-ambient-temporal-coupling] Whose `today` a record is in is read
-  // off where its transcript lives: a sum over every directory seen so far, or
-  // over the sessions that had asked, would move with which other sessions
-  // happened to have rendered.
-  // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
-  // src/renderer/render-payload.ts): the directory set's scans, held, so a set
-  // no scan has answered starts its first one now — before the request or the
-  // frame that reads it. The lane answers the set's day sums once a scan has
-  // answered; which day of them is the draw's (`projectToday`).
-  declareToday(holds2, claudeConfigDir2) {
-    if (this.closed) return settledLane(failed("usage store closed", "read"));
-    const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
-    const scans = this.scans.declare(holds2, claudePaths);
-    const set2 = this.daySet(claudePaths);
-    return {
-      current: () => {
-        const scan = scans.current();
-        return scan.kind === "ok" ? ok({ roots: set2.roots, sums: set2.sums.read() }) : scan;
-      }
-    };
-  }
-  // The rendering session's own days the set's sums do not hold, as the
-  // records stand, for the `today` fact: no I/O, no fold. A transcript under
-  // the set's roots is the set's to sum (its scan reads it, and fails if it
-  // cannot), so the session has none beyond them whatever its record holds.
-  // [LAW:no-silent-failure] Outside the roots, the session's last ingest
-  // failing is this read failing, so the fact fails with it and the draw shows
-  // a gap, never a total silently missing the session's own work.
-  daysOutside(sessionId2, transcriptPath, roots) {
-    if (under2(transcriptPath, roots)) return ABSENT;
-    const slot = this.sessions.get(sessionId2);
-    if (slot === void 0) return ABSENT;
-    const failure = slot.failure.get();
-    if (failure !== null) return failed(failure, "read");
-    return slot.record === void 0 ? ABSENT : ok(Object.fromEntries(slot.record.days));
-  }
-  // A refresh's speed sample, over its one ingest of the session: its current
-  // cumulative counts and whether its turn is open, added to the session's
-  // ring — taken only at a stamp no sample was taken at, so a period over an
-  // unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
-  // as `failed` (the boundary logs it and the segment reads "—"); an unknown
-  // session yields a zero-count sample, so a first-ever render establishes a
-  // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
-  // clock instant — the store never reads the clock for tok/s timing itself.
-  async observed(sessionId2, refresh, nowMs) {
-    const { stamp: stamp2, record: refreshed } = refresh();
-    return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
-      const record2 = await refreshed;
-      if (record2.kind === "failed") {
-        answer(this.hold(sessionId2).speed, record2);
-        return record2;
-      }
-      const slot = this.hold(sessionId2);
-      const standing2 = slot.speed.get();
-      if (slot.sampledAt === stamp2 && standing2?.kind === "ok") return standing2;
-      const cur = record2.kind === "ok" ? speedSampleOf(
-        record2.value.usage.tokenBreakdown,
-        record2.value.turnOpen,
-        nowMs
-      ) : speedSampleOf(null, false, nowMs);
-      const { ring } = slot;
-      ring.push(cur);
-      ring.sort((a, b) => a.atMs - b.atMs);
-      if (ring.length > SPEED_RING_CAPACITY) ring.shift();
-      slot.sampledAt = stamp2;
-      const observed = ok({ samples: [...ring] });
-      answer(slot.speed, observed);
-      return observed;
-    });
-  }
-  // The session's speed as its last refresh observed it, for a draw: a frame
-  // takes no sample, so how often the bar is drawn moves no rate.
-  speedOf(sessionId2) {
-    return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
-  }
-  // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
-  // `absent` is a session with no transcript to read, `failed` is a
-  // transcript that exists but couldn't be parsed — NOT cached (only ok
-  // records are stored; the next render retries, same rule as the git
-  // cache). This is the single write-path of a slot's record.
-  async ingest(sessionId2, transcriptPath, tally, stamp2) {
-    const existing = this.see(sessionId2)?.record;
-    if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
-      tally.hits++;
-      return ok(existing);
-    }
-    if (!transcriptPath) return existing ? ok(existing) : ABSENT;
-    tally.misses++;
-    let refolded;
-    try {
-      refolded = await this.flight.run(`${sessionId2}:${stamp2}`, async () => {
-        const prior2 = this.sessions.get(sessionId2)?.record;
-        return {
-          prior: prior2,
-          outcome: await this.refold(sessionId2, transcriptPath, prior2)
-        };
-      });
-    } catch (error) {
-      return failed(
-        `usage refold (${sessionId2}): ${error instanceof Error ? error.message : String(error)}`,
-        "read"
-      );
-    }
-    const { prior, outcome } = refolded;
-    if (outcome.kind !== "ok") return outcome;
-    const { mainStamp, ...folded2 } = outcome.value;
-    const record2 = {
-      ...folded2,
-      transcriptStamp: mainStamp,
-      transcriptPath
-    };
-    const landed = this.sessions.get(sessionId2)?.record;
-    if (landed === prior) {
-      this.stored(sessionId2, record2);
-      return ok(record2);
-    }
-    if (landed === void 0) return ok(record2);
-    return this.ingest(sessionId2, transcriptPath, tally, stamp2);
-  }
-  // [LAW:single-enforcer] The one write of a slot's record: the slot is
-  // replaced in the observable map, which is the change the day sums derive
-  // from.
-  stored(sessionId2, record2) {
-    const slot = this.hold(sessionId2);
-    runInAction(() => this.sessions.set(sessionId2, { ...slot, record: record2 }));
-  }
-  // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
-  // undefined while the store holds nothing for it — asking stores nothing.
-  see(sessionId2) {
-    const slot = this.sessions.get(sessionId2);
-    if (slot) slot.lastSeenAt = this.clock.now();
-    return slot;
-  }
-  // The slot something is about to be stored in, created on the first store.
-  hold(sessionId2) {
-    const seen2 = this.see(sessionId2);
-    if (seen2) return seen2;
-    const slot = {
-      lastSeenAt: this.clock.now(),
-      record: void 0,
-      ring: [],
-      sampledAt: null,
-      failure: observable.box(null),
-      speed: observable.box(void 0, {
-        deep: false
-      })
-    };
-    runInAction(() => this.sessions.set(sessionId2, slot));
-    return slot;
-  }
-  // A directory set's day sums, derived on first ask and kept with the store.
-  daySet(claudePaths) {
-    const key = claudePaths.join("\0");
-    const known = this.daySets.get(key);
-    if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path26.join)(dir, "projects") + import_node_path26.sep);
-    const set2 = {
-      roots,
-      sums: new Kept(
-        `today over ${claudePaths.join(",")}`,
-        () => daySumsOver(this.sessions.values(), roots)
-      )
-    };
-    this.daySets.set(key, set2);
-    return set2;
-  }
-  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
-  // prior record — the transcript (and each agent sidechain) is append-only, so
-  // per-render work is O(new bytes), not O(file). The whole-file case (cold
-  // record, or a first-ever read) is the same path with an empty prior: the
-  // reader yields the whole file from offset 0. A `failed` read on any file
-  // fails the fold (the boundary logs it); an `absent` file (not yet written /
-  // agent removed) keeps its prior fold and contributes nothing new.
-  async refold(sessionId2, transcriptPath, prior) {
-    const agents = await findAgentTranscripts(
-      sessionId2,
-      (0, import_node_path26.dirname)(transcriptPath),
-      prior === void 0 ? void 0 : new Set(prior.files.keys())
-    );
-    for (const line of longLineLog(agents.longLines)) this.log("info", line);
-    const newFiles = /* @__PURE__ */ new Map();
-    let mainStamp = "";
-    for (const filePath2 of [transcriptPath, ...agents.paths]) {
-      const priorFold = prior?.files.get(filePath2);
-      const read2 = await foldAppended(
-        filePath2,
-        priorFold,
-        EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, cacheDir(this.host), this.clock)
-      );
-      if (read2.kind === "failed") return read2;
-      if (read2.kind === "absent") {
-        if (priorFold) newFiles.set(filePath2, priorFold);
-        continue;
-      }
-      const { folded: folded2, longLines } = read2.value;
-      for (const line of longLineLog(longLines)) this.log("info", line);
-      newFiles.set(filePath2, folded2);
-      if (filePath2 === transcriptPath) mainStamp = folded2.cursor.stamp;
-    }
-    return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
-  }
-  // The one whole-tree scan of a directory set — its seed, or a rescan:
-  // ingest every session whose transcript was touched recently enough to hold
-  // a today entry. A rescan is the same scan over warm records, so it costs a
-  // stat per transcript plus the bytes appended since the last one.
-  // [LAW:no-silent-failure] A scan that throws, or that could not read a
-  // session it found, answers as failed, which is `today`'s failure until a
-  // scan lands — never a sum silently missing the sessions it did not reach.
-  // Only a file or directory gone between the listing and its read (ENOENT) is
-  // absence.
-  async scan(claudePaths) {
-    try {
-      const cutoff = seedCutoffMs(this.clock.now());
-      const projectPaths = await findProjectPaths(claudePaths);
-      const candidates = [];
-      for (const dir of projectPaths) {
-        const files = await unlessGone(readdir2(dir));
-        for (const file of files ?? []) {
-          if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path26.join)(dir, file);
-          const st = await unlessGone(stat2(filePath2));
-          if (st === void 0 || st.mtimeMs < cutoff) continue;
-          const id2 = parseSessionId(file.slice(0, -".jsonl".length));
-          if (!id2.ok) {
-            this.log(
-              "warn",
-              `usageStore scan: transcript ${JSON.stringify(file)} names no session: session id ${id2.problem}`
-            );
-            continue;
-          }
-          candidates.push({
-            sessionId: id2.id,
-            path: filePath2,
-            stamp: stampOf(st)
-          });
-        }
-      }
-      const failures = [];
-      const tally = { hits: 0, misses: 0 };
-      await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
-        const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
-        if (outcome.kind === "failed") {
-          failures.push(outcome.reason);
-          this.log("warn", `usageStore scan: ${outcome.reason}`);
-        }
-      });
-      this.log(
-        "info",
-        `usageStore scan dirs=${valueOf(claudePaths.join(","))} sessions=${candidates.length} read=${tally.misses} failed=${failures.length}`
-      );
-      if (failures.length > 0) {
-        return failed(
-          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read \u2014 ${failures[0]}`,
-          "read"
-        );
-      }
-      return ok({ sessions: candidates.length, read: tally.misses });
-    } catch (error) {
-      return failed(
-        `usage scan: ${error instanceof Error ? error.message : String(error)}`,
-        "read"
-      );
-    }
-  }
-  // Public for tests; called periodically from the timer. Drops what nothing
-  // reads any more: a session unseen for `staleAgeMs` holding no bucket for
-  // today. A stale record holding one is `held`, since `today` sums it — a
-  // session whose transcript the scans have stopped visiting is seen no more,
-  // and a day can run past `staleAgeMs` (a 25-hour DST day).
-  // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
-  // wall clock a frame's instant and the scan's cutoff read too.
-  sweepStale() {
-    const now2 = this.clock.now();
-    const today = dayKey(new Date(now2));
-    let dropped = 0;
-    let held = 0;
-    let noRecord = 0;
-    runInAction(() => {
-      for (const [sid, { lastSeenAt, record: record2 }] of [...this.sessions]) {
-        if (now2 - lastSeenAt <= this.staleAgeMs) continue;
-        if (record2?.days.has(today)) {
-          held++;
-          continue;
-        }
-        this.sessions.delete(sid);
-        dropped++;
-        if (record2 === void 0) noRecord++;
-      }
-    });
-    if (dropped > 0) this.sweeps++;
-    if (dropped > 0 || held > 0) {
-      this.log(
-        "info",
-        `usageStore sweep dropped=${dropped} noRecord=${noRecord} held=${held}`
-      );
-    }
-    return dropped;
-  }
-  close() {
-    this.closed = true;
-    this.stopSweep?.();
-    this.stopSweep = null;
-    this.scans.close();
-    runInAction(() => {
-      for (const { sums } of this.daySets.values()) sums.release();
-      this.sessions.clear();
-    });
-    this.daySets.clear();
   }
 };
 
@@ -65831,30 +65847,32 @@ function createPayloadProviders(opts) {
     home: opts.host.home,
     sourceRuns: opts.sourceRuns,
     log: opts.logger,
-    // [LAW:single-enforcer] The one close of every owner built here: a held
+    // [LAW:single-enforcer] The one close of every owner built here, a named
+    // step each, which its caller's teardown runs (runTeardown): a held
     // entry's period re-arms after every read, so an owner a caller forgets
     // keeps its timers for good. The transcript lanes go before the usage
     // store their reads fill.
-    close: () => closeEach([
-      ["gitProvider", () => owners.gitProvider.close()],
-      ["transcriptLanes", () => owners.transcriptLanes.close()],
-      ["usageStore", () => lanes.usageStore.close()],
-      ["tmuxService", () => owners.tmuxService.close()],
-      ["hostService", () => owners.hostService.close()],
-      ["managedStorage", () => owners.managedStorage.close()]
-    ])
+    closes: [
+      ["gitProvider close", () => owners.gitProvider.close()],
+      ["transcriptLanes close", () => owners.transcriptLanes.close()],
+      ["usageStore close", () => lanes.usageStore.close()],
+      ["tmuxService close", () => owners.tmuxService.close()],
+      ["hostService close", () => owners.hostService.close()],
+      ["managedStorage close", () => owners.managedStorage.close()]
+    ]
   };
 }
-function closeEach(closes) {
-  const failures = closes.flatMap(([owner, close]) => {
+
+// src/utils/teardown.ts
+init_globals();
+async function runTeardown(steps2, log) {
+  for (const [name, run3] of steps2) {
     try {
-      close();
-      return [];
+      await run3();
     } catch (e) {
-      return [`${owner}: ${e instanceof Error ? e.message : String(e)}`];
+      log("warn", `${name} failed: ${inspect(e)}`);
     }
-  });
-  if (failures.length > 0) throw new Error(failures.join("; "));
+  }
 }
 
 // src/daemon/stats.ts
@@ -86754,7 +86772,7 @@ function createDaemon(inputs) {
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
         ["renderer views close", rendererStep("close-views")],
-        ["payloadProviders close", () => payloadProviders.close()],
+        ...payloadProviders.closes,
         ["runs close", () => runs.close()],
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
@@ -86767,13 +86785,7 @@ function createDaemon(inputs) {
         // ends with nothing left to flush.
         ["renderer process close", () => link.close()]
       ];
-      for (const [step4, run3] of teardown) {
-        try {
-          await run3();
-        } catch (e) {
-          log("warn", `${step4} failed: ${e.message}`);
-        }
-      }
+      await runTeardown(teardown, log);
       closed = true;
       return { settled: launcher.settled() };
     }
