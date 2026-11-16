@@ -31,6 +31,12 @@ export type TypeResult =
   | { readonly kind: "typed"; readonly pane: string }
   | { readonly kind: "refused"; readonly reason: string };
 
+// A slash line typed into a pane, once the prompt there reads ready.
+export type SlashTyper = (
+  pane: TmuxHint,
+  line: SlashLine,
+) => Promise<TypeResult>;
+
 // The pane a session's client reported, or why the bar has none to act in.
 export type SessionPane =
   | { readonly kind: "pane"; readonly hint: TmuxHint }
@@ -59,7 +65,7 @@ export function tmuxPaneOf(tmux: ClientHints["tmux"]): SessionPane {
 // A slash line typed into the session's pane: refused for a session whose
 // client reported none, and otherwise typed into it (`typeInPane`).
 export async function typeSlash(
-  type: (pane: TmuxHint, line: SlashLine) => Promise<TypeResult>,
+  type: SlashTyper,
   pane: SessionPane,
   line: SlashLine,
 ): Promise<TypeResult> {

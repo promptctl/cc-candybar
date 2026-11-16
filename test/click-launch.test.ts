@@ -85,7 +85,7 @@ describe("clickHandoff", () => {
       HOST.tmp,
     );
     expect(logged).toEqual([
-      expect.stringMatching(/^rate-limited: click.open /),
+      expect.stringMatching(/^second not run: rate-limited: click.open /),
     ]);
   });
 
@@ -135,8 +135,27 @@ describe("clickLaunch", () => {
           category: "click.open",
         },
         "opening https://example.com",
-        () => {},
+        "opened",
       ),
     ).rejects.toThrow(/^opening https:\/\/example\.com failed \(.*ENOENT\)$/);
+  });
+
+  test("a launch the rate limit refused is acknowledged, saying it did not run", async () => {
+    await expect(
+      clickLaunch(
+        async () => ({
+          ok: false,
+          reason: "rate-limited",
+          stdout: "",
+          stderr: "",
+          exitCode: null,
+          signal: null,
+          error: "too many click.pbcopy launches",
+        }),
+        { bin: "/usr/bin/pbcopy", stdinInput: "x", category: "click.pbcopy" },
+        "pbcopy",
+        "copied",
+      ),
+    ).resolves.toMatch(/^pbcopy not run: /);
   });
 });

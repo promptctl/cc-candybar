@@ -40,7 +40,7 @@ import {
 import { attachCommandLine } from "../src/attach-launcher";
 import { refusalOf, runsAttached, barPanesOf } from "../src/daemon/lane-edge";
 import { draftShown, turnRunning } from "../src/claude-input/prompt-screen";
-import { tmuxPaneOf, type SessionPane } from "../src/claude-input/typing";
+import { tmuxPaneOf, typeInPane, type SessionPane } from "../src/claude-input/typing";
 import { BadVerbArgs } from "../src/daemon/foundations/verb-error";
 import type { LaneSwitches } from "../src/config/lanes";
 import type { TmuxHint } from "../src/tmux-hint";
@@ -181,7 +181,7 @@ describe("lane A, band", () => {
     const { root, bundle } = checkout();
     const { edge, did } = fakeEdge();
     await expect(
-      bandOn(session("yes", "/home/u/.claude"), IN_PANE, { ...HOST, bundle }, edge),
+      bandOn(session("yes", "/home/u/.claude"), IN_PANE, typeInPane(edge.claudeInput), { ...HOST, bundle }, edge),
     ).resolves.toContain(
       `installed ${BAND_PLUGIN} from ${root}`,
     );
@@ -196,7 +196,7 @@ describe("lane A, band", () => {
     const { root, bundle } = checkout();
     const { edge, did } = fakeEdge();
     await expect(
-      bandOn(session(), tmuxPaneOf(null), { ...HOST, bundle }, edge),
+      bandOn(session(), tmuxPaneOf(null), typeInPane(edge.claudeInput), { ...HOST, bundle }, edge),
     ).rejects.toThrow(
       /installed, but \/reload-plugins was not typed: .*not running inside tmux.*type \/reload-plugins yourself/,
     );
@@ -208,7 +208,7 @@ describe("lane A, band", () => {
 
   test("a daemon not run from a checkout is refused before anything is installed", async () => {
     const { edge, did } = fakeEdge();
-    await expect(bandOn(session(), IN_PANE, HOST, edge)).rejects.toThrow(
+    await expect(bandOn(session(), IN_PANE, typeInPane(edge.claudeInput), HOST, edge)).rejects.toThrow(
       BadVerbArgs,
     );
     expect(did).toEqual([]);
@@ -218,7 +218,7 @@ describe("lane A, band", () => {
     const { bundle } = checkout();
     const { edge, did } = fakeEdge({ fileExists: () => false });
     await expect(
-      bandOn(session(), IN_PANE, { ...HOST, bundle }, edge),
+      bandOn(session(), IN_PANE, typeInPane(edge.claudeInput), { ...HOST, bundle }, edge),
     ).rejects.toThrow(/just install-rust/);
     expect(did).toEqual([]);
   });
@@ -232,7 +232,7 @@ describe("lane A, band", () => {
       },
     });
     await expect(
-      bandOn(session(), IN_PANE, { ...HOST, bundle }, edge),
+      bandOn(session(), IN_PANE, typeInPane(edge.claudeInput), { ...HOST, bundle }, edge),
     ).rejects.toThrow(
       /installed, but \/reload-plugins was not typed: .*copy mode/,
     );
@@ -1221,7 +1221,7 @@ describe("the host performing lane acts", () => {
     await second;
   });
 
-  test("a slash line for a pane a setup holds is refused at once, saying why, and typed nowhere", async () => {
+  test("a slash line for a session a restart holds is refused at once, saying why, and typed nowhere", async () => {
     let exit!: (gone: boolean) => void;
     const { edge } = fakeEdge({
       exited: () => new Promise((r) => (exit = r)),
@@ -1239,7 +1239,7 @@ describe("the host performing lane acts", () => {
       }),
     ).toEqual({
       kind: "refused",
-      reason: "/compact: a lane setup holds pane %7 — click again once it has finished",
+      reason: "/compact: a restart holds pane %7 — click again once it has finished",
     });
     exit(true);
     await restarting;
@@ -1273,6 +1273,74 @@ describe("the host performing lane acts", () => {
     expect(typing).toEqual(["start /compact", "end /compact", "start /clear"]);
     typed();
     expect(await second).toEqual({ kind: "ok" });
+  });
+
+  // A click that types a slash and switches the statusline lane on: the
+  // restart its landing asks must not exit Claude Code under the line.
+  test("a restart asked while a slash line is typing waits for it to finish", async () => {
+    const order: string[] = [];
+    let typed!: () => void;
+    const base = fakeEdge().edge;
+    const edge: LaneEdge = {
+      ...base,
+      paneClaude: async (tmux) => {
+        order.push("restart reads the pane");
+        return base.paneClaude(tmux);
+      },
+    };
+    const { acts } = performer(edge, async () => {
+      order.push("slash starts");
+      await new Promise<void>((r) => (typed = r));
+      order.push("slash typed");
+      return { kind: "typed", pane: TMUX.pane };
+    });
+    const slash = acts.perform({
+      kind: "type-slash",
+      id: ++ids as EffectId,
+      session: SID,
+      pane: TMUX,
+      line: "/compact" as never,
+    });
+    const restarting = acts.perform(restart());
+    await new Promise((r) => setImmediate(r));
+    expect(order).toEqual(["slash starts"]);
+    typed();
+    await slash;
+    await restarting;
+    expect(order.slice(0, 3)).toEqual([
+      "slash starts",
+      "slash typed",
+      "restart reads the pane",
+    ]);
+  });
+
+  // Splitting a bar pane types nothing into Claude Code's prompt.
+  test("a slash line while a bar pane opens under its pane is typed, after the split", async () => {
+    let split!: () => void;
+    const { edge } = fakeEdge({
+      openBarPane: () =>
+        new Promise((r) => (split = () => r("%9"))),
+    });
+    const { acts } = performer(edge);
+    const opening = acts.perform({
+      kind: "surface",
+      surface: "pane",
+      on: true,
+      id: ++ids as EffectId,
+      session: SID,
+      pane: TMUX,
+    });
+    await new Promise((r) => setImmediate(r));
+    const slash = acts.perform({
+      kind: "type-slash",
+      id: ++ids as EffectId,
+      session: SID,
+      pane: TMUX,
+      line: "/compact" as never,
+    });
+    split();
+    await opening;
+    expect(await slash).toEqual({ kind: "ok" });
   });
 
   test("a restart that fails after its click is a failed outcome naming the lane, on its act line", async () => {

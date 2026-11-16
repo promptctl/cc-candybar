@@ -46,7 +46,7 @@ Menus close themselves after a timeout counted from the session's last click. Th
 
 ## Slash commands
 
-A slash click types into the session's tmux pane. The daemon reads the pane first and refuses unless the pane shows the bare input box: a permission dialog would take the Enter as approval, and a held ctrl+s stash would get popped into the command. The keys go in one tmux call: ctrl+s (Claude Code restores the draft afterwards), then a bracketed paste, then Enter. Only lines the config declares get typed. A slash line for a pane a lane setup holds is refused at once rather than queued, because it would land in whatever the setup leaves there; nothing else waits behind a setup, so a copy is never held behind a restart.
+A slash click types into the session's tmux pane. The daemon reads the pane first and refuses unless the pane shows the bare input box: a permission dialog would take the Enter as approval, and a held ctrl+s stash would get popped into the command. The keys go in one tmux call: ctrl+s (Claude Code restores the draft afterwards), then a bracketed paste, then Enter. Only lines the config declares get typed. Whatever acts in one pane (a slash line, the band's /reload-plugins, a restart, a bar pane split) goes one at a time in the order asked, because each reads the pane before it types and two at once would both find the bare input box. A slash line for a session a restart holds is refused at once rather than queued, because it would land in the shell the restart leaves; nothing outside the pane waits behind a restart, so a copy is never held behind one.
 
 ## Running a program
 

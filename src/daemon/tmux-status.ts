@@ -531,9 +531,11 @@ export class DeclaredStatusLines {
     this.declared = next;
   }
 
-  // A request of `session` arrived, reporting `tmux`.
-  arrived(session: SessionId, tmux: TmuxHint | null | undefined): void {
-    if (this.declared.has(session)) this.lines.observe(session, tmux, true);
+  // A request of `session` arrived: its row follows the pane its newest
+  // request reports, which a late older request does not move.
+  arrived(session: SessionId): void {
+    if (this.declared.has(session))
+      this.lines.observe(session, this.paneOf(session), true);
   }
 }
 

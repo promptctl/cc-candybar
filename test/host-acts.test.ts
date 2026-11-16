@@ -166,7 +166,42 @@ test("once the daemon's close has begun, nothing lands and no act is performed",
   const { turn, did } = hostOver([set, act], { closing: () => true });
   await turn();
   expect(fs.readFileSync(file, "utf8")).toBe(FILE);
-  expect(did).toEqual([`done ${set.id} closing`, `done ${act.id} skipped`]);
+  expect(did).toEqual([`done ${set.id} closing`, `done ${act.id} closing`]);
+});
+
+// A turn of acts alone has nothing to land: the close still stops them, and
+// says so, so the click is answered closing, never ok.
+test("once the daemon's close has begun, a turn of acts alone settles each closing", async () => {
+  const act = copy();
+  const { turn, did } = hostOver([act], { closing: () => true });
+  const answered = await turn();
+  expect(did).toEqual([`done ${act.id} closing`]);
+  expect(answered.settled.map((o) => o.kind)).toEqual(["closing"]);
+});
+
+// Two copies: the clipboard ends with the one the turn asked last.
+test("each act over in its turn starts once the one before it has ended", async () => {
+  const [a, b] = [copy(), copy()];
+  const ends: Array<() => void> = [];
+  const { turn, did } = hostOver([a, b], {
+    perform: (act) => {
+      did.push(`start ${act.id}`);
+      return new Promise((r) =>
+        ends.push(() => {
+          did.push(`end ${act.id}`);
+          r({ kind: "ok" });
+        }),
+      );
+    },
+  });
+  const answered = turn();
+  await new Promise((r) => setImmediate(r));
+  expect(did).toEqual([`start ${a.id}`]);
+  ends[0]!();
+  await new Promise((r) => setImmediate(r));
+  expect(did.filter((d) => !d.startsWith("done"))).toEqual([`start ${a.id}`, `end ${a.id}`, `start ${b.id}`]);
+  ends[1]!();
+  await answered;
 });
 
 test("the acts of one turn are performed in the order the turn returned them", async () => {

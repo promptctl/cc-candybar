@@ -34,9 +34,9 @@ import { LANES, type Lane } from "../config/lanes.js";
 import type { SessionFacts } from "./foundations/session-env.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import {
-  typeInPane,
   typeSlash,
   type SessionPane,
+  type SlashTyper,
   type ClaudeInputEdge,
 } from "../claude-input/typing.js";
 import { slashLine } from "../claude-input/slash-line.js";
@@ -180,10 +180,12 @@ export type LaneAt = LaneSession & { readonly sessionId: SessionId };
 // to do.
 
 // The band mod installed from this daemon's checkout and loaded into the
-// session's Claude Code, through its pane when the session reported one.
+// session's Claude Code by `/reload-plugins`, typed with `type` into its pane
+// when the session reported one.
 export async function bandOn(
   session: LaneAt,
   pane: SessionPane,
+  type: SlashTyper,
   host: LaneHost,
   edge: LaneEdge,
 ): Promise<string> {
@@ -199,7 +201,7 @@ export async function bandOn(
       `the band mod starts ${client}, which is not built — run \`just install-rust\` in ${checkout}`,
     );
   }
-  return installBand(session, pane, checkout, edge);
+  return installBand(session, pane, type, checkout, edge);
 }
 
 // Claude Code in the pane restarted under the attach launcher.
@@ -258,6 +260,7 @@ export async function paneOff(tmux: TmuxHint, edge: LaneEdge): Promise<string> {
 async function installBand(
   session: LaneAt,
   pane: SessionPane,
+  type: SlashTyper,
   checkout: string,
   edge: LaneEdge,
 ): Promise<string> {
@@ -268,11 +271,7 @@ async function installBand(
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const typed = await typeSlash(
-    typeInPane(edge.claudeInput),
-    pane,
-    RELOAD_PLUGINS,
-  );
+  const typed = await typeSlash(type, pane, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} — or type /reload-plugins yourself`,

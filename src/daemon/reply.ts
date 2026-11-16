@@ -361,10 +361,7 @@ export async function replyTo(
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
       // A declared session's row follows the pane its newest request reports.
-      parts.declaredStatusLines.arrived(
-        checked.req.hookData.session_id,
-        checked.req.hints.tmux,
-      );
+      parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
     // The request's event, written on every exit, and its reply.
     const recorded = (rendered: {

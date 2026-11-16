@@ -514,19 +514,21 @@ describe("the declared status lines", () => {
     expect(seen).toEqual(["s1 %1 on", "s1 null off"]);
   });
 
-  test("a named session's request is held in the pane it reports; an unnamed one's is not", () => {
-    const { declared, seen } = rig();
-    declared.arrived(S1, PANE_A);
+  test("a named session's request holds it in the pane its newest request reports; an unnamed one's does not", () => {
+    const { declared, seen, panes } = rig();
+    declared.arrived(S1);
     expect(seen).toEqual([]);
     declared.declare([S1]);
-    declared.arrived(S1, PANE_B);
+    panes.set(S1, PANE_B);
+    declared.arrived(S1);
     expect(seen).toEqual(["s1 %1 on", "s1 %2 on"]);
   });
 
   test("a session named before its first request is held once that request reports its pane", () => {
-    const { declared, seen } = rig();
+    const { declared, seen, panes } = rig();
     declared.declare([S2]);
-    declared.arrived(S2, PANE_B);
+    panes.set(S2, PANE_B);
+    declared.arrived(S2);
     expect(seen).toEqual(["s2 undefined on", "s2 %2 on"]);
   });
 });

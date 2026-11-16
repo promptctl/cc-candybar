@@ -7,7 +7,7 @@
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import type { TypeResult } from "../claude-input/typing.js";
+import type { SlashTyper, TypeResult } from "../claude-input/typing.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -33,7 +33,7 @@ type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
 export interface ActDeps {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
   // A slash line typed into a pane, once the prompt there reads ready.
-  readonly type: (pane: TmuxHint, line: SlashLine) => Promise<TypeResult>;
+  readonly type: SlashTyper;
   readonly run: (run: RunAct) => Promise<RunEnd>;
   // The update notice's act: what it applies is the update watch's.
   readonly applyUpdate: () => Promise<void>;
@@ -89,16 +89,15 @@ const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
 });
 
 export class Acts {
-  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time:
-  // two restarts of one Claude Code would type over each other.
-  private readonly setups = new KeyedSerialQueue<SessionId>();
-  // The sessions a setup holds now, by how many are queued or running on
-  // each.
-  private readonly held = new Map<SessionId, number>();
-  // [LAW:no-ambient-temporal-coupling] Each pane's slash lines, one at a
-  // time: each reads the pane before it types, so two at once would both
-  // find the bare input box and type into each other.
-  private readonly typing = new KeyedSerialQueue<string>();
+  // [LAW:no-ambient-temporal-coupling] Whatever acts in a pane, one at a
+  // time, in the order asked: a slash line, the band's /reload-plugins, a
+  // restart, a bar pane split under it. Each reads the pane before it types,
+  // so two at once would both find the bare input box and type into each
+  // other.
+  private readonly inPane = new KeyedSerialQueue<string>();
+  // The sessions a restart holds now, by how many are queued or running on
+  // each: their Claude Code is about to exit.
+  private readonly restarting = new Map<SessionId, number>();
   private readonly performers: {
     readonly [K in HostAct["kind"]]: (act: Of<K>) => Promise<Done>;
   };
@@ -106,55 +105,53 @@ export class Acts {
   constructor(private readonly deps: ActDeps) {
     const { lanes } = deps;
     this.performers = {
-      copy: async (act) => {
-        await clickLaunch(
-          deps.launch,
-          {
-            bin: "/usr/bin/pbcopy",
-            stdinInput: act.text,
-            category: "click.pbcopy",
-          },
-          "pbcopy",
-          deps.log,
-        );
-        return did("copied");
+      copy: async (act) =>
+        did(
+          await clickLaunch(
+            deps.launch,
+            {
+              bin: "/usr/bin/pbcopy",
+              stdinInput: act.text,
+              category: "click.pbcopy",
+            },
+            "pbcopy",
+            "copied",
+          ),
+        ),
+      open: async (act) =>
+        did(
+          await clickLaunch(
+            deps.launch,
+            {
+              bin: "/usr/bin/open",
+              args: ["-a", "Visual Studio Code", act.target],
+              category: "click.open",
+            },
+            'open -a "Visual Studio Code"',
+            `opened ${act.target}`,
+          ),
+        ),
+      // [LAW:no-ambient-temporal-coupling] A session a restart holds is
+      // about to exit its Claude Code: a line typed now would land in the
+      // shell the restart leaves, so it is refused at once, saying why.
+      "type-slash": async (act) => {
+        if (this.restarting.has(act.session))
+          return not({
+            kind: "refused",
+            reason: `a restart holds pane ${act.pane.pane} — click again once it has finished`,
+          });
+        const typed = await this.typed(act.pane, act.line);
+        return typed.kind === "typed"
+          ? did(`typed into ${typed.pane}`)
+          : not({ kind: "refused", reason: typed.reason });
       },
-      open: async (act) => {
-        await clickLaunch(
-          deps.launch,
-          {
-            bin: "/usr/bin/open",
-            args: ["-a", "Visual Studio Code", act.target],
-            category: "click.open",
-          },
-          'open -a "Visual Studio Code"',
-          deps.log,
-        );
-        return did(`opened ${act.target}`);
-      },
-      // [LAW:no-ambient-temporal-coupling] A session a setup holds is about
-      // to be restarted or typed into: a line typed now would land in
-      // whatever the setup leaves there, so it is refused at once, saying
-      // why.
-      "type-slash": (act) =>
-        this.typing.run(paneKey(act.pane), async () => {
-          if (this.held.has(act.session))
-            return not({
-              kind: "refused",
-              reason: `a lane setup holds pane ${act.pane.pane} — click again once it has finished`,
-            });
-          const typed = await deps.type(act.pane, act.line);
-          return typed.kind === "typed"
-            ? did(`typed into ${typed.pane}`)
-            : not({ kind: "refused", reason: typed.reason });
-        }),
       run: (act) => deps.run(act),
       "apply-update": async () => {
         await deps.applyUpdate();
         return did("applied");
       },
       "restart-claude": (act) =>
-        this.holding(act.session, () =>
+        this.restart(act.session, act.pane, () =>
           restartClaude(
             { ...act.at, sessionId: act.session },
             act.pane,
@@ -162,23 +159,36 @@ export class Acts {
             lanes.edge,
           ),
         ),
-      surface: (act) =>
-        this.holding(act.session, () => {
-          switch (act.surface) {
-            case "band":
-              return bandOn(
+      surface: async (act) => {
+        switch (act.surface) {
+          // The install acts in no pane: only its /reload-plugins is typed,
+          // in turn with whatever else acts in the pane.
+          case "band":
+            return did(
+              await bandOn(
                 { ...act.at, sessionId: act.session },
                 act.pane,
+                (pane, line) => this.typed(pane, line),
                 lanes.host,
                 lanes.edge,
-              );
-            case "pane":
-              return act.on
-                ? paneOn(act.pane, lanes.host, lanes.edge)
-                : paneOff(act.pane, lanes.edge);
-          }
-        }),
+              ),
+            );
+          case "pane":
+            return did(
+              await this.inPane.run(paneKey(act.pane), () =>
+                act.on
+                  ? paneOn(act.pane, lanes.host, lanes.edge)
+                  : paneOff(act.pane, lanes.edge),
+              ),
+            );
+        }
+      },
     };
+  }
+
+  // A slash line typed into `pane` in its turn.
+  private typed(pane: TmuxHint, line: SlashLine): Promise<TypeResult> {
+    return this.inPane.run(paneKey(pane), () => this.deps.type(pane, line));
   }
 
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
@@ -217,19 +227,20 @@ export class Acts {
     }
   }
 
-  // A setup in `session`'s queue, holding the session from now until it has
+  // A restart in `pane`'s turn, holding `session` from now until it has
   // finished.
-  private async holding(
+  private async restart(
     session: SessionId,
-    setup: () => Promise<string>,
+    pane: TmuxHint,
+    restart: () => Promise<string>,
   ): Promise<Done> {
-    this.held.set(session, (this.held.get(session) ?? 0) + 1);
+    this.restarting.set(session, (this.restarting.get(session) ?? 0) + 1);
     try {
-      return did(await this.setups.run(session, setup));
+      return did(await this.inPane.run(paneKey(pane), restart));
     } finally {
-      const left = this.held.get(session)! - 1;
-      if (left === 0) this.held.delete(session);
-      else this.held.set(session, left);
+      const left = this.restarting.get(session)! - 1;
+      if (left === 0) this.restarting.delete(session);
+      else this.restarting.set(session, left);
     }
   }
 }

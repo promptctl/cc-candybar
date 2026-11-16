@@ -104,9 +104,8 @@ export function rendererHost(
       // anything else here can throw and before the turn's caller hears it:
       // the renderer opens its next journal only once they have landed. Its
       // acts are performed only once they have, in the order it returned
-      // them, and none is once the daemon's close has begun: an act whose
-      // landing did not go is skipped, since the changes' own outcome says
-      // why. A present
+      // them, each once the one before it has ended, and none is once the
+      // daemon's close has begun. A present
       // answers the request whose turn returned it, so one another turn
       // returns is refused here. No effect is left owed its `effect-done`,
       // and the turn's caller hears it only after each `effect-done` turn of
@@ -127,7 +126,17 @@ export function rendererHost(
               answers,
               said: (line) => log("info", line),
             });
+      // An act no landing let go: the close is its own cause, and any other
+      // is its changes', whose own outcome says why.
+      const unperformed: EffectOutcome =
+        landed.kind === "ok" || landed.kind === "closing"
+          ? landed
+          : { kind: "skipped", reason: `not performed: ${landed.reason}` };
       const inTurn: Array<Promise<EffectOutcome>> = [];
+      // [LAW:no-ambient-temporal-coupling] Each act starts once every act
+      // over in its turn before it has ended, so two copies land in the
+      // order the turn asked them.
+      let before: Promise<unknown> = Promise.resolve();
       for (const effect of output.effects) {
         if (effect.kind === "present") {
           if (input.event.kind !== "request")
@@ -140,16 +149,16 @@ export function rendererHost(
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
           inTurn.push(settle(effect, landed));
         else if (isAct(effect)) {
-          const acted = (
+          const acted =
             landed.kind === "ok"
-              ? world.perform(effect)
-              : Promise.resolve<EffectOutcome>({
-                  kind: "skipped",
-                  reason: `not performed: ${landed.reason}`,
-                })
-          ).then((outcome) => settle(effect, outcome));
-          if (outlives(effect)) void acted;
-          else inTurn.push(acted);
+              ? before.then(() => world.perform(effect))
+              : Promise.resolve(unperformed);
+          const settled = acted.then((outcome) => settle(effect, outcome));
+          if (outlives(effect)) void settled;
+          else {
+            inTurn.push(settled);
+            before = acted;
+          }
         }
       }
       collector.subscribed(subscriptions);

@@ -42,10 +42,12 @@ export async function clickHandoff(
     };
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
-      clickFailed(
-        { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
-        what,
-        log,
+      log(
+        "warn",
+        clickFailed(
+          { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
+          what,
+        ),
       );
       return;
     }
@@ -79,7 +81,6 @@ export async function clickHandoff(
                 signal: null,
               },
           what,
-          log,
         );
         return;
       }
