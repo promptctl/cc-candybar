@@ -31,7 +31,7 @@ Each entry is what the design must achieve, with where the need was stated and t
 
 ## 3. Assumptions
 
-Each must be true for the design to work. Each has a probe or measurement that would show it false, and none has been run yet.
+Each must be true for the design to work. Each has a probe or measurement that would show it false. §17 records what each has shown so far.
 
 | ID | Assumption | Falsified by |
 |---|---|---|
@@ -401,4 +401,11 @@ The steps are the tickets under the epic `candybar-host-renderer-x96a`, in its r
 
 | Item | Owner | Due |
 |---|---|---|
-| A-1 to A-5 are unmeasured. | `bwr` measures A-1, A-4 and A-5. `adf`'s done-when tests A-2, and `8ts`'s refused-fix test tests A-3. | Each before the step that relies on it |
+| A-1 and A-5 are unmeasured on the out-of-process renderer. The in-process baseline for A-1 is p50 4 ms, p99 11 ms: the render event's `took` over 18,548 requests of real use. The daemon log rotates every few minutes, so a day's reading is sampled across the day. | `bwr` | Before more optimization is chosen or ruled out |
+| A-2 and A-3 are untested. | `adf`'s done-when tests A-2, and `8ts`'s refused-fix test tests A-3. | Each before the step that relies on it |
+
+**A-4 stands, on three conditions** that `dbf` builds. The probe was a user LaunchAgent with a `Sockets` entry at a path beside the installed socket, so the live daemon was untouched. It started its program on the first connect, started it again after it exited, and recreated the socket when the agent loaded with its directory missing, as after a boot.
+
+1. The host cannot check in with launchd itself, because node has no call for it. A native launcher calls `launch_activate_socket`, clears the descriptor's close-on-exec flag (launchd sets it, and `dup2` onto the same number keeps it), and execs node, which listens on the inherited descriptor.
+2. launchd's PATH is `/usr/bin:/bin:/usr/sbin:/sbin`, where tmux is not found. The agent's `EnvironmentVariables` carries the PATH the host needs, and the agent names node by absolute path.
+3. launchd creates a missing socket directory owned by root, mode 755. The host can write nothing else into it, so the lease, the daemon records and every other file the host keeps beside the socket today move to a directory the host owns.
