@@ -290,11 +290,11 @@ function startOver(
     inputs.storage.history,
     history,
   );
-  // [LAW:single-enforcer] The one queue every journal waits its turn in, the
-  // renderer's own: no host part takes a turn.
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const configWrites = new ConfigWrites(mint, readConfigText);
+  // [LAW:single-enforcer] The one queue every journal waits its turn in, the
+  // renderer's own: no host part takes a turn.
   const journalTurns = new JournalTurns({
     monotonic: () => clock.monotonic(),
     changesLanded: () => configWrites.landed(),

@@ -2,19 +2,12 @@
 // `change`s its turn returns, which the host performs, never as a file the
 // renderer writes. A click lands whole or not at all, so what else it did is
 // its consequence (its journal's commit), held here from its turn until its
-// changes' `effect-done`s: applied once they land, dropped when they do not,
-// and the history's answer to the refusal run when a setting moved under
-// them. A journal turn opens only once no click's changes are on their way
+// changes' `effect-done`s: applied once they land, dropped when they do not. A journal turn opens only once no click's changes are on their way
 // (src/renderer/journal-turns.ts), so each click reads the files the clicks
 // ahead of it wrote, and at most one click is ever landing. The host owes every
 // change it is handed its `effect-done` (src/daemon/renderer-host.ts).
 
-import {
-  addressText,
-  applyChanges,
-  diffChanges,
-} from "../config/config-changes.js";
-import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
+import { diffChanges } from "../config/config-changes.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type {
   ConfigChange,
@@ -24,19 +17,11 @@ import type {
 } from "../renderer-interface/interface.js";
 
 // A click whose changes are on their way: the session it clicked, the files
-// they change, its consequence, and what a refusal of them leaves behind.
+// they change, and its consequence.
 export interface Landing {
   readonly session: SessionId;
   readonly files: readonly string[];
   readonly consequence: () => void;
-  readonly refused: () => void;
-}
-
-// A file's text as a write found it, and as it leaves it.
-export interface FileWrite {
-  readonly file: string;
-  readonly before: string | null;
-  readonly after: string | null;
 }
 
 // How a landing ended: every change of its click landed, or the first reason
@@ -70,26 +55,15 @@ export class ConfigWrites {
     return written === undefined ? this.disk(file) : written.after;
   }
 
-  // Writes of the open click, landing together or not at all: one change per
-  // file, from the click's first read of it to its last write. A write from
-  // text other than the click's own (a history step, from what it recorded)
-  // lands as the changes between its two texts, applied over what the click
-  // already wrote.
-  land(writes: readonly FileWrite[]): void {
-    const landed = writes.map(({ file, before, after }) => {
-      const open = this.open.get(file);
-      if (open === undefined) return { file, before, after };
-      const applied = applyChanges(open.after, diffChanges(before, after));
-      // [LAW:no-silent-failure] The click's own writes moved a setting its
-      // later write steps from: the click contradicts itself.
-      if (applied.kind === "moved")
-        throw new BadVerbArgs(
-          `${addressText(applied.at)} in ${file} was changed earlier in this click — nothing was written`,
-        );
-      return { file, before: open.before, after: applied.text };
+  // A write of the open click, from the file as the click read it (`read`):
+  // one change per file, from the click's first read of it to its last write.
+  land(file: string, before: string | null, after: string | null): void {
+    const open = this.open.get(file);
+    // An absent file read first stays absent: its `before` is null.
+    this.open.set(file, {
+      before: open === undefined ? before : open.before,
+      after,
     });
-    for (const { file, before, after } of landed)
-      this.open.set(file, { before, after });
   }
 
   // The open click is over. Its changes join its turn's effects, and its
@@ -98,7 +72,7 @@ export class ConfigWrites {
   seal(
     effects: Effect[],
     session: SessionId | null,
-    { consequence, refused }: Pick<Landing, "consequence" | "refused">,
+    consequence: () => void,
   ): void {
     // [LAW:no-ambient-temporal-coupling] A click the daemon's close cut off
     // lands nothing, so nothing of it is performed under the teardown.
@@ -124,7 +98,7 @@ export class ConfigWrites {
       }),
     );
     this.landing = {
-      of: { session, files, consequence, refused },
+      of: { session, files, consequence },
       owed: new Set(changes.map((c) => c.id)),
       missed: null,
     };

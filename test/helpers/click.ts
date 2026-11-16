@@ -20,10 +20,7 @@ import {
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
 import { changeDone, VERBS } from "../../src/renderer/verbs";
-import {
-  ConfigWrites,
-  type Landing,
-} from "../../src/renderer/config-writes";
+import { ConfigWrites } from "../../src/renderer/config-writes";
 import { readConfigText } from "../../src/renderer/config-file-store";
 import { performChanges } from "../../src/daemon/effect-interpreter";
 import type {
@@ -99,10 +96,10 @@ class LandingAtOnce extends ConfigWrites {
   override seal(
     effects: Effect[],
     session: SessionId | null,
-    landing: Pick<Landing, "consequence" | "refused">,
+    consequence: () => void,
   ): void {
     const from = effects.length;
-    super.seal(effects, session, landing);
+    super.seal(effects, session, consequence);
     const changes = effects
       .splice(from)
       .filter((e): e is ConfigChange => e.kind === "change");

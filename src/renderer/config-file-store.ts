@@ -542,9 +542,16 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// [LAW:single-enforcer] The gate a text no verb loaded passes before a click
+// writes it (a history step's, over the file as it stands): the gate every
+// write passes.
+export function proveLoads(home: ConfigHome, text: string | null): void {
+  loadOrRefuse(home, text);
+}
+
 // The config `text` loads to as the home, or the click's refusal naming why
 // it does not load.
-function loadOrRefuse(home: ConfigHome, text: string): LoadedChain {
+function loadOrRefuse(home: ConfigHome, text: string | null): LoadedChain {
   try {
     return chainOver(home, text);
   } catch (e) {

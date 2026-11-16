@@ -16,12 +16,13 @@ import type {
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { Step } from "../../src/renderer-interface/history-storage";
 
+// A history's files with no click around it: read from and written to the
+// disk at once, with no home to prove a step's text against.
 export const WRITES_IN_PLACE: ConfigFiles = {
-  land: (writes) => {
-    for (const { file, after } of writes)
-      if (after === null) rmSync(file, { force: true });
-      else writeFileSync(file, after);
-  },
+  read: readConfigText,
+  land: (file, _before, after) =>
+    after === null ? rmSync(file, { force: true }) : writeFileSync(file, after),
+  prove: () => {},
 };
 
 // A config writer's store with no click around it: it reads the disk, and
@@ -37,9 +38,13 @@ export function clickOf<T>(
   act: (journal: Journal) => T,
 ): T {
   const journal = history.begin(WRITES_IN_PLACE);
-  const done = act(journal);
-  journal.commit();
-  return done;
+  // A click commits whatever its handler threw, as the click path does: a
+  // refused step's forgetting is part of what it did.
+  try {
+    return act(journal);
+  } finally {
+    journal.commit();
+  }
 }
 
 export const undoOf = (history: SettingsHistory, sid: SessionId): Step =>

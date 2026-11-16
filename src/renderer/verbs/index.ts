@@ -51,6 +51,7 @@ import {
   applyLayoutOp as applyLayoutOpToFile,
   deletePreset as deletePresetFromFile,
   deleteValues,
+  proveLoads,
   readValue,
   writePreset,
   writeDrafts,
@@ -783,11 +784,8 @@ function recordedOrigin(
 // reaches the sessions that render it through the fs watcher.
 // [LAW:no-silent-failure] Not landed, the click's consequence is dropped: its
 // drafts, picks and history stay as they were, and the reason shows on its
-// session's ⚠. Refused, since a setting moved under it, the history forgets
-// the files of any step the click took, which stayed where it was and would be
-// refused again at every click. A write that failed leaves them, to step
-// again once it can land. No click answers this turn, so whatever fails in it
-// shows on the session's ⚠ itself.
+// session's ⚠. No click answers this turn, so whatever fails in it shows on
+// the session's ⚠ itself.
 export function changeDone(
   ctx: Omit<DaemonContext, TurnBound>,
   id: EffectId,
@@ -801,7 +799,7 @@ export function changeDone(
 
 function changeLanded(
   ctx: Omit<DaemonContext, TurnBound>,
-  { session, files, consequence, refused, outcome }: Landed,
+  { session, files, consequence, outcome }: Landed,
 ): void {
   const failed: string[] = [];
   const step = (work: () => void): void => {
@@ -819,14 +817,30 @@ function changeLanded(
         ctx.reloadConfig(origin);
     });
     step(consequence);
-  } else {
-    failed.push(outcome.reason);
-    if (outcome.kind === "refused") step(refused);
-  }
+  } else failed.push(outcome.reason);
   if (failed.length === 0) return;
   const reason = failed.join("\n");
   ctx.log("warn", `config change: ${reason} (session=${session})`);
   holdClickError(ctx.sessionState, session, reason, ctx.now());
+}
+
+// [LAW:no-silent-failure] A history step's text loads as the home of the
+// session stepping it, or the step is refused: a step only ever wrote that
+// session's home, and a file it no longer renders from has no chain to prove
+// the text in.
+function proveLoadsAsHome(
+  ctx: Omit<DaemonContext, TurnBound>,
+  sid: SessionId | null,
+  file: string,
+  text: string | null,
+): void {
+  const origin = sid === null ? null : recordedOrigin(ctx, sid);
+  const home = origin === null ? null : originHome(ctx, origin);
+  if (home?.path !== file)
+    throw new BadVerbArgs(
+      `${file} is not the config file this session renders from — its step is not taken`,
+    );
+  proveLoads(home, text);
 }
 
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
@@ -1982,7 +1996,11 @@ async function journaled<C extends DaemonContext>(
   handler: (ctx: Journaled<C>) => Promise<void>,
 ): Promise<void> {
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
-  const journal = ctx.history.begin(ctx.configWrites);
+  const journal = ctx.history.begin({
+    read: (file) => ctx.configWrites.read(file),
+    land: (file, before, after) => ctx.configWrites.land(file, before, after),
+    prove: (file, text) => proveLoadsAsHome(ctx, sid, file, text),
+  });
   const navigation = ctx.navigation.begin(journal.sessionState);
   const failures: unknown[] = [];
   // Both views close what a write closes, the navigating one above its
@@ -2047,10 +2065,7 @@ async function journaled<C extends DaemonContext>(
     throwAll(failed);
   };
   try {
-    ctx.configWrites.seal(effects, sid, {
-      consequence,
-      refused: () => journal.refused(),
-    });
+    ctx.configWrites.seal(effects, sid, consequence);
   } catch (e) {
     failures.push(e);
   }

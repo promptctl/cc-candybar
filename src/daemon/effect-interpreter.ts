@@ -30,7 +30,9 @@ const said = (read: Read | "object"): string =>
     ? "an object"
     : read.kind === "absent"
       ? "nothing"
-      : read.text;
+      : read.kind === "file"
+        ? "the file as it was read"
+        : read.text;
 
 // A file as it stood, and as the turn's changes leave it.
 interface Rewrite {

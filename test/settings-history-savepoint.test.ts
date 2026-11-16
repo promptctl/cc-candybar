@@ -208,16 +208,15 @@ describe("cancel puts back what edit mode found, whatever the stack did", () => 
     expect(readConfigText(file)).toBe("v1");
   });
 
-  // The host refuses a cancel over a setting edited by hand, whole; its
-  // landing forgets the file, so the next cancel puts back the rest.
-  test("a file the host refused is forgotten: cancel then puts back everything else", () => {
+  test("a file edited by hand since is kept and named, and everything else is put back", () => {
     const { history, edit, pick, toggle, theme } = rig();
     toggle("arrange");
     pick("nord");
     edit(); // v1
     fs.writeFileSync(file, "hand edit");
-    history.forgetFile(SID, file);
-    rewindOf(history, SID);
+    expect(() => rewindOf(history, SID)).toThrow(
+      /changed since edit mode opened — kept as it is/,
+    );
     expect(readConfigText(file)).toBe("hand edit");
     expect(theme()).toBeNull();
     expect(history.depth(SID)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
@@ -298,8 +297,9 @@ describe("the savepoint under the history's bounds", () => {
     journal.file(SID, other, "o1", "o2");
     journal.sessionState.set(SID, "theme", "gruvbox");
     journal.commit();
-    // An undo of C the host refused, `other` having been edited by hand.
-    history.forgetFile(SID, other);
+    // An undo of C, refused: `other` was edited by hand.
+    fs.writeFileSync(other, "o hand");
+    expect(() => undoOf(history, SID)).toThrow(/changed since that edit/);
     // A was only `other`, so it left; the savepoint counts B alone below it.
     expect(history.history(SID).savepoint?.at).toBe(1);
     rewindOf(history, SID);

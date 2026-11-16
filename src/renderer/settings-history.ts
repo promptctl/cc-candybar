@@ -45,6 +45,11 @@ import {
   type Savepoint,
   isSettingKey,
 } from "../renderer-interface/history-storage";
+import {
+  addressText,
+  applyChanges,
+  diffChanges,
+} from "../config/config-changes.js";
 import type { ConfigWrites } from "./config-writes.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
@@ -80,7 +85,11 @@ const EMPTY: SessionHistory = { past: [], future: [] };
 
 // Where a click's config writes go: changes its turn returns
 // (src/renderer/config-writes.ts).
-export type ConfigFiles = Pick<ConfigWrites, "land">;
+// [LAW:single-enforcer] `prove` is the gate every click's write passes: the
+// text loads as the file it is written to, or the click is refused.
+export type ConfigFiles = Pick<ConfigWrites, "land" | "read"> & {
+  readonly prove: (file: string, text: string | null) => void;
+};
 
 // Records one click's changes. Handlers write through `sessionState` (which
 // records settings keys once they are written, and holds every write until
@@ -101,10 +110,6 @@ export interface Journal {
   redo(sessionId: SessionId): Step;
   rewind(sessionId: SessionId): Step;
   commit(): void;
-  // The click's changes were refused: every file a step it took steps drops
-  // off that session's stacks, since the step stayed where it was and would
-  // be refused at every click that takes it again.
-  refused(): void;
   // A write this journal holds no step for (a history step, the repo book).
   wrote(): void;
   // Whether the click wrote at all, a value it found included, across commits.
@@ -162,20 +167,12 @@ export class SettingsHistory {
     const held = heldWrites(this.sessionState);
     // Each session's history as this click leaves it.
     const working = new Map<SessionId, SessionHistory>();
-    // The files each session's steps taken by this click step.
-    const stepped = new Map<SessionId, Set<string>>();
     const click: Click = {
       held,
       files,
       historyOf: (sessionId) =>
         working.get(sessionId) ?? this.history(sessionId),
       move: (sessionId, history) => working.set(sessionId, history),
-      stepped: (sessionId, step) => {
-        const files = stepped.get(sessionId) ?? new Set<string>();
-        for (const change of step)
-          if (change.kind === "file") files.add(change.file);
-        stepped.set(sessionId, files);
-      },
     };
     const pending: Pending = new Map();
     let written = false;
@@ -245,7 +242,7 @@ export class SettingsHistory {
       sessionState,
       file: (sessionId, file, before, after) => {
         note(sessionId, { kind: "file", file, before, after });
-        files.land([{ file, before, after }]);
+        files.land(file, before, after);
       },
       wrote: () => {
         written = true;
@@ -271,13 +268,9 @@ export class SettingsHistory {
         working.clear();
         // [LAW:no-ambient-temporal-coupling] The step is saved before the
         // session's writes are applied: the save is what can fail, and a
-        // click whose step was not saved applies nothing of its own.
+        // click whose step was not saved applies none of its session writes.
         for (const [sessionId, history] of moved) this.put(sessionId, history);
         held.flush();
-      },
-      refused: () => {
-        for (const [sessionId, files] of stepped)
-          for (const file of files) this.forgetFile(sessionId, file);
       },
     };
   }
@@ -303,11 +296,11 @@ export class SettingsHistory {
   // changed back to what it held when edit mode opened — one step, landing
   // whole or not at all — then give the stack back the shape it had, with
   // nothing to redo, so neither `↶` nor `↷` can bring back what was discarded.
-  // A session pick changed since by anything else is not put back:
-  // overwriting it would destroy that change, and no later cancel could put it
-  // back either. Every other target is, and then the refusal names what was
-  // kept, loudly. A file's settings are the host's to check, and a refusal
-  // there refuses the whole cancel. Edit mode stays where it is — the click
+  // A target changed since by anything else (a session pick, or a file one of
+  // whose settings the cancel steps) is not put back: overwriting it would
+  // destroy that change, and no later cancel could put it back either. Every
+  // other target is, and then the refusal names what was kept, loudly. Edit
+  // mode stays where it is — the click
   // that cancels also leaves — so the savepoint is taken again at the stack as
   // it now stands. Returns what it put back.
   private rewind(click: Click, sessionId: SessionId): Step {
@@ -318,10 +311,11 @@ export class SettingsHistory {
         "rewind: edit mode has no savepoint — nothing to cancel",
       );
     }
-    const stale = savepoint.net.filter((c) =>
-      moved(click, sessionId, c, "after"),
-    );
-    const gone = new Set(stale.map(identity));
+    const stale = savepoint.net.flatMap((c) => {
+      const stepped = stepOf(click, sessionId, c, "before");
+      return stepped.kind === "moved" ? [stepped] : [];
+    });
+    const gone = new Set(stale.map((s) => s.target));
     const putBack = savepoint.net.filter((c) => !gone.has(identity(c)));
     const past = capped(without(pastAt(history, savepoint), gone));
     this.apply(click, sessionId, putBack, "before", "rewind", {
@@ -331,7 +325,7 @@ export class SettingsHistory {
     });
     if (stale.length > 0) {
       throw new BadVerbArgs(
-        `rewind: ${stale.map(describe).join(", ")} changed since edit mode opened — kept as it is; everything else edit mode changed was put back`,
+        `rewind: ${stale.map((s) => s.what).join(", ")} changed since edit mode opened — kept as it is; everything else edit mode changed was put back`,
       );
     }
     return putBack;
@@ -354,11 +348,15 @@ export class SettingsHistory {
     return step;
   }
 
-  // [LAW:no-silent-failure] A step is refused whole when a session pick it
-  // steps has moved: the pick is named, and its now-unreachable changes leave
-  // both stacks (see the header). Otherwise each pick is written through the
-  // click, and each file's step is a change the click returns, from what the
-  // step recorded, so the host refuses it when a setting in it moved.
+  // [LAW:no-silent-failure] A step is refused whole when a target it steps
+  // has moved, a session pick or a setting of a file: what moved is named,
+  // and the target's now-unreachable changes leave both stacks (see the
+  // header). Otherwise each pick is written through the click, and each file
+  // is written as the changes between the texts the step recorded, applied
+  // over the file as the click reads it, so a write to another setting of the
+  // file never stops it. [LAW:single-enforcer] That text has not been loaded
+  // by anyone, so it passes the gate every click's write passes before it
+  // lands.
   private apply(
     click: Click,
     sessionId: SessionId,
@@ -367,43 +365,29 @@ export class SettingsHistory {
     verb: "undo" | "redo" | "rewind",
     then: SessionHistory,
   ): void {
-    const from = to === "before" ? "after" : "before";
-    const stale = step.filter((c) => moved(click, sessionId, c, from));
+    const stepped = step.map((c) => stepOf(click, sessionId, c, to));
+    const stale = stepped.flatMap((s) => (s.kind === "moved" ? [s] : []));
     if (stale.length > 0) {
       click.move(
         sessionId,
-        forgotten(click.historyOf(sessionId), new Set(stale.map(identity))),
+        forgotten(
+          click.historyOf(sessionId),
+          new Set(stale.map((s) => s.target)),
+        ),
       );
       throw new BadVerbArgs(
-        `${verb}: ${stale.map(describe).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
+        `${verb}: ${stale.map((s) => s.what).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
       );
     }
-    click.files.land(
-      step.flatMap((change) =>
-        change.kind === "file"
-          ? [{ file: change.file, before: change[from], after: change[to] }]
-          : [],
-      ),
-    );
-    for (const change of step) {
-      if (change.kind === "file") continue;
-      const value = change[to];
-      if (value === null) click.held.clear(sessionId, change.key);
-      else click.held.set(sessionId, change.key, value);
-    }
-    click.stepped(sessionId, step);
+    const files = stepped.flatMap((s) => (s.kind === "file" ? [s] : []));
+    for (const { file, text } of files) click.files.prove(file, text);
+    for (const { file, text } of files)
+      click.files.land(file, click.files.read(file), text);
+    for (const s of stepped)
+      if (s.kind === "session")
+        if (s.value === null) click.held.clear(sessionId, s.key);
+        else click.held.set(sessionId, s.key, s.value);
     click.move(sessionId, then);
-  }
-
-  // [LAW:single-enforcer] A file a change of this session's did not land in
-  // (the host refused it, or could not write it): its history no longer
-  // chains through that file, so every change it holds for the file leaves
-  // both stacks, as a stale target's does.
-  forgetFile(sessionId: SessionId, file: string): void {
-    this.put(
-      sessionId,
-      forgotten(this.history(sessionId), new Set([`file:${file}`])),
-    );
   }
 
   // Move-to-end keeps insertion order as recency, so the bounds drop the
@@ -617,21 +601,51 @@ interface Click {
   readonly files: ConfigFiles;
   readonly historyOf: (sessionId: SessionId) => SessionHistory;
   readonly move: (sessionId: SessionId, history: SessionHistory) => void;
-  readonly stepped: (sessionId: SessionId, step: Step) => void;
 }
 
-// A session pick that no longer holds the value a step would step from. A
-// file's settings are the host's to check, as its change lands.
-function moved(
+// What a change stepped to `to` writes, read in the click: a session pick's
+// value, or the file's text with the changes between the two texts the step
+// recorded applied over it; or, when the pick or a setting of the file no
+// longer holds what the step stepped from, what moved.
+type Stepped =
+  | {
+      readonly kind: "session";
+      readonly key: string;
+      readonly value: string | null;
+    }
+  | {
+      readonly kind: "file";
+      readonly file: string;
+      readonly text: string | null;
+    }
+  | { readonly kind: "moved"; readonly target: string; readonly what: string };
+
+function stepOf(
   click: Click,
   sessionId: SessionId,
   change: Change,
-  from: "before" | "after",
-): boolean {
-  return (
-    change.kind === "session" &&
-    click.held.get(sessionId, change.key) !== change[from]
+  to: "before" | "after",
+): Stepped {
+  const from = to === "before" ? "after" : "before";
+  if (change.kind === "session")
+    return click.held.get(sessionId, change.key) === change[from]
+      ? { kind: "session", key: change.key, value: change[to] }
+      : {
+          kind: "moved",
+          target: identity(change),
+          what: `session setting "${change.key}"`,
+        };
+  const applied = applyChanges(
+    click.files.read(change.file),
+    diffChanges(change[from], change[to]),
   );
+  return applied.kind === "applied"
+    ? { kind: "file", file: change.file, text: applied.text }
+    : {
+        kind: "moved",
+        target: identity(change),
+        what: `${addressText(applied.at)} in ${change.file}`,
+      };
 }
 
 // The history with every change to the targets `gone` names gone from both

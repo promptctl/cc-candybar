@@ -377,10 +377,12 @@ describe("undo/redo click → the session's settings history", () => {
     expect(handEdited).not.toBe(written);
     writeFileSync(durable.configPath, handEdited);
 
-    // The click is taken; the host refuses its change, naming the setting.
-    await press(runtime, "back");
+    // The click is refused, naming the setting.
+    await expect(press(runtime, "back")).rejects.toThrow(
+      /undo: globals in .* changed since that edit — refusing to overwrite it/,
+    );
     expect(lastClickError(runtime.sessionState, S1)?.text).toMatch(
-      /globals in .* changed since it was read \(it was \{\s*palette: "dracula",\s*\}, it is \{\s*palette: "gruvbox",\s*\}\) — nothing was written/,
+      /globals in .* changed since that edit/,
     );
     // Nothing was overwritten, and the file step is gone: every change this
     // session made to that file chains through the state the hand edit replaced.
@@ -389,6 +391,20 @@ describe("undo/redo click → the session's settings history", () => {
 
     await press(runtime, "back"); // the session pick is still undoable
     expect(runtime.sessionState.get(S1, "theme")).toBeNull();
+    expect(durable.text()).toBe(handEdited);
+  });
+
+  test("undo over a hand edit elsewhere in the file is refused when the file it would write does not load", async () => {
+    const runtime = undoBar(SRC);
+    await press(runtime, "pinDracula");
+    const handEdited = durable
+      .text()!
+      .replace("actions: {", "actions: {\n    broken: { do: ['nope'] },");
+    writeFileSync(durable.configPath, handEdited);
+
+    await expect(press(runtime, "back")).rejects.toThrow(
+      /the config file would not load after this click/,
+    );
     expect(durable.text()).toBe(handEdited);
   });
 
@@ -514,7 +530,11 @@ describe("settings history: a step lands whole, and records only what landed", (
     const history = new SettingsHistory(new SessionState(), () => {});
     const big = (c: string): string => c.repeat(2 * 1024 * 1024);
     const step = (sid: SessionId, file: string, from: string, to: string): void => {
-      const journal = history.begin({ land: () => {} });
+      const journal = history.begin({
+        read: () => null,
+        land: () => {},
+        prove: () => {},
+      });
       journal.file(sid, file, big(from), big(to));
       journal.commit();
     };
