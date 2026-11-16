@@ -6,7 +6,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { diffChanges } from "../src/config/config-changes.js";
-import { performChanges } from "../src/daemon/effect-interpreter.js";
+import {
+  performChanges,
+  type ApproveRepo,
+} from "../src/daemon/effect-interpreter.js";
+import { repoConfigs, repoConfigsPath } from "../src/config/repo-configs.js";
 import type { SessionId } from "../src/daemon/foundations/session-id.js";
 import type {
   ConfigChange,
@@ -52,7 +56,7 @@ describe("performChanges", () => {
     const removed = change(user, USER, null);
     // Read from the file as it stood: the removal ahead of it moved it.
     const edited = change(user, USER, USER.replace("padding: 1", "padding: 3"));
-    expect(performChanges([removed, edited])).toMatchObject({
+    expect(performChanges([removed, edited], null)).toMatchObject({
       kind: "refused",
     });
     expect(read(user)).toBe(USER);
@@ -61,7 +65,7 @@ describe("performChanges", () => {
   test("splices a setting into the file as it stands, keeping every other byte", () => {
     const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     fs.writeFileSync(user, USER.replace("// mine", "// mine, edited"));
-    expect(performChanges([set])).toEqual({ kind: "ok" });
+    expect(performChanges([set], null)).toEqual({ kind: "ok" });
     expect(read(user)).toBe(
       USER.replace("// mine", "// mine, edited").replace(
         "padding: 1",
@@ -74,7 +78,7 @@ describe("performChanges", () => {
     const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     const moved = USER.replace("padding: 1", "padding: 5");
     fs.writeFileSync(user, moved);
-    expect(performChanges([set])).toEqual({
+    expect(performChanges([set], null)).toEqual({
       kind: "refused",
       reason: `globals.padding in ${user} changed since it was read (it was 1, it is 5) — nothing was written`,
     });
@@ -85,7 +89,7 @@ describe("performChanges", () => {
     const inUser = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     const inProject = change(project, PROJECT, PROJECT.replace(`" "`, `"|"`));
     fs.writeFileSync(project, PROJECT.replace(`" "`, `"/"`));
-    expect(performChanges([inUser, inProject]).kind).toBe("refused");
+    expect(performChanges([inUser, inProject], null).kind).toBe("refused");
     expect(read(user)).toBe(USER);
   });
 
@@ -96,10 +100,10 @@ describe("performChanges", () => {
     fs.writeFileSync(unwritable, PROJECT);
     fs.chmodSync(path.dirname(unwritable), 0o500);
     try {
-      const outcome = performChanges([
-        inUser,
-        change(unwritable, PROJECT, PROJECT.replace(`" "`, `"|"`)),
-      ]);
+      const outcome = performChanges(
+        [inUser, change(unwritable, PROJECT, PROJECT.replace(`" "`, `"|"`))],
+        null,
+      );
       expect(outcome).toMatchObject({ kind: "failed" });
       expect(outcome.kind === "failed" && outcome.reason).toMatch(
         /nothing was written$/,
@@ -115,17 +119,79 @@ describe("performChanges", () => {
   test("a file removed through a link removes its target and keeps the link", () => {
     const link = path.join(dir, "linked.json5");
     fs.symlinkSync("dotfiles.json5", link);
-    expect(performChanges([change(link, null, USER)])).toEqual({ kind: "ok" });
-    expect(performChanges([change(link, USER, null)])).toEqual({ kind: "ok" });
+    expect(performChanges([change(link, null, USER)], null)).toEqual({ kind: "ok" });
+    expect(performChanges([change(link, USER, null)], null)).toEqual({ kind: "ok" });
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(dir, "dotfiles.json5"))).toBe(false);
   });
 
   test("creates a file a change creates, and removes one it removes", () => {
     const fresh = path.join(dir, "fresh.json5");
-    expect(performChanges([change(fresh, null, USER)])).toEqual({ kind: "ok" });
+    expect(performChanges([change(fresh, null, USER)], null)).toEqual({ kind: "ok" });
     expect(read(fresh)).toBe(USER);
-    expect(performChanges([change(fresh, USER, null)])).toEqual({ kind: "ok" });
+    expect(performChanges([change(fresh, USER, null)], null)).toEqual({ kind: "ok" });
     expect(fs.existsSync(fresh)).toBe(false);
+  });
+});
+
+// [LAW:verifiable-goals] A click's answers to the trust book land with its
+// config changes or not at all: an answer decides which config a session
+// renders, so a book written beside a config change that failed would trust
+// a repository whose config the click never set.
+describe("performChanges with the trust book", () => {
+  const answer = (dir: string): ApproveRepo => ({
+    kind: "approve-repo",
+    id: ++ids as EffectId,
+    session: "s" as SessionId,
+    dir,
+    answer: "approved",
+  });
+
+  test("an answer lands with the turn's changes, and its line is said once it has", () => {
+    const state = path.join(dir, "state");
+    const said: string[] = [];
+    const outcome = performChanges(
+      [change(user, USER, USER.replace("dusk", "dawn"))],
+      { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
+    );
+    expect(outcome).toEqual({ kind: "ok" });
+    expect(read(user)).toContain("dawn");
+    expect(repoConfigs(state).read()).toEqual({ kind: "ok", value: { [dir]: "approved" } });
+    expect(said).toEqual([expect.stringMatching(/^repo-config: .* approved /)]);
+  });
+
+  test("a trust book that cannot be written leaves every config file as it was", () => {
+    const state = path.join(dir, "state");
+    const folder = path.dirname(repoConfigsPath(state));
+    fs.mkdirSync(folder, { recursive: true });
+    // The book reads as empty, and its folder takes no write: the config
+    // change is written first, then put back.
+    fs.chmodSync(folder, 0o500);
+    try {
+      const said: string[] = [];
+      const outcome = performChanges(
+        [change(user, USER, USER.replace("dusk", "dawn"))],
+        { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
+      );
+      expect(outcome).toMatchObject({ kind: "failed" });
+      expect(outcome.kind === "failed" && outcome.reason).toMatch(
+        /nothing was written$/,
+      );
+      expect(read(user)).toBe(USER);
+      expect(said).toEqual([]);
+    } finally {
+      fs.chmodSync(folder, 0o700);
+    }
+  });
+
+  test("a change that moved since it was read writes no answer", () => {
+    const state = path.join(dir, "state");
+    fs.writeFileSync(user, USER.replace("dusk", "noon"));
+    const outcome = performChanges(
+      [change(user, USER, USER.replace("dusk", "dawn"))],
+      { stateDir: state, answers: [answer(dir)], said: () => {} },
+    );
+    expect(outcome.kind).toBe("refused");
+    expect(fs.existsSync(repoConfigsPath(state))).toBe(false);
   });
 });

@@ -201,7 +201,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       (lines) =>
         lines.some((l) =>
           l.includes(
-            `run sid=${SESSION} action=plugins.p.go program=./write.sh outcome=ok exit=0 `,
+            `outcome=ok — run plugins.p.go: program=./write.sh ended=ok exit=0 `,
           ),
         ) &&
         lines.some(
@@ -246,7 +246,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     await refusedClick(daemon, changed, "bad-request");
     expect((await statsOf(daemon.daemon)).runs).toMatchObject({
       started: before.runs.started,
-      refused: before.runs.refused,
+
     });
     expect(await render()).not.toContain("⚠");
   });
@@ -281,7 +281,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
     await refusedClick(daemon, forged, "bad-request");
     expect((await statsOf(daemon.daemon)).runs).toMatchObject({
       started: before.runs.started,
-      refused: before.runs.refused + 1,
+
     });
     // The refusal is the bar's one message: the indicator counts it, and the
     // viewer it opens shows it.

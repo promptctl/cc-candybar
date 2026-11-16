@@ -26,7 +26,7 @@ import {
   repoConfigs,
   repoConfigsDir,
   repoConfigsPath,
-} from "./repo-configs.js";
+} from "../config/repo-configs.js";
 import { REPO_PLUGIN_DIR } from "../config/loader/plugin-folders.js";
 import type { Drawing } from "../config/lanes.js";
 import {
@@ -1710,7 +1710,7 @@ export class RenderCache<
   // the runs its `shell` and `file` sources name. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
-  subscriptions(): Subscriptions {
+  subscriptions(): Pick<Subscriptions, "sources"> {
     return {
       sources: Object.fromEntries(
         [...this.views].map(([session, view]) => [

@@ -1,27 +1,36 @@
 // [LAW:single-enforcer] How a click's config writes leave the renderer: as
 // `change`s its turn returns, which the host performs, never as a file the
-// renderer writes. A click lands whole or not at all, so what else it did is
-// its consequence (its journal's commit), held here from its turn until its
-// changes' `effect-done`s: applied once they land, dropped when they do not. A journal turn opens only once no click's changes are on their way
+// renderer writes, and with them its answers to the trust book, which decide
+// which config a session renders. A click lands whole or not at all, so what
+// else it did is its consequence (its journal's commit), held here from its
+// turn until its changes' `effect-done`s: applied once they land, dropped
+// when they do not. A journal turn opens only once no click's changes are on their way
 // (src/renderer/journal-turns.ts), so each click reads the files the clicks
 // ahead of it wrote, and at most one click is ever landing. The host owes every
 // change it is handed its `effect-done` (src/daemon/renderer-host.ts).
 
 import { diffChanges } from "../config/config-changes.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
+import type { RepoAnswer } from "../config/loader/repo-gate.js";
 import type {
+  Act,
   ConfigChange,
   Effect,
   EffectId,
   EffectOutcome,
 } from "../renderer-interface/interface.js";
 
+// What a click's consequence is applied in: the turn its changes landed in,
+// whose effects what it asks joins.
+export type Consequence = (effects: Effect[]) => void;
+
 // A click whose changes are on their way: the session it clicked, the files
-// they change, and its consequence.
+// they change, whether it answered the trust book, and its consequence.
 export interface Landing {
   readonly session: SessionId;
   readonly files: readonly string[];
-  readonly consequence: () => void;
+  readonly answered: boolean;
+  readonly consequence: Consequence;
 }
 
 // How a landing ended: every change of its click landed, or the first reason
@@ -41,6 +50,11 @@ export class ConfigWrites {
   } | null = null;
   private waiting: Array<() => void> = [];
   private closed = false;
+  // The open click's answers to the trust book, in the order it gave them.
+  private answers: Array<{
+    readonly dir: string;
+    readonly answer: RepoAnswer;
+  }> = [];
 
   constructor(
     private readonly mint: () => EffectId,
@@ -66,14 +80,22 @@ export class ConfigWrites {
     });
   }
 
-  // The open click is over. Its changes join its turn's effects, and its
-  // consequence waits for them; a click that changed no file has its
-  // consequence now.
+  // The open click answers the trust book for `dir`: it lands with the
+  // click's changes.
+  answer(dir: string, answer: RepoAnswer): void {
+    this.answers.push({ dir, answer });
+  }
+
+  // The open click is over. Its changes and its answers join its turn's
+  // effects, and its consequence waits for them; a click that changed no file
+  // and answered nothing has its consequence now.
   seal(
     effects: Effect[],
     session: SessionId | null,
-    consequence: () => void,
+    consequence: Consequence,
   ): void {
+    const answers = this.answers;
+    this.answers = [];
     // [LAW:no-ambient-temporal-coupling] A click the daemon's close cut off
     // lands nothing, so nothing of it is performed under the teardown.
     if (this.closed) return this.open.clear();
@@ -83,26 +105,40 @@ export class ConfigWrites {
     });
     const files = written.map(({ path }) => path);
     this.open.clear();
-    if (written.length === 0) return consequence();
+    if (written.length === 0 && answers.length === 0)
+      return consequence(effects);
     // [LAW:no-silent-failure] A write is a session's: one with none is the
     // click's bug.
     if (session === null)
-      throw new Error(`a click with no session wrote ${files.join(", ")}`);
-    const changes = written.map(
-      ({ path, list }): ConfigChange => ({
-        kind: "change",
+      throw new Error(
+        `a click with no session wrote ${[...files, ...answers.map((a) => `the answer for ${a.dir}`)].join(", ")}`,
+      );
+    const landing: Array<
+      ConfigChange | Extract<Act, { kind: "approve-repo" }>
+    > = [
+      ...written.map(
+        ({ path, list }): ConfigChange => ({
+          kind: "change",
+          id: this.mint(),
+          session,
+          target: { kind: "layer", path },
+          changes: list,
+        }),
+      ),
+      ...answers.map(({ dir, answer }) => ({
+        kind: "approve-repo" as const,
         id: this.mint(),
         session,
-        target: { kind: "layer", path },
-        changes: list,
-      }),
-    );
+        dir,
+        answer,
+      })),
+    ];
     this.landing = {
-      of: { session, files, consequence },
-      owed: new Set(changes.map((c) => c.id)),
+      of: { session, files, answered: answers.length > 0, consequence },
+      owed: new Set(landing.map((c) => c.id)),
       missed: null,
     };
-    effects.push(...changes);
+    effects.push(...landing);
   }
 
   // A change's `effect-done`: the landing once its last change is settled,

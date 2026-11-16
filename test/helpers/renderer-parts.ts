@@ -39,17 +39,11 @@ const unhosted = (what: string) => (): never => {
 };
 
 // The host a renderer test draws against: no feed follows a session, no
-// update is offered, file events are heard, nothing is idle and nothing is
-// set up.
+// update is offered, file events are heard, and nothing is idle.
 export function inertHost(): AdapterToHost {
   return {
     wake: () => {},
     log: () => {},
-    launch: unhosted("launch"),
-    typeSlash: unhosted("type slash"),
-    applyUpdate: () =>
-      Promise.reject(new Error("apply-update: no update watch in this rig")),
-    runs: { start: unhosted("runs"), refused: unhosted("runs") },
     doctor: {
       probeTmux: unhosted("doctor"),
       remoteLogin: unhosted("doctor"),
@@ -59,8 +53,6 @@ export function inertHost(): AdapterToHost {
       transcript: unhosted("doctor"),
       install: unhosted("doctor"),
     },
-    laneSetups: { noted: () => {}, clicked: () => {} },
-    tmuxStatusLines: { observe: () => {} },
     menuIdle: {
       clicked: () => {},
       observe: () => {},
@@ -97,7 +89,11 @@ export function rendererParts({
     worldStates,
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions(),
+    // A rig's sessions have no lane switched, so no setup is owed.
+    laneActs: { noted: () => {}, clicked: () => {} },
     verbs,
     mint: minter(),
+    // A rig's verbs ask no act, so no `effect-done` is an act's.
+    acts: { done: () => false },
   };
 }

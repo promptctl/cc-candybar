@@ -24,7 +24,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext,
-  verbContextWith, effectsOf, clickUrl } from "./helpers/click";
+  effectsOf, clickActing } from "./helpers/click";
 import { VERB_SLASH } from "../src/click/wire";
 import {
   SESSION_CLIENT_HINTS_KEY,
@@ -112,15 +112,14 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
       return { kind: "typed" };
     },
   };
-  const ctx = verbContextWith(testVerbContext(sessionState, undefined, config), {
-    typeSlash: typeInPane(claudeInput)
-});
+  const ctx = testVerbContext(sessionState, undefined, config);
+  const host = { type: typeInPane(claudeInput) };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
   );
   // What each control types, in the order the cell draws them.
   const lines = urls.map((u) => effectsOf(u)[0]!.args[1]);
-  return { text: textOf(raw), urls, lines, ctx, typed };
+  return { text: textOf(raw), urls, lines, ctx, typed, host };
 }
 
 describe("the autocompact segment", () => {
@@ -190,7 +189,7 @@ describe("the autocompact segment", () => {
 
   test("a click types its line into the session", async () => {
     const rt = runtime(ok(400_000));
-    await clickUrl(rt.urls[1]!, rt.ctx);
+    await clickActing(rt.urls[1]!, rt.ctx, rt.host);
     expect(rt.typed).toEqual(["/autocompact 500000"]);
   });
 

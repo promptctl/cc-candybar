@@ -1,9 +1,9 @@
 // The host's one path to a renderer: every input it hands one is one turn,
 // which answers with the turn's output or with how the turn failed: a turn's
 // throw comes back as a value, never as a rejection. Every turn's
-// subscriptions are taken here, in the order the turns answered, and its
-// config changes performed; a present a turn that answers no request returned
-// is refused. A caller
+// subscriptions are taken here, in the order the turns answered, its config
+// changes landed, and its acts performed once they have; a present a turn that
+// answers no request returned is refused. A caller
 // whose own event records the turn takes it by `answer`; every other input is
 // taken by `deliver`, which writes the turn's own line.
 
@@ -26,14 +26,37 @@ import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import { CrossedFailure, failureOf } from "./foundations/verb-error.js";
-import { performChanges } from "./effect-interpreter.js";
+import { performChanges, type ApproveRepo } from "./effect-interpreter.js";
+import { outlives, type HostAct } from "./acts.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
 
-// A turn as the host took it: how it ended, and what the hop to its renderer
-// cost, null for a turn no renderer answered.
-export type HostTurn = TurnOutcome & { readonly hopMs: number | null };
+// A turn as the host took it: how it ended, what the hop to its renderer
+// cost, null for a turn no renderer answered, and how each of its effects
+// settled before it returned: its changes, and the acts over in the turn, in
+// the order they were returned.
+export type HostTurn = TurnOutcome & {
+  readonly hopMs: number | null;
+  readonly settled: readonly EffectOutcome[];
+};
+
+// What the host's turns act in: the performer of acts, the trust book's
+// directory, whether the daemon's close has begun, and where an act's failure
+// goes that no session's bar can hold.
+export interface HostWorld {
+  readonly perform: (act: HostAct) => Promise<EffectOutcome>;
+  readonly stateDir: string;
+  readonly closing: () => boolean;
+  readonly unheard: (text: string) => void;
+}
+
+// An act the host performs: the trust book's answer lands with the turn's
+// changes, and its failure is theirs.
+const performed = (effect: Effect): effect is HostAct =>
+  effect.kind !== "present" &&
+  effect.kind !== "change" &&
+  effect.kind !== "approve-repo";
 
 export interface RendererHost {
   readonly name: RendererName;
@@ -67,6 +90,7 @@ export function rendererHost(
     // a session under a turn on it, however long the turn waits.
     readonly holding: (session: SessionId) => () => void;
   },
+  world: HostWorld,
 ): RendererHost {
   const held = async (input: EventInput): Promise<HostTurn> => {
     const session = sessionOf(input.event);
@@ -78,33 +102,70 @@ export function rendererHost(
       // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
       // turn, so what the process boundary costs is read from the event.
       const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
-      // [LAW:single-enforcer] A turn's changes are performed here, together,
-      // in the order the turns answered, before anything else here can throw
-      // and before the turn's caller hears it: the renderer opens its next
-      // journal only once they have landed. A present answers the request
-      // whose turn returned it, so one another turn returns is refused here.
-      // No effect is left owed its `effect-done`, and the turn's caller
-      // hears it only after each `effect-done` turn, so a click is answered
-      // after what its landing did, in or out of process.
+      // [LAW:single-enforcer] A turn's changes land here, together with its
+      // answers to the trust book, in the order the turns answered, before
+      // anything else here can throw and before the turn's caller hears it:
+      // the renderer opens its next journal only once they have landed. Its
+      // acts are performed only once they have, in the order it returned
+      // them, each once the one before it has ended, and none is once the
+      // daemon's close has begun. A present
+      // answers the request whose turn returned it, so one another turn
+      // returns is refused here. No effect is left owed its `effect-done`,
+      // and the turn's caller hears it only after each `effect-done` turn of
+      // what is over in the turn, so a click is answered after what its
+      // landing and its acts did, in or out of process.
       const changes = output.effects.filter(
         (effect): effect is ConfigChange => effect.kind === "change",
       );
-      const landed = changes.length === 0 ? null : performChanges(changes);
-      const settled = output.effects.flatMap((effect) =>
-        effect.kind === "change"
-          ? [settle(effect, landed!)]
-          : input.event.kind === "request"
-            ? []
-            : [
-                settle(effect, {
-                  kind: "failed",
-                  reason: `a ${input.event.kind} turn answers no request`,
-                }),
-              ],
+      const answers = output.effects.filter(
+        (effect): effect is ApproveRepo => effect.kind === "approve-repo",
       );
+      const landed: EffectOutcome = world.closing()
+        ? { kind: "closing", reason: "the daemon is closing" }
+        : changes.length + answers.length === 0
+          ? { kind: "ok" }
+          : performChanges(changes, {
+              stateDir: world.stateDir,
+              answers,
+              said: (line) => log("info", line),
+            });
+      // An act no landing let go: the close is its own cause, and any other
+      // is its changes', whose own outcome says why.
+      const unperformed: EffectOutcome =
+        landed.kind === "ok" || landed.kind === "closing"
+          ? landed
+          : { kind: "skipped", reason: `not performed: ${landed.reason}` };
+      const inTurn: Array<Promise<EffectOutcome>> = [];
+      // [LAW:no-ambient-temporal-coupling] Each act starts once every act
+      // over in its turn before it has ended, so two copies land in the
+      // order the turn asked them.
+      let before: Promise<unknown> = Promise.resolve();
+      for (const effect of output.effects) {
+        if (effect.kind === "present") {
+          if (input.event.kind !== "request")
+            inTurn.push(
+              settle(effect, {
+                kind: "failed",
+                reason: `a ${input.event.kind} turn answers no request`,
+              }),
+            );
+        } else if (effect.kind === "change" || effect.kind === "approve-repo")
+          inTurn.push(settle(effect, landed));
+        else {
+          const acted =
+            landed.kind === "ok"
+              ? before.then(() => world.perform(effect))
+              : Promise.resolve(unperformed);
+          const settled = acted.then((outcome) => settle(effect, outcome));
+          if (outlives(effect)) void settled;
+          else {
+            inTurn.push(settled);
+            before = acted;
+          }
+        }
+      }
       collector.subscribed(subscriptions);
-      await Promise.all(settled);
-      return output;
+      return { ...output, settled: await Promise.all(inTurn) };
     } finally {
       release();
     }
@@ -121,10 +182,22 @@ export function rendererHost(
         record: [],
         effects: [],
         hopMs: null,
+        settled: [],
       }),
     );
-  const settle = (effect: Effect, outcome: EffectOutcome): Promise<unknown> =>
-    deliver(
+  // [LAW:no-silent-failure] Each effect's outcome goes back to the renderer
+  // that returned it. An act's failure that no session's bar can hold — one
+  // with no session, or one whose renderer has ended — is the daemon's, on
+  // every bar.
+  const settle = async (
+    effect: Effect,
+    outcome: EffectOutcome,
+  ): Promise<EffectOutcome> => {
+    const failed =
+      performed(effect) &&
+      (outcome.kind === "failed" || outcome.kind === "refused");
+    if (failed && effect.session === null) world.unheard(outcome.reason);
+    const delivered = await deliver(
       {
         kind: "event",
         at: instantAt(clock),
@@ -137,6 +210,15 @@ export function rendererHost(
       },
       [["effect", String(effect.id)]],
     );
+    if (
+      failed &&
+      effect.session !== null &&
+      delivered.kind === "threw" &&
+      delivered.failure.kind === "down"
+    )
+      world.unheard(outcome.reason);
+    return outcome;
+  };
   // A turn's line, when it learned something or failed.
   const record = (
     input: EventInput,
@@ -224,6 +306,9 @@ export function rendererHost(
 // its checkpoint, names none.
 function sessionOf(event: Event): SessionId | null {
   switch (event.kind) {
+    // A start is every session's: it holds none of them alone.
+    case "start":
+      return null;
     case "config":
     case "request":
       return event.context.hookData.session_id;

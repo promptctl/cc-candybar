@@ -107,7 +107,7 @@ Today the path is read → parse → publish, in `declareSource`.
 
 ## 3. Repo gate
 
-**Where:** `gateRepos` (pure, `src/config/loader/repo-gate.ts`) is called from `resolveDslConfig` in `src/config/loader/discovery.ts`. Answers come from `repoConfigs().read()` (`src/renderer/repo-configs.ts`) in `loadFromDisk`; `durableConfig` uses the same resolve.
+**Where:** `gateRepos` (pure, `src/config/loader/repo-gate.ts`) is called from `resolveDslConfig` in `src/config/loader/discovery.ts`. Answers come from `repoConfigs().read()` (`src/config/repo-configs.ts`) in `loadFromDisk`; `durableConfig` uses the same resolve.
 
 **What it gates:**
 - cwd and project config layers, filtered by `repos.approved` *before merge*

@@ -502,6 +502,43 @@ export type StatusClick =
   | { readonly kind: "link"; readonly url: string }
   | { readonly kind: "refused"; readonly reason: string };
 
+// [LAW:one-source-of-truth] The sessions the renderer declares, in each
+// output's subscriptions, whose tmux status line switch is on: the host holds
+// each one's row in the pane its newest request reports, and lets a session's
+// row go once the renderer stops naming it — its switch off, its view closed.
+// A row the host released on its own (its pane gone, or taken by another
+// session) is held again at the session's next request, since the renderer
+// still names it.
+export class DeclaredStatusLines {
+  private declared: ReadonlySet<SessionId> = new Set();
+
+  constructor(
+    private readonly lines: Pick<TmuxStatusLines, "observe">,
+    // The pane the session's newest request reported.
+    private readonly paneOf: (
+      session: SessionId,
+    ) => TmuxHint | null | undefined,
+  ) {}
+
+  // The whole declaration, as the renderer's latest output has it.
+  declare(sessions: readonly SessionId[]): void {
+    const next = new Set(sessions);
+    for (const session of this.declared)
+      if (!next.has(session)) this.lines.observe(session, null, false);
+    for (const session of next)
+      if (!this.declared.has(session))
+        this.lines.observe(session, this.paneOf(session), true);
+    this.declared = next;
+  }
+
+  // A request of `session` arrived: its row follows the pane its newest
+  // request reports, which a late older request does not move.
+  arrived(session: SessionId): void {
+    if (this.declared.has(session))
+      this.lines.observe(session, this.paneOf(session), true);
+  }
+}
+
 /**
  * [LAW:single-enforcer] The one writer of this lane's tmux state: every
  * session's rows, every status line's layout, every server's click binding.
@@ -517,11 +554,11 @@ export class TmuxStatusLines {
 
   constructor(private readonly deps: TmuxStatusDeps) {}
 
-  // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival with its own hints, a click's commit with its session's latest —
-  // never at a draw: a session whose switch is on and that reported a tmux
-  // pane is held, any other is not. A daemon restart picks each session up at
-  // its next request.
+  // [LAW:dataflow-not-control-flow] Level-triggered, at events — the
+  // renderer's declaration moving, a declared session's request arriving
+  // with its own hints (`DeclaredStatusLines`) — never at a draw: a session
+  // whose switch is on and that reported a tmux pane is held, any other is
+  // not.
   observe(
     sessionId: SessionId,
     tmux: TmuxHint | null | undefined,

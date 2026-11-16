@@ -5,7 +5,6 @@ import type { FileEventDelivery } from "./cache/file-events";
 import type { WatcherRegistry } from "./cache/watchers";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { FrameFeeds } from "./frame-feed.js";
-import type { LaneSetups } from "./lane-setup.js";
 import type { LimitsHandle } from "./limits";
 import type { MenuIdle } from "./menu-idle.js";
 import type { RenderPayloadDeps } from "./readings";
@@ -13,7 +12,7 @@ import type { RenderSightings } from "./render-sightings";
 import type { Runs } from "./runs.js";
 import type { SourceRuns } from "./source-runs.js";
 import type { RuntimeStats } from "./stats";
-import type { TmuxStatusLines } from "./tmux-status.js";
+import type { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
 import type { DoctorStores } from "../doctor/ports";
 import type { RendererHost } from "./renderer-host.js";
@@ -51,8 +50,8 @@ export interface DaemonParts {
   // [LAW:single-enforcer] The daemon's one owner of every declared source's
   // runs, which the stats reply reads.
   readonly sourceRuns: SourceRuns;
-  readonly laneSetups: LaneSetups;
   readonly tmuxStatusLines: TmuxStatusLines;
+  readonly declaredStatusLines: DeclaredStatusLines;
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;
   readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;

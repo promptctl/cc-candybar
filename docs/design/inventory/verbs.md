@@ -155,7 +155,7 @@ Other points:
 - `src/renderer/settings-history.ts`
 - `src/renderer/navigation-history.ts`
 - `src/renderer/config-file-store.ts`
-- `src/renderer/repo-configs.ts`
+- `src/config/repo-configs.ts`
 - `src/daemon/runs.ts`
 - `src/daemon/update-notice.ts`
 - `src/daemon/update-act.ts`

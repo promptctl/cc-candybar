@@ -20,7 +20,7 @@ import {
   refusedHintsError,
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
-import { repoQuestions } from "./repo-configs";
+import { repoQuestions } from "../config/repo-configs";
 import {
   type CacheEntry,
   type RenderCache,
@@ -34,7 +34,7 @@ import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
 } from "../daemon/foundations/session-keys";
-import { answeredOf, roleOf } from "../daemon/foundations/sighting-roles";
+import { roleOf } from "../daemon/foundations/sighting-roles";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
 import {
@@ -68,8 +68,9 @@ import {
 import {
   type AdapterToHost,
   type FeedFrame,
-  type LaneSession,
 } from "../renderer-interface/adapter.js";
+import type { LaneActs } from "./lane-acts.js";
+import type { Effect } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -122,6 +123,9 @@ export interface RendererState {
   // [LAW:single-enforcer] The signer every link this renderer draws is
   // signed with, over the state directory's key.
   readonly linkSigner: LinkSigner;
+  // [LAW:single-enforcer] What turning a lane on or off asks of the host
+  // (src/renderer/lane-acts.ts).
+  readonly laneActs: Pick<LaneActs, "noted" | "clicked">;
 }
 
 export type RendererParts = RendererState & AdapterToHost;
@@ -254,11 +258,11 @@ export function viewLanes(
 
 // The lanes `sessionId`'s settings switch on over the config `origin`
 // resolves to, as the render cache holds it, in the pane its latest request
-// reported — the same request a click's setups and status line follow
-// (laneClicked). A session this daemon has no request from has no pane fact
+// reported — the same request a click's setups follow (src/renderer/
+// lane-acts.ts). A session this daemon has no request from has no pane fact
 // yet, so its switches are its settings alone: what the click moves is owed
 // to its first request, which settles it against the pane that request
-// reports (`arrived`), so a session outside tmux is owed nothing it can run.
+// reports, so a session outside tmux is owed nothing it can run.
 export function lanesAt(
   parts: RendererParts,
   origin: RenderOrigin,
@@ -614,14 +618,17 @@ export function drawRender(
   const { daemon } = document;
   const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
-  const ended = rendererEndedAt(daemon.rendererEnded, at, drawing.by);
-  const eventsShown = [pipeWarning?.event, ended?.event].flatMap((e) =>
-    e === undefined ? [] : [e],
+  const held = [
+    daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
+    daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
+  ].flatMap((w) => (w === undefined ? [] : [w]));
+  const eventsShown = [pipeWarning?.event, ...held.map((w) => w.event)].flatMap(
+    (e) => (e === undefined ? [] : [e]),
   );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
     ...launched,
-    ...(ended === undefined ? [] : [ended]),
+    ...held,
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
@@ -819,6 +826,7 @@ export function drawRender(
       case "lifeline":
       case "launch-pipes":
       case "renderer-ended":
+      case "act-failed":
       case "when":
         return w.kind;
     }
@@ -907,29 +915,31 @@ interface FactsWarning {
 
 // [LAW:no-silent-failure] A renderer process that ended took its session
 // state that lives only in memory with it (open menus, armed confirms): the
-// bar the next one draws says so, by the same event hold as a pipe event.
-interface RendererEndedWarning {
-  readonly kind: "renderer-ended";
+// bar the next one draws says so, by the same event hold as a pipe event. So
+// does an act that failed where no session's bar could hold it.
+interface DaemonEventWarning {
+  readonly kind: "renderer-ended" | "act-failed";
   readonly message: string;
   readonly event: HeldEvent;
 }
 
-function rendererEndedAt(
+function daemonEventAt(
+  kind: DaemonEventWarning["kind"],
   event: HeldEvent | null,
   at: Instant,
   render: Drawing["by"],
-): RendererEndedWarning | undefined {
+): DaemonEventWarning | undefined {
   return event === null ||
     eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render) === "over"
     ? undefined
-    : { kind: "renderer-ended", message: event.text, event };
+    : { kind, message: event.text, event };
 }
 
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
   | LauncherWarning
-  | RendererEndedWarning
+  | DaemonEventWarning
   | ConfigWatchWarning
   | LoadWarning
   | FactsWarning;
@@ -985,69 +995,6 @@ export interface RequestAnswer {
   readonly delivered: () => void;
 }
 
-// [LAW:effects-at-boundaries] What a request's arrival starts beyond its
-// own answer, in its arrival turn, by the lanes its session's settings switch
-// on as it arrived: the setups its session's clicks owe
-// (src/daemon/lane-setup.ts), and the tmux status line its switch and pane
-// hold (src/daemon/tmux-status.ts) — held again here after `answered`
-// released it, and by nothing between requests, so a status line another
-// session's save turned off is never re-taken from a remembered switch. No
-// draw starts either.
-function arrived(
-  parts: RendererParts,
-  req: CheckedRenderRequest,
-  lanes: LaneSwitches,
-): void {
-  const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(req), lanes);
-  tmuxStatusLines.observe({
-    sessionId: req.hookData.session_id,
-    tmux: req.hints.tmux,
-    on: lanes.tmuxStatus,
-  });
-}
-
-// [LAW:one-source-of-truth] A session as a lane's setup needs it: what its
-// request `req` reported, and the config inputs it renders from.
-export function laneSessionOf(req: CheckedRenderRequest): LaneSession {
-  return {
-    sessionId: req.hookData.session_id,
-    hints: req.hints,
-    origin: req.requested,
-    transcript: req.hookData.transcript_path,
-    answered: answeredOf(req.hookData),
-  };
-}
-
-// What follows a click of `sessionId` that found its lane switches at
-// `before` and left them at `after`: each lane it moved is set up for the
-// session as its latest request reported it, or owed to its first request;
-// and a tmux status line switch it moved is followed in the pane that request
-// reported. A click that left that switch alone holds nothing: the pane is
-// only remembered, and `answered` may have released it to the session that
-// took it since.
-export function laneClicked(
-  parts: RendererParts,
-  sessionId: SessionId,
-  latest: CheckedRenderRequest | null,
-  before: LaneSwitches,
-  after: LaneSwitches,
-): void {
-  const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.clicked(
-    sessionId,
-    latest === null ? null : laneSessionOf(latest),
-    before,
-    after,
-  );
-  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe({
-      sessionId,
-      tmux: latest.hints.tmux,
-      on: after.tmuxStatus,
-    });
-}
-
 export async function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
@@ -1062,16 +1009,22 @@ export async function answerRequest(
     readonly idleSince: Instant | null;
   },
   facts: RequestFacts,
+  // The request's turn's effects, which the setups its session's clicks owe
+  // join.
+  effects: Effect[],
 ): Promise<RequestAnswer> {
   const { clock, log } = parts;
   // [LAW:no-ambient-temporal-coupling] The wait is counted from this turn's
   // start on the renderer's own clock.
   const turnFrom = clock.monotonic();
   using setup = setUpRender(parts, req, at, facts);
-  arrived(
-    parts,
+  // [LAW:effects-at-boundaries] What the request's arrival starts beyond its
+  // own answer: the setups its session's clicks owe, by the lanes its
+  // settings switch on as it arrived. No draw starts one.
+  parts.laneActs.noted(
     req,
     laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
+    effects,
   );
   // Rules 1 and 2 of the model: the answer shows what this request carried,
   // so it waits for the first value of every fact of its world state it

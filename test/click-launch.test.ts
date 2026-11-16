@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { clickLaunch } from "../src/renderer/verbs";
+import { clickLaunch } from "../src/daemon/foundations/click-launch";
 import { clickHandoff } from "../src/daemon/click-handoff";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { systemTimekeeper } from "../src/time";
@@ -85,7 +85,7 @@ describe("clickHandoff", () => {
       HOST.tmp,
     );
     expect(logged).toEqual([
-      expect.stringMatching(/^rate-limited: click.open /),
+      expect.stringMatching(/^second not run: rate-limited: click.open /),
     ]);
   });
 
@@ -135,8 +135,33 @@ describe("clickLaunch", () => {
           category: "click.open",
         },
         "opening https://example.com",
-        () => {},
+        "opened",
       ),
     ).rejects.toThrow(/^opening https:\/\/example\.com failed \(.*ENOENT\)$/);
+  });
+
+  test("a launch the rate limit refused is skipped, saying it did not run", async () => {
+    await expect(
+      clickLaunch(
+        async () => ({
+          ok: false,
+          reason: "rate-limited",
+          stdout: "",
+          stderr: "",
+          exitCode: null,
+          signal: null,
+          error: "too many click.pbcopy launches",
+        }),
+        { bin: "/usr/bin/pbcopy", stdinInput: "x", category: "click.pbcopy" },
+        "pbcopy",
+        "copied",
+      ),
+    ).resolves.toEqual({
+      outcome: {
+        kind: "skipped",
+        reason: expect.stringMatching(/^pbcopy not run: /),
+      },
+      said: expect.stringMatching(/^pbcopy not run: /),
+    });
   });
 });

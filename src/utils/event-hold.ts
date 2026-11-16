@@ -42,6 +42,22 @@ export function eventHoldAt(
   return render === "request" && !event.answered ? "owed" : "over";
 }
 
+// [LAW:single-enforcer] The one rule for an event that follows another: while
+// the last is still owed to a client it joins it, so failures that land
+// apart — a click's, then its run's — show together until one answer has
+// carried them; once one has, the next starts afresh.
+export function joinedEvent(
+  last: HeldEvent | null,
+  text: string,
+  at: Instant,
+): HeldEvent {
+  return {
+    text: last === null || last.answered ? text : `${last.text}\n${text}`,
+    at,
+    answered: false,
+  };
+}
+
 // [LAW:single-enforcer] The one rule for which answer marks an event: one that
 // carried the latest event, not yet marked. A newer event since stays unmarked.
 export function answeredBy(last: HeldEvent, shown: HeldEvent): boolean {

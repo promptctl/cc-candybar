@@ -7,7 +7,7 @@ import { failureOf } from "../../src/daemon/foundations/verb-error";
 import type { AdapterOutput } from "../../src/renderer-interface/interface";
 import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
-import { pushRenderer } from "../helpers/renderers";
+import { NO_ACTS, pushRenderer } from "../helpers/renderers";
 
 const AT = instantOf(new Date(0));
 
@@ -28,7 +28,7 @@ function hostOver(output: AdapterOutput) {
       holding: () => {
         throw new Error("a push holds no session");
       },
-    },
+    }, NO_ACTS,
   );
   return { host, said };
 }

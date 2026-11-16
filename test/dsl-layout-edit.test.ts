@@ -1556,7 +1556,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(parsed.presets.default.root).toEqual({ rows: {} });
       // The same click again is stale, and names the root it stages.
       await expect(removeDirectory).rejects.toThrow(
-        /^root holds no placement "directory"/,
+        /^apply-layout-op: root holds no placement "directory"/,
       );
     } finally {
       for (const fn of cleanups) fn();

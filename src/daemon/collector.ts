@@ -251,7 +251,7 @@ export class Collector {
   // a session whose set moved is declared again, and one absent from them has
   // no plugin sources. A retiring session takes its set too, and holds none
   // of it.
-  subscribed(subscriptions: Subscriptions): void {
+  subscribed(subscriptions: Pick<Subscriptions, "sources">): void {
     // A record's own keys only, so a session named like an inherited member
     // (`constructor`) is a key absent.
     const sources = new Map(

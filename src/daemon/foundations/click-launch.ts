@@ -1,24 +1,32 @@
-// What a click's launch that ended badly does to the click, and the bound its
-// programs run under: shared, because the renderer's verbs launch and the host
-// hands off.
+// What a click's launch that ended badly does to its act, and the bound its
+// programs run under: shared by the acts that launch and the host's handoff.
 
-import type { DaemonLogger } from "../../utils/logger";
 import {
   failureText,
   type Failed,
+  type LaunchCategory,
   type Launcher,
   type LaunchResult,
 } from "../../proc/launcher";
-import type { ClickLaunch } from "../../renderer-interface/adapter";
 import { DaemonClosing } from "./verb-error";
+import type { EffectOutcome } from "../../renderer-interface/interface";
+
+// [LAW:types-are-the-program] A launch a click's act makes: the program, its
+// arguments and what it reads on stdin, as text.
+export interface ClickLaunch {
+  readonly bin: string;
+  readonly args?: readonly string[];
+  readonly stdinInput?: string;
+  readonly category: LaunchCategory;
+}
 
 // How long a program a click launches has before the click fails, or, for an
 // opener's handoff, before it counts as handed off: a handful of seconds at most.
 export const CLICK_PROGRAM_TIMEOUT_MS = 5000;
 
-// [LAW:no-ambient-temporal-coupling] A click's launch through `launcher`: a
-// click holds the daemon-wide turn while it waits, so the bound is no option.
-// It is what gives the turn back.
+// [LAW:no-ambient-temporal-coupling] A click's launch through `launcher`: the
+// click is answered only once its act has ended, so the bound is no option.
+// It is what lets the click be answered.
 export const clickLaunchVia =
   (launcher: Pick<Launcher, "launch">) =>
   (launch: ClickLaunch): Promise<LaunchResult> =>
@@ -28,17 +36,32 @@ export const clickLaunchVia =
       timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
     });
 
+// [LAW:one-type-per-behavior] A click's launch of a program it waits out —
+// the clipboard, an editor — each of which hands off and exits. Resolves with
+// its act's outcome and what it did: `said` once the program ran; a launch
+// the rate limit held back is skipped, saying so, as it ran nothing and
+// failed at nothing.
+export async function clickLaunch(
+  launch: (launch: ClickLaunch) => Promise<LaunchResult>,
+  opts: ClickLaunch,
+  what: string,
+  said: string,
+): Promise<{ readonly outcome: EffectOutcome; readonly said: string }> {
+  const result = await launch(opts);
+  if (result.ok) return { outcome: { kind: "ok" }, said };
+  const held = clickFailed(result, what);
+  return { outcome: { kind: "skipped", reason: held }, said: held };
+}
+
 // [LAW:single-enforcer] What a click's launch that ended badly does to the
-// click, for both of the launches a click makes (`clickLaunch`, `clickHandoff`).
+// act, for both of the launches a click makes (`clickLaunch`, `clickHandoff`).
 // [LAW:dataflow-not-control-flow] Rate-limit rejection is one outcome among
-// many — the click is acknowledged and the rejection is logged. A closing
-// daemon is its own outcome; every other failure surfaces as RENDER_FAILED,
-// saying what the launch itself said: the spawn's error, or the program's stderr.
-export function clickFailed(r: Failed, what: string, log: DaemonLogger): void {
-  if (r.reason === "rate-limited") {
-    log("warn", failureText(r));
-    return;
-  }
+// many — the click is acknowledged, and what is returned says it did not run.
+// A closing daemon is its own outcome; every other failure surfaces as
+// RENDER_FAILED, saying what the launch itself said: the spawn's error, or the
+// program's stderr.
+export function clickFailed(r: Failed, what: string): string {
+  if (r.reason === "rate-limited") return `${what} not run: ${failureText(r)}`;
   if (r.reason === "aborted") throw new DaemonClosing(what);
   throw new Error(`${what} failed (${failureText(r)})`);
 }

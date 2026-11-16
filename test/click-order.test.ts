@@ -1,9 +1,8 @@
-// A click's read-only launches run ahead of its journal turn, and its session's
-// queue keeps arrival order across them (candybar-launch-q7o7.fqw). Doctor
+// A click's read-only gathers run ahead of its journal turn, and its session's
+// queue keeps arrival order across them. Doctor
 // clicks here are real verbs over a fake doctor edge whose process probe parks
 // on a gate; the click-path cases drive `replyTo`, the daemon's real click arm.
 
-import { typeInPane } from "../src/claude-input/typing";
 import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/renderer/journal-turns";
 import { HOST, locs } from "./helpers/host";
@@ -20,20 +19,17 @@ import {
 } from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
-  VERB_COPY,
-  VERB_COPY_DIAGNOSTIC,
   VERB_DISPATCH,
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
-  VERB_SLASH,
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
 import { ClickAbandoned } from "../src/daemon/foundations/verb-error";
 import { systemLauncher } from "../src/proc/system-launcher";
-import { type Launcher, type LaunchResult } from "../src/proc/launcher";
+import { type Launcher } from "../src/proc/launcher";
 import { productionEdge } from "../src/doctor/edge";
 import { type DoctorEdge } from "../src/doctor/ports";
 import { instantOf } from "../src/utils/instant";
@@ -58,25 +54,9 @@ import {
 const SESSION_C = sessionIdOf("session-c");
 
 const ALLOWED = new Set(listResolvablePaletteNames());
-const RULE = "─".repeat(60);
-const IDLE_SCREEN = [
-  "⏺ Done.",
-  "",
-  "",
-  `${RULE} probe ─`,
-  "❯ ",
-  RULE,
-  "  ⏸ manual mode on",
-];
 const A = sessionIdOf("session-a");
 const B = sessionIdOf("session-b");
 const S = sessionIdOf("s");
-const LAUNCHED = {
-  ok: true,
-  stdout: "",
-  stderr: "",
-  exitCode: 0,
-} as LaunchResult;
 type Load = ReturnType<DoctorEdge["loadConfig"]>;
 const LOAD = {
   layers: [],
@@ -291,11 +271,15 @@ describe("one session's order", () => {
   });
 
   test("a `do` of doctor then a write whose client leaves in the turn wait, after its gather, is refused", async () => {
-    const { held, doDoctorThen, ctx, written, reports } = setup();
+    const { held, doDoctorThen, ctx, written, reports, turns } = setup();
     const parked = gate();
     let gone = false;
-    const launch = () => parked.wait.then(() => LAUNCHED);
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launch });
+    // Another click's turn, parked: the write's turn waits behind it.
+    const holding = turns.take(
+      "parked",
+      { waited: () => {}, gone: async () => false },
+      () => parked.wait,
+    );
     await drain();
     const a = doDoctorThen({ ...ctx, clientGone: async () => gone });
     held.open();
@@ -422,67 +406,6 @@ test("a `do` of doctor then a write with a failed probe still writes and shows t
   expect(written(A)).toBe("nord");
   expect(reports()).toEqual([]);
   expect(sessionState.get(A, "click.error")).toContain("ps broke");
-});
-
-test("a slash click re-checks nothing outside the turn: read and typing share it", async () => {
-  const { ctx, turns, sessionState } = setup();
-  sessionState.set(
-    A,
-    SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({ tmux: { pane: "%1", socket: "/tmp/s", truecolor: null } }),
-  );
-  const config = parseAndValidate(
-    "<user>",
-    `{ actions: { c: { slash: "/compact" } } }`,
-    ALLOWED,
-    DEFAULT_DSL_CONFIG,
-  );
-  const holders: Array<string | null> = [];
-  await VERBS.get(VERB_SLASH)!(encodeSegments([A, "/compact"]), {
-    ...ctx,
-    configFor: () => config,
-    typeSlash: typeInPane({
-      read: async () => {
-        holders.push(turns.getStats().holder);
-        return { inMode: false, screen: IDLE_SCREEN };
-      },
-      type: async () => {
-        holders.push(turns.getStats().holder);
-        return { kind: "typed" };
-      },
-    }),
-  });
-  expect(holders).toEqual([VERB_SLASH, VERB_SLASH]);
-});
-
-test("a watcher reload during a parked pbcopy starts no `by=click` setup", async () => {
-  const { ctx } = setup();
-  const parked = gate();
-  const quiet = { band: false } as never as ReturnType<
-    VerbContext["lanes"]["of"]
-  >;
-  const moved = { band: true } as never as typeof quiet;
-  let now = quiet;
-  const moves: unknown[][] = [];
-  const launch = () => parked.wait.then(() => LAUNCHED);
-  const copying = VERBS.get(VERB_COPY_DIAGNOSTIC)!(
-    encodeSegments([A, "request", "k"]),
-    {
-      ...ctx,
-      launch,
-      diagnosticCopy: () => "text",
-      lanes: {
-        of: () => now,
-        clicked: (sessionId, _latest, before, after) =>
-          moves.push([sessionId, before, after]),
-      },
-    },
-  );
-  await drain();
-  now = moved;
-  parked.open();
-  await copying;
-  expect(moves).toEqual([[A, moved, moved]]);
 });
 
 describe("the idle clock", () => {

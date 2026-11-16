@@ -161,7 +161,7 @@ function collectorOver(
 const subscribing = (
   session: SessionId,
   ...folders: string[]
-): Subscriptions => ({
+): Pick<Subscriptions, "sources"> => ({
   sources: {
     [session]: folders.map((folder) => ({
       kind: "plugin" as const,
@@ -415,7 +415,7 @@ describe("the renderer's subscriptions", () => {
       parse: { kind: "json" },
       refresh: { kind: "never" },
     });
-    const subscription: Subscriptions = {
+    const subscription: Pick<Subscriptions, "sources"> = {
       sources: { [SID]: [{ kind: "run" as const, run }] },
     };
     collector.requested(requestAt("/a"));

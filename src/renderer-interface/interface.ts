@@ -24,6 +24,11 @@ import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneFeeds } from "../config/lanes";
 import type { Change } from "../config/config-changes";
+import type { TmuxHint } from "../tmux-hint";
+import type { SlashLine } from "../claude-input/slash-line";
+import type { SessionPane } from "../claude-input/typing";
+import type { RepoAnswer } from "../config/loader/repo-gate";
+import type { Answered } from "../daemon/foundations/sighting-roles";
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -71,6 +76,13 @@ export interface EventInput {
   readonly at: Instant;
 }
 
+// A session's config as its newest request names it, and the world state read
+// at that request's keys.
+export interface SessionConfig {
+  readonly context: CheckedRenderRequest;
+  readonly worldState: WorldState;
+}
+
 // [LAW:effects-at-boundaries] exception: a reach of the host's into the
 // renderer that is not yet an event, listed in the adapter
 // (src/renderer-interface/adapter.ts). A push opens no view and names no
@@ -94,6 +106,13 @@ export const INPUTS_CROSS: Crosses<RendererInput> = true;
 export const OUTPUTS_CROSS: Crosses<RendererOutput | AdapterOutput> = true;
 
 export type Event =
+  | {
+      // A renderer's start: every live session's config, as `config` hands
+      // one in, in one turn, so the start's output names everything the
+      // renderer serves and the host releases nothing it still holds for one.
+      readonly kind: "start";
+      readonly sessions: readonly SessionConfig[];
+    }
   | {
       // What the session's config is made of, as its newest request names
       // it, delivered ahead of that request: its turn opens the session's
@@ -149,8 +168,9 @@ export type Event =
     }
   | {
       readonly kind: "effect-done";
-      // The session of the effect it reports on.
-      readonly session: SessionId;
+      // The session of the effect it reports on: none for an act no session
+      // asked for.
+      readonly session: SessionId | null;
       readonly of: EffectId;
       readonly outcome: EffectOutcome;
     }
@@ -191,9 +211,17 @@ export type Event =
 export type EffectOutcome =
   | { readonly kind: "ok" }
   | { readonly kind: "failed"; readonly reason: string }
-  // A change to a setting that moved since the renderer read it: nothing was
-  // written, and nothing made over that reading can land.
-  | { readonly kind: "refused"; readonly reason: string };
+  // Refused before it acted: a change to a setting that moved since the
+  // renderer read it, so nothing made over that reading can land; or an act
+  // the world it acts in would not take (a pane not at its prompt, an update
+  // already running).
+  | { readonly kind: "refused"; readonly reason: string }
+  // The daemon's close began before it acted, or cut it off: no failure of
+  // its own, so no bar holds it.
+  | { readonly kind: "closing"; readonly reason: string }
+  // An act not performed because its turn's changes did not land: their own
+  // outcome says why, so no bar holds it a second time.
+  | { readonly kind: "skipped"; readonly reason: string };
 
 // [LAW:one-type-per-behavior] Every frame reaches its surface by `present`;
 // the statusline's arm carries the request it answers.
@@ -221,7 +249,118 @@ export interface ConfigChange {
   readonly changes: readonly Change[];
 }
 
-export type Effect = Present | ConfigChange;
+// A source a run makes stale: its full name, for the run's line, and the
+// storage folder its file is in.
+export interface RunRefresh {
+  readonly name: string;
+  readonly folder: string;
+}
+
+// A session as a lane's setup needs it, beyond its pane: its config's
+// directory and its Claude Code directory, which the `claude` CLI runs under;
+// its conversation, as Claude Code names it in the statusline JSON, which a
+// restart resumes from and which a session has none of until its first
+// message; and whether Claude Code has answered in it, by the one mark it
+// leaves (`answeredOf`).
+export interface LaneSession {
+  readonly projectDir: string;
+  // Null for the default directory: the hint names one only when set.
+  readonly claudeConfigDir: string | null;
+  readonly transcript: string;
+  readonly answered: Answered;
+}
+
+// [LAW:types-are-the-program] What a click or a lane switch asks done in the
+// world, each named by its operation and carrying exactly what that operation
+// needs: no free-form command, so the safety of a slash line or a run is the
+// type's. An act's session is the bar its failure shows on; a copy or an open
+// a click names no session for has none.
+export type Act = { readonly id: EffectId } & (
+  | {
+      readonly kind: "copy";
+      readonly session: SessionId | null;
+      readonly text: string;
+    }
+  | {
+      // A file opened in the user's editor: which program opens it is the
+      // host's.
+      readonly kind: "open";
+      readonly session: SessionId | null;
+      readonly target: string;
+    }
+  | {
+      // [LAW:single-enforcer] Checked and typed in one step: the pane is read
+      // and refused unless it shows the bare input box, then the line goes in.
+      readonly kind: "type-slash";
+      readonly session: SessionId;
+      readonly pane: TmuxHint;
+      readonly line: SlashLine;
+    }
+  | {
+      // A program the bar drew, run in its session's environment; each source
+      // it refreshes reads pending from its start until it has exited and the
+      // source is read again.
+      readonly kind: "run";
+      readonly session: SessionId;
+      readonly action: string;
+      readonly program: string;
+      readonly args: readonly string[];
+      // Set over the launcher's inherited environment; null unsets.
+      readonly env: Readonly<Record<string, string | null>>;
+      readonly cwd: string;
+      readonly refreshes: readonly RunRefresh[];
+    }
+  | {
+      // The answer to a repository's question, which lands with the turn's
+      // changes: the trust book is the host's.
+      readonly kind: "approve-repo";
+      readonly session: SessionId;
+      readonly dir: string;
+      readonly answer: RepoAnswer;
+    }
+  | {
+      // The update notice's act: what it applies is the update watch's to
+      // decide, from its own provenance.
+      readonly kind: "apply-update";
+      readonly session: SessionId;
+    }
+  | {
+      // Claude Code in the pane ended and started again under the attach
+      // launcher, on the same session.
+      readonly kind: "restart-claude";
+      readonly session: SessionId;
+      readonly pane: TmuxHint;
+      readonly at: LaneSession;
+    }
+  | {
+      // A pushed surface turned on or off: the bar pane split under the
+      // session's pane, or closed.
+      readonly kind: "surface";
+      readonly session: SessionId;
+      readonly surface: "pane";
+      readonly on: boolean;
+      readonly pane: TmuxHint;
+    }
+  | {
+      // The band mod installed and loaded into the session's Claude Code.
+      // Off, it draws nothing, so turning it off asks nothing. Only its
+      // `/reload-plugins` is typed into a pane, so it carries the session's
+      // pane or why it has none: outside tmux, the mod still installs, and
+      // the session is told to type that line itself.
+      readonly kind: "surface";
+      readonly session: SessionId;
+      readonly surface: "band";
+      readonly on: true;
+      readonly pane: SessionPane;
+      readonly at: LaneSession;
+    }
+);
+
+// An act as its turn asks it, before the renderer names it.
+export type ActRequest = Unnamed<Act>;
+type Unnamed<A> = A extends unknown ? Omit<A, "id"> : never;
+
+export type Effect = Present | ConfigChange | Act;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.
@@ -239,13 +378,17 @@ export type Subscription =
   | { readonly kind: "run"; readonly run: Run };
 
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
-// renderer holds needs read. The host diffs it; nothing is declared by
-// message. A session absent from it needs nothing read.
+// renderer holds needs read, and whose bar it draws in its tmux status line.
+// The host diffs it; nothing is declared by message, so nothing has to
+// remember what it asked. A session absent from it needs nothing read.
 // [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
 // and a record, so it crosses a process as it is: a session absent is a key
 // absent, never one holding `undefined`, which JSON does not carry.
 export interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
+  // The sessions whose tmux status line switch is on, in order: the host
+  // holds each one's row in the pane its newest request reports.
+  readonly tmuxStatus: readonly SessionId[];
 }
 
 // How a turn ended, a turn that threw included: its failure as data, a class

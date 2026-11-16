@@ -4,10 +4,8 @@
 // effects does this click apply" rather than the exact wire encoding.
 
 import { installFacts } from "../../src/doctor/edge";
-import { clickLaunchVia } from "../../src/daemon/foundations/click-launch";
 import { bareGates } from "./gates";
 import { HOST } from "./host";
-import { unscriptedLauncher } from "./fake-launcher";
 import type { Host } from "../../src/host";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
@@ -20,14 +18,27 @@ import {
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
 import { changeDone, VERBS } from "../../src/renderer/verbs";
-import { ConfigWrites } from "../../src/renderer/config-writes";
+import {
+  ConfigWrites,
+  type Consequence,
+} from "../../src/renderer/config-writes";
 import { readConfigText } from "../../src/renderer/config-file-store";
-import { performChanges } from "../../src/daemon/effect-interpreter";
+import {
+  performChanges,
+  type ApproveRepo,
+} from "../../src/daemon/effect-interpreter";
 import type {
+  Act,
   ConfigChange,
   Effect,
   EffectId,
+  EffectOutcome,
 } from "../../src/renderer-interface/interface";
+import { ActsOnTheirWay } from "../../src/renderer/acts";
+import { Acts, outlives, type ActDeps } from "../../src/daemon/acts";
+import type { HostWorld } from "../../src/daemon/renderer-host";
+import type { LaneEdge, LaneHost } from "../../src/daemon/lane-setup";
+import { holdClickError } from "../../src/daemon/foundations/click-error";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import type { VerbContext } from "../../src/renderer/verbs";
@@ -83,9 +94,11 @@ export const asyncSightings = (
 class LandingAtOnce extends ConfigWrites {
   private context: VerbContext | null = null;
 
-  constructor() {
-    let minted = 0;
-    super(() => ++minted as EffectId, readConfigText);
+  constructor(
+    mint: () => EffectId,
+    private readonly stateDir: string,
+  ) {
+    super(mint, readConfigText);
   }
 
   of(ctx: VerbContext): VerbContext {
@@ -93,21 +106,37 @@ class LandingAtOnce extends ConfigWrites {
     return ctx;
   }
 
+  // The landing leaves the click's effects; what its consequence asks joins
+  // them, so a test reads every act its click asked for there.
   override seal(
     effects: Effect[],
     session: SessionId | null,
-    consequence: () => void,
+    consequence: Consequence,
   ): void {
     const from = effects.length;
     super.seal(effects, session, consequence);
-    const changes = effects
-      .splice(from)
-      .filter((e): e is ConfigChange => e.kind === "change");
-    if (changes.length === 0) return;
-    const outcome = performChanges(changes);
-    for (const change of changes) changeDone(this.context!, change.id, outcome);
+    const landing = effects.splice(from);
+    if (landing.length === 0) return;
+    const outcome = performChanges(
+      landing.filter((e): e is ConfigChange => e.kind === "change"),
+      {
+        stateDir: this.stateDir,
+        answers: landing.filter(
+          (e): e is ApproveRepo => e.kind === "approve-repo",
+        ),
+        said: () => {},
+      },
+    );
+    for (const { id } of landing)
+      changeDone(this.context!, id, outcome, effects);
   }
 }
+
+// The acts a click asked of the host, in the order it asked them.
+export const actsOf = (ctx: Pick<VerbContext, "effects">): readonly Act[] =>
+  ctx.effects.filter(
+    (e): e is Act => e.kind !== "present" && e.kind !== "change",
+  );
 
 // A test's verb context with its own parts: its clicks land through the
 // context they ran with, so a landing reloads with the test's own reload.
@@ -119,9 +148,9 @@ export function verbContextWith(
 }
 
 // [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
-// silent log and an update act that refuses loudly — no test here has an
-// update watch, so an apply-update click reaching it is a test bug, never a
-// silent no-op. [LAW:no-silent-failure]
+// silent log, and acts that land in the click's effects, where a test reads
+// what its click asked of the host (`actsOf`); a failed act's `effect-done`
+// holds the click error as the renderer's does.
 // The history is ephemeral unless the caller hands one in: a test that is not
 // isolated from the real state dir must never write the daemon's history file
 // (test/helpers/durable-config.ts hands in one under its own temp root).
@@ -131,9 +160,14 @@ export function testVerbContext(
   config?: DslConfig,
   host: Host = HOST,
 ): VerbContext {
-  const configWrites = new LandingAtOnce();
+  let minted = 0;
+  const mint = (): EffectId => ++minted as EffectId;
+  const configWrites = new LandingAtOnce(mint, stateDir(host));
   return configWrites.of({
     configWrites,
+    acts: new ActsOnTheirWay(mint, (session, reason) =>
+      holdClickError(sessionState, session, reason, instantOf(new Date())),
+    ),
     effects: [],
     gates: bareGates(),
     stateDir: stateDir(host),
@@ -152,11 +186,7 @@ export function testVerbContext(
     gatherTook: () => {},
     turnWaited: () => {},
     log: () => {},
-    launch: clickLaunchVia(unscriptedLauncher),
     now: () => instantOf(new Date()),
-    applyUpdate: async () => {
-      throw new Error("apply-update: no update watch in this test");
-    },
     // Same posture for the doctor's edge: a test that drives a doctor click
     // hands in its own fake edge; reaching this one is a test bug.
     doctor: {
@@ -193,12 +223,18 @@ export function testVerbContext(
         update: () => {
           throw new Error("doctor: no mark book in this test");
         },
+        plan: () => {
+          throw new Error("doctor: no mark book in this test");
+        },
       },
       clicked: {
         read: () => {
           throw new Error("doctor: no clicked terminals in this test");
         },
         update: () => {
+          throw new Error("doctor: no clicked terminals in this test");
+        },
+        plan: () => {
           throw new Error("doctor: no clicked terminals in this test");
         },
       },
@@ -209,6 +245,9 @@ export function testVerbContext(
         update: () => {
           throw new Error("doctor: no post-mortem record in this test");
         },
+        plan: () => {
+          throw new Error("doctor: no post-mortem record in this test");
+        },
       },
     },
     // A click from the handler this build would stage.
@@ -216,11 +255,6 @@ export function testVerbContext(
     clients: asyncSightings(new RenderSightings()),
     bundle: HEALTHY_BUNDLE,
     serving: async () => HEALTHY_SERVING,
-    // And for the Claude Code pane: a test that drives a slash click hands in
-    // its own typing.
-    typeSlash: async () => {
-      throw new Error("slash: no claude-input edge in this test");
-    },
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key, any session write once the session has
     // rendered — the write closes what it closes in that config) hands it in;
@@ -243,14 +277,6 @@ export function testVerbContext(
       throw new Error("sourcesFor: this test handed in no sources");
     },
     links: TEST_SIGNER,
-    runs: {
-      start: () => {
-        throw new Error("run: no run owner in this test");
-      },
-      refused: () => {
-        throw new Error("run: no run owner in this test");
-      },
-    },
     // A click of a session that has rendered measures its lane switches over
     // that same config, as the daemon's does; a test that handed in none
     // switches no lane on. No lane owner runs here: a test that reads what a
@@ -286,4 +312,81 @@ export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   const handler = VERBS.get(verb);
   if (!handler) throw new Error(`no handler for verb "${verb}"`);
   await handler(value, ctx);
+}
+
+// The host's act performer over `deps`; a part the test does not hand in
+// fails by name.
+export function testActs(log: VerbContext["log"], deps: Partial<ActDeps> = {}): Acts {
+  const missing = (part: string) => async (): Promise<never> => {
+    throw new Error(`${part}: no host part in this test`);
+  };
+  return new Acts({
+    launch: missing("launch"),
+    type: missing("type"),
+    run: missing("run"),
+    applyUpdate: missing("apply-update"),
+    lanes: {
+      edge: new Proxy({} as LaneEdge, { get: (_, k) => missing(`lane ${String(k)}`) }),
+      host: new Proxy({} as LaneHost, { get: (_, k) => missing(`lane ${String(k)}`) }),
+    },
+    closing: () => false,
+    log,
+    ...deps,
+  });
+}
+
+// The world a rig's host turns act in: its acts performed over `deps`, and
+// an act's failure no bar holds handed to `unheard`.
+export function actingWorld(
+  ctx: Pick<VerbContext, "log" | "stateDir">,
+  deps: Partial<ActDeps> = {},
+  unheard: (text: string) => void = (text) => {
+    throw new Error(`an act's failure no bar holds: ${text}`);
+  },
+): HostWorld {
+  const acts = testActs(ctx.log, deps);
+  return {
+    perform: (act) => acts.perform(act),
+    stateDir: ctx.stateDir,
+    closing: () => false,
+    unheard,
+  };
+}
+
+// The host's side of a test's clicks: each act they asked, performed by the
+// host's own performer over `deps`, and settled back as the renderer hears an
+// `effect-done`, so a failed act holds its click error as it would live. A
+// part the test does not hand in fails by name. As the host does, an act that
+// outlives its turn is started and settled when it ends, and the rest are
+// awaited: returns their outcomes in the order they were asked, and leaves the
+// context with no act to perform.
+export async function performActs(
+  ctx: VerbContext,
+  deps: Partial<ActDeps> = {},
+): Promise<EffectOutcome[]> {
+  const acts = testActs(ctx.log, deps);
+  const asked = actsOf(ctx);
+  const rest = ctx.effects.filter((e) => !asked.includes(e as Act));
+  ctx.effects.splice(0, ctx.effects.length, ...rest);
+  const outcomes: EffectOutcome[] = [];
+  for (const act of asked) {
+    if (act.kind === "approve-repo") continue;
+    const settled = acts.perform(act).then((outcome) => {
+      (ctx.acts as ActsOnTheirWay).done(act.id, act.session, outcome);
+      return outcome;
+    });
+    if (!outlives(act)) outcomes.push(await settled);
+  }
+  return outcomes;
+}
+
+// A click and the acts it asked, as the host carries them out: the turn's
+// own failure throws, as `clickUrl`'s does; each act's outcome is returned.
+export async function clickActing(
+  url: string,
+  ctx: VerbContext,
+  deps: Partial<ActDeps> = {},
+): Promise<EffectOutcome[]> {
+  await clickUrl(url, ctx);
+  return performActs(ctx, deps);
 }

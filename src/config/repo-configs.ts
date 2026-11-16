@@ -16,12 +16,17 @@ import {
   type RepoAnswer,
   type RepoConfigBook,
   type RepoGate,
-} from "../config/loader/repo-gate.js";
+} from "./loader/repo-gate.js";
 import { worktreeLink } from "../utils/git-root.js";
 import { ok } from "../utils/outcome.js";
 import { presence, type Unchecked } from "../utils/presence.js";
 import type { Asked } from "../doctor/checks.js";
-import { stateFile, type StateFile } from "../doctor/state-file.js";
+import {
+  stateFile,
+  written,
+  type Planned,
+  type StateFile,
+} from "../doctor/state-file.js";
 import {
   APPROVAL_SEVERITY,
   diagnosticSpan,
@@ -61,14 +66,16 @@ export const repoConfigs = (dir: string): StateFile<RepoConfigBook> => {
   );
   const loose = stateFile(dir, REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
   const filed = (): boolean => fs.existsSync(repoConfigsPath(dir));
+  const plan: StateFile<RepoConfigBook>["plan"] = (next) => {
+    if (filed()) return book.plan(next);
+    const kept = loose.read();
+    if (kept.kind === "failed") return kept;
+    return book.plan(() => next(kept.value));
+  };
   return {
     read: () => (filed() ? book : loose).read(),
-    update: (next) => {
-      if (filed()) return book.update(next);
-      const kept = loose.read();
-      if (kept.kind === "failed") return kept;
-      return book.update(() => next(kept.value));
-    },
+    plan,
+    update: (next) => written(plan(next)),
   };
 };
 
@@ -82,11 +89,38 @@ export interface Recorded {
   readonly unchecked: readonly Unchecked[];
 }
 
-// [LAW:single-enforcer] The one way an answer reaches the book — the bar's
+// [LAW:single-enforcer] The one way an answer changes the book — the bar's
 // click and the tests' approvals alike: the repository at `dir` takes the
 // answer, and every other entry whose directory is present and answers under
 // `dir` (a linked worktree's own, kept from before answers were kept by
 // repository) goes with it, so a repository holds one answer.
+function answering(
+  book: RepoConfigBook,
+  dir: string,
+  answer: RepoAnswer,
+): { readonly book: RepoConfigBook; readonly recorded: Recorded } {
+  const others = Object.keys(book)
+    .filter((d) => d !== dir)
+    .map((d) => ({ d, found: presence(d) }));
+  const recorded: Recorded = {
+    superseded: others
+      .filter(
+        ({ d, found }) =>
+          found === "present" &&
+          answerDir({ dir: d, link: worktreeLink(d) }) === dir,
+      )
+      .map(({ d }) => d),
+    absent: others.filter(({ found }) => found === "absent").map(({ d }) => d),
+    unchecked: others.flatMap(({ found }) =>
+      typeof found === "object" ? [found] : [],
+    ),
+  };
+  return {
+    book: withAnswer(book, dir, answer, recorded.superseded),
+    recorded,
+  };
+}
+
 export function recordAnswer(
   store: StateFile<RepoConfigBook>,
   dir: string,
@@ -94,27 +128,39 @@ export function recordAnswer(
 ): Asked<Recorded> {
   let recorded: Recorded = { superseded: [], absent: [], unchecked: [] };
   const filed = store.update((book) => {
-    const others = Object.keys(book)
-      .filter((d) => d !== dir)
-      .map((d) => ({ d, found: presence(d) }));
-    recorded = {
-      superseded: others
-        .filter(
-          ({ d, found }) =>
-            found === "present" &&
-            answerDir({ dir: d, link: worktreeLink(d) }) === dir,
-        )
-        .map(({ d }) => d),
-      absent: others
-        .filter(({ found }) => found === "absent")
-        .map(({ d }) => d),
-      unchecked: others.flatMap(({ found }) =>
-        typeof found === "object" ? [found] : [],
-      ),
-    };
-    return withAnswer(book, dir, answer, recorded.superseded);
+    const answered = answering(book, dir, answer);
+    recorded = answered.recorded;
+    return answered.book;
   });
   return filed.kind === "failed" ? filed : ok(recorded);
+}
+
+// One repository's answer as a click gives it.
+export interface Answer {
+  readonly session: SessionId;
+  readonly dir: string;
+  readonly answer: RepoAnswer;
+}
+
+// [LAW:effects-at-boundaries] What answering `answers` in order makes of the
+// book under `stateDir`, unwritten, so it lands with the config files its
+// click changed: the file and its next text, and each answer's line.
+export function answeredBook(
+  stateDir: string,
+  answers: readonly Answer[],
+): Asked<Planned<RepoConfigBook> & { readonly said: readonly string[] }> {
+  const said: string[] = [];
+  const planned = repoConfigs(stateDir).plan((current) =>
+    answers.reduce((book, { session, dir, answer }) => {
+      const answered = answering(book, dir, answer);
+      const { superseded, absent, unchecked } = answered.recorded;
+      said.push(
+        `repo-config: ${dir} ${answer} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${session})`,
+      );
+      return answered.book;
+    }, current),
+  );
+  return planned.kind === "failed" ? planned : ok({ ...planned.value, said });
 }
 
 // [LAW:single-enforcer] What an answer link signs: the session it was drawn

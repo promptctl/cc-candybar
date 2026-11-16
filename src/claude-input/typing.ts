@@ -31,14 +31,20 @@ export type TypeResult =
   | { readonly kind: "typed"; readonly pane: string }
   | { readonly kind: "refused"; readonly reason: string };
 
-// [LAW:parse-dont-validate] The pane a session's client reported, or why the
-// bar has none to act in: the one reading of the tmux hint's three states for
-// everything the daemon does in a session's pane.
-export function tmuxPaneOf(
-  tmux: ClientHints["tmux"],
-):
+// A slash line typed into a pane, once the prompt there reads ready.
+export type SlashTyper = (
+  pane: TmuxHint,
+  line: SlashLine,
+) => Promise<TypeResult>;
+
+// The pane a session's client reported, or why the bar has none to act in.
+export type SessionPane =
   | { readonly kind: "pane"; readonly hint: TmuxHint }
-  | { readonly kind: "refused"; readonly reason: string } {
+  | { readonly kind: "refused"; readonly reason: string };
+
+// [LAW:parse-dont-validate] The one reading of the tmux hint's three states
+// for everything the daemon does in a session's pane.
+export function tmuxPaneOf(tmux: ClientHints["tmux"]): SessionPane {
   if (tmux === undefined) {
     return {
       kind: "refused",
@@ -59,11 +65,10 @@ export function tmuxPaneOf(
 // A slash line typed into the session's pane: refused for a session whose
 // client reported none, and otherwise typed into it (`typeInPane`).
 export async function typeSlash(
-  type: (pane: TmuxHint, line: SlashLine) => Promise<TypeResult>,
-  hint: ClientHints["tmux"],
+  type: SlashTyper,
+  pane: SessionPane,
   line: SlashLine,
 ): Promise<TypeResult> {
-  const pane = tmuxPaneOf(hint);
   return pane.kind === "refused" ? pane : type(pane.hint, line);
 }
 

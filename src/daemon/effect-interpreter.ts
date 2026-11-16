@@ -1,8 +1,10 @@
 // [LAW:single-enforcer] Where a config write lands: the host applies a turn's
 // `change`s to their files as the files stand, keeping every byte a change
-// does not touch, and lands them together or not at all. Every read in every
-// file is checked before any file is written, and a write that fails puts
-// back the files already written. No renderer writes a config file.
+// does not touch, and lands them together or not at all, with the answers its
+// click gave the trust book: an approval is what decides which config a
+// session renders, so it lands with the configs or not at all. Every read in
+// every file is checked before any file is written, and a write that fails
+// puts back the files already written. No renderer writes a config file.
 
 import fs from "node:fs";
 import {
@@ -11,9 +13,11 @@ import {
   type Read,
 } from "../config/config-changes.js";
 import type {
+  Act,
   ConfigChange,
   EffectOutcome,
 } from "../renderer-interface/interface.js";
+import { answeredBook } from "../config/repo-configs.js";
 import {
   readConfigText,
   resolvedTarget,
@@ -41,12 +45,24 @@ interface Rewrite {
   readonly will: string | null;
 }
 
+export type ApproveRepo = Extract<Act, { kind: "approve-repo" }>;
+
+// The trust book a turn's answers land in, and where what each did is said
+// once they have.
+export interface TrustBook {
+  readonly stateDir: string;
+  readonly answers: readonly ApproveRepo[];
+  readonly said: (line: string) => void;
+}
+
 // [LAW:no-silent-failure] Every way the turn's changes did not land is their
 // one outcome, naming the file, and the setting when one moved.
 export function performChanges(
   changes: readonly ConfigChange[],
+  book: TrustBook | null,
 ): EffectOutcome {
   const rewrites = new Map<string, Rewrite>();
+  let answered: readonly string[] = [];
   try {
     for (const { target, changes: list } of changes) {
       // Keyed by the file a write lands in, so two paths to one file are one
@@ -67,6 +83,20 @@ export function performChanges(
         };
       rewrites.set(file, { file, was, will: applied.text });
     }
+    if (book !== null && book.answers.length > 0) {
+      const planned = answeredBook(book.stateDir, book.answers);
+      if (planned.kind === "failed")
+        return {
+          kind: "failed",
+          reason: `the repository answers were not recorded: ${planned.reason} — nothing was written`,
+        };
+      const { file, text } = planned.value;
+      answered = planned.value.said;
+      if (text !== null) {
+        const at = resolvedTarget(file);
+        rewrites.set(at, { file: at, was: readConfigText(at), will: text });
+      }
+    }
   } catch (e) {
     return { kind: "failed", reason: `config read failed: ${message(e)}` };
   }
@@ -76,6 +106,7 @@ export function performChanges(
       writeText(rewrite.file, rewrite.will);
       written.push(rewrite);
     }
+    for (const line of answered) book!.said(line);
     return { kind: "ok" };
   } catch (e) {
     return { kind: "failed", reason: putBack(written, e) };

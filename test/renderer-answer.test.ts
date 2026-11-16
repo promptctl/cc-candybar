@@ -10,6 +10,7 @@
 // parts its side still reaches; no daemon is built.
 
 import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -48,7 +49,7 @@ import type {
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { HeldEvent } from "../src/utils/event-hold";
-import { hearingEvents, NO_PUSHES } from "./helpers/renderers";
+import { hearingEvents, NO_ACTS, NO_PUSHES } from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
@@ -238,6 +239,33 @@ describe("a statusline request", () => {
     expect(new Map(record).has("drew")).toBe(true);
   });
 
+  // A restarted renderer: the host releases whatever its first output does
+  // not name, a tmux status row included.
+  test("of each live session is configured by a start's one turn, whose output names them all", async () => {
+    const { r, rig } = renderer();
+    const mine = checked();
+    const other = sessionIdOf("other-session");
+    const theirs: CheckedRenderRequest = {
+      ...mine,
+      hookData: { ...mine.hookData, session_id: other },
+    };
+    const output = await r.answer({
+      kind: "event",
+      at: AT,
+      event: {
+        kind: "start",
+        sessions: [mine, theirs].map((context) => ({
+          context,
+          worldState: rig.served.collector.requested(context),
+        })),
+      },
+    });
+    expect(output.kind).toBe("answered");
+    expect(Object.keys(output.subscriptions.sources).sort()).toEqual(
+      [SESSION, other].sort(),
+    );
+  });
+
   test("has its context's facts on its config turn's record, which opens with the session", async () => {
     const { record } = await configure(renderer(), checked());
     expect(record[0]).toEqual(["sid", SESSION]);
@@ -296,6 +324,23 @@ describe("a statusline request", () => {
     expect(t.pipesAnswered).toEqual([event]);
   });
 
+  test("draws an act's failure no session's bar held as the daemon's warning, and an answer that carried it tells the host once it arrived", async () => {
+    const event = {
+      text: "copy: pbcopy failed: exit 1",
+      at: AT,
+      answered: false,
+    };
+    const t = renderer(undefined, () => ({
+      ...daemonFactsOf(),
+      actFailed: event,
+    }));
+    const { effects, record } = answered(await request(t));
+    expect(new Map(record).get("warn")).toBe("act-failed");
+    expect(t.pipesAnswered).toEqual([]);
+    answered(await done(t.r, presentOf(effects), true));
+    expect(t.pipesAnswered).toEqual([event]);
+  });
+
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
     const { r, recorded, rig } = renderer();
     const { effects } = answered(await request({ r, rig }));
@@ -310,7 +355,7 @@ describe("a statusline request", () => {
     await done(r, present, false);
     expect(recorded).toEqual([]);
     expect(threw(await done(r, present, true)).failure.message).toMatch(
-      /neither a present nor a change on its way/,
+      /no present, change or act on its way/,
     );
   });
 });
@@ -466,7 +511,7 @@ describe("the session's config, ahead of its request", () => {
       systemTimekeeper,
       hearingEvents(t.r, (input) => kinds.push(input.event.kind)),
       () => {},
-      t.rig.served.collector,
+      t.rig.served.collector, NO_ACTS,
     );
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
@@ -549,7 +594,7 @@ describe("two requests of one session at different keys", () => {
           requests.push(input.event.worldState);
       }),
       () => {},
-      t.rig.served.collector,
+      t.rig.served.collector, NO_ACTS,
     );
     const ask = (pane: string, id: number) =>
       answerStatusline(

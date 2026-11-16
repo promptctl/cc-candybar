@@ -1,5 +1,5 @@
-// A failed click's errors, as the bar shows them: the dispatch verb holds them
-// in the clicking session's state, and every render of that session asks
+// A failed click's errors, as the bar shows them: the click and each act it
+// asked for hold them in the clicking session's state, and every render of that session asks
 // whether they are still its to show.
 //
 // [LAW:no-ambient-temporal-coupling] How long they show is time, asked by every
@@ -23,6 +23,7 @@ import type { Drawing } from "../../config/lanes.js";
 import {
   answeredBy,
   eventHoldAt,
+  joinedEvent,
   type HeldEvent,
 } from "../../utils/event-hold.js";
 
@@ -43,13 +44,19 @@ export type ClickErrorHold =
   | { readonly kind: "owed"; readonly error: ClickErrorRecord }
   | { readonly kind: "over" };
 
+// A failure of the session's click, or of an act one asked for, joined to the
+// last by the one rule for events that follow each other.
 export function holdClickError(
   state: SessionStateRW,
   sessionId: SessionId,
   text: string,
   at: Instant,
 ): void {
-  const record: ClickErrorRecord = { text, at, answered: false };
+  const record: ClickErrorRecord = joinedEvent(
+    lastClickError(state, sessionId),
+    text,
+    at,
+  );
   state.set(sessionId, KEY, JSON.stringify(record));
 }
 

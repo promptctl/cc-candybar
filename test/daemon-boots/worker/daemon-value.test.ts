@@ -368,8 +368,12 @@ describe("the daemon is a value", () => {
     daemon.arm();
 
     // The first render settles its wait early: a deadline in the past draws
-    // the slow source as pending, and leaves the session's origin recorded.
-    await answer(daemon, renderRequest("value-close", 1));
+    // the slow source as pending, and leaves the session's origin recorded,
+    // and the pane the band's setup is asked for.
+    await answer(daemon, {
+      ...renderRequest("value-close", 1),
+      tmux: { socket: `/tmp/value-close-${process.pid}`, pane: "%7", truecolor: null },
+    });
     const { setting, on } = LANES.band.switch;
     await clickLink(
       daemon,
