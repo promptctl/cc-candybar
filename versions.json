@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-767",
-      "ref": "refs/pull/767/merge",
-      "sha": "ac2eebfa406ab3eadd65868ca028d65516e40952",
-      "timestamp": "2026-11-16T05:17:38.879Z",
-      "commits": [
-        {
-          "sha": "ac2eebfa406ab3eadd65868ca028d65516e40952",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T22:16:27-07:00",
-          "message": "Merge f26a6ef527240317b3eebb6692cf2803b682b21a into de3c13c9486c8ef1f1e628f961ce4877c1199dd8\n"
-        },
-        {
-          "sha": "f26a6ef527240317b3eebb6692cf2803b682b21a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T22:16:14-07:00",
-          "message": "docs(spec): A-1's open item says a request waits for the renderer's thread, not for turns taken one at a time (candybar-host-renderer-x96a.cwq)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "de3c13c9486c8ef1f1e628f961ce4877c1199dd8",
-      "timestamp": "2026-11-16T04:42:39.831Z",
+      "sha": "bfd86d4f92a91f2678bed4d48c6e38f0aa03998d",
+      "timestamp": "2026-11-16T05:17:57.910Z",
       "commits": [
         {
-          "sha": "de3c13c9486c8ef1f1e628f961ce4877c1199dd8",
+          "sha": "bfd86d4f92a91f2678bed4d48c6e38f0aa03998d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:41:47-07:00",
-          "message": "chore(demo): the demo and the gallery are deleted (candybar-host-renderer-x96a.7q2) (#764)\n\n* chore(demo): the demo and the gallery are deleted, with their scripts, their test and their zone row (candybar-host-renderer-x96a.7q2)\n\nEach assembled its own draw from renderer internals, so every change to\nthose internals paid to keep them compiling; nothing in CI, release or\nthe docs ran either. What existed only for them goes too: the repo gate\na one-shot load built (its one test builds it inline), and the exports\nof loadChain, subscriptionsOf and buildRenderState. Comments, memory and\nthe live docs stop naming them; dated reports and inventories keep the\nrecord of what was measured then.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(demo): the examples render through check, and comments the deletion left stale say what is true (candybar-host-renderer-x96a.7q2)\n\nEvery payload carries a resume command now that only composePayload builds\none, so the toolbar's ⎘ resume is drawn ungated.\n\n* fix(demo): comments that list a preview signer's or a spelled session id's callers name them all (candybar-host-renderer-x96a.7q2)\n\n* fix(demo): the resume command has no default, because every payload carries one (candybar-host-renderer-x96a.7q2)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
+          "timestamp": "2026-11-15T22:16:56-07:00",
+          "message": "docs(spec): A-1's open item says a request waits for the renderer's thread, not for turns taken one at a time (candybar-host-renderer-x96a.cwq) (#767)"
         }
       ]
     },
