@@ -8,7 +8,7 @@
 // globals field becomes writable ONLY when a config declares a `persist`
 // action for it — the epic's "zero engine edits to add a menu-able field"
 // goal, realized more strictly here than SessionState's legacy baseline
-// theme/endcaps/toolbar-expanded keys.
+// theme/endcaps keys.
 
 import type { ActionDecl } from "../../config/action";
 import {

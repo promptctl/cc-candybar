@@ -780,7 +780,6 @@ const NAMED_BY: Readonly<
 > = {
   argument: "command argument",
   environment: `$${CONFIG_ENV}`,
-  pick: "load-config pick",
   unknown: "source unknown",
 };
 

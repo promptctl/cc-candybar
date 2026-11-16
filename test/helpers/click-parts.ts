@@ -5,6 +5,7 @@
 // these in.
 
 import { NO_PUSHES } from "./renderers";
+import { minter } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
 import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
@@ -38,6 +39,7 @@ export function clickParts(
     renderCache: { subscriptions: () => ({ sources: {} }) },
     // What the renderer times each turn by.
     clock: systemTimekeeper,
+    mint: minter(),
   } as unknown as MainRendererParts;
   return {
     renderer: rendererHost(

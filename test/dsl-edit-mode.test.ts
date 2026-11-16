@@ -43,7 +43,8 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { testVerbContext,
+  verbContextWith, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/renderer/verbs";
@@ -69,6 +70,7 @@ import { menuMember, menuStateKey } from "../src/config/menu-keys";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { WRITES_IN_PLACE } from "./helpers/history-step";
 
 const S1 = sessionIdOf("s1");
 
@@ -177,12 +179,11 @@ function buildEditRuntime(src: string, sessionId = S1) {
       instantOf(new Date()),
       opts(width),
     ).frame;
-  const ctx: VerbContext = {
-    ...testVerbContext(sessionState, history, undefined, durable.host),
+  const ctx: VerbContext = verbContextWith(testVerbContext(sessionState, history, undefined, durable.host), {
     // The config this bar rendered with, which gates every click and which an
     // insertion mints its id against — the daemon's own lookup.
-    configFor: () => config,
-  };
+    configFor: () => config
+});
   const click = async (url: string): Promise<void> => {
     const { verb, value } = linkClick(url);
     const effects =
@@ -937,7 +938,7 @@ describe("edit mode's save and cancel", () => {
     const rt = buildEditRuntime(BASE);
     const original = durable.text();
     // A step from before edit mode opened.
-    const earlier = rt.history.begin();
+    const earlier = rt.history.begin(WRITES_IN_PLACE);
     earlier.sessionState.set(S1, "theme", "nord");
     earlier.commit();
     await open(rt);

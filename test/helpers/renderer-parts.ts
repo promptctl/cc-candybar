@@ -14,13 +14,22 @@ import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import { systemTimekeeper } from "../../src/time";
 import { TEST_SIGNER } from "./link-signer";
+import type { EffectId } from "../../src/renderer-interface/interface";
 
 // A renderer that acts no verb: every click names a verb it does not have,
 // and an idle close is refused, so a test that clicks hands in the act it
 // means to observe.
-const NO_VERBS: RendererVerbs = {
+export const NO_VERBS: RendererVerbs = {
   handler: () => undefined,
   closeIdle: () => Promise.reject(new Error("this rig closes no menus")),
+  // A rig's verbs write no config, so no `effect-done` is a change's.
+  changeDone: () => false,
+};
+
+// A renderer's effect ids, from 1.
+export const minter = (): (() => EffectId) => {
+  let minted = 0;
+  return () => ++minted as EffectId;
 };
 
 // [LAW:no-silent-failure] A reach this rig has no host part for throws by
@@ -89,5 +98,6 @@ export function rendererParts({
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions(),
     verbs,
+    mint: minter(),
   };
 }

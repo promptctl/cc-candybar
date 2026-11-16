@@ -40,6 +40,8 @@ import { deriveConfigActionValidators } from "../src/daemon/foundations/config-v
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
 import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import { undoOf, WRITES_IN_PLACE } from "./helpers/history-step";
+import { lastClickError } from "../src/daemon/foundations/click-error";
 
 const S1 = sessionIdOf("s1");
 const SID_A = sessionIdOf("a");
@@ -375,7 +377,13 @@ describe("undo/redo click → the session's settings history", () => {
     expect(handEdited).not.toBe(written);
     writeFileSync(durable.configPath, handEdited);
 
-    await expect(press(runtime, "back")).rejects.toThrow(/changed since that edit/);
+    // The click is refused, naming the setting.
+    await expect(press(runtime, "back")).rejects.toThrow(
+      /undo: globals in .* changed since that edit — refusing to overwrite it/,
+    );
+    expect(lastClickError(runtime.sessionState, S1)?.text).toMatch(
+      /globals in .* changed since that edit/,
+    );
     // Nothing was overwritten, and the file step is gone: every change this
     // session made to that file chains through the state the hand edit replaced.
     expect(durable.text()).toBe(handEdited);
@@ -386,11 +394,24 @@ describe("undo/redo click → the session's settings history", () => {
     expect(durable.text()).toBe(handEdited);
   });
 
-  // The decision the ticket asked for: a session's history is its OWN clicks.
-  // Another session's write to the same file is not a step here, and it makes
-  // this session's earlier steps on that file unreachable — refused loudly,
-  // never overwritten.
-  test("another session's write to the same file is never undone from here, and makes this session's earlier file steps refuse", async () => {
+  test("undo over a hand edit elsewhere in the file is refused when the file it would write does not load", async () => {
+    const runtime = undoBar(SRC);
+    await press(runtime, "pinDracula");
+    const handEdited = durable
+      .text()!
+      .replace("actions: {", "actions: {\n    broken: { do: ['nope'] },");
+    writeFileSync(durable.configPath, handEdited);
+
+    await expect(press(runtime, "back")).rejects.toThrow(
+      /the config file would not load after this click/,
+    );
+    expect(durable.text()).toBe(handEdited);
+  });
+
+  // A session's history is its OWN clicks. Another session's write to the
+  // same file is not a step here: undoing this session's own setting leaves it
+  // as it is.
+  test("another session's write to the same file is never undone from here, and this session's own setting still steps back", async () => {
     const sessionState = new SessionState();
     const history = durable.historyFor(sessionState);
     const a = undoBar(SRC, SID_A, { sessionState, history });
@@ -401,13 +422,17 @@ describe("undo/redo click → the session's settings history", () => {
     expect(history.depth(SID_A)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
     expect(history.depth(B)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
-    await expect(press(a, "back")).rejects.toThrow(/changed since that edit/);
-    expect(durable.text()).toBe(afterB);
-    expect(history.depth(SID_A)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+    const rootAfterB = durable.parsed().root;
+    expect(afterB).toContain("dracula");
+    await press(a, "back");
+    expect(lastClickError(a.sessionState, SID_A)).toBeNull();
+    expect(durable.parsed().root).toEqual(rootAfterB);
+    expect(globals().palette).not.toBe("dracula");
+    expect(history.depth(SID_A)).toEqual({ undo: 0, redo: 1, sinceEdit: 0 });
 
     await press(b, "back"); // b's own step is intact
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
-    expect(globals().palette).toBe("dracula");
+    expect(globals().palette).not.toBe("dracula");
   });
 
   test("undo at the bottom of the stack is a loud no-op, never silent", async () => {
@@ -463,48 +488,28 @@ describe("settings history: a step lands whole, and records only what landed", (
     durable.dispose();
   });
 
-  test("an undo whose file write fails puts back the session change it already made", () => {
-    const sessionState = new SessionState();
-    const history = durable.historyFor(sessionState);
-    const file = durable.configPath;
-    const journal = history.begin();
-    journal.sessionState.set(S1, "theme", "nord"); // recorded first
-    writeFileSync(file, "{ after: 1 }");
-    journal.file(S1, file, "{ before: 1 }", "{ after: 1 }");
-    journal.commit();
+  // A write that fails is no refusal: the step stays, to land once it can.
+  test("an undo whose file write fails applies none of the click, and keeps its step", async () => {
+    const runtime = undoBar(SRC);
+    await press(runtime, "pickTheme");
+    await press(runtime, "pickPadding");
+    const original = durable.text()!;
+    await press(runtime, "keep");
+    const saved = durable.text()!;
 
     chmodSync(dirname(durable.configPath), 0o500); // the file write cannot land
-    expect(() => history.undo(S1)).toThrow(/config write failed/);
-    expect(sessionState.get(S1, "theme")).toBe("nord");
-    expect(durable.text()).toBe("{ after: 1 }");
-    expect(history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
+    await press(runtime, "back");
+    expect(lastClickError(runtime.sessionState, S1)?.text).toMatch(
+      /config write failed/,
+    );
+    expect(runtime.sessionState.get(S1, "theme")).toBeNull();
+    expect(durable.text()).toBe(saved);
+    expect(runtime.history.depth(S1)).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
 
     chmodSync(dirname(durable.configPath), 0o700); // and once it can, the step is intact
-    history.undo(S1);
-    expect(sessionState.get(S1, "theme")).toBeNull();
-    expect(durable.text()).toBe("{ before: 1 }");
-  });
-
-  test("a session write that throws records no step", () => {
-    const inner = new SessionState();
-    const throwing = {
-      get: (sid: SessionId, key: string) => inner.get(sid, key),
-      set: () => {
-        throw new Error("store refused");
-      },
-      setBatch: () => {
-        throw new Error("store refused");
-      },
-      clear: (sid: SessionId, key: string) => inner.clear(sid, key),
-      revision: (sid: SessionId) => inner.revision(sid),
-    };
-    const history = new SettingsHistory(throwing, () => {});
-    const journal = history.begin();
-    expect(() => journal.sessionState.set(S1, "theme", "nord")).toThrow(
-      /store refused/,
-    );
-    journal.commit();
-    expect(history.depth(S1)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+    await press(runtime, "back");
+    expect(runtime.sessionState.get(S1, "theme")).toBe("nord");
+    expect(durable.text()).toBe(original);
   });
 
   test("an undo in the same click as a change undoes that change, as two clicks would", async () => {
@@ -525,7 +530,11 @@ describe("settings history: a step lands whole, and records only what landed", (
     const history = new SettingsHistory(new SessionState(), () => {});
     const big = (c: string): string => c.repeat(2 * 1024 * 1024);
     const step = (sid: SessionId, file: string, from: string, to: string): void => {
-      const journal = history.begin();
+      const journal = history.begin({
+        read: () => null,
+        land: () => {},
+        prove: () => {},
+      });
       journal.file(sid, file, big(from), big(to));
       journal.commit();
     };
@@ -556,23 +565,23 @@ describe("settings history: the step and its record land together", () => {
 
   test("an undo whose history save fails puts its writes back", () => {
     const { sessionState, gate, history } = refusingHistory();
-    const journal = history.begin();
+    const journal = history.begin(WRITES_IN_PLACE);
     journal.sessionState.set(S1, "theme", "nord");
     journal.commit();
 
     gate.refusing = true;
-    expect(() => history.undo(S1)).toThrow(/history save refused/);
+    expect(() => undoOf(history, S1)).toThrow(/history save refused/);
     expect(sessionState.get(S1, "theme")).toBe("nord");
     expect(history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
     gate.refusing = false;
-    history.undo(S1);
+    undoOf(history, S1);
     expect(sessionState.get(S1, "theme")).toBeNull();
   });
 
   test("a commit whose save fails reports it once and never records the step later", () => {
     const { gate, history } = refusingHistory();
-    const journal = history.begin();
+    const journal = history.begin(WRITES_IN_PLACE);
     journal.sessionState.set(S1, "theme", "nord");
     gate.refusing = true;
     expect(() => journal.commit()).toThrow(/history save refused/);

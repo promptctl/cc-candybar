@@ -12,7 +12,8 @@ import {
   VERB_BACK,
   VERB_UNDO,
 } from "../src/click/wire";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { recordRender, testVerbContext,
+  verbContextWith } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { UPDATE_DISMISSED_KEY } from "../src/daemon/foundations/update-keys";
@@ -41,10 +42,9 @@ function setup() {
   const sessionState = new SessionState();
   let config = configWithTabs("a", "b");
   recordRender(sessionState, S1);
-  const ctx = {
-    ...testVerbContext(sessionState),
-    configFor: () => config,
-  };
+  const ctx = verbContextWith(testVerbContext(sessionState), {
+    configFor: () => config
+});
   // The update notice's dismissal is the daemon's own key, not a config's.
   const dispose = ctx.gates.state.register(UPDATE_DISMISSED_KEY, ["1.2.3"]);
   const set = async (...pairs: string[]): Promise<void> =>

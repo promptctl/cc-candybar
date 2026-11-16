@@ -63,7 +63,8 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/renderer/config-file-store";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { testVerbContext,
+  verbContextWith, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import {
   encodeSegments,
@@ -566,13 +567,12 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
       instantOf(new Date()),
       opts(),
     ).frame;
-  const ctx: VerbContext = {
-    ...testVerbContext(
+  const ctx: VerbContext = verbContextWith(testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
       undefined,
       durable.host,
-    ),
+    ), {
     // The daemon's own lookup and reload: a click is gated by the config as
     // the last click left it, and an insertion mints its id against it.
     configFor: () => current,
@@ -585,8 +585,8 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
         if (!(err instanceof ConfigError)) throw err;
       }
     },
-    log: (_level, message) => log.push(message),
-  };
+    log: (_level, message) => log.push(message)
+});
   const click = async (url: string): Promise<void> => {
     const { verb, value } = linkClick(url);
     const effects =
@@ -1079,13 +1079,12 @@ function originCtx(
   sessionId = S1,
 ): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
-  return {
-    ...testVerbContext(
+  return verbContextWith(testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
       undefined,
       durable.host,
-    ),
+    ), {
     // The daemon's own wiring (daemon.ts): the config a session renders with
     // is its cache entry's, and a click that must not act on the old config
     // reloads that entry from the file it just wrote.
@@ -1095,8 +1094,8 @@ function originCtx(
     reloadConfig: (origin) =>
       cache.reload(origin.projectDir, origin.cwd, origin.target.path, {
         kind: "write",
-      }),
-  };
+      })
+});
 }
 
 describe("RenderCache: authoredRoots — the file authors a root at the preset's path", () => {

@@ -17,6 +17,7 @@ import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
+  Present,
   Event,
   Renderer,
   RendererOutput,
@@ -25,7 +26,7 @@ import type {
 import { mainRenderer } from "../src/renderer/main";
 import { renderFrame, type RendererParts } from "../src/renderer/draw-bar";
 import { MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { rendererParts } from "./helpers/renderer-parts";
+import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
 import { instantAt, type Instant } from "../src/utils/instant";
@@ -215,9 +216,11 @@ const threw = (output: RendererOutput) => {
   return output;
 };
 
-const presentOf = (effects: readonly Effect[]): Effect => {
+const presentOf = (effects: readonly Effect[]): Present => {
   expect(effects).toHaveLength(1);
-  return effects[0]!;
+  const [present] = effects;
+  if (present?.kind !== "present") throw new Error("the turn presented nothing");
+  return present;
 };
 
 describe("a statusline request", () => {
@@ -307,7 +310,7 @@ describe("a statusline request", () => {
     await done(r, present, false);
     expect(recorded).toEqual([]);
     expect(threw(await done(r, present, true)).failure.message).toMatch(
-      /not a present on its way/,
+      /neither a present nor a change on its way/,
     );
   });
 });
@@ -610,6 +613,7 @@ describe("a click", () => {
     // output read before it landed would still name the view's sources.
     let act = async (): Promise<void> => {};
     const t = renderer({
+      ...NO_VERBS,
       handler: (verb) => (verb === "act" ? () => act() : undefined),
       closeIdle: () => Promise.reject(new Error("no idle close here")),
     });
@@ -631,6 +635,7 @@ describe("a click", () => {
   test("that throws once its act has landed names what the open views read then", async () => {
     let act = async (): Promise<void> => {};
     const t = renderer({
+      ...NO_VERBS,
       handler: (verb) => (verb === "act" ? () => act() : undefined),
       closeIdle: () => Promise.reject(new Error("no idle close here")),
     });
@@ -648,6 +653,7 @@ describe("a click", () => {
   test("hands its act the host's newest request of its session, though the session has retired", async () => {
     let seen: CheckedRenderRequest | null | undefined;
     const t = renderer({
+      ...NO_VERBS,
       handler: (verb) =>
         verb === "act"
           ? async (_value, facts) => {
@@ -677,6 +683,7 @@ describe("the idle close", () => {
   test("closes the session's menus in its own turn, with no effect", async () => {
     const closed: string[] = [];
     const t = renderer({
+      ...NO_VERBS,
       handler: () => undefined,
       closeIdle: async (sessionId) => {
         closed.push(sessionId);

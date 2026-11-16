@@ -19,7 +19,15 @@ import {
   noManagedSettings,
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
-import { VERBS } from "../../src/renderer/verbs";
+import { changeDone, VERBS } from "../../src/renderer/verbs";
+import { ConfigWrites } from "../../src/renderer/config-writes";
+import { readConfigText } from "../../src/renderer/config-file-store";
+import { performChanges } from "../../src/daemon/effect-interpreter";
+import type {
+  ConfigChange,
+  Effect,
+  EffectId,
+} from "../../src/renderer-interface/interface";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import type { VerbContext } from "../../src/renderer/verbs";
@@ -66,6 +74,50 @@ export const asyncSightings = (
   ofSession: async (sessionId, now) => sightings.ofSession(sessionId, now),
 });
 
+// [LAW:single-enforcer] The host, for a test that drives the verb table with
+// none: each click's changes land as its turn hands them on, through the
+// host's own interpreter, and their outcome comes back through the verbs' own
+// `changeDone`, so the click's consequence applies, or is dropped, as a real
+// landing's would. A rig with a renderer host (test/helpers/click-parts.ts)
+// hands its clicks' changes to that host instead.
+class LandingAtOnce extends ConfigWrites {
+  private context: VerbContext | null = null;
+
+  constructor() {
+    let minted = 0;
+    super(() => ++minted as EffectId, readConfigText);
+  }
+
+  of(ctx: VerbContext): VerbContext {
+    this.context = ctx;
+    return ctx;
+  }
+
+  override seal(
+    effects: Effect[],
+    session: SessionId | null,
+    consequence: () => void,
+  ): void {
+    const from = effects.length;
+    super.seal(effects, session, consequence);
+    const changes = effects
+      .splice(from)
+      .filter((e): e is ConfigChange => e.kind === "change");
+    if (changes.length === 0) return;
+    const outcome = performChanges(changes);
+    for (const change of changes) changeDone(this.context!, change.id, outcome);
+  }
+}
+
+// A test's verb context with its own parts: its clicks land through the
+// context they ran with, so a landing reloads with the test's own reload.
+export function verbContextWith(
+  base: VerbContext,
+  over: Partial<VerbContext>,
+): VerbContext {
+  return (base.configWrites as LandingAtOnce).of({ ...base, ...over });
+}
+
 // [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
 // silent log and an update act that refuses loudly — no test here has an
 // update watch, so an apply-update click reaching it is a test bug, never a
@@ -79,7 +131,10 @@ export function testVerbContext(
   config?: DslConfig,
   host: Host = HOST,
 ): VerbContext {
-  return {
+  const configWrites = new LandingAtOnce();
+  return configWrites.of({
+    configWrites,
+    effects: [],
     gates: bareGates(),
     stateDir: stateDir(host),
     locations: locations(host),
@@ -89,8 +144,8 @@ export function testVerbContext(
     clientGone: async () => false,
     latest: null,
     journalTurns: new JournalTurns({
-      log: () => {},
       monotonic: () => systemTimekeeper.monotonic(),
+      changesLanded: () => configWrites.landed(),
     }),
     clickLanded: () => {},
     placeWaited: () => {},
@@ -180,7 +235,7 @@ export function testVerbContext(
     // holds no render cache, so there is nothing to rebuild: the file a click
     // wrote is the whole outcome, and it is what these tests read. A rig with a
     // cache hands in its own — test/settings-config-menu.test.ts records each
-    // reload to pin write → reload → release.
+    // reload to pin that a landing reloads before it releases.
     reloadConfig: () => {},
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.
@@ -215,11 +270,9 @@ export function testVerbContext(
             ),
       clicked: () => {},
     },
-    // No render cache here, so no session has a view to move.
-    views: { follow: () => {} },
     // No draw here lists a diagnostic, so a copy-diagnostic click is refused.
     diagnosticCopy: () => undefined,
-  };
+  });
 }
 
 export { effectsOf, type DecodedEffect } from "../../src/click/read";

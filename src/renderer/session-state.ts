@@ -185,7 +185,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // ALL writes inside this one block. Previously, the verb's "loop and
   // call set N times" pattern fired reportChanged() N times, which
   // scheduled autoruns between pairs (visible to consumers as the menu
-  // value changing while toolbar-expanded was still old). The batch
+  // value changing while another key of the batch was still old). The batch
   // method is the structural fix: there is no way to get half-applied
   // state because there is no intermediate scheduler tick.
   //

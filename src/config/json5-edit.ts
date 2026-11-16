@@ -581,6 +581,53 @@ export function setValue(
   return setBelow(text, parseDocument(text), path, valueText, dialect);
 }
 
+/**
+ * Add the member at an object path, which its parent object lacks, before
+ * the parent's member `precedes`, or last when that is null or no longer
+ * there. A member that went back where it was taken from leaves the document
+ * as it was before it went. A member that would start the parent goes on a
+ * line of its own when the member it precedes starts one, and inline when
+ * not.
+ */
+export function insertValue(
+  text: string,
+  path: readonly string[],
+  valueText: string,
+  dialect: Dialect,
+  precedes: string | null,
+): string {
+  const parentPath = path.slice(0, -1);
+  const leaf = path[path.length - 1];
+  const parent = nodeAt(parseDocument(text), parentPath);
+  if (leaf === undefined || parent?.kind !== "object")
+    throw new Json5EditError(
+      `cannot insert ${path.join(".")}: its parent is not an object`,
+      parent?.span.start ?? 0,
+    );
+  if (entryOf(parent, leaf) !== undefined)
+    throw new Json5EditError(
+      `cannot insert ${path.join(".")}: it is already there`,
+      parent.span.start,
+    );
+  const member = entryText([leaf], valueText, dialect);
+  const next =
+    precedes === null
+      ? undefined
+      : parent.entries.find((e) => e.key === precedes);
+  if (next === undefined) return appendMember(text, parent, member, dialect);
+  if (!startsLine(text, next.span.start))
+    return splice(text, next.span.start, next.span.start, `${member}, `);
+  const indent = indentOfLine(text, next.span.start);
+  const eol = eolOf(text);
+  const at = lineStartOf(text, next.span.start);
+  return splice(
+    text,
+    at,
+    at,
+    `${indent}${reindent(member, indent, eol)},${eol}`,
+  );
+}
+
 // setValue's descent, from any object node of the document rather than its
 // root — how a value lands inside an array element, which no key path names.
 function setBelow(

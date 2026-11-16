@@ -2958,17 +2958,17 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
 
   test("returns default when SessionState has no entry for the key", () => {
     const { store, registry } = makeWithState();
-    registry.declareState("toolbarExpanded", { key: "toolbar-expanded" });
+    registry.declareState("caps", { key: "endcaps" });
     feedInputs(registry, { session_id: "s1" });
-    expect(store.read("toolbarExpanded")).toBe("");
+    expect(store.read("caps")).toBe("");
   });
 
   test("returns SessionState value when present", () => {
     const { store, registry, sessionState } = makeWithState();
-    sessionState.set(S1, "toolbar-expanded", "1");
-    registry.declareState("toolbarExpanded", { key: "toolbar-expanded" });
+    sessionState.set(S1, "endcaps", "plain");
+    registry.declareState("caps", { key: "endcaps" });
     feedInputs(registry, { session_id: "s1" });
-    expect(store.read("toolbarExpanded")).toBe("1");
+    expect(store.read("caps")).toBe("plain");
   });
 
   test("varDefault wins when SessionState key is absent", () => {

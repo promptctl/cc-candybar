@@ -254,10 +254,17 @@ type FileTarget =
   | { kind: "layer"; session: SessionId; role: LayerRole }   // any layer of the session's chain
   | { kind: "claude-settings"; session: SessionId };    // the session's Claude Code settings, from its session context
 
+// A value crosses as JSON5 text, so a copied row keeps its comments and an
+// inline placement stays inline. The empty address is the document.
 type Change =
-  | { op: "set"; at: Address; value: JsonValue; read: { kind: "value"; value: JsonValue } | { kind: "absent" } }
-  | { op: "remove"; at: Address; read: JsonValue }
-  | { op: "insert"; at: Address; index: number; value: JsonValue };
+  | { op: "replace"; at: Address; text: Json5Text; read: Read }
+  | { op: "insert"; at: Address; text: Json5Text; precedes: string | null }   // the setting is absent; it goes before `precedes`, or last
+  | { op: "remove"; at: Address; read: Read };
+
+type Read =
+  | { kind: "value"; text: Json5Text }   // agrees with any text of the same value
+  | { kind: "file"; text: string }       // the whole document, byte for byte
+  | { kind: "absent" };
 
 // Today's run action, with its directory named, never spelled.
 interface Program {
@@ -280,7 +287,8 @@ interface Program {
   Local merges above project, so a local value wins over the shared one. When the interpreter creates a local file, it adds the file to the repository's exclude file (`git rev-parse --git-path info/exclude`, which every worktree of the repository shares), so git never shows it. The local layer loads under the project layer's approval, because a clone can commit a file by that name.
 - **A config write is a `change`, and the renderer decides what it means.** It decides from the schema in its own bundle: a step's arithmetic, which settings a reset clears, where a layout insert goes. It returns plain changes, each `at` a setting's address inside the document its target names. The host never knows the schema, so a renderer can add a setting without a host install. A host-side verb, such as save a preset or step, would put the schema in the host.
 - **The host splices, and refuses a setting that moved.** It splices each value in place and keeps every other byte, comments included, and a change's list lands whole or not at all. `read` is the value the renderer saw at that address. If it has moved, the host refuses the whole change and names the setting. That is how undo refuses a setting someone else changed, how save cannot overwrite a hand edit made after its config was read, and how the doctor's fix lands only on the settings it diagnosed. The guard is per setting because dozens of sessions write Claude Code's settings file, and a whole-file guard would fail on every unrelated write.
-- **A turn that changes a config layer ends when the change lands.** The host hands the layer's new text to config discovery, the one writer of every `ConfigSnapshot`. Every session whose chain holds that file gets it before its renderer's next input, so each click sees what the one before it left, and the watcher then finds nothing new. Every other writer reaches discovery through the watcher, as today.
+- **A turn that changes a config layer ends when the change lands.** The host hands the layer's new text to config discovery, the one writer of every `ConfigSnapshot`. Every session whose chain holds that file gets it before its renderer's next input, so each click sees what the one before it left, and the watcher then finds nothing new. Every other writer reaches discovery through the watcher, as today. A turn's changes land together or not at all, and each is settled with that one outcome.
+- **A click lands whole or not at all.** Whatever else a click did — the picks a save releases, a history step — assumes its changes landed, so it is the next step of the chain: it applies in the changes' `effect-done` turn, or is dropped when they are refused, leaving the drafts and history as they were and the reason on the `⚠`. Until step 5, the renderer stands in for discovery: a layer is named by its path, the clicking session reloads in that turn, and a journal turn opens only once the changes ahead of it have landed.
 - **`type-slash` checks, then acts.** The interpreter reads the pane and refuses unless it shows Claude Code's bare input box, then stashes, pastes and submits. Nothing in the bar can come between the check and the act, because the interpreter runs one effect at a time; the user can, in the gap between two tmux calls, as today.
 - **`run` carries its refreshes.** The collector holds each named source pending from the run's start until the program exits and the source has been re-read. The host owns that order. A run's program runs in its session's environment (above).
 - **Repository trust is the host's.** Which repositories may run commands is a security decision, so the host keeps the answers and resolves config by them; a click that answers the question returns `approve-repo` for the layer it asked about. [LAW:single-enforcer]
@@ -348,7 +356,7 @@ Each step leaves a working bar. The renderer leaves the host's process first, th
 2. **The renderer out of process, through an adapter.** The supervisor runs the renderer in its own process through the socket transport. Every reach it still makes into a host part, such as a verb starting a run or the draw reading a feed's follow, is an entry in one adapter. A file the renderer still opens itself is not an entry. The step that removes it (config, stored state, the acts, the doctor) also adds the rule that keeps it out, so the work left is listed once. *Done when* the bar draws from the renderer's process and the adapter lists every reach that remains. It reports the latency check's reading (A-1, A-5).
 3. **Signed links.** Every link a renderer draws is signed, and the host verifies each click before any renderer sees it, because any web page can open a link.
 4. **Effects returned, not performed, and the draw pure.** Every verb and timer returns effects; the interpreter runs them. The draw writes nothing: frame memory and animation clocks are state machine state. *Done when* no renderer-side code writes, starts a process, calls tmux or reads a clock, and the adapter's entries for those are deleted.
-5. **The profile, config and stored state handed in.** The profile is derived from the renderer's name with its root canonicalized once, and `load-config` is removed. The host reads the config chain and the profile's stores and hands them in. *Done when* the renderer side opens no file (A-2), and a renderer started under a second name writes only under its own profile.
+5. **The profile, config and stored state handed in.** The profile is derived from the renderer's name with its root canonicalized once (`load-config` is already gone). The host reads the config chain and the profile's stores and hands them in. *Done when* the renderer side opens no file (A-2), and a renderer started under a second name writes only under its own profile.
 6. **Subscriptions.** The collector runs sources from the renderers' subscriptions, each in its session's environment, which the client now sends in the session context, in both runtimes; `declare` and `key` are deleted. *Done when* sessions that declare one source share one run when the variables it names agree, a session whose named variable differs gets its own, and a key change is served stale-while-revalidate.
 7. **The adapter deleted, and the replay test** (§11). It comes once the adapter is empty, because a replay can only be byte-identical once the renderer is a function of its inputs.
 8. **A second renderer.** *Done when* a worktree's renderer draws one session while the others draw theirs, and no transcript is read twice (I-1, I-2).

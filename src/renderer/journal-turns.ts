@@ -13,9 +13,8 @@
 // turn, and no turn ever asks for a place, so the two cannot deadlock.
 //
 // `close` ends the turns for good: what is queued is refused as its turn
-// arrives, and what is in flight is committed there and then, so writes already
-// landed stay undoable as one step when the daemon's launches abort under them,
-// and goes no further than its next `landed`. A click's launches are bounded
+// arrives, and what is in flight goes no further than its next `landed` and
+// lands nothing (src/renderer/config-writes.ts). A click's launches are bounded
 // (`clickLaunch`), so a turn comes back unless a child outlives SIGKILL, in
 // uninterruptible sleep: its launch never settles, and `getStats` shows the
 // holder's `heldMs` growing.
@@ -29,10 +28,6 @@ import {
 import type { JournalTurnStats } from "../daemon/foundations/stats-snapshot";
 
 export interface JournalTurn {
-  // Names the commit `close` runs if the turn is cut off, and answers the one
-  // way to run it: true when this call committed, false when `close` already
-  // had and the turn is over.
-  readonly holds: (commit: () => void) => () => boolean;
   // [LAW:single-enforcer] Where a handler resumes: what follows an await runs
   // only if the turn outlived it, so a click `close` cut off writes nothing
   // more, whichever store it would have reached. `p` settling either way
@@ -54,11 +49,6 @@ export interface ClickAsker extends TurnAsker {
   readonly gathered: (ms: number) => void;
 }
 
-interface InFlight {
-  readonly verb: string;
-  readonly commit: () => void;
-}
-
 const DAEMON_WIDE = "journals";
 const GATHERS = "gathers";
 
@@ -67,7 +57,6 @@ export class JournalTurns {
   private readonly sessions = new KeyedSerialQueue<string>();
   private readonly gathers = new KeyedSerialQueue<typeof GATHERS>();
   private open = true;
-  private inFlight: InFlight | null = null;
   private holder: { readonly verb: string; readonly since: Monotonic } | null =
     null;
   private queued = 0;
@@ -75,9 +64,11 @@ export class JournalTurns {
 
   constructor(
     private readonly deps: {
-      readonly log: (level: "warn", msg: string) => void;
       // On a clock whose differences are milliseconds.
       readonly monotonic: () => Monotonic;
+      // Resolves once no click's config changes are on their way
+      // (src/renderer/config-writes.ts).
+      readonly changesLanded: () => Promise<void>;
     },
   ) {}
 
@@ -92,6 +83,10 @@ export class JournalTurns {
     const asked = this.deps.monotonic();
     this.queued++;
     return this.queue.run(DAEMON_WIDE, async () => {
+      // [LAW:no-ambient-temporal-coupling] A turn reads the files the turns
+      // ahead of it wrote, and the session state their consequences left, so
+      // it opens once their changes have landed.
+      await this.deps.changesLanded();
       this.queued--;
       const since = this.deps.monotonic();
       waited(spanMs(asked, since));
@@ -105,11 +100,6 @@ export class JournalTurns {
         // answer is out.
         this.refuseClosed(verb);
         return await body({
-          holds: (commit) => {
-            const held = { verb, commit };
-            this.inFlight = held;
-            return () => this.commit(held);
-          },
           landed: (p) => p.finally(() => this.refuseClosed(verb)),
         });
       } finally {
@@ -176,23 +166,9 @@ export class JournalTurns {
 
   close(): void {
     this.open = false;
-    if (this.inFlight === null) return;
-    // [LAW:nothing-unseen] Said first, so a commit that throws still names it.
-    this.deps.log(
-      "warn",
-      `journal: ${this.inFlight.verb} cut off by close, committing what landed`,
-    );
-    this.commit(this.inFlight);
   }
 
   private refuseClosed(verb: string): void {
     if (!this.open) throw new DaemonClosing(verb);
-  }
-
-  private commit(held: InFlight): boolean {
-    if (this.inFlight !== held) return false;
-    this.inFlight = null;
-    held.commit();
-    return true;
   }
 }

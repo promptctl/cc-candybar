@@ -72,12 +72,6 @@ export const VERB_SET_STATE = "set-state";
 export const VERB_STEP_STATE = "step-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
-export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
-// [LAW:effects-at-boundaries] A daemon-global config override: the verb writes
-// the override path (or clears it with an empty value); the render pipeline
-// reads it at the cache-lookup boundary. Clicking a different config is a
-// side-effect isolated to the verb handler; the renderer only sees the result.
-export const VERB_LOAD_CONFIG = "load-config";
 // [LAW:one-source-of-truth] `persist`'s twin of set-state/step-state: writes
 // land in the session's config FILE (candybar-config-dqe — the one durable
 // store), spliced in place so comments survive, and reach the bar through
@@ -274,8 +268,6 @@ const SAYS = {
   [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key!, by!)],
   [VERB_COPY]: ([text]) => [`copy ${saidCopy(text!)}`],
   [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
-  [VERB_TOOLBAR_TOGGLE]: () => ["toggle the toolbar"],
-  [VERB_LOAD_CONFIG]: ([, path]) => [`load config ${path}`],
   [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
   [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key!, by!)}`],
   [VERB_SAVE]: () => ["save settings"],
@@ -471,7 +463,7 @@ export function parseHandlerUrl(rawUrl: string): HandlerUrl {
 
 // [LAW:one-source-of-truth] The verbs whose handler splits its value into
 // `/`-separated segments (decodeSegments); every other verb decodes its whole
-// value as one argument (oneArg, or load-config's split at the first slash).
+// value as one argument (oneArg).
 // It is what src/click/read.ts decodes a click's effects by, to describe them
 // as the handler will read them; a handler that changes codec changes its row.
 export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
@@ -514,7 +506,6 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_REDO,
   VERB_BACK,
   VERB_REWIND,
-  VERB_TOOLBAR_TOGGLE,
   VERB_APPLY_UPDATE,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
@@ -522,7 +513,6 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
-  VERB_LOAD_CONFIG,
   VERB_COPY_DIAGNOSTIC,
 ]);
 

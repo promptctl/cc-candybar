@@ -8,7 +8,8 @@ import { parseSessionId, sessionIdOf } from "../src/daemon/foundations/session-i
 import { SessionState } from "../src/renderer/session-state";
 import { BadVerbArgs, VERBS } from "../src/renderer/verbs";
 import { encodeSegments } from "../src/click/wire";
-import { testVerbContext } from "./helpers/click";
+import { recordRender, testVerbContext } from "./helpers/click";
+import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { REFUSED } from "./helpers/session-id-refused";
 
 describe("the session-id checkpoint", () => {
@@ -33,13 +34,14 @@ describe("the session-id checkpoint", () => {
 });
 
 describe("a click's session id", () => {
-  const toggle = VERBS.get("toolbar-toggle")!;
+  const applyUpdate = VERBS.get("apply-update")!;
+  const setState = VERBS.get("set-state")!;
   const stepState = VERBS.get("step-state")!;
 
   test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState());
-    await expect(toggle(encodeURIComponent(raw), ctx)).rejects.toThrow(BadVerbArgs);
-    await expect(toggle(encodeURIComponent(raw), ctx)).rejects.toThrow(problem);
+    await expect(applyUpdate(encodeURIComponent(raw), ctx)).rejects.toThrow(BadVerbArgs);
+    await expect(applyUpdate(encodeURIComponent(raw), ctx)).rejects.toThrow(problem);
     await expect(stepState(encodeSegments([raw, "k", "1"]), ctx)).rejects.toThrow(
       problem,
     );
@@ -48,7 +50,11 @@ describe("a click's session id", () => {
   test("passes a UUID", async () => {
     const state = new SessionState();
     const uuid = sessionIdOf(randomUUID());
-    await toggle(encodeURIComponent(uuid), testVerbContext(state));
-    expect(state.get(uuid, "toolbar-expanded")).toBe("1");
+    recordRender(state, uuid);
+    await setState(
+      encodeSegments([uuid, "theme", "nord"]),
+      testVerbContext(state, undefined, EMPTY_DEFAULT),
+    );
+    expect(state.get(uuid, "theme")).toBe("nord");
   });
 });

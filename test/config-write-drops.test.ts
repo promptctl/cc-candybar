@@ -10,11 +10,9 @@ import path from "node:path";
 
 import { applyLayoutOp, writeValues } from "../src/renderer/config-file-store";
 import type { ConfigHome } from "../src/config/loader/discovery";
+import { EDITS_IN_PLACE } from "./helpers/history-step";
 
-const store = {
-  record: () => {},
-  logger: { info: () => {}, warn: () => {}, error: () => {} },
-} as unknown as Parameters<typeof applyLayoutOp>[0];
+const store = EDITS_IN_PLACE;
 
 let dir: string;
 const homeWith = (text: string): ConfigHome => {

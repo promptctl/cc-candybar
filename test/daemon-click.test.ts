@@ -4,7 +4,8 @@ import { SessionState } from "../src/renderer/session-state";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { recordRender, testVerbContext,
+  verbContextWith } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -64,15 +65,6 @@ describe("SessionState", () => {
     expect(state.get(B, "theme")).toBeNull();
     expect(state.get(C, "theme")).toBe("forest");
   });
-
-  test("toolbar-expanded key works for toggle semantics", () => {
-    const state = new SessionState();
-    expect(state.get(S1, "toolbar-expanded")).toBeNull();
-    state.set(S1, "toolbar-expanded", "1");
-    expect(state.get(S1, "toolbar-expanded")).toBe("1");
-    state.clear(S1, "toolbar-expanded");
-    expect(state.get(S1, "toolbar-expanded")).toBeNull();
-  });
 });
 
 describe("click protocol", () => {
@@ -112,12 +104,11 @@ describe("apply-update verb", () => {
   // handler's whole job is reaching the daemon's update watch through ctx.
   test("a session id reaches ctx.applyUpdate once; a missing or unsafe one is BadVerbArgs and never does", async () => {
     let calls = 0;
-    const ctx: VerbContext = {
-      ...testVerbContext(new SessionState()),
+    const ctx: VerbContext = verbContextWith(testVerbContext(new SessionState()), {
       applyUpdate: async () => {
         calls++;
-      },
-    };
+      }
+});
     const handler = VERBS.get(VERB_APPLY_UPDATE)!;
     await handler(encodeURIComponent("sess-1"), ctx);
     expect(calls).toBe(1);
@@ -127,12 +118,11 @@ describe("apply-update verb", () => {
   });
 
   test("an act refused rejects through the verb, for the click to answer with", async () => {
-    const ctx: VerbContext = {
-      ...testVerbContext(new SessionState()),
+    const ctx: VerbContext = verbContextWith(testVerbContext(new SessionState()), {
       applyUpdate: async () => {
         throw new BadVerbArgs("apply-update: already rebuilding…");
-      },
-    };
+      }
+});
     await expect(
       VERBS.get(VERB_APPLY_UPDATE)!(encodeURIComponent("sess-1"), ctx),
     ).rejects.toThrow("already rebuilding");
@@ -162,30 +152,6 @@ describe("statusline binary render isolation", () => {
     // No fallback to in-process rendering.
     expect(indexSrc).not.toContain("generateStatusline");
     expect(indexSrc).not.toContain("new PowerlineRenderer");
-  });
-});
-
-// --- Toolbar toggle dataflow ---
-// Verify the dataflow: toolbar-toggle click updates daemon state, next render
-// sees the change without re-reading from disk.
-
-describe("toolbar toggle dataflow", () => {
-  test("toggle via SessionState reflects in get without disk I/O", () => {
-    // [LAW:one-source-of-truth] The SessionState is the daemon's in-memory
-    // source of truth. No file reads needed.
-    const state = new SessionState();
-    const sessionId = sessionIdOf("toggle-test-session");
-
-    // Initially not expanded.
-    expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
-
-    // Set → expanded.
-    state.set(sessionId, "toolbar-expanded", "1");
-    expect(state.get(sessionId, "toolbar-expanded")).toBe("1");
-
-    // Clear → collapsed.
-    state.clear(sessionId, "toolbar-expanded");
-    expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
   });
 });
 

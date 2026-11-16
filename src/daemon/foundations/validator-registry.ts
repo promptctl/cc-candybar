@@ -383,7 +383,7 @@ export interface Keyspace<C extends object> {
 
 // [LAW:one-type-per-behavior] ONE keyspace implementation, instantiated once
 // per wire. `baseline` seeds the built-in keys (raw KeyValidator functions,
-// never re-claimable — SessionState's theme/endcaps/toolbar-expanded; none
+// never re-claimable — SessionState's theme/endcaps; none
 // for the config file). `derive` is what a config contributes: its action
 // table's writes. `noun` names the keyspace in every message
 // ("state"/"config").

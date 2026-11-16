@@ -156,30 +156,6 @@ describe("persistValueText", () => {
       /names a layout, not a value/,
     );
   });
-
-  // [LAW:no-silent-failure] A write failure must be OBSERVABLE by the caller
-  // — the verb handler logs "set-config: ..." as a success on the line right
-  // after this call, so a swallowed failure would let that log lie. Point
-  // the write at a path whose parent cannot be a directory (a file standing
-  // where one is expected) to force a real fs failure.
-  test("writeValues throws (not silently swallows) when the write fails", () => {
-    const blocker = join(durable.projectDir, "blocker");
-    writeFileSync(blocker, "not a directory");
-    const impossiblePath = join(blocker, "config.json5");
-    expect(() =>
-      writeValues(
-        { record: () => {}, logger: () => {} },
-        {
-          path: impossiblePath,
-          above: [],
-          repo: null,
-          cwd: null,
-          locs: locations(durable.host),
-        },
-        [["palette", "nord"]],
-      ),
-    ).toThrow();
-  });
 });
 
 // ─── config-validators: the persistent-write gate ─────────────────────────────
@@ -870,7 +846,7 @@ function makeCache(): {
 
 describe("a durable click lands in the file the next reload reads", () => {
   // The origin's `configFile` is the explicit path draw-bar.ts composed for the
-  // session (load-config pick > `--config` > `configEnv` hint). It is the sole
+  // session (`--config` > `configEnv` hint). It is the sole
   // candidate: the click lands there — creating the file when it is `missing`
   // — and never falls through to the project file or the XDG tail.
   test("an origin with an explicit path writes that path, even before it exists", async () => {

@@ -1,13 +1,13 @@
 // The renderer's click turn: what a click means is the verb its link names,
 // acted on in this turn, so the turn's output reads the subscriptions as they
-// stand once the act has landed (its commit, and its view's follow).
+// stand once the act has landed (its commit).
 
 import {
   noteFacts,
   type RequestFacts,
 } from "../daemon/foundations/request-event.js";
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
-import type { Event } from "../renderer-interface/interface.js";
+import type { Effect, Event } from "../renderer-interface/interface.js";
 import type { MainRendererParts } from "./verbs/port.js";
 
 type ClickEvent = Extract<Event, { kind: "click" }>;
@@ -20,6 +20,9 @@ export async function clickTurn(
   { verbs, menuIdle }: Pick<MainRendererParts, "verbs" | "menuIdle">,
   { verb, value, session, arrival, id, latest }: ClickEvent,
   record: RequestFacts,
+  // Where the click's config changes go, kept by the turn even when the
+  // handler throws.
+  effects: Effect[],
 ): Promise<void> {
   const handler = verbs.handler(verb);
   if (handler === undefined)
@@ -36,6 +39,7 @@ export async function clickTurn(
       turnWaited: (ms) => noteFacts(record, { turnWait: `${ms}ms` }),
       click: id,
       latest,
+      effects,
     });
   } finally {
     if (pending !== null) menuIdle.clickSettled(pending);

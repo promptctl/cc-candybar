@@ -7,9 +7,15 @@
 import type { RendererParts } from "../draw-bar.js";
 import type { SessionId } from "../../daemon/foundations/session-id.js";
 import type { AdapterToHost } from "../../renderer-interface/adapter.js";
-import type { RequestId } from "../../renderer-interface/interface.js";
+import type {
+  Effect,
+  EffectId,
+  EffectOutcome,
+  RequestId,
+} from "../../renderer-interface/interface.js";
 import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
 import {
+  changeDone,
   closeIdleMenus,
   VERBS,
   type IdleClose,
@@ -26,6 +32,7 @@ type VerbClickFacts = Pick<
   | "turnWaited"
   | "clientGone"
   | "latest"
+  | "effects"
 >;
 
 // The facts the renderer brings of one click: the same, the click named by its
@@ -50,13 +57,20 @@ export interface RendererVerbs {
     sessionId: SessionId,
     latest: CheckedRenderRequest | null,
     idle: IdleClose,
+    effects: Effect[],
   ): Promise<void>;
+  // A change's `effect-done`, in its turn: false for an id no click's change
+  // holds.
+  changeDone(id: EffectId, outcome: EffectOutcome): boolean;
 }
 
 // The main renderer's parts: the draw's, which the host's own frames share,
 // and the verbs its click and menu-idle turns act through.
 export type MainRendererParts = RendererParts & {
   readonly verbs: RendererVerbs;
+  // [LAW:one-source-of-truth] The one minter of this renderer's effect ids,
+  // a present's and a change's alike.
+  readonly mint: () => EffectId;
 };
 
 // [LAW:single-enforcer] The verb table over the one verb context the daemon
@@ -83,7 +97,8 @@ export function verbsOver(
           }))
       );
     },
-    closeIdle: (sessionId, latest, idle) =>
-      closeIdleMenus(sessionId, latest, idle, ctx),
+    closeIdle: (sessionId, latest, idle, effects) =>
+      closeIdleMenus(sessionId, latest, idle, ctx, effects),
+    changeDone: (id, outcome) => changeDone(ctx, id, outcome),
   };
 }

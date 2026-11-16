@@ -20,7 +20,8 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
+import { testVerbContext,
+  verbContextWith, effectsOf, clickUrl } from "./helpers/click";
 import { VERB_SET_STATE, VERB_SLASH, effectsUrl } from "../src/click/wire";
 import { SESSION_CLIENT_HINTS_KEY, SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
@@ -231,11 +232,10 @@ function runtime(tmux: TmuxHint | null) {
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const raw = drawPayload(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS).frame;
   const logged: string[] = [];
-  const ctx = {
-    ...testVerbContext(sessionState, undefined, config),
+  const ctx = verbContextWith(testVerbContext(sessionState, undefined, config), {
     log: (_level: string, msg: string) => logged.push(msg),
-    typeSlash: typeInPane(productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper))),
-  };
+    typeSlash: typeInPane(productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)))
+});
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
   );
@@ -363,10 +363,9 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  const ctx = {
-    ...testVerbContext(sessionState, undefined, config),
-    typeSlash: typeInPane(productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper))),
-  };
+  const ctx = verbContextWith(testVerbContext(sessionState, undefined, config), {
+    typeSlash: typeInPane(productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)))
+});
   // What the daemon's payload carries for that hint (RenderPayload.tmux).
   const payload = {
     session_id: "s1",

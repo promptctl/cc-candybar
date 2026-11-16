@@ -8,14 +8,14 @@ The reach classes, the dev rows and the Facts-or-Draw placement of state below b
 
 **I did not write `/tmp/ccb-probe/findings-verbs.md`.** This agent runs in read-only mode, which forbids creating files, including in `/tmp`, so the full findings are below instead of a path and summary.
 
-the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming-wind`. All 27 leaf verbs, `dispatch`, and `tmux-status-click` have rows, based on code read at commit `10f26ceb`.
+the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming-wind`. All 25 leaf verbs, `dispatch`, and `tmux-status-click` have rows, based on code read at commit `10f26ceb`.
 
 ## Main isolation hazards
 
 1. **A settings click can reach Claude Code.** `journaled` compares lane switches before and after the click. If `experimentalStatusline` flips, `LaneSetups` sends SIGTERM to Claude Code and types a restart line into the pane's shell. So verb class alone does not give isolation: a dev Draw must never forward lane changes.
 2. **Copying the state does not isolate it.**
    - `settings-history.json` holds absolute file paths and whole-file snapshots, so `undo` in a dev Draw could overwrite or delete the real config.
-   - `render-origin` and `config-override` also lead `originHome` back to the real file. Paths must be remapped.
+   - `render-origin` also leads `originHome` back to the real file. Paths must be remapped.
 3. **Links carry no Draw identity.** A click is `{verb, value, clientVersion}`, so nothing in it says which Draw drew it. I did not read how the URL handler picks a socket.
 4. **Undo skips some safeguards.** `undo`, `redo` and `rewind` call `writeConfigText` directly, skipping `commit`'s loader gate. Their session writes also skip the closing view, because `SettingsHistory` holds the raw store.
 5. **A refused effect does not stop the click.** `dispatch` runs every effect even after one fails. A refusal should throw `BadVerbArgs`, which already holds the error on the bar, but the click's other effects still land.
@@ -23,11 +23,11 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 ## Verb table
 
 **Baseline for every row that names a valid session:**
-- `journaled` uses `history`, `navigation`, `sessionState`, `lanes`, `views`, plus `configFor` through `nestOf` or `lanesAt`.
+- `journaled` uses `history`, `navigation`, `sessionState`, `lanes`, plus `configFor` through `nestOf` or `lanesAt`.
 - `dlog` writes the click event to `<state>/daemon.log`.
 - `<state>` is `stateDir()`, normally `~/.local/state/cc-candybar`.
 
-**Exceptions:** `copy`, `open-vscode` and `doctor-probe` are not in `SESSION_FIRST_VERBS`, so `journaled` has no session and skips the lane and view follow-ups. It still opens and commits empty journals.
+**Exceptions:** `copy`, `open-vscode` and `doctor-probe` are not in `SESSION_FIRST_VERBS`, so `journaled` has no session and skips the lane follow-up. It still opens and commits empty journals.
 
 **Touch codes:** P picks (`session-state.json`), SH settings history, NH navigation history (memory only), CF config file, CC Claude Code process or pane, TM tmux, OS another session, MA machine, SS source storage. Anything not listed is not touched by the handler.
 
@@ -38,10 +38,8 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 | `copy` | `dlog` | none | `/usr/bin/pbcopy` | clipboard only | host | Clipboard is outside your stated isolation; allow it. Needs a message to Facts if Facts owns all programs |
 | `copy-diagnostic` | `diagnosticCopy`, `dlog` | none | `pbcopy` | clipboard; reads `renderCache.copies` | host | Same; text comes from the dev Draw's own frames |
 | `open-vscode` | `dlog` | none | `/usr/bin/open -a "Visual Studio Code" <path>`; path is not gated | editor | host | Same as `copy` |
-| `load-config` | `dlog` | `session-state.json` | none | P (`config-override`), not SH or NH; L | picks | Own copy. Shape check only: any absolute `.json`/`.json5` path. Later durable clicks would write to that path unless remapped |
 | `set-state` | `configFor`, `dlog` | `session-state.json`; `settings-history.json` for setting keys or edit-mode toggles | none | P; SH for settings; NH for navigation keys; L | picks | Own copy. Lanes must not go to Facts |
 | `step-state` | `configFor`, `dlog` | same | none | P, SH or NH; L possible | picks | Own copy |
-| `toolbar-toggle` | none | `session-state.json` | none | P (`toolbar-expanded`), NH | picks | Own copy |
 | `back` | `configFor`, `dlog` | `session-state.json`; `settings-history.json` if it crosses `EDIT_MODE_KEY` | none | P, NH; SH savepoint only through that key | picks | Own copy |
 | `set-config` | `configFor`, `reloadConfig`, `dlog` | `home.path`, `settings-history.json` | none directly; see reload | CF, SH, OS (shared file); L | config | Own config copy, with `home.path` remapped |
 | `step-config` | same | same | same | CF, SH, OS; L | config | Same |
@@ -84,10 +82,9 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 
 **Everything else:**
 - **Before the handler:** `menuIdle.clicked` restarts the idle clock, even if the click then fails. `laneMeter` reads `renderCache.hold`.
-- **Idle timer:** `MenuIdle.fire` calls `closeIdleMenus`, which writes `closed` through the full journaled path. That is P and NH, can release the savepoint (SH), and runs the lane and view follow-ups, with no click involved.
+- **Idle timer:** `MenuIdle.fire` calls `closeIdleMenus`, which writes `closed` through the full journaled path. That is P and NH, can release the savepoint (SH), and runs the lane follow-up, with no click involved.
 - **Closing view:** every write through it also clears nested disclosures in the same transaction, and logs `close-nested`.
 - **Commits:** `navigation.commit`, then `journal.commit`, which writes `settings-history.json`.
-- **View follow:** `views.follow` calls `renderCache.follow`, which can build and move a session's view.
 - **Reload:** `reloadInto` wakes feeds and rebinds watchers. A `built` result retires the old state, and its `SourceRegistry` is disposed.
 - **Config sources:** `src/var-system/sources.ts` runs shell-command sources with `/bin/sh -c`. A code comment says a reload restarts every source.
 - **File watchers:** `config-watch` reloads the entry again, and `answers-watch` calls `reloadEvery`.
@@ -147,8 +144,6 @@ Other points:
 - Whether `renderCache.hold` creates an entry; `getOrCreate` does by name.
 - Whether a `step-state` click can reach a lane switch; the keys come from each config's gate, so I can't list them statically.
 - What exactly the `500` passed to `FileSessionStorage` does.
-
-**One code comment looks stale:** `journaled` says a history step can restore a load-config pick, but the literal `config-override` appears nowhere under `src` or `test` except `verbs/index.ts`, and `load-config` writes through the view that only records setting keys. So `undo` should not restore it.
 
 ## Key files
 

@@ -23,7 +23,8 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
+import { testVerbContext,
+  verbContextWith, effectsOf, clickUrl } from "./helpers/click";
 import { VERB_SLASH } from "../src/click/wire";
 import {
   SESSION_CLIENT_HINTS_KEY,
@@ -111,10 +112,9 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
       return { kind: "typed" };
     },
   };
-  const ctx = {
-    ...testVerbContext(sessionState, undefined, config),
-    typeSlash: typeInPane(claudeInput),
-  };
+  const ctx = verbContextWith(testVerbContext(sessionState, undefined, config), {
+    typeSlash: typeInPane(claudeInput)
+});
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
   );
