@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-771",
+      "ref": "refs/pull/771/merge",
+      "sha": "1dd639d9f63bdb824e7bdbb55e92c42ea6326893",
+      "timestamp": "2026-11-16T18:15:48.212Z",
+      "commits": [
+        {
+          "sha": "1dd639d9f63bdb824e7bdbb55e92c42ea6326893",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T11:14:37-07:00",
+          "message": "Merge addc1c5d1e71bf927db64f1f82d2d0652015da91 into df316f23603ca5bd744a8963232d120351758895\n"
+        },
+        {
+          "sha": "addc1c5d1e71bf927db64f1f82d2d0652015da91",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T11:14:18-07:00",
+          "message": "feat(effects): every act a click or a lane switch causes is an effect the host performs (candybar-host-renderer-x96a.lhy)\n\nThe renderer no longer acts in place. A click's copy, open, slash line,\nrun, repository answer and update, and every lane setup, leave its turn as\na typed effect (`copy`, `open`, `type-slash`, `run`, `approve-repo`,\n`apply-update`, `restart-claude`, `surface`). The host's act interpreter\nperforms each by kind and hands its outcome back as `effect-done`.\n\n- One click path: a leaf link and a `dispatch` fold the same steps, and\n  the per-verb wrappers are gone.\n- The renderer's `Acts` ledger holds a failed act on its session's bar.\n  One whose click named no session, or whose outcome reached no renderer,\n  is the daemon's own `act-failed` warning on every bar.\n- The host waits for the acts that end in a click's turn (copy, open,\n  type-slash, approve-repo, apply-update), and the click is answered with\n  how they ended. Runs, restarts and surfaces outlive it.\n- Lane decisions (owed setups, the tmux row at each request) live in the\n  renderer's `LaneSurfaces`. The host's `LaneSetups` only performs a\n  surface or a restart, one at a time per session.\n- The repository answer lands with the click's config changes, and its\n  landing reloads the session's config before the click's lanes are\n  measured, so an approved config that switches a lane on sets it up.\n- The trust book's reader is shared and its writer is the host's.\n- The adapter loses launch, typeSlash, applyUpdate, runs, laneSetups and\n  tmuxStatusLines, and the hold-click-error push.\n- The run owner's refusal count goes: a refused link is the click's bad\n  request on its event line.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "df316f23603ca5bd744a8963232d120351758895",
