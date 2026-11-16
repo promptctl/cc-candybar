@@ -2,7 +2,12 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
-import { build as buildHistogram, type Histogram } from "hdr-histogram-js";
+import {
+  durationHistogram,
+  durationsOf,
+  recordMs,
+  type Histogram,
+} from "./durations.js";
 import type {
   Durations,
   RunStats,
@@ -49,24 +54,6 @@ const NO_RUNS: SourceRunsStats["shell"] = {
 // workload ever sustains higher rates.
 const ROLLING_WINDOW_MS = 60_000;
 const ROLLING_BUFFER_CAP = 16384;
-
-// A histogram of every duration recorded, in microseconds, in bounded memory
-// however long the daemon runs.
-const durationHistogram = (): Histogram =>
-  buildHistogram({ bitBucketSize: "packed" });
-
-const msOf = (us: number): number => Math.round(us / 100) / 10;
-
-const durationsOf = (h: Histogram): Durations => {
-  const s = h.summary;
-  return {
-    count: s.totalCount,
-    p50Ms: msOf(s.p50),
-    p90Ms: msOf(s.p90),
-    p99Ms: msOf(s.p99),
-    maxMs: msOf(s.max),
-  };
-};
 
 export class RuntimeStats {
   readonly startedAt: Date;
@@ -186,12 +173,12 @@ export class RuntimeStats {
     const held = this.subprocessDurations.get(category);
     const hist = held ?? durationHistogram();
     if (held === undefined) this.subprocessDurations.set(category, hist);
-    hist.recordValue(Math.round(durationMs * 1000));
+    recordMs(hist, durationMs);
   }
 
   // A render's duration, from its start to its answer.
   recordTook(tookMs: number): void {
-    this.took.recordValue(Math.round(tookMs * 1000));
+    recordMs(this.took, tookMs);
   }
 
   private snapshotSubprocesses(): StatsSnapshot["subprocesses"] {

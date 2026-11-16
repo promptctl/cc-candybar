@@ -15,11 +15,13 @@ import {
   type RefreshTrigger,
 } from "../utils/refresh-ledger.js";
 import { inspect } from "node:util";
+import { encodeIntoCompressedBase64 } from "hdr-histogram-js";
 import {
-  build as buildHistogram,
-  encodeIntoCompressedBase64,
+  durationHistogram,
+  durationsOf,
+  recordMs,
   type Histogram,
-} from "hdr-histogram-js";
+} from "./durations.js";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
@@ -252,19 +254,25 @@ const answerOf = (answers: Answers, lane: Lane): string =>
 // count.
 const paceOf = (period: number): number => Math.round(1000 / period);
 
-// One of a feed's timings over its life, in ms: the frames counted, the
-// percentiles, the largest, and the mean and standard deviation. For lateness,
-// the spread between p50 and the tail is the jitter. The summary also writes
-// each whole histogram, compressed, so any other percentile, or a merge of many
-// feeds or of a day's summaries, is read from the log without asking the
-// daemon.
+// One of a feed's timings over its life. For lateness, the spread between p50
+// and the tail is the jitter.
 const distributionOf = (h: Histogram): string => {
-  const ms = (us: number): string => (us / 1000).toFixed(2);
-  const s = h.summary;
-  return s.totalCount === 0
+  const d = durationsOf(h);
+  const ms = (v: number): string => v.toFixed(2);
+  return d.count === 0
     ? "-"
-    : `n:${s.totalCount},p50:${ms(s.p50)},p90:${ms(s.p90)},p99:${ms(s.p99)},p99.9:${ms(s.p99_9)},max:${ms(s.max)},mean:${ms(h.mean)},stddev:${ms(h.stdDeviation)}`;
+    : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
 };
+
+// [LAW:one-source-of-truth] The closing summary alone writes each whole
+// histogram, compressed: it holds every frame of the feed's life once, so any
+// other percentile, or a merge of many feeds' closing summaries, is read from
+// the log without asking the daemon. A running summary's would count the
+// same frames again each minute.
+const histogramsOf = (feed: Feed, state: "running" | "closed"): string =>
+  state === "running"
+    ? ""
+    : ` drawHistogram=${encodeIntoCompressedBase64(feed.drawTime)} latenessHistogram=${encodeIntoCompressedBase64(feed.lateness)}`;
 
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_MS = 60_000;
@@ -531,8 +539,8 @@ export class FrameFeeds<Req> {
       fault: null,
       faulted: 0,
       pushed: 0,
-      drawTime: buildHistogram({ bitBucketSize: "packed" }),
-      lateness: buildHistogram({ bitBucketSize: "packed" }),
+      drawTime: durationHistogram(),
+      lateness: durationHistogram(),
       evaluated: 0,
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
@@ -659,8 +667,8 @@ export class FrameFeeds<Req> {
     const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed.drawn++;
-    feed.drawTime.recordValue(Math.round((finished - started) * 1000));
-    feed.lateness.recordValue(Math.round((finished - dueMoment) * 1000));
+    recordMs(feed.drawTime, finished - started);
+    recordMs(feed.lateness, finished - dueMoment);
     feed.evaluated += frame.evaluated;
     feed.cellBreaks += frame.cellBreaks;
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
@@ -865,7 +873,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed.drawTime)} drawHistogram=${encodeIntoCompressedBase64(feed.drawTime)} lateness=${distributionOf(feed.lateness)} latenessHistogram=${encodeIntoCompressedBase64(feed.lateness)}`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed.drawTime)} lateness=${distributionOf(feed.lateness)}${histogramsOf(feed, state)}`,
     );
     feed.summarizedAt = now;
   }

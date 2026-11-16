@@ -401,7 +401,7 @@ The steps are the tickets under the epic `candybar-host-renderer-x96a`, in its r
 
 | Item | Owner | Due |
 |---|---|---|
-| A-1 falls at 60 fps: the renderer process is one turn at a time, and a statusline request waits behind the feed's frames. Before a moving rate above 30 fps ships, a request must not queue behind frames. | Brandon | Before 60 fps ships |
+| A-1 falls at 60 fps: the renderer process is one turn at a time, and a statusline request waits behind the feed's frames. Before a moving rate above 30 fps ships, a request must not queue behind frames. | `cwq` | Before a moving rate above 30 fps ships |
 | A-2 and A-3 are untested. | `adf`'s done-when tests A-2, and `8ts`'s refused-fix test tests A-3. | Each before the step that relies on it |
 
 **A-1 stands at 30 fps and falls at 60.** Every reading is the render event's `took` in real use, compared with the in-process daemon's p50 4 ms, p99 11 ms over 18,548 requests.
@@ -409,11 +409,11 @@ The steps are the tickets under the epic `candybar-host-renderer-x96a`, in its r
 - At 30 fps, out of process, over about 30,000 requests: p50 3 ms, p99 6 ms. The hop to the renderer is p50 1 ms, p99 3 ms.
 - At 60 fps, over 21,863 requests: p50 8 ms, p99 30 ms, which is 19 ms over the baseline's p99. The draw itself is unchanged at p50 3 ms, p99 5 ms. The hop grew to p50 4 ms, p99 16 ms, because one animating feed keeps the renderer busy at 60 frames a second.
 
-**A-5 stands at both rates.** Every reading is the feed's own summary for a session animating in its pane.
+**A-5 stands at 30 fps, the rate it names.** Every reading is the feed's own summary for a session animating in its pane.
 
 - At 30 fps, each minute drew 29.2 to 29.4 frames a second, with a mean draw of 9 ms and no failures.
-- At 60 fps, over 89,134 frames in 26 minutes: 57.1 frames a second, and no failures. Each frame's lateness, from falling due to being drawn, was p50 6.0 ms, p99 13.3 ms, p99.9 34.4 ms, with a standard deviation of 3.0 ms. 99% of frames arrive within their 16.7 ms period. About one in a thousand is late by more than a period, which shows as a hitch.
-- Lateness follows the draw's time (p99 12.4 ms), not the timer, so the frames' evenness depends on what a draw costs.
+- At 60 fps, beyond that rate, frames fall short: over 89,134 frames in 26 minutes, 57.1 frames a second, and no failures. Each frame's lateness, from falling due to being drawn, was p50 6.0 ms, p99 13.3 ms, p99.9 34.4 ms, with a standard deviation of 3.0 ms. 99% of frames arrive within their 16.7 ms period. About one in a thousand is late by more than a period, which shows as a hitch.
+- A frame's lateness includes its draw, so the timer and the host's queue add roughly the gap between the two: at p99, 13.3 ms against a draw of 12.4 ms. The frames' evenness depends on what a draw costs.
 
 **A-4 stands, on three conditions** that `dbf` builds. The probe was a user LaunchAgent with a `Sockets` entry at a path beside the installed socket, so the live daemon was untouched. It started its program on the first connect, started it again after it exited, and recreated the socket when the agent loaded with its directory missing, as after a boot.
 

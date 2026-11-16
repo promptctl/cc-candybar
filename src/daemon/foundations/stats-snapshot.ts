@@ -43,15 +43,19 @@ export interface SourceSnapshots {
   >;
 }
 
-// A distribution of durations over a daemon's life, in ms: how many, the
-// percentiles and the largest. Read from a histogram of every one, never a
-// sample, so p99 means the 99th percentile of all of them.
+// A distribution of durations, in ms to three significant digits: how many,
+// the percentiles, the largest, and the mean and standard deviation. Read
+// from a histogram of every one, never a sample, so p99 means the 99th
+// percentile of all of them.
 export interface Durations {
   count: number;
   p50Ms: number;
   p90Ms: number;
   p99Ms: number;
+  p999Ms: number;
   maxMs: number;
+  meanMs: number;
+  stddevMs: number;
 }
 
 export interface StatsSnapshot {
@@ -78,7 +82,9 @@ export interface StatsSnapshot {
     errored: number;
     timedOut: number;
     inFlight: number;
-    // How long each render took, from its start to its answer.
+    // [LAW:one-source-of-truth] How long each render request took, from its
+    // start to its answer: every render event's `took`, a refused request's
+    // included.
     took: Durations;
   };
   // Hook-data fields this daemon has been sent that its schema does not know:

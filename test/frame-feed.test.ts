@@ -687,6 +687,24 @@ describe("a feed's draws and its summary", () => {
     expect(logged.getValueAtPercentile(99) / 1000).toBeCloseTo(5, 2);
   });
 
+  // [LAW:one-source-of-truth] A running summary states its distributions but
+  // writes no histogram: each would hold every frame since the feed opened, so
+  // a merge of a day's summaries would count early frames once a minute.
+  test("only the closing summary writes the histograms, so each frame is logged in one", async () => {
+    const { feeds, note, log, clock } = harness({ motion: "moving" });
+    note(S, "bar");
+    const close = feeds.subscribe(
+      S,
+      sub(() => {}),
+    );
+    await clock.settle(61_000);
+    const running = log.find((l) => / running /.test(l))!;
+    expect(running).toMatch(/ lateness=n:/);
+    expect(running).not.toMatch(/Histogram=/);
+    close();
+    expect(log.at(-1)).toMatch(/ closed .* latenessHistogram=\S+$/);
+  });
+
   // brandon-unfiled-3248.8ro6 step 7: what the feed's frames evaluated rides
   // beside what it drew.
   test("the summary counts the parts its frames evaluated", async () => {

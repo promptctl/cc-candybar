@@ -1,5 +1,20 @@
 import { RuntimeStats } from "../src/daemon/stats";
-import { type SourceSnapshots } from "../src/daemon/foundations/stats-snapshot";
+import {
+  type Durations,
+  type SourceSnapshots,
+} from "../src/daemon/foundations/stats-snapshot";
+
+// No durations recorded: every reading zero, never NaN.
+const NO_DURATIONS: Durations = {
+  count: 0,
+  p50Ms: 0,
+  p90Ms: 0,
+  p99Ms: 0,
+  p999Ms: 0,
+  maxMs: 0,
+  meanMs: 0,
+  stddevMs: 0,
+};
 import { EMPTY_STORES } from "./helpers/doctor-facts";
 import {
   formatStats,
@@ -210,7 +225,7 @@ describe("RuntimeStats.snapshot", () => {
       errored: 1,
       timedOut: 2,
       inFlight: 1,
-      took: { count: 0, p50Ms: 0, p90Ms: 0, p99Ms: 0, maxMs: 0 },
+      took: NO_DURATIONS,
     });
     expect(snap.gitCache.hits).toBe(100);
     expect(snap.gitCache.held).toBe(1);
@@ -265,20 +280,39 @@ describe("RuntimeStats.snapshot", () => {
       stats.launchStats.onEnd("git", 19);
     }
     const { requests, subprocesses } = stats.snapshot(EXTRAS);
-    expect(requests.took).toEqual({
+    expect(requests.took).toMatchObject({
       count: 1000,
       p50Ms: 2,
       p90Ms: 2,
       p99Ms: 40,
+      p999Ms: 40,
       maxMs: 500,
+      meanMs: 3.22,
     });
     expect(subprocesses.durations["git"]).toEqual({
       count: 100,
       p50Ms: 19,
       p90Ms: 19,
       p99Ms: 19,
+      p999Ms: 19,
       maxMs: 19,
+      meanMs: 19,
+      stddevMs: 0,
     });
+  });
+
+  // A value above where the histogram counts exactly falls in a bucket wider
+  // than a millisecond, whose highest value lies above it; a percentile still
+  // never reads above the largest value recorded.
+  test("no percentile reads above the largest duration recorded", () => {
+    const stats = new RuntimeStats(systemTimekeeper);
+    for (let i = 0; i < 10; i++) {
+      stats.launchStats.onStart("git");
+      stats.launchStats.onEnd("git", 9999);
+    }
+    expect(stats.snapshot(EXTRAS).subprocesses.durations["git"]).toMatchObject(
+      { p50Ms: 9999, p99Ms: 9999, p999Ms: 9999, maxMs: 9999 },
+    );
   });
 });
 
@@ -361,7 +395,16 @@ describe("formatStats", () => {
         errored: 2,
         timedOut: 1,
         inFlight: 0,
-        took: { count: 100, p50Ms: 3.1, p90Ms: 5, p99Ms: 11.2, maxMs: 161 },
+        took: {
+          count: 100,
+          p50Ms: 3.1,
+          p90Ms: 5,
+          p99Ms: 11.2,
+          p999Ms: 161,
+          maxMs: 161,
+          meanMs: 4.2,
+          stddevMs: 15.6,
+        },
       },
       unknownHookFields: ["fast_mode", "x\n  inFlight      9"],
       gitCache: {
@@ -519,7 +562,7 @@ describe("formatStats", () => {
         errored: 0,
         timedOut: 0,
         inFlight: 0,
-        took: { count: 0, p50Ms: 0, p90Ms: 0, p99Ms: 0, maxMs: 0 },
+        took: NO_DURATIONS,
       },
       unknownHookFields: [],
       gitCache: {
