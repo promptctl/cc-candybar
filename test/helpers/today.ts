@@ -7,7 +7,7 @@ import { todayReading } from "../../src/daemon/readings";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import type { Holds } from "../../src/utils/holds";
 import type { Instant } from "../../src/utils/instant";
-import { ok, pendingOf } from "../../src/utils/outcome";
+import { pendingOf } from "../../src/utils/outcome";
 import { laneOutcome } from "../../src/utils/reading";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
@@ -23,11 +23,7 @@ export async function todayInfo(
 ) {
   const lane = store.declareToday(holds, claudeConfigDir);
   await store
-    .refresh(
-      sessionIdOf(hookData.session_id),
-      hookData.transcript_path,
-      "change",
-    )
+    .refresh(sessionIdOf(hookData.session_id), hookData.transcript_path, "change")
     .usage();
   await laneOutcome(lane);
   return projected(store, lane, hookData, at);
@@ -48,22 +44,14 @@ export function todayNow(
 }
 
 // The `today` fact as the document reads it (`todayReading`), projected at the
-// draw's instant: what a draw shows. The store's refreshes stand in for the
-// session's transcript entry, so the entry has answered and the session's
-// record is what the store holds.
+// draw's instant: what a draw shows.
 function projected(
   store: SessionUsageStore,
   lane: ReturnType<SessionUsageStore["declareToday"]>,
   hookData: ClaudeHookData,
   at: Instant,
 ) {
-  const fact = todayReading(
-    lane,
-    store,
-    sessionIdOf(hookData.session_id),
-    hookData.transcript_path,
-    ok(null),
-  );
+  const fact = todayReading(lane, store, sessionIdOf(hookData.session_id));
   return fact.kind === "ok" ? projectToday(fact.value, at) : fact;
 }
 

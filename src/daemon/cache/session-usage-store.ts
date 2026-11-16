@@ -363,10 +363,7 @@ function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
 
 // Whether a transcript path lies under one of a directory set's `projects/`
 // roots — exactly when its session's `today` is that set's.
-export function under(
-  path: string | undefined,
-  roots: readonly string[],
-): boolean {
+function under(path: string | undefined, roots: readonly string[]): boolean {
   return path !== undefined && roots.some((root) => path.startsWith(root));
 }
 
@@ -632,12 +629,11 @@ export class SessionUsageStore {
     });
   }
 
-  // What the `today` fact (todayReading, src/daemon/readings.ts) reads here:
-  // a directory set's sums of every record's day buckets (declareToday), and
-  // a session's own days (daysOf) when no set sums its transcript.
-  // [LAW:no-silent-failure] A failed scan fails the set's sums — a total
-  // silently missing a session's work would be a confident wrong number,
-  // worse than a loud gap.
+  // The `today` projection, which declareToday and daysOutside below answer
+  // together: the cross-session sum of every record's today bucket.
+  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
+  // makes the whole projection `failed` — a total silently missing today's
+  // main work would be a confident wrong number, worse than a loud gap.
   //
   // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
   // the sum is that session plus every session whose transcript lives in THAT
@@ -672,19 +668,25 @@ export class SessionUsageStore {
     };
   }
 
-  // A session's own days as its record stands, for the `today` fact of a
-  // session whose transcript no directory set sums: no I/O, no fold.
-  // [LAW:no-silent-failure] Its last ingest failing is this read failing, so
-  // the fact fails with it and the draw shows a gap, never a total silently
-  // missing the session's own work.
-  daysOf(sessionId: SessionId): Outcome<Readonly<Record<string, DayUsage>>> {
+  // The rendering session's own days the set's sums do not hold, as the
+  // records stand, for the `today` fact: no I/O, no fold. A record under the
+  // set's roots is in its sums already, so it has none beyond them.
+  // [LAW:no-silent-failure] The session's last ingest failing is this read
+  // failing, so the fact fails with it and the draw shows a gap, never a total
+  // silently missing the session's own work.
+  daysOutside(
+    sessionId: SessionId,
+    roots: readonly string[],
+  ): Outcome<Readonly<Record<string, DayUsage>>> {
     const slot = this.sessions.get(sessionId);
     if (slot === undefined) return ABSENT;
     const failure = slot.failure.get();
     if (failure !== null) return failed(failure, "read");
-    return slot.record === undefined
-      ? ABSENT
-      : ok(Object.fromEntries(slot.record.days));
+    const record = slot.record;
+    if (record === undefined || under(record.transcriptPath, roots)) {
+      return ABSENT;
+    }
+    return ok(Object.fromEntries(record.days));
   }
 
   // A refresh's speed sample, over its one ingest of the session: its current
@@ -738,7 +740,9 @@ export class SessionUsageStore {
       // Drop oldest (smallest atMs ⇒ ring[0]) beyond the cap — a tail window,
       // not an archive.
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
-      slot.sampledAt = stamp;
+      // The stamp of the newest sample, so an older observation settling last
+      // does not make a read at the newest stamp sample it again.
+      if (ring.at(-1) === cur) slot.sampledAt = stamp;
       const observed = ok({ samples: [...ring] });
       answer(slot.speed, observed);
       return observed;

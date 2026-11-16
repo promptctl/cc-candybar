@@ -438,9 +438,8 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  // The session's own days, which the `today` fact carries beside the set's
-  // when no set sums its transcript.
-  test("a session's own days are absent before a record, its transcript's days after one, and its ingest failure when the refresh failed", async () => {
+  // The session's own days, which the `today` fact carries beside the set's.
+  test("a session's own days are absent before a record or under the set's roots, its transcript's days outside them, and its ingest failure when the refresh failed", async () => {
     const t = join(dir, "A.jsonl");
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
@@ -450,13 +449,17 @@ describe("SessionUsageStore — session projection", () => {
       sweepIntervalMs: 0,
     });
     try {
-      expect(store.daysOf(SID_A)).toEqual(ABSENT);
+      const elsewhere = ["/not/this/dir/"];
+      expect(store.daysOutside(SID_A, elsewhere)).toEqual(ABSENT);
       await usageFold(store, SID_A, t);
-      const own = store.daysOf(SID_A);
+      const own = store.daysOutside(SID_A, elsewhere);
       expect(Object.keys(own.kind === "ok" ? own.value : {})).toHaveLength(1);
+      // Under the set's roots the days are in its sums already.
+      expect(store.daysOutside(SID_A, [dir])).toEqual(ABSENT);
       // A directory is no transcript: the refresh fails, and so does the read.
       await usageFold(store, SID_G, dir);
-      expect(store.daysOf(SID_G).kind).toBe("failed");
+      expect(store.daysOutside(SID_G, elsewhere).kind).toBe("failed");
+      expect(store.daysOutside(SID_G, [dir]).kind).toBe("failed");
     } finally {
       store.close();
     }

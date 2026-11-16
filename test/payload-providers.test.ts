@@ -49,9 +49,10 @@ test("an owner whose close throws is logged by name with its stack, and every ow
   };
   const logged: string[] = [];
   try {
-    await runTeardown(built.closes, (level, message) =>
+    const failed = await runTeardown(built.closes, (level, message) =>
       logged.push(`${level} ${message}`),
     );
+    expect(failed).toEqual(["gitProvider close"]);
     expect(logged).toHaveLength(1);
     expect(logged[0]).toMatch(
       /^warn gitProvider close failed: Error: git refused\n\s+at /,

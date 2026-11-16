@@ -191,9 +191,19 @@ describe("a frame's payload", () => {
       payload.activity,
       payload.cache,
       payload.autocompact,
+      payload.speed,
     ]) {
       expect(lane).toEqual(pendingOf("unread"));
     }
+  });
+
+  test("a speed lane that failed draws no speed; the rest of the frame draws", async () => {
+    const { inputs, request, deps } = counted();
+    await request();
+    deps.usageStore.speedOf = () => failed("transcript unreadable", "read");
+    const payload = payloadOf(inputs(), DRAW);
+    expect(payload.speed).toBeUndefined();
+    expect(payload.git).toMatchObject({ branch: "main" });
   });
 
   test("a lane whose read throws is that lane's failure; the rest of the frame draws", async () => {
@@ -215,7 +225,7 @@ describe("a frame's payload", () => {
   test("a `today` read that throws is today's failure, logged; the rest of the frame draws", async () => {
     const { inputs, request, deps, logs } = counted();
     await request();
-    deps.usageStore.daysOf = () => {
+    deps.usageStore.daysOutside = () => {
       throw new Error("days bug");
     };
     expect(todayReadingOf(inputs())).toMatchObject({
@@ -227,23 +237,17 @@ describe("a frame's payload", () => {
     );
   });
 
-  // A transcript outside the set's roots is summed by no scan, so its days
-  // are the session's record alone, and a fault in the lane that refreshes
-  // that record is today's. (Under the roots the set's scan answers for
-  // them: test/today-facts.test.ts.)
-  test("a `today` whose session lane's refresh threw, outside the set's roots, is that fault", async () => {
-    const { inputs, request, deps } = counted();
+  test("a `today` whose session lane's refresh threw is that failure, before the lane is read", async () => {
+    const { inputs, reads, request, deps } = counted();
     await request();
-    expect(todayReadingOf(inputs())).toMatchObject({ kind: "ok" });
+    const before = reads["today"];
     deps.faults.refreshed(
       sessionIdOf(HOOK.session_id),
       "session",
       "ingest threw",
     );
-    expect(todayReadingOf(inputs())).toMatchObject({
-      kind: "failed",
-      reason: "ingest threw",
-    });
+    expect(todayReadingOf(inputs())).toEqual(failed("ingest threw", "read"));
+    expect(reads["today"]).toBe(before);
   });
 
   test("autocompact's controls are not answered while the context window they are capped to is not", async () => {

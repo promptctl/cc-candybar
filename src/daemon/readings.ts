@@ -15,10 +15,9 @@ import {
 import type { CacheExpiryProvider } from "../segments/cache.js";
 import { settledLane, type Current, type Lane } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import {
-  under,
-  type DaySums,
-  type SessionUsageStore,
+import type {
+  DaySums,
+  SessionUsageStore,
 } from "./cache/session-usage-store.js";
 import {
   type SpeedObservation,
@@ -334,19 +333,21 @@ export function readingsOf(
   // every lane is the failure of an entry that cannot refresh them (its
   // declaration threw, its source closed).
   const entry = lanes.transcript.current();
-  const guarded = <T>(name: string, value: () => T): T | Outcome<never> => {
+  // `name` is what the read is of, which is its lane but for `today`.
+  const read = <T>(
+    lane: RefreshLane,
+    value: () => T,
+    name: string = lane,
+  ): T | Outcome<never> => {
+    if (entry.kind === "failed") return entry;
+    const fault = deps.faults.of(sessionId, lane);
+    if (fault !== undefined) return fault;
     try {
       return value();
     } catch (e) {
       deps.log("error", `${name} read threw: ${inspect(e)}`);
       return failed(`${name}: ${String(e)}`, "read");
     }
-  };
-  const read = <T>(lane: RefreshLane, value: () => T): T | Outcome<never> => {
-    if (entry.kind === "failed") return entry;
-    const fault = deps.faults.of(sessionId, lane);
-    if (fault !== undefined) return fault;
-    return guarded(lane, value);
   };
   const laneReadings: Lanes = {
     git: lanes.git.current(),
@@ -376,18 +377,12 @@ export function readingsOf(
   };
   return {
     lanes: laneReadings,
-    // The session's lane gates today only where the directory set does not
-    // already sum the session's days (todayReading).
-    today: guarded("today", () =>
-      todayReading(
-        lanes.today,
-        deps.usageStore,
-        sessionId,
-        inputs.hookData.transcript_path,
-        // The session lane as a lane read sees it: the entry's failure, then
-        // its refresh's fault, then the entry.
-        read("session", () => entry),
-      ),
+    // The session's own days are its record's, so its lane's failure is
+    // today's.
+    today: read(
+      "session",
+      () => todayReading(lanes.today, deps.usageStore, sessionId),
+      "today",
     ),
     faults: REFRESH_LANES.flatMap((lane) => {
       const fault = deps.faults.of(sessionId, lane);
@@ -399,28 +394,18 @@ export function readingsOf(
 }
 
 // [LAW:single-enforcer] Today's facts as the session reads them: the directory
-// set's day sums with the session's own days beside them. The draw's
-// projection (`todayOf`) and the facts document read through this one
-// definition, behind `readingsOf`'s guard on a throw.
+// set's day sums with the session's own days beside them, failing if the
+// session's last ingest did. The draw's projection (`todayOf`) and the facts
+// document read through this one definition, behind `readingsOf`'s `read`
+// (the refresh's fault, a throw).
 export function todayReading(
   lane: Lane<DaySums>,
-  usage: Pick<SessionUsageStore, "daysOf">,
+  usage: Pick<SessionUsageStore, "daysOutside">,
   sessionId: SessionId,
-  transcriptPath: string | undefined,
-  entry: Current<null>,
 ): Current<TodayFacts> {
   const set = lane.current();
   if (set.kind !== "ok") return set;
-  // A transcript under the set's roots is the set's to sum: its scan reads
-  // it, and fails if it cannot.
-  if (under(transcriptPath, set.value.roots)) {
-    return ok({ sums: set.value.sums, own: {} });
-  }
-  // [LAW:no-silent-failure] Outside them, the session's days are its record's
-  // alone, so the transcript entry that refreshes the record failing, or not
-  // having answered yet, is today's too.
-  if (entry.kind !== "ok") return entry;
-  const own = usage.daysOf(sessionId);
+  const own = usage.daysOutside(sessionId, set.value.roots);
   if (own.kind === "failed") return own;
   return ok({ sums: set.value.sums, own: own.kind === "ok" ? own.value : {} });
 }

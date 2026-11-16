@@ -15,7 +15,7 @@ import type { Readings } from "./readings";
 
 // The shape of a facts document on the wire; a document of another version is
 // not this one.
-export const FACTS_VERSION = 2;
+export const FACTS_VERSION = 3;
 
 // A reading's value carried through `project`; every other arm as it stands.
 const over = <T, U>(

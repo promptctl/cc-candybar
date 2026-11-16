@@ -155,7 +155,8 @@ export interface SpeedSample {
 
 // The session's recent samples, oldest→newest. The pure projections live at
 // the render-payload boundary; the session usage store only remembers and
-// reports. tok/s and the burn-rate history fold from this one ring.
+// reports. [LAW:one-source-of-truth] tok/s and the burn-rate history fold
+// from this one ring, never two parallel stores.
 export interface SpeedObservation {
   readonly samples: readonly SpeedSample[];
 }
