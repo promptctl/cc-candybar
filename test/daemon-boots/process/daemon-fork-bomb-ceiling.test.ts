@@ -11,6 +11,13 @@ import {
   listRegistryFiles,
   readRegistryEntry,
 } from "../../../src/daemon/fork-bomb-breaker";
+import {
+  sameLiveProcess,
+  systemProbe,
+  type ProcessIdentity,
+} from "../../../src/daemon/process-fingerprint";
+import { systemLauncher } from "../../../src/proc/system-launcher";
+import { systemTimekeeper } from "../../../src/time";
 import { until } from "../../helpers/until";
 
 // [LAW:verifiable-goals] Integration proof for the daemon-side fork-bomb
@@ -55,42 +62,44 @@ afterAll(() => {
   fs.rmSync(registryDir, { recursive: true, force: true });
 });
 
-// The pids the registry names now: the daemon workers that hold its slots,
-// not their tsx wrappers.
-const registeredPids = (): number[] =>
+// Who the registry names now: the daemon workers that hold its slots, not
+// their tsx wrappers.
+const registered = (): ProcessIdentity[] =>
   listRegistryFiles(registryDir).flatMap((file) => {
     const entry = readRegistryEntry(file);
-    return entry === null ? [] : [entry.pid];
+    return entry === null ? [] : [entry];
   });
 
-// Whether `pid` has left the process table. A killed worker stays a zombie,
-// still counted live, until it is reaped: its socket closing or its
-// wrapper's exit is not that.
-const gone = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "ESRCH";
-  }
-};
+// [LAW:one-source-of-truth] Whether an entry still holds its slot, read as the
+// breaker reads it: a killed worker stays a zombie, still live, until it is
+// reaped, and a reused pid with another start time is not it.
+const probe = systemProbe(
+  systemLauncher({ inherited: process.env }, systemTimekeeper),
+);
+const holdsSlot = (entry: ProcessIdentity): Promise<boolean> =>
+  sameLiveProcess(entry.pid, entry.startTime, probe);
 
 describe("daemon-side fork-bomb circuit breaker (integration)", () => {
   jest.setTimeout(30_000);
 
   test("refuses the (ceiling+1)th isolated daemon; a dead sibling's slot is reclaimed", async () => {
+    // [LAW:single-enforcer] One cleanup list, run in reverse in a single
+    // `finally`, so an assertion's throw mid-test still kills every daemon.
     const cleanups: Array<() => void> = [];
     try {
       const d1 = await spawnDaemonWithEnv(fixture().env);
       cleanups.push(() => d1.killTree());
-      const before = registeredPids();
+      const before = registered().map(({ pid }) => pid);
       const d2 = await spawnDaemonWithEnv(fixture().env);
       cleanups.push(() => d2.killTree());
-      const [d2Pid] = registeredPids().filter((pid) => !before.includes(pid));
+      const added = registered().filter(({ pid }) => !before.includes(pid));
+      expect(added).toHaveLength(1);
+      const d2Entry = added[0]!;
 
       // Ceiling is full (2/2 live isolated daemons registered). The 3rd must
-      // refuse: the helper's diagnosis says it never bound its socket and
-      // exited with code 1.
+      // refuse: the helper's diagnosis says it never bound its socket, exited
+      // with code 1, and quotes the daemon's log, which the log writes out
+      // as the process exits, saying the breaker refused it.
       // One the breaker wrongly admitted is still a daemon to kill.
       const d3 = spawnDaemonWithEnv(fixture().env);
       d3.then(
@@ -98,7 +107,7 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
         () => {},
       );
       await expect(d3).rejects.toThrow(
-        /no socket at .*; the process exited \(code 1\)/,
+        /no socket at .*; the process exited \(code 1\)[\s\S]*fork-bomb breaker: .*; refusing to boot/,
       );
 
       // Kill one of the two admitted daemons WITHOUT its graceful shutdown
@@ -106,12 +115,16 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
       // registry entry is left behind as a stale file: the exact condition
       // admitDaemon()'s sweep exists to reclaim.
       d2.killTree();
-      await until(() => gone(d2Pid!), `d2's worker (pid ${d2Pid}) reaped`);
+      await until(
+        async () => !(await holdsSlot(d2Entry)),
+        `d2's worker (pid ${d2Entry.pid}) gone`,
+      );
 
-      // d4 is d3's control: a daemon set up as d3 was boots once a slot is
-      // free, so d3's refusal was the ceiling's, not a boot failure of its own.
+      // A daemon set up as d3 was boots once a slot is free, and its
+      // admission swept d2's stale entry.
       const d4 = await spawnDaemonWithEnv(fixture().env);
       cleanups.push(() => d4.killTree());
+      expect(registered().map(({ pid }) => pid)).not.toContain(d2Entry.pid);
     } finally {
       for (const cleanup of cleanups.reverse()) cleanup();
     }
