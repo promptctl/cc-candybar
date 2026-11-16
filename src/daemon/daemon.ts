@@ -882,12 +882,15 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           parts.renderer.ask({ kind }, instant());
       // The session state still flushes after a close failed (runTeardown).
       const teardown: readonly TeardownStep[] = [
+        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
+        // back before it goes (src/daemon/tmux-status.ts).
+        // [LAW:no-ambient-temporal-coupling] First, before anything awaited:
+        // a signal to the process group reaches the renderer too, and a step
+        // waiting on it can outlast shutdown's backstop.
+        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
         // journal in flight, so none opens after.
         ["journalTurns close", rendererStep("close-journal")],
-        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts).
-        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
