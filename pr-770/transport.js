@@ -34602,6 +34602,14 @@ function writeAtomic(at, text4, mode) {
     throw e;
   }
 }
+function readConfigText(file) {
+  try {
+    return fs_default.readFileSync(file, "utf8");
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw e;
+  }
+}
 function resolvedTarget(at) {
   return linkChain(at).at(-1);
 }
@@ -74725,23 +74733,15 @@ function addressText(at) {
 }
 
 // src/daemon/effect-interpreter.ts
-var readText = (file) => {
-  try {
-    return fs_default.readFileSync(file, "utf8");
-  } catch (e) {
-    if (e.code === "ENOENT") return null;
-    throw e;
-  }
-};
 var writeText = (file, text4) => text4 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text4);
 var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.text;
 function performChanges(changes) {
-  const landings = /* @__PURE__ */ new Map();
+  const rewrites = /* @__PURE__ */ new Map();
   try {
     for (const { target, changes: list2 } of changes) {
-      const file = target.path;
-      const prior = landings.get(file);
-      const was = prior === void 0 ? readText(file) : prior.was;
+      const file = resolvedTarget(target.path);
+      const prior = rewrites.get(file);
+      const was = prior === void 0 ? readConfigText(file) : prior.was;
       const applied3 = applyChanges(
         prior === void 0 ? was : prior.will,
         list2
@@ -74751,16 +74751,16 @@ function performChanges(changes) {
           kind: "refused",
           reason: `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said(applied3.read)}, it is ${said(applied3.found)}) \u2014 nothing was written`
         };
-      landings.set(file, { file, was, will: applied3.text });
+      rewrites.set(file, { file, was, will: applied3.text });
     }
   } catch (e) {
     return { kind: "failed", reason: `config read failed: ${message(e)}` };
   }
   const written2 = [];
   try {
-    for (const landing of landings.values()) {
-      writeText(landing.file, landing.will);
-      written2.push(landing);
+    for (const rewrite of rewrites.values()) {
+      writeText(rewrite.file, rewrite.will);
+      written2.push(rewrite);
     }
     return { kind: "ok" };
   } catch (e) {
@@ -76458,9 +76458,9 @@ var SourceRegistry = class _SourceRegistry {
       clearSettling?.();
       const outcome = raw;
       this.noteOutcome(name, outcome);
-      const readText2 = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
-      const next = readText2 || varDefault === void 0 ? outcome : fallback;
-      const torn2 = showingRead && readText2 && outcome.kind !== "ok";
+      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
+      const next = readText || varDefault === void 0 ? outcome : fallback;
+      const torn2 = showingRead && readText && outcome.kind !== "ok";
       const show2 = () => {
         showingRead = outcome.kind === "ok";
         this.store.setDocument(name, next);
@@ -86215,14 +86215,6 @@ function persistValueText(key, raw) {
     `persistValueText: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`
   );
 }
-function readConfigText(file) {
-  try {
-    return fs_default.readFileSync(file, "utf8");
-  } catch (e) {
-    if (e.code === "ENOENT") return null;
-    throw e;
-  }
-}
 function docOf(text4) {
   return /^\s*$/.test(text4) ? null : parseDocument(text4);
 }
@@ -87014,7 +87006,7 @@ var SettingsHistory = class {
       sessionState,
       file: (sessionId2, file, before, after) => {
         note(sessionId2, { kind: "file", file, before, after });
-        files.land(file, before, after);
+        files.land([{ file, before, after }]);
       },
       wrote: () => {
         written2 = true;
@@ -87131,11 +87123,15 @@ var SettingsHistory = class {
         `${verb}: ${stale.map(describe3).join(", ")} changed since that edit \u2014 refusing to overwrite it; this session's undo history no longer steps it`
       );
     }
+    click3.files.land(
+      step4.flatMap(
+        (change) => change.kind === "file" ? [{ file: change.file, before: change[from], after: change[to] }] : []
+      )
+    );
     for (const change of step4) {
+      if (change.kind === "file") continue;
       const value = change[to];
-      if (change.kind === "file")
-        click3.files.land(change.file, change[from], value);
-      else if (value === null) click3.held.clear(sessionId2, change.key);
+      if (value === null) click3.held.clear(sessionId2, change.key);
       else click3.held.set(sessionId2, change.key, value);
     }
     click3.stepped(sessionId2, step4);
@@ -90304,33 +90300,37 @@ var ConfigWrites = class {
   open = /* @__PURE__ */ new Map();
   landing = null;
   waiting = [];
+  closed = false;
   // [LAW:one-source-of-truth] `file` as the open click left it: its last
   // write, else the disk, which holds every click ahead of it.
   read(file) {
     const written2 = this.open.get(file);
     return written2 === void 0 ? this.disk(file) : written2.after;
   }
-  // A write of the open click: one change per file, from the click's first
-  // read of it to its last write. A write from text other than the click's
-  // own (a history step, from what it recorded) lands as the changes between
-  // its two texts, applied over what the click already wrote.
-  land(file, before, after) {
-    const open2 = this.open.get(file);
-    if (open2 === void 0) {
+  // Writes of the open click, landing together or not at all: one change per
+  // file, from the click's first read of it to its last write. A write from
+  // text other than the click's own (a history step, from what it recorded)
+  // lands as the changes between its two texts, applied over what the click
+  // already wrote.
+  land(writes) {
+    const landed = writes.map(({ file, before, after }) => {
+      const open2 = this.open.get(file);
+      if (open2 === void 0) return { file, before, after };
+      const applied3 = applyChanges(open2.after, diffChanges(before, after));
+      if (applied3.kind === "moved")
+        throw new BadVerbArgs(
+          `${addressText(applied3.at)} in ${file} was changed earlier in this click \u2014 nothing was written`
+        );
+      return { file, before: open2.before, after: applied3.text };
+    });
+    for (const { file, before, after } of landed)
       this.open.set(file, { before, after });
-      return;
-    }
-    const applied3 = applyChanges(open2.after, diffChanges(before, after));
-    if (applied3.kind === "moved")
-      throw new BadVerbArgs(
-        `${addressText(applied3.at)} in ${file} was changed earlier in this click \u2014 nothing was written`
-      );
-    this.open.set(file, { before: open2.before, after: applied3.text });
   }
   // The open click is over. Its changes join its turn's effects, and its
   // consequence waits for them; a click that changed no file has its
   // consequence now.
   seal(effects, session, { consequence, refused }) {
+    if (this.closed) return this.open.clear();
     const written2 = [...this.open].flatMap(([path43, { before, after }]) => {
       const list2 = diffChanges(before, after);
       return list2.length === 0 ? [] : [{ path: path43, list: list2 }];
@@ -90367,6 +90367,10 @@ var ConfigWrites = class {
     this.landing = null;
     for (const resume of this.waiting.splice(0)) resume();
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
+  }
+  // No click seals after this: the daemon is closing.
+  close() {
+    this.closed = true;
   }
   // Resolves once no click's changes are on their way.
   landed() {
@@ -90699,6 +90703,7 @@ function startOver(inputs, sessionState, history, host) {
       // the one in flight stops at its next await once the host's abort lands.
       case "close-journal":
         journalTurns.close();
+        configWrites.close();
         return { kind: "close-journal" };
       case "close-views":
         renderCache.close();

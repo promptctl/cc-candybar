@@ -4,15 +4,22 @@
     {
       "version": "pr-770",
       "ref": "refs/pull/770/merge",
-      "sha": "f73c4d1a0b50b7b34cfa3c556e216730ff4cf391",
-      "timestamp": "2026-11-16T16:46:12.087Z",
+      "sha": "1c87fef32854e421487bc680be1b44ea91b3fdf1",
+      "timestamp": "2026-11-16T16:59:54.260Z",
       "commits": [
         {
-          "sha": "f73c4d1a0b50b7b34cfa3c556e216730ff4cf391",
+          "sha": "1c87fef32854e421487bc680be1b44ea91b3fdf1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T16:45:16Z",
-          "message": "Merge 593100cfaa0601e3fa54516ec028d34259816cd6 into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
+          "timestamp": "2026-11-16T16:58:46Z",
+          "message": "Merge 6f77728b175cf32e87289789c3b4c6ff97c0a5ae into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
+        },
+        {
+          "sha": "6f77728b175cf32e87289789c3b4c6ff97c0a5ae",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T09:58:33-07:00",
+          "message": "fix(click): a click cut off by close lands nothing, and a history step lands all its files or none (candybar-host-renderer-x96a.axx)\n\n- A click the daemon's close cut off seals nothing, so nothing of it is\n  performed under the teardown.\n- A step's file writes land together: one that contradicts the click\n  lands none of them.\n- The interpreter keys a turn's files by the file a write lands in, so\n  two paths to one file are one rewrite.\n- The host and the renderer read a config file through one reader.\n- Edit mode's cancel memory line says what a moved file setting does.\n"
         },
         {
           "sha": "593100cfaa0601e3fa54516ec028d34259816cd6",
