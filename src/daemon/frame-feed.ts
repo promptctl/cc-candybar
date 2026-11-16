@@ -205,10 +205,11 @@ interface Feed {
   fault: string | null;
   faulted: number;
   pushed: number;
-  drawMs: number;
-  // [LAW:nothing-unseen] Frame pacing: each frame's lateness, from the moment
-  // it fell due to the moment it was drawn, in microseconds. The rate says how
-  // many frames a feed drew; the spread of their lateness says how evenly.
+  // [LAW:nothing-unseen] Each frame's draw, from asking the renderer to its
+  // answer, and its lateness, from the moment it fell due to the moment it was
+  // drawn, both in microseconds. The rate says how many frames a feed drew;
+  // the spread of their lateness says how evenly.
+  readonly drawTime: Histogram;
   readonly lateness: Histogram;
   // Parts its frames evaluated: between data changes, those reading the instant.
   evaluated: number;
@@ -251,12 +252,13 @@ const answerOf = (answers: Answers, lane: Lane): string =>
 // count.
 const paceOf = (period: number): number => Math.round(1000 / period);
 
-// A feed's frame lateness over its life, in ms: the frames counted, the
-// percentiles, the largest, and the mean and standard deviation. The spread
-// between p50 and the tail is the jitter. The summary also writes the whole
-// histogram, compressed, so any other percentile, or a merge of many feeds or
-// of a day's summaries, is read from the log without asking the daemon.
-const latenessOf = (h: Histogram): string => {
+// One of a feed's timings over its life, in ms: the frames counted, the
+// percentiles, the largest, and the mean and standard deviation. For lateness,
+// the spread between p50 and the tail is the jitter. The summary also writes
+// each whole histogram, compressed, so any other percentile, or a merge of many
+// feeds or of a day's summaries, is read from the log without asking the
+// daemon.
+const distributionOf = (h: Histogram): string => {
   const ms = (us: number): string => (us / 1000).toFixed(2);
   const s = h.summary;
   return s.totalCount === 0
@@ -529,7 +531,7 @@ export class FrameFeeds<Req> {
       fault: null,
       faulted: 0,
       pushed: 0,
-      drawMs: 0,
+      drawTime: buildHistogram({ bitBucketSize: "packed" }),
       lateness: buildHistogram({ bitBucketSize: "packed" }),
       evaluated: 0,
       cellBreaks: 0,
@@ -657,7 +659,7 @@ export class FrameFeeds<Req> {
     const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed.drawn++;
-    feed.drawMs += finished - started;
+    feed.drawTime.recordValue(Math.round((finished - started) * 1000));
     feed.lateness.recordValue(Math.round((finished - dueMoment) * 1000));
     feed.evaluated += frame.evaluated;
     feed.cellBreaks += frame.cellBreaks;
@@ -863,7 +865,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms lateness=${latenessOf(feed.lateness)} latenessHistogram=${encodeIntoCompressedBase64(feed.lateness)}`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed.drawTime)} drawHistogram=${encodeIntoCompressedBase64(feed.drawTime)} lateness=${distributionOf(feed.lateness)} latenessHistogram=${encodeIntoCompressedBase64(feed.lateness)}`,
     );
     feed.summarizedAt = now;
   }

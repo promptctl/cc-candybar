@@ -674,11 +674,11 @@ describe("a feed's draws and its summary", () => {
     await clock.settle(1000);
     close();
     const summary = log.at(-1)!;
-    expect(summary).toMatch(
-      new RegExp(
-        ` lateness=n:${state.renders},p50:5\\.00,p90:5\\.00,p99:5\\.00,p99\\.9:5\\.00,max:5\\.00,mean:5\\.00,stddev:0\\.00 `,
-      ),
-    );
+    // Every render takes 5 ms and starts the moment its frame falls due, so
+    // each frame is drawn 5 ms after it fell due.
+    const fiveMs = `n:${state.renders},p50:5\\.00,p90:5\\.00,p99:5\\.00,p99\\.9:5\\.00,max:5\\.00,mean:5\\.00,stddev:0\\.00`;
+    expect(summary).toMatch(new RegExp(` draw=${fiveMs} `));
+    expect(summary).toMatch(new RegExp(` lateness=${fiveMs} `));
     const logged = decodeFromCompressedBase64(
       / latenessHistogram=(\S+)/.exec(summary)![1]!,
     );

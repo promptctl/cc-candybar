@@ -43,6 +43,17 @@ export interface SourceSnapshots {
   >;
 }
 
+// A distribution of durations over a daemon's life, in ms: how many, the
+// percentiles and the largest. Read from a histogram of every one, never a
+// sample, so p99 means the 99th percentile of all of them.
+export interface Durations {
+  count: number;
+  p50Ms: number;
+  p90Ms: number;
+  p99Ms: number;
+  maxMs: number;
+}
+
 export interface StatsSnapshot {
   pid: number;
   // [LAW:one-source-of-truth] The daemon's own baked package stamp — set
@@ -67,6 +78,8 @@ export interface StatsSnapshot {
     errored: number;
     timedOut: number;
     inFlight: number;
+    // How long each render took, from its start to its answer.
+    took: Durations;
   };
   // Hook-data fields this daemon has been sent that its schema does not know:
   // what Anthropic has added since the schema was written.
@@ -155,8 +168,8 @@ export interface StatsSnapshot {
     drainedBytes: number;
     drainsCut: number;
     pipeErrors: number;
-    p50DurationMs: Record<string, number>;
-    p99DurationMs: Record<string, number>;
+    // How long each category's launches ran, keyed as `byCategory` is.
+    durations: Record<string, Durations>;
   };
   nextRestartReason: string | null;
   // The `doctor-probe` links that reached this daemon, newest last — what

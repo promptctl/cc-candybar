@@ -378,11 +378,13 @@ export async function replyTo(
         clientLeft: clientLeft() ? "Y" : "N",
         queued: `${queuedMs}ms`,
       });
+      const took = elapsedMs(clock, t0);
+      stats.recordTook(took);
       const { level, line } = requestEvent(
         "render",
         facts,
         rendered.outcome,
-        elapsedMs(clock, t0),
+        took,
       );
       parts.log(level, line);
       return {
