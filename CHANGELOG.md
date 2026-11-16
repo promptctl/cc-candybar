@@ -1,3 +1,14 @@
+## [1.224.0](https://github.com/promptctl/cc-candybar/compare/v1.223.0...v1.224.0) (2026-11-16)
+
+### Features
+
+* **click:** a click's config writes are changes the host lands whole (candybar-host-renderer-x96a.axx) ([#770](https://github.com/promptctl/cc-candybar/issues/770)) ([df316f2](https://github.com/promptctl/cc-candybar/commit/df316f23603ca5bd744a8963232d120351758895))
+* **click:** every act a click or a lane switch causes is an effect the host performs once its turn has landed (candybar-host-renderer-x96a.lhy) ([#772](https://github.com/promptctl/cc-candybar/issues/772)) ([d7dfe00](https://github.com/promptctl/cc-candybar/commit/d7dfe00a0b58a559b3f47e2058445eff3c2f3960))
+
+### Bug Fixes
+
+* **daemon:** a shutdown puts the tmux status lines back after its own tmux calls land, before it waits on the renderer ([#775](https://github.com/promptctl/cc-candybar/issues/775)) ([acbe8d7](https://github.com/promptctl/cc-candybar/commit/acbe8d7f00ff771cf71a9fa7c33723e6256ede7e))
+
 ## [1.223.0](https://github.com/promptctl/cc-candybar/compare/v1.222.1...v1.223.0) (2026-11-16)
 
 ### Features
