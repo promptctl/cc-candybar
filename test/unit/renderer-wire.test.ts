@@ -13,6 +13,7 @@ import {
 import {
   rendererOf,
   type AdapterInput,
+  type RendererInput,
   type Renderer,
 } from "../../src/renderer-interface/interface";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
@@ -83,6 +84,11 @@ function overLines(host: AdapterToHost): Renderer {
     send: (line) => queueMicrotask(() => lines.heard(crossed(line))),
     memory: () => ({ rss: 1, heapTotal: 1 }),
     heapSnapshot: () => {},
+    clock: {
+      defer: () => {
+        throw new Error("these pushes draw no frame");
+      },
+    },
   });
   return lines.renderer;
 }
@@ -144,6 +150,91 @@ describe("the renderer over lines", () => {
       kind: thrownHere.kind,
       message: thrownHere.message,
     });
+  });
+
+  test("an event, and what it awaits, runs ahead of every frame heard with it or after it, and a frame draws one per turn", async () => {
+    const seen: string[] = [];
+    const turns: Array<() => void> = [];
+    const answers = new Map<number, () => void>();
+    const serve = serveRenderer({
+      renderer: rendererOf({
+        event: async (input) => {
+          const name = (input.event as unknown as { name: string }).name;
+          seen.push(name);
+          await Promise.resolve();
+          seen.push(`${name} continued`);
+          return {} as never;
+        },
+        adapter: async (input) => {
+          seen.push((input.push as { session: string }).session);
+          return {} as never;
+        },
+      }),
+      host: hostOverLines(() => {}),
+      send: (line) => {
+        const answered = answers.get((line as { n: number }).n);
+        if (answered === undefined)
+          throw new Error(`an answer to no input: ${JSON.stringify(line)}`);
+        answered();
+      },
+      memory: () => ({ rss: 1, heapTotal: 1 }),
+      heapSnapshot: () => {},
+      clock: {
+        defer: (step) => {
+          turns.push(step);
+          return () => {};
+        },
+      },
+    });
+    let n = 0;
+    // Hears one input line, and resolves once its answer is sent.
+    const hear = (input: RendererInput): Promise<void> => {
+      n += 1;
+      const line: HostLine = { kind: "input", n, input };
+      return new Promise((answered) => {
+        answers.set(line.n, answered);
+        serve(line);
+      });
+    };
+    const event = (name: string): Promise<void> =>
+      hear({ kind: "event", event: { name } as never, at: 0 as Instant });
+    const frame = (name: string): Promise<void> =>
+      hear({
+        kind: "adapter",
+        push: { kind: "frame", session: name as SessionId } as never,
+        at: 0 as Instant,
+      });
+    const turn = (): void => {
+      const step = turns.shift();
+      if (step === undefined) throw new Error("no frame's turn was owed");
+      step();
+    };
+
+    // One chunk: a frame, a request, a frame.
+    const f1 = frame("f1");
+    const e1 = event("e1");
+    const f2 = frame("f2");
+    await e1;
+    expect(seen).toEqual(["e1", "e1 continued"]);
+
+    turn();
+    await f1;
+    expect(seen).toEqual(["e1", "e1 continued", "f1"]);
+
+    // Heard between the two frames' turns: it goes ahead of the second.
+    await event("e2");
+    expect(turns).toHaveLength(1);
+    turn();
+    await f2;
+    expect(seen).toEqual([
+      "e1",
+      "e1 continued",
+      "f1",
+      "e2",
+      "e2 continued",
+      "f2",
+    ]);
+    expect(turns).toEqual([]);
   });
 
   test("a line split across chunks is heard whole, and a last line without its newline at the end", () => {

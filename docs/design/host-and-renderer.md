@@ -401,7 +401,7 @@ The steps are the tickets under the epic `candybar-host-renderer-x96a`, in its r
 
 | Item | Owner | Due |
 |---|---|---|
-| A-1 falls at 60 fps: the renderer process is one turn at a time, and a statusline request waits behind the feed's frames. Before a moving rate above 30 fps ships, a request must not queue behind frames. | `cwq` | Before a moving rate above 30 fps ships |
+| A-1 falls at 60 fps: the renderer is one thread, and a chunk's lines are heard in one synchronous loop, so a frame drawn as it is heard goes ahead of the requests heard with or after it. Before a moving rate above 30 fps ships, a request must not queue behind frames. | `cwq` | Before a moving rate above 30 fps ships |
 | A-2 and A-3 are untested. | `adf`'s done-when tests A-2, and `8ts`'s refused-fix test tests A-3. | Each before the step that relies on it |
 
 **A-1 stands at 30 fps and falls at 60.** Every reading is the render event's `took` in real use, compared with the in-process daemon's p50 4 ms, p99 11 ms over 18,548 requests.

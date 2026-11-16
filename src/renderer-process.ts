@@ -103,6 +103,7 @@ export function runRenderer(world: World): void {
         return { rss, heapTotal };
       },
       heapSnapshot: (file) => void v8.writeHeapSnapshot(file),
+      clock: world.clock,
     });
     send({ kind: "started", pid: process.pid });
   };

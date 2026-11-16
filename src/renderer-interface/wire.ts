@@ -11,6 +11,7 @@ import type { Failure } from "../daemon/foundations/verb-error.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { Host } from "../host-facts.js";
+import type { Timekeeper } from "../time.js";
 import type { Asked } from "../utils/outcome.js";
 import type { AdapterToHost } from "./adapter.js";
 import type { Crosses } from "./crosses.js";
@@ -482,22 +483,37 @@ export function serveRenderer(deps: {
   readonly send: (line: RendererLine) => void;
   readonly memory: () => MemorySizes;
   readonly heapSnapshot: (file: string) => void;
+  readonly clock: Pick<Timekeeper, "defer">;
 }): (line: HostLine) => void {
   const { renderer, send } = deps;
+  type InputLine = Extract<HostLine, { kind: "input" }>;
+  // [LAW:no-silent-failure] An input whose answer rejected is answered as
+  // that input's failure, never left to end the process.
+  const answered = (line: InputLine): void =>
+    void (
+      renderer.answer as (
+        i: RendererInput,
+      ) => Promise<RendererOutput | AdapterOutput>
+    )(line.input).then(
+      (output) => send({ kind: "output", n: line.n, output }),
+      (thrown: unknown) =>
+        send({ kind: "rejected", n: line.n, failure: failureOf(thrown) }),
+    );
+  // [LAW:no-ambient-temporal-coupling] The renderer is one thread, and a
+  // chunk's lines are heard in one synchronous loop, so a frame drawn as it is
+  // heard draws ahead of every event heard with it or after it, and of their
+  // continuations. Each frame is drawn on a turn of its own, after the frame
+  // heard before it, so an event waits behind at most the frame drawing as it
+  // arrives.
+  let lastFrame: Promise<void> = Promise.resolve();
   return (line) => {
     switch (line.kind) {
       case "input":
-        // [LAW:no-silent-failure] An input whose answer rejected is answered
-        // as that input's failure, never left to end the process.
-        void (
-          renderer.answer as (
-            i: RendererInput,
-          ) => Promise<RendererOutput | AdapterOutput>
-        )(line.input).then(
-          (output) => send({ kind: "output", n: line.n, output }),
-          (thrown: unknown) =>
-            send({ kind: "rejected", n: line.n, failure: failureOf(thrown) }),
-        );
+        if (line.input.kind === "adapter" && line.input.push.kind === "frame")
+          lastFrame = lastFrame
+            .then(() => new Promise<void>((turn) => deps.clock.defer(turn)))
+            .then(() => answered(line));
+        else answered(line);
         return;
       case "returned":
         deps.host.returned(line.n, line.returned);
