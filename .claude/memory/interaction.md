@@ -54,7 +54,7 @@ A run click runs only what the bar drew. The draw evaluates the program, its arg
 
 Every link the bar draws is signed, because any web page can open a `cc-candybar://` link. The host opens the signature before any renderer sees the click, so a link the bar did not draw reaches no verb. A config can draw any link, so the bar's signature proves only that the bar drew it; a run link also carries a mac of its own over the run and its declaration, which proves the draw evaluated this run from what the config declared. The key lives in the state directory and outlives restarts, so a link still in scrollback keeps working while its action is declared as it was drawn. The run's mac covers the declaration, because a link drawn before an edit would otherwise run a program the config no longer declares. What the program is allowed to touch (its directory, the sources it refreshes) comes from the declaration the link names, never from the link.
 
-The click is answered at once and the program runs after it. Its failure therefore can't be the click's error: it reaches the session's bar through the session's state when the program ends.
+The click is answered at once and the program runs after it. Its failure therefore can't be the click's error: it comes back as the run's outcome when the program ends, and the renderer holds it on the session's bar.
 
 ## A failed click's error
 

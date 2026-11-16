@@ -40,7 +40,7 @@ import {
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
-import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
+import { performClick, BadVerbArgs } from "../src/renderer/verbs";
 import { SessionState } from "../src/renderer/session-state";
 import {
   recordRender,
@@ -501,12 +501,6 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(
       /unknown effect verb "dispatch"/,
     );
-  });
-
-  test("dispatch is the only verb that resolves a nested dispatch — leaf table excludes it", () => {
-    // The full table dispatches `dispatch`, but the leaf table it folds over
-    // does not — so an effect can never re-enter dispatch.
-    expect(VERBS.has(VERB_DISPATCH)).toBe(true);
   });
 
   test("per-effect errors are written to click.error in session state for bar display", async () => {

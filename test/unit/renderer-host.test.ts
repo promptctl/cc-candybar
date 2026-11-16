@@ -2,6 +2,7 @@
 // back the reply of the push's own kind or rejects, and `tell` says a failure
 // on the log, since nothing awaits it.
 
+import { NO_ACTS } from "../helpers/renderer-parts";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { failureOf } from "../../src/daemon/foundations/verb-error";
 import type { AdapterOutput } from "../../src/renderer-interface/interface";
@@ -29,6 +30,7 @@ function hostOver(output: AdapterOutput) {
         throw new Error("a push holds no session");
       },
     },
+    NO_ACTS,
   );
   return { host, said };
 }

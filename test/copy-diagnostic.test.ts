@@ -3,23 +3,11 @@
 // under that key: the full prompt reaches the clipboard while the link stays
 // short, and a key that draw does not list is refused loudly.
 
-import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
-import { type LaunchOpts } from "../src/proc/launcher";
-import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
 import { SessionState } from "../src/renderer/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
-import { clickUrl, testVerbContext,
+import { actsOf, clickUrl, testVerbContext,
   verbContextWith } from "./helpers/click";
-
-const launched: LaunchOpts[] = [];
-const recording = {
-  ...unscriptedLauncher,
-  launch: async (opts: LaunchOpts) => {
-    launched.push(opts);
-    return { ok: true as const, exitCode: 0, stdout: "", stderr: "" };
-  },
-};
 
 const SID = "sid-copy";
 const PROMPT = `Fix my config.\n\n${"a placement that names nothing; ".repeat(200)}`;
@@ -37,35 +25,29 @@ const drawn = () => {
   return { list, copies };
 };
 
-beforeEach(() => {
-  launched.length = 0;
-});
-
 test("the first line's click copies the full prompt, though its link carries only a key", async () => {
   const { list, copies } = drawn();
   const link = list[0]!.lines[0]![0].link!;
   expect(link.length).toBeLessThan(200);
   expect(link).not.toContain("placement");
-  await clickUrl(link, verbContextWith(testVerbContext(new SessionState()), {
-    launch: clickLaunchVia(recording),
+  const ctx = verbContextWith(testVerbContext(new SessionState()), {
     diagnosticCopy: (sid, by, key) =>
-      sid === SID && by === "request" ? copies.get(key) : undefined
-}));
-  expect(launched).toHaveLength(1);
-  expect(launched[0]!.bin).toBe("/usr/bin/pbcopy");
-  expect(launched[0]!.stdinInput).toBe(PROMPT);
+      sid === SID && by === "request" ? copies.get(key) : undefined,
+  });
+  await clickUrl(link, ctx);
+  expect(actsOf(ctx, "copy").map(({ session, text }) => ({ session, text }))).toEqual([
+    { session: SID, text: PROMPT },
+  ]);
 });
 
 test("a key the session's last draw no longer lists is refused, and nothing is copied", async () => {
   const { list } = drawn();
   const link = list[0]!.lines[0]![0].link!;
-  await expect(
-    clickUrl(link, verbContextWith(testVerbContext(new SessionState()), {
-      launch: clickLaunchVia(recording),
-      diagnosticCopy: () => undefined
-})),
-  ).rejects.toThrow(/no longer listed/);
-  expect(launched).toHaveLength(0);
+  const ctx = verbContextWith(testVerbContext(new SessionState()), {
+    diagnosticCopy: () => undefined,
+  });
+  await expect(clickUrl(link, ctx)).rejects.toThrow(/no longer listed/);
+  expect(actsOf(ctx, "copy")).toEqual([]);
 });
 
 test("a dropped placement's prompt names the file to edit and carries the error whole", () => {

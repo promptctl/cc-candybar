@@ -24,6 +24,8 @@ import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneFeeds } from "../config/lanes";
 import type { Change } from "../config/config-changes";
+import type { SlashLine } from "../claude-input/slash-line";
+import type { RepoAnswer } from "../config/loader/repo-gate";
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -149,8 +151,9 @@ export type Event =
     }
   | {
       readonly kind: "effect-done";
-      // The session of the effect it reports on.
-      readonly session: SessionId;
+      // The session of the effect it reports on: none for an act whose click
+      // named none.
+      readonly session: SessionId | null;
       readonly of: EffectId;
       readonly outcome: EffectOutcome;
     }
@@ -221,7 +224,100 @@ export interface ConfigChange {
   readonly changes: readonly Change[];
 }
 
-export type Effect = Present | ConfigChange;
+// [LAW:effects-at-boundaries] Every other act a click or a lane switch
+// causes, as the operation it names: the host's interpreter performs it and
+// answers its `effect-done`, so no renderer code launches, types into a pane
+// or writes the trust book.
+// [LAW:types-are-the-program] A copy or an open carries the session its click
+// named, null when its steps name none: its failure is held on that session's
+// bar, or on every bar when it has none.
+export type Act =
+  | {
+      readonly kind: "copy";
+      readonly id: EffectId;
+      readonly session: SessionId | null;
+      readonly text: string;
+    }
+  | {
+      // Which program opens it is the host's choice.
+      readonly kind: "open";
+      readonly id: EffectId;
+      readonly session: SessionId | null;
+      readonly target: string;
+    }
+  | {
+      // Checked and typed in one step: the interpreter reads the pane its
+      // session's newest request reported and types only into the bare input
+      // box.
+      readonly kind: "type-slash";
+      readonly id: EffectId;
+      readonly session: SessionId;
+      readonly line: SlashLine;
+    }
+  | {
+      readonly kind: "run";
+      readonly id: EffectId;
+      readonly session: SessionId;
+      readonly program: RunProgram;
+    }
+  | {
+      // [LAW:single-enforcer] exception: the repository is named by its
+      // directory, not by its layer's role in a session's chain, until config
+      // discovery hands in snapshots.
+      readonly kind: "approve-repo";
+      readonly id: EffectId;
+      readonly session: SessionId;
+      readonly dir: string;
+      readonly answer: RepoAnswer;
+    }
+  | {
+      // No version crosses: the host's update watch decides what applies from
+      // its own provenance, so a version here would be a second clock.
+      readonly kind: "apply-update";
+      readonly id: EffectId;
+      readonly session: SessionId;
+    }
+  | {
+      // Claude Code exited and started again under the attach launcher, on
+      // the same session: what turning the statusline lane on takes.
+      readonly kind: "restart-claude";
+      readonly id: EffectId;
+      readonly session: SessionId;
+    }
+  | {
+      readonly kind: "surface";
+      readonly id: EffectId;
+      readonly session: SessionId;
+      readonly surface: PushedSurface;
+      readonly on: boolean;
+    };
+
+// A surface the host pushes frames to, each set up by its own adapter.
+export type PushedSurface = "band" | "pane" | "tmux-status";
+
+// [LAW:types-are-the-program] One run, as the click settled it: the program
+// and its arguments as the draw evaluated them, the environment laid over the
+// host's, the directory, and the sources it refreshes, so the host decides
+// nothing about what runs.
+// [LAW:single-enforcer] exception: the directory is a path and each refresh
+// names its storage folder until config discovery hands in snapshots.
+export interface RunProgram {
+  readonly action: string;
+  readonly argv: readonly [string, ...string[]];
+  // Set over the host's environment; null unsets.
+  readonly env: Readonly<Record<string, string | null>>;
+  readonly cwd: string;
+  readonly refreshes: readonly RunRefresh[];
+}
+
+// A source a run makes stale: its full name, for the event, and the storage
+// folder its file is in.
+export interface RunRefresh {
+  readonly name: string;
+  readonly folder: string;
+}
+
+export type Effect = Present | ConfigChange | Act;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.

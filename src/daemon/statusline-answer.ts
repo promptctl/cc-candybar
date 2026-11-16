@@ -179,7 +179,8 @@ export async function answerStatusline(
   // [LAW:types-are-the-program] Every present the turn returned, in its
   // order, is performed or refused: the first statusline frame for this
   // request answers it, and nothing else may; a turn that threw answers
-  // nothing. A change was the host's to perform as the turn answered.
+  // nothing. A change or an act was the host's to perform as the turn
+  // answered.
   let answer: Present | null = null;
   for (const effect of effects) {
     switch (effect.kind) {
@@ -194,7 +195,7 @@ export async function answerStatusline(
           done(effect, `a second statusline frame for request ${id}`);
         else answer = effect;
         break;
-      case "change":
+      default:
         break;
     }
   }

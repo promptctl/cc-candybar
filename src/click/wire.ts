@@ -528,9 +528,14 @@ export function clickSessionOf(
   verb: string,
   value: string,
 ): ParsedSessionId | null {
-  return sessionOfEffects(
-    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }],
-  );
+  return sessionOfEffects(stepsOf(verb, value));
+}
+
+// [LAW:one-type-per-behavior] A click is its steps: a `dispatch/` link lists
+// them, and a link naming one step's verb (scrollback from before every link
+// listed its steps) is its one step.
+export function stepsOf(verb: string, value: string): ParsedEffect[] {
+  return verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
 }
 
 export function sessionOfEffects(

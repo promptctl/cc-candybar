@@ -38,7 +38,7 @@ import {
   renderOptionsOf,
 } from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { performClick, type VerbContext } from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   fileHeldSettings,
@@ -221,9 +221,7 @@ function rig(
     // click — looked up in the one table, so a click is one history step.
     click: async (url: string) => {
       const { verb, value } = linkClick(url);
-      const handler = VERBS.get(verb);
-      if (!handler) throw new Error(`no handler for verb "${verb}"`);
-      await handler(value, ctx);
+      await performClick(verb, value, ctx);
     },
     dispose: () => entry.registry.dispose(),
   };

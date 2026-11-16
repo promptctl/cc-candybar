@@ -13,9 +13,9 @@ import type { DaemonLogger } from "../utils/logger";
 const HANDOFF_POLL_MS = 50;
 
 // [LAW:one-type-per-behavior] A click that hands a URL to the platform's
-// opener. Unlike `clickLaunch`, what the opener starts must outlive the click:
-// xdg-open with no browser running stays the browser's parent, so a launch the
-// bound ends would end the browser with it. The opener runs as a job, whose
+// opener. Unlike an act's launch (`clickLaunchVia`), what the opener starts
+// must outlive the click: xdg-open with no browser running stays the browser's
+// parent, so a launch the bound ends would end the browser with it. The opener runs as a job, whose
 // group nothing aimed at the daemon reaches — a closing daemon included — and
 // the click waits on its verdict for `boundMs`. [LAW:no-silent-failure] An
 // opener that exits non-zero inside the bound fails the click with what it

@@ -66,12 +66,14 @@ export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 // and what the launcher stands behind (whether what it launches dies with it,
 // and the latest pipe event, whose hold each draw judges at its own instant
 // and for whom it draws, src/utils/event-hold.ts), and how the last renderer
-// process ended, held the same way: null while none has.
+// process ended, held the same way: null while none has; and the last act
+// that failed with no bar of its own to show it on, held the same way.
 export interface DaemonFacts {
   readonly update: UpdateState;
   readonly fileEvents: readonly FileEventsWarning[];
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;
+  readonly actFailed: HeldEvent | null;
 }
 
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the

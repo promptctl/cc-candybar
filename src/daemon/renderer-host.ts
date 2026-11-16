@@ -1,13 +1,14 @@
 // The host's one path to a renderer: every input it hands one is one turn,
 // which answers with the turn's output or with how the turn failed: a turn's
 // throw comes back as a value, never as a rejection. Every turn's
-// subscriptions are taken here, in the order the turns answered, and its
-// config changes performed; a present a turn that answers no request returned
-// is refused. A caller
+// subscriptions are taken here, in the order the turns answered, its config
+// changes performed and its acts started; a present a turn that answers no
+// request returned is refused. A caller
 // whose own event records the turn takes it by `answer`; every other input is
 // taken by `deliver`, which writes the turn's own line.
 
 import {
+  type Act,
   type ConfigChange,
   type Effect,
   type EffectOutcome,
@@ -25,15 +26,43 @@ import { elapsedMs, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
-import { CrossedFailure, failureOf } from "./foundations/verb-error.js";
+import {
+  badRequest,
+  CrossedFailure,
+  failureOf,
+  type Failure,
+} from "./foundations/verb-error.js";
 import { performChanges } from "./effect-interpreter.js";
+import type { ActInterpreter } from "./act-interpreter.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
 
-// A turn as the host took it: how it ended, and what the hop to its renderer
-// cost, null for a turn no renderer answered.
-export type HostTurn = TurnOutcome & { readonly hopMs: number | null };
+// A turn as the host took it: how it ended, what the hop to its renderer
+// cost, null for a turn no renderer answered, and how the acts its caller
+// waited for failed, null when none did.
+export type HostTurn = TurnOutcome & {
+  readonly hopMs: number | null;
+  readonly actsFailed: Failure | null;
+};
+
+// [LAW:types-are-the-program] What the acts a turn's caller waited for make of
+// its answer, as a click's own steps do (src/renderer/verbs/index.ts): the
+// daemon's failure when any failed, a bad request when each was refused.
+function actsFailed(
+  done: ReadonlyArray<{ readonly act: Act; readonly outcome: EffectOutcome }>,
+): Failure | null {
+  const failures = done.flatMap(({ act, outcome }) =>
+    outcome.kind === "ok" ? [] : [{ kind: outcome.kind, act, outcome }],
+  );
+  if (failures.length === 0) return null;
+  const message = failures
+    .map(({ act, outcome }) => `${act.kind}: ${outcome.reason}`)
+    .join("; ");
+  return failures.some((f) => f.kind === "failed")
+    ? { kind: "threw", message, detail: message }
+    : badRequest(message);
+}
 
 export interface RendererHost {
   readonly name: RendererName;
@@ -67,6 +96,13 @@ export function rendererHost(
     // a session under a turn on it, however long the turn waits.
     readonly holding: (session: SessionId) => () => void;
   },
+  acts: {
+    readonly interpreter: ActInterpreter;
+    // [LAW:no-silent-failure] An act that failed where no renderer can show
+    // it: its click named no session, or no renderer was live to take its
+    // outcome. Every bar shows it, as the daemon's own event.
+    readonly unseen: (text: string) => void;
+  },
 ): RendererHost {
   const held = async (input: EventInput): Promise<HostTurn> => {
     const session = sessionOf(input.event);
@@ -81,30 +117,42 @@ export function rendererHost(
       // [LAW:single-enforcer] A turn's changes are performed here, together,
       // in the order the turns answered, before anything else here can throw
       // and before the turn's caller hears it: the renderer opens its next
-      // journal only once they have landed. A present answers the request
-      // whose turn returned it, so one another turn returns is refused here.
-      // No effect is left owed its `effect-done`, and the turn's caller
-      // hears it only after each `effect-done` turn, so a click is answered
-      // after what its landing did, in or out of process.
+      // journal only once they have landed. Then every act starts, in the order the turn returned them
+      // (src/daemon/act-interpreter.ts). A present answers the request whose
+      // turn returned it, so one another turn returns is refused here. No
+      // effect is left owed its `effect-done`, and the turn's caller hears it
+      // only after the `effect-done` turn of every change and of every act
+      // that ends in its turn, so a click is answered after what its landing
+      // did, in or out of process, and with how those acts ended.
       const changes = output.effects.filter(
         (effect): effect is ConfigChange => effect.kind === "change",
       );
       const landed = changes.length === 0 ? null : performChanges(changes);
-      const settled = output.effects.flatMap((effect) =>
-        effect.kind === "change"
-          ? [settle(effect, landed!)]
-          : input.event.kind === "request"
-            ? []
-            : [
+      const settled: Array<Promise<unknown>> = [];
+      const waited: Array<Promise<{ act: Act; outcome: EffectOutcome }>> = [];
+      for (const effect of output.effects) {
+        switch (effect.kind) {
+          case "change":
+            settled.push(settle(effect, landed!));
+            break;
+          case "present":
+            if (input.event.kind !== "request")
+              settled.push(
                 settle(effect, {
                   kind: "failed",
                   reason: `a ${input.event.kind} turn answers no request`,
                 }),
-              ],
-      );
+              );
+            break;
+          default: {
+            const done = performed(effect);
+            if (acts.interpreter.endsInTurn(effect)) waited.push(done);
+          }
+        }
+      }
       collector.subscribed(subscriptions);
       await Promise.all(settled);
-      return output;
+      return { ...output, actsFailed: actsFailed(await Promise.all(waited)) };
     } finally {
       release();
     }
@@ -121,9 +169,26 @@ export function rendererHost(
         record: [],
         effects: [],
         hopMs: null,
+        actsFailed: null,
       }),
     );
-  const settle = (effect: Effect, outcome: EffectOutcome): Promise<unknown> =>
+  // An act performed, and its outcome handed back to the renderer.
+  const performed = async (
+    act: Act,
+  ): Promise<{ act: Act; outcome: EffectOutcome }> => {
+    const outcome = await acts.interpreter.perform(act);
+    const delivered = await settle(act, outcome);
+    if (
+      outcome.kind !== "ok" &&
+      (act.session === null || delivered.kind === "threw")
+    )
+      acts.unseen(`${act.kind}: ${outcome.reason}`);
+    return { act, outcome };
+  };
+  const settle = (
+    effect: Effect,
+    outcome: EffectOutcome,
+  ): Promise<TurnOutcome> =>
     deliver(
       {
         kind: "event",

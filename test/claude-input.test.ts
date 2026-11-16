@@ -5,7 +5,7 @@
 // `tmux` on PATH that records its argv and serves a captured screen — so the
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
-import { typeInPane } from "../src/claude-input/typing";
+import { typeInPane, typeSlashAct } from "../src/claude-input/typing";
 import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
@@ -21,7 +21,8 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext,
-  verbContextWith, effectsOf, clickUrl } from "./helpers/click";
+  effectsOf, clickUrl, performActs } from "./helpers/click";
+import type { VerbContext } from "../src/renderer/verbs";
 import { VERB_SET_STATE, VERB_SLASH, effectsUrl } from "../src/click/wire";
 import { SESSION_CLIENT_HINTS_KEY, SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
@@ -231,16 +232,24 @@ function runtime(tmux: TmuxHint | null) {
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const raw = drawPayload(config, compiled, store, registry, { session_id: "s1" }, instantOf(new Date()), OPTS).frame;
-  const logged: string[] = [];
-  const ctx = verbContextWith(testVerbContext(sessionState, undefined, config), {
-    log: (_level: string, msg: string) => logged.push(msg),
-    typeSlash: typeInPane(productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)))
-});
+  const ctx = testVerbContext(sessionState, undefined, config);
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
   );
-  return { urls, ctx, sessionState, logged };
+  return { urls, ctx, sessionState, perform: typing(ctx, tmux) };
 }
+
+// The host's typing of a click's `type-slash` acts into the pane the session
+// reported (`tmux`), through the tmux edge, settled back as the host would.
+const typing = (ctx: VerbContext, tmux: TmuxHint | null) => {
+  const type = typeInPane(
+    productionClaudeInputEdge(
+      systemLauncher({ inherited: process.env }, systemTimekeeper),
+    ),
+  );
+  return () =>
+    performActs(ctx, "type-slash", ({ line }) => typeSlashAct(type, tmux, line));
+};
 
 describe("a slash click", () => {
   test("renders one effect per action carrying the declared line", async () => {
@@ -256,6 +265,7 @@ describe("a slash click", () => {
     serve(SCREENS.draft);
     const rt = runtime(HINT);
     await clickUrl(rt.urls[1]!, rt.ctx);
+    expect(await rt.perform()).toEqual([{ kind: "ok" }]);
     expect(invocations()).toEqual([
       ["-S", HINT.socket, "display", "-p", "-t", "%7", "#{pane_in_mode}", ";", "capture-pane", "-p", "-t", "%7"],
       [
@@ -267,13 +277,13 @@ describe("a slash click", () => {
       ],
     ]);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/model opus");
-    expect(rt.logged).toContain("slash: typed /model opus into %7 (session=s1)");
   });
 
   test("a line ending in `;` is typed whole: tmux never parses it as a separator", async () => {
     serve(SCREENS.idle);
     const rt = runtime(HINT);
     await clickUrl(rt.urls[2]!, rt.ctx);
+    await rt.perform();
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/compact keep the api;");
     expect(invocations()[1]).not.toContain("/compact keep the api;");
   });
@@ -282,23 +292,32 @@ describe("a slash click", () => {
     serve(SCREENS.idle);
     const rt = runtime(HINT);
     await clickUrl(rt.urls[0]!, rt.ctx);
-    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/typed a command moments ago/);
-    expect(lastClickError(rt.sessionState, S1)?.text ?? null).toMatch(/\/compact was not typed/);
+    await clickUrl(rt.urls[0]!, rt.ctx);
+    expect(await rt.perform()).toEqual([
+      { kind: "ok" },
+      { kind: "refused", reason: expect.stringMatching(/typed a command moments ago/) },
+    ]);
+    expect(lastClickError(rt.sessionState, S1)?.text ?? null).toMatch(/type-slash: \/compact was not typed/);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer", "display"]);
   });
 
   test("a click the pane refused types nothing, so clicking again at once goes through", async () => {
     serve(SCREENS.permission);
     const rt = runtime(HINT);
-    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/not at its prompt/);
+    await clickUrl(rt.urls[0]!, rt.ctx);
+    expect(await rt.perform()).toEqual([
+      { kind: "refused", reason: expect.stringMatching(/not at its prompt/) },
+    ]);
     serve(SCREENS.idle);
     await clickUrl(rt.urls[0]!, rt.ctx);
+    expect(await rt.perform()).toEqual([{ kind: "ok" }]);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "display", "load-buffer"]);
   });
 
   test("outside tmux: refused in the bar, and tmux is never run", async () => {
     const rt = runtime(null);
-    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(/not running inside tmux/);
+    await clickUrl(rt.urls[0]!, rt.ctx);
+    await rt.perform();
     expect(lastClickError(rt.sessionState, S1)?.text ?? null).toMatch(
       /\/compact was not typed: this Claude Code is not running inside tmux/,
     );
@@ -313,7 +332,10 @@ describe("a slash click", () => {
   ])("%s: read, refused, nothing typed", async (_, screen, inMode, reason) => {
     serve(screen, inMode);
     const rt = runtime(HINT);
-    await expect(clickUrl(rt.urls[0]!, rt.ctx)).rejects.toThrow(reason);
+    await clickUrl(rt.urls[0]!, rt.ctx);
+    expect(await rt.perform()).toEqual([
+      { kind: "refused", reason: expect.stringMatching(reason) },
+    ]);
     expect(invocations().map((argv) => argv[2])).toEqual(["display"]);
   });
 
@@ -335,6 +357,7 @@ describe("a slash click", () => {
     await expect(clickUrl(forged, rt.ctx)).rejects.toThrow(
       `"/exit" is not a command this config declares (it declares: ${declared.join(", ")})`,
     );
+    expect(await rt.perform()).toEqual([]);
     expect(invocations()).toEqual([]);
   });
 });
@@ -363,9 +386,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  const ctx = verbContextWith(testVerbContext(sessionState, undefined, config), {
-    typeSlash: typeInPane(productionClaudeInputEdge(systemLauncher({ inherited: process.env }, systemTimekeeper)))
-});
+  const ctx = testVerbContext(sessionState, undefined, config);
   // What the daemon's payload carries for that hint (RenderPayload.tmux).
   const payload = {
     session_id: "s1",
@@ -376,7 +397,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
     linkUrls(drawPayload(config, compiled, store, registry, payload, instantOf(new Date()), OPTS).frame).map(
       (u) => ({ url: u, effects: effectsOf(u) }),
     );
-  return { config, links, ctx, sessionState };
+  return { config, links, ctx, sessionState, perform: typing(ctx, tmux) };
 }
 
 const typedLines = (effects: { verb: string; args: string[] }[]) =>
@@ -389,6 +410,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     const button = rt.links().find((l) => typedLines(l.effects).includes(line))!;
     expect(button.effects).toEqual([{ verb: VERB_SLASH, args: ["s1", line] }]);
     await clickUrl(button.url, rt.ctx);
+    expect(await rt.perform()).toEqual([{ kind: "ok" }]);
     expect(invocations().map((argv) => argv[2])).toEqual(["display", "load-buffer"]);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe(line);
   });
@@ -408,6 +430,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
       { verb: VERB_SET_STATE, args: ["s1", "commands.clear.armed", "armed"] },
     ]);
     await clickUrl(arm!.url, rt.ctx);
+    expect(await rt.perform()).toEqual([]);
     expect(invocations()).toEqual([]);
 
     // Armed: a confirm that disarms and types /clear, and a ✕ that only disarms.
@@ -420,6 +443,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
       { verb: VERB_SET_STATE, args: ["s1", "commands.clear.armed", "disarmed"] },
     ]);
     await clickUrl(confirm!.url, rt.ctx);
+    expect(await rt.perform()).toEqual([{ kind: "ok" }]);
     expect(fs.readFileSync(path.join(dir, "stdin"), "utf8")).toBe("/clear");
     expect(rt.sessionState.get(S1, "commands.clear.armed")).toBe("disarmed");
     expect(typedLines(clearLinks().flatMap((l) => l.effects))).toEqual([]);
@@ -441,7 +465,10 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
       rt.links().find((l) => l.effects.some((e) => e.args[1] === "commands.clear.armed"))!.url,
       rt.ctx,
     );
-    await expect(clickUrl(armed()!.url, rt.ctx)).rejects.toThrow(/not running inside tmux/);
+    await clickUrl(armed()!.url, rt.ctx);
+    expect(await rt.perform()).toEqual([
+      { kind: "refused", reason: expect.stringMatching(/not running inside tmux/) },
+    ]);
     expect(lastClickError(rt.sessionState, S1)?.text ?? null).toMatch(
       /\/clear was not typed: this Claude Code is not running inside tmux/,
     );

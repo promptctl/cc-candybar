@@ -741,7 +741,7 @@ async function handleClick(
   switch (delivered.kind) {
     case "answered":
       facts.push(...delivered.record);
-      return { kind: "ok" };
+      return delivered.actsFailed ?? { kind: "ok" };
     case "threw":
       facts.push(...delivered.record);
       return delivered.failure;

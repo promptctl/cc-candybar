@@ -690,9 +690,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // lane setups ended (src/daemon/lane-setup.ts).
   const renderEvents = (sid: string): string[] =>
     renderEventsOf(logLines(env), sid);
+  // The renderer's line for each lane a click or request moved, naming what
+  // started it; the host's lines for what each setup did name no cause.
   const laneLines = (sid: string): string[] =>
     logLines(env).filter(
-      (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
+      (l) =>
+        l.includes(" lane: ") &&
+        / by=(click|owed) /.test(l) &&
+        l.includes(`(session=${sid})`),
     );
   const setState = async (
     sid: string,

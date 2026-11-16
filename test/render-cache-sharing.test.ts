@@ -36,7 +36,7 @@ import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
 import { effectsOf } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
-import { VERBS } from "../src/renderer/verbs";
+import { performClick } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -546,7 +546,7 @@ const walkMenu = async (
     const { verb, value } = linkClick(hit.url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
+    for (const e of effects) await performClick(e.verb, e.value, ctx);
     last = drawnBytes(view);
   }
 };

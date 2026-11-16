@@ -28,7 +28,7 @@
 
 import { previewSigner } from "./click/link-signer.js";
 import { locations, stateDir } from "./daemon/paths.js";
-import { repoConfigs } from "./renderer/repo-configs.js";
+import { repoConfigs } from "./config/repo-book.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
 import type { ConfigResolution } from "./config/loader/discovery.js";
 import fs from "node:fs";
@@ -352,6 +352,7 @@ export function checkPayload(
       fileEvents: [],
       launcher: [],
       rendererEnded: null,
+      actFailed: null,
     },
     at,
   );

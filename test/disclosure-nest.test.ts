@@ -9,7 +9,7 @@ import { linkUrls } from "./helpers/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { performClick, type VerbContext } from "../src/renderer/verbs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
@@ -161,7 +161,7 @@ test("◁ back over a closed door restores the menu with what was open in it", a
   await rt.clickWriting(PICKERS, "candybar.apply.effect");
   await rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
   expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
-  await VERBS.get("back")!(SID, rt.ctx);
+  await performClick("back", SID, rt.ctx);
   expect(rt.held(SETTINGS_ANCHOR)).toBe("open");
   expect(rt.held(TAB)).toBe("look");
   expect(rt.held(PICKERS)).toBe("candybar.apply.effect");

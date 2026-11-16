@@ -20,7 +20,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { VERBS } from "../src/renderer/verbs";
+import { performClick, type VerbContext } from "../src/renderer/verbs";
 import {
   configureMember,
   EDIT_MODE_KEY,
@@ -132,7 +132,8 @@ describe("block's thresholds are settings configure mode steps", () => {
     const rt = thresholdBar(BLOCK_ONLY, 10);
     const warn = placementDraftKey("default", "block", "warnAt");
     const error = placementDraftKey("default", "block", "errorAt");
-    const setState = VERBS.get("set-state")!;
+    const setState = (value: string, ctx: VerbContext) =>
+    performClick("set-state", value, ctx);
     const ctx = { ...rt.ctx, configFor: () => load(BLOCK_ONLY) };
     await expect(setState(`${SID}/${warn}/70/${error}/60`, ctx),
     ).rejects.toThrow(/"errorAt" \(60\) is below "warnAt" \(70\)/);

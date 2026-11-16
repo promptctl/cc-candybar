@@ -73,7 +73,7 @@ import {
   VERB_DISPATCH,
   VERB_RESET_CONFIG,
 } from "../src/click/wire";
-import { VERBS } from "../src/renderer/verbs";
+import { performClick } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
@@ -592,9 +592,7 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
+      await performClick(e.verb, e.value, ctx);
     }
   };
   return { config, store, render, click, log };
@@ -809,7 +807,8 @@ describe("apply-layout-op click → the config file", () => {
       config,
       durable.host,
     );
-    const applyLayoutOp = VERBS.get("apply-layout-op")!;
+    const applyLayoutOp = (value: string, ctx: VerbContext) =>
+    performClick("apply-layout-op", value, ctx);
     const before = durable.text();
     await expect(
       applyLayoutOp(
@@ -834,7 +833,8 @@ describe("apply-layout-op click → the config file", () => {
       config,
       durable.host,
     );
-    const applyLayoutOp = VERBS.get("apply-layout-op")!;
+    const applyLayoutOp = (value: string, ctx: VerbContext) =>
+    performClick("apply-layout-op", value, ctx);
     await expect(
       applyLayoutOp(
         `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
@@ -1067,7 +1067,7 @@ async function fireVerb(
   ctx: VerbContext,
   ...args: string[]
 ): Promise<void> {
-  await VERBS.get(verb)!(args.map(encodeURIComponent).join("/"), ctx);
+  await performClick(verb, args.map(encodeURIComponent).join("/"), ctx);
 }
 
 // A session that has rendered from the fixture's file — the origin a durable
@@ -1556,7 +1556,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(parsed.presets.default.root).toEqual({ rows: {} });
       // The same click again is stale, and names the root it stages.
       await expect(removeDirectory).rejects.toThrow(
-        /^root holds no placement "directory"/,
+        /root holds no placement "directory"/,
       );
     } finally {
       for (const fn of cleanups) fn();

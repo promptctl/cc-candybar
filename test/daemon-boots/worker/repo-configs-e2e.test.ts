@@ -23,7 +23,7 @@ import {
 } from "../../helpers/spawn-isolated-daemon";
 import { VERB_REPO_CONFIG } from "../../../src/click/wire";
 import { logPath } from "../../../src/daemon/paths";
-import { repoConfigs, repoConfigsPath } from "../../../src/renderer/repo-configs";
+import { repoConfigs, repoConfigsPath } from "../../../src/config/repo-book";
 import { stateDir } from "../../../src/daemon/paths";
 import {
   indicatorOf,

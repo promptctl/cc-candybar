@@ -26,7 +26,7 @@ import type {
 import { mainRenderer } from "../src/renderer/main";
 import { renderFrame, type RendererParts } from "../src/renderer/draw-bar";
 import { MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
+import { NO_VERBS, rendererParts, NO_ACTS } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
 import { instantAt, type Instant } from "../src/utils/instant";
@@ -219,7 +219,8 @@ const threw = (output: RendererOutput) => {
 const presentOf = (effects: readonly Effect[]): Present => {
   expect(effects).toHaveLength(1);
   const [present] = effects;
-  if (present?.kind !== "present") throw new Error("the turn presented nothing");
+  if (present?.kind !== "present")
+    throw new Error("the turn presented nothing");
   return present;
 };
 
@@ -310,7 +311,7 @@ describe("a statusline request", () => {
     await done(r, present, false);
     expect(recorded).toEqual([]);
     expect(threw(await done(r, present, true)).failure.message).toMatch(
-      /neither a present nor a change on its way/,
+      /no present, write or act on its way/,
     );
   });
 });
@@ -467,6 +468,7 @@ describe("the session's config, ahead of its request", () => {
       hearingEvents(t.r, (input) => kinds.push(input.event.kind)),
       () => {},
       t.rig.served.collector,
+      NO_ACTS,
     );
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
@@ -550,6 +552,7 @@ describe("two requests of one session at different keys", () => {
       }),
       () => {},
       t.rig.served.collector,
+      NO_ACTS,
     );
     const ask = (pane: string, id: number) =>
       answerStatusline(

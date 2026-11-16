@@ -262,6 +262,7 @@ describe("the close as a renderer turn", () => {
       effects: [],
       record: [],
       hopMs: 0,
+      actsFailed: null,
     });
     const idle = { firedAt: at(now), idleS: 30, timeoutS: 30 };
     await closeByTurn(host, () => at(now), S, idle, null);
@@ -281,6 +282,7 @@ describe("the close as a renderer turn", () => {
       effects: [],
       record: [],
       hopMs: 0,
+      actsFailed: null,
     });
     const failures: string[] = [];
     const idle = new MenuIdle({

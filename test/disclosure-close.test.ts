@@ -42,7 +42,7 @@ import {
 import { sharedMenuStateKey } from "../src/config/menu-keys";
 import { GROUP_NS } from "../src/config/reserved-names";
 import type { RichText } from "@promptctl/rich-js";
-import { VERBS } from "../src/renderer/verbs";
+import { performClick } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
@@ -147,9 +147,7 @@ function build(src: string, withDefault: boolean) {
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
+      await performClick(e.verb, e.value, ctx);
     }
   };
   // Click the first link on any rendered line that writes `key` = `value`.

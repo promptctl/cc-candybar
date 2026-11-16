@@ -9,6 +9,7 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
+import { NO_ACTS } from "../helpers/renderer-parts";
 import { UNFOLLOWED } from "../helpers/daemon-facts";
 import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
 import { eventRenderer, hearingEvents } from "../helpers/renderers";
@@ -132,16 +133,23 @@ async function answer(
   const facts: RequestFacts = [];
   const named = new Set<string>();
   const answered = await answerStatusline(
-    rendererHost("main", CLOCK, renderer, (_level, line) => logged.push(line), {
-      subscribed: (subscriptions) => void subscribed.push(subscriptions),
-      // Mirrors the collector: only a session a request has named is held.
-      holding: (session) => {
-        if (!named.has(session)) return () => {};
-        holds.count++;
-        holds.sessions.push(session);
-        return () => void holds.count--;
+    rendererHost(
+      "main",
+      CLOCK,
+      renderer,
+      (_level, line) => logged.push(line),
+      {
+        subscribed: (subscriptions) => void subscribed.push(subscriptions),
+        // Mirrors the collector: only a session a request has named is held.
+        holding: (session) => {
+          if (!named.has(session)) return () => {};
+          holds.count++;
+          holds.sessions.push(session);
+          return () => void holds.count--;
+        },
       },
-    }),
+      NO_ACTS,
+    ),
     {
       requested: (req) => {
         named.add(req.hookData.session_id);

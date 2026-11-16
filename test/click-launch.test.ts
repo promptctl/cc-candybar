@@ -1,16 +1,19 @@
-// A click's launch of a program (src/renderer/verbs/index.ts): one that fails
-// says what the launch itself said of why, so the click's reply and its event
-// carry the cause, not only the class of failure.
+// A click's launch of a program (a copy's or an open's act, and an opener's
+// handoff): one that fails says what the launch itself said of why, so the
+// outcome and the click's event carry the cause, not only the class of failure.
 
-import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
+import {
+  clickLaunchVia,
+  launchOutcome,
+} from "../src/daemon/foundations/click-launch";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { clickLaunch } from "../src/renderer/verbs";
 import { clickHandoff } from "../src/daemon/click-handoff";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { systemTimekeeper } from "../src/time";
+import type { Launcher } from "../src/proc/launcher";
 
 const alive = (pid: number): boolean => {
   try {
@@ -122,21 +125,56 @@ describe("clickHandoff", () => {
   });
 });
 
-describe("clickLaunch", () => {
-  test("a program that cannot start is a throw naming the spawn's own error", async () => {
-    await expect(
-      clickLaunch(
-        clickLaunchVia(
-          systemLauncher({ inherited: process.env }, systemTimekeeper),
-        ),
-        {
-          bin: "/nonexistent/cc-candybar-no-such-opener",
-          args: ["https://example.com"],
-          category: "click.open",
-        },
-        "opening https://example.com",
-        () => {},
+describe("launchOutcome", () => {
+  const launcher = systemLauncher({ inherited: process.env }, systemTimekeeper);
+  // `launcher`, running `bin` and `args` for every launch asked of it.
+  const running = (bin: string, args: string[]): Pick<Launcher, "launch"> => ({
+    launch: (opts) =>
+      launcher.launch({ ...opts, bin, args, stdinInput: undefined }),
+  });
+
+  test("a hung copy fails its act at the click's bound", async () => {
+    const launched = await clickLaunchVia(running("/bin/sleep", ["30"]))({
+      bin: "/usr/bin/pbcopy",
+      stdinInput: "x",
+      category: "click.pbcopy",
+    });
+    expect(launchOutcome(launched, "pbcopy", () => {})).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(/^pbcopy failed/),
+    });
+  }, 15_000);
+
+  test("a setsid descendant holding stdout leaves the loop answering while it lives", async () => {
+    const script =
+      "import os,time\nif os.fork()==0:\n  os.setsid()\n  time.sleep(3)\n  os._exit(0)\nos._exit(0)\n";
+    let ticks = 0;
+    const ticking = setInterval(() => ticks++, 10);
+    const started = performance.now();
+    const launched = await clickLaunchVia(
+      running("python3", ["-c", script]),
+    )({ bin: "/usr/bin/pbcopy", stdinInput: "x", category: "click.pbcopy" });
+    clearInterval(ticking);
+    expect(launchOutcome(launched, "pbcopy", () => {})).toEqual({ kind: "ok" });
+    expect(performance.now() - started).toBeLessThan(2500);
+    expect(ticks).toBeGreaterThan(0);
+  });
+
+  test("a program that cannot start fails its act, naming the spawn's own error", async () => {
+    const launched = await clickLaunchVia(
+      systemLauncher({ inherited: process.env }, systemTimekeeper),
+    )({
+      bin: "/nonexistent/cc-candybar-no-such-opener",
+      args: ["https://example.com"],
+      category: "click.open",
+    });
+    expect(
+      launchOutcome(launched, "opening https://example.com", () => {}),
+    ).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(
+        /^opening https:\/\/example\.com failed \(.*ENOENT\)$/,
       ),
-    ).rejects.toThrow(/^opening https:\/\/example\.com failed \(.*ENOENT\)$/);
+    });
   });
 });

@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SessionState } from "../src/renderer/session-state";
-import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/renderer/verbs";
+import { performClick, VERB_NAMES, BadVerbArgs } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
-import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
+import { encodeSegments, VERB_DISPATCH, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
 import { recordRender, testVerbContext,
-  verbContextWith } from "./helpers/click";
+  verbContextWith, actsOf, performActs } from "./helpers/click";
+import { lastClickError } from "../src/daemon/foundations/click-error";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -68,19 +69,16 @@ describe("SessionState", () => {
 });
 
 describe("click protocol", () => {
-  test("VERBS lookup is prototype-pollution-safe", () => {
-    // [LAW:types-are-the-program] VERBS is a ReadonlyMap, not a plain
+  test("a step naming a prototype member is an unknown step, never a handler", async () => {
+    // [LAW:types-are-the-program] The step table is a Map, not a plain
     // object — wire-level untrusted verb names like `__proto__` and
-    // `constructor` are non-members, not truthy hits on Object.prototype.
-    // A future revert to `Readonly<Record<string, VerbHandler>>` would
-    // let those names return prototype functions, bypass the `!handler`
-    // check in handleClick, then crash on `handler(value, ctx)` as
-    // RENDER_FAILED instead of the intended BAD_REQUEST.
-    // [LAW:behavior-not-structure] Pins the safety guarantee at lookup,
-    // so the regression reads as "verb table leaks Object.prototype"
-    // rather than as a type-only diff a reviewer might wave through.
+    // `constructor` are non-members, not truthy hits on Object.prototype,
+    // so each is the click's bad request (BAD_REQUEST), never a prototype
+    // function called as a handler (RENDER_FAILED).
     for (const poison of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
-      expect(VERBS.get(poison)).toBeUndefined();
+      await expect(
+        performClick(VERB_DISPATCH, `e=${encodeURIComponent(poison)}`, testVerbContext(new SessionState())),
+      ).rejects.toThrow(BadVerbArgs);
     }
   });
 
@@ -93,7 +91,8 @@ describe("click protocol", () => {
     // (set-state) codecs at their shared decode boundary.
     const ctx: VerbContext = testVerbContext(new SessionState());
     for (const verb of ["copy", "set-state"]) {
-      const handler = VERBS.get(verb)!;
+      const handler = (value: string, ctx: VerbContext) =>
+    performClick(verb, value, ctx);
       await expect(handler("%", ctx)).rejects.toThrow(BadVerbArgs);
     }
   });
@@ -101,31 +100,26 @@ describe("click protocol", () => {
 
 describe("apply-update verb", () => {
   // [LAW:effects-at-boundaries] The wire carries only the session id; the
-  // handler's whole job is reaching the daemon's update watch through ctx.
-  test("a session id reaches ctx.applyUpdate once; a missing or unsafe one is BadVerbArgs and never does", async () => {
-    let calls = 0;
-    const ctx: VerbContext = verbContextWith(testVerbContext(new SessionState()), {
-      applyUpdate: async () => {
-        calls++;
-      }
-});
-    const handler = VERBS.get(VERB_APPLY_UPDATE)!;
+  // click's whole job is returning the act the daemon's update watch performs.
+  test("a session id returns one apply-update; a missing or unsafe one is BadVerbArgs and returns none", async () => {
+    const ctx: VerbContext = testVerbContext(new SessionState());
+    const handler = (value: string, ctx: VerbContext) =>
+      performClick(VERB_APPLY_UPDATE, value, ctx);
     await handler(encodeURIComponent("sess-1"), ctx);
-    expect(calls).toBe(1);
     await expect(handler("", ctx)).rejects.toThrow(BadVerbArgs);
     await expect(handler(encodeURIComponent("../etc"), ctx)).rejects.toThrow(BadVerbArgs);
-    expect(calls).toBe(1);
+    expect(actsOf(ctx, "apply-update").map((a) => a.session)).toEqual(["sess-1"]);
   });
 
-  test("an act refused rejects through the verb, for the click to answer with", async () => {
-    const ctx: VerbContext = verbContextWith(testVerbContext(new SessionState()), {
-      applyUpdate: async () => {
-        throw new BadVerbArgs("apply-update: already rebuilding…");
-      }
-});
-    await expect(
-      VERBS.get(VERB_APPLY_UPDATE)!(encodeURIComponent("sess-1"), ctx),
-    ).rejects.toThrow("already rebuilding");
+  test("an act refused is held on the clicking session's bar", async () => {
+    const state = new SessionState();
+    const ctx: VerbContext = testVerbContext(state);
+    await performClick(VERB_APPLY_UPDATE, encodeURIComponent("sess-1"), ctx);
+    await performActs(ctx, "apply-update", async () => ({
+      kind: "refused",
+      reason: "apply-update: already rebuilding…",
+    }));
+    expect(lastClickError(state, sessionIdOf("sess-1"))?.text).toMatch("already rebuilding");
   });
 });
 
@@ -177,7 +171,8 @@ describe("step-state handler", () => {
     const sessionState = new SessionState();
     recordRender(sessionState, S1);
     const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-    const step = VERBS.get(VERB_STEP_STATE)!;
+    const step = (value: string, ctx: VerbContext) =>
+    performClick(VERB_STEP_STATE, value, ctx);
     const click = async (by: number): Promise<void> =>
       await step(encodeSegments(["s1", KEY, String(by)]), ctx);
     return { sessionState, ctx, click };
@@ -215,7 +210,8 @@ describe("step-state handler", () => {
 
   test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", async () => {
     const { ctx } = setup();
-    const step = VERBS.get(VERB_STEP_STATE)!;
+    const step = (value: string, ctx: VerbContext) =>
+    performClick(VERB_STEP_STATE, value, ctx);
     await expect(step(encodeSegments(["s1", KEY, "x"]), ctx),
     ).rejects.toThrow(BadVerbArgs);
   });
@@ -252,7 +248,8 @@ describe("step-state handler", () => {
       actions: { pick: { set: KEY, from: ["warm", "cool"] } },
     });
     const range = session(stepper("14"));
-    const set = VERBS.get("set-state")!;
+    const set = (value: string, ctx: VerbContext) =>
+    performClick("set-state", value, ctx);
     await set(encodeSegments(["s1", KEY, "cool"]), words.ctx);
     expect(words.sessionState.get(S1, KEY)).toBe("cool");
     await range.click(2);
@@ -272,7 +269,8 @@ describe("step-state handler", () => {
   });
 
   test("a key the session's config declares no range for is rejected, not silently stepped", async () => {
-    const step = VERBS.get(VERB_STEP_STATE)!;
+    const step = (value: string, ctx: VerbContext) =>
+    performClick(VERB_STEP_STATE, value, ctx);
     const { ctx } = setup();
     await expect(step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
     ).rejects.toThrow(BadVerbArgs);

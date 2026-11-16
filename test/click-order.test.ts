@@ -1,9 +1,8 @@
-// A click's read-only launches run ahead of its journal turn, and its session's
+// A click's read-only gathers run ahead of its journal turn, and its session's
 // queue keeps arrival order across them (candybar-launch-q7o7.fqw). Doctor
 // clicks here are real verbs over a fake doctor edge whose process probe parks
 // on a gate; the click-path cases drive `replyTo`, the daemon's real click arm.
 
-import { typeInPane } from "../src/claude-input/typing";
 import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/renderer/journal-turns";
 import { HOST, locs } from "./helpers/host";
@@ -14,7 +13,7 @@ import { signedClick } from "./helpers/link-signer";
 import { replyTo } from "../src/daemon/reply";
 import { SessionState } from "../src/renderer/session-state";
 import {
-  VERBS,
+  performClick,
   type VerbContext,
   type VerbHandler,
 } from "../src/renderer/verbs";
@@ -138,15 +137,15 @@ function setup(over: Partial<DoctorEdge> = {}) {
   });
   const written = (sid: SessionId) => sessionState.get(sid, "theme");
   const doctor = (sid: string, c: VerbContext = ctx) =>
-    VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(sid), c);
+    performClick(VERB_DOCTOR_RUN, encodeURIComponent(sid), c);
   const write = (sid: string, c: VerbContext = ctx) =>
-    VERBS.get(VERB_SET_STATE)!(encodeSegments([sid, "theme", "nord"]), c);
+    performClick(VERB_SET_STATE, encodeSegments([sid, "theme", "nord"]), c);
   const doDoctorThen = (c: VerbContext = ctx) => {
     const url = effectsUrl([
       { verb: VERB_DOCTOR_RUN, args: [A] },
       { verb: VERB_SET_STATE, args: [A, "theme", "nord"] },
     ]);
-    return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), c);
+    return performClick(VERB_DISPATCH, url.slice(url.lastIndexOf("/") + 1), c);
   };
   const reports = () => logged.filter((l) => l.startsWith("doctor: "));
   return {
@@ -222,8 +221,7 @@ describe("a gather holds no turn", () => {
       { verb: VERB_DOCTOR_RUN, args: [A] },
       { verb: VERB_DOCTOR_RUN, args: [A] },
     ]);
-    const twice = VERBS.get(VERB_DISPATCH)!(
-      url.slice(url.lastIndexOf("/") + 1),
+    const twice = performClick(VERB_DISPATCH, url.slice(url.lastIndexOf("/") + 1),
       ctx,
     );
     held.open();
@@ -263,8 +261,7 @@ describe("one session's order", () => {
       },
     };
     const refuse = (m: string) =>
-      VERBS.get(VERB_DOCTOR_MARK)!(
-        encodeSegments([A, "nerdFont", m]),
+      performClick(VERB_DOCTOR_MARK, encodeSegments([A, "nerdFont", m]),
         logging,
       ).catch((e: unknown) =>
         order.push(`${m}: ${String(e).includes("mark") ? "refused" : e}`),
@@ -291,11 +288,14 @@ describe("one session's order", () => {
   });
 
   test("a `do` of doctor then a write whose client leaves in the turn wait, after its gather, is refused", async () => {
-    const { held, doDoctorThen, ctx, written, reports } = setup();
+    const { held, doDoctorThen, ctx, turns, written, reports } = setup();
     const parked = gate();
     let gone = false;
-    const launch = () => parked.wait.then(() => LAUNCHED);
-    const holding = VERBS.get(VERB_COPY)!("x", { ...ctx, launch });
+    const holding = turns.take(
+      "holder",
+      { waited: () => {}, gone: async () => false },
+      () => parked.wait,
+    );
     await drain();
     const a = doDoctorThen({ ...ctx, clientGone: async () => gone });
     held.open();
@@ -345,7 +345,7 @@ describe("a gather is a snapshot of one config", () => {
         { verb: VERB_SET_CONFIG, args: [A, "palette", [...ALLOWED][0]!] },
         { verb: VERB_DOCTOR_RUN, args: [A] },
       ]);
-      await VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
+      await performClick(VERB_DISPATCH, url.slice(url.lastIndexOf("/") + 1), ctx);
       expect(seen).toHaveLength(1);
       expect(seen).toEqual([null]);
       expect(fixture.text()).toContain("palette");
@@ -402,7 +402,7 @@ describe("a gather is a snapshot of one config", () => {
         },
       },
     };
-    const a = VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(A), c);
+    const a = performClick(VERB_DOCTOR_RUN, encodeURIComponent(A), c);
     await new Promise((resolve) => setTimeout(resolve, 50));
     load = FAILED_LOAD;
     parked.open();
@@ -422,67 +422,6 @@ test("a `do` of doctor then a write with a failed probe still writes and shows t
   expect(written(A)).toBe("nord");
   expect(reports()).toEqual([]);
   expect(sessionState.get(A, "click.error")).toContain("ps broke");
-});
-
-test("a slash click re-checks nothing outside the turn: read and typing share it", async () => {
-  const { ctx, turns, sessionState } = setup();
-  sessionState.set(
-    A,
-    SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({ tmux: { pane: "%1", socket: "/tmp/s", truecolor: null } }),
-  );
-  const config = parseAndValidate(
-    "<user>",
-    `{ actions: { c: { slash: "/compact" } } }`,
-    ALLOWED,
-    DEFAULT_DSL_CONFIG,
-  );
-  const holders: Array<string | null> = [];
-  await VERBS.get(VERB_SLASH)!(encodeSegments([A, "/compact"]), {
-    ...ctx,
-    configFor: () => config,
-    typeSlash: typeInPane({
-      read: async () => {
-        holders.push(turns.getStats().holder);
-        return { inMode: false, screen: IDLE_SCREEN };
-      },
-      type: async () => {
-        holders.push(turns.getStats().holder);
-        return { kind: "typed" };
-      },
-    }),
-  });
-  expect(holders).toEqual([VERB_SLASH, VERB_SLASH]);
-});
-
-test("a watcher reload during a parked pbcopy starts no `by=click` setup", async () => {
-  const { ctx } = setup();
-  const parked = gate();
-  const quiet = { band: false } as never as ReturnType<
-    VerbContext["lanes"]["of"]
-  >;
-  const moved = { band: true } as never as typeof quiet;
-  let now = quiet;
-  const moves: unknown[][] = [];
-  const launch = () => parked.wait.then(() => LAUNCHED);
-  const copying = VERBS.get(VERB_COPY_DIAGNOSTIC)!(
-    encodeSegments([A, "request", "k"]),
-    {
-      ...ctx,
-      launch,
-      diagnosticCopy: () => "text",
-      lanes: {
-        of: () => now,
-        clicked: (sessionId, _latest, before, after) =>
-          moves.push([sessionId, before, after]),
-      },
-    },
-  );
-  await drain();
-  now = moved;
-  parked.open();
-  await copying;
-  expect(moves).toEqual([[A, moved, moved]]);
 });
 
 describe("the idle clock", () => {

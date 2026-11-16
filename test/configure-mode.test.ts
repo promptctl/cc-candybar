@@ -31,7 +31,7 @@ import {
   VERB_SAVE_PRESET,
   VERB_UNDO,
 } from "../src/click/wire";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { performClick, type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   configureMember,
@@ -422,7 +422,7 @@ describe("configure mode's drafts are saved into the placement", () => {
     ]);
 
     const logged: string[] = [];
-    await VERBS.get(VERB_SAVE)!(SID, {
+    await performClick(VERB_SAVE, SID, {
       ...rt.ctx,
       log: (_level, message) => logged.push(message),
     });
@@ -511,13 +511,13 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     const rt = configureBar(SRC);
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
     await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
-    await VERBS.get(VERB_UNDO)!(SID, rt.ctx);
+    await performClick(VERB_UNDO, SID, rt.ctx);
     expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
 
     await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
-    await VERBS.get(VERB_SAVE)!(SID, rt.ctx);
+    await performClick(VERB_SAVE, SID, rt.ctx);
     expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
-    await VERBS.get(VERB_UNDO)!(SID, rt.ctx);
+    await performClick(VERB_UNDO, SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
     expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBe("true");
   });
@@ -534,7 +534,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     const key = placementDraftKey("p", "vcs2", "detail");
     configurePlacement(rt.sessionState, SID, "p", "vcs2");
     await rt.click(rt.urlWriting(rt.render(), key, "true"));
-    await VERBS.get(VERB_SAVE_PRESET)!(SID, rt.ctx);
+    await performClick(VERB_SAVE_PRESET, SID, rt.ctx);
     expect(rt.sessionState.get(SID, key)).toBeNull();
     const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
     const settingsIn = (preset: string) =>
@@ -565,7 +565,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       const rt = configureBar(src);
       configurePlacement(rt.sessionState, SID, "default", "vcs2");
       await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
-      await VERBS.get(VERB_SAVE_PRESET)!(SID, rt.ctx);
+      await performClick(VERB_SAVE_PRESET, SID, rt.ctx);
       const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
       const settingsIn = (preset: string) =>
         [...walkNodes(presetRoot(saved, preset).node)].find(
@@ -594,7 +594,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     // takes the id opens with nothing configured.
     expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
     // One click, one step: its undo brings the placement and its draft back.
-    await VERBS.get(VERB_UNDO)!(SID, rt.ctx);
+    await performClick(VERB_UNDO, SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
     expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBe("true");
   });
@@ -690,7 +690,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     const { verb, value } = linkClick(remove);
     const [effect] =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    await VERBS.get(effect!.verb)!(effect!.value, {
+    await performClick(effect!.verb, effect!.value, {
       ...rt.ctx,
       log: (_level, message) => logged.push(message),
     });

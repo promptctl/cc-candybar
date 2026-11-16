@@ -55,7 +55,7 @@ import {
 
 // The decor the bundled config renders under.
 const BAR = DEFAULT_DECOR;
-import { VERBS } from "../src/renderer/verbs";
+import { performClick } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
@@ -225,9 +225,7 @@ function build(src: string, withDefault = false) {
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
+      await performClick(e.verb, e.value, ctx);
     }
   };
   // The link spans of a segment's cells, by URL.

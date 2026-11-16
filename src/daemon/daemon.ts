@@ -51,9 +51,25 @@ import {
 import { runTmuxAsync } from "../proc/tmux.js";
 import { type TmuxAtExit, TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
-import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
-import { clickLaunchVia } from "./foundations/click-launch.js";
-import { LaneSetups, type LaneEdge } from "./lane-setup.js";
+import {
+  typeInPane,
+  tmuxPaneOf,
+  typeSlashAct,
+  type ClaudeInputEdge,
+} from "../claude-input/typing.js";
+import { clickLaunchVia, launchOutcome } from "./foundations/click-launch.js";
+import {
+  LaneSetups,
+  laneSessionOf,
+  type LaneEdge,
+  type LaneSession,
+} from "./lane-setup.js";
+import { actInterpreter } from "./act-interpreter.js";
+import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
+import { repoConfigs } from "../config/repo-book.js";
+import { recordAnswer } from "./repo-book.js";
+import type { EffectOutcome } from "../renderer-interface/interface.js";
+import { BadVerbArgs } from "./foundations/verb-error.js";
 import { linkSignerOver } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
@@ -281,20 +297,23 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<
-    Pick<DaemonFacts, "fileEvents" | "launcher" | "rendererEnded">
+    Pick<DaemonFacts, "fileEvents" | "launcher" | "rendererEnded" | "actFailed">
   >(
-    { fileEvents: [], launcher: [], rendererEnded: null },
+    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
     { deep: false, equals: compareStructural },
   );
-  // [LAW:one-source-of-truth] How the last renderer process ended, held for
-  // the bar until an answer has carried it.
+  // [LAW:one-source-of-truth] How the last renderer process ended, and the
+  // last act that failed with no bar of its own, each held for the bar until
+  // an answer has carried it.
   let rendererEnded: HeldEvent | null = null;
+  let actFailed: HeldEvent | null = null;
   function restateFaults(): void {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
         rendererEnded,
+        actFailed,
       }),
     );
   }
@@ -439,27 +458,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         `menu-idle: close failed (session=${sessionId}): ${failure.detail}`,
       ),
   });
-  // [LAW:one-source-of-truth] The host parts' one write of a click error into
-  // the session's state: a run's end, a lane setup's failure.
-  const holdClickError = (sessionId: SessionId, text: string, at: Instant) =>
-    parts.renderer.tell(
-      { kind: "hold-click-error", session: sessionId, text },
-      at,
-    );
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
   // flight (src/daemon/runs.ts), closed with the daemon.
   const runs = new Runs({
     supersede: (folder, sessionId) =>
       managedStorage.supersede(folder, sessionId),
     launch: launcher.launch,
-    holdClickError,
     log,
-    now: instant,
     clock,
   });
   // [LAW:single-enforcer] The one owner of what turning an animation lane on or
-  // off takes (src/daemon/lane-setup.ts), told the switches each of a session's
-  // clicks moved, and each request's arrival for the setups owed to it.
+  // off takes (src/daemon/lane-setup.ts), which performs each setup the
+  // renderer's effects ask for.
   const laneSetups = new LaneSetups({
     edge: inputs.laneEdge(
       launcher,
@@ -475,10 +485,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       socket: paths.socket,
       preload: stableAttachPreload(bundle.path, host),
     },
-    holdClickError,
     log,
-    now: instant,
-    defer: (run) => void clock.defer(run),
   });
   // [LAW:single-enforcer] The one writer of the tmux status line lane's tmux
   // state (src/daemon/tmux-status.ts).
@@ -675,11 +682,134 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
 
   const clicks = new ClicksInFlight();
+  const claudeLaunch = clickLaunchVia(launcher);
+  // [LAW:no-ambient-temporal-coupling] Each session's typings, one at a time:
+  // two lines in one pane would type over each other.
+  const typings = new KeyedSerialQueue<SessionId>();
+  // [LAW:no-silent-failure] An act on a session reads it as its newest
+  // request reported it; one this daemon holds none of is refused, saying so.
+  const sessionAt = (sessionId: SessionId): LaneSession | EffectOutcome => {
+    const latest = frameFeeds.latest(sessionId);
+    return latest === null
+      ? {
+          kind: "refused",
+          reason: `session ${sessionId} has sent this daemon no request yet — its pane is not known`,
+        }
+      : laneSessionOf(latest);
+  };
+  const isOutcome = (at: LaneSession | EffectOutcome): at is EffectOutcome =>
+    "kind" in at;
+  const typeInto = typeInPane(inputs.claudeInput(launcher));
+  // [LAW:single-enforcer] Every act a renderer returns, performed by its kind
+  // (src/daemon/act-interpreter.ts).
+  const acts = actInterpreter(
+    {
+      copy: {
+        endsInTurn: true,
+        perform: async ({ text }) =>
+          launchOutcome(
+            await claudeLaunch({
+              bin: "/usr/bin/pbcopy",
+              stdinInput: text,
+              category: "click.pbcopy",
+            }),
+            "pbcopy",
+            log,
+          ),
+      },
+      // [LAW:single-enforcer] Which program opens a target is the host's.
+      open: {
+        endsInTurn: true,
+        perform: async ({ target }) =>
+          launchOutcome(
+            await claudeLaunch({
+              bin: "/usr/bin/open",
+              args: ["-a", "Visual Studio Code", target],
+              category: "click.open",
+            }),
+            'open -a "Visual Studio Code"',
+            log,
+          ),
+      },
+      "type-slash": {
+        endsInTurn: true,
+        perform: ({ session, line }) =>
+          typings.run(session, async () => {
+            const at = sessionAt(session);
+            return isOutcome(at)
+              ? at
+              : typeSlashAct(typeInto, at.hints.tmux, line);
+          }),
+      },
+      run: {
+        endsInTurn: false,
+        perform: async ({ session, program }) =>
+          runs.start({ sessionId: session, ...program }),
+      },
+      "approve-repo": {
+        endsInTurn: true,
+        perform: async ({ session, dir, answer }) => {
+          const filed = recordAnswer(repoConfigs(paths.state), dir, answer);
+          if (filed.kind === "failed")
+            return {
+              kind: "failed",
+              reason: `${dir} was not ${answer}: ${filed.reason}`,
+            };
+          const { superseded, absent, unchecked } = filed.value;
+          log(
+            "info",
+            `repo-config: ${dir} ${answer} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${session})`,
+          );
+          return { kind: "ok" };
+        },
+      },
+      "apply-update": {
+        endsInTurn: true,
+        perform: () =>
+          updateWatch.act().then(
+            (): EffectOutcome => ({ kind: "ok" }),
+            (e: unknown): EffectOutcome => ({
+              kind: e instanceof BadVerbArgs ? "refused" : "failed",
+              reason: e instanceof Error ? e.message : String(e),
+            }),
+          ),
+      },
+      "restart-claude": {
+        endsInTurn: false,
+        perform: async ({ session }) => {
+          const at = sessionAt(session);
+          return isOutcome(at) ? at : laneSetups.start(at, { kind: "restart" });
+        },
+      },
+      surface: {
+        endsInTurn: false,
+        perform: async ({ session, surface, on }) => {
+          // [LAW:dataflow-not-control-flow] The tmux row is the daemon's own
+          // to draw: held while on, at the pane the newest request reported,
+          // released once off. Holding it again is no change.
+          // [LAW:no-silent-failure] A row asked for where the session reported
+          // no pane is refused, saying why, as every act in its pane is.
+          if (surface === "tmux-status") {
+            const tmux = frameFeeds.latest(session)?.hints.tmux;
+            const pane = tmuxPaneOf(tmux);
+            if (on && pane.kind === "refused") return pane;
+            tmuxStatusLines.observe(session, tmux, on);
+            return { kind: "ok" };
+          }
+          const at = sessionAt(session);
+          return isOutcome(at)
+            ? at
+            : laneSetups.start(at, { kind: "surface", surface, on });
+        },
+      },
+    },
+    clock,
+    log,
+  );
   // [LAW:single-enforcer] Each watch the renderer holds, by the id it minted,
   // from its `watch` to its `unwatch`.
   const rendererWatches = new Map<WatchId, WatcherHandle>();
   const doctorEdge = inputs.doctorEdge(launcher, host);
-  const claudeInput = inputs.claudeInput(launcher);
   // [LAW:one-way-deps] The host's parts the main renderer reaches: the
   // compiler checks each against its entry in `AdapterToHost` here, so no
   // renderer file names a host type.
@@ -688,27 +818,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // the host's part in its crossing shape: a notice, or an awaited call.
     wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
     log,
-    launch: clickLaunchVia(launcher),
-    typeSlash: typeInPane(claudeInput),
-    applyUpdate: () => updateWatch.act(),
-    runs: {
-      start: (run) => runs.start(run),
-      refused: (sessionId, action, reason) =>
-        runs.refused(sessionId, action, reason),
-    },
     doctor: {
       ...doctorEdge,
       install: async (daemonBundle, clients) =>
         installFacts(doctorEdge.install, daemonBundle, clients),
-    },
-    laneSetups: {
-      noted: (session, switches) => laneSetups.noted(session, switches),
-      clicked: (sessionId, session, before, after) =>
-        laneSetups.clicked(sessionId, session, before, after),
-    },
-    tmuxStatusLines: {
-      observe: ({ sessionId, tmux, on }) =>
-        tmuxStatusLines.observe(sessionId, tmux, on),
     },
     menuIdle: {
       clicked: (sessionId, at) => menuIdle.clicked(sessionId, at),
@@ -729,6 +842,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
         rendererEnded = { ...rendererEnded, answered: true };
+      if (actFailed !== null && answeredBy(actFailed, event))
+        actFailed = { ...actFailed, answered: true };
       restateFaults();
     },
     watches: {
@@ -826,7 +941,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     updateWatch,
     limits,
     collector,
-    renderer: rendererHost("main", clock, link.renderer, log, collector),
+    renderer: rendererHost("main", clock, link.renderer, log, collector, {
+      interpreter: acts,
+      unseen: (text) => {
+        actFailed = { text, at: instant(), answered: false };
+        restateFaults();
+      },
+    }),
   };
 
   return {

@@ -5,19 +5,14 @@
 // data a process can carry, answered by its `AdapterReply`.
 
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import type { ClientHints, Response } from "../daemon/foundations/protocol.js";
+import type { Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
-import type { Answered } from "../daemon/foundations/sighting-roles.js";
 import type { RequestId } from "./interface.js";
 import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
 import type { Crosses, Reaches } from "./crosses.js";
-import type { TmuxHint } from "../tmux-hint.js";
 import type { ClientHint } from "../client-hint.js";
-import type { LaunchCategory, LaunchResult } from "../proc/launcher.js";
-import type { SlashLine } from "../claude-input/slash-line.js";
-import type { TypeResult } from "../claude-input/typing.js";
 import type {
   RenderCacheStats,
   StatsSnapshot,
@@ -45,41 +40,6 @@ export type WatchId = number & { readonly [WATCH_ID]: true };
 // minted.
 declare const STORAGE_HOLD_ID: unique symbol;
 export type StorageHoldId = number & { readonly [STORAGE_HOLD_ID]: true };
-
-export interface LaneSession {
-  readonly sessionId: SessionId;
-  readonly hints: ClientHints;
-  // The inputs its last render resolved its config from.
-  readonly origin: RenderOrigin;
-  // Its conversation, as Claude Code names it in the statusline JSON: a
-  // session resumes from it, and has none until its first message.
-  readonly transcript: string;
-  // Whether Claude Code has answered in it, by the one mark it leaves
-  // (`answeredOf`): a session it has answered in has a conversation, whether
-  // or not a transcript of it is on disk.
-  readonly answered: Answered;
-}
-
-// A source a run makes stale: its full name, for the event, and the storage
-// folder its file is in.
-export interface RunRefresh {
-  readonly name: string;
-  readonly folder: string;
-}
-
-// [LAW:types-are-the-program] One run, as the verb hands it over: everything
-// was settled at the click — the program and its arguments as the draw
-// evaluated them, the environment, the directory, the sources it refreshes —
-// so the owner decides nothing about what runs.
-export interface RunRequest {
-  readonly sessionId: SessionId;
-  readonly action: string;
-  readonly argv: readonly [string, ...string[]];
-  // Set over the owner's launcher's inherited environment; null unsets.
-  readonly envOverlay: Readonly<Record<string, string | null>>;
-  readonly cwd: string;
-  readonly refreshes: readonly RunRefresh[];
-}
 
 // What one frame of the feed drew: the bar, the responses its subscribers
 // receive, and — for a render that threw — the render event describing it,
@@ -124,24 +84,6 @@ export interface LogLine {
   readonly line: string;
 }
 
-// [LAW:types-are-the-program] A launch a click makes: the program, its
-// arguments and what it reads on stdin, as text. The host bounds it by the
-// click's own timeout, so a click's turn comes back.
-export interface ClickLaunch {
-  readonly bin: string;
-  readonly args?: readonly string[];
-  readonly stdinInput?: string;
-  readonly category: LaunchCategory;
-}
-
-// The tmux status line a session's lane switch holds, in the pane its client
-// reported: the hint's three states, an absent one included.
-export interface TmuxStatusSighting {
-  readonly sessionId: SessionId;
-  readonly tmux?: TmuxHint | null;
-  readonly on: boolean;
-}
-
 // The doctor's reads of the machine, each the host's to make: the gather
 // (src/doctor/gather.ts) runs in the renderer over them.
 export type DoctorReads = Omit<DoctorMachineEdge, "install"> & {
@@ -161,36 +103,7 @@ export interface AdapterToHost {
   // A line into the host's one log, which rotates itself: two writers would
   // each shift its generations.
   readonly log: (level: Level, line: string) => void;
-  // A click's launch, answered by how it ended.
-  readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
-  // A slash line typed into the pane, once the prompt there reads ready.
-  readonly typeSlash: (pane: TmuxHint, line: SlashLine) => Promise<TypeResult>;
-  // The update notice's act.
-  readonly applyUpdate: () => Promise<void>;
-  // The one owner of `run` programs in flight.
-  readonly runs: {
-    readonly start: (run: RunRequest) => void;
-    readonly refused: (
-      sessionId: string,
-      action: string,
-      reason: string,
-    ) => void;
-  };
   readonly doctor: DoctorReads;
-  // What turning an animation lane on or off takes.
-  readonly laneSetups: {
-    readonly noted: (session: LaneSession, switches: LaneSwitches) => void;
-    readonly clicked: (
-      sessionId: SessionId,
-      session: LaneSession | null,
-      before: LaneSwitches,
-      after: LaneSwitches,
-    ) => void;
-  };
-  // The tmux status lines this daemon lays out.
-  readonly tmuxStatusLines: {
-    readonly observe: (sighting: TmuxStatusSighting) => void;
-  };
   // Each session's idle clock and the timer that closes its menus. The draw's
   // idle period is read by the host and handed in with the input it draws.
   readonly menuIdle: {
@@ -285,13 +198,6 @@ export type AdapterPush =
   | { readonly kind: "stats" }
   // The debug reply's projection of the most recently drawn view.
   | { readonly kind: "debug"; readonly what: DebugWhat }
-  // A host part's write of a click error into the session's state, at the
-  // input's instant: a run's end, a lane setup's failure.
-  | {
-      readonly kind: "hold-click-error";
-      readonly session: SessionId;
-      readonly text: string;
-    }
   // Every entry's reload, when file events resume after `since`.
   | { readonly kind: "reload-every"; readonly since: number }
   // The reload of the config `origin` resolves to, after a write.

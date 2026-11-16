@@ -129,8 +129,8 @@ export interface StatsSnapshot {
   menuIdle: MenuIdleStats;
   journalTurns: JournalTurnStats;
   // `run` clicks (src/daemon/runs.ts): programs started, those that failed
-  // (a non-zero exit or no start), timed out, links refused before anything
-  // ran, and runs in flight now.
+  // (a non-zero exit or no start), timed out, and runs in flight now. A link
+  // refused before anything ran is its click's bad request.
   runs: RunStats;
   // The per-session click store: how many sessions it holds, how many
   // derivations are subscribed to it, and its revision — how many changes it
@@ -213,8 +213,6 @@ export interface RunStats {
   // Ended with a non-zero exit, or could not be started.
   readonly failed: number;
   readonly timedOut: number;
-  // Links refused before anything ran.
-  readonly refused: number;
   // In flight now.
   readonly running: number;
 }

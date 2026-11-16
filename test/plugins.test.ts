@@ -36,7 +36,7 @@ import { textOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoConfigs } from "../src/renderer/repo-configs";
+import { repoConfigs } from "../src/config/repo-book";
 import { gateRepos } from "../src/config/loader/repo-gate";
 import { repoProject } from "../src/config/loader/discovery";
 import { installFromRepo } from "../src/plugin-install";

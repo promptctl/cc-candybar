@@ -25,13 +25,9 @@ import {
   type LoadCause,
   type ReloadedEntry,
 } from "../src/renderer/render-cache";
-import {
-  recordAnswer,
-  repoAnswerFields,
-  repoConfigs,
-  repoConfigsPath,
-  repoQuestions,
-} from "../src/renderer/repo-configs";
+import { repoAnswerFields, repoQuestions } from "../src/renderer/repo-configs";
+import { repoConfigs, repoConfigsPath } from "../src/config/repo-book";
+import { recordAnswer } from "../src/daemon/repo-book";
 import { SessionState } from "../src/renderer/session-state";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";

@@ -144,10 +144,6 @@ type ReachKinds<T> = {
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   wake: "notice",
   log: "notice",
-  launch: "call",
-  typeSlash: "call",
-  applyUpdate: "call",
-  runs: { start: "notice", refused: "notice" },
   doctor: {
     probeTmux: "call",
     remoteLogin: "call",
@@ -157,8 +153,6 @@ export const REACH_KINDS: ReachKinds<AdapterToHost> = {
     transcript: "call",
     install: "call",
   },
-  laneSetups: { noted: "notice", clicked: "notice" },
-  tmuxStatusLines: { observe: "notice" },
   menuIdle: {
     clicked: "notice",
     clickArrived: "notice",

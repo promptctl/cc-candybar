@@ -47,7 +47,7 @@ import { testVerbContext,
   verbContextWith, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/renderer/verbs";
+import { performClick } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import {
@@ -189,9 +189,7 @@ function buildEditRuntime(src: string, sessionId = S1) {
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
+      await performClick(e.verb, e.value, ctx);
     }
   };
   return { config, store, render, click, ctx, history, sessionState };
@@ -783,7 +781,8 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // mode wires ONE static undo/redo pair rather than synthesizing one per
     // position, so BASE deliberately declares neither; drive the verb
     // directly, exactly as dsl-undo-redo.test.ts does.
-    const undo = VERBS.get("undo")!;
+    const undo = (value: string, ctx: VerbContext) =>
+    performClick("undo", value, ctx);
     await undo(encodeURIComponent("s1"), ctx);
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
     await undo(encodeURIComponent("s1"), ctx);
@@ -950,7 +949,7 @@ describe("edit mode's save and cancel", () => {
       sinceEdit: 0,
     });
     expect(rt.sessionState.get(S1, "theme")).toBe("nord");
-    await VERBS.get("undo")!("s1", rt.ctx);
+    await performClick("undo", "s1", rt.ctx);
     expect(rt.sessionState.get(S1, "theme")).toBeNull();
     expect(durable.text()).toBe(original);
     expect(rt.history.depth(S1)).toEqual({
@@ -962,11 +961,11 @@ describe("edit mode's save and cancel", () => {
 
   test("rewind says what it put back, and a session with no savepoint is refused loudly", async () => {
     const rt = buildEditRuntime(BASE);
-    await expect(VERBS.get("rewind")!("s1", rt.ctx)).rejects.toThrow(/no savepoint/);
+    await expect(performClick("rewind", "s1", rt.ctx)).rejects.toThrow(/no savepoint/);
     await open(rt);
     await removeGit(rt);
     const logs: string[] = [];
-    await VERBS.get("rewind")!("s1", {
+    await performClick("rewind", "s1", {
       ...rt.ctx,
       log: (_level, message) => logs.push(message),
     });

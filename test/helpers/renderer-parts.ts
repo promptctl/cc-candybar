@@ -15,6 +15,10 @@ import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import { systemTimekeeper } from "../../src/time";
 import { TEST_SIGNER } from "./link-signer";
 import type { EffectId } from "../../src/renderer-interface/interface";
+import { Acts } from "../../src/renderer/acts";
+import { LaneSurfaces } from "../../src/renderer/lane-surfaces";
+import type { ActInterpreter } from "../../src/daemon/act-interpreter";
+import { instantOf } from "../../src/utils/instant";
 
 // A renderer that acts no verb: every click names a verb it does not have,
 // and an idle close is refused, so a test that clicks hands in the act it
@@ -38,6 +42,22 @@ const unhosted = (what: string) => (): never => {
   throw new Error(`${what}: no host part in this rig`);
 };
 
+// The host's acts, for a rig that performs none: each is refused, saying so,
+// and one no bar can show is dropped.
+export const NO_ACTS: {
+  readonly interpreter: ActInterpreter;
+  readonly unseen: (text: string) => void;
+} = {
+  interpreter: {
+    perform: async (act) => ({
+      kind: "refused",
+      reason: `${act.kind}: no host part in this rig`,
+    }),
+    endsInTurn: () => true,
+  },
+  unseen: () => {},
+};
+
 // The host a renderer test draws against: no feed follows a session, no
 // update is offered, file events are heard, nothing is idle and nothing is
 // set up.
@@ -45,11 +65,6 @@ export function inertHost(): AdapterToHost {
   return {
     wake: () => {},
     log: () => {},
-    launch: unhosted("launch"),
-    typeSlash: unhosted("type slash"),
-    applyUpdate: () =>
-      Promise.reject(new Error("apply-update: no update watch in this rig")),
-    runs: { start: unhosted("runs"), refused: unhosted("runs") },
     doctor: {
       probeTmux: unhosted("doctor"),
       remoteLogin: unhosted("doctor"),
@@ -59,8 +74,6 @@ export function inertHost(): AdapterToHost {
       transcript: unhosted("doctor"),
       install: unhosted("doctor"),
     },
-    laneSetups: { noted: () => {}, clicked: () => {} },
-    tmuxStatusLines: { observe: () => {} },
     menuIdle: {
       clicked: () => {},
       observe: () => {},
@@ -88,6 +101,12 @@ export function rendererParts({
   readonly worldStates: WorldStates;
   readonly verbs?: RendererVerbs;
 }): MainRendererParts {
+  const mint = minter();
+  const acts = new Acts({
+    mint,
+    sessionState,
+    now: () => instantOf(new Date()),
+  });
   return {
     ...inertHost(),
     clock: systemTimekeeper,
@@ -97,7 +116,9 @@ export function rendererParts({
     worldStates,
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions(),
+    laneSurfaces: new LaneSurfaces({ acts, log: () => {} }),
     verbs,
-    mint: minter(),
+    mint,
+    acts,
   };
 }

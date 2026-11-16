@@ -50,7 +50,7 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
-import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
+import { performClick, BadVerbArgs } from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import type { VerbContext } from "../src/renderer/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
@@ -601,10 +601,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.render()).toContain("✓ Nerd Font");
       expect(markUrl(rt, "drawn")).toBeUndefined();
       await expect(
-        VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", rt.ctx),
+        performClick(VERB_DOCTOR_MARK, "s1/nerdFont/drawn", rt.ctx),
       ).rejects.toThrow(BadVerbArgs);
       await expect(
-        VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
+        performClick(VERB_DOCTOR_MARK, "s1/nerdFont/perhaps", rt.ctx),
       ).rejects.toThrow(/the mark is "perhaps"/);
     });
 
@@ -627,7 +627,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
           doctorStores: { ...rt.ctx.doctorStores, marks },
         };
         const mark = async () =>
-          await VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
+          await performClick(VERB_DOCTOR_MARK, "s1/nerdFont/drawn", ctx);
         await expect(mark).rejects.toThrow(BadVerbArgs);
         await expect(mark).rejects.toThrow(`doctor-mark: ${file} is not JSON`);
         expect(fs.readFileSync(file, "utf8")).toBe("junk");
@@ -643,10 +643,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       };
       const rt = doctorBar(null, CLEAN_LOAD, limited);
       await rt.openTools();
-      await expect(VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).rejects.toThrow(
-        new BadVerbArgs(
-          "the doctor looked at the font less than a second ago — click again",
-        ),
+      const run = performClick(VERB_DOCTOR_RUN, "s1", rt.ctx);
+      await expect(run).rejects.toBeInstanceOf(BadVerbArgs);
+      await expect(run).rejects.toThrow(
+        "the doctor looked at the font less than a second ago — click again",
       );
       expect(rt.render()).not.toContain("Nerd Font");
     });

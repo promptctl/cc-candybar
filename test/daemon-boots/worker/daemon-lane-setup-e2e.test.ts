@@ -22,6 +22,7 @@ import path from "node:path";
 
 import {
   effectsUrl,
+  VERB_REPO_CONFIG,
   VERB_SET_STATE,
   VERB_TMUX_STATUS_CLICK,
 } from "../../../src/click/wire";
@@ -29,7 +30,8 @@ import { rangeOf } from "../../../src/tmux-status/frames";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
-import { click, clickAnswer, render, saidOf, toldOf, drawnLink } from "../../helpers/daemon-e2e";
+import { click, clickAnswer, findUrl, render, saidOf, toldOf, drawnLink } from "../../helpers/daemon-e2e";
+import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
@@ -113,6 +115,10 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     logLines(env).filter(
       (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
     );
+  // The renderer's line for each lane a click or request moved, naming what
+  // started it; the host's lines for what each setup did name no cause.
+  const decided = (sid: string): string[] =>
+    laneLines(sid).filter((l) => / by=(click|owed) /.test(l));
   const statusLines = (sid: string, what: "holding" | "released"): string[] =>
     logLines(env).filter((l) =>
       l.includes(`tmux-status: ${what} sid=${JSON.stringify(sid)}`),
@@ -136,9 +142,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await switchLanes(sid, true, "tmuxStatus");
     await until(() => laneLines(sid).length > 0, "the toggle's setup");
     expect(laneLines(sid)).toEqual([
-      expect.stringContaining(
-        `lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${sid})`,
-      ),
+      expect.stringContaining(`lane: tmuxStatus on by=click (session=${sid})`),
     ]);
     // The click itself held the status line: no request came after it.
     await until(
@@ -204,13 +208,13 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     const sid = "lane-two";
     await renderIn(sid);
     await switchLanes(sid, true, "tmuxStatus", "band");
-    await until(() => laneLines(sid).length >= 2, "both toggles' setups");
+    await until(() => decided(sid).length >= 2, "both toggles' setups");
     expect(
-      laneLines(sid)
+      decided(sid)
         .map((l) => l.match(/lane: (\w+ \w+)/)![1])
         .sort(),
     ).toEqual(["band on", "tmuxStatus on"]);
-    for (const line of laneLines(sid)) expect(line).toContain(" by=click ");
+    for (const line of decided(sid)) expect(line).toContain(" by=click ");
   });
 
   test("a status line switched off is released once, and nothing re-takes it", async () => {
@@ -276,6 +280,42 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await renderLines(env, sid, 1);
     expect(statusLines(sid, "holding")).toEqual([]);
     expect(readFileSync(file, "utf8")).toBe(source);
+  });
+
+  // An answer's landing reloads the session's config before the click's lanes
+  // are measured after it, so a lane the approved config switches on is the
+  // answer's own move.
+  test("approving a repository's config that switches a lane on sets it up", async () => {
+    const sid = "lane-approve";
+    const repo = path.join(projectDir, "repo-lane");
+    mkdirSync(repo);
+    writeFileSync(
+      path.join(repo, ".cc-candybar.json5"),
+      `{ globals: { ${LANES.tmuxStatus.switch.setting}: "${LANES.tmuxStatus.switch.on}" } }`,
+    );
+    const bar = await render(daemon, sid, repo, inTmux(sid));
+    const pages = await readDiagnostics(daemon, sid, repo, bar, inTmux(sid));
+    const approve = pages
+      .map((p) =>
+        findUrl(linkUrls(p.rendered), (effects) =>
+          effects.some(
+            (e) => e.verb === VERB_REPO_CONFIG && e.args[2] === "approved",
+          ),
+        ),
+      )
+      .find((url) => url !== undefined);
+    expect(approve).toBeDefined();
+    expect(laneLines(sid)).toEqual([]);
+    // The answer compiles the repository's config before it replies.
+    await click(daemon, approve!, 20_000);
+    await until(() => decided(sid).length > 0, "the approval's setup");
+    expect(decided(sid)).toEqual([
+      expect.stringContaining(`lane: tmuxStatus on by=click (session=${sid})`),
+    ]);
+    await until(
+      () => statusLines(sid, "holding").length > 0,
+      "the status line's hold",
+    );
   });
 
   // The daemon before a restart drew the bar the toggle is clicked on: this

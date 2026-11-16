@@ -14,10 +14,10 @@
 //
 // `close` ends the turns for good: what is queued is refused as its turn
 // arrives, and what is in flight goes no further than its next `landed` and
-// lands nothing (src/renderer/config-writes.ts). A click's launches are bounded
-// (`clickLaunch`), so a turn comes back unless a child outlives SIGKILL, in
-// uninterruptible sleep: its launch never settles, and `getStats` shows the
-// holder's `heldMs` growing.
+// lands nothing (src/renderer/config-writes.ts). A click acts on the world
+// only through the effects its turn returns, so a turn waits on nothing but
+// the gathers past its click's first, whose probes are bounded; one that never
+// settles shows in `getStats` as the holder's `heldMs` growing.
 
 import { elapsedMs, spanMs, type Monotonic } from "../time.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";

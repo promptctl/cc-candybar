@@ -1,6 +1,6 @@
 // Typing a slash line into a session's Claude Code, over an edge that reads
-// its pane and types into it. Shared, so the renderer's verbs type through the
-// edge the host hands in (the tmux one is src/claude-input/edge.ts).
+// its pane and types into it (the tmux one is src/claude-input/edge.ts): the
+// host's `type-slash` act.
 //
 // [LAW:effects-at-boundaries] The two tmux calls — read the pane, type into
 // it — live behind `ClaudeInputEdge`; whether to type is `typeSlash`'s fold
@@ -14,7 +14,8 @@
 import type { ClientHints } from "../daemon/foundations/protocol.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import { promptState, REFUSALS, type PaneSnapshot } from "./prompt-screen.js";
-import type { SlashLine } from "./slash-line.js";
+import { parseSlashLine, type SlashLine } from "./slash-line.js";
+import type { EffectOutcome } from "../renderer-interface/interface.js";
 
 export interface ClaudeInputEdge {
   // Both throw naming tmux's own failure. `type` answers with the refusal
@@ -65,6 +66,22 @@ export async function typeSlash(
 ): Promise<TypeResult> {
   const pane = tmuxPaneOf(hint);
   return pane.kind === "refused" ? pane : type(pane.hint, line);
+}
+
+// [LAW:parse-dont-validate] A `type-slash` act as its outcome: the line is
+// read again here, the checkpoint a line crosses into a keystroke, wherever it
+// came from; refused, it says why the line was not typed.
+export async function typeSlashAct(
+  type: (pane: TmuxHint, line: SlashLine) => Promise<TypeResult>,
+  hint: ClientHints["tmux"],
+  line: string,
+): Promise<EffectOutcome> {
+  const parsed = parseSlashLine(line);
+  if (parsed.kind === "refused") return parsed;
+  const typed = await typeSlash(type, hint, parsed.line);
+  return typed.kind === "typed"
+    ? { kind: "ok" }
+    : { kind: "refused", reason: `${line} was not typed: ${typed.reason}` };
 }
 
 // A slash line typed into `tmux`, once the prompt there reads ready.

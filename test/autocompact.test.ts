@@ -7,7 +7,6 @@
 // test/claude-input.test.ts's; the lane itself is
 // test/render-payload-outcomes.test.ts's.
 
-import { typeInPane } from "../src/claude-input/typing";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -24,14 +23,13 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext,
-  verbContextWith, effectsOf, clickUrl } from "./helpers/click";
+  effectsOf, clickUrl, actsOf } from "./helpers/click";
 import { VERB_SLASH } from "../src/click/wire";
 import {
   SESSION_CLIENT_HINTS_KEY,
   SESSION_RENDER_ORIGIN_KEY,
 } from "../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
-import type { ClaudeInputEdge } from "../src/claude-input/typing";
 import {
   AUTOCOMPACT_WINDOWS,
   autoCompactControls,
@@ -101,26 +99,13 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
     instantOf(new Date()),
     OPTS,
   ).frame;
-  const typed: string[] = [];
-  const claudeInput: ClaudeInputEdge = {
-    read: async () => ({
-      inMode: false,
-      screen: ["─".repeat(30), "❯ ", "─".repeat(30)],
-    }),
-    type: async (_hint, line) => {
-      typed.push(line);
-      return { kind: "typed" };
-    },
-  };
-  const ctx = verbContextWith(testVerbContext(sessionState, undefined, config), {
-    typeSlash: typeInPane(claudeInput)
-});
+  const ctx = testVerbContext(sessionState, undefined, config);
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
   );
   // What each control types, in the order the cell draws them.
   const lines = urls.map((u) => effectsOf(u)[0]!.args[1]);
-  return { text: textOf(raw), urls, lines, ctx, typed };
+  return { text: textOf(raw), urls, lines, ctx };
 }
 
 describe("the autocompact segment", () => {
@@ -191,7 +176,10 @@ describe("the autocompact segment", () => {
   test("a click types its line into the session", async () => {
     const rt = runtime(ok(400_000));
     await clickUrl(rt.urls[1]!, rt.ctx);
-    expect(rt.typed).toEqual(["/autocompact 500000"]);
+    // The click types nothing itself: its line is the effect it returns.
+    expect(actsOf(rt.ctx, "type-slash").map((a) => a.line)).toEqual([
+      "/autocompact 500000",
+    ]);
   });
 
   test("every offered window is a declared line: auto, then 100K to 1M", async () => {

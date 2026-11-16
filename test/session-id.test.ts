@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { parseSessionId, sessionIdOf } from "../src/daemon/foundations/session-id";
 import { SessionState } from "../src/renderer/session-state";
-import { BadVerbArgs, VERBS } from "../src/renderer/verbs";
+import { BadVerbArgs, performClick, type VerbContext } from "../src/renderer/verbs";
 import { encodeSegments } from "../src/click/wire";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
@@ -34,9 +34,12 @@ describe("the session-id checkpoint", () => {
 });
 
 describe("a click's session id", () => {
-  const applyUpdate = VERBS.get("apply-update")!;
-  const setState = VERBS.get("set-state")!;
-  const stepState = VERBS.get("step-state")!;
+  const applyUpdate = (value: string, ctx: VerbContext) =>
+    performClick("apply-update", value, ctx);
+  const setState = (value: string, ctx: VerbContext) =>
+    performClick("set-state", value, ctx);
+  const stepState = (value: string, ctx: VerbContext) =>
+    performClick("step-state", value, ctx);
 
   test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState());

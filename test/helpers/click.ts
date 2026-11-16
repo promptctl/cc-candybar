@@ -4,10 +4,8 @@
 // effects does this click apply" rather than the exact wire encoding.
 
 import { installFacts } from "../../src/doctor/edge";
-import { clickLaunchVia } from "../../src/daemon/foundations/click-launch";
 import { bareGates } from "./gates";
 import { HOST } from "./host";
-import { unscriptedLauncher } from "./fake-launcher";
 import type { Host } from "../../src/host";
 import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
@@ -19,15 +17,20 @@ import {
   noManagedSettings,
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
-import { changeDone, VERBS } from "../../src/renderer/verbs";
+import { changeDone, performClick } from "../../src/renderer/verbs";
 import { ConfigWrites } from "../../src/renderer/config-writes";
 import { readConfigText } from "../../src/renderer/config-file-store";
 import { performChanges } from "../../src/daemon/effect-interpreter";
 import type {
+  Act,
   ConfigChange,
   Effect,
   EffectId,
+  EffectOutcome,
 } from "../../src/renderer-interface/interface";
+import { Acts } from "../../src/renderer/acts";
+import { repoConfigs } from "../../src/config/repo-book";
+import { recordAnswer } from "../../src/daemon/repo-book";
 import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import type { VerbContext } from "../../src/renderer/verbs";
@@ -75,11 +78,13 @@ export const asyncSightings = (
 });
 
 // [LAW:single-enforcer] The host, for a test that drives the verb table with
-// none: each click's changes land as its turn hands them on, through the
-// host's own interpreter, and their outcome comes back through the verbs' own
+// none: each click's writes land as its turn hands them on — its changes
+// through the host's own interpreter, a repository answer through the book's
+// own writer — and their outcome comes back through the verbs' own
 // `changeDone`, so the click's consequence applies, or is dropped, as a real
 // landing's would. A rig with a renderer host (test/helpers/click-parts.ts)
-// hands its clicks' changes to that host instead.
+// hands its clicks' writes to that host instead. Every other act stays in the
+// click's effects, for the test to read (`actsOf`).
 class LandingAtOnce extends ConfigWrites {
   private context: VerbContext | null = null;
 
@@ -96,16 +101,33 @@ class LandingAtOnce extends ConfigWrites {
   override seal(
     effects: Effect[],
     session: SessionId | null,
-    consequence: () => void,
+    consequence: (effects: Effect[]) => void,
   ): void {
     const from = effects.length;
     super.seal(effects, session, consequence);
-    const changes = effects
-      .splice(from)
-      .filter((e): e is ConfigChange => e.kind === "change");
-    if (changes.length === 0) return;
-    const outcome = performChanges(changes);
-    for (const change of changes) changeDone(this.context!, change.id, outcome);
+    const written = effects.splice(from);
+    const changes = written.filter(
+      (e): e is ConfigChange => e.kind === "change",
+    );
+    const answers = written.filter(
+      (e): e is Extract<Act, { kind: "approve-repo" }> =>
+        e.kind === "approve-repo",
+    );
+    const ctx = this.context!;
+    const landed = changes.length === 0 ? null : performChanges(changes);
+    for (const change of changes) changeDone(ctx, change.id, landed!, effects);
+    for (const answer of answers) {
+      const filed = recordAnswer(
+        repoConfigs(ctx.stateDir),
+        answer.dir,
+        answer.answer,
+      );
+      const outcome: EffectOutcome =
+        filed.kind === "failed"
+          ? { kind: "failed", reason: filed.reason }
+          : { kind: "ok" };
+      changeDone(ctx, answer.id, outcome, effects);
+    }
   }
 }
 
@@ -132,7 +154,14 @@ export function testVerbContext(
   host: Host = HOST,
 ): VerbContext {
   const configWrites = new LandingAtOnce();
+  let minted = 0;
   return configWrites.of({
+    // Each act a click returns stays in its effects (`actsOf`).
+    acts: new Acts({
+      mint: () => (1_000_000 + ++minted) as EffectId,
+      sessionState,
+      now: () => instantOf(new Date()),
+    }),
     configWrites,
     effects: [],
     gates: bareGates(),
@@ -152,11 +181,7 @@ export function testVerbContext(
     gatherTook: () => {},
     turnWaited: () => {},
     log: () => {},
-    launch: clickLaunchVia(unscriptedLauncher),
     now: () => instantOf(new Date()),
-    applyUpdate: async () => {
-      throw new Error("apply-update: no update watch in this test");
-    },
     // Same posture for the doctor's edge: a test that drives a doctor click
     // hands in its own fake edge; reaching this one is a test bug.
     doctor: {
@@ -216,11 +241,6 @@ export function testVerbContext(
     clients: asyncSightings(new RenderSightings()),
     bundle: HEALTHY_BUNDLE,
     serving: async () => HEALTHY_SERVING,
-    // And for the Claude Code pane: a test that drives a slash click hands in
-    // its own typing.
-    typeSlash: async () => {
-      throw new Error("slash: no claude-input edge in this test");
-    },
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key, any session write once the session has
     // rendered — the write closes what it closes in that config) hands it in;
@@ -237,20 +257,12 @@ export function testVerbContext(
     // cache hands in its own — test/settings-config-menu.test.ts records each
     // reload to pin that a landing reloads before it releases.
     reloadConfig: () => {},
-    // A test that drives a run click hands in its own run owner and the
-    // storage keys of its config's sources.
+    // A test that drives a run click hands in the storage keys of its
+    // config's sources.
     sourcesFor: () => {
       throw new Error("sourcesFor: this test handed in no sources");
     },
     links: TEST_SIGNER,
-    runs: {
-      start: () => {
-        throw new Error("run: no run owner in this test");
-      },
-      refused: () => {
-        throw new Error("run: no run owner in this test");
-      },
-    },
     // A click of a session that has rendered measures its lane switches over
     // that same config, as the daemon's does; a test that handed in none
     // switches no lane on. No lane owner runs here: a test that reads what a
@@ -277,13 +289,41 @@ export function testVerbContext(
 
 export { effectsOf, type DecodedEffect } from "../../src/click/read";
 
+// [LAW:single-enforcer] The host, for the acts of `kind` the clicks run with
+// `ctx` returned: each taken from the effects, performed by `perform`, and its
+// outcome settled through the renderer's own acts, so a failure is held on its
+// session's bar as a real outcome's would be. Answers the outcomes, in order.
+export async function performActs<K extends Act["kind"]>(
+  ctx: VerbContext,
+  kind: K,
+  perform: (act: Extract<Act, { kind: K }>) => Promise<EffectOutcome>,
+): Promise<EffectOutcome[]> {
+  const acts = actsOf(ctx, kind);
+  for (const act of acts) ctx.effects.splice(ctx.effects.indexOf(act), 1);
+  const outcomes: EffectOutcome[] = [];
+  for (const act of acts) {
+    const outcome = await perform(act);
+    (ctx.acts as Acts).settled(act.id, outcome);
+    outcomes.push(outcome);
+  }
+  return outcomes;
+}
+
+// The acts of `kind` the clicks run with `ctx` returned, in order.
+export function actsOf<K extends Act["kind"]>(
+  ctx: Pick<VerbContext, "effects">,
+  kind: K,
+): Extract<Act, { kind: K }>[] {
+  return ctx.effects.filter(
+    (e): e is Extract<Act, { kind: K }> => e.kind === kind,
+  );
+}
+
 // A rendered link as the daemon reads it; a test's links are always links.
 export const linkClick = clickOf;
 
 // Drive a rendered click URL through the real parse → dispatch path.
 export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   const { verb, value } = linkClick(url);
-  const handler = VERBS.get(verb);
-  if (!handler) throw new Error(`no handler for verb "${verb}"`);
-  await handler(value, ctx);
+  await performClick(verb, value, ctx);
 }

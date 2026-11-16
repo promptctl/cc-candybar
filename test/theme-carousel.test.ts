@@ -36,7 +36,7 @@ import type {
   ColorCompatibility,
   Endcaps,
 } from "../src/themes/policy";
-import { VERBS } from "../src/renderer/verbs";
+import { performClick } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
 import { testVerbContext, effectsOf, recordRender } from "./helpers/click";
@@ -141,7 +141,7 @@ function rig(
     const { verb, value } = linkClick(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
+    for (const e of effects) await performClick(e.verb, e.value, ctx);
   };
   // Click the link whose visible text is `text`, in the bar as last rendered.
   const clickText = async (text: string): Promise<void> => {

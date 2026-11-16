@@ -69,7 +69,7 @@ import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
 import { UNREAD_RUN } from "../src/facts/world-state";
 import { mainRenderer } from "../src/renderer/main";
-import { rendererParts } from "./helpers/renderer-parts";
+import { rendererParts, NO_ACTS } from "./helpers/renderer-parts";
 import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
@@ -845,6 +845,7 @@ function statusline(r: Rig, configFile: string) {
     }),
     () => {},
     r.collector,
+    NO_ACTS,
   );
   // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
   // request delivered has settled, the present's `effect-done` among them, so

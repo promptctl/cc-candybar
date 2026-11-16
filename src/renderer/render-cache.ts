@@ -26,7 +26,7 @@ import {
   repoConfigs,
   repoConfigsDir,
   repoConfigsPath,
-} from "./repo-configs.js";
+} from "../config/repo-book.js";
 import { REPO_PLUGIN_DIR } from "../config/loader/plugin-folders.js";
 import type { Drawing } from "../config/lanes.js";
 import {

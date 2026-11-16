@@ -39,7 +39,7 @@ import {
   VERB_COPY,
   VERB_OPEN_VSCODE,
 } from "../src/click/wire";
-import { VERBS } from "../src/renderer/verbs";
+import { performClick } from "../src/renderer/verbs";
 import { CHECKS } from "../src/doctor/checks";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
@@ -83,9 +83,7 @@ function actionBar(src: string) {
         sideEffects.push({ verb: e.verb, args: [decodeURIComponent(e.value)] });
         continue;
       }
-      const handler = VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, rig.ctx); // real set-state / step-state through the gate
+      await performClick(e.verb, e.value, rig.ctx); // real set-state / step-state through the gate
     }
   };
   return { config, store, sessionState, render, click, sideEffects };

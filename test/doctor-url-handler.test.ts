@@ -25,7 +25,7 @@ import {
 import { clickArrived } from "../src/doctor/sightings";
 import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { performClick, type VerbContext } from "../src/renderer/verbs";
 import { parseClick } from "../src/daemon/click-reading";
 import { linkSignerOver } from "../src/click/link-signer";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
@@ -404,7 +404,7 @@ describe("the daemon's side of the round trip", () => {
       }
 });
     const click = async (verb: string, value: string): Promise<void> =>
-      await VERBS.get(verb)!(value, ctx);
+      await performClick(verb, value, ctx);
     return { sessionState, logs, click };
   }
 

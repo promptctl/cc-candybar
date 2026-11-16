@@ -49,7 +49,6 @@ import type {
   DebugSnapshot,
   DebugWhat,
 } from "../daemon/foundations/debug-types.js";
-import { holdClickError } from "../daemon/foundations/click-error.js";
 import { floorOf } from "../config/globals-fields.js";
 import { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
@@ -84,6 +83,8 @@ import {
 } from "../renderer-interface/interface.js";
 import { JournalTurns } from "./journal-turns.js";
 import { ConfigWrites } from "./config-writes.js";
+import { Acts } from "./acts.js";
+import { LaneSurfaces } from "./lane-surfaces.js";
 import { readConfigText } from "./config-file-store.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
@@ -127,6 +128,7 @@ export function mainRenderer(
             idleSince: event.idleSince,
           },
           record,
+          effects,
         );
         const id = parts.mint();
         deliveries.set(id, delivered);
@@ -147,13 +149,14 @@ export function mainRenderer(
         retireSession(parts, event.session);
         return;
       case "effect-done": {
-        if (parts.verbs.changeDone(event.of, event.outcome)) return;
+        if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
+        if (parts.acts.settled(event.of, event.outcome)) return;
         const delivered = deliveries.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
         // one already settled, is the host's bug: said, never ignored.
         if (delivered === undefined)
           throw new Error(
-            `effect-done for effect ${event.of}, which is neither a present nor a change on its way`,
+            `effect-done for effect ${event.of}, which is no present, write or act on its way`,
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
@@ -293,6 +296,7 @@ function startOver(
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const configWrites = new ConfigWrites(mint, readConfigText);
+  const acts = new Acts({ mint, sessionState, now });
   // [LAW:single-enforcer] The one queue every journal waits its turn in, the
   // renderer's own: no host part takes a turn.
   const journalTurns = new JournalTurns({
@@ -375,6 +379,7 @@ function startOver(
     worldStates,
     renderWarnings,
     effectSessions,
+    laneSurfaces: new LaneSurfaces({ acts, log }),
   };
   const reloadConfig = (origin: RenderOrigin): void =>
     renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
@@ -391,9 +396,8 @@ function startOver(
     configWrites,
     clickLanded: (sessionId) => host.menuIdle.clicked(sessionId, now()),
     log,
-    launch: host.launch,
+    acts,
     now,
-    applyUpdate: host.applyUpdate,
     doctor: {
       ...machineReads,
       // The load the session's bar is drawn from: its cache entry's load
@@ -421,7 +425,6 @@ function startOver(
     clients: host.renderSightings,
     bundle: inputs.bundle,
     serving: host.serving,
-    typeSlash: host.typeSlash,
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -435,12 +438,11 @@ function startOver(
       renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
         .state.sources,
     links: linkSigner,
-    runs: host.runs,
     lanes: {
       of: (origin, sessionId, latest) =>
         lanesAt(parts, origin, sessionId, latest),
-      clicked: (sessionId, latest, before, after) =>
-        laneClicked(parts, sessionId, latest, before, after),
+      clicked: (sessionId, latest, before, after, effects) =>
+        laneClicked(parts, sessionId, latest, before, after, effects),
     },
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
@@ -520,9 +522,6 @@ function startOver(
       case "watch":
         watches.pushed(push.id, push.heard, push.deaf);
         return { kind: "watch" };
-      case "hold-click-error":
-        holdClickError(sessionState, push.session, push.text, at);
-        return { kind: "hold-click-error" };
       case "reload-every":
         renderCache.reloadEvery({ kind: "events-resumed", since: push.since });
         return { kind: "reload-every" };
@@ -544,7 +543,7 @@ function startOver(
     }
   };
   return mainRenderer(
-    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint },
+    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint, acts },
     pushed,
   );
 }

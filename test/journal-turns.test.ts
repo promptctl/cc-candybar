@@ -1,9 +1,8 @@
 // Journals across an awaited handler. A click is a real `dispatch` parked on
-// its `copy` launch; the click-path cases drive `replyTo`, the daemon's real
-// click arm.
+// a doctor gather in its turn; the click-path cases drive `replyTo`, the
+// daemon's real click arm.
 
 import { signedClick } from "./helpers/link-signer";
-import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { fieldOf } from "../src/utils/logfmt";
 import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/renderer/journal-turns";
@@ -17,10 +16,9 @@ import {
   type Failure,
 } from "../src/daemon/foundations/verb-error";
 import { SessionState } from "../src/renderer/session-state";
-import { closeIdleMenus, VERBS, type VerbContext } from "../src/renderer/verbs";
+import { closeIdleMenus, performClick, type VerbContext } from "../src/renderer/verbs";
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
-  VERB_COPY,
   VERB_DISPATCH,
   VERB_SET_STATE,
   VERB_TMUX_STATUS_CLICK,
@@ -28,9 +26,7 @@ import {
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
-import type { Launcher, LaunchResult } from "../src/proc/launcher";
 import { instantOf } from "../src/utils/instant";
-import { systemLauncher } from "../src/proc/system-launcher";
 import { busy } from "../src/doctor/busy";
 import type { DoctorEdge } from "../src/doctor/ports";
 import {
@@ -62,13 +58,26 @@ function gate(): { wait: Promise<void>; open: () => void } {
   return { wait, open };
 }
 
-const LAUNCHED: LaunchResult = {
-  ok: true,
-  stdout: "",
-  stderr: "",
-  exitCode: 0,
-} as LaunchResult;
+const doctorEdge = (over: Partial<DoctorEdge>): DoctorEdge =>
+  ({
+    install: HEALTHY_INSTALL_EDGE,
+    ...healthyDaemonEdge(),
+    ...healthyDataEdge(),
+    ...noManagedSettings(),
+    loadConfig: () => ({
+      layers: [],
+      error: null,
+      warning: null,
+      unused: [],
+      config: EMPTY_DEFAULT,
+    }),
+    probeTmux: async () => ({ kind: "failed", reason: "no tmux" }),
+    ...over,
+  }) as DoctorEdge;
 
+// A click writing `theme`, then running the doctor, whose gather is past the
+// click's head and so runs in its turn, parked on `parked`, then writing
+// `style`.
 function parkedClick(
   ctx: VerbContext,
   theme: string,
@@ -77,19 +86,25 @@ function parkedClick(
 ): Promise<void> {
   const url = effectsUrl([
     { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
-    { verb: VERB_COPY, args: ["x"] },
+    { verb: VERB_DOCTOR_RUN, args: [SID] },
     { verb: VERB_SET_STATE, args: [SID, "endcaps", style] },
   ]);
-  const launch = () => parked.then(() => LAUNCHED);
-  return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), {
+  const healthy = healthyDaemonEdge().daemons;
+  return performClick(VERB_DISPATCH, url.slice(url.lastIndexOf("/") + 1), {
     ...ctx,
-    launch,
+    doctorStores: emptyStores(),
+    doctor: doctorEdge({ daemons: () => parked.then(healthy) }),
   });
 }
+
+// Another session's click holding the daemon-wide turn until `held`.
+const holdTurn = (turns: JournalTurns, held: Promise<void>): Promise<void> =>
+  turns.take("holder", { waited: () => {}, gone: async () => false }, () => held);
 
 function setup() {
   const sessionState = new SessionState();
   recordRender(sessionState, SID);
+  sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, "{}");
   const logged: string[] = [];
   const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT);
   const turns = new JournalTurns({
@@ -100,8 +115,6 @@ function setup() {
     journalTurns: turns,
     log: (_level, msg) => logged.push(msg),
   });
-  // A click writing `theme`, parked on `parked` in a launch before it writes
-  // `style`.
   const click = (theme: string, style: string, parked: Promise<unknown>) =>
     parkedClick(ctx, theme, style, parked);
   // The renderer's `close-journal`.
@@ -199,15 +212,12 @@ describe("the idle close decides in its turn", () => {
   afterEach(() => jest.useRealTimers());
 
   test("a close queued behind another session's click keeps what a click arriving behind it opens", async () => {
-    const { ctx, logged } = setup();
+    const { ctx, turns, logged } = setup();
     const m = idleOver(ctx);
     m.idle.observe(SID, m.at(), true, 30);
     const held = gate();
     // Another session holds the turn past this session's deadline.
-    const other = VERBS.get(VERB_COPY)!("x", {
-      ...ctx,
-      launch: () => held.wait.then(() => LAUNCHED),
-    });
+    const other = holdTurn(turns, held.wait);
     await drain();
     m.advance(30);
     expect(m.fired).toHaveLength(1);
@@ -226,14 +236,11 @@ describe("the idle close decides in its turn", () => {
   });
 
   test("a close whose session was evicted while queued keeps what its click opened", async () => {
-    const { ctx, logged } = setup();
+    const { ctx, turns, logged } = setup();
     const m = idleOver(ctx);
     const held = gate();
     m.idle.observe(SID, m.at(), true, 30);
-    const other = VERBS.get(VERB_COPY)!("x", {
-      ...ctx,
-      launch: () => held.wait.then(() => LAUNCHED),
-    });
+    const other = holdTurn(turns, held.wait);
     await drain();
     m.advance(30);
     for (let i = 0; i < 256; i++)
@@ -275,7 +282,8 @@ test("a navigation commit that throws leaves the settings journal committed", as
       throw new Error("navigation broke");
     },
   }));
-  const click = VERBS.get(VERB_SET_STATE)!;
+  const click = (value: string, ctx: VerbContext) =>
+    performClick(VERB_SET_STATE, value, ctx);
   await expect(
     click(encodeSegments([SID, "theme", "nord"]), ctx),
   ).rejects.toThrow("navigation broke");
@@ -287,7 +295,8 @@ test("a navigation commit that throws leaves the settings journal committed", as
 test("a verb stamps its session's landing, though its handler threw", async () => {
   const { ctx } = setup();
   const landed: string[] = [];
-  const verb = VERBS.get(VERB_UNDO)!;
+  const verb = (value: string, ctx: VerbContext) =>
+    performClick(VERB_UNDO, value, ctx);
   await expect(
     verb(encodeSegments([SID]), {
       ...ctx,
@@ -459,7 +468,7 @@ describe("a cut click goes no further", () => {
     expect(sessionState.get(SID, "endcaps")).toBeNull();
   });
 
-  test("a launch the close aborted answers DaemonClosing, not its own failure", async () => {
+  test("a gather the close aborted answers DaemonClosing, not its own failure", async () => {
     const { ctx, turns, click } = setup();
     const held = gate();
     const cut = click(
@@ -496,21 +505,7 @@ test("stats name the holder and what waits", async () => {
 });
 
 describe("a doctor click", () => {
-  const edge = (over: Partial<DoctorEdge>): DoctorEdge =>
-    ({
-      install: HEALTHY_INSTALL_EDGE,
-      ...healthyDaemonEdge(),
-      ...healthyDataEdge(),
-      ...noManagedSettings(),
-      loadConfig: () => ({
-        layers: [],
-        error: null,
-        advisories: [],
-        config: EMPTY_DEFAULT,
-      }),
-      probeTmux: async () => ({ kind: "failed", reason: "no tmux" }),
-      ...over,
-    }) as DoctorEdge;
+  const edge = doctorEdge;
 
   test("cut during its probes files nothing", async () => {
     const { sessionState, ctx, turns } = setup();
@@ -518,7 +513,7 @@ describe("a doctor click", () => {
     const before = sessionState.revision(SID);
     const held = gate();
     const healthy = healthyDaemonEdge().daemons;
-    const run = VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(SID), {
+    const run = performClick(VERB_DOCTOR_RUN, encodeURIComponent(SID), {
       ...ctx,
       doctorStores: emptyStores(),
       doctor: edge({ daemons: () => held.wait.then(healthy) }),
@@ -540,66 +535,11 @@ describe("a doctor click", () => {
       }),
     );
     await expect(
-      VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(SID), {
+      performClick(VERB_DOCTOR_RUN, encodeURIComponent(SID), {
         ...ctx,
         doctorStores: emptyStores(),
         doctor: edge({ probeTmux: async () => busy("tmux") }),
       }),
     ).rejects.toThrow(/tmux less than a second ago/);
-  });
-});
-
-describe("a click's real launch", () => {
-  test("hung, it times out and gives the turn back", async () => {
-    const { ctx, turns } = setup();
-    const launcher = systemLauncher(
-      { inherited: process.env },
-      systemTimekeeper,
-    );
-    const hung = {
-      ...launcher,
-      launch: (opts: Parameters<Launcher["launch"]>[0]) =>
-        launcher.launch({
-          ...opts,
-          bin: "/bin/sleep",
-          args: ["30"],
-          timeoutMs: 100,
-          stdinInput: undefined,
-        }),
-    } as Launcher;
-    await expect(
-      VERBS.get(VERB_COPY)!("x", { ...ctx, launch: clickLaunchVia(hung) }),
-    ).rejects.toThrow(/pbcopy failed/);
-    expect(turns.getStats().holder).toBeNull();
-  });
-
-  test("a setsid descendant holding stdout leaves the loop answering while it lives", async () => {
-    const { ctx } = setup();
-    const launcher = systemLauncher(
-      { inherited: process.env },
-      systemTimekeeper,
-    );
-    const script =
-      "import os,time\nif os.fork()==0:\n  os.setsid()\n  time.sleep(3)\n  os._exit(0)\nos._exit(0)\n";
-    const holder = {
-      ...launcher,
-      launch: (opts: Parameters<Launcher["launch"]>[0]) =>
-        launcher.launch({
-          ...opts,
-          bin: "python3",
-          args: ["-c", script],
-          stdinInput: undefined,
-        }),
-    } as Launcher;
-    let ticks = 0;
-    const ticking = setInterval(() => ticks++, 10);
-    const started = performance.now();
-    await VERBS.get(VERB_COPY)!("x", {
-      ...ctx,
-      launch: clickLaunchVia(holder),
-    });
-    clearInterval(ticking);
-    expect(performance.now() - started).toBeLessThan(2500);
-    expect(ticks).toBeGreaterThan(0);
   });
 });

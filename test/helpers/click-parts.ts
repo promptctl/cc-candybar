@@ -5,7 +5,8 @@
 // these in.
 
 import { NO_PUSHES } from "./renderers";
-import { minter } from "./renderer-parts";
+import { minter, NO_ACTS } from "./renderer-parts";
+import type { Acts } from "../../src/renderer/acts";
 import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
 import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
@@ -27,6 +28,7 @@ export function clickParts(
     holding: () => () => {},
     clicked: () => {},
   },
+  acts: Parameters<typeof rendererHost>[5] = NO_ACTS,
 ): Pick<DaemonParts, "renderer" | "clicks" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
 } {
@@ -40,6 +42,8 @@ export function clickParts(
     // What the renderer times each turn by.
     clock: systemTimekeeper,
     mint: minter(),
+    // The acts the verb context's clicks return, settled by their outcomes.
+    acts: verbCtx.acts as Acts,
   } as unknown as MainRendererParts;
   return {
     renderer: rendererHost(
@@ -48,6 +52,7 @@ export function clickParts(
       mainRenderer(parts, NO_PUSHES),
       () => {},
       { subscribed: () => {}, holding: collector.holding },
+      acts,
     ),
     clicks,
     collector,
