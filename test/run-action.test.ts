@@ -260,7 +260,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   cleanups.push(() => {
     runs.close();
     cache.close();
-    providers.close();
+    for (const [, close] of providers.closes) close();
     watchers.closeAll();
   });
   return {
@@ -1070,7 +1070,9 @@ describe("the link key", () => {
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     expect(fs.readFileSync(file)).toHaveLength(32);
     // Another process over the same file verifies the first one's links.
-    expect(linkSignerOver(linkKeyFromFile(file)).verify(fields, mac)).toBe(true);
+    expect(linkSignerOver(linkKeyFromFile(file)).verify(fields, mac)).toBe(
+      true,
+    );
     expect(linkSigner(TEST_LINK_KEY).verify(fields, mac)).toBe(false);
     // Each maker's own file is gone once the key landed.
     expect(fs.readdirSync(path.dirname(file))).toEqual(["link.key"]);
@@ -1115,7 +1117,9 @@ describe("the link key", () => {
     const mac = linkSignerOver(linkKeyFromFile(file)).sign(fields);
     fs.chmodSync(path.dirname(file), 0o500);
     try {
-      expect(linkSignerOver(linkKeyFromFile(file)).verify(fields, mac)).toBe(true);
+      expect(linkSignerOver(linkKeyFromFile(file)).verify(fields, mac)).toBe(
+        true,
+      );
     } finally {
       fs.chmodSync(path.dirname(file), 0o700);
     }
@@ -1140,9 +1144,9 @@ describe("the link key", () => {
     const key = linkKeyFromFile(file);
     const host = linkSignerOver(key);
     const why = `link key ${file} holds 5 bytes, not 32`;
-    expect(host.openLink("cc-candybar://copy/x#AAAAAAAAAAAAAAAAAAAAAA")).toEqual(
-      { kind: "failed", reason: expect.stringContaining(why) },
-    );
+    expect(
+      host.openLink("cc-candybar://copy/x#AAAAAAAAAAAAAAAAAAAAAA"),
+    ).toEqual({ kind: "failed", reason: expect.stringContaining(why) });
     expect(key()).toEqual({
       kind: "failed",
       reason: expect.stringContaining(why),

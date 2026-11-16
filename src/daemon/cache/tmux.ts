@@ -9,7 +9,7 @@ import {
   type KeyedSourceStats,
 } from "../../utils/keyed-source";
 import { quietLogger, type DaemonLogger } from "../../utils/logger";
-import { RefreshLedger } from "../../utils/refresh-ledger";
+import { RefreshLedger, REFRESH_TRIGGERS } from "../../utils/refresh-ledger";
 import type { Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
@@ -55,6 +55,7 @@ export class TmuxService {
       every: () => ({ okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS }),
       watch: NO_WATCH,
       maxEntries: MAX_ENTRIES,
+      lines: REFRESH_TRIGGERS,
       logger,
       ledger: opts.ledger ?? new RefreshLedger(logger),
       clock: opts.clock,

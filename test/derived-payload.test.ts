@@ -207,6 +207,20 @@ describe("a cache policy over the view's payload", () => {
   });
 });
 
+// A rate ends with the turn its samples measured, which the transcript says,
+// so the session's speed is a value of its payload, not of the draw.
+test("a cache key over the burn-rate history loads", () => {
+  expect(() =>
+    parseAndValidate(
+      "<test>",
+      `{ variables: { p: { kind: "shell", command: "true",
+        cache: { key: "{{ .speed.history }}" } } } }`,
+      undefined,
+      DEFAULT_DSL_CONFIG,
+    ),
+  ).not.toThrow();
+});
+
 describe("a policy or rule over what the draw answers is refused at load", () => {
   const load = (source: string) => () =>
     parseAndValidate("<test>", source, undefined, DEFAULT_DSL_CONFIG);

@@ -57,9 +57,13 @@ test("every input at a path the draw answers is a projection", () => {
       rate: { kind: "input", path: "feeds.band.fps" },
       by: { kind: "input", path: "drawing.by" },
       sid: { kind: "input", path: "session_id" },
+      burn: { kind: "input", path: "speed.history" },
     }`),
   );
   expect(projections.has("sid")).toBe(false);
+  // A rate ends with its turn, which the transcript says, so speed moves
+  // with its samples and never with the draw.
+  expect(projections.has("burn")).toBe(false);
   for (const name of ["spent", "rate", "by"]) {
     expect([name, projections.get(name)]).toEqual([
       name,
@@ -222,7 +226,7 @@ test("the config load line names the load's projections", () => {
     /: projections=(\S+) /
       .exec(text)![1]!
       .split(",")
-      .filter((name) => !/^(today|speed|feeds|drawing)\./.test(name));
+      .filter((name) => !/^(today|feeds|drawing)\./.test(name));
   try {
     expect(
       named(

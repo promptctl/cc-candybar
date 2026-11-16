@@ -191,9 +191,19 @@ describe("a frame's payload", () => {
       payload.activity,
       payload.cache,
       payload.autocompact,
+      payload.speed,
     ]) {
       expect(lane).toEqual(pendingOf("unread"));
     }
+  });
+
+  test("a speed lane that failed draws no speed; the rest of the frame draws", async () => {
+    const { inputs, request, deps } = counted();
+    await request();
+    deps.usageStore.speedOf = () => failed("transcript unreadable", "read");
+    const payload = payloadOf(inputs(), DRAW);
+    expect(payload.speed).toBeUndefined();
+    expect(payload.git).toMatchObject({ branch: "main" });
   });
 
   test("a lane whose read throws is that lane's failure; the rest of the frame draws", async () => {

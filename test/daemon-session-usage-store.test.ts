@@ -72,7 +72,7 @@ async function countFsOps(body: () => Promise<unknown>): Promise<number> {
 }
 
 // One JSONL line of usage for `day` with the given cost. Unique requestId/msgId
-// so the dedup in the parser keeps every line.
+// so each line is a response of its own and the fold counts every one.
 function usageLine(tag: string, day: Date, cost: number): string {
   return (
     JSON.stringify({
@@ -185,10 +185,7 @@ describe("SessionUsageStore — session projection", () => {
       const late = join(dir, "C.jsonl");
       mkdirSync(late);
       const request = store.refresh(SID_C, late, "change");
-      await Promise.all([
-        request.usage(),
-        request.speed(Date.now()),
-      ]);
+      await Promise.all([request.usage(), request.speed(Date.now())]);
       expect(usage()).toMatchObject({ refreshes: { change: 3 }, failures: 2 });
       expect(
         lines.filter((l) => l.startsWith("warn usage refresh sid=C ")),
@@ -372,11 +369,10 @@ describe("SessionUsageStore — session projection", () => {
       expect(store.sweepStale()).toBe(1);
       expect(store.getStats()).toMatchObject({ size: 0 });
       expect(lines).toContain("usageStore sweep dropped=1 noRecord=1 held=0");
-      // The ring went with it: the next observation starts a new baseline.
+      // The ring went with it: the next observation starts a new one.
       const next = await store.refresh(SID_R, undefined, "change").speed(2_000);
-      expect(next.kind).toBe("ok");
-      if (next.kind !== "ok") return;
-      expect(next.value.prev).toBeUndefined();
+      if (next.kind !== "ok") throw new Error("no observation");
+      expect(next.value.samples.map((s) => s.atMs)).toEqual([2_000]);
     } finally {
       store.close();
       clock.mockRestore();
@@ -464,6 +460,55 @@ describe("SessionUsageStore — session projection", () => {
       await usageFold(store, SID_G, dir);
       expect(store.daysOutside(SID_G, elsewhere).kind).toBe("failed");
       expect(store.daysOutside(SID_G, [dir]).kind).toBe("failed");
+    } finally {
+      store.close();
+    }
+  });
+
+  // Claude Code writes each content block of one API response as its own
+  // entry, every one repeating the response's usage.
+  test("a response written as several entries is counted once", async () => {
+    const t = join(dir, "A.jsonl");
+    const at = new Date();
+    const block = (id: string, request: string) =>
+      JSON.stringify({
+        timestamp: at.toISOString(),
+        type: "assistant",
+        requestId: request,
+        costUSD: 0.01,
+        message: {
+          id,
+          model: "claude-opus-4-8",
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      }) + "\n";
+    writeFileSync(
+      t,
+      block("msg-1", "req-1") +
+        block("msg-1", "req-1") +
+        block("msg-1", "req-1") +
+        block("msg-2", "req-2"),
+    );
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const info = await usageFold(store, SID_A, t);
+      expect(info).toMatchObject({
+        kind: "ok",
+        value: {
+          tokens: 30,
+          tokenBreakdown: { input: 20, output: 10 },
+        },
+      });
+      if (info.kind !== "ok") return;
+      expect(info.value.calculatedCost).toBeCloseTo(0.02, 5);
+      // A run split across two appends is still one response.
+      appendFileSync(t, block("msg-2", "req-2"));
+      const again = await usageFold(store, SID_A, t);
+      expect(again).toMatchObject({ value: { tokens: 30 } });
     } finally {
       store.close();
     }

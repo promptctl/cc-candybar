@@ -15,6 +15,7 @@ import {
   findAgentTranscripts,
   foldAppended,
   longLineLog,
+  turnOpenAfter,
   unlessGone,
   type Folded,
   type ParsedEntry,
@@ -48,6 +49,7 @@ import {
 } from "../../utils/keyed-source";
 import {
   RefreshLedger,
+  REFRESH_TRIGGERS,
   type RefreshTrigger,
   type Refreshes,
 } from "../../utils/refresh-ledger";
@@ -86,14 +88,16 @@ import type {
 // computed over it, so a frame's `today` is one lookup that changes in the
 // turn a record does (brandon-unfiled-3248.8ro6, step 3).
 
-// How many recent samples the burn-rate ring retains per session. A render-cadence
-// trend, not an archive: enough to fill a wide sparkline cell, capped so an
-// idle-but-alive session can't grow it without bound. The window the sparkline
-// draws is a tail slice of this (the `width` arg), so this only sets the ceiling.
+// How many recent samples the burn-rate ring retains per session. A
+// write-cadence trend, not an archive: enough to fill a wide sparkline cell,
+// capped so a long session can't grow it without bound. The window the
+// sparkline draws is a tail slice of this (the `width` arg), so this only sets
+// the ceiling.
 const SPEED_RING_CAPACITY = 64;
 
 function speedSampleOf(
   breakdown: TokenBreakdown | null,
+  turnOpen: boolean,
   atMs: number,
 ): SpeedSample {
   // Prompt-side = raw input plus both cache lanes (all tokens fed to the model);
@@ -103,7 +107,7 @@ function speedSampleOf(
     ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead
     : 0;
   const output = breakdown ? breakdown.output : 0;
-  return { input, output, total: input + output, atMs };
+  return { input, output, total: input + output, atMs, turnOpen };
 }
 
 interface SessionRecord {
@@ -113,6 +117,7 @@ interface SessionRecord {
   files: Map<string, Folded<FileFold>>;
   usage: TranscriptUsage;
   days: Map<string, DayUsage>;
+  turnOpen: boolean;
   transcriptStamp: string;
   transcriptPath: string | undefined;
 }
@@ -163,9 +168,10 @@ export interface SessionLanes {
   speed(nowMs: number): Promise<Outcome<SpeedObservation>>;
 }
 
-// What one caller's ingests did. Renders share the store's running tally — the
-// usage cache's hit rate; each scan keeps its own, reported on its event, so a
-// rescan over thousands of warm records cannot pass for render behaviour.
+// What one caller's ingests did. A session's refreshes share the store's
+// running tally — the usage cache's hit rate, which a render event reports as
+// it stands; each scan keeps its own, reported on its event, so a rescan over
+// thousands of warm records cannot pass for a session's refreshes.
 interface IngestTally {
   hits: number;
   misses: number;
@@ -214,15 +220,21 @@ function emptyBreakdown(): TokenBreakdown {
 
 // [LAW:one-source-of-truth] The incremental fold of ONE append-only transcript
 // file (a session's main transcript or one agent sidechain): the sums over
-// every usage-bearing entry seen so far. The cursor marking the bytes folded
-// is the `Folded` pair's, never a field of its own here.
+// every response seen so far, and whether its turn is open after
+// the last entry. The cursor marking the bytes folded is the `Folded` pair's,
+// never a field of its own here.
 // The session aggregate is the MERGE of its files' folds (mergeFolds), so a file
 // rewritten by /compact re-folds in isolation without disturbing the others.
 interface FileFold {
-  entries: number; // usage-bearing entries folded (0 ⇒ empty session, all-null)
+  entries: number; // responses whose usage is folded (0 ⇒ empty session, all-null)
   cost: number;
   breakdown: TokenBreakdown;
   days: Map<string, DayUsage>; // keys >= seed cutoff only (pruned on fold)
+  // An agent sidechain's entries move no turn (turnOpenAfter), so only the
+  // main transcript's fold can be open.
+  turnOpen: boolean;
+  // The API response the last usage folded came from (responseOf).
+  response: string | undefined;
 }
 
 const EMPTY_FILE_FOLD: FileFold = {
@@ -230,7 +242,19 @@ const EMPTY_FILE_FOLD: FileFold = {
   cost: 0,
   breakdown: emptyBreakdown(),
   days: new Map(),
+  turnOpen: false,
+  response: undefined,
 };
+
+// [LAW:one-source-of-truth] The API response an entry belongs to. Claude Code
+// writes each content block of one response as its own entry, in a run, and
+// every entry of the run repeats the response's usage: the usage is the
+// response's, counted once, at the run's first entry. An entry naming no
+// message is a response of its own.
+function responseOf(entry: ParsedEntry): string | undefined {
+  const id = entry.message?.id;
+  return id === undefined ? undefined : `${id}:${entry.raw.requestId ?? ""}`;
+}
 
 // [LAW:effects-at-boundaries] The fold step: NEW entries onto a file fold.
 // Returns a FRESH FileFold (the state is never mutated) so two concurrent
@@ -252,12 +276,18 @@ async function foldFile(
   const keep = dayKey(new Date(seedCutoffMs(clock.now())));
   let count = state.entries;
   let cost = state.cost;
+  let turnOpen = state.turnOpen;
+  let last = state.response;
   const breakdown = { ...state.breakdown };
   const days = new Map<string, DayUsage>();
   for (const [k, v] of state.days) if (k >= keep) days.set(k, { ...v });
   for (const entry of entries) {
+    turnOpen = turnOpenAfter(turnOpen, entry);
     const u = entry.message?.usage;
     if (!u) continue;
+    const response = responseOf(entry);
+    if (response !== undefined && response === last) continue;
+    last = response;
     count++;
     const priced =
       entry.costUSD ??
@@ -281,8 +311,18 @@ async function foldFile(
     d.cacheRead += u.cache_read_input_tokens || 0;
     days.set(key, d);
   }
-  return { entries: count, cost, breakdown, days };
+  return { entries: count, cost, breakdown, days, turnOpen, response: last };
 }
+
+// A session's files folded again: each file's fold, their merge, and the main
+// transcript's stamp they were read at.
+type Refolded = {
+  readonly files: Map<string, Folded<FileFold>>;
+  readonly mainStamp: string;
+  // Whether the session's turn is open: the main transcript's fold alone,
+  // since a sidechain's entries move no turn (turnOpenAfter).
+  readonly turnOpen: boolean;
+} & ReturnType<typeof mergeFolds>;
 
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
 // derived record shape the read path serves. `entries === 0` across all files is
@@ -429,7 +469,7 @@ export class SessionUsageStore {
   // pricing table is cached.
   private readonly host: Host;
   private readonly log: DaemonLogger;
-  private readonly renderTally: IngestTally = { hits: 0, misses: 0 };
+  private readonly refreshTally: IngestTally = { hits: 0, misses: 0 };
   private readonly ledger: RefreshLedger;
   // The session record's refresh, which its transcript lanes make; a
   // rescan's reads are its `today` scan's.
@@ -464,7 +504,7 @@ export class SessionUsageStore {
       name: "usage",
       scope: "session",
       refresh: ["first", "period", "change"],
-      event: "step",
+      lines: [],
     });
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
     this.scans = new KeyedSource({
@@ -476,6 +516,7 @@ export class SessionUsageStore {
       every: () => opts.rescan ?? DEFAULT_RESCAN,
       watch: NO_WATCH,
       maxEntries: MAX_UNHELD_SCANS,
+      lines: REFRESH_TRIGGERS,
       logger: this.log,
       ledger: this.ledger,
       clock: this.clock,
@@ -496,8 +537,8 @@ export class SessionUsageStore {
   } {
     return {
       size: this.sessions.size,
-      hits: this.renderTally.hits,
-      misses: this.renderTally.misses,
+      hits: this.refreshTally.hits,
+      misses: this.refreshTally.misses,
       sweeps: this.sweeps,
     };
   }
@@ -568,8 +609,8 @@ export class SessionUsageStore {
       const tally: IngestTally = { hits: 0, misses: 0 };
       const startedAt = this.clock.monotonic();
       const record = await this.ingest(sessionId, transcriptPath, tally, stamp);
-      this.renderTally.hits += tally.hits;
-      this.renderTally.misses += tally.misses;
+      this.refreshTally.hits += tally.hits;
+      this.refreshTally.misses += tally.misses;
       if (tally.misses > 0) {
         this.usage.recorded(
           `sid=${valueOf(sessionId)}`,
@@ -649,9 +690,9 @@ export class SessionUsageStore {
   }
 
   // A refresh's speed sample, over its one ingest of the session: its current
-  // cumulative counts, the prior sample alongside, and this one recorded as the
-  // new baseline — taken only at a stamp no sample was taken at, so a period
-  // over an unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
+  // cumulative counts and whether its turn is open, added to the session's
+  // ring — taken only at a stamp no sample was taken at, so a period over an
+  // unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
   // as `failed` (the boundary logs it and the segment reads "—"); an unknown
   // session yields a zero-count sample, so a first-ever render establishes a
   // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
@@ -662,10 +703,9 @@ export class SessionUsageStore {
     nowMs: number,
   ): Promise<Outcome<SpeedObservation>> {
     // [LAW:no-ambient-temporal-coupling] Key the observation by the same
-    // (session, stamp) tuple ingest uses, so concurrent renders at one transcript
-    // state coalesce onto a single observe-and-commit — the read of `prev` and
-    // the write of `cur` happen exactly once for that state, with the flight as
-    // the sole owner of ordering. A distinct stamp is a genuinely new sample and
+    // (session, stamp) tuple ingest uses, so concurrent refreshes at one
+    // transcript state coalesce onto a single sample, with the flight as the
+    // sole owner of ordering. A distinct stamp is a genuinely new sample and
     // gets its own key.
     const { stamp, record: refreshed } = refresh();
     return this.speedFlight.run(`${sessionId}:${stamp}`, async () => {
@@ -677,36 +717,33 @@ export class SessionUsageStore {
       const slot = this.hold(sessionId);
       const standing = slot.speed.get();
       if (slot.sampledAt === stamp && standing?.kind === "ok") return standing;
-      const breakdown =
-        record.kind === "ok" ? record.value.usage.tokenBreakdown : null;
-      const cur = speedSampleOf(breakdown, nowMs);
+      const cur =
+        record.kind === "ok"
+          ? speedSampleOf(
+              record.value.usage.tokenBreakdown,
+              record.value.turnOpen,
+              nowMs,
+            )
+          : speedSampleOf(null, false, nowMs);
       const { ring } = slot;
-      // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
-      // clock) owns ring order — NOT ingest-completion order. Two concurrent
-      // observes with different stamps don't coalesce in speedFlight and each
-      // awaits ingest before this mutation, so a plain append would record
-      // samples in whichever-ingest-settled-first order and invert oldest→newest.
-      // prev is the latest sample strictly before this observation; the post-
-      // insert sort by atMs makes the ring's order independent of completion
-      // order. (get→insert→set is synchronous after the await, so each resumed
-      // continuation mutates atomically — no lost update.)
-      let prev: SpeedSample | undefined;
-      for (const s of ring) {
-        if (s.atMs < cur.atMs && (prev === undefined || s.atMs > prev.atMs)) {
-          prev = s;
-        }
-      }
+      // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the
+      // refresh's clock) owns ring order — NOT ingest-completion order. Two
+      // concurrent observes with different stamps don't coalesce in
+      // speedFlight and each awaits ingest before this mutation, so a plain
+      // append would record samples in whichever-ingest-settled-first order
+      // and invert oldest→newest. The post-insert sort by atMs makes the ring's
+      // order independent of completion order. (insert→sort is synchronous
+      // after the await, so each resumed continuation mutates atomically — no
+      // lost update.)
       ring.push(cur);
       ring.sort((a, b) => a.atMs - b.atMs);
       // Drop oldest (smallest atMs ⇒ ring[0]) beyond the cap — a tail window,
       // not an archive.
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
-      slot.sampledAt = stamp;
-      const observed = ok({
-        ...(prev !== undefined && { prev }),
-        cur,
-        samples: [...ring],
-      });
+      // The stamp of the newest sample, so an older observation settling last
+      // does not make a read at the newest stamp sample it again.
+      if (ring.at(-1) === cur) slot.sampledAt = stamp;
+      const observed = ok({ samples: [...ring] });
       answer(slot.speed, observed);
       return observed;
     });
@@ -760,12 +797,7 @@ export class SessionUsageStore {
     // wrapped this; keep that guarantee by mapping any throw to `failed`.
     let refolded: {
       prior: SessionRecord | undefined;
-      outcome: Outcome<{
-        files: Map<string, Folded<FileFold>>;
-        usage: TranscriptUsage;
-        days: Map<string, DayUsage>;
-        mainStamp: string;
-      }>;
+      outcome: Outcome<Refolded>;
     };
     try {
       refolded = await this.flight.run(`${sessionId}:${stamp}`, async () => {
@@ -783,11 +815,10 @@ export class SessionUsageStore {
     }
     const { prior, outcome } = refolded;
     if (outcome.kind !== "ok") return outcome;
+    const { mainStamp, ...folded } = outcome.value;
     const record: SessionRecord = {
-      files: outcome.value.files,
-      usage: outcome.value.usage,
-      days: outcome.value.days,
-      transcriptStamp: outcome.value.mainStamp,
+      ...folded,
+      transcriptStamp: mainStamp,
       transcriptPath,
     };
     // Store only over the record this fold started from. A sweep of that
@@ -867,14 +898,7 @@ export class SessionUsageStore {
     sessionId: SessionId,
     transcriptPath: string,
     prior: SessionRecord | undefined,
-  ): Promise<
-    Outcome<{
-      files: Map<string, Folded<FileFold>>;
-      usage: TranscriptUsage;
-      days: Map<string, DayUsage>;
-      mainStamp: string;
-    }>
-  > {
+  ): Promise<Outcome<Refolded>> {
     // File set for this fold: the main transcript plus the session's current
     // agent sidechains. Files no longer in the set (a removed sidechain) drop
     // out of `newFiles`, so a rewritten/renamed file cannot linger in the merge.
@@ -911,7 +935,12 @@ export class SessionUsageStore {
       newFiles.set(filePath, folded);
       if (filePath === transcriptPath) mainStamp = folded.cursor.stamp;
     }
-    return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
+    return ok({
+      files: newFiles,
+      ...mergeFolds(newFiles),
+      mainStamp,
+      turnOpen: newFiles.get(transcriptPath)?.value.turnOpen ?? false,
+    });
   }
 
   // The one whole-tree scan of a directory set — its seed, or a rescan:

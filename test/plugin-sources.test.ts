@@ -199,17 +199,17 @@ function rig(): Rig {
   // hears nothing here, as in every rig.
   const providers = withTranscriptLanes(
     createPayloadProviders({
-    clock: systemTimekeeper,
-    launcher: world.launcher,
-    host,
-    watchers,
-    fileEvents: new FileEventDelivery({
       clock: systemTimekeeper,
+      launcher: world.launcher,
+      host,
       watchers,
+      fileEvents: new FileEventDelivery({
+        clock: systemTimekeeper,
+        watchers,
+        logger: log,
+      }),
       logger: log,
-    }),
-    logger: log,
-    ledger: new RefreshLedger(log),
+      ledger: new RefreshLedger(log),
       sourceRuns: new SourceRuns({
         launcher: world.launcher,
         clock: systemTimekeeper,
@@ -264,7 +264,7 @@ function rig(): Rig {
     cache.close();
     // The watch-less trigger built over them, then every provider's own.
     providers.transcriptLanes.close();
-    providers.close();
+    for (const [, close] of providers.closes) close();
     watchers.closeAll();
   });
   return {

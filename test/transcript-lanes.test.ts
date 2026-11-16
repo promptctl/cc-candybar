@@ -74,7 +74,7 @@ function rig({ throwing = new Set<string>() } = {}) {
     },
     clock,
     logger: (level, msg) => logged.push(`${level} ${msg}`),
-    ledger: new RefreshLedger(),
+    ledger: new RefreshLedger((level, msg) => logged.push(`${level} ${msg}`)),
   });
   return { clock, calls, owners, watched, logged, lanes };
 }
@@ -149,6 +149,27 @@ test("with no event heard, the period reads every lane again while a session hol
   holds.close();
   await clock.settle(TRANSCRIPT_PERIOD.okMs * 3);
   expect(calls).toEqual([]);
+});
+
+// [LAW:nothing-unseen] A session held for hours adds nothing to the log while
+// its transcript is quiet; each write its watch hears is one line.
+test("a quiet session's period writes no line, and a write's read writes one", async () => {
+  const { clock, watched, logged, lanes } = rig();
+  close.push(() => lanes.close());
+  const holds = new Holds();
+  holds.declare(() => lanes.declare(holds, FOLLOWED));
+  await clock.settle(0);
+  const refreshLines = () =>
+    logged.filter((l) => l.startsWith("info transcript refresh"));
+  expect(refreshLines()).toEqual([expect.stringMatching(/ by=first /)]);
+  await clock.settle(TRANSCRIPT_PERIOD.okMs * 3);
+  expect(refreshLines()).toHaveLength(1);
+  watched[0]!.changed();
+  await clock.settle(0);
+  expect(refreshLines()).toEqual([
+    expect.stringMatching(/ by=first /),
+    expect.stringMatching(/ by=change /),
+  ]);
 });
 
 test("a lane whose read throws is logged and kept as that lane's failure; the rest read, and a clean read clears it", async () => {

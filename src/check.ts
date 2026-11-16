@@ -200,8 +200,8 @@ function bindPass(
 // [LAW:types-are-the-program] The readings are the owners' own types, so a
 // field the daemon's payload requires is a compile error here until the
 // fixture carries it. `term` is the draw's (bindPayload writes it from the
-// width), so it is left out; `today` and `speed` are the draw's projections
-// of the document's facts, handed beside the payload as a draw hands them.
+// width), so it is left out; `today` is the draw's projection of the
+// document's facts, handed beside the payload as a draw hands it.
 export type CheckPayload = Omit<ViewPayload, "term"> &
   ReturnType<typeof instantFacts>;
 

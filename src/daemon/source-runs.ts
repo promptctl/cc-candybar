@@ -44,7 +44,7 @@ import { KeyedSource, NO_WATCH } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { failed, ok, type Outcome } from "../utils/outcome.js";
 import { settledLane, type Current } from "../utils/reading.js";
-import { RefreshLedger } from "../utils/refresh-ledger.js";
+import { RefreshLedger, REFRESH_TRIGGERS } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { shortDigest } from "../facts/world-state.js";
 import type { Timekeeper } from "../time";
@@ -416,6 +416,7 @@ export class SourceRuns {
         // the last release drops it, ending its child, its period and its
         // watch, so a key that moves every tick leaves no child behind.
         maxEntries: 0,
+        lines: REFRESH_TRIGGERS,
         logger,
         ledger,
         clock: deps.clock,

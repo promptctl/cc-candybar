@@ -125,7 +125,7 @@ export class MetricsProvider {
         name: "metrics",
         scope: "session",
         refresh: ["first", "period", "change"],
-        event: "step",
+        lines: [],
       }),
       opts.clock,
       logger,

@@ -49,6 +49,7 @@ import { WatcherRegistry } from "../daemon/cache/watchers.js";
 import { NO_FILE_EVENTS } from "../daemon/cache/file-events.js";
 import { type DaemonLogger, debug, setDebug } from "../utils/logger.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
+import { runTeardown } from "../utils/teardown.js";
 import { processWorld } from "../host.js";
 import { RefreshLedger } from "../utils/refresh-ledger.js";
 import { parseClientHints } from "../daemon/foundations/protocol.js";
@@ -302,7 +303,11 @@ try {
   process.exitCode = 1;
 } finally {
   // The providers own their timers and watchers; all of them are released so
-  // the process ends when the frames do.
-  providers.close();
-  watchers.closeAll();
+  // the process ends when the frames do. A close that threw is a defect, so
+  // the run fails with it.
+  const failed = await runTeardown(
+    [...providers.closes, ["watchers closeAll", () => watchers.closeAll()]],
+    log,
+  );
+  if (failed.length > 0) process.exitCode = 1;
 }

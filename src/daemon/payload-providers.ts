@@ -31,6 +31,7 @@ import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
 import { ManagedStorage } from "./cache/managed-storage.js";
 import type { SourceRuns } from "./source-runs.js";
+import type { TeardownStep } from "../utils/teardown.js";
 import { TranscriptLanes, type LaneOwners } from "./cache/transcript-lanes.js";
 
 // [LAW:single-enforcer] Every provider records its refreshes in the caller's
@@ -52,7 +53,7 @@ export function createPayloadProviders(opts: {
   // The caller's one owner of every `shell` and `file` run, whose stats and
   // close are the caller's.
   readonly sourceRuns: SourceRuns;
-}): RenderPayloadDeps & { close(): void } {
+}): RenderPayloadDeps & { readonly closes: readonly TeardownStep[] } {
   const { launcher, clock, logger, ledger } = opts;
   // [LAW:one-source-of-truth] The owners the transcript lanes refresh are the
   // ones the payload reads.
@@ -101,17 +102,18 @@ export function createPayloadProviders(opts: {
     home: opts.host.home,
     sourceRuns: opts.sourceRuns,
     log: opts.logger,
-    // [LAW:single-enforcer] The one close of every owner built here: a held
+    // [LAW:single-enforcer] The one close of every owner built here, a named
+    // step each, which its caller's teardown runs (runTeardown): a held
     // entry's period re-arms after every read, so an owner a caller forgets
     // keeps its timers for good. The transcript lanes go before the usage
     // store their reads fill.
-    close: () => {
-      owners.gitProvider.close();
-      owners.transcriptLanes.close();
-      lanes.usageStore.close();
-      owners.tmuxService.close();
-      owners.hostService.close();
-      owners.managedStorage.close();
-    },
+    closes: [
+      ["gitProvider close", () => owners.gitProvider.close()],
+      ["transcriptLanes close", () => owners.transcriptLanes.close()],
+      ["usageStore close", () => lanes.usageStore.close()],
+      ["tmuxService close", () => owners.tmuxService.close()],
+      ["hostService close", () => owners.hostService.close()],
+      ["managedStorage close", () => owners.managedStorage.close()],
+    ],
   };
 }

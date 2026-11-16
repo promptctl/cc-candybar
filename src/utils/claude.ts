@@ -247,6 +247,8 @@ export interface ParsedEntry {
     model?: string;
     role?: string;
     type?: string;
+    // Why an assistant message stopped: `tool_use` while its turn goes on.
+    stopReason?: string;
   };
   costUSD?: number;
   isSidechain?: boolean;
@@ -307,6 +309,38 @@ export function userEntryOf(
     : "prompt";
 }
 
+// The stop reasons that leave Claude working on its turn: a tool call, and the
+// server pausing a long turn. A block of a message still streaming states
+// none. Any other reason ends the turn, one the API adds later included, so
+// an unknown stop ends a rate rather than holding it.
+const TURN_GOES_ON: ReadonlySet<string | undefined> = new Set([
+  undefined,
+  "tool_use",
+  "pause_turn",
+]);
+
+// [LAW:one-source-of-truth] Whether the session's turn is open after `entry`:
+// input Claude answers opens one, an interrupt or a final assistant message
+// ends it, and everything else (a tool's answer, what Claude Code writes on
+// its own, a subagent's sidechain) leaves it as it was.
+export function turnOpenAfter(open: boolean, entry: ParsedEntry): boolean {
+  if (entry.isSidechain) return open;
+  switch (entry.userEntry) {
+    case "prompt":
+    case "turn":
+      return true;
+    case "interrupt":
+      return false;
+    case "tool-result":
+    case "claude-code":
+      return open;
+    case undefined:
+      return entry.type === "assistant"
+        ? TURN_GOES_ON.has(entry.message?.stopReason)
+        : open;
+  }
+}
+
 const CLAUDE_CODE_TEXT =
   /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
 
@@ -339,6 +373,8 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
           usage,
           role: typeof msg.role === "string" ? msg.role : undefined,
           type: typeof msg.type === "string" ? msg.type : undefined,
+          stopReason:
+            typeof msg.stop_reason === "string" ? msg.stop_reason : undefined,
         }
       : undefined,
     costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,

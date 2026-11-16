@@ -1,4 +1,7 @@
-import { RefreshLedger } from "../../src/utils/refresh-ledger";
+import {
+  RefreshLedger,
+  REFRESH_TRIGGERS,
+} from "../../src/utils/refresh-ledger";
 import {
   KeyedSource,
   NO_WATCH,
@@ -56,6 +59,7 @@ function sourceOf(
     every: () => EVERY,
     watch: NO_WATCH,
     maxEntries: opts.maxEntries ?? 64,
+    lines: REFRESH_TRIGGERS,
     logger: (level, msg) => opts.lines?.push({ level, msg }),
     ledger: new RefreshLedger((level, msg) => opts.lines?.push({ level, msg })),
     clock: opts.clock ?? systemTimekeeper,
@@ -377,6 +381,7 @@ describe("KeyedSource", () => {
         every: () => null,
         watch: NO_WATCH,
         maxEntries: 64,
+        lines: REFRESH_TRIGGERS,
         logger: () => {},
         ledger: new RefreshLedger(),
         clock: systemTimekeeper,

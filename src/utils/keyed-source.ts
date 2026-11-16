@@ -76,6 +76,10 @@ export interface KeyedSourceSpec<I, T> {
   readonly maxEntries: number;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
+  // The triggers whose clean refresh writes its line
+  // (SourceDeclaration.lines): every one (`REFRESH_TRIGGERS`) for a source
+  // whose each read is news.
+  readonly lines: readonly RefreshTrigger[];
   // [LAW:effects-at-boundaries] Times each refresh and arms each entry's
   // period.
   readonly clock: Pick<Timekeeper, "monotonic" | "after">;
@@ -127,7 +131,7 @@ export class KeyedSource<I, T> {
       name: spec.name,
       scope: spec.scope,
       refresh: ["first", "period", "change", "supersede"],
-      event: "own",
+      lines: spec.lines,
     });
   }
 
