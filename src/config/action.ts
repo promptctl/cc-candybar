@@ -249,7 +249,8 @@ export type ActionDecl =
   | { readonly redo: true }
   | { readonly back: true }
   | { readonly rewind: true }
-  // Save asks by default: `ask` offers the session's writable layers.
+  // Save writes the user layer by default, as every config write does;
+  // `ask` has each link bind one of the session's writable layers.
   | { readonly save: true; readonly layer?: LayerChoice }
   // Save as preset (brandon-save-undo-bwi.o6u). `save` takes nothing — the
   // daemon names the preset and reads what it holds at click time — while
