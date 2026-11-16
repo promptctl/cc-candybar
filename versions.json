@@ -4,15 +4,22 @@
     {
       "version": "pr-777",
       "ref": "refs/pull/777/merge",
-      "sha": "efe82205f1547d06e77bf5ee5fdfc5a9bf002c34",
-      "timestamp": "2026-11-16T23:36:00.780Z",
+      "sha": "4ba3d9ac80130b8ce3c588265b7e395fcc8c64ca",
+      "timestamp": "2026-11-16T23:43:18.766Z",
       "commits": [
         {
-          "sha": "efe82205f1547d06e77bf5ee5fdfc5a9bf002c34",
+          "sha": "4ba3d9ac80130b8ce3c588265b7e395fcc8c64ca",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T16:34:47-07:00",
-          "message": "Merge e178af90b73af1f808ebb856bd2575f90ffe0217 into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
+          "timestamp": "2026-11-16T23:42:22Z",
+          "message": "Merge a083e51cd61f2f359b74b672f35c510a574db7bc into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
+        },
+        {
+          "sha": "a083e51cd61f2f359b74b672f35c510a574db7bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T16:42:12-07:00",
+          "message": "fix(daemon): the renderer the close waits on is still pinged, its end in the close is logged, and the teardown is bracketed so the renderer always ends (candybar-host-renderer-x96a.w8l)\n\nAn in-process flush that fails is logged and the close still ends, as the process renderer's does.\n"
         },
         {
           "sha": "e178af90b73af1f808ebb856bd2575f90ffe0217",

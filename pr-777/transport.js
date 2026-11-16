@@ -94461,7 +94461,7 @@ var inProcessPort = ({ load }) => {
   const loaded = load();
   return { start: (own2) => inProcessRenderer(loaded, own2) };
 };
-function inProcessRenderer(loaded, { reaches, clock }) {
+function inProcessRenderer(loaded, { reaches, clock, log }) {
   const renderer = loaded.start(reaches);
   return {
     renderer,
@@ -94470,12 +94470,20 @@ function inProcessRenderer(loaded, { reaches, clock }) {
     // [LAW:single-enforcer] The flush a process renderer runs as its stdin
     // ends (src/renderer-process.ts), here where it has no stdin.
     close: async (teardown) => {
-      await teardown();
-      await renderer.answer({
-        kind: "adapter",
-        push: { kind: "close-session-state" },
-        at: instantAt(clock)
-      });
+      try {
+        await teardown();
+      } finally {
+        await renderer.answer({
+          kind: "adapter",
+          push: { kind: "close-session-state" },
+          at: instantAt(clock)
+        }).catch(
+          (thrown2) => log(
+            "warn",
+            `the session state did not flush: ${failureOf(thrown2).detail}`
+          )
+        );
+      }
     },
     process: () => null
   };
