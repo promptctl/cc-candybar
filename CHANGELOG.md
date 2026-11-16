@@ -1,3 +1,9 @@
+## [1.222.0](https://github.com/promptctl/cc-candybar/compare/v1.221.0...v1.222.0) (2026-11-16)
+
+### Features
+
+* **collector:** a watch and a period refresh a session's transcript lanes, and a request waits on its world state (candybar-skeleton-wj0c.zhh) ([#760](https://github.com/promptctl/cc-candybar/issues/760)) ([2f9cd55](https://github.com/promptctl/cc-candybar/commit/2f9cd5593479f304565f8e07630dd0ad4e8383b4))
+
 ## [1.221.0](https://github.com/promptctl/cc-candybar/compare/v1.220.0...v1.221.0) (2026-11-15)
 
 ### Features
