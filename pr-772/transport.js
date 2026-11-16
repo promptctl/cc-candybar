@@ -49239,15 +49239,12 @@ var clickLaunchVia = (launcher) => (launch) => launcher.launch({
   args: launch.args?.slice(),
   timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
 });
-async function clickLaunch(launch, opts, what, log) {
+async function clickLaunch(launch, opts, what, said2) {
   const result = await launch(opts);
-  if (!result.ok) clickFailed(result, what, log);
+  return result.ok ? said2 : clickFailed(result, what);
 }
-function clickFailed(r, what, log) {
-  if (r.reason === "rate-limited") {
-    log("warn", failureText(r));
-    return;
-  }
+function clickFailed(r, what) {
+  if (r.reason === "rate-limited") return `${what} not run: ${failureText(r)}`;
   if (r.reason === "aborted") throw new DaemonClosing(what);
   throw new Error(`${what} failed (${failureText(r)})`);
 }
@@ -49265,10 +49262,12 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     };
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
-      clickFailed(
-        { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
-        what,
-        log
+      log(
+        "warn",
+        clickFailed(
+          { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
+          what
+        )
       );
       return;
     }
@@ -49295,8 +49294,7 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
             exitCode: null,
             signal: null
           },
-          what,
-          log
+          what
         );
         return;
       }
@@ -60279,10 +60277,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     if (checked.ok) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
-      parts.declaredStatusLines.arrived(
-        checked.req.hookData.session_id,
-        checked.req.hints.tmux
-      );
+      parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
     const recorded2 = (rendered) => {
       if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
@@ -73519,9 +73514,11 @@ var DeclaredStatusLines = class {
         this.lines.observe(session, this.paneOf(session), true);
     this.declared = next;
   }
-  // A request of `session` arrived, reporting `tmux`.
-  arrived(session, tmux3) {
-    if (this.declared.has(session)) this.lines.observe(session, tmux3, true);
+  // A request of `session` arrived: its row follows the pane its newest
+  // request reports, which a late older request does not move.
+  arrived(session) {
+    if (this.declared.has(session))
+      this.lines.observe(session, this.paneOf(session), true);
   }
 };
 var TmuxStatusLines = class {
@@ -74217,7 +74214,7 @@ var BAND_CLIENT = import_node_path34.default.join("bin", "cc-candybar-native");
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
-async function bandOn(session, pane, host, edge) {
+async function bandOn(session, pane, type3, host, edge) {
   const checkout = sourceCheckoutOf(host.bundle);
   if (checkout === null) {
     throw new BadVerbArgs(
@@ -74230,7 +74227,7 @@ async function bandOn(session, pane, host, edge) {
       `the band mod starts ${client}, which is not built \u2014 run \`just install-rust\` in ${checkout}`
     );
   }
-  return installBand(session, pane, checkout, edge);
+  return installBand(session, pane, type3, checkout, edge);
 }
 async function restartClaude(session, tmux3, host, edge) {
   const launcher = attachLauncherOf(host.preload);
@@ -74265,7 +74262,7 @@ async function paneOff(tmux3, edge) {
   for (const pane of open2) await edge.closePane(tmux3, pane);
   return open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`;
 }
-async function installBand(session, pane, checkout, edge) {
+async function installBand(session, pane, type3, checkout, edge) {
   const facts = {
     sessionId: session.sessionId,
     projectDir: session.projectDir,
@@ -74273,11 +74270,7 @@ async function installBand(session, pane, checkout, edge) {
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const typed = await typeSlash(
-    typeInPane(edge.claudeInput),
-    pane,
-    RELOAD_PLUGINS
-  );
+  const typed = await typeSlash(type3, pane, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} \u2014 or type /reload-plugins yourself`
@@ -74475,7 +74468,7 @@ var Acts = class {
     this.deps = deps;
     const { lanes } = deps;
     this.performers = {
-      copy: async (act2) => {
+      copy: async (act2) => did(
         await clickLaunch(
           deps.launch,
           {
@@ -74484,11 +74477,10 @@ var Acts = class {
             category: "click.pbcopy"
           },
           "pbcopy",
-          deps.log
-        );
-        return did("copied");
-      },
-      open: async (act2) => {
+          "copied"
+        )
+      ),
+      open: async (act2) => did(
         await clickLaunch(
           deps.launch,
           {
@@ -74497,30 +74489,29 @@ var Acts = class {
             category: "click.open"
           },
           'open -a "Visual Studio Code"',
-          deps.log
-        );
-        return did(`opened ${act2.target}`);
-      },
-      // [LAW:no-ambient-temporal-coupling] A session a setup holds is about
-      // to be restarted or typed into: a line typed now would land in
-      // whatever the setup leaves there, so it is refused at once, saying
-      // why.
-      "type-slash": (act2) => this.typing.run(paneKey(act2.pane), async () => {
-        if (this.held.has(act2.session))
+          `opened ${act2.target}`
+        )
+      ),
+      // [LAW:no-ambient-temporal-coupling] A session a restart holds is
+      // about to exit its Claude Code: a line typed now would land in the
+      // shell the restart leaves, so it is refused at once, saying why.
+      "type-slash": async (act2) => {
+        if (this.restarting.has(act2.session))
           return not({
             kind: "refused",
-            reason: `a lane setup holds pane ${act2.pane.pane} \u2014 click again once it has finished`
+            reason: `a restart holds pane ${act2.pane.pane} \u2014 click again once it has finished`
           });
-        const typed = await deps.type(act2.pane, act2.line);
+        const typed = await this.typed(act2.pane, act2.line);
         return typed.kind === "typed" ? did(`typed into ${typed.pane}`) : not({ kind: "refused", reason: typed.reason });
-      }),
+      },
       run: (act2) => deps.run(act2),
       "apply-update": async () => {
         await deps.applyUpdate();
         return did("applied");
       },
-      "restart-claude": (act2) => this.holding(
+      "restart-claude": (act2) => this.restart(
         act2.session,
+        act2.pane,
         () => restartClaude(
           { ...act2.at, sessionId: act2.session },
           act2.pane,
@@ -74528,33 +74519,46 @@ var Acts = class {
           lanes.edge
         )
       ),
-      surface: (act2) => this.holding(act2.session, () => {
+      surface: async (act2) => {
         switch (act2.surface) {
+          // The install acts in no pane: only its /reload-plugins is typed,
+          // in turn with whatever else acts in the pane.
           case "band":
-            return bandOn(
-              { ...act2.at, sessionId: act2.session },
-              act2.pane,
-              lanes.host,
-              lanes.edge
+            return did(
+              await bandOn(
+                { ...act2.at, sessionId: act2.session },
+                act2.pane,
+                (pane, line) => this.typed(pane, line),
+                lanes.host,
+                lanes.edge
+              )
             );
           case "pane":
-            return act2.on ? paneOn(act2.pane, lanes.host, lanes.edge) : paneOff(act2.pane, lanes.edge);
+            return did(
+              await this.inPane.run(
+                paneKey(act2.pane),
+                () => act2.on ? paneOn(act2.pane, lanes.host, lanes.edge) : paneOff(act2.pane, lanes.edge)
+              )
+            );
         }
-      })
+      }
     };
   }
   deps;
-  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time:
-  // two restarts of one Claude Code would type over each other.
-  setups = new KeyedSerialQueue();
-  // The sessions a setup holds now, by how many are queued or running on
-  // each.
-  held = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] Each pane's slash lines, one at a
-  // time: each reads the pane before it types, so two at once would both
-  // find the bare input box and type into each other.
-  typing = new KeyedSerialQueue();
+  // [LAW:no-ambient-temporal-coupling] Whatever acts in a pane, one at a
+  // time, in the order asked: a slash line, the band's /reload-plugins, a
+  // restart, a bar pane split under it. Each reads the pane before it types,
+  // so two at once would both find the bare input box and type into each
+  // other.
+  inPane = new KeyedSerialQueue();
+  // The sessions a restart holds now, by how many are queued or running on
+  // each: their Claude Code is about to exit.
+  restarting = /* @__PURE__ */ new Map();
   performers;
+  // A slash line typed into `pane` in its turn.
+  typed(pane, line) {
+    return this.inPane.run(paneKey(pane), () => this.deps.type(pane, line));
+  }
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
   // throw is classified once, here: a refusal the user can act on, the
   // daemon's close, or a failure.
@@ -74581,16 +74585,16 @@ var Acts = class {
       }
     }
   }
-  // A setup in `session`'s queue, holding the session from now until it has
+  // A restart in `pane`'s turn, holding `session` from now until it has
   // finished.
-  async holding(session, setup) {
-    this.held.set(session, (this.held.get(session) ?? 0) + 1);
+  async restart(session, pane, restart) {
+    this.restarting.set(session, (this.restarting.get(session) ?? 0) + 1);
     try {
-      return did(await this.setups.run(session, setup));
+      return did(await this.inPane.run(paneKey(pane), restart));
     } finally {
-      const left = this.held.get(session) - 1;
-      if (left === 0) this.held.delete(session);
-      else this.held.set(session, left);
+      const left = this.restarting.get(session) - 1;
+      if (left === 0) this.restarting.delete(session);
+      else this.restarting.set(session, left);
     }
   }
 };
@@ -75078,7 +75082,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         answers,
         said: (line) => log("info", line)
       });
+      const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
       const inTurn2 = [];
+      let before = Promise.resolve();
       for (const effect of output.effects) {
         if (effect.kind === "present") {
           if (input.event.kind !== "request")
@@ -75091,12 +75097,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
           inTurn2.push(settle3(effect, landed));
         else if (isAct(effect)) {
-          const acted = (landed.kind === "ok" ? world.perform(effect) : Promise.resolve({
-            kind: "skipped",
-            reason: `not performed: ${landed.reason}`
-          })).then((outcome) => settle3(effect, outcome));
-          if (outlives(effect)) void acted;
-          else inTurn2.push(acted);
+          const acted = landed.kind === "ok" ? before.then(() => world.perform(effect)) : Promise.resolve(unperformed);
+          const settled3 = acted.then((outcome) => settle3(effect, outcome));
+          if (outlives(effect)) void settled3;
+          else {
+            inTurn2.push(settled3);
+            before = acted;
+          }
         }
       }
       collector.subscribed(subscriptions);

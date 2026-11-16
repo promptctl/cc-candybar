@@ -4,15 +4,22 @@
     {
       "version": "pr-772",
       "ref": "refs/pull/772/merge",
-      "sha": "bb682286345f15515e40f8a921d17de313b2817d",
-      "timestamp": "2026-11-16T20:04:02.707Z",
+      "sha": "50f6703fd4ca30e9823122814c9a9971fd278f41",
+      "timestamp": "2026-11-16T20:16:04.681Z",
       "commits": [
         {
-          "sha": "bb682286345f15515e40f8a921d17de313b2817d",
+          "sha": "50f6703fd4ca30e9823122814c9a9971fd278f41",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T20:03:07Z",
-          "message": "Merge d7ec3683c781619c71f9d930a8c9d8175f9aecef into df316f23603ca5bd744a8963232d120351758895\n"
+          "timestamp": "2026-11-16T20:14:56Z",
+          "message": "Merge fc0609a43a86241fa0a16e03bf1caf8d4bcca5ac into df316f23603ca5bd744a8963232d120351758895\n"
+        },
+        {
+          "sha": "fc0609a43a86241fa0a16e03bf1caf8d4bcca5ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T13:14:38-07:00",
+          "message": "fix(acts): the medium review's fixes: a close answers closing, one queue per pane, acts in turn order (candybar-host-renderer-x96a.lhy)\n\n- A turn the daemon's close stopped settles its acts `closing` again, so a\n  click of acts alone is answered closing, not ok. Only acts whose changes\n  were refused or failed are `skipped`.\n- Whatever acts in one pane, slash lines, the band's /reload-plugins, a\n  restart, a bar pane split, runs in that pane's one queue in the order\n  asked, so a restart asked after a slash waits for it. Only a restart\n  holds its session against slash lines; a split or the band's install\n  holds nothing.\n- Each act over in its turn starts once the one before it has ended, so two\n  copies land in the order the turn asked.\n- A declared session's row follows its newest request's pane, read where\n  the declaration reads it, so a late older request cannot move it.\n- A rate-limited copy or open says it did not run, on its act line.\n"
         },
         {
           "sha": "d7ec3683c781619c71f9d930a8c9d8175f9aecef",
