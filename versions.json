@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-774",
-      "ref": "refs/pull/774/merge",
-      "sha": "393060e28fd199672485b4fe11e5c420f511927f",
-      "timestamp": "2026-11-16T21:03:03.153Z",
-      "commits": [
-        {
-          "sha": "393060e28fd199672485b4fe11e5c420f511927f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T21:02:01Z",
-          "message": "Merge 09bdb020da3708ec90772d79b62a1b5a2563ead4 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
-        },
-        {
-          "sha": "09bdb020da3708ec90772d79b62a1b5a2563ead4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:01:48-07:00",
-          "message": "test(daemon): the fork-bomb test's timeout covers its four boots, and d3's own environment is the control\n\n- The test's timeout is four of the helper's readiness budgets and the\n  reap's wait, so a hung step fails by the helper's diagnosis, and a boot\n  in flight is the helper's to kill, before jest's timeout.\n- d1 is asserted to be the registry's one entry; d4 boots on d3's\n  environment; the registry after the sweep holds d1 and d4 by identity.\n- A daemon killed mid-test leaves the teardown's list.\n"
-        },
-        {
-          "sha": "5b52376ad15cfa36808e4bc5ab7d2872d75ac8c4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T13:57:25-07:00",
-          "message": "test(daemon): the fork-bomb test kills its daemons in its one teardown and pins the registry after the sweep\n\n- Every daemon booted is killed in afterAll, which jest runs after a\n  timeout too, before the directories it runs in are removed; the\n  in-test finally is gone.\n- After d4's admission the registry names d1 and d4 alone.\n- The liveness read uses the suite's process probe; a fixture is just\n  its environment.\n"
-        },
-        {
-          "sha": "fb2c175b111587e754f289a3107a9625cdd6dfe3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T13:54:16-07:00",
-          "message": "test(daemon): the fork-bomb test pins the breaker's own refusal, waits on its liveness read, and checks the sweep\n\n- d3's rejection must quote the breaker's refusal line, which the daemon\n  log writes out as the process exits, so a boot failing for another\n  reason no longer passes.\n- d2 is waited out by the breaker's own read, the registered pid and\n  start time, so a zombie or a reused pid answers as the breaker would.\n- d2's registration is asserted to be the one new entry, and d4's\n  admission is asserted to have swept it.\n"
-        },
-        {
-          "sha": "b9e1c6ffc618e0ff3cff11ab6588397667372f54",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T13:49:25-07:00",
-          "message": "test(daemon): the fork-bomb ceiling test boots through the suite's isolated-daemon helper\n\nThe test hand-rolled its fixtures, a dedicated daemon pool, and a 5 s\nexit budget for the refused daemon. It failed main's Release run when a\nNode boot under fourteen parallel process suites ran past that budget.\n\nEvery daemon now boots through `spawnDaemonWithEnv`: the suite's one\nreadiness budget, the shared pool that caps how many daemons the suite\nruns, and a refusal named at once with the daemon's log and stderr. The\nrefused daemon is asserted by that helper's diagnosis: no socket, exited\nwith code 1. The reclaim waits until the killed worker's registered pid\nhas been reaped, since a zombie still counts live. d4 is d3's control: a\ndaemon set up as d3 was boots once a slot is free.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "d7dfe00a0b58a559b3f47e2058445eff3c2f3960",
-      "timestamp": "2026-11-16T20:42:25.006Z",
+      "sha": "f70ac8933da8b45a3b1df24110a27e5de909823d",
+      "timestamp": "2026-11-16T21:25:26.199Z",
       "commits": [
         {
-          "sha": "d7dfe00a0b58a559b3f47e2058445eff3c2f3960",
+          "sha": "f70ac8933da8b45a3b1df24110a27e5de909823d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T13:41:26-07:00",
-          "message": "feat(click): every act a click or a lane switch causes is an effect the host performs once its turn has landed (candybar-host-renderer-x96a.lhy) (#772)\n\n* feat(click): every act a click or a lane switch causes is an effect the host performs once its turn has landed (candybar-host-renderer-x96a.lhy)\n\nA run, a slash line, open, copy, apply-update, relaunching Claude Code and\nthe band and pane surfaces are effects. The host performs a turn's acts only\nonce its config changes and trust-book answers have landed, in order, and\nsettles each with an effect-done. A slash line, a restart and a surface carry\nthe pane from the session's client hints. The tmux status row is held by\ndeclaration in the renderer's subscriptions, not by an act.\n\nSpec deviation from host-and-renderer.md section 7: PushedSurface acts are\nband | pane only, the tmux row is a subscription, apply-update names no\nversion, and acts carry their pane. Section 7 is updated to match.\n\n* fix(acts): the high review's fixes: slash lines one at a time per pane, the band outside tmux, acts a refused landing skips (candybar-host-renderer-x96a.lhy)\n\n- type-slash runs in a per-pane queue, so two quick slash clicks no longer\n  both read the bare input box and type into each other. A lane setup holds\n  its session, and a slash for that session is refused while it does.\n- The band act carries the session's pane or why it has none, so a session\n  outside tmux still gets the mod installed and is told to type\n  /reload-plugins itself.\n- copy and open carry the session their click names, so their failure holds\n  on that bar rather than on every bar.\n- An act whose turn's changes did not land settles `skipped`: the changes'\n  own outcome says why, so the reason is not held twice and a sessionless\n  act raises nothing daemon-wide. The spec says so.\n- The click fold classifies a thrown step with failureOf, so a close, a\n  client that left, or a renderer that is down keeps its own class instead\n  of becoming an operational failure.\n- A run's facts move onto its act line, its only outcome line.\n- A request whose session owes no lane setup allocates nothing.\n\n* fix(acts): the medium review's fixes: a close answers closing, one queue per pane, acts in turn order (candybar-host-renderer-x96a.lhy)\n\n- A turn the daemon's close stopped settles its acts `closing` again, so a\n  click of acts alone is answered closing, not ok. Only acts whose changes\n  were refused or failed are `skipped`.\n- Whatever acts in one pane, slash lines, the band's /reload-plugins, a\n  restart, a bar pane split, runs in that pane's one queue in the order\n  asked, so a restart asked after a slash waits for it. Only a restart\n  holds its session against slash lines; a split or the band's install\n  holds nothing.\n- Each act over in its turn starts once the one before it has ended, so two\n  copies land in the order the turn asked.\n- A declared session's row follows its newest request's pane, read where\n  the declaration reads it, so a late older request cannot move it.\n- A rate-limited copy or open says it did not run, on its act line.\n\n* fix(acts): the second high review's fixes: setups in turn per session, a renderer start is one turn (candybar-host-renderer-x96a.lhy)\n\n- A session's lane setups run one at a time, beside the one queue per\n  pane: a band install ends, its /reload-plugins typed, before a restart\n  the same click asked begins, and two installs never overlap.\n- A renderer's start is one `start` turn carrying every live session's\n  config, so its first output names every session it serves and the host\n  releases no tmux status row or subscription it still holds for one.\n- A rate-limited copy or open settles skipped, and its act line warns.\n- The trust book's answer lands with the changes and is reported as they\n  are, not as a performed act.\n- A request that owes no lane setup builds nothing."
+          "timestamp": "2026-11-16T14:24:25-07:00",
+          "message": "test(daemon): the fork-bomb ceiling test boots through the suite's isolated-daemon helper (#774)\n\n* test(daemon): the fork-bomb ceiling test boots through the suite's isolated-daemon helper\n\nThe test hand-rolled its fixtures, a dedicated daemon pool, and a 5 s\nexit budget for the refused daemon. It failed main's Release run when a\nNode boot under fourteen parallel process suites ran past that budget.\n\nEvery daemon now boots through `spawnDaemonWithEnv`: the suite's one\nreadiness budget, the shared pool that caps how many daemons the suite\nruns, and a refusal named at once with the daemon's log and stderr. The\nrefused daemon is asserted by that helper's diagnosis: no socket, exited\nwith code 1. The reclaim waits until the killed worker's registered pid\nhas been reaped, since a zombie still counts live. d4 is d3's control: a\ndaemon set up as d3 was boots once a slot is free.\n\n* test(daemon): the fork-bomb test pins the breaker's own refusal, waits on its liveness read, and checks the sweep\n\n- d3's rejection must quote the breaker's refusal line, which the daemon\n  log writes out as the process exits, so a boot failing for another\n  reason no longer passes.\n- d2 is waited out by the breaker's own read, the registered pid and\n  start time, so a zombie or a reused pid answers as the breaker would.\n- d2's registration is asserted to be the one new entry, and d4's\n  admission is asserted to have swept it.\n\n* test(daemon): the fork-bomb test kills its daemons in its one teardown and pins the registry after the sweep\n\n- Every daemon booted is killed in afterAll, which jest runs after a\n  timeout too, before the directories it runs in are removed; the\n  in-test finally is gone.\n- After d4's admission the registry names d1 and d4 alone.\n- The liveness read uses the suite's process probe; a fixture is just\n  its environment.\n\n* test(daemon): the fork-bomb test's timeout covers its four boots, and d3's own environment is the control\n\n- The test's timeout is four of the helper's readiness budgets and the\n  reap's wait, so a hung step fails by the helper's diagnosis, and a boot\n  in flight is the helper's to kill, before jest's timeout.\n- d1 is asserted to be the registry's one entry; d4 boots on d3's\n  environment; the registry after the sweep holds d1 and d4 by identity.\n- A daemon killed mid-test leaves the teardown's list."
         }
       ]
     }
