@@ -4,15 +4,22 @@
     {
       "version": "pr-772",
       "ref": "refs/pull/772/merge",
-      "sha": "8a22a05f8a50affaa296941c7b183ae89088e17b",
-      "timestamp": "2026-11-16T19:40:53.958Z",
+      "sha": "bb682286345f15515e40f8a921d17de313b2817d",
+      "timestamp": "2026-11-16T20:04:02.707Z",
       "commits": [
         {
-          "sha": "8a22a05f8a50affaa296941c7b183ae89088e17b",
+          "sha": "bb682286345f15515e40f8a921d17de313b2817d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T12:39:59-07:00",
-          "message": "Merge c92bfe25edb154c4018ec468a94df34419baba8b into df316f23603ca5bd744a8963232d120351758895\n"
+          "timestamp": "2026-11-16T20:03:07Z",
+          "message": "Merge d7ec3683c781619c71f9d930a8c9d8175f9aecef into df316f23603ca5bd744a8963232d120351758895\n"
+        },
+        {
+          "sha": "d7ec3683c781619c71f9d930a8c9d8175f9aecef",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T13:02:46-07:00",
+          "message": "fix(acts): the high review's fixes: slash lines one at a time per pane, the band outside tmux, acts a refused landing skips (candybar-host-renderer-x96a.lhy)\n\n- type-slash runs in a per-pane queue, so two quick slash clicks no longer\n  both read the bare input box and type into each other. A lane setup holds\n  its session, and a slash for that session is refused while it does.\n- The band act carries the session's pane or why it has none, so a session\n  outside tmux still gets the mod installed and is told to type\n  /reload-plugins itself.\n- copy and open carry the session their click names, so their failure holds\n  on that bar rather than on every bar.\n- An act whose turn's changes did not land settles `skipped`: the changes'\n  own outcome says why, so the reason is not held twice and a sessionless\n  act raises nothing daemon-wide. The spec says so.\n- The click fold classifies a thrown step with failureOf, so a close, a\n  client that left, or a renderer that is down keeps its own class instead\n  of becoming an operational failure.\n- A run's facts move onto its act line, its only outcome line.\n- A request whose session owes no lane setup allocates nothing.\n"
         },
         {
           "sha": "c92bfe25edb154c4018ec468a94df34419baba8b",
