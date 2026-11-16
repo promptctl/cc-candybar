@@ -76,6 +76,7 @@ import { autocompactControl } from "./autocompact-control.js";
 import { formatTokenCount } from "./format-token-count.js";
 import { confirmStep } from "./confirm-step.js";
 import { SETTINGS_NS } from "./reserved-names.js";
+import { LAYER_ROLES, type LayerRole } from "./layer-role.js";
 import {
   DIAGNOSTICS_VIEWING,
   SETTINGS_ANCHOR,
@@ -155,13 +156,10 @@ const tabRef = (tab: TabName): DisclosureRef => ({
 // the session: a pick is a DRAFT until it is saved (brandon-save-undo-bwi.hpi).
 // The drafts are derived, never flagged — src/renderer/setting-drafts.ts compares
 // the session with what the config file resolves — and `💾 save N` exists
-// exactly while there are N of them, writing all of them to the file in one
-// click. There is no destination selector to consult: where a click lands is
-// the same place every time, and saving is its own, visible act.
-// Exported because edit mode's `✓ save` fires this same save and reads this
-// same count (src/config/edit-chrome.ts): the menu is in every config, and
-// is synthesized before edit chrome.
-export const SAVE_SEG = `${SETTINGS_NS}save`;
+// exactly while there are N of them, writing all of them to one layer of the
+// session's chain in one click — the layer the click names, so saving is its
+// own, visible act and says where it lands.
+const SAVE_SEG = `${SETTINGS_NS}save`;
 
 // ─── Presets the user makes (brandon-save-undo-bwi.o6u) ─────────────────────
 const PRESET_SAVE = `${SETTINGS_NS}preset.save`;
@@ -538,17 +536,29 @@ interface SavePart {
 const SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"] as const;
 type SaveCount = (typeof SAVE_COUNTS)[number];
 const saveCountVar = (count: SaveCount): string => `${SETTINGS_NS}${count}`;
-// Exported for edit mode's `✓ save`, which reads the same count (see SAVE_SEG).
+// Exported for edit mode's `✓ save`, which reads the same count.
 export const UNSAVED_VAR = saveCountVar("unsaved");
 const counted = (count: SaveCount, body: string): SavePart => ({
   body,
   shown: `(gt .${saveCountVar(count)} 0)`,
 });
+// Whether the session's chain can write a layer: the payload's
+// `layers.<role>`, read through this input.
+const layerVar = (role: LayerRole): string => `${SETTINGS_NS}layers.${role}`;
+// The save asks which layer (its declaration's `layer: "ask"`), so each link
+// binds one. A chain with one writable layer — the user's — draws the save as
+// one link; a project's chain draws a link per layer it can write.
+const SAVE_LABEL = `(printf "💾 save %d" .${UNSAVED_VAR})`;
+const SAVE_TO = LAYER_ROLES.map(
+  (role) =>
+    `{{ if .${layerVar(role)} }} {{ action "${SAVE_SEG}" "${role}" "${role}" }}{{ end }}`,
+).join("");
+const SAVE_BODY =
+  `{{ if or .${layerVar("project")} .${layerVar("local")} }}` +
+  `{{ ${SAVE_LABEL} }}:${SAVE_TO}` +
+  `{{ else }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "user" }}{{ end }}`;
 const SAVE_PARTS: readonly SavePart[] = [
-  counted(
-    "unsaved",
-    `{{ action "${SAVE_SEG}" (printf "💾 save %d" .${UNSAVED_VAR}) }}`,
-  ),
+  counted("unsaved", SAVE_BODY),
   counted("history.undo", `{{ action "${UNDO_ACTION}" "↶" }}`),
   counted("history.redo", `{{ action "${REDO_ACTION}" "↷" }}`),
   {
@@ -884,7 +894,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       ...AUTOCOMPACT.actions,
-      [SAVE_SEG]: { save: true },
+      [SAVE_SEG]: { save: true, layer: "ask" },
       [UNDO_ACTION]: { undo: true },
       // [LAW:composability] Going back can reopen a view a confirm sits in, so
       // it disarms every confirm as the door does: a confirm is only ever
@@ -968,6 +978,15 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
     type: "number",
     default: 0,
   };
+  // The layers the save offers, as the daemon publishes them every render.
+  for (const role of LAYER_ROLES) {
+    artifacts.variables[layerVar(role)] = {
+      kind: "input",
+      path: `layers.${role}`,
+      type: "boolean",
+      default: false,
+    };
+  }
   // The counts the daemon publishes every render, read by the save cell.
   for (const count of SAVE_COUNTS) {
     artifacts.variables[saveCountVar(count)] = {

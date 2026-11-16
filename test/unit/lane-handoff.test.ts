@@ -49,20 +49,34 @@ describe("laneSwitches", () => {
 
 describe("laneHandoff", () => {
   test("is one row holding the button alone", () => {
-    const row = laneHandoff(S1, ["tmuxStatus"]);
+    const row = laneHandoff(S1, ["user"], ["tmuxStatus"]);
     expect(row.lines).toHaveLength(1);
     expect(row.lines[0]!.map((span) => span.text)).toEqual([HANDOFF_BUTTON]);
   });
 
   test("its button resets the switch of each lane it hands off to: the renderer, and a 🧪 toggle", () => {
-    const row = laneHandoff(S1, ["band", "tmuxStatus"]);
+    const row = laneHandoff(S1, ["user"], ["band", "tmuxStatus"]);
     expect(row.lines[0]![0]!.link).toBe(
       effectsUrl([
         {
           verb: VERB_RESET_CONFIG,
-          args: ["s1", "experimentalBand", "renderer"],
+          args: ["s1", "user", "experimentalBand", "renderer"],
         },
       ]),
+    );
+  });
+
+  // The way out of a lane holds however this person saved the switch, and
+  // leaves the project's checked-in file alone.
+  test("its button resets the switch in this person's own layers, never the project's", () => {
+    const row = laneHandoff(S1, ["user", "project", "local"], ["tmuxStatus"]);
+    expect(row.lines[0]![0]!.link).toBe(
+      effectsUrl(
+        (["user", "local"] as const).map((layer) => ({
+          verb: VERB_RESET_CONFIG,
+          args: ["s1", layer, "renderer"],
+        })),
+      ),
     );
   });
 });

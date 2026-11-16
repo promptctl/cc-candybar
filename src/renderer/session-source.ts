@@ -41,6 +41,7 @@ import {
 import type { SessionStateReader } from "../renderer-interface/session-state.js";
 import type { HistoryDepth } from "./settings-history.js";
 import { settingCounts } from "./setting-drafts.js";
+import { layerFlags } from "../config/layer-role.js";
 
 // What a session's view draws from: the selections its slots settle and the
 // payload its inputs read, as ViewSource names them, the globals the session's
@@ -113,6 +114,7 @@ export function sessionSource(
         configFacts: {
           ...settingCounts(state.config, state.fileHeldSettings, pick),
           configPath: state.configPath,
+          layers: layerFlags(state.writable),
         },
         history: deps.history(sessionId),
         back: deps.navigation(sessionId, state.config),

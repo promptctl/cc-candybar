@@ -15,7 +15,7 @@ import path from "node:path";
 import { checkConfig } from "../src/check";
 import {
   configResolutionNotice,
-  durableConfig,
+  writeLayer,
   resolveDslConfig,
 } from "../src/config/dsl-loader";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
@@ -78,7 +78,7 @@ function write(rel: string, text: string): string {
 }
 
 const layersOf = (answers: RepoAnswers) => {
-  const r = resolveDslConfig(locations(host), answers, project, project);
+  const r = resolveDslConfig(locations(host), answers, { projectDir: project });
   return r.kind === "chain" ? r.layers.map((l) => l.path) : null;
 };
 
@@ -88,8 +88,7 @@ describe("the gate over a project's config file", () => {
     const resolved = resolveDslConfig(
       locations(host),
       book({}),
-      project,
-      project,
+      { projectDir: project },
     );
     expect(layersOf(book({}))).toEqual([]);
     expect(resolved.repos).toEqual({
@@ -108,8 +107,7 @@ describe("the gate over a project's config file", () => {
     const resolved = resolveDslConfig(
       locations(host),
       book({ [project]: "declined" }),
-      project,
-      project,
+      { projectDir: project },
     );
     expect(resolved.kind === "chain" && resolved.layers).toEqual([]);
     expect(resolved.repos.awaiting).toEqual([]);
@@ -126,13 +124,11 @@ describe("the gate over a project's config file", () => {
     const explicit = resolveDslConfig(
       locations(host),
       book({}),
-      project,
-      project,
-      named,
+      { projectDir: project, configFile: named },
     );
     // An explicit file is the user's, whatever repository it sits in.
     expect(explicit.kind === "chain" && explicit.layers).toEqual([
-      { path: named, scope: "plugins" },
+      { path: named, role: "user" },
     ]);
     expect(explicit.repos.awaiting).toEqual([]);
   });
@@ -140,8 +136,13 @@ describe("the gate over a project's config file", () => {
   test("the durable writer's chain leaves out what the bar's leaves out", () => {
     write(".cc-candybar.json5", "{}");
     expect(
-      durableConfig(locations(host), book({}), project, project).above,
-    ).toEqual([]);
+      writeLayer(
+        locations(host),
+        book({}),
+        { projectDir: project, cwd: project },
+        "user",
+      ),
+    ).toMatchObject({ above: [] });
   });
 
   test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {
@@ -149,8 +150,7 @@ describe("the gate over a project's config file", () => {
     const resolved = resolveDslConfig(
       locations(host),
       { kind: "failed", reason: "repo-configs.json is not JSON" },
-      project,
-      project,
+      { projectDir: project },
     );
     expect(resolved.kind === "chain" && resolved.layers).toEqual([]);
     // A question it asked could not be recorded: the notice is the answer.
@@ -200,7 +200,7 @@ describe("the gate over a project's plugins", () => {
       recursive: true,
     });
     expect(
-      resolveDslConfig(locations(host), book({}), project, project).repos
+      resolveDslConfig(locations(host), book({}), { projectDir: project }).repos
         .awaiting,
     ).toEqual([]);
   });
@@ -243,7 +243,7 @@ describe("check", () => {
     const outcome = await checkConfig(world, daemonGates(), undefined, project);
     expect(outcome).toMatchObject({
       kind: "clean",
-      layers: [{ path: file, scope: "repo" }],
+      layers: [{ path: file, role: "project" }],
     });
     expect(fs.existsSync(marker)).toBe(true);
   });
@@ -428,7 +428,7 @@ describe("a repository's worktrees answer as the repository", () => {
     execFileSync("git", args, { stdio: "ignore" });
   };
   const resolveAt = (answers: RepoAnswers, dir: string) =>
-    resolveDslConfig(locations(host), answers, dir, dir);
+    resolveDslConfig(locations(host), answers, { projectDir: dir });
   const layersAt = (answers: RepoAnswers, dir: string) => {
     const r = resolveAt(answers, dir);
     return r.kind === "chain" ? r.layers.map((l) => l.path) : null;
@@ -464,14 +464,14 @@ describe("a repository's worktrees answer as the repository", () => {
   test("a new worktree of an approved repository loads its config and plugins, and never asks", () => {
     const resolved = resolveAt(book({ [project]: "approved" }), wt);
     expect(resolved).toMatchObject({
-      layers: [{ path: path.join(wt, ".cc-candybar.json5"), scope: "repo" }],
+      layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
       repos: { plugins: wt, approved: [wt], awaiting: [], declined: [] },
     });
   });
 
   test("a worktree's own answer stands while its repository has none", () => {
     expect(resolveAt(book({ [wt]: "approved" }), wt)).toMatchObject({
-      layers: [{ path: path.join(wt, ".cc-candybar.json5"), scope: "repo" }],
+      layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
       repos: { plugins: wt, approved: [wt], awaiting: [] },
     });
     expect(resolveAt(book({ [wt]: "declined" }), wt)).toMatchObject({

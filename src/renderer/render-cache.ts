@@ -39,6 +39,7 @@ import {
   type LoadedChain,
   type LoadedFile,
   resolveDslConfig,
+  writableRoles,
   configResolutionNotice,
   dslConfigCandidatePaths,
   detectConfigCollisions,
@@ -46,6 +47,7 @@ import {
   type DroppedFileError,
   type ConfigLayer,
 } from "../config/dsl-loader.js";
+import type { LayerRole } from "../config/layer-role.js";
 import type {
   DslConfig,
   RawDslConfig,
@@ -313,9 +315,11 @@ export interface DslRenderState {
   // The config keys the FILE holds a value for at a layer a reset clears
   // (fileHeldSettings) — from the same raw parse, for the same reason.
   readonly fileHeldSettings: ReadonlySet<string>;
-  // The file this load's durable clicks edit (the chain's home), once it
-  // exists — what the menu's `↗ config` opens; null while it does not.
+  // The user layer's file (the chain's home), once it exists — what the
+  // menu's `↗ config` opens; null while it does not.
   readonly configPath: string | null;
+  // The roles of the chain a click can write — what the save offers.
+  readonly writable: readonly LayerRole[];
   // What the file declares that nothing uses (the doctor's config check) —
   // from the same raw parse, for the same reason.
   readonly unused: readonly UnusedDecl[];
@@ -338,6 +342,8 @@ type LoadedPlugins = LoadedChain["installed"];
 export interface ConfigChain {
   readonly layers: readonly ConfigLayer[];
   readonly home: string;
+  // The roles of the chain a click can write.
+  readonly writable: readonly LayerRole[];
   // The session's project, once approved: where the plugins it ships live.
   readonly repo: ApprovedRepo | null;
   // Where the installed plugins the chain loads over live.
@@ -621,12 +627,10 @@ function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
   ];
   return watchTargetsOf({
     named: [
-      ...dslConfigCandidatePaths(
-        locs,
-        entry.projectDir,
-        entry.cwd,
-        entry.configFile,
-      ),
+      ...dslConfigCandidatePaths(locs, {
+        projectDir: entry.projectDir,
+        configFile: entry.configFile,
+      }),
       ...roots,
       ...loaded.map((d) => d.path),
       ...[...dropped, ...unreached].map((d) => d.path),
@@ -742,6 +746,7 @@ function loadKey(inputs: LoadInputs): string {
     chain: {
       layers: chain.layers,
       home: chain.home,
+      writable: chain.writable,
       repo: chain.repo,
       locs: chain.locs,
     } satisfies Projection<ConfigChain>,
@@ -919,12 +924,13 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       store,
       registry,
       compiled: registration.compiled,
-      // What a reset clears is the home's: resets write nowhere else.
+      // What the menu's resets clear is the user layer's: they name no other.
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
       configPath: chain.layers.some((l) => l.path === chain.home)
         ? chain.home
         : null,
+      writable: chain.writable,
       // One entry per declaration, however many layers declare it, judged
       // over the trees as placed and every layer's insert entries, so a
       // segment only an insert entry places is used, here or not.
@@ -1049,9 +1055,7 @@ export function loadFromDisk(
   const resolution = resolveDslConfig(
     deps.locations,
     repoConfigs(deps.stateDir).read(),
-    projectDir,
-    cwd,
-    configFile,
+    { projectDir, configFile },
   );
   const { repos } = resolution;
   // `chain` loads its layers; `missing`/`unreadable` build the bundled
@@ -1059,6 +1063,7 @@ export function loadFromDisk(
   const chain: ConfigChain = {
     layers: resolution.kind === "chain" ? resolution.layers : [],
     home: resolution.home,
+    writable: writableRoles(resolution, { projectDir, configFile }),
     repo: repos.plugins,
     locs: deps.locations,
   };
@@ -1071,7 +1076,7 @@ export function loadFromDisk(
   // appearing — triggers reload and re-detection automatically; nothing
   // else needs to invalidate this.
   const advisories = [
-    detectConfigCollisions(deps.locations, projectDir, cwd),
+    detectConfigCollisions(deps.locations, projectDir),
     configResolutionNotice(resolution),
     repoUnreadNotice(repos),
   ];
@@ -1098,6 +1103,9 @@ export function fallbackState(
   const resolved = resolveLoad(cwd, {
     layers: [],
     home: "",
+    // A failed load's writes are refused until its chain loads (the writer
+    // proves the whole chain), so its bar offers the one layer every chain has.
+    writable: ["user"],
     repo,
     locs: deps.locations,
   });

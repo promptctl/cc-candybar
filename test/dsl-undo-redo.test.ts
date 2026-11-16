@@ -200,7 +200,7 @@ const SRC = `{
     pickPadding: { set: 'padding', to: '3' },
     back: { undo: true },
     fwd: { redo: true },
-    keep: { save: true },
+    keep: { save: true, layer: 'user' },
   },
   segments: {
     directory: { template: 'd', bg: 'surface', fg: 'foreground' },

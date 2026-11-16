@@ -93,6 +93,7 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "./config/effective-globals.js";
+import { LAYER_ROLES, layerFlags } from "./config/layer-role.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
 // of the config alone, not of whichever terminal invoked the check. Templates
@@ -393,6 +394,9 @@ export function checkPayload(
         // drawn.
         configPath:
           configPath ?? `${CHECK_HOME}/.config/cc-candybar/config.json5`,
+        // Every layer writable, so the save cell draws every link it can and
+        // each gets its template checked.
+        layers: layerFlags(LAYER_ROLES),
       },
       // One step each way, so undo, redo and back render.
       history: { undo: 1, redo: 1, sinceEdit: 1 },
@@ -492,9 +496,7 @@ export async function checkConfig(
   const resolution = resolveDslConfig(
     locs,
     repoConfigs(stateDir(world.host)).read(),
-    cwd,
-    cwd,
-    configPath ?? undefined,
+    { projectDir: cwd, configFile: configPath ?? undefined },
   );
   warnings.push(...repoGateLines(resolution.repos));
   // An explicit file that is absent or unreadable is still the chain: its
@@ -529,7 +531,7 @@ export async function checkConfig(
   // [LAW:dataflow-not-control-flow] Collision detection runs independent of
   // load success: even if the .json5 fails to parse, the author still wants
   // to know a shadowed .json sibling exists.
-  const collision = detectConfigCollisions(locs, cwd, cwd);
+  const collision = detectConfigCollisions(locs, cwd);
   if (collision !== null) warnings.push(collision);
 
   try {

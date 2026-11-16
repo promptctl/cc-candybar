@@ -72,47 +72,50 @@ export const VERB_SET_STATE = "set-state";
 export const VERB_STEP_STATE = "step-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
+// Every config write's args begin `[sessionId, layer]`: the session whose
+// chain the write resolves in, and the role of the layer it writes there
+// (configWire, src/renderer/verbs/index.ts).
 // [LAW:one-source-of-truth] `persist`'s twin of set-state/step-state: writes
-// land in the session's config FILE (candybar-config-dqe — the one durable
-// store), spliced in place so comments survive, and reach the bar through
-// the SAME file-watcher path a hand edit already takes. Args: `[sessionId, key, value]` — the
-// sessionId is carried only for click.error surfacing, exactly like
-// set-state; the write itself is daemon-global, not session-scoped.
+// land in a config FILE of the session's chain (the one durable store),
+// spliced in place so comments survive, and reach the bar through the SAME
+// file-watcher path a hand edit already takes. Args: `[sessionId, layer, key,
+// value]`.
 export const VERB_SET_CONFIG = "set-config";
 // [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-file
 // key (e.g. a padding stepper) — the config twin of step-state. Args:
-// `[sessionId, key, by]`.
+// `[sessionId, layer, key, by]`.
 export const VERB_STEP_CONFIG = "step-config";
 // [LAW:no-ambient-temporal-coupling] Write every one of the session's unsaved
 // settings (src/renderer/setting-drafts.ts) to its config file, then release
 // them from the session — one handler, so a refused write keeps every draft.
-// Args: `[sessionId]`: which settings are drafts, and their values, are read
-// at click time from the session itself, never carried by the URL.
+// Args: `[sessionId, layer]`: which settings are drafts, and their values, are
+// read at click time from the session itself, never carried by the URL.
 export const VERB_SAVE = "save";
 // Save as preset (brandon-save-undo-bwi.o6u): write the bar the session
 // renders into the config file as a new `presets.custom-N`, then switch the
-// session to it. Args: `[sessionId]` — the name, the arrangement and the
-// settings are all read at click time, like `save`'s drafts.
+// session to it. Args: `[sessionId, layer]` — the name, the arrangement and
+// the settings are all read at click time, like `save`'s drafts.
 export const VERB_SAVE_PRESET = "save-preset";
 // Save the look the session draws as the active theme's default
 // (candybar-theme-colours-6fq5.ix8): write its shade, variation and style into
 // `themeDefaults.<theme>` in the config file, then release those picks. Args:
-// `[sessionId]` — the theme and the look are read at click time.
+// `[sessionId, layer]` — the theme and the look are read at click time.
 export const VERB_SAVE_THEME_DEFAULT = "save-theme-default";
-// Delete a preset the config file authors (never a bundled one). Args:
-// `[sessionId, name]` — the name the bar showed, so the click removes the
-// preset its label named, and a name the file no longer declares is refused.
+// Delete a preset the written file authors (never one it inherits). Args:
+// `[sessionId, layer, name]` — the name the bar showed, so the click removes
+// the preset its label named, and a name the file no longer declares is
+// refused.
 export const VERB_DELETE_PRESET = "delete-preset";
-// [LAW:one-source-of-truth] Return each named config key to its bundled
-// default at every layer that holds it — its paths in the config file, in one
-// write, and the session's pick (resetLayers, src/renderer/setting-drafts.ts).
-// Args: `[sessionId, key, …key]`.
+// [LAW:one-source-of-truth] Return each named config key to what the
+// written layer inherits — its paths in that layer's file, in one write, and
+// the session's pick (resetLayers, src/renderer/setting-drafts.ts). Args:
+// `[sessionId, layer, key, …key]`.
 export const VERB_RESET_CONFIG = "reset-config";
 // [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's structural-edit
 // verb — a THIRD write semantic beside set-config's plain overwrite and
 // step-config's numeric read-modify-write: apply one tree op to the layout
 // the config file authors at `key` (a "presets.<name>.root" target). Args:
-// `[sessionId, key, op]` — `op` is one opaque token from
+// `[sessionId, layer, key, op]` — `op` is one opaque token from
 // src/config/layout-ops.ts's codec, the SAME shape a `persist … to` literal's
 // value would be, gated the SAME way (configGate) — only the write's
 // SHAPE (a tree edit vs. a value) differs, which is exactly why this is its
@@ -268,14 +271,28 @@ const SAYS = {
   [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key!, by!)],
   [VERB_COPY]: ([text]) => [`copy ${saidCopy(text!)}`],
   [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
-  [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
-  [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key!, by!)}`],
-  [VERB_SAVE]: () => ["save settings"],
-  [VERB_SAVE_PRESET]: () => ["save as a new preset"],
-  [VERB_SAVE_THEME_DEFAULT]: () => ["save this look for the theme"],
-  [VERB_DELETE_PRESET]: ([, name]) => [`delete preset ${name}`],
-  [VERB_RESET_CONFIG]: ([, ...keys]) => keys.map((key) => `reset ${key}`),
-  [VERB_APPLY_LAYOUT_OP]: ([, key, op]) => [`edit ${op} in ${key}`],
+  // A config write says the layer of the session's chain it writes.
+  [VERB_SET_CONFIG]: ([, layer, key, value]) => [
+    `save ${key} as ${value} in ${layer} config`,
+  ],
+  [VERB_STEP_CONFIG]: ([, layer, key, by]) => [
+    `save ${sayStep(key!, by!)} in ${layer} config`,
+  ],
+  [VERB_SAVE]: ([, layer]) => [`save settings to ${layer} config`],
+  [VERB_SAVE_PRESET]: ([, layer]) => [
+    `save as a new preset in ${layer} config`,
+  ],
+  [VERB_SAVE_THEME_DEFAULT]: ([, layer]) => [
+    `save this look for the theme in ${layer} config`,
+  ],
+  [VERB_DELETE_PRESET]: ([, layer, name]) => [
+    `delete preset ${name} from ${layer} config`,
+  ],
+  [VERB_RESET_CONFIG]: ([, layer, ...keys]) =>
+    keys.map((key) => `reset ${key} in ${layer} config`),
+  [VERB_APPLY_LAYOUT_OP]: ([, layer, key, op]) => [
+    `edit ${op} in ${key} of ${layer} config`,
+  ],
   [VERB_UNDO]: () => ["undo"],
   [VERB_REDO]: () => ["redo"],
   [VERB_BACK]: () => ["go back"],
@@ -378,12 +395,15 @@ export function parseEffects(rawValue: string): ParsedEffect[] {
 // one file write and one reload, so `⟲ reset all` is one write however many
 // settings it names. Only adjacency merges: effects still run in the order the
 // click lists them, so an effect between two writes keeps its place, and a
-// different verb or session id starts a new run rather than borrowing the
-// previous one's. The tail stays encoded — splitVerb one level down splits
-// `<sid>/<args…>`, and joining encoded runs is the codec's own join.
-const BATCHED_VERBS: ReadonlySet<string> = new Set([
-  VERB_SET_STATE,
-  VERB_RESET_CONFIG,
+// different verb or a different head starts a new run rather than borrowing
+// the previous one's. The head is what a run's members share: a session
+// write's session, and a config write's session and the layer it writes, so
+// two layers are never one write. The tail stays encoded, so its segments
+// split at `/`, and joining encoded runs is the codec's own join.
+// [LAW:dataflow-not-control-flow] Each batched verb's head width, as data.
+const BATCHED_VERBS: ReadonlyMap<string, number> = new Map([
+  [VERB_SET_STATE, 1],
+  [VERB_RESET_CONFIG, 2],
 ]);
 
 export function batchAdjacentWrites(
@@ -397,15 +417,17 @@ export function batchAdjacentWrites(
 }
 
 // Two effects as one batch, or undefined when they are not the same batched
-// verb for the same session.
+// verb with the same head.
 function joinWrites(
   a: ParsedEffect,
   b: ParsedEffect,
 ): ParsedEffect | undefined {
-  if (a.verb !== b.verb || !BATCHED_VERBS.has(a.verb)) return undefined;
-  const [x, y] = [splitVerb(a.value), splitVerb(b.value)];
-  return x.verb === y.verb
-    ? { verb: a.verb, value: `${x.verb}/${x.value}/${y.value}` }
+  const width = BATCHED_VERBS.get(a.verb);
+  if (a.verb !== b.verb || width === undefined) return undefined;
+  const [x, y] = [a.value.split("/"), b.value.split("/")];
+  const head = x.slice(0, width).join("/");
+  return head === y.slice(0, width).join("/")
+    ? { verb: a.verb, value: [...x, ...y.slice(width)].join("/") }
     : undefined;
 }
 

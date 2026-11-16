@@ -25,17 +25,14 @@
 // when the file already authors it.
 
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
-import fs from "node:fs";
 import JSON5 from "json5";
+import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import {
-  DEFAULT_DSL_CONFIG,
-  RAW_DEFAULT_DSL_CONFIG,
-} from "../config/default-dsl-config.js";
-import {
+  inheritedConfig,
   loadConfigChain,
-  type ConfigHome,
+  type ConfigLayer,
+  type WriteLayer,
   type LoadedChain,
-  homeLayer,
 } from "../config/dsl-loader.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
@@ -43,7 +40,6 @@ import type {
   Globals,
   LayoutNode,
   PresetDecl,
-  Root,
   RootFragment,
   SettingValue,
 } from "../config/dsl-types.js";
@@ -51,7 +47,7 @@ import {
   wireKindOf,
   type ThemeDefaultField,
 } from "../config/globals-fields.js";
-import { isRowsFragment } from "../config/root.js";
+import { isRowsFragment, ROW_NAME_RE, rootNode } from "../config/root.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import {
   deleteValue,
@@ -81,7 +77,6 @@ import {
   type ConfigPath,
   type PersistTarget,
 } from "../config/loader/persist-target.js";
-import { BUNDLED_PRESETS, isBundledPreset } from "./bundled-presets.js";
 import { ident } from "../config/ident.js";
 
 // [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
@@ -176,13 +171,8 @@ export function authoredFragment(fragment: RootFragment): unknown {
   };
 }
 
-const RAW = RAW_DEFAULT_DSL_CONFIG;
-const RAW_SEGMENTS: Readonly<Record<string, unknown>> = RAW.segments;
-const RAW_PRESETS: Readonly<Record<string, PresetDecl>> = RAW.presets;
-const RAW_ROOT: Root = RAW.root;
-
 // [LAW:no-silent-failure] A write under a by-name declaration NEITHER the
-// file nor the bundled default carries is the stale click: the gate admitted
+// file nor what it inherits carries is the stale click: the gate admitted
 // a key from a config this file no longer holds (a custom segment or preset
 // deleted by hand since the render, another session's file). It refuses,
 // never falls through — for a preset, "not declared" once read as "declares
@@ -190,12 +180,12 @@ const RAW_ROOT: Root = RAW.root;
 function requireDeclared(
   doc: Node | null,
   own: ConfigPath,
-  bundled: unknown,
+  inherited: unknown,
   key: string,
 ): void {
-  if (!has(doc, own) && bundled === undefined) {
+  if (!has(doc, own) && inherited === undefined) {
     throw new BadVerbArgs(
-      `cannot edit ${key}: neither the config file nor the bundled default declares ${own.join(".")}`,
+      `cannot edit ${key}: neither the config file nor the layers beneath it declare ${own.join(".")}`,
     );
   }
 }
@@ -207,13 +197,17 @@ type ValueTarget = Exclude<PersistTarget, { scope: "preset-root" }>;
 // The path a value write splices at. A globals field is always declared; a
 // segment field needs its segment declared somewhere, since the one field
 // the file would then hold is a delta over the bundled declaration.
-function valuePathOf(doc: Node | null, target: ValueTarget): ConfigPath {
+function valuePathOf(
+  doc: Node | null,
+  under: DslConfig,
+  target: ValueTarget,
+): ConfigPath {
   const path = persistPath(target);
   if (target.scope === "segment-palette") {
     requireDeclared(
       doc,
       ["segments", target.segment],
-      RAW_SEGMENTS[target.segment],
+      under.segments[target.segment],
       path.join("."),
     );
   }
@@ -223,12 +217,12 @@ function valuePathOf(doc: Node | null, target: ValueTarget): ConfigPath {
 // ─── The root cascade, as the file spells it ────────────────────────────────
 
 // [LAW:one-type-per-behavior] One layer of the root cascade a preset renders
-// (bundled root rows < file root < the preset's fragment — the order
-// mergeRoot folds in src/config/root.ts): its fragment in the AUTHORING
+// (the rows the layers beneath hold < file root < the preset's fragment — the
+// order mergeRoot folds in src/config/root.ts): its fragment in the AUTHORING
 // grammar, the config-file path a structural edit to it lands at, and what
 // the file must author first for that path to hold it — null for a layer the
 // file already authors. Every layer is spelled the way it would sit in the
-// file (a bundled one as the very text `ensureAuthored` would materialize),
+// file (an inherited one as the very text `ensureAuthored` would materialize),
 // so one grammar reader (json5-edit) answers "does this layer hold the
 // segment" for all of them [LAW:one-source-of-truth].
 interface RootLayer {
@@ -237,19 +231,30 @@ interface RootLayer {
   readonly unit: Placement["unit"];
 }
 
-function bundledDoc(value: unknown): Node {
+function inheritedDoc(value: unknown): Node {
   return parseDocument(json5Text(value));
 }
 
-// The bundled default's root, one layer PER ROW: a first edit on an inherited
-// row materializes `root.rows.<name>` alone, the by-name cascade's own unit,
-// never the whole tree.
-function bundledRowLayers(): readonly RootLayer[] {
-  return Object.entries(RAW_ROOT.rows).map(([name, row]) => {
+// The root the layers beneath merge to, one layer PER ROW: a first edit on an
+// inherited row materializes `root.rows.<name>` alone, the by-name cascade's
+// own unit, never the whole tree. A root a tree beneath lowered to positional
+// rows has no row a file can name, so it is one layer: the whole tree.
+function inheritedRowLayers(under: DslConfig): readonly RootLayer[] {
+  if (!Object.keys(under.root.rows).every((name) => ROW_NAME_RE.test(name))) {
+    const authored = authoredLayout(rootNode(under.root));
+    return [
+      {
+        path: ["root"],
+        fragment: inheritedDoc(authored),
+        unit: { path: ["root"], value: authored },
+      },
+    ];
+  }
+  return Object.entries(under.root.rows).map(([name, row]) => {
     const authored = authoredLayout(row);
     return {
       path: ["root"],
-      fragment: bundledDoc({ rows: { [name]: authored } }),
+      fragment: inheritedDoc({ rows: { [name]: authored } }),
       unit: { path: ["root", "rows", name], value: authored },
     };
   });
@@ -260,10 +265,11 @@ function fileLayer(doc: Node | null, path: ConfigPath): RootLayer | null {
   return fragment === undefined ? null : { path, fragment, unit: null };
 }
 
-// The bundled preset's root as a layer at its place in the file — a first
-// structural edit materializes `presets.<name>.root` alone, the one field
-// the edit lands in — or null for a preset that stages no root.
-function bundledRootLayer(
+// The preset's root as the layers beneath merge it, as a layer at its place
+// in the file — a first structural edit materializes `presets.<name>.root`
+// alone, the one field the edit lands in — or null for a preset that stages
+// no root.
+function inheritedRootLayer(
   path: ConfigPath,
   root: RootFragment | undefined,
 ): RootLayer | null {
@@ -271,25 +277,30 @@ function bundledRootLayer(
   const authored = authoredFragment(root);
   return {
     path,
-    fragment: bundledDoc(authored),
+    fragment: inheritedDoc(authored),
     unit: { path, value: authored },
   };
 }
 
 // [LAW:parse-dont-validate] The preset's fragment, by mergeWithDefault's own
-// rule, field by field: the file's `root` under that name wins, else the
-// bundled preset's, else the preset stages no root. A preset declared
-// nowhere is the stale click requireDeclared refuses.
+// rule, field by field: the file's `root` under that name wins, else the one
+// the layers beneath merge to, else the preset stages no root. A preset
+// declared nowhere is the stale click requireDeclared refuses.
 // [LAW:one-source-of-truth] A declared fragment that is the merge identity
 // stages the config's own root, exactly as presetRoot classifies it
 // (root.ts's `restages`), so every path this module names agrees with the
 // one the renderer reports.
-function presetLayer(doc: Node | null, preset: string): RootLayer | null {
+function presetLayer(
+  doc: Node | null,
+  under: DslConfig,
+  preset: string,
+): RootLayer | null {
   const own: ConfigPath = ["presets", preset];
   const path: ConfigPath = [...own, "root"];
-  const bundled = RAW_PRESETS[preset];
-  requireDeclared(doc, own, bundled, path.join("."));
-  const layer = fileLayer(doc, path) ?? bundledRootLayer(path, bundled?.root);
+  const inherited: PresetDecl | undefined = under.presets[preset];
+  requireDeclared(doc, own, inherited, path.join("."));
+  const layer =
+    fileLayer(doc, path) ?? inheritedRootLayer(path, inherited?.root);
   return layer !== null && restagesFragment(layer.fragment) ? layer : null;
 }
 
@@ -332,11 +343,15 @@ function applyLayer(base: Cascade, layer: RootLayer): Cascade {
       ]);
 }
 
-function cascadeOf(doc: Node | null, preset: string): Cascade {
+function cascadeOf(
+  doc: Node | null,
+  under: DslConfig,
+  preset: string,
+): Cascade {
   const layers = [
-    ...bundledRowLayers(),
+    ...inheritedRowLayers(under),
     fileLayer(doc, ["root"]),
-    presetLayer(doc, preset),
+    presetLayer(doc, under, preset),
   ].filter((layer): layer is RootLayer => layer !== null);
   return layers.reduce(applyLayer, new Map());
 }
@@ -347,27 +362,36 @@ function cascadeOf(doc: Node | null, preset: string): Cascade {
 // the row changed under it — loud, never a write somewhere plausible.
 function layoutPlacementOf(
   doc: Node | null,
+  under: DslConfig,
   preset: string,
   id: string,
 ): Placement {
-  for (const { node, ...placement } of cascadeOf(doc, preset).values()) {
+  for (const { node, ...placement } of cascadeOf(doc, under, preset).values()) {
     if (hasSegmentRef(node, id)) return placement;
   }
   throw new BadVerbArgs(
-    `${stagedPathOf(doc, preset).join(".")} holds no placement "${id}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
+    `${stagedPathOf(doc, under, preset).join(".")} holds no placement "${id}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
   );
 }
 
 // The path a preset's layout is authored at: the fragment it stages (the
 // file's, or the bundled one's place in the file), else the config's own
 // `root` — the same fact presetRoot's reported path projects.
-function stagedPathOf(doc: Node | null, preset: string): ConfigPath {
-  return presetLayer(doc, preset)?.path ?? ["root"];
+function stagedPathOf(
+  doc: Node | null,
+  under: DslConfig,
+  preset: string,
+): ConfigPath {
+  return presetLayer(doc, under, preset)?.path ?? ["root"];
 }
 
-function resetPathOf(doc: Node | null, target: PersistTarget): ConfigPath {
+function resetPathOf(
+  doc: Node | null,
+  under: DslConfig,
+  target: PersistTarget,
+): ConfigPath {
   return target.scope === "preset-root"
-    ? stagedPathOf(doc, target.preset)
+    ? stagedPathOf(doc, under, target.preset)
     : persistPath(target);
 }
 
@@ -407,6 +431,36 @@ export interface EditStore {
   readonly record: (file: string, before: string | null, after: string) => void;
 }
 
+// [LAW:one-source-of-truth] A write as its click sees it: each neighbouring
+// layer read through the click, so a file the same click already changed or
+// created reads as the click left it, and one it holds no text for is no
+// layer. A click writes several files (a `do` across layers, an undo step), and
+// each write is proved against the chain the click leaves, never the disk's.
+interface Seen extends WriteLayer {
+  readonly below: readonly HeldLayer[];
+  readonly above: readonly HeldLayer[];
+}
+type HeldLayer = ConfigLayer & { readonly text: string };
+
+function seenBy(
+  layer: WriteLayer,
+  read: (file: string) => string | null,
+): Seen {
+  const held = (layers: readonly ConfigLayer[]): HeldLayer[] =>
+    layers.flatMap((l) => {
+      const text = read(l.path);
+      return text === null ? [] : [{ ...l, text }];
+    });
+  return { ...layer, below: held(layer.below), above: held(layer.above) };
+}
+
+// The loader's read over a chain of held layers: every path it asks for is
+// one of theirs.
+function textsOf(layers: readonly HeldLayer[]): (path: string) => string {
+  const texts = new Map(layers.map((l) => [l.path, l.text]));
+  return (path) => texts.get(path)!;
+}
+
 // [LAW:one-source-of-truth] Every tracked write lands here, once, as the
 // click's record of it. Returns the config the write's own load proved, which
 // is what the session renders once the click lands.
@@ -418,23 +472,23 @@ export interface EditStore {
 // and the file — and everything the verb does after its write — stays as it
 // was. `refuse` is what else the click promised: a value or layout click
 // promises the bar changes (refuseHidden); a reset promises only that the
-// home stops holding what it held, which a layer above cannot hide.
+// written layer stops holding what it held, which a layer above cannot hide.
 function commit(
   store: EditStore,
-  home: ConfigHome,
+  into: Seen,
   before: string | null,
   after: string,
-  refuse: (home: ConfigHome, was: Was, will: LoadedChain) => void,
+  refuse: (into: Seen, was: Was, will: LoadedChain) => void,
 ): DslConfig {
-  const will = loadOrRefuse(home, after);
+  const will = loadOrRefuse(into, after);
   // [LAW:one-source-of-truth] The file before the click is loaded at most
   // once, and only by a refusal that reads it; every refusal judges against
   // that one load.
   let held: { readonly chain: LoadedChain | null } | undefined;
-  const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
-  refuseNewDrops(home, was, will);
-  refuse(home, was, will);
-  store.record(home.path, before, after);
+  const was: Was = () => (held ??= { chain: loadedOrNull(into, before) }).chain;
+  refuseNewDrops(into, was, will);
+  refuse(into, was, will);
+  store.record(into.path, before, after);
   return will.config;
 }
 
@@ -442,86 +496,113 @@ function commit(
 // when that file does not load.
 type Was = () => LoadedChain | null;
 
-// A write the home takes and a layer above hides would change the file and
+// A write the written layer takes and a layer above hides would change the file and
 // not the bar — refused, naming the layer that holds it.
-function refuseHidden(home: ConfigHome, was: Was, will: LoadedChain): void {
-  const hidden = hiddenBy(home, was(), will);
+function refuseHidden(into: Seen, was: Was, will: LoadedChain): void {
+  const hidden = hiddenBy(into, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
-      `refused: ${home.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar — edit it there`,
+      `refused: ${into.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${into.path}, so this click would change nothing on the bar — write it to that layer instead`,
     );
   }
 }
 
 const releases = (): void => {};
 
-// [LAW:no-silent-failure] A structural read finds only what the home and the
-// bundled default declare; what it misses may be a layer above's, which no
-// click writes — the refusal says so rather than calling the bar stale.
-function homeOnly<T>(home: ConfigHome, read: () => T): T {
+// [LAW:no-silent-failure] A structural read finds only what the written layer and the
+// layers beneath it declare; what it misses may be a layer above's, which a
+// write to that layer edits — the refusal says so rather than calling the bar
+// stale.
+function writtenOnly<T>(into: Seen, read: () => T): T {
   try {
     return read();
   } catch (e) {
-    if (!(e instanceof BadVerbArgs) || home.above.length === 0) throw e;
+    if (!(e instanceof BadVerbArgs) || into.above.length === 0) throw e;
     throw new BadVerbArgs(
-      `${e.message} — or it is declared by ${home.above.map((l) => l.path).join(", ")}, which the bar does not edit`,
+      `${e.message} — or it is declared by ${into.above.map((l) => l.path).join(", ")}, above it: write to that layer instead`,
     );
   }
 }
 
-// What the home's change would say that the chain above it would not draw.
-// [LAW:types-are-the-program] A home that does not load now drew nothing a
+// What the written layer's change would say that the chain above it would not draw.
+// [LAW:types-are-the-program] A written layer that does not load now drew nothing a
 // click could hide — the bar runs on its last good load — so a click that
 // repairs it compares against no prior chain and hides nothing.
 function hiddenBy(
-  home: ConfigHome,
+  into: Seen,
   was: LoadedChain | null,
   will: LoadedChain,
 ): string[] {
   if (was === null) return [];
   const drawn = new Set(changedPaths(topConfig(was), topConfig(will)));
-  return changedPaths(homeConfig(home, was), homeConfig(home, will)).filter(
-    (p) => !drawn.has(p),
-  );
+  return changedPaths(
+    writtenConfig(into, was),
+    writtenConfig(into, will),
+  ).filter((p) => !drawn.has(p));
 }
 
-function loadedOrNull(
-  home: ConfigHome,
-  text: string | null,
-): LoadedChain | null {
+function loadedOrNull(into: Seen, text: string | null): LoadedChain | null {
   try {
-    return chainOver(home, text);
+    return chainOver(into, text);
   } catch (e) {
     if (e instanceof ConfigError) return null;
     throw e;
   }
 }
 
-// The chain the home's text — or its absence — loads to, read from disk
-// above it, exactly as resolveDslConfig orders it: an existing file is a
-// layer whatever it holds.
-function chainOver(home: ConfigHome, text: string | null): LoadedChain {
+// What the written file inherits: the merge of every layer beneath it, which
+// each of its by-name reads looks through when the file itself is silent.
+// [LAW:no-silent-failure] A layer beneath that does not load refuses the
+// click, naming why, as the written file's own failure to load does.
+function inheritedOf(into: Seen): DslConfig {
+  try {
+    return inheritedConfig(
+      into.locs,
+      into.below,
+      DEFAULT_DSL_CONFIG,
+      { repo: into.repo, cwd: into.cwd },
+      textsOf(into.below),
+    );
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    throw new BadVerbArgs(
+      `refused: a layer beneath ${into.path} does not load — ${e.message}`,
+    );
+  }
+}
+
+// The chain the written layer's text — or its absence — loads to, between
+// the layers the click holds, exactly as resolveDslConfig orders it: an
+// existing file is a layer whatever it holds.
+function chainOver(into: Seen, text: string | null): LoadedChain {
+  const layers = [
+    ...into.below,
+    ...(text !== null ? [{ path: into.path, role: into.role, text }] : []),
+    ...into.above,
+  ];
   return loadConfigChain(
-    home.locs,
-    text !== null ? [homeLayer(home.path), ...home.above] : home.above,
+    into.locs,
+    layers,
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
-    { repo: home.repo, cwd: home.cwd },
-    (p) =>
-      p === home.path && text !== null ? text : fs.readFileSync(p, "utf8"),
+    { repo: into.repo, cwd: into.cwd },
+    textsOf(layers),
   );
 }
 
-// The home's own layer merged over the chain's base, and the whole
-// chain's merge — what the file says, and what the bar draws.
-function homeConfig(home: ConfigHome, chain: LoadedChain): DslConfig {
-  const [bottom] = chain.layers;
-  return bottom?.path === home.path ? bottom.config : chain.base;
+// The chain merged up to the written layer: each loaded layer is merged over
+// the ones under it, and those are the same on both sides of a write, so a
+// difference between two of these is the written layer's alone.
+function writtenConfig(into: Seen, chain: LoadedChain): DslConfig {
+  const upTo = new Set([...into.below.map((l) => l.path), into.path]);
+  return (
+    chain.layers.filter((l) => upTo.has(l.path)).at(-1)?.config ?? chain.base
+  );
 }
 
-// An absent home reads as the chain's base — installed plugins included —
+// An absent written layer reads as the chain's base — installed plugins included —
 // never the bare bundled default, or an installed plugin's names would read
-// as a change the home's write is hidden behind.
+// as a change the written layer's write is hidden behind.
 function topConfig(chain: LoadedChain): DslConfig {
   return chain.layers.at(-1)?.config ?? chain.base;
 }
@@ -543,17 +624,21 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 // [LAW:single-enforcer] The gate a text no verb loaded passes before a click
-// writes it (a history step's, over the file as it stands): the gate every
-// write passes.
-export function proveLoads(home: ConfigHome, text: string | null): void {
-  loadOrRefuse(home, text);
+// writes it (a history step's, between the files as the step leaves them):
+// the gate every write passes.
+export function proveLoads(
+  layer: WriteLayer,
+  text: string | null,
+  read: (file: string) => string | null,
+): void {
+  loadOrRefuse(seenBy(layer, read), text);
 }
 
-// The config `text` loads to as the home, or the click's refusal naming why
+// The config `text` loads to as the written layer, or the click's refusal naming why
 // it does not load.
-function loadOrRefuse(home: ConfigHome, text: string | null): LoadedChain {
+function loadOrRefuse(into: Seen, text: string | null): LoadedChain {
   try {
-    return chainOver(home, text);
+    return chainOver(into, text);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -569,7 +654,7 @@ function loadOrRefuse(home: ConfigHome, text: string | null): LoadedChain {
 // click over it would lock the bar's own controls. A file that does not load
 // now has drops nobody can know — the bar runs on its last good load, as
 // hiddenBy reads it — so a click that repairs it is not blamed for them.
-function refuseNewDrops(home: ConfigHome, was: Was, will: LoadedChain): void {
+function refuseNewDrops(into: Seen, was: Was, will: LoadedChain): void {
   if (will.dropped.length === 0) return;
   const prior = was();
   if (prior === null) return;
@@ -608,10 +693,10 @@ export function readValue(
  */
 export function writeValues(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
 ): void {
-  writeDrafts(store, home, pairs, []);
+  writeDrafts(store, into, pairs, []);
 }
 
 // One placement's setting as a save writes it: the value, and the placement
@@ -626,16 +711,18 @@ export interface PlacementValue {
 /** `save`'s write: every value key and every placement setting, as ONE tracked write. */
 export function writeDrafts(
   store: EditStore,
-  home: ConfigHome,
+  layer: WriteLayer,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
 ): void {
-  const before = store.read(home.path);
+  const into = seenBy(layer, (file) => store.read(file));
+  const before = store.read(into.path);
+  const under = inheritedOf(into);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
         text,
-        valuePathOf(docOf(text), requireValueTarget(key)),
+        valuePathOf(docOf(text), under, requireValueTarget(key)),
         persistValueText(key, raw),
         JSON5_DIALECT,
       ),
@@ -643,10 +730,10 @@ export function writeDrafts(
   );
   commit(
     store,
-    home,
+    into,
     before,
-    homeOnly(home, () =>
-      withPlacements(valued, home.path, placements, (text) => text),
+    writtenOnly(into, () =>
+      withPlacements(valued, under, into.path, placements, (text) => text),
     ),
     refuseHidden,
   );
@@ -661,13 +748,14 @@ export function writeDrafts(
 // error, never a value written somewhere plausible.
 function withPlacements(
   text: string,
+  under: DslConfig,
   file: string,
   placements: readonly PlacementValue[],
-  own: (text: string, preset: string, id: string) => string,
+  own: (text: string, under: DslConfig, preset: string, id: string) => string,
 ): string {
   return placements.reduce((prior, { preset, id, setting, value }) => {
-    const acc = own(prior, preset, id);
-    const placement = layoutPlacementOf(docOf(acc), preset, id);
+    const acc = own(prior, under, preset, id);
+    const placement = layoutPlacementOf(docOf(acc), under, preset, id);
     const set = setPlacementSetting(
       ensureAuthored(acc, placement),
       placement.path,
@@ -685,16 +773,21 @@ function withPlacements(
 }
 
 // The row holding `id` in `preset`'s layout, copied into the preset's OWN root
-// when a layer other presets share supplies it — the file's `root` or a
-// bundled row — so a value written into it is this preset's alone. A named
+// when a layer other presets share supplies it — the file's `root` or an
+// inherited row — so a value written into it is this preset's alone. A named
 // row lands at `rows.<row>`, the unit the by-name cascade replaces; a whole
 // tree replaces the preset's root outright.
 // [LAW:no-silent-failure] A tree under a preset that already stages its own
 // rows cannot be copied without discarding them: refused, never clobbered.
-function ownRow(text: string, preset: string, id: string): string {
+function ownRow(
+  text: string,
+  under: DslConfig,
+  preset: string,
+  id: string,
+): string {
   const doc = docOf(text);
   const own: ConfigPath = ["presets", preset, "root"];
-  for (const [row, { path, unit, node }] of cascadeOf(doc, preset)) {
+  for (const [row, { path, unit, node }] of cascadeOf(doc, under, preset)) {
     if (!hasSegmentRef(node, id)) continue;
     if (own.every((key, i) => path[i] === key)) return text;
     const rowText =
@@ -702,7 +795,7 @@ function ownRow(text: string, preset: string, id: string): string {
     if (row !== TREE_BLOCK) {
       return setValue(text, [...own, "rows", row], rowText, JSON5_DIALECT);
     }
-    if (presetLayer(doc, preset) !== null) {
+    if (presetLayer(doc, under, preset) !== null) {
       throw new BadVerbArgs(
         `cannot give preset "${preset}" its own copy of ${path.join(".")}: it already stages rows of its own over that tree`,
       );
@@ -712,13 +805,19 @@ function ownRow(text: string, preset: string, id: string): string {
   return text;
 }
 
-// [LAW:one-source-of-truth] A preset the user authored is declared by its
+// [LAW:one-source-of-truth] A preset this file authored is declared by its
 // name alone — `presets.mine: {}` still offers `mine` — so a reset that empties
-// it keeps the name; under a bundled name the entry is a delta, and an empty
-// one prunes so the name tracks the bundled preset again.
-function deleteAtPath(text: string, path: ConfigPath): string {
+// it keeps the name; under a name the file inherits the entry is a delta, and
+// an empty one prunes so the name tracks the inherited preset again.
+function deleteAtPath(
+  text: string,
+  under: DslConfig,
+  path: ConfigPath,
+): string {
   const ownPreset =
-    path[0] === "presets" && path.length > 2 && !isBundledPreset(path[1]!);
+    path[0] === "presets" &&
+    path.length > 2 &&
+    under.presets[path[1]!] === undefined;
   return deleteValue(text, path, ownPreset ? 2 : 0);
 }
 
@@ -730,18 +829,21 @@ function deleteAtPath(text: string, path: ConfigPath): string {
  */
 export function deleteValues(
   store: EditStore,
-  home: ConfigHome,
+  layer: WriteLayer,
   keys: readonly string[],
 ): void {
+  const into = seenBy(layer, (file) => store.read(file));
   const targets = keys.map(requireTarget);
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   if (before === null) return;
+  const under = inheritedOf(into);
   const after = targets.reduce(
-    (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
+    (text, target) =>
+      deleteAtPath(text, under, resetPathOf(docOf(text), under, target)),
     before,
   );
   if (after === before) return;
-  commit(store, home, before, after, releases);
+  commit(store, into, before, after, releases);
 }
 
 const SAVED_PRESET_PREFIX = "custom-";
@@ -752,21 +854,25 @@ function presetKeys(doc: Node | null): string[] {
 }
 
 // [LAW:single-enforcer] The name a saved preset takes: the first `custom-N`
-// no preset the chain will declare already holds — the bundled ones, the
-// file's own read from the very text the write lands in, and every layer's
-// above it (a name a project holds would merge the copy into its preset) —
-// compared by `ident`, the collapse the loader refuses two preset names sharing.
-function freePresetName(doc: Node | null, home: ConfigHome): string {
+// no preset the chain will declare already holds — every one the file
+// inherits, the file's own read from the very text the write lands in, and
+// every layer's above it (a name another layer holds would merge the copy
+// into its preset) — compared by `ident`, the collapse the loader refuses two
+// preset names sharing.
+function freePresetName(
+  doc: Node | null,
+  under: DslConfig,
+  into: Seen,
+): string {
   const taken = new Set(
     [
-      ...BUNDLED_PRESETS,
+      ...Object.keys(under.presets),
       ...presetKeys(doc),
       // Each layer above as the loader reads it (JSON5, duplicate keys and
       // all) — the editor refuses files the loader renders.
-      ...home.above.flatMap((l) =>
+      ...into.above.flatMap((l) =>
         Object.keys(
-          (JSON5.parse(fs.readFileSync(l.path, "utf8")) as { presets?: object })
-            .presets ?? {},
+          (JSON5.parse(l.text) as { presets?: object }).presets ?? {},
         ),
       ),
     ].map(ident),
@@ -788,17 +894,19 @@ function freePresetName(doc: Node | null, home: ConfigHome): string {
  */
 export function writePreset(
   store: EditStore,
-  home: ConfigHome,
+  layer: WriteLayer,
   from: string,
   globals: Globals,
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
-  const before = store.read(home.path);
+  const into = seenBy(layer, (file) => store.read(file));
+  const before = store.read(into.path);
   const doc = docOf(before ?? "");
-  const name = freePresetName(doc, home);
+  const under = inheritedOf(into);
+  const name = freePresetName(doc, under, into);
   const own: ConfigPath = ["presets", name];
-  const staged = homeOnly(home, () => presetLayer(doc, from));
+  const staged = writtenOnly(into, () => presetLayer(doc, under, from));
   const copied: ReadonlyArray<readonly [ConfigPath, string]> = [
     ...(staged === null
       ? []
@@ -817,7 +925,7 @@ export function writePreset(
   const pinned = picks.map(([field, raw]) => {
     const key = presetGlobalsKey(name, field);
     return [
-      valuePathOf(doc, requireValueTarget(key)),
+      valuePathOf(doc, under, requireValueTarget(key)),
       persistValueText(key, raw),
     ] as const;
   });
@@ -827,15 +935,16 @@ export function writePreset(
   );
   // The placements the session configured, each in a row the new preset
   // owns — never in a layer the preset it was copied from renders too.
-  const placed = homeOnly(home, () =>
+  const placed = writtenOnly(into, () =>
     withPlacements(
       after,
-      home.path,
+      under,
+      into.path,
       placements.map((p) => ({ ...p, preset: name })),
       ownRow,
     ),
   );
-  commit(store, home, before, placed, refuseHidden);
+  commit(store, into, before, placed, refuseHidden);
   return name;
 }
 
@@ -849,44 +958,47 @@ export function writePreset(
  */
 export function writeThemeDefault(
   store: EditStore,
-  home: ConfigHome,
+  layer: WriteLayer,
   theme: string,
   look: Readonly<Record<ThemeDefaultField, string>>,
 ): DslConfig {
-  const before = store.read(home.path);
+  const into = seenBy(layer, (file) => store.read(file));
+  const before = store.read(into.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme],
     json5Text(look),
     JSON5_DIALECT,
   );
-  return commit(store, home, before, after, refuseHidden);
+  return commit(store, into, before, after, refuseHidden);
 }
 
 /**
  * Delete a preset the file authors, as ONE tracked write — and the file's
  * `globals.preset` with it when that names it, since a default naming no
- * declared preset fails the load. Never a bundled preset: the file's entry
- * there is a delta the bundled preset survives, which `reset` owns. Never a
- * name the file does not declare: the stale click. What else the file says
- * about the preset (an action targeting it) is commit's to refuse.
+ * declared preset fails the load. Never a preset the file inherits: its
+ * entry there is a delta the inherited preset survives, which `reset` owns.
+ * Never a name the file does not declare: the stale click. What else the file
+ * says about the preset (an action targeting it) is commit's to refuse.
  */
 export function deletePreset(
   store: EditStore,
-  home: ConfigHome,
+  layer: WriteLayer,
   name: string,
 ): void {
-  if (isBundledPreset(name)) {
+  const into = seenBy(layer, (file) => store.read(file));
+  const under = inheritedOf(into);
+  if (under.presets[name] !== undefined) {
     throw new BadVerbArgs(
-      `cannot delete preset "${name}": it is bundled — reset its settings instead`,
+      `cannot delete preset "${name}": a layer beneath ${into.path} declares it — reset its settings instead`,
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
-      `cannot delete preset "${name}": ${home.path} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
+      `cannot delete preset "${name}": ${into.path} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
     );
   }
   const selected = nodeAt(doc, ["globals", "preset"]);
@@ -898,9 +1010,9 @@ export function deletePreset(
   ];
   commit(
     store,
-    home,
+    into,
     before,
-    paths.reduce((text, at) => deleteAtPath(text, at), before),
+    paths.reduce((text, at) => deleteAtPath(text, under, at), before),
     releases,
   );
 }
@@ -914,35 +1026,37 @@ export function deletePreset(
  */
 export function applyLayoutOp(
   store: EditStore,
-  home: ConfigHome,
+  layer: WriteLayer,
   key: string,
   op: LayoutOp,
 ): { readonly placed: NewPlacement | null; readonly config: DslConfig } {
+  const into = seenBy(layer, (file) => store.read(file));
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
-  const placement = homeOnly(home, () =>
-    layoutPlacementOf(docOf(before ?? ""), target.preset, subject),
+  const under = inheritedOf(into);
+  const placement = writtenOnly(into, () =>
+    layoutPlacementOf(docOf(before ?? ""), under, target.preset, subject),
   );
   const authored = ensureAuthored(before ?? "", placement);
   const { after, placed } = spliceOp(authored, placement.path, op, () => {
     // [LAW:no-ambient-temporal-coupling] Minted over the text this click
     // splices, never a cached render of it: a hand edit, or a click an
     // instant earlier, is in the text before any watcher reloads it.
-    const config = loadOrRefuse(home, authored).config;
+    const config = loadOrRefuse(into, authored).config;
     return presetNames(config.presets).map(
       (preset) => presetRoot(config, preset).node,
     );
   });
   if (after === null) {
     throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${home.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
+      `${placement.path.join(".")} in ${into.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  return { placed, config: commit(store, home, before, after, refuseHidden) };
+  return { placed, config: commit(store, into, before, after, refuseHidden) };
 }
 
 // [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:

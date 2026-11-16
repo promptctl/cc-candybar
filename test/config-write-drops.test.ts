@@ -9,16 +9,18 @@ import os from "node:os";
 import path from "node:path";
 
 import { applyLayoutOp, writeValues } from "../src/renderer/config-file-store";
-import type { ConfigHome } from "../src/config/loader/discovery";
+import type { WriteLayer } from "../src/config/loader/discovery";
 import { EDITS_IN_PLACE } from "./helpers/history-step";
 
 const store = EDITS_IN_PLACE;
 
 let dir: string;
-const homeWith = (text: string): ConfigHome => {
+const homeWith = (text: string): WriteLayer => {
   const file = path.join(dir, "config.json5");
   fs.writeFileSync(file, text);
-  return { path: file, above: [], repo: null, cwd: null, locs: locs() };
+  return { path: file, role: "user",
+          below: [],
+          above: [], repo: null, cwd: null, locs: locs() };
 };
 
 beforeEach(() => {

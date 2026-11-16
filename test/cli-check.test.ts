@@ -83,7 +83,7 @@ describe("checkConfig — explicit target", () => {
     const outcome = await checkConfig(world, daemonGates(), p, dir);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind === "clean") {
-      expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
+      expect(outcome.layers).toEqual([{ path: p, role: "user" }]);
       expect(textOf(outcome.rendered).length).toBeGreaterThan(0);
     }
   });
@@ -826,7 +826,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     answerRepo(cwd);
     const outcome = await checkConfig(world, daemonGates(), undefined, cwd);
     expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "repo" }]);
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, role: "project" }]);
   });
 
   // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
@@ -848,7 +848,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     // ...the CLI edge lifts it into the target.
     const viaEnv = await checkConfig(world, daemonGates(), detectConfigEnv(host, cwd), cwd);
     expect(viaEnv.kind).toBe("clean");
-    if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([{ path: p, scope: "plugins" }]);
+    if (viaEnv.kind === "clean") expect(viaEnv.layers).toEqual([{ path: p, role: "user" }]);
     runOn({ CC_CANDYBAR_CONFIG: path.join(dir, "absent.json5") });
     const absent = await checkConfig(world, daemonGates(), detectConfigEnv(host, cwd), cwd);
     expect(absent.kind).toBe("unreadable");
@@ -863,7 +863,7 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     );
     const outcome = await checkConfig(world, daemonGates(), "target.json5", path.join(dir, "rel"));
     expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, scope: "plugins" }]);
+    if (outcome.kind === "clean") expect(outcome.layers).toEqual([{ path: p, role: "user" }]);
   });
 
   it("surfaces the .json5/.json collision as a warning on a CLEAN exit", async () => {
@@ -890,7 +890,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps clean → exit 0 with the verdict on stdout", async () => {
     const plan = checkPlan({
       kind: "clean",
-      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
+      layers: [{ path: "/tmp/x.json5", role: "user" }],
       warnings: [],
       rendered: barOf([{ text: "line" }]),
     });
@@ -914,7 +914,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps fatal → exit 1 with the diagnostic on stderr", async () => {
     const plan = checkPlan({
       kind: "fatal",
-      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
+      layers: [{ path: "/tmp/x.json5", role: "user" }],
       message: "broken here",
       warnings: [],
     });
@@ -940,7 +940,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("the verdict alone carries no bar; --render appends the rendered one beneath it", () => {
     const clean: CheckOutcome = {
       kind: "clean",
-      layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
+      layers: [{ path: "/tmp/x.json5", role: "user" }],
       warnings: [],
       rendered: barOf([{ text: " ~/c/x " }], [{ text: " Opus 4.8 " }]),
     };
@@ -962,7 +962,7 @@ describe("checkPlan — the text/exit-code contract", () => {
       checkPlan(
         {
           kind: "fatal",
-          layers: [{ path: "/tmp/x.json5", scope: "plugins" }],
+          layers: [{ path: "/tmp/x.json5", role: "user" }],
           message: "broken",
           warnings: [],
         },

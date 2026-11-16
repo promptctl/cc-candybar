@@ -10,7 +10,8 @@ import { locations } from "../src/daemon/paths";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, NO_REPO, prepareConfig, type CheckOutcome } from "../src/check";
-import { durableConfig, homeLayer, loadConfigChain } from "../src/config/dsl-loader";
+import { homeLayer, loadConfigChain, writeLayer } from "../src/config/dsl-loader";
+import type { LayerRole } from "../src/config/layer-role";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   deleteValues,
@@ -66,9 +67,18 @@ function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
 }
 
 
-// The home a click in the project writes, under the answers the bar reads.
-const projectHome = () =>
-  durableConfig(locations(host), repoConfigs(stateDir(host)).read(), project, project);
+// The layer of `role` a click in the project writes, under the answers the
+// bar reads.
+const projectLayer = (role: LayerRole = "user") => {
+  const write = writeLayer(
+    locations(host),
+    repoConfigs(stateDir(host)).read(),
+    { projectDir: project, cwd: project },
+    role,
+  );
+  if (write.kind !== "layer") throw new Error(write.why);
+  return write;
+};
 
 test("a project file that places one segment renders over the user's whole config", async () => {
   // `mine` is declared only by the user's file: the project file loads only
@@ -79,8 +89,8 @@ test("a project file that places one segment renders over the user's whole confi
   );
   const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
   expect(outcome.layers).toEqual([
-    { path: userFile, scope: "plugins" },
-    { path: projectFile, scope: "repo" },
+    { path: userFile, role: "user" },
+    { path: projectFile, role: "project" },
   ]);
   expect(textOf(outcome.rendered)).toContain("USERSEG");
   expect(textOf(outcome.rendered)).toContain("PROJSEG");
@@ -101,8 +111,8 @@ test("a layer that does not load fails naming its own file", async () => {
 
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
-  const home = projectHome();
-  expect(home).toEqual({ path: userFile, above: [{ path: projectFile, scope: "repo" }], repo: project, cwd: project, locs: locations(host) });
+  const home = projectLayer();
+  expect(home).toEqual({ kind: "layer", path: userFile, role: "user", below: [], above: [{ path: projectFile, role: "project" }, { path: path.join(project, ".cc-candybar.local.json5"), role: "local" }], repo: project, cwd: project, locs: locations(host) });
   writeValues(EDITS_IN_PLACE, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -112,7 +122,7 @@ test("a click a project layer would hide is refused, naming the layer", () => {
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
   const before = fs.readFileSync(userFile, "utf8");
   expect(() =>
-    writeValues(EDITS_IN_PLACE, projectHome(), [["palette", "nord"]]),
+    writeValues(EDITS_IN_PLACE, projectLayer(), [["palette", "nord"]]),
   ).toThrow(new RegExp(`${projectFile} sets globals\\.palette`));
   expect(fs.readFileSync(userFile, "utf8")).toBe(before);
 });
@@ -123,14 +133,14 @@ test("a reset the project layer hides still clears the user's file", () => {
     `{ globals: { palette: "nord" }, segments: { mine: { template: "USERSEG" } }, root: { h: ["mine"] } }`,
   );
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
-  deleteValues(EDITS_IN_PLACE, projectHome(), ["palette"]);
+  deleteValues(EDITS_IN_PLACE, projectLayer(), ["palette"]);
   expect(fs.readFileSync(userFile, "utf8")).not.toContain("nord");
 });
 
 test("a click that repairs a broken user file is not refused under a project layer", () => {
   fs.writeFileSync(userFile, `{ globals: { palette: "no-such-theme" } }`);
   fs.writeFileSync(projectFile, `{ globals: { menuGlyph: "P" } }`);
-  writeValues(EDITS_IN_PLACE, projectHome(), [["palette", "nord"]]);
+  writeValues(EDITS_IN_PLACE, projectLayer(), [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
 });
 
@@ -138,7 +148,7 @@ test("save-as-preset never mints a name a project layer declares", () => {
   fs.writeFileSync(projectFile, `{ presets: { "custom-1": {} } }`);
   const name = writePreset(
     EDITS_IN_PLACE,
-    projectHome(),
+    projectLayer(),
     "default",
     {},
     [],
@@ -147,15 +157,93 @@ test("save-as-preset never mints a name a project layer declares", () => {
   expect(name).toBe("custom-2");
 });
 
-test("the user's file is a layer even when the session's cwd is its directory", () => {
+// A file above the user's inherits what the user's file says: a structural
+// edit there finds and copies the user's rows and presets, never the bundled
+// default's in their place.
+describe("a write to a layer above the user's", () => {
+  const localFile = () => path.join(project, ".cc-candybar.local.json5");
+
+  test("a layout edit finds the user's row and copies it, not the bundled one", () => {
+    applyLayoutOp(EDITS_IN_PLACE, projectLayer("project"), "presets.default.root", {
+      op: "insert",
+      segment: "model",
+      anchor: "mine",
+      relation: "after",
+    });
+    const written = fs.readFileSync(projectFile, "utf8");
+    expect(written).toContain("mine");
+    expect(written).toContain("model");
+    expect(written).not.toContain("gitaculous");
+  });
+
+  test("save-as-preset copies a preset only the user's file declares", () => {
+    fs.writeFileSync(
+      userFile,
+      `{ segments: { mine: { template: "USERSEG" } }, presets: { own: { root: { h: ["mine"] } } } }`,
+    );
+    const name = writePreset(EDITS_IN_PLACE, projectLayer("local"), "own", {}, [], []);
+    const written = fs.readFileSync(localFile(), "utf8");
+    expect(written).toContain(name);
+    expect(written).toContain("mine");
+  });
+
+  test("save-as-preset never mints a name the user's file declares", () => {
+    fs.writeFileSync(userFile, `{ presets: { "custom-1": {} } }`);
+    expect(
+      writePreset(EDITS_IN_PLACE, projectLayer("project"), "default", {}, [], []),
+    ).toBe("custom-2");
+  });
+
+  // A click that writes two layers proves each write against the files as
+  // the click leaves them: a value it set in the project's file hides the
+  // user's write of the same field, though the disk does not hold it yet.
+  test("a later write of one click is judged against what the click's earlier write left", () => {
+    const staged = new Map<string, string>();
+    const click = {
+      read: (file: string) =>
+        staged.get(file) ??
+        (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null),
+      record: (file: string, _before: string | null, after: string) => {
+        staged.set(file, after);
+      },
+    };
+    writeValues(click, projectLayer("project"), [["menuGlyph", "P"]]);
+    expect(fs.existsSync(projectFile)).toBe(false);
+    expect(() =>
+      writeValues(click, projectLayer("user"), [["menuGlyph", "Q"]]),
+    ).toThrow(/would change nothing on the bar/);
+  });
+
+  test("a write over a layer beneath that does not load is refused, naming why", () => {
+    fs.writeFileSync(userFile, `{ globals: { menuGlyph: `);
+    expect(() =>
+      writeValues(EDITS_IN_PLACE, projectLayer("project"), [["menuGlyph", "P"]]),
+    ).toThrow(/^refused: a layer beneath .* does not load/);
+  });
+
+  // What a file inherits is the merge of the layers beneath it, never a
+  // chain with a layer taken out: a layer above that leans on the written
+  // file's declarations does not refuse the write.
+  test("a user write is not refused because the local file selects a preset the user's file declares", () => {
+    fs.writeFileSync(
+      userFile,
+      `{ segments: { mine: { template: "USERSEG" } }, presets: { own: {} }, root: { h: ["mine"] } }`,
+    );
+    fs.writeFileSync(localFile(), `{ globals: { preset: "own" } }`);
+    writeValues(EDITS_IN_PLACE, projectLayer("user"), [["menuGlyph", "Q"]]);
+    expect(fs.readFileSync(userFile, "utf8")).toContain("Q");
+  });
+});
+
+test("the user's file is a layer even when the session's project is its directory", () => {
   const xdgDir = path.dirname(userFile);
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
   answerRepo(xdgDir);
-  const resolved = resolveDslConfig(locations(host), repoConfigs(stateDir(host)).read(), undefined, xdgDir);
+  const resolved = resolveDslConfig(locations(host), repoConfigs(stateDir(host)).read(), { projectDir: xdgDir });
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
-    { path: userFile, scope: "plugins" },
-    { path: local, scope: "repo" },
+    { path: userFile, role: "user" },
+    { path: local, role: "project" },
   ]);
 });
 
@@ -165,7 +253,7 @@ test("save-as-preset reads a layer above that the editor would refuse", () => {
     `{ presets: { "custom-1": {} }, globals: { menuGlyph: "a", menuGlyph: "b" } }`,
   );
   expect(
-    writePreset(EDITS_IN_PLACE, projectHome(), "default", {}, [], []),
+    writePreset(EDITS_IN_PLACE, projectLayer(), "default", {}, [], []),
   ).toBe("custom-2");
 });
 
@@ -180,7 +268,7 @@ test("a first durable write with no user file succeeds beside an installed plugi
     fs.mkdirSync(path.dirname(def), { recursive: true });
     fs.writeFileSync(def, `{ data: "./d.json", segments: { status: { template: "x" } } }`);
     fs.writeFileSync(projectFile, `{ root: { h: ["plugins.deploy.status"] } }`);
-    writeValues(EDITS_IN_PLACE, projectHome(), [["palette", "nord"]]);
+    writeValues(EDITS_IN_PLACE, projectLayer(), [["palette", "nord"]]);
     expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   }
 });
@@ -408,7 +496,7 @@ describe("a project layer inserting into the user's row", () => {
       // A layout op aimed at the inserted id writes nothing.
       const before = fs.readFileSync(userFile, "utf8");
       expect(() =>
-        applyLayoutOp(EDITS_IN_PLACE, projectHome(), "presets.default.root", {
+        applyLayoutOp(EDITS_IN_PLACE, projectLayer(), "presets.default.root", {
           op: "remove",
           target: "theirs",
         }),
@@ -422,7 +510,7 @@ describe("a project layer inserting into the user's row", () => {
   const barLoad = () => {
     const warnings: string[] = [];
     const loaded = loadConfigChain(locations(host), 
-      [homeLayer(userFile), { path: projectFile, scope: "repo" }],
+      [homeLayer(userFile), { path: projectFile, role: "project" }],
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
       { repo: null, cwd: project },

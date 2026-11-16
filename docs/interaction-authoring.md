@@ -98,7 +98,7 @@ declares exactly one value source:
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ rewind: true }` | put back everything this session changed since edit mode opened (layout edits, setting picks, configure-mode picks) and leave nothing to redo — edit mode's `↩ cancel`. Refused when edit mode is not open (so fire it before anything that closes edit mode); a file edited since by anything else is kept as it is, everything else is put back, and the refusal names the file |
-| `{ save: true }` | write every setting this session renders differently from your config file to that file, in one edit, and drop those picks from the session — see below |
+| `{ save: true, layer }` | write every setting this session renders differently from your config to the layer `layer` names, in one edit, and drop those picks from the session. `layer` defaults to `"user"`; `"ask"` has each link bind the layer as its value — see below |
 | `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
 | `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |
 | `{ themeDefault: "save" }` | write this session's shade, variation and style into your config file as the active theme's default (`themeDefaults.<theme>`), and drop the session's picks the file now draws; refused when a rule chose the theme — see below |
@@ -224,14 +224,20 @@ since they are part of what you wrote. The reset also clears the session's
 own pick of that setting, so the bar moves. A path your file never authored is
 left alone, and a reset that changes nothing enters no undo history.
 
-The file a click writes is your own config file, resolved at the moment of the
-click by the same search the render runs: an explicit path (`--config`, or
-`$CC_CANDYBAR_CONFIG`) if one is set, else the XDG
-`config.json5` — never a project or cwd `.cc-candybar.json5`, which are
-layers merged over it. When the file does not exist yet, the first `persist`
-creates it. A click whose change a project or cwd file would hide (that file
-sets the same value) is refused, naming the file, rather than writing a value
-the bar would not show. A click from a session that
+Every action that writes config names the layer it writes with `layer`:
+`"user"` (your XDG `config.json5`), `"project"` (the approved project's
+`.cc-candybar.json5`) or `"local"` (`.cc-candybar.local.json5` beside it, yours
+alone in that project). The chain merges them user < project < local, and a
+write defaults to `"user"`. The file is resolved at the moment of the click by
+the same search the render runs; an explicit path (`--config`, or
+`$CC_CANDYBAR_CONFIG`) is the session's only layer, so only `"user"` writes it.
+A project layer in a session with no approved project is refused. When the
+file does not exist yet, the first write creates it, and a local file it
+creates is added to the repository's `info/exclude` so git never shows it. A
+click whose change a layer above would hide (that file sets the same value) is
+refused, naming the file, rather than writing a value the bar would not show.
+The payload's `layers.user`, `layers.project` and `layers.local` say which
+layers this session can write. A click from a session that
 has not rendered yet has no file to write and fails loudly (`has not rendered
 yet — no config file to write`) rather than guessing.
 
@@ -286,14 +292,17 @@ many differ as the payload input `unsaved`. Pick a value and then pick your
 saved one back, and there is nothing to save; a pick the bar ignores (a preset
 or style your config no longer declares) is never a draft.
 
-`{ save: true }` writes every draft to your config file as ONE edit. Each
+`{ save: true }` writes every draft to one layer as ONE edit. Each
 lands where the next reload reads it: a field the saved preset's own `globals`
 names goes into `presets.<name>.globals`, since a top-level value would be
 shadowed there, and every other field into `globals`. The daemon reloads the
 file before it drops those picks from the session, so the bar reads the saved
 values from the very next render and follows the file from then on.
-The settings menu's `💾 save N` is exactly this, shown while `unsaved` is
-above zero:
+A save writes the user's own file by default; `layer: "project"` or
+`"local"` fixes another, and `layer: "ask"` has each link bind one as the
+action's value. The
+settings menu's `💾 save N` is exactly this, shown while `unsaved` is above
+zero, with a link per layer the session can write:
 
 ```json5 check:pass
 {
@@ -302,7 +311,7 @@ above zero:
   },
   actions: {
     applyTheme: { set: "theme", from: "themes" },
-    keep: { save: true },
+    keep: { save: true, layer: "ask" },
   },
   segments: {
     themeControl: {
@@ -310,7 +319,7 @@ above zero:
     },
     saveButton: {
       when: "{{ gt .unsaved 0 }}",
-      template: '{{ action "keep" (printf "💾 save %d" .unsaved) }}',
+      template: '{{ action "keep" (printf "💾 save %d" .unsaved) "user" }}',
     },
   },
   root: { v: [{ h: ["themeControl", "saveButton"] }] },
@@ -321,9 +330,10 @@ Gate the button with `gt`, which renders `true` or `false`: a `when` hides
 only on the literal text `false`, so a bare `{{ .unsaved }}` would leave an
 empty cell at zero.
 
-The click carries nothing but your session id — which settings are drafts, and
+The click carries nothing but your session id and the layer — which settings are drafts, and
 their values, are read at the moment of the click, so the save writes what the
-button counted. The file is the one a `persist` click would write (below). Each
+button counted. The file is the layer the link binds, resolved as any write's
+is (below). Each
 value is checked again against the gate that admitted it as a pick; a value
 that gate no longer accepts, or a file that cannot be written, refuses the
 whole save loudly, and every draft stays where it was. A save is one step in
@@ -341,6 +351,21 @@ the undo history: undoing it restores the file and the picks together.
 
 ```error
 save must be the literal true
+```
+
+A save that asks and is drawn without a layer to bind writes nowhere, so it
+is a render error on the bar:
+
+```json5 check:fail
+{
+  actions: { keep: { save: true, layer: "ask" } },
+  segments: { saveButton: { template: '{{ action "keep" "💾 save" }}' } },
+  root: { h: ["saveButton"] },
+}
+```
+
+```error
+a save that asks which layer it writes binds the layer as its value
 ```
 
 ### Save as preset

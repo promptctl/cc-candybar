@@ -70,6 +70,12 @@ import {
   type Effect,
 } from "../click/wire.js";
 import type { LinkSigner } from "../click/link-signer.js";
+import {
+  LAYER_ROLES,
+  layerRoleOf,
+  type LayerChoice,
+  type LayerRole,
+} from "../config/layer-role.js";
 
 // ─── Compiled shapes ───────────────────────────────────────────────────────────
 
@@ -153,12 +159,14 @@ export type CompiledActionDecl =
   | {
       readonly kind: "persist-literal";
       readonly key: string;
+      readonly layer: LayerRole;
       readonly value: string;
       readonly stateVar: string;
     }
   | {
       readonly kind: "persist-option";
       readonly key: string;
+      readonly layer: LayerRole;
       readonly stateVar: string;
       readonly options: readonly string[];
       // set-option's durability twin, so it carries the same domain facts.
@@ -172,11 +180,13 @@ export type CompiledActionDecl =
   | {
       readonly kind: "persist-bounded";
       readonly key: string;
+      readonly layer: LayerRole;
       readonly by: number;
     }
   | {
       readonly kind: "persist-cycle";
       readonly key: string;
+      readonly layer: LayerRole;
       readonly stateVar: string;
       readonly members: readonly string[];
     }
@@ -184,12 +194,17 @@ export type CompiledActionDecl =
   // one key from the config file and the session (resetLayers). Carries only the key — there is no value to
   // realize, so it shares copy/open's "no gate" shape at compile time (the
   // GATE is the key-membership check the reset-config verb handler applies).
-  | { readonly kind: "reset"; readonly key: string }
+  | { readonly kind: "reset"; readonly key: string; readonly layer: LayerRole }
   // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural-edit
   // arms. Fully literal at compile time (the op IS the declaration — no
   // template-bound option, unlike persist-option), so `op` is precomputed
   // here rather than reconstructed from raw fields at every realize() call.
-  | { readonly kind: "layout-op"; readonly key: string; readonly op: LayoutOp }
+  | {
+      readonly kind: "layout-op";
+      readonly key: string;
+      readonly layer: LayerRole;
+      readonly op: LayoutOp;
+    }
   // [LAW:one-source-of-truth] brandon-layout-edit-2gc.3's domain-sourced
   // sibling of layout-op: `anchor`/`relation` are fixed at compile time (the
   // POSITION is author-time data) but the segment name comes from the
@@ -202,6 +217,7 @@ export type CompiledActionDecl =
   | {
       readonly kind: "layout-op-option";
       readonly key: string;
+      readonly layer: LayerRole;
       readonly anchor: string;
       readonly relation: "before" | "after";
       readonly options: readonly string[];
@@ -224,13 +240,18 @@ export type CompiledActionDecl =
   // A step of the session's navigation history — the same keyless shape.
   | { readonly kind: "back" }
   | { readonly kind: "rewind" }
-  // Write every unsaved setting — the daemon derives which at click time.
-  | { readonly kind: "save" }
+  // Write every unsaved setting — the daemon derives which at click time — to
+  // a layer, or to the one the click binds (`ask`).
+  | { readonly kind: "save"; readonly layer: LayerChoice }
   // Save the bar as a new preset, or delete the preset the template names.
-  | { readonly kind: "preset-save" }
-  | { readonly kind: "preset-delete"; readonly name: Template<RichText> }
+  | { readonly kind: "preset-save"; readonly layer: LayerRole }
+  | {
+      readonly kind: "preset-delete";
+      readonly layer: LayerRole;
+      readonly name: Template<RichText>;
+    }
   // Save the session's look as the active theme's default.
-  | { readonly kind: "theme-default-save" }
+  | { readonly kind: "theme-default-save"; readonly layer: LayerRole }
   // [LAW:effects-at-boundaries] The doctor's two triggers (brandon-doctor-b6a):
   // the check name is compiled in from the declaration (already gated against
   // CHECKS at load), so the click carries only what the config declared.
@@ -507,12 +528,14 @@ function compileAction(
     };
   }
   if ("persist" in action) {
+    const layer = action.layer ?? "user";
     const stateVar =
       CONFIG_KEY_TO_EFFECTIVE_VAR.get(action.persist) ?? action.persist;
     if ("to" in action) {
       return {
         kind: "persist-literal",
         key: action.persist,
+        layer,
         value: action.to,
         stateVar,
       };
@@ -522,6 +545,7 @@ function compileAction(
       return {
         kind: "persist-option",
         key: action.persist,
+        layer,
         stateVar,
         options: [...domain.members],
         paletteOf: domain.paletteOf,
@@ -533,6 +557,7 @@ function compileAction(
       return {
         kind: "persist-cycle",
         key: action.persist,
+        layer,
         stateVar,
         members: action.cycle,
       };
@@ -541,6 +566,7 @@ function compileAction(
       return {
         kind: "layout-op",
         key: action.persist,
+        layer,
         op: { op: "remove", target: action.removeSegment },
       };
     }
@@ -548,6 +574,7 @@ function compileAction(
       return {
         kind: "layout-op",
         key: action.persist,
+        layer,
         op: {
           op: "insert",
           segment: action.insertSegment,
@@ -564,6 +591,7 @@ function compileAction(
       return {
         kind: "layout-op-option",
         key: action.persist,
+        layer,
         anchor: action.anchor,
         relation: action.relation,
         options: [...domain.members],
@@ -575,6 +603,7 @@ function compileAction(
     return {
       kind: "persist-bounded",
       key: action.persist,
+      layer,
       by: action.by,
     };
   }
@@ -591,7 +620,7 @@ function compileAction(
     };
   }
   if ("reset" in action) {
-    return { kind: "reset", key: action.reset };
+    return { kind: "reset", key: action.reset, layer: action.layer ?? "user" };
   }
   if ("doctor" in action) {
     switch (action.doctor) {
@@ -620,16 +649,19 @@ function compileAction(
   if ("redo" in action) return { kind: "redo" };
   if ("back" in action) return { kind: "back" };
   if ("rewind" in action) return { kind: "rewind" };
-  if ("save" in action) return { kind: "save" };
+  if ("save" in action) return { kind: "save", layer: action.layer ?? "user" };
   if ("preset" in action) {
+    const layer = action.layer ?? "user";
     return action.preset === "save"
-      ? { kind: "preset-save" }
+      ? { kind: "preset-save", layer }
       : {
           kind: "preset-delete",
+          layer,
           name: parseActionTemplate(parse, action.name, name),
         };
   }
-  if ("themeDefault" in action) return { kind: "theme-default-save" };
+  if ("themeDefault" in action)
+    return { kind: "theme-default-save", layer: action.layer ?? "user" };
   // [LAW:one-source-of-truth] A `do` is its members' clicks: each member is the
   // entry compiled for that name, so there is no second statement of what any
   // of them writes. The loader proves every name resolves; a config assembled
@@ -916,7 +948,9 @@ export function realize(
     case "persist-literal": {
       const current = readVar(store, c.stateVar);
       return {
-        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId, c.key, c.value] }],
+        effects: [
+          { verb: VERB_SET_CONFIG, args: [sessionId, c.layer, c.key, c.value] },
+        ],
         active: current === c.value,
       };
     }
@@ -924,14 +958,18 @@ export function realize(
       const value = boundValue ?? display;
       const current = readVar(store, c.stateVar);
       return {
-        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId, c.key, value] }],
+        effects: [
+          { verb: VERB_SET_CONFIG, args: [sessionId, c.layer, c.key, value] },
+        ],
         active: current === value,
       };
     }
     case "persist-cycle": {
       const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
       return {
-        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId, c.key, next] }],
+        effects: [
+          { verb: VERB_SET_CONFIG, args: [sessionId, c.layer, c.key, next] },
+        ],
         active: false,
       };
     }
@@ -940,7 +978,7 @@ export function realize(
         effects: [
           {
             verb: VERB_STEP_CONFIG,
-            args: [sessionId, c.key, String(c.by)],
+            args: [sessionId, c.layer, c.key, String(c.by)],
           },
         ],
         active: false,
@@ -948,7 +986,9 @@ export function realize(
     }
     case "reset":
       return {
-        effects: [{ verb: VERB_RESET_CONFIG, args: [sessionId, c.key] }],
+        effects: [
+          { verb: VERB_RESET_CONFIG, args: [sessionId, c.layer, c.key] },
+        ],
         active: false,
       };
     // [LAW:one-source-of-truth] No key to carry — the click just says "step
@@ -976,20 +1016,31 @@ export function realize(
         effects: [{ verb: VERB_REWIND, args: [sessionId] }],
         active: false,
       };
-    case "save":
+    // [LAW:no-silent-failure] A save that asks writes the layer its click
+    // binds, and one drawn without a layer to bind is the author's error,
+    // said on the bar — never a write to some layer it did not name.
+    case "save": {
+      const layer = c.layer === "ask" ? layerRoleOf(boundValue) : c.layer;
+      if (layer === null)
+        throw new Error(
+          `a save that asks which layer it writes binds the layer as its value — {{ action "<save>" "💾 project" "project" }} — and ${boundValue === undefined ? "none was bound" : `${JSON.stringify(boundValue)} is not one of ${LAYER_ROLES.join(", ")}`}`,
+        );
       return {
-        effects: [{ verb: VERB_SAVE, args: [sessionId] }],
+        effects: [{ verb: VERB_SAVE, args: [sessionId, layer] }],
         active: false,
       };
+    }
     // Never "active": one-shot triggers, like save.
     case "preset-save":
       return {
-        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId] }],
+        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId, c.layer] }],
         active: false,
       };
     case "theme-default-save":
       return {
-        effects: [{ verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId] }],
+        effects: [
+          { verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId, c.layer] },
+        ],
         active: false,
       };
     case "preset-delete":
@@ -997,7 +1048,7 @@ export function realize(
         effects: [
           {
             verb: VERB_DELETE_PRESET,
-            args: [sessionId, evalTemplate(c.name, buildScope(store))],
+            args: [sessionId, c.layer, evalTemplate(c.name, buildScope(store))],
           },
         ],
         active: false,
@@ -1066,7 +1117,7 @@ export function realize(
         effects: [
           {
             verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId, c.key, encodeLayoutOp(c.op)],
+            args: [sessionId, c.layer, c.key, encodeLayoutOp(c.op)],
           },
         ],
         active: false,
@@ -1115,7 +1166,7 @@ export function realize(
         effects: [
           {
             verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId, c.key, encodeLayoutOp(op)],
+            args: [sessionId, c.layer, c.key, encodeLayoutOp(op)],
           },
         ],
         active: false,

@@ -809,6 +809,13 @@
               },
               "to": {
                 "type": "string"
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -839,6 +846,13 @@
                     "uniqueItems": true
                   }
                 ]
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -861,6 +875,13 @@
               },
               "by": {
                 "type": "integer"
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -885,6 +906,13 @@
                 },
                 "minItems": 2,
                 "uniqueItems": true
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -901,6 +929,13 @@
               },
               "removeSegment": {
                 "type": "string"
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -925,6 +960,13 @@
                 "enum": [
                   "before",
                   "after"
+                ]
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
                 ]
               }
             },
@@ -967,6 +1009,13 @@
                   "before",
                   "after"
                 ]
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -1006,6 +1055,13 @@
             "properties": {
               "reset": {
                 "type": "string"
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -1066,6 +1122,14 @@
             "properties": {
               "save": {
                 "const": true
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local",
+                  "ask"
+                ]
               }
             },
             "required": [
@@ -1078,6 +1142,13 @@
             "properties": {
               "preset": {
                 "const": "save"
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -1093,6 +1164,13 @@
               },
               "name": {
                 "type": "string"
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [
@@ -1106,6 +1184,13 @@
             "properties": {
               "themeDefault": {
                 "const": "save"
+              },
+              "layer": {
+                "enum": [
+                  "user",
+                  "project",
+                  "local"
+                ]
               }
             },
             "required": [

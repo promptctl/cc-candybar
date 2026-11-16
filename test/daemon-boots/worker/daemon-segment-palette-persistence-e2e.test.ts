@@ -120,7 +120,7 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
 
       // applyDirectoryPalette is a persist-option action targeting
       // `segments.directory.palette` (verb set-config, args = [sessionId,
-      // "segments.directory.palette", value]), rendered as one link per
+      // "user", "segments.directory.palette", value]), rendered as one link per
       // theme name.
       const applyUrl = openedUrls.find((u) => {
         try {
@@ -128,8 +128,9 @@ describe("candybar-config-engine-71o.6: a daemon's segment-palette click → per
           return (
             effects.length === 1 &&
             effects[0]!.verb === "set-config" &&
-            effects[0]!.args[1] === "segments.directory.palette" &&
-            effects[0]!.args[2] === targetPalette
+            effects[0]!.args[1] === "user" &&
+            effects[0]!.args[2] === "segments.directory.palette" &&
+            effects[0]!.args[3] === targetPalette
           );
         } catch {
           return false;

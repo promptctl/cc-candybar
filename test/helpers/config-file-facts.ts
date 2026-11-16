@@ -8,4 +8,5 @@ export const NO_CONFIG_FILE: ConfigFileFacts = {
   resettable: perSetting(() => false),
   themeDefault: { differs: false },
   configPath: null,
+  layers: { user: true, project: false, local: false },
 };

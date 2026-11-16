@@ -27,7 +27,11 @@
 
 import fs from "node:fs";
 import JSON5 from "json5";
-import type { Locations, ConfigLayer } from "./loader/discovery.js";
+import {
+  scopeOf,
+  type Locations,
+  type ConfigLayer,
+} from "./loader/discovery.js";
 import {
   type DslConfig,
   type InsertCell,
@@ -139,12 +143,15 @@ export {
   dslConfigCandidatePaths,
   resolveDslConfig,
   configResolutionNotice,
-  durableConfig,
+  writeLayer,
+  writeLayers,
+  writableRoles,
   detectConfigCollisions,
   homeLayer,
 } from "./loader/discovery.js";
 export type {
-  ConfigHome,
+  WriteLayer,
+  LayerWrite,
   ConfigLayer,
   ConfigResolution,
 } from "./loader/discovery.js";
@@ -403,6 +410,63 @@ export function loadConfigChain(
   read: (path: string) => string = (p) => fs.readFileSync(p, "utf-8"),
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
+  const { ctx, found, plugins, base, layers } = mergeChain(
+    locs,
+    chain,
+    dflt,
+    trace,
+    session,
+    read,
+    allowedPalettes,
+  );
+  return validateChain(
+    ctx,
+    found,
+    plugins,
+    base,
+    layers,
+    trace,
+    allowedPalettes,
+  );
+}
+
+/**
+ * What a file over `chain` inherits: the bundled default, the installed
+ * plugins and every file of `chain` merged in order — the config the next
+ * layer up merges over. [LAW:one-source-of-truth] The very merge the chain
+ * load runs, stopped before its validation: a lower layer merges to the same
+ * config whatever sits above it, so a prefix of a real chain is never judged
+ * as if it were the chain that renders.
+ */
+export function inheritedConfig(
+  locs: Locations,
+  chain: readonly ConfigLayer[],
+  dflt: DslConfig,
+  session: SessionDirs,
+  read: (path: string) => string,
+): DslConfig {
+  const { base, layers } = mergeChain(
+    locs,
+    chain,
+    dflt,
+    { warned: () => {} },
+    session,
+    read,
+  );
+  return layers.at(-1)?.config ?? base;
+}
+
+type MergedLayers = Array<LoadedFile & { path: string; config: DslConfig }>;
+
+function mergeChain(
+  locs: Locations,
+  chain: readonly ConfigLayer[],
+  dflt: DslConfig,
+  trace: ChainTrace,
+  session: SessionDirs,
+  read: (path: string) => string,
+  allowedPalettes?: ReadonlySet<string>,
+) {
   // [LAW:single-enforcer] The one place a session's working directory
   // becomes the checkout its plugins' data paths resolve against.
   const ctx: PluginContext = {
@@ -426,8 +490,9 @@ export function loadConfigChain(
     ),
   );
   const base = plugins.config;
-  const layers: Array<LoadedFile & { path: string; config: DslConfig }> = [];
-  for (const { path, scope } of chain) {
+  const layers: MergedLayers = [];
+  for (const { path, role } of chain) {
+    const scope = scopeOf(role);
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,
@@ -451,6 +516,18 @@ export function loadConfigChain(
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path });
   }
+  return { ctx, found, plugins, base, layers };
+}
+
+function validateChain(
+  ctx: PluginContext,
+  found: ReturnType<typeof installedPlugins>,
+  plugins: ReturnType<typeof mergeChain>["plugins"],
+  base: DslConfig,
+  layers: MergedLayers,
+  trace: ChainTrace,
+  allowedPalettes?: ReadonlySet<string>,
+): LoadedChain {
   // [LAW:no-silent-failure] An installed plugin is on only where a config
   // places it, so its drop is the config's problem only where the config
   // reaches it (a stand-in carries it); one nothing reaches is said in the

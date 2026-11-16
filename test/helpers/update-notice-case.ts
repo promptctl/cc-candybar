@@ -101,10 +101,12 @@ export function scratchLayout(source: Source): Scratch {
   };
 }
 
+// A config write names its layer before the key it writes.
 export const affordance = (raw: Frame, verb: string, key?: string): string => {
+  const at = verb === "set-config" ? 2 : 1;
   const url = findUrl(linkUrls(raw), (effects) =>
     effects.some(
-      (e) => e.verb === verb && (key === undefined || e.args[1] === key),
+      (e) => e.verb === verb && (key === undefined || e.args[at] === key),
     ),
   );
   if (url === undefined)

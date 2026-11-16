@@ -26,6 +26,7 @@ import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import {
   parseEffects,
+  VERB_APPLY_LAYOUT_OP,
   VERB_DISPATCH,
   VERB_SAVE,
   VERB_SAVE_PRESET,
@@ -127,11 +128,14 @@ function configureBar(src: string, preset?: string) {
   // A link whose click writes `value` to `key` — or, for a stepper
   // (`step-state`), steps `key` by `value`. A picker over two words writes
   // the other one behind both its arrows, so there may be more than one; they
-  // are one click.
+  // are one click. A config write names its layer before the key.
   const urlWriting = (out: Frame, key: string, value: string): string => {
     const hits = new Set(
       linkUrls(out).filter((u) =>
-        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
+        effectsOf(u).some((e) => {
+          const at = e.verb === VERB_APPLY_LAYOUT_OP ? 2 : 1;
+          return e.args[at] === key && e.args[at + 1] === value;
+        }),
       ),
     );
     expect(hits.size).toBe(1);
@@ -422,7 +426,7 @@ describe("configure mode's drafts are saved into the placement", () => {
     ]);
 
     const logged: string[] = [];
-    await VERBS.get(VERB_SAVE)!(SID, {
+    await VERBS.get(VERB_SAVE)!(`${SID}/user`, {
       ...rt.ctx,
       log: (_level, message) => logged.push(message),
     });
@@ -515,7 +519,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
 
     await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
-    await VERBS.get(VERB_SAVE)!(SID, rt.ctx);
+    await VERBS.get(VERB_SAVE)!(`${SID}/user`, rt.ctx);
     expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
     await VERBS.get(VERB_UNDO)!(SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
@@ -534,7 +538,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     const key = placementDraftKey("p", "vcs2", "detail");
     configurePlacement(rt.sessionState, SID, "p", "vcs2");
     await rt.click(rt.urlWriting(rt.render(), key, "true"));
-    await VERBS.get(VERB_SAVE_PRESET)!(SID, rt.ctx);
+    await VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rt.ctx);
     expect(rt.sessionState.get(SID, key)).toBeNull();
     const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
     const settingsIn = (preset: string) =>
@@ -565,7 +569,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       const rt = configureBar(src);
       configurePlacement(rt.sessionState, SID, "default", "vcs2");
       await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
-      await VERBS.get(VERB_SAVE_PRESET)!(SID, rt.ctx);
+      await VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rt.ctx);
       const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
       const settingsIn = (preset: string) =>
         [...walkNodes(presetRoot(saved, preset).node)].find(

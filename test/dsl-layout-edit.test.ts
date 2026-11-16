@@ -754,11 +754,11 @@ describe("apply-layout-op click → the config file", () => {
     expect(durable.parsed().presets).toEqual({});
 
     const undeclared =
-      /neither the config file nor the bundled default declares presets\.mine/;
+      /neither the config file nor the layers beneath it declare presets\.mine/;
     await expect(click(urls[0]!)).rejects.toThrow(undeclared);
     // The reset link is hand-built: the harness filters rendered preset-root
     // resets as edit chrome's own banner, and the verb is what is under test.
-    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
+    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "user", "presets.mine.root"])}`;
     await expect(click(resetUrl)).rejects.toThrow(undeclared);
     expect(durable.parsed().root).toEqual({
       v: [{ h: ["directory", "git"] }, "bar"],
@@ -789,7 +789,7 @@ describe("apply-layout-op click → the config file", () => {
     }`;
     const { render, click } = buildLayoutRuntime(SRC_PLACED);
     render();
-    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
+    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "user", "presets.mine.root"])}`;
     await click(resetUrl);
     // The preset the user authored keeps its name: the action still targets it.
     expect(durable.parsed().presets).toEqual({ mine: {} });
@@ -813,7 +813,7 @@ describe("apply-layout-op click → the config file", () => {
     const before = durable.text();
     await expect(
       applyLayoutOp(
-        `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
+        `${encodeURIComponent("s1")}/user/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
           encodeLayoutOp({ op: "remove", target: "noSuchSegmentAnywhere" }),
         )}`,
         ctx,
@@ -837,7 +837,7 @@ describe("apply-layout-op click → the config file", () => {
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     await expect(
       applyLayoutOp(
-        `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
+        `${encodeURIComponent("s1")}/user/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
           encodeLayoutOp({ op: "remove", target: "directory" }),
         )}`,
         ctx,
@@ -1264,6 +1264,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
             "apply-layout-op",
             ctx,
             "s1",
+            "user",
             "presets.default.root",
             REMOVE_DIRECTORY,
           );
@@ -1311,6 +1312,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "apply-layout-op",
           ctx,
           "s1",
+          "user",
           "presets.default.root",
           REMOVE_DIRECTORY,
         );
@@ -1360,6 +1362,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "apply-layout-op",
           ctx,
           "s1",
+          "user",
           "presets.compact.root",
           encodeLayoutOp(op),
         );
@@ -1405,6 +1408,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "apply-layout-op",
         ctx,
         "s1",
+        "user",
         "presets.default.root",
         REMOVE_DIRECTORY,
       );
@@ -1412,6 +1416,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "apply-layout-op",
         ctx,
         "s1",
+        "user",
         "presets.default.root",
         INSERT_GITPR_AFTER_GIT,
       );
@@ -1446,6 +1451,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "apply-layout-op",
         originCtx(cache, sessionState),
         "s1",
+        "user",
         "presets.default.root",
         REMOVE_DIRECTORY,
       );
@@ -1488,6 +1494,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "apply-layout-op",
         originCtx(cache, sessionState),
         "s1",
+        "user",
         "presets.default.root",
         encodeLayoutOp({ op: "remove", target: "directory" }),
       );
@@ -1503,6 +1510,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "apply-layout-op",
         originCtx(cache, sessionState),
         "s1",
+        "user",
         "presets.default.root",
         encodeLayoutOp({ op: "remove", target: "dir2" }),
       );
@@ -1543,6 +1551,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "apply-layout-op",
           originCtx(cache, sessionState),
           "s1",
+          "user",
           "presets.default.root",
           encodeLayoutOp({ op: "remove", target: "directory" }),
         );
@@ -1587,6 +1596,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "apply-layout-op",
         originCtx(cache, sessionState),
         "s1",
+        "user",
         "presets.default.root",
         encodeLayoutOp({ op: "remove", target: "gitaculous" }),
       );
@@ -1651,6 +1661,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "apply-layout-op",
           originCtx(cache2, sessionState2),
           "s1",
+          "user",
           "presets.default.root",
           encodeLayoutOp({
             op: "insert",
@@ -1711,6 +1722,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "apply-layout-op",
         originCtx(cache, sessionState),
         "s1",
+        "user",
         "presets.default.root",
         REMOVE_DIRECTORY,
       );
@@ -1745,6 +1757,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "reset-config",
           originCtx(cache2, sessionState2),
           "s1",
+          "user",
           "presets.default.root",
         );
         // The authored root is DELETED from the file; its siblings stay.
@@ -1813,6 +1826,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "apply-layout-op",
           ctx,
           "s1",
+          "user",
           "presets.compact.root",
           encodeLayoutOp({ op: "remove", target }),
         );
@@ -1851,6 +1865,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "reset-config",
           originCtx(cache2, sessionState2),
           "s1",
+          "user",
           "presets.compact.root",
         ),
       ).resolves.toBeUndefined();

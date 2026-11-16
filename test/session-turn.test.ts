@@ -330,6 +330,7 @@ describe("the all-pending document", () => {
                 unsaved: 0,
                 resettable: perSetting(() => false),
                 themeDefault: { differs: false },
+                layers: { user: true, project: false, local: false },
                 configPath: null,
               },
               history: { undo: 0, redo: 0, sinceEdit: 0 },

@@ -436,6 +436,8 @@ describe("config-file-store: segment-palette placement", () => {
         store(),
         {
           path: durable.configPath,
+          role: "user",
+          below: [],
           above: [],
           repo: null,
           cwd: null,
@@ -444,7 +446,7 @@ describe("config-file-store: segment-palette placement", () => {
         [["segments.ghost.palette", "nord"]],
       ),
     ).toThrow(
-      /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
+      /cannot edit segments\.ghost\.palette: neither the config file nor the layers beneath it declare segments\.ghost/,
     );
     expect(durable.text()).toBe(text);
   });
@@ -534,7 +536,9 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
           store(),
           {
             path: durable.configPath,
-            above: [],
+            role: "user",
+          below: [],
+          above: [],
             repo: null,
             cwd: null,
             locs: locations(durable.host),
@@ -572,7 +576,9 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       store(),
       {
         path: durable.configPath,
-        above: [],
+        role: "user",
+          below: [],
+          above: [],
         repo: null,
         cwd: null,
         locs: locations(durable.host),
@@ -617,7 +623,9 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       store(),
       {
         path: durable.configPath,
-        above: [],
+        role: "user",
+          below: [],
+          above: [],
         repo: null,
         cwd: null,
         locs: locations(durable.host),

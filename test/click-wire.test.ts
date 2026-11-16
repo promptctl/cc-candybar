@@ -169,20 +169,23 @@ describe("a link says in words what its click does", () => {
       "step padding down by 1",
     ],
     [
-      { verb: VERB_SET_CONFIG, args: [SID, "wrap", "true"] },
-      "save wrap as true",
+      { verb: VERB_SET_CONFIG, args: [SID, "user", "wrap", "true"] },
+      "save wrap as true in user config",
     ],
     [
-      { verb: VERB_STEP_CONFIG, args: [SID, "padding", "-1"] },
-      "save step padding down by 1",
+      { verb: VERB_STEP_CONFIG, args: [SID, "project", "padding", "-1"] },
+      "save step padding down by 1 in project config",
     ],
-    [{ verb: VERB_RESET_CONFIG, args: [SID, "palette"] }, "reset palette"],
+    [
+      { verb: VERB_RESET_CONFIG, args: [SID, "user", "palette"] },
+      "reset palette in user config",
+    ],
     [
       {
         verb: VERB_APPLY_LAYOUT_OP,
-        args: [SID, "presets.a.root", "remove:model"],
+        args: [SID, "user", "presets.a.root", "remove:model"],
       },
-      "edit remove:model in presets.a.root",
+      "edit remove:model in presets.a.root of user config",
     ],
     [{ verb: VERB_COPY, args: ["/tmp/proj"] }, "copy /tmp/proj"],
     [
@@ -193,15 +196,18 @@ describe("a link says in words what its click does", () => {
       { verb: VERB_OPEN_VSCODE, args: ["/tmp/a.ts"] },
       "open /tmp/a.ts in vs code",
     ],
-    [{ verb: VERB_SAVE, args: [SID] }, "save settings"],
-    [{ verb: VERB_SAVE_PRESET, args: [SID] }, "save as a new preset"],
+    [{ verb: VERB_SAVE, args: [SID, "local"] }, "save settings to local config"],
     [
-      { verb: VERB_SAVE_THEME_DEFAULT, args: [SID] },
-      "save this look for the theme",
+      { verb: VERB_SAVE_PRESET, args: [SID, "user"] },
+      "save as a new preset in user config",
     ],
     [
-      { verb: VERB_DELETE_PRESET, args: [SID, "custom-1"] },
-      "delete preset custom-1",
+      { verb: VERB_SAVE_THEME_DEFAULT, args: [SID, "user"] },
+      "save this look for the theme in user config",
+    ],
+    [
+      { verb: VERB_DELETE_PRESET, args: [SID, "user", "custom-1"] },
+      "delete preset custom-1 from user config",
     ],
     [{ verb: VERB_UNDO, args: [SID] }, "undo"],
     [{ verb: VERB_REDO, args: [SID] }, "redo"],
@@ -410,8 +416,8 @@ describe("parseHandlerUrl — verb split, value raw", () => {
       effectsOf(`cc-candybar://${VERB_DOCTOR_FIX}/s1/tmuxTruecolor`),
     ).toEqual([{ verb: VERB_DOCTOR_FIX, args: ["s1", "tmuxTruecolor"] }]);
     // The preset verbs segment like set-state (their handlers split).
-    expect(effectsOf("cc-candybar://delete-preset/s1/custom-1")).toEqual([
-      { verb: "delete-preset", args: ["s1", "custom-1"] },
+    expect(effectsOf("cc-candybar://delete-preset/s1/user/custom-1")).toEqual([
+      { verb: "delete-preset", args: ["s1", "user", "custom-1"] },
     ]);
   });
 });
@@ -467,12 +473,27 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     ]);
   });
 
-  test("adjacent resets for one session join into one reset of every key, never with a set-state", () => {
-    const reset = (sid: string, k: string) => ({ verb: VERB_RESET_CONFIG, value: `${sid}/${k}` });
+  test("adjacent resets for one session and layer join into one reset of every key, never with a set-state", () => {
+    const reset = (sid: string, layer: string, k: string) => ({
+      verb: VERB_RESET_CONFIG,
+      value: `${sid}/${layer}/${k}`,
+    });
     const set = { verb: VERB_SET_STATE, value: "a/k/v" };
     expect(
-      batchAdjacentWrites([set, reset("a", "palette"), reset("a", "style"), reset("b", "endcaps")]),
-    ).toEqual([set, { verb: VERB_RESET_CONFIG, value: "a/palette/style" }, reset("b", "endcaps")]);
+      batchAdjacentWrites([
+        set,
+        reset("a", "user", "palette"),
+        reset("a", "user", "style"),
+        reset("a", "project", "wrap"),
+        reset("b", "project", "endcaps"),
+      ]),
+    ).toEqual([
+      set,
+      { verb: VERB_RESET_CONFIG, value: "a/user/palette/style" },
+      // Another layer is another write, though the session is the same.
+      reset("a", "project", "wrap"),
+      reset("b", "project", "endcaps"),
+    ]);
   });
 
   test("an input-only failure keeps the BadVerbArgs (BAD_REQUEST) classification", async () => {
@@ -529,7 +550,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const sessionState = new SessionState();
     // A preset name carrying a bad percent escape (`%ZZ`).
     const url = effectsUrl([
-      { verb: VERB_DELETE_PRESET, args: [SID, "BAD"] },
+      { verb: VERB_DELETE_PRESET, args: [SID, "user", "BAD"] },
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
     ]).replace("BAD", encodeURIComponent("%ZZ"));
     await expect(clickUrl(url, ctx(sessionState))).rejects.toThrow(BadVerbArgs);
