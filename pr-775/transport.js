@@ -93070,8 +93070,8 @@ function createDaemon(inputs) {
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
         // [LAW:no-ambient-temporal-coupling] First, before anything awaited:
-        // a signal to the process group reaches the renderer too, and a step
-        // waiting on it can outlast shutdown's backstop.
+        // a renderer step waits behind whatever turn the renderer is in, which
+        // can outlast shutdown's backstop.
         ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
         // journal in flight, so none opens after.

@@ -4,15 +4,22 @@
     {
       "version": "pr-775",
       "ref": "refs/pull/775/merge",
-      "sha": "31a61d59ce47988746cae895d4f672ae8c0a651a",
-      "timestamp": "2026-11-16T21:28:03.053Z",
+      "sha": "0018c677ecfbecfc8cd37bebce0c15cfc1202a2b",
+      "timestamp": "2026-11-16T21:34:38.367Z",
       "commits": [
         {
-          "sha": "31a61d59ce47988746cae895d4f672ae8c0a651a",
+          "sha": "0018c677ecfbecfc8cd37bebce0c15cfc1202a2b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T14:26:59-07:00",
-          "message": "Merge 150cf33759b7e6db954576c5802045f17c050d06 into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+          "timestamp": "2026-11-16T21:33:24Z",
+          "message": "Merge a9d77b86cd0102910e2a5bcdb4097b4ba388faad into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+        },
+        {
+          "sha": "a9d77b86cd0102910e2a5bcdb4097b4ba388faad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T14:33:05-07:00",
+          "message": "test(daemon): a close puts the tmux status lines back while its renderer has not answered\n"
         },
         {
           "sha": "150cf33759b7e6db954576c5802045f17c050d06",
