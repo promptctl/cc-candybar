@@ -202,7 +202,7 @@ export async function spawnDaemonWithEnv(
 // daemon broken. 12 s buys ~24x oversubscription — 2.4x the load that broke the
 // inherited 5 s — and two of them still fit inside jest.config.js's 30 s
 // testTimeout, which is what a cold-restart test spends it on.
-const READINESS_BUDGET_MS = 12_000;
+export const READINESS_BUDGET_MS = 12_000;
 
 // A bound socket answered in 2-65 ms across every row above, so this bounds a
 // round trip that has already been accepted, not a boot. It stays far below the
