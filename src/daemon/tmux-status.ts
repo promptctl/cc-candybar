@@ -23,11 +23,13 @@
 // [LAW:no-ambient-temporal-coupling] A tmux call costs ~20 ms of spawn
 // (measured, macOS), so while the daemon runs every call is asynchronous and
 // one server's calls run one at a time, in the order the reconcile decides
-// them. The daemon's shutdown cannot wait (it is SIGKILLed 500 ms after it
-// starts), so it restores synchronously, from the same plans — and a frame's
-// write still in flight cannot undo that restore: every draw runs under
-// `if-shell -F '#{@cc-candybar-status-prior}'`, which the restore removes, so
-// a draw landing after it does nothing.
+// them. The daemon's shutdown restores through the same calls, after the ones
+// in flight have landed, inside the 500 ms before it is SIGKILLed: a restore
+// is a call or two a session, as a reconcile is. A tmux call outlives a daemon
+// that is killed, so a draw runs under
+// `if-shell -F '#{@cc-candybar-status-prior}'`, which a restore removes: the
+// last draw of a killed daemon lands on nothing once the next one has put its
+// session back.
 
 import type { SessionId } from "./foundations/session-id.js";
 import { LANES } from "../config/lanes.js";
@@ -209,8 +211,7 @@ function arrayWrite(session: string, formats: Formats | null): Command[] {
 
 // ─── The plans: what to ask tmux, and what to write from its answers ───────
 //
-// [LAW:effects-at-boundaries] Pure: the owner runs them asynchronously while
-// the daemon runs and synchronously at its shutdown.
+// [LAW:effects-at-boundaries] Pure: the owner runs them.
 
 // Laying a session out: its `status`, its own array, the global array (the
 // rows below the bar's come from whichever the session reads), and what a
@@ -432,14 +433,6 @@ export interface TmuxStatusEdge {
   ): Promise<TmuxRun>;
 }
 
-// One tmux invocation that finishes before it returns: the daemon's shutdown
-// cannot wait, so whoever ends the process hands this to `restoreAll`.
-export type TmuxAtExit = (
-  socket: string,
-  args: readonly string[],
-  stdin?: string,
-) => TmuxRun;
-
 export interface TmuxStatusDeps {
   readonly edge: TmuxStatusEdge;
   readonly subscribe: (sessionId: SessionId, sub: Subscriber) => () => void;
@@ -640,33 +633,36 @@ export class TmuxStatusLines {
     );
   }
 
-  // [LAW:single-enforcer] The daemon's shutdown: everything put back, now —
-  // a few synchronous tmux calls a server, whatever is in flight.
-  restoreAll(atExit: TmuxAtExit): void {
+  // [LAW:single-enforcer] The daemon's shutdown: everything it laid out put
+  // back. [LAW:no-ambient-temporal-coupling] Nothing new starts, and each
+  // server's tmux call already in flight lands first: a lay-out write is its
+  // own tmux client, which reaches the server whenever it does, so a restore
+  // that ran beside it could be laid out over again once the daemon is gone.
+  // Each server is put back on its own, so one slow or failing server holds
+  // up no other.
+  async close(): Promise<void> {
     this.closed = true;
     for (const held of this.held.values()) held.unsubscribe?.();
     this.held.clear();
-    for (const [socket, server] of this.servers) {
-      for (const [session, layout] of [...server.layouts]) {
-        server.layouts.delete(session);
-        const answers = this.askSync(atExit, socket, RESTORE_QUERIES(session));
-        if (answers === null) continue;
-        const plan = restorePlan(session, layout.prior, answers);
-        this.writeSync(atExit, socket, plan.commands);
-        this.saidRestored(socket, session, plan.kept);
-      }
-      const binding = server.binding;
-      server.binding = { kind: "none" };
-      if (binding.kind === "ours" || binding.kind === "adopted") {
-        const answers = this.askSync(atExit, socket, ROOT_KEYS);
-        if (answers === null) continue;
-        this.writeBindingRestoreSync(
-          atExit,
-          socket,
-          binding.prior,
-          answers[0] ?? "",
-        );
-      }
+    await Promise.all(
+      [...this.servers].map(([socket, server]) =>
+        this.closeServer(socket, server),
+      ),
+    );
+  }
+
+  private async closeServer(socket: string, server: Server): Promise<void> {
+    try {
+      await server.running;
+      for (const session of [...server.layouts.keys()])
+        await this.restore(socket, server, session);
+      await this.restoreBinding(socket, server);
+    } catch (error) {
+      // [LAW:no-silent-failure] As a reconcile's throw is: said, per server.
+      this.deps.log(
+        "warn",
+        `tmux-status: socket=${JSON.stringify(socket)} restore at close threw: ${String(error)}`,
+      );
     }
   }
 
@@ -803,7 +799,7 @@ export class TmuxStatusLines {
       }
       if (server.left.has(session)) continue;
       const layout = known ?? (await this.install(socket, server, session));
-      if (layout === null) continue;
+      if (layout === null || this.closed) continue;
       const shown = panes.find((h) => h.pane === view.shownBy.get(session));
       const rows =
         shown?.frame?.rows.slice(0, MAX_STATUS_ROWS - layout.prior.base) ?? [];
@@ -1041,21 +1037,6 @@ export class TmuxStatusLines {
     );
   }
 
-  private writeBindingRestoreSync(
-    atExit: TmuxAtExit,
-    socket: string,
-    prior: Bound | null,
-    listKeys: string,
-  ): void {
-    const plan = bindingRestorePlan(prior, listKeys);
-    for (const step of plan.steps)
-      this.writeSync(atExit, socket, [step.command], step.stdin);
-    this.deps.log(
-      "info",
-      `tmux-status: socket=${JSON.stringify(socket)} ${plan.said}`,
-    );
-  }
-
   // ─── tmux, counted ───────────────────────────────────────────────────────
 
   // A failure is counted, and logged when it differs from the server's last.
@@ -1087,15 +1068,6 @@ export class TmuxStatusLines {
     return run.kind === "ok" ? answersOf(run.stdout, queries.length) : null;
   }
 
-  private askSync(
-    atExit: TmuxAtExit,
-    socket: string,
-    queries: readonly Command[],
-  ): string[] | null {
-    const run = this.counted(socket, atExit(socket, readChain(queries)));
-    return run.kind === "ok" ? answersOf(run.stdout, queries.length) : null;
-  }
-
   // Whether tmux took the write.
   private async write(
     socket: string,
@@ -1105,17 +1077,6 @@ export class TmuxStatusLines {
     if (commands.length === 0) return true;
     this.writes++;
     return (await this.run(socket, chain(commands), stdin)).kind === "ok";
-  }
-
-  private writeSync(
-    atExit: TmuxAtExit,
-    socket: string,
-    commands: readonly Command[],
-    stdin?: string,
-  ): void {
-    if (commands.length === 0) return;
-    this.writes++;
-    this.counted(socket, atExit(socket, chain(commands), stdin));
   }
 }
 

@@ -5,7 +5,6 @@
 
 import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import { linkSignerOver } from "../../../src/click/link-signer";
-import { NO_TMUX_AT_EXIT } from "../../helpers/in-worker-daemon";
 import { hostOf } from "../../helpers/host";
 import type { Host } from "../../../src/host";
 import { createHook } from "node:async_hooks";
@@ -132,7 +131,7 @@ describe("the daemon is a value", () => {
 
   const close = async (daemon: Daemon): Promise<void> => {
     await (
-      await daemon.close(NO_TMUX_AT_EXIT)
+      await daemon.close()
     ).settled;
     open = null;
   };
@@ -408,7 +407,7 @@ describe("the daemon is a value", () => {
     );
 
     const sessionFile = sessionStatePath(hostNow());
-    const { settled: closing } = await daemon.close(NO_TMUX_AT_EXIT);
+    const { settled: closing } = await daemon.close();
     open = null;
     afterClose = { armed: [], fired: [] };
     const closedWith = readFileSync(sessionFile, "utf8");

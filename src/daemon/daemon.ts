@@ -49,11 +49,7 @@ import {
   PaneVisibility,
 } from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
-import {
-  DeclaredStatusLines,
-  type TmuxAtExit,
-  TmuxStatusLines,
-} from "./tmux-status.js";
+import { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
 import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
@@ -232,10 +228,8 @@ export interface Daemon {
   // stays armed once what was in flight has settled, and only the log is
   // written. A read already under way may finish. It resolves once every
   // teardown step has run, the renderer's included, and its `settled` once the
-  // launches and lifeline it ended have ended. `atExit` is what puts the tmux
-  // status lines back: synchronous, so they are back in one step early in the
-  // close, however long the later steps take inside shutdown's backstop.
-  close(atExit: TmuxAtExit): Promise<{ readonly settled: Promise<Settled> }>;
+  // launches and lifeline it ended have ended.
+  close(): Promise<{ readonly settled: Promise<Settled> }>;
 }
 
 export function createDaemon(inputs: DaemonInputs): Daemon {
@@ -312,8 +306,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   }
   // [LAW:single-enforcer] Route all child_process spawns through src/proc/launch:
   // this daemon's launcher meters them into daemon-stats and ends them with it.
-  // The tmux restore at exit is the exception: it runs through the process's
-  // one-shot launcher, after the last stats anyone reads.
   // Its work holds this one, so a closed daemon's launches are refused here,
   // whichever daemon is live by then.
   const launcher = inputs.launcher({
@@ -873,7 +865,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       limits.arm();
       link.arm();
     },
-    async close(atExit) {
+    async close() {
       // The renderer's three steps of the teardown, each awaited where it
       // stands: the renderer takes them in the order they are sent.
       const rendererStep =
@@ -882,12 +874,15 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           parts.renderer.ask({ kind }, instant());
       // The session state still flushes after a close failed (runTeardown).
       const teardown: readonly TeardownStep[] = [
+        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
+        // back before it goes (src/daemon/tmux-status.ts).
+        // [LAW:no-ambient-temporal-coupling] First, before any renderer step:
+        // one waits behind whatever turn the renderer is in, which can outlast
+        // shutdown's backstop, while this waits only on its own tmux calls.
+        ["tmuxStatusLines close", () => tmuxStatusLines.close()],
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
         // journal in flight, so none opens after.
         ["journalTurns close", rendererStep("close-journal")],
-        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts).
-        ["tmuxStatusLines restore", () => tmuxStatusLines.restoreAll(atExit)],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.

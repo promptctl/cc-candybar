@@ -5,7 +5,6 @@
 // (src/tmux-hint.ts); this is the one place that spells `tmux -S <socket>`,
 // its timeout, and how a failure reads.
 
-import { type OneShotLauncher } from "./launch.js";
 import {
   failureText,
   type LaunchCategory,
@@ -48,22 +47,7 @@ function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
   };
 }
 
-// Holds the caller's loop until tmux answers: for what must finish before the
-// process does, the status lines put back at exit, where no later turn comes.
-export function runTmuxAtExit(
-  launcher: OneShotLauncher,
-  hint: Pick<TmuxHint, "socket">,
-  category: LaunchCategory,
-  args: readonly string[],
-  stdinInput?: string,
-): TmuxRun {
-  return tmuxRun(
-    launcher.launchSync(invocation(hint, category, args, stdinInput)),
-    args,
-  );
-}
-
-// The same invocation off the loop: for everything else the daemon asks.
+// One tmux invocation, off the loop.
 export async function runTmuxAsync(
   launcher: Launcher,
   hint: Pick<TmuxHint, "socket">,
