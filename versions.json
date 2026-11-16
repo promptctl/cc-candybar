@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "833345462e42c521a828b6776792cc4d1f575249",
+      "timestamp": "2026-11-16T01:43:13.964Z",
+      "commits": [
+        {
+          "sha": "833345462e42c521a828b6776792cc4d1f575249",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-16T01:42:12Z",
+          "message": "chore(release): set `package.json` to 1.222.1\n\n## [1.222.1](https://github.com/promptctl/cc-candybar/compare/v1.222.0...v1.222.1) (2026-11-16)\n\n### Bug Fixes\n\n* **collector:** tok/s lasts a whole turn, speed configs load again, a quiet session logs nothing and every provider closes (candybar-host-renderer-x96a.xae) ([#761](https://github.com/promptctl/cc-candybar/issues/761)) ([3d8af44](https://github.com/promptctl/cc-candybar/commit/3d8af440ea7624f469ec0bdb62620124ea12c90f))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-762",
       "ref": "refs/pull/762/merge",
       "sha": "1ba3ee6a47ed75735dd14c0670d85536ed4d9937",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T18:36:41-07:00",
           "message": "fix(usage): a forked or resumed session's copied history counts once, in the session it was copied from (candybar-host-renderer-x96a.au0)\n\nClaude Code marks each entry it copies into a fork's transcript with\nforkedFrom. Across the 80 newest transcripts here, all 947 response ids\nheld by more than one file have exactly one unmarked copy, so the fold\nskips copied entries and needs no set of response ids.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "3d8af440ea7624f469ec0bdb62620124ea12c90f",
-      "timestamp": "2026-11-16T01:34:15.987Z",
-      "commits": [
-        {
-          "sha": "3d8af440ea7624f469ec0bdb62620124ea12c90f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T18:33:15-07:00",
-          "message": "fix(collector): tok/s lasts a whole turn, speed configs load again, a quiet session logs nothing and every provider closes (candybar-host-renderer-x96a.xae) (#761)\n\n* fix(collector): tok/s lasts a whole turn, speed configs load again, a quiet session logs nothing and every provider closes (candybar-host-renderer-x96a.xae)\n\nSpeed samples come at transcript writes, which land seconds to minutes\napart in real work, so the 10 s sample window dropped long generations\nand the draw ended the rate mid-turn. Each sample now says whether\nClaude's turn was open after that write, read from the transcript (a\nprompt opens it; an interrupt or a final assistant message closes it).\nA pair is a rate only inside a turn, the current rate is the open turn's\nlatest measured interval, and it ends at the write that closes the turn.\nWith no clock in it, speed returns to the view's payload, so a config\nwhose cache policy reads speed.* loads as it did before. The observation\nis its ring alone; its prev and cur restated the ring's last two samples.\n\n- A source declares which triggers' clean refreshes write a line. The\n  transcript leaves out its backstop period, so a held quiet session adds\n  nothing to the log; its refreshes still count and a failed one writes.\n- The providers' close runs every owner's close whatever an earlier one\n  threw, and throws once naming each owner that failed.\n- today fails on the session's own ingest only when the directory set does\n  not already sum its transcript.\n- The usage store's running tally counts refreshes, and is named so.\n\n* fix(collector): a response's usage counts once, an unknown stop ends a turn, and today waits on a session outside its directory (candybar-host-renderer-x96a.xae)\n\nHigh review of #761:\n- Claude Code writes each content block of one response as its own entry,\n  each repeating the usage, so a fold counted tokens and cost 2-4 times and\n  every tok/s rate with them. The fold counts a response once, at the first\n  entry of its run.\n- A turn goes on only at tool_use, pause_turn or a block still streaming;\n  any other stop ends it, model_context_window_exceeded and later ones too.\n- Turn state is the main transcript's fold alone, not an OR over sidechains.\n- Outside the directory set's roots, today fails with or waits on the\n  session's transcript entry, so a failed declaration no longer draws a\n  total silently missing the session's work.\n- The providers hand back named close steps, and one teardown runner serves\n  the daemon and the demo, logging each failure with its stack.\n- Comments that still called speed a draw projection are fixed.\n\n* fix(collector): outside its directory's roots, a session lane that threw fails today (candybar-host-renderer-x96a.xae)\n\n* fix(collector): today is gated on the session lane again, the speed fact's new shape is version 3, and a teardown says which steps failed (candybar-host-renderer-x96a.xae)\n\nSecond high review of #761:\n- today goes back to main's gate: the session lane's failure is today's,\n  under the roots too, since the sums hold the session's last record; the\n  roots are judged by the record's own path, as the scan judges them. Judging\n  roots first by the hook's path let the two disagree and left stale totals.\n- FACTS_VERSION is 3: samples carry turnOpen and prev/cur are gone, so a\n  renderer built before reads another version, not a blank speed.\n- A speed read marks only the newest sample's stamp as sampled.\n- runTeardown answers the steps that threw; the demo fails its run on one.\n- The speed lane's pending and failed arms are tested again.\n\n* test(e2e): a render that hits the daemon's 200ms guard is asked again until its reply budget runs out, not for five asks (candybar-host-renderer-x96a.xae)\n\nOn a loaded runner a cold daemon's first render waited behind a 685-870ms\nconfig load, longer than five 200ms guards, so the build-currency e2e cases\nfailed though the daemon answered. Each ask waits on the daemon's own\nanswer; the budget is a backstop for a daemon that never answers."
         }
       ]
     }
