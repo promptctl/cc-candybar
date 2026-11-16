@@ -162,48 +162,48 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       globals: {},
       variables: {
         themePick: { kind: 'state', key: 'theme', default: '(unset)' },
-        expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
+        caps: { kind: 'state', key: 'endcaps', default: '' },
       },
       segments: {
         themeSeg: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
-        tbSeg: { template: '{{ .expanded }}', bg: 'surface', fg: 'foreground' },
+        capsSeg: { template: '{{ .caps }}', bg: 'surface', fg: 'foreground' },
       },
-      root: { h: ['themeSeg', 'tbSeg'] },
+      root: { h: ['themeSeg', 'capsSeg'] },
     }`);
     feedInputs(registry, HOOK_DATA);
 
     const themeObs: string[] = [];
-    const expandedObs: string[] = [];
+    const capsObs: string[] = [];
     const disposeTheme = autorun(() => {
       themeObs.push(String(store.read("themePick")));
     });
-    const disposeExp = autorun(() => {
-      expandedObs.push(String(store.read("expanded")));
+    const disposeCaps = autorun(() => {
+      capsObs.push(String(store.read("caps")));
     });
     // [LAW:no-defensive-null-guards] try/finally is the type-level
     // guarantee that both autoruns are disposed even when the
     // assertions throw — see the same note on the test above.
     try {
       expect(themeObs).toEqual(["(unset)"]);
-      expect(expandedObs).toEqual([""]);
+      expect(capsObs).toEqual([""]);
 
       await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
 
       // Watched key advanced — cascade reached the right computed.
       expect(themeObs).toEqual(["(unset)", "nord"]);
-      // Unrelated key: the atom invalidated the `expanded` computed too
+      // Unrelated key: the atom invalidated the `caps` computed too
       // (coarse-grained reactivity), but it re-derived to the same fallback
       // "" — MobX's value comparer suppresses propagation to this observer.
-      expect(expandedObs).toEqual([""]);
+      expect(capsObs).toEqual([""]);
 
-      // Sanity: a mutation to the OTHER state key fires the expanded
+      // Sanity: a mutation to the OTHER state key fires the caps
       // observer (cascade is not over-suppressed).
-      sessionState.set(SESSION_ID, "toolbar-expanded", "1");
-      expect(expandedObs).toEqual(["", "1"]);
+      sessionState.set(SESSION_ID, "endcaps", "capsule");
+      expect(capsObs).toEqual(["", "capsule"]);
       expect(themeObs).toEqual(["(unset)", "nord"]);
     } finally {
       disposeTheme();
-      disposeExp();
+      disposeCaps();
     }
   });
 
@@ -249,32 +249,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { ctx } = cascadeBar();
     await expect(VERBS.get("set-state")!(`${SESSION_ID}/endcaps/not-a-shape`, ctx),
     ).rejects.toThrow(/unknown endcaps "not-a-shape" \(have: .*capsule.*\)/);
-  });
-
-  test("set-state normalizes boolean-ish toolbar-expanded values", async () => {
-    // [LAW:one-source-of-truth] The canonical truthy/falsy strings are
-    // owned by the boolean validator, not by each callsite. "1"/"true"
-    // collapse to "1"; "0"/"false" collapse to "" — the same sentinel
-    // the toolbar-toggle verb produces via clear() for the next render.
-    const { sessionState, ctx } = cascadeBar();
-
-    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/true`, ctx);
-    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
-
-    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/false`, ctx);
-    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
-
-    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/1`, ctx);
-    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
-
-    await VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/0`, ctx);
-    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
-  });
-
-  test("set-state rejects non-boolean-ish toolbar-expanded values", async () => {
-    const { ctx } = cascadeBar();
-    await expect(VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
-    ).rejects.toThrow(/expected boolean-ish/);
   });
 
   test("set-state rejects malformed wire input (missing tail or odd count)", async () => {
@@ -326,9 +300,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // Menu primitive (chunk 11 .3) uses this to atomically write the
     // chosen value AND collapse the menu in one click.
     const { sessionState, ctx } = cascadeBar();
-    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/toolbar-expanded/0`, ctx);
+    await VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/endcaps/capsule`, ctx);
     expect(sessionState.get(SESSION_ID, "theme")).toBe("nord");
-    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
+    expect(sessionState.get(SESSION_ID, "endcaps")).toBe("capsule");
   });
 
   test("multi-pair batch fires reactive observers exactly once", async () => {
@@ -337,8 +311,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // intermediate "first write applied, second pending" state. A
     // previous shape (loop and call sessionState.set N times) fired
     // reportChanged() per pair, scheduling autoruns between writes; an
-    // observer correlating theme and toolbar-expanded would have seen
-    // (nord, "1") momentarily before reaching (nord, ""). The setBatch
+    // observer correlating theme and endcaps would have seen
+    // (nord, plain) momentarily before reaching (nord, capsule). The setBatch
     // seam collapses N notifications into one.
     //
     // [LAW:behavior-not-structure] We don't assert "setBatch was
@@ -348,38 +322,38 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       globals: {},
       variables: {
         themePick: { kind: 'state', key: 'theme', default: '(unset)' },
-        expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
+        caps: { kind: 'state', key: 'endcaps', default: '' },
       },
       segments: {
         s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
       },
       root: 's',
     }`);
-    sessionState.set(SESSION_ID, "toolbar-expanded", "1");
+    sessionState.set(SESSION_ID, "endcaps", "plain");
     feedInputs(registry, HOOK_DATA);
 
     // Observer reads BOTH state vars in one tracked frame — the kind
     // of cross-key correlation a Menu rendering would do.
-    const snapshots: Array<{ theme: string; expanded: string }> = [];
+    const snapshots: Array<{ theme: string; caps: string }> = [];
     const dispose = autorun(() => {
       snapshots.push({
         theme: String(store.read("themePick")),
-        expanded: String(store.read("expanded")),
+        caps: String(store.read("caps")),
       });
     });
     try {
-      expect(snapshots).toEqual([{ theme: "(unset)", expanded: "1" }]);
+      expect(snapshots).toEqual([{ theme: "(unset)", caps: "plain" }]);
 
       await VERBS.get("set-state")!(
-        `${SESSION_ID}/theme/nord/toolbar-expanded/0`,
+        `${SESSION_ID}/theme/nord/endcaps/capsule`,
         ctx,
       );
 
       // Exactly one new snapshot AND it shows BOTH writes applied.
-      // An intermediate fire would have inserted a `(nord, "1")` row.
+      // An intermediate fire would have inserted a `(nord, plain)` row.
       expect(snapshots).toEqual([
-        { theme: "(unset)", expanded: "1" },
-        { theme: "nord", expanded: "" },
+        { theme: "(unset)", caps: "plain" },
+        { theme: "nord", caps: "capsule" },
       ]);
     } finally {
       dispose();
@@ -397,10 +371,10 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // not overwrite it.
     sessionState.set(SESSION_ID, "theme", "dracula");
     await expect(VERBS.get("set-state")!(
-        `${SESSION_ID}/theme/nord/toolbar-expanded/maybe`,
+        `${SESSION_ID}/theme/nord/endcaps/not-a-shape`,
         ctx,
       ),
-    ).rejects.toThrow(/pair 2.*expected boolean-ish/);
+    ).rejects.toThrow(/pair 2.*unknown endcaps/);
     // The failing batch did NOT advance the prior theme value.
     expect(sessionState.get(SESSION_ID, "theme")).toBe("dracula");
   });
@@ -460,26 +434,5 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     }`);
     expect(config.variables["session.id"]).toEqual(PAYLOAD_INPUTS["session.id"]);
     expect(render()).toContain("calm");
-  });
-
-  test("toolbar-toggle click verb cascades through state binding", async () => {
-    // Same pattern with a different verb / key — exercises the toggle
-    // semantics (set on first click, clear on second).
-    const { render, ctx } = cascadeBar(`{
-      globals: {},
-      variables: {
-        expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
-      },
-      segments: {
-        tb: { template: ' tb=[{{ .expanded }}] ', bg: 'surface', fg: 'foreground' },
-      },
-      root: 'tb',
-    }`);
-
-    expect(render()).toContain("tb=[]");
-    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
-    expect(render()).toContain("tb=[1]");
-    await VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
-    expect(render()).toContain("tb=[]");
   });
 });

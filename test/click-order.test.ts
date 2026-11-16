@@ -26,8 +26,8 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
   VERB_SET_CONFIG,
+  VERB_SET_STATE,
   VERB_SLASH,
-  VERB_TOOLBAR_TOGGLE,
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
@@ -114,7 +114,7 @@ function setup(over: Partial<DoctorEdge> = {}) {
     log: () => {},
     monotonic: () => systemTimekeeper.monotonic(),
   });
-  for (const sid of [A, B]) {
+  for (const sid of [A, B, SESSION_C]) {
     recordRender(sessionState, sid);
     sessionState.set(sid, SESSION_CLIENT_HINTS_KEY, "{}");
   }
@@ -135,15 +135,15 @@ function setup(over: Partial<DoctorEdge> = {}) {
       ...over,
     }),
   };
-  const toggled = (sid: SessionId) => sessionState.get(sid, "toolbar-expanded");
+  const written = (sid: SessionId) => sessionState.get(sid, "theme");
   const doctor = (sid: string, c: VerbContext = ctx) =>
     VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(sid), c);
-  const toggle = (sid: string, c: VerbContext = ctx) =>
-    VERBS.get(VERB_TOOLBAR_TOGGLE)!(encodeURIComponent(sid), c);
+  const write = (sid: string, c: VerbContext = ctx) =>
+    VERBS.get(VERB_SET_STATE)!(encodeSegments([sid, "theme", "nord"]), c);
   const doDoctorThen = (c: VerbContext = ctx) => {
     const url = effectsUrl([
       { verb: VERB_DOCTOR_RUN, args: [A] },
-      { verb: VERB_TOOLBAR_TOGGLE, args: [A] },
+      { verb: VERB_SET_STATE, args: [A, "theme", "nord"] },
     ]);
     return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), c);
   };
@@ -155,9 +155,9 @@ function setup(over: Partial<DoctorEdge> = {}) {
     held,
     gathers,
     ctx,
-    toggled,
+    written,
     doctor,
-    toggle,
+    write,
     doDoctorThen,
     reports,
   };
@@ -165,28 +165,28 @@ function setup(over: Partial<DoctorEdge> = {}) {
 
 describe("a gather holds no turn", () => {
   test("session B's click lands while A's doctor gather parks, and A's report lands", async () => {
-    const { turns, held, gathers, doctor, toggle, toggled, reports } = setup();
+    const { turns, held, gathers, doctor, write, written, reports } = setup();
     const a = doctor(A);
     await drain();
     expect(gathers).toEqual(["holder=null"]);
     expect(turns.getStats().holder).toBeNull();
-    await toggle(B);
-    expect(toggled(B)).toBe("1");
+    await write(B);
+    expect(written(B)).toBe("nord");
     expect(reports()).toEqual([]);
     held.open();
     await a;
     expect(reports()).toHaveLength(1);
   });
 
-  test("two sessions' doctor gathers run one at a time, while a toggle passes both", async () => {
-    const { turns, held, gathers, doctor, toggle, toggled, reports } = setup();
+  test("two sessions' doctor gathers run one at a time, while a write passes both", async () => {
+    const { turns, held, gathers, doctor, write, written, reports } = setup();
     const a = doctor(A);
     const b = doctor(B);
     await drain();
     expect(gathers).toHaveLength(1);
     expect(turns.getStats().gathers).toBe(2);
-    await toggle("session-c");
-    expect(toggled(SESSION_C)).toBe("1");
+    await write("session-c");
+    expect(written(SESSION_C)).toBe("nord");
     held.open();
     await Promise.all([a, b]);
     expect(reports()).toHaveLength(2);
@@ -204,7 +204,7 @@ describe("a gather holds no turn", () => {
   });
 
   test("a `do` of doctor then a write whose client left during the gather lands both", async () => {
-    const { held, doDoctorThen, ctx, toggled, reports } = setup();
+    const { held, doDoctorThen, ctx, written, reports } = setup();
     let gone = false;
     const a = doDoctorThen({ ...ctx, clientGone: async () => gone });
     await drain();
@@ -212,7 +212,7 @@ describe("a gather holds no turn", () => {
     held.open();
     await a;
     expect(reports()).toHaveLength(1);
-    expect(toggled(A)).toBe("1");
+    expect(written(A)).toBe("nord");
   });
 
   test("a gather past a click's first gather runs in the turn, after the first one's write", async () => {
@@ -232,16 +232,16 @@ describe("a gather holds no turn", () => {
 });
 
 describe("one session's order", () => {
-  test("a toggle arriving after a doctor click lands after it", async () => {
-    const { held, doctor, toggle, toggled, reports } = setup();
+  test("a write arriving after a doctor click lands after it", async () => {
+    const { held, doctor, write, written, reports } = setup();
     const a = doctor(A);
-    const later = toggle(A);
+    const later = write(A);
     await drain();
-    expect(toggled(A)).toBeNull();
+    expect(written(A)).toBeNull();
     held.open();
     await Promise.all([a, later]);
     expect(reports()).toHaveLength(1);
-    expect(toggled(A)).toBe("1");
+    expect(written(A)).toBe("nord");
   });
 
   test("two doctor-marks reach their verdicts in arrival order", async () => {
@@ -279,18 +279,18 @@ describe("one session's order", () => {
   });
 
   test("a later click whose client left while queued behind the gather is refused, and writes nothing", async () => {
-    const { held, doctor, toggle, ctx, toggled } = setup();
+    const { held, doctor, write, ctx, written } = setup();
     const a = doctor(A);
-    const later = toggle(A, { ...ctx, clientGone: async () => true });
+    const later = write(A, { ...ctx, clientGone: async () => true });
     const refused = expect(later).rejects.toBeInstanceOf(ClickAbandoned);
     held.open();
     await a;
     await refused;
-    expect(toggled(A)).toBeNull();
+    expect(written(A)).toBeNull();
   });
 
-  test("a `do` of doctor then toggle whose client leaves in the turn wait, after its gather, is refused", async () => {
-    const { held, doDoctorThen, ctx, toggled, reports } = setup();
+  test("a `do` of doctor then a write whose client leaves in the turn wait, after its gather, is refused", async () => {
+    const { held, doDoctorThen, ctx, written, reports } = setup();
     const parked = gate();
     let gone = false;
     const launch = () => parked.wait.then(() => LAUNCHED);
@@ -305,7 +305,7 @@ describe("one session's order", () => {
     await holding;
     await refused;
     expect(reports()).toEqual([]);
-    expect(toggled(A)).toBeNull();
+    expect(written(A)).toBeNull();
   });
 });
 
@@ -409,14 +409,14 @@ describe("a gather is a snapshot of one config", () => {
   });
 });
 
-test("a `do` of doctor then toggle with a failed probe still toggles and shows the error on the bar", async () => {
-  const { doDoctorThen, sessionState, toggled, reports } = setup({
+test("a `do` of doctor then a write with a failed probe still writes and shows the error on the bar", async () => {
+  const { doDoctorThen, sessionState, written, reports } = setup({
     daemons: async () => {
       throw new Error("ps broke");
     },
   });
   await expect(doDoctorThen()).rejects.toThrow("ps broke");
-  expect(toggled(A)).toBe("1");
+  expect(written(A)).toBe("nord");
   expect(reports()).toEqual([]);
   expect(sessionState.get(A, "click.error")).toContain("ps broke");
 });
@@ -702,10 +702,10 @@ test("tsc refuses `ctx.launcher` in a VerbHandler", () => {
 });
 
 test("a click waiting behind its session's gather reports the wait; a menu with a click in flight draws no countdown", async () => {
-  const { held, doctor, toggle, ctx } = setup();
+  const { held, doctor, write, ctx } = setup();
   const waits: number[] = [];
   const a = doctor(A);
-  const later = toggle(A, { ...ctx, placeWaited: (ms) => waits.push(ms) });
+  const later = write(A, { ...ctx, placeWaited: (ms) => waits.push(ms) });
   await new Promise((r) => setTimeout(r, 20));
   held.open();
   await Promise.all([a, later]);

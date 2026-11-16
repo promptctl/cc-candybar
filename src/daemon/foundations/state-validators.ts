@@ -83,29 +83,13 @@ const validateEndcaps: KeyValidator = (raw) => {
   return { ok: true, value: raw };
 };
 
-// [LAW:dataflow-not-control-flow] Boolean-ish accepts exactly four canonical
-// inputs and normalizes to two canonical outputs: truthy ("1"/"true") → "1",
-// falsy ("0"/"false") → "" (empty). The empty falsy sentinel matches what
-// `toolbar-toggle` produces via `clear()` for the next render.
-const BOOLEAN_TRUTHY = new Set(["1", "true"]);
-const BOOLEAN_FALSY = new Set(["0", "false"]);
-const validateBoolean: KeyValidator = (raw) => {
-  if (BOOLEAN_TRUTHY.has(raw)) return { ok: true, value: "1" };
-  if (BOOLEAN_FALSY.has(raw)) return { ok: true, value: "" };
-  return {
-    ok: false,
-    reason: `expected boolean-ish (1, 0, true, false), got "${raw}"`,
-  };
-};
-
-// [LAW:one-source-of-truth] The built-in keys (endcaps/theme/toolbar-expanded):
+// [LAW:one-source-of-truth] The built-in keys (endcaps/theme):
 // legacy widget-era targets that predate the action-table-driven world and
 // stay writable in every session; every other SessionState key is derived
 // from the session's config's action table.
 const BASELINE: Readonly<Record<string, KeyValidator>> = {
   endcaps: validateEndcaps,
   theme: validateTheme,
-  "toolbar-expanded": validateBoolean,
 };
 
 // [LAW:no-shared-mutable-globals] A SessionState keyspace is a value the root

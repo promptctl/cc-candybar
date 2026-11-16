@@ -39,4 +39,4 @@ Load `laws:code` first. The laws govern this work.
 
 ## Awaiting a decision
 
-Removal candidates: `env` variables ([gather](areas/gather.md)), `load-config` ([isolation](areas/isolation.md)), and direct verb URLs ([clicks](areas/clicks.md)).
+Removal candidates: `env` variables ([gather](areas/gather.md)) and direct verb URLs ([clicks](areas/clicks.md)).

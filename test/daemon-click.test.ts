@@ -64,15 +64,6 @@ describe("SessionState", () => {
     expect(state.get(B, "theme")).toBeNull();
     expect(state.get(C, "theme")).toBe("forest");
   });
-
-  test("toolbar-expanded key works for toggle semantics", () => {
-    const state = new SessionState();
-    expect(state.get(S1, "toolbar-expanded")).toBeNull();
-    state.set(S1, "toolbar-expanded", "1");
-    expect(state.get(S1, "toolbar-expanded")).toBe("1");
-    state.clear(S1, "toolbar-expanded");
-    expect(state.get(S1, "toolbar-expanded")).toBeNull();
-  });
 });
 
 describe("click protocol", () => {
@@ -162,30 +153,6 @@ describe("statusline binary render isolation", () => {
     // No fallback to in-process rendering.
     expect(indexSrc).not.toContain("generateStatusline");
     expect(indexSrc).not.toContain("new PowerlineRenderer");
-  });
-});
-
-// --- Toolbar toggle dataflow ---
-// Verify the dataflow: toolbar-toggle click updates daemon state, next render
-// sees the change without re-reading from disk.
-
-describe("toolbar toggle dataflow", () => {
-  test("toggle via SessionState reflects in get without disk I/O", () => {
-    // [LAW:one-source-of-truth] The SessionState is the daemon's in-memory
-    // source of truth. No file reads needed.
-    const state = new SessionState();
-    const sessionId = sessionIdOf("toggle-test-session");
-
-    // Initially not expanded.
-    expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
-
-    // Set → expanded.
-    state.set(sessionId, "toolbar-expanded", "1");
-    expect(state.get(sessionId, "toolbar-expanded")).toBe("1");
-
-    // Clear → collapsed.
-    state.clear(sessionId, "toolbar-expanded");
-    expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
   });
 });
 

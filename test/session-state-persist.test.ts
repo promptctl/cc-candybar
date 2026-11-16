@@ -310,24 +310,24 @@ describe("SessionState disk persistence", () => {
     const first = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
     first.set(S1, "theme", "dracula");
     first.set(S1, "displayStyle", "capsule");
-    first.set(S2, "toolbar-expanded", "1");
+    first.set(S2, "endcaps", "plain");
     first.flush();
 
     const reborn = restore();
     expect(reborn.get(S1, "theme")).toBe("dracula");
     expect(reborn.get(S1, "displayStyle")).toBe("capsule");
-    expect(reborn.get(S2, "toolbar-expanded")).toBe("1");
+    expect(reborn.get(S2, "endcaps")).toBe("plain");
   });
 
   it("clear() persists removal across a restart", () => {
     const first = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    first.set(S1, "toolbar-expanded", "1");
+    first.set(S1, "endcaps", "plain");
     first.flush();
-    first.clear(S1, "toolbar-expanded");
+    first.clear(S1, "endcaps");
     first.flush();
 
     const reborn = restore();
-    expect(reborn.get(S1, "toolbar-expanded")).toBeNull();
+    expect(reborn.get(S1, "endcaps")).toBeNull();
   });
 
   it("prune() drops inactive sessions and persists the bounded set", () => {
@@ -419,8 +419,8 @@ describe("SessionState disk persistence", () => {
 
   it("clear() of the last key removes the session entirely (no empty husk)", () => {
     const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    ss.set(S1, "toolbar-expanded", "1");
-    ss.clear(S1, "toolbar-expanded");
+    ss.set(S1, "endcaps", "plain");
+    ss.clear(S1, "endcaps");
     ss.flush();
     const onDisk = JSON.parse(readFileSync(file, "utf8"));
     expect(onDisk.s1).toBeUndefined();

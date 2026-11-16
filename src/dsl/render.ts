@@ -594,7 +594,7 @@ export function declareDslVariables(
   // abort the rest. Errors are data (accumulated in loadWarnings); the store
   // simply lacks the broken variable. Segments that reference it get a
   // MissingFieldError at render time and show an error cell. Segments that
-  // don't (e.g. configSwitcher) render normally.
+  // don't render normally.
   const loadWarnings: string[] = [];
   for (const [name, decl] of declaredVariables(config)) {
     if (!scopes.has(scopeOf.get(name)!)) continue;

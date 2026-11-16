@@ -171,7 +171,7 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
 - Config-authored links via `{{ link url text }}` become `new Style({ link: url })` in rich-js `dist/template-bindings/style-funcs.js`. Sources:
   - `src/config/default-dsl-config.ts`: `.git.prUrl`.
   - `src/config/quick-actions.ts`: `.git.repoUrl`.
-  - `examples/demo-actions.json5`, among others: literal `cc-candybar://open-vscode/...` and `load-config/...`.
+  - `examples/demo-actions.json5`, among others: literal `cc-candybar://open-vscode/...`.
 
 **Readers that spell or parse the scheme (they break on `to/<draw-id>/`)**
 - `parseHandlerUrl` in `src/install/index.ts`: treats the first path segment as the verb.

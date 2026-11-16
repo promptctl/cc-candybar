@@ -86,8 +86,8 @@ import type { DaemonLogger } from "../utils/logger.js";
 import { BUNDLED_PRESETS, isBundledPreset } from "./bundled-presets.js";
 import { ident } from "../config/ident.js";
 
-// [LAW:one-source-of-truth] The same four boolean-ish inputs validateBoolean
-// (state-validators.ts) accepts — a `persist` action's gate is an ALLOW-LIST
+// [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
+// value is written from — a `persist` action's gate is an ALLOW-LIST
 // whose members pass through verbatim, so a config author writing
 // `cycle: ["true", "false"]` or `to: "0"` reaches this boundary with the raw
 // member string, not a pre-canonicalized "1"/"".

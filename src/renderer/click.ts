@@ -1,6 +1,6 @@
 // The renderer's click turn: what a click means is the verb its link names,
 // acted on in this turn, so the turn's output reads the subscriptions as they
-// stand once the act has landed (its commit, and its view's follow).
+// stand once the act has landed (its commit).
 
 import {
   noteFacts,

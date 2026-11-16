@@ -30,7 +30,7 @@ describe("state-validators contract", () => {
     // surfaces the change in the diff, so downstream surfaces (DSL
     // bindings, docs, panel migration) get the signal.
     expect([...bare().listKeys()].sort()).toEqual(
-      ["endcaps", "theme", "toolbar-expanded"].sort(),
+      ["endcaps", "theme"].sort(),
     );
   });
 
@@ -53,35 +53,6 @@ describe("state-validators contract", () => {
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBe(shape);
     }
-  });
-
-  test("toolbar-expanded validator normalizes the boolean-ish input set", () => {
-    // [LAW:types-are-the-program] The canonical (input, normalized)
-    // pairs ARE the contract — pinned here so a downstream widget can
-    // rely on "set toolbar-expanded to 'true'" landing as "1" in
-    // SessionState, and on the falsy/truthy split being precisely this.
-    const expected: ReadonlyArray<[string, string]> = [
-      ["1", "1"],
-      ["true", "1"],
-      ["0", ""],
-      ["false", ""],
-    ];
-    for (const [input, normalized] of expected) {
-      const result = bare().validate("toolbar-expanded", input);
-      expect(result.ok).toBe(true);
-      if (result.ok) expect(result.value).toBe(normalized);
-    }
-  });
-
-  test("toolbar-expanded validator rejects the empty string (no silent guess)", () => {
-    // [LAW:no-silent-failure] Empty value on the wire is structurally
-    // ambiguous (did the operator mean "0", or did they forget to provide
-    // a value?). Accepting it would be a silent semantic guess; the
-    // validator rejects it explicitly so the operator sees the malformed
-    // input rather than a quietly-applied default.
-    const result = bare().validate("toolbar-expanded", "");
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toMatch(/expected boolean-ish/);
   });
 
   test("unknown key rejection lists the gate's keys", () => {
