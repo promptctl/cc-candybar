@@ -401,13 +401,14 @@ The steps are the tickets under the epic `candybar-host-renderer-x96a`, in its r
 
 | Item | Owner | Due |
 |---|---|---|
-| A-1 falls at 60 fps: the renderer process is one turn at a time, and a statusline request waits behind the feed's frames. Before a moving rate above 30 fps ships, a request must not queue behind frames. | `cwq` | Before a moving rate above 30 fps ships |
+| A-1 falls at 60 fps: the renderer process is one turn at a time, and a statusline request waits behind the feed's frames. A feed now asks for a frame only while no event turn is out, so a request waits behind at most the one frame already drawing as it arrives. Whether that holds A-1 is read in real use after deploy. | `cwq` | Before a moving rate above 30 fps ships |
 | A-2 and A-3 are untested. | `adf`'s done-when tests A-2, and `8ts`'s refused-fix test tests A-3. | Each before the step that relies on it |
 
 **A-1 stands at 30 fps and falls at 60.** Every reading is the render event's `took` in real use, compared with the in-process daemon's p50 4 ms, p99 11 ms over 18,548 requests.
 
 - At 30 fps, out of process, over about 30,000 requests: p50 3 ms, p99 6 ms. The hop to the renderer is p50 1 ms, p99 3 ms.
 - At 60 fps, over 21,863 requests: p50 8 ms, p99 30 ms, which is 19 ms over the baseline's p99. The draw itself is unchanged at p50 3 ms, p99 5 ms. The hop grew to p50 4 ms, p99 16 ms, because one animating feed keeps the renderer busy at 60 frames a second.
+- At 60 fps a build later, with frames still asked for whatever turns were out, over 24,572 requests with two feeds animating: p50 4 ms, p99 15 ms, 4 ms over the baseline's p99. The draw is p99 4 ms and the hop p99 8 ms. The renderer process used about 40% of a core while it animated and about 8% with no feed, so frames are what keep it busy.
 
 **A-5's falsifier names no tolerance, and read strictly it falls at both rates: frames fall short of the rate.** Every reading is the feed's own summary for a session animating in its pane. Each frame falls due a period after the instant the last was drawn for, so a late frame delays the ones after it, and the rate falls short by the frames' lateness.
 

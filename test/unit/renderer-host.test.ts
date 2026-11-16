@@ -4,10 +4,13 @@
 
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { failureOf } from "../../src/daemon/foundations/verb-error";
-import type { AdapterOutput } from "../../src/renderer-interface/interface";
+import type {
+  AdapterOutput,
+  RendererOutput,
+} from "../../src/renderer-interface/interface";
 import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
-import { pushRenderer } from "../helpers/renderers";
+import { eventRenderer, pushRenderer } from "../helpers/renderers";
 
 const AT = instantOf(new Date(0));
 
@@ -72,4 +75,57 @@ test("a tell that fails is said on the log, and nothing rejects", async () => {
   expect(await said).toMatch(
     /^error renderer main push unpin threw: .*no such session/,
   );
+});
+
+// candybar-host-renderer-x96a.cwq: a feed's frame waits on `eventsSettled`,
+// so it must settle only once every event turn out has answered or thrown.
+test("events settle at once while no turn is out, and only once the last turn out ends, a thrown one included", async () => {
+  const ends: ((output: RendererOutput) => void)[] = [];
+  const host = rendererHost(
+    "main",
+    { now: () => 0, monotonic: () => 0 as Monotonic },
+    eventRenderer(
+      () => new Promise<RendererOutput>((resolve) => ends.push(resolve)),
+    ),
+    () => {},
+    { subscribed: () => {}, holding: () => () => {} },
+  );
+  const settledNow = await Promise.race([
+    host.eventsSettled().then(() => true),
+    Promise.resolve().then(() => false),
+  ]);
+  expect(settledNow).toBe(true);
+  const retire = (session: string) =>
+    host.deliver(
+      {
+        kind: "event",
+        at: AT,
+        event: { kind: "retire", session: session as never },
+      },
+      [],
+    );
+  const first = retire("a");
+  const second = retire("b");
+  let settled = false;
+  void host.eventsSettled().then(() => (settled = true));
+  const answered: RendererOutput = {
+    kind: "answered",
+    effects: [],
+    record: [],
+    subscriptions: { sources: {} },
+    turnMs: 0,
+  };
+  ends[0]!(answered);
+  await first;
+  expect(settled).toBe(false);
+  ends[1]!({
+    kind: "threw",
+    failure: failureOf(new Error("the turn broke")),
+    record: [],
+    subscriptions: { sources: {} },
+    turnMs: 0,
+  });
+  await second;
+  await Promise.resolve();
+  expect(settled).toBe(true);
 });

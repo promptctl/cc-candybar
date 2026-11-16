@@ -45,6 +45,10 @@ export interface RendererHost {
   ask<P extends AdapterPush>(push: P, at: Instant): Promise<ReplyTo<P["kind"]>>;
   // One push nobody awaits: its failure is logged here.
   tell(push: AdapterPush, at: Instant): void;
+  // Resolves once no event turn is out to the renderer: at once when none is.
+  // A feed's frame waits on it, so a request, a click or a push the host
+  // handed in is never queued behind a frame asked after it.
+  eventsSettled(): Promise<void>;
 }
 
 export function rendererHost(
@@ -64,9 +68,18 @@ export function rendererHost(
     readonly holding: (session: SessionId) => () => void;
   },
 ): RendererHost {
+  // [LAW:single-enforcer] The one count of event turns out to the renderer,
+  // and who waits for it to reach zero.
+  let eventTurns = 0;
+  let settledWaiters: Array<() => void> = [];
+  const eventsSettled = (): Promise<void> =>
+    eventTurns === 0
+      ? Promise.resolve()
+      : new Promise((resolve) => settledWaiters.push(resolve));
   const held = async (input: EventInput): Promise<HostTurn> => {
     const session = sessionOf(input.event);
     const release = session === null ? () => {} : collector.holding(session);
+    eventTurns++;
     try {
       const sentAt = clock.monotonic();
       const { subscriptions, turnMs, ...answered } =
@@ -84,6 +97,12 @@ export function rendererHost(
       return output;
     } finally {
       release();
+      eventTurns--;
+      if (eventTurns === 0) {
+        const settled = settledWaiters;
+        settledWaiters = [];
+        for (const resolve of settled) resolve();
+      }
     }
   };
   // [LAW:single-enforcer] Every turn's caller, a fire-and-forget one included,
@@ -192,7 +211,7 @@ export function rendererHost(
       // supervisor's to say.
       if (failure.kind !== "down") log("error", failure.detail);
     });
-  return { name, answer: turn, deliver, ask, tell };
+  return { name, answer: turn, deliver, ask, tell, eventsSettled };
 }
 
 // [LAW:one-source-of-truth] The session an event names: what a turn holds,

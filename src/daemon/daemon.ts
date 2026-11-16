@@ -523,6 +523,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       // [LAW:parse-dont-validate] The receiving edge of a feed frame.
       return frame === null ? null : { ...frame, bar: parseFrame(frame.bar) };
     },
+    eventsSettled: () => parts.renderer.eventsSettled(),
     lanes: async (sessionId) =>
       (
         await parts.renderer.ask(

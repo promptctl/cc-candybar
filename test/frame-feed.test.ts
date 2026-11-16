@@ -124,6 +124,9 @@ function harness(opts: {
     handoff: null as string | null,
     // Runs inside the next render, once.
     duringRender: null as (() => void) | null,
+    // The renderer's event turns out, as the host's settle signal reads
+    // them: null while none is, else what settles once the last answers.
+    eventsOut: null as Promise<void> | null,
     pins: new Map<string, number>(),
     // The lanes each frame was asked for as following the session, in order.
     following: [] as (readonly Lane[])[],
@@ -169,6 +172,7 @@ function harness(opts: {
       // failed one included, as the renderer's do.
       return { ...frameOf(req, at), lanes: state.lanes };
     },
+    eventsSettled: () => state.eventsOut ?? Promise.resolve(),
     lanes: async (sessionId) => {
       if (state.gateThrows) throw new Error("the gate broke");
       return feeds.latest(sessionId) === null ? null : state.lanes;
@@ -685,6 +689,36 @@ describe("a feed's draws and its summary", () => {
     expect(logged.totalCount).toBe(state.renders);
     // In µs, to the histogram's three significant digits.
     expect(logged.getValueAtPercentile(99) / 1000).toBeCloseTo(5, 2);
+  });
+
+  // candybar-host-renderer-x96a.cwq: a statusline request crosses to the
+  // renderer while frames are drawn there, so a frame waits for every event
+  // turn out before it is asked for, and the summary says how long it waited.
+  test("a frame falling due while event turns are out is asked for once they settle, drawn for that instant, and its hold is in the summary", async () => {
+    const { feeds, note, state, log, clock } = harness({ motion: "moving" });
+    note(S, "bar");
+    const close = feeds.subscribe(
+      S,
+      sub(() => {}),
+    );
+    await clock.settle(0);
+    expect(state.renders).toBe(1);
+    let settle!: () => void;
+    state.eventsOut = new Promise((resolve) => (settle = resolve));
+    // The next frame falls due 20 ms after the first and is held through 70.
+    await clock.settle(70);
+    expect(state.renders).toBe(1);
+    state.eventsOut = null;
+    settle();
+    await clock.settle(0);
+    expect(state.renders).toBe(2);
+    expect(state.walls[1]! - state.walls[0]!).toBe(70);
+    expect(state.ats[1]).toBeCloseTo(state.walls[1]! / 1000, 3);
+    close();
+    const summary = log.at(-1)!;
+    // The first frame was asked at once, the second 50 ms after it fell due.
+    expect(summary).toMatch(/ held=n:2,p50:0\.00,.*max:50\.\d\d,/);
+    expect(summary).toMatch(/ heldHistogram=\S+/);
   });
 
   // [LAW:nothing-unseen] A draw that overruns its period makes the next frame

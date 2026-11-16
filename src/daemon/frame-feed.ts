@@ -126,6 +126,10 @@ export interface FeedDeps<Req> {
     following: readonly Lane[],
     feeds: LaneFeeds,
   ): Promise<FeedFrame | null>;
+  // Resolves once the renderer has no event turn out: a frame is asked only
+  // then, so a statusline request is never queued behind a frame asked after
+  // it, only behind one already drawing.
+  eventsSettled(): Promise<void>;
   // Which animation lanes the session's settings switch on now, as its view
   // draws them — never a copy taken when a frame was drawn, so a toggle turned
   // on is honoured at the next subscribe. Null while it has no view.
@@ -208,10 +212,13 @@ interface Feed {
   faulted: number;
   pushed: number;
   // [LAW:nothing-unseen] Each frame's draw, from asking the renderer to its
-  // answer, and its lateness, from the moment it fell due to the moment it was
-  // drawn, both in microseconds. The rate says how many frames a feed drew;
-  // the spread of their lateness says how evenly.
+  // answer; how long it was held before asking, while the renderer had event
+  // turns out; and its lateness, from the moment it fell due to the moment it
+  // was drawn, both of the others included; all in microseconds. The rate
+  // says how many frames a feed drew; the spread of their lateness says how
+  // evenly.
   readonly drawTime: Histogram;
+  readonly held: Histogram;
   readonly lateness: Histogram;
   // Parts its frames evaluated: between data changes, those reading the instant.
   evaluated: number;
@@ -272,7 +279,7 @@ const distributionOf = (h: Histogram): string => {
 const histogramsOf = (feed: Feed, state: "running" | "closed"): string =>
   state === "running"
     ? ""
-    : ` drawHistogram=${encodedOf(feed.drawTime)} latenessHistogram=${encodedOf(feed.lateness)}`;
+    : ` drawHistogram=${encodedOf(feed.drawTime)} heldHistogram=${encodedOf(feed.held)} latenessHistogram=${encodedOf(feed.lateness)}`;
 
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_MS = 60_000;
@@ -540,6 +547,7 @@ export class FrameFeeds<Req> {
       faulted: 0,
       pushed: 0,
       drawTime: durationHistogram(),
+      held: durationHistogram(),
       lateness: durationHistogram(),
       evaluated: 0,
       cellBreaks: 0,
@@ -599,7 +607,14 @@ export class FrameFeeds<Req> {
     dueMoment: number,
   ): Promise<void> {
     feed.phase = { kind: "drawing", woken: false };
+    // [LAW:no-ambient-temporal-coupling] Every event turn out to the renderer
+    // goes ahead of this frame, so the frame is drawn for the instant it is
+    // asked at, after them. A feed closed meanwhile asks for nothing.
+    const holdFrom = this.deps.clock.monotonic();
+    await this.deps.eventsSettled();
+    if (this.feeds.get(feed.sessionId) !== feed) return;
     const started = this.deps.clock.monotonic();
+    recordMs(feed.held, started - holdFrom);
     const wall = this.deps.instant();
     const at = Math.min(
       Math.max(due, wall),
@@ -885,7 +900,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed.drawTime)} lateness=${distributionOf(feed.lateness)}${histogramsOf(feed, state)}`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed.drawTime)} held=${distributionOf(feed.held)} lateness=${distributionOf(feed.lateness)}${histogramsOf(feed, state)}`,
     );
     feed.summarizedAt = now;
   }
