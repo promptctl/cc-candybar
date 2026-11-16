@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-775",
+      "ref": "refs/pull/775/merge",
+      "sha": "31a61d59ce47988746cae895d4f672ae8c0a651a",
+      "timestamp": "2026-11-16T21:28:03.053Z",
+      "commits": [
+        {
+          "sha": "31a61d59ce47988746cae895d4f672ae8c0a651a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T14:26:59-07:00",
+          "message": "Merge 150cf33759b7e6db954576c5802045f17c050d06 into f70ac8933da8b45a3b1df24110a27e5de909823d\n"
+        },
+        {
+          "sha": "150cf33759b7e6db954576c5802045f17c050d06",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T14:26:46-07:00",
+          "message": "fix(daemon): a shutdown puts the tmux status lines back before it waits on the renderer\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f70ac8933da8b45a3b1df24110a27e5de909823d",
