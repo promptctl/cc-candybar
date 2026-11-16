@@ -76,6 +76,13 @@ export interface EventInput {
   readonly at: Instant;
 }
 
+// A session's config as its newest request names it, and the world state read
+// at that request's keys.
+export interface SessionConfig {
+  readonly context: CheckedRenderRequest;
+  readonly worldState: WorldState;
+}
+
 // [LAW:effects-at-boundaries] exception: a reach of the host's into the
 // renderer that is not yet an event, listed in the adapter
 // (src/renderer-interface/adapter.ts). A push opens no view and names no
@@ -99,6 +106,13 @@ export const INPUTS_CROSS: Crosses<RendererInput> = true;
 export const OUTPUTS_CROSS: Crosses<RendererOutput | AdapterOutput> = true;
 
 export type Event =
+  | {
+      // A renderer's start: every live session's config, as `config` hands
+      // one in, in one turn, so the start's output names everything the
+      // renderer serves and the host releases nothing it still holds for one.
+      readonly kind: "start";
+      readonly sessions: readonly SessionConfig[];
+    }
   | {
       // What the session's config is made of, as its newest request names
       // it, delivered ahead of that request: its turn opens the session's

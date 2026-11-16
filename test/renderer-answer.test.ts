@@ -10,6 +10,7 @@
 // parts its side still reaches; no daemon is built.
 
 import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -236,6 +237,33 @@ describe("a statusline request", () => {
     expect(present.frame.rows.length).toBeGreaterThan(0);
     // The turn's record is the draw's half of the render event.
     expect(new Map(record).has("drew")).toBe(true);
+  });
+
+  // A restarted renderer: the host releases whatever its first output does
+  // not name, a tmux status row included.
+  test("of each live session is configured by a start's one turn, whose output names them all", async () => {
+    const { r, rig } = renderer();
+    const mine = checked();
+    const other = sessionIdOf("other-session");
+    const theirs: CheckedRenderRequest = {
+      ...mine,
+      hookData: { ...mine.hookData, session_id: other },
+    };
+    const output = await r.answer({
+      kind: "event",
+      at: AT,
+      event: {
+        kind: "start",
+        sessions: [mine, theirs].map((context) => ({
+          context,
+          worldState: rig.served.collector.requested(context),
+        })),
+      },
+    });
+    expect(output.kind).toBe("answered");
+    expect(Object.keys(output.subscriptions.sources).sort()).toEqual(
+      [SESSION, other].sort(),
+    );
   });
 
   test("has its context's facts on its config turn's record, which opens with the session", async () => {

@@ -9,6 +9,7 @@ import {
   type LaunchResult,
 } from "../../proc/launcher";
 import { DaemonClosing } from "./verb-error";
+import type { EffectOutcome } from "../../renderer-interface/interface";
 
 // [LAW:types-are-the-program] A launch a click's act makes: the program, its
 // arguments and what it reads on stdin, as text.
@@ -37,15 +38,19 @@ export const clickLaunchVia =
 
 // [LAW:one-type-per-behavior] A click's launch of a program it waits out —
 // the clipboard, an editor — each of which hands off and exits. Resolves with
-// what it did: `said` once the program ran, or why it did not.
+// its act's outcome and what it did: `said` once the program ran; a launch
+// the rate limit held back is skipped, saying so, as it ran nothing and
+// failed at nothing.
 export async function clickLaunch(
   launch: (launch: ClickLaunch) => Promise<LaunchResult>,
   opts: ClickLaunch,
   what: string,
   said: string,
-): Promise<string> {
+): Promise<{ readonly outcome: EffectOutcome; readonly said: string }> {
   const result = await launch(opts);
-  return result.ok ? said : clickFailed(result, what);
+  if (result.ok) return { outcome: { kind: "ok" }, said };
+  const held = clickFailed(result, what);
+  return { outcome: { kind: "skipped", reason: held }, said: held };
 }
 
 // [LAW:single-enforcer] What a click's launch that ended badly does to the

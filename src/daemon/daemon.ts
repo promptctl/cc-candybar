@@ -761,32 +761,23 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
-    // gets its `config` with its latest stamp, and every open feed its `pin`,
-    // through the host's one path to the renderer, each turn recorded there.
+    // gets its config with its latest stamp, all in the one `start` turn, so
+    // its output names every session it serves; and every open feed gets its
+    // `pin`. All through the host's one path to the renderer, each turn
+    // recorded there.
     start: async () => {
       const at = instant();
       for (const sessionId of frameFeeds.openFeeds())
         parts.renderer.tell({ kind: "pin", session: sessionId }, at);
-      await Promise.all(
-        [...collector.liveDocuments()].flatMap(([sessionId, worldState]) => {
+      const sessions = [...collector.liveDocuments()].flatMap(
+        ([sessionId, worldState]) => {
           const req = frameFeeds.latest(sessionId);
-          return req === null
-            ? []
-            : [
-                parts.renderer.deliver(
-                  {
-                    kind: "event",
-                    at,
-                    event: {
-                      kind: "config",
-                      context: located(req),
-                      worldState,
-                    },
-                  },
-                  [["why", "renderer-start"]],
-                ),
-              ];
-        }),
+          return req === null ? [] : [{ context: located(req), worldState }];
+        },
+      );
+      await parts.renderer.deliver(
+        { kind: "event", at, event: { kind: "start", sessions } },
+        [["why", "renderer-start"]],
       );
     },
     ended: (event) => {

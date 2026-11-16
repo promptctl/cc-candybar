@@ -41,10 +41,6 @@ type SetupCause = "click" | "owed";
 // each by where its switch stood before the first of those clicks: what the
 // lane runs, as far as this renderer knows.
 type Owed = Map<Lane, boolean>;
-// What a request settles for a session whose clicks owe nothing, which is
-// nearly every request.
-const NOTHING_OWED: ReadonlyMap<Lane, boolean> = new Map();
-
 // [LAW:types-are-the-program] What bringing a lane to a switch asks: an act,
 // nothing (said why), or a refusal the user can act on, shown on the bar.
 type Setup =
@@ -231,10 +227,11 @@ export class LaneActs {
     switches: LaneSwitches,
     effects: Effect[],
   ): void {
-    const at = atOf(req);
-    const owed = this.owed.get(at.sessionId) ?? NOTHING_OWED;
-    this.owed.delete(at.sessionId);
-    this.settle(at, owed, switches, () => "owed", effects);
+    // Nearly every request owes nothing.
+    const owed = this.owed.get(req.hookData.session_id);
+    if (owed === undefined) return;
+    this.owed.delete(req.hookData.session_id);
+    this.settle(atOf(req), owed, switches, () => "owed", effects);
   }
 
   private take(sessionId: SessionId): Owed {

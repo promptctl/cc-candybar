@@ -8,7 +8,6 @@
 // taken by `deliver`, which writes the turn's own line.
 
 import {
-  type Act,
   type ConfigChange,
   type Effect,
   type EffectOutcome,
@@ -52,8 +51,12 @@ export interface HostWorld {
   readonly unheard: (text: string) => void;
 }
 
-const isAct = (effect: Effect): effect is Act =>
-  effect.kind !== "present" && effect.kind !== "change";
+// An act the host performs: the trust book's answer lands with the turn's
+// changes, and its failure is theirs.
+const performed = (effect: Effect): effect is HostAct =>
+  effect.kind !== "present" &&
+  effect.kind !== "change" &&
+  effect.kind !== "approve-repo";
 
 export interface RendererHost {
   readonly name: RendererName;
@@ -148,7 +151,7 @@ export function rendererHost(
             );
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
           inTurn.push(settle(effect, landed));
-        else if (isAct(effect)) {
+        else {
           const acted =
             landed.kind === "ok"
               ? before.then(() => world.perform(effect))
@@ -191,7 +194,7 @@ export function rendererHost(
     outcome: EffectOutcome,
   ): Promise<EffectOutcome> => {
     const failed =
-      isAct(effect) &&
+      performed(effect) &&
       (outcome.kind === "failed" || outcome.kind === "refused");
     if (failed && effect.session === null) world.unheard(outcome.reason);
     const delivered = await deliver(
@@ -303,6 +306,9 @@ export function rendererHost(
 // its checkpoint, names none.
 function sessionOf(event: Event): SessionId | null {
   switch (event.kind) {
+    // A start is every session's: it holds none of them alone.
+    case "start":
+      return null;
     case "config":
     case "request":
       return event.context.hookData.session_id;

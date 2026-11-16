@@ -140,7 +140,7 @@ describe("clickLaunch", () => {
     ).rejects.toThrow(/^opening https:\/\/example\.com failed \(.*ENOENT\)$/);
   });
 
-  test("a launch the rate limit refused is acknowledged, saying it did not run", async () => {
+  test("a launch the rate limit refused is skipped, saying it did not run", async () => {
     await expect(
       clickLaunch(
         async () => ({
@@ -156,6 +156,12 @@ describe("clickLaunch", () => {
         "pbcopy",
         "copied",
       ),
-    ).resolves.toMatch(/^pbcopy not run: /);
+    ).resolves.toEqual({
+      outcome: {
+        kind: "skipped",
+        reason: expect.stringMatching(/^pbcopy not run: /),
+      },
+      said: expect.stringMatching(/^pbcopy not run: /),
+    });
   });
 });

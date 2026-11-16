@@ -1178,6 +1178,7 @@ describe("the host performing lane acts", () => {
   const performer = (
     edge: LaneEdge,
     type: ActDeps["type"] = async () => ({ kind: "typed", pane: TMUX.pane }),
+    host = HOST,
   ) => {
     const logs: string[] = [];
     const missing = async (): Promise<never> => {
@@ -1188,7 +1189,7 @@ describe("the host performing lane acts", () => {
       type,
       run: missing,
       applyUpdate: missing,
-      lanes: { edge, host: HOST },
+      lanes: { edge, host },
       closing: () => false,
       log: (level, msg) => void logs.push(`${level} ${msg}`),
     });
@@ -1310,6 +1311,55 @@ describe("the host performing lane acts", () => {
     expect(order.slice(0, 3)).toEqual([
       "slash starts",
       "slash typed",
+      "restart reads the pane",
+    ]);
+  });
+
+  // One click switches band and statusline on: the band asks first.
+  test("a session's band install ends, its reload typed, before a restart it asked after begins", async () => {
+    const order: string[] = [];
+    let installed!: () => void;
+    const base = fakeEdge().edge;
+    const edge: LaneEdge = {
+      ...base,
+      claude: async (args) => {
+        if (args.includes("install")) {
+          order.push("install starts");
+          await new Promise<void>((r) => (installed = r));
+        }
+      },
+      paneClaude: async (tmux) => {
+        order.push("restart reads the pane");
+        return base.paneClaude(tmux);
+      },
+    };
+    const { bundle } = checkout();
+    const { acts } = performer(
+      edge,
+      async () => {
+        order.push("reload typed");
+        return { kind: "typed", pane: TMUX.pane };
+      },
+      { ...HOST, bundle },
+    );
+    const band = acts.perform({
+      kind: "surface",
+      surface: "band",
+      on: true,
+      id: ++ids as EffectId,
+      session: SID,
+      pane: IN_PANE,
+      at: session(),
+    });
+    const restarting = acts.perform(restart());
+    await new Promise((r) => setImmediate(r));
+    expect(order).toEqual(["install starts"]);
+    installed();
+    await band;
+    await restarting;
+    expect(order.slice(0, 3)).toEqual([
+      "install starts",
+      "reload typed",
       "restart reads the pane",
     ]);
   });

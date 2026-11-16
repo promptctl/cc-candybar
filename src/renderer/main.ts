@@ -113,6 +113,10 @@ export function mainRenderer(
     effects: Effect[],
   ): Promise<void> => {
     switch (event.kind) {
+      case "start":
+        for (const { context, worldState } of event.sessions)
+          configureSession(parts, context, worldState, at, record);
+        return;
       case "config":
         configureSession(parts, event.context, event.worldState, at, record);
         return;

@@ -95,6 +95,11 @@ export class Acts {
   // so two at once would both find the bare input box and type into each
   // other.
   private readonly inPane = new KeyedSerialQueue<string>();
+  // [LAW:no-ambient-temporal-coupling] A session's lane setups, one at a
+  // time, in the order asked: a band install ends, its /reload-plugins
+  // typed, before a restart the same click asked exits Claude Code, and two
+  // installs never run `claude plugin` over one config at once.
+  private readonly setups = new KeyedSerialQueue<SessionId>();
   // The sessions a restart holds now, by how many are queued or running on
   // each: their Claude Code is about to exit.
   private readonly restarting = new Map<SessionId, number>();
@@ -105,31 +110,27 @@ export class Acts {
   constructor(private readonly deps: ActDeps) {
     const { lanes } = deps;
     this.performers = {
-      copy: async (act) =>
-        did(
-          await clickLaunch(
-            deps.launch,
-            {
-              bin: "/usr/bin/pbcopy",
-              stdinInput: act.text,
-              category: "click.pbcopy",
-            },
-            "pbcopy",
-            "copied",
-          ),
+      copy: (act) =>
+        clickLaunch(
+          deps.launch,
+          {
+            bin: "/usr/bin/pbcopy",
+            stdinInput: act.text,
+            category: "click.pbcopy",
+          },
+          "pbcopy",
+          "copied",
         ),
-      open: async (act) =>
-        did(
-          await clickLaunch(
-            deps.launch,
-            {
-              bin: "/usr/bin/open",
-              args: ["-a", "Visual Studio Code", act.target],
-              category: "click.open",
-            },
-            'open -a "Visual Studio Code"',
-            `opened ${act.target}`,
-          ),
+      open: (act) =>
+        clickLaunch(
+          deps.launch,
+          {
+            bin: "/usr/bin/open",
+            args: ["-a", "Visual Studio Code", act.target],
+            category: "click.open",
+          },
+          'open -a "Visual Studio Code"',
+          `opened ${act.target}`,
         ),
       // [LAW:no-ambient-temporal-coupling] A session a restart holds is
       // about to exit its Claude Code: a line typed now would land in the
@@ -165,20 +166,24 @@ export class Acts {
           // in turn with whatever else acts in the pane.
           case "band":
             return did(
-              await bandOn(
-                { ...act.at, sessionId: act.session },
-                act.pane,
-                (pane, line) => this.typed(pane, line),
-                lanes.host,
-                lanes.edge,
+              await this.setups.run(act.session, () =>
+                bandOn(
+                  { ...act.at, sessionId: act.session },
+                  act.pane,
+                  (pane, line) => this.typed(pane, line),
+                  lanes.host,
+                  lanes.edge,
+                ),
               ),
             );
           case "pane":
             return did(
-              await this.inPane.run(paneKey(act.pane), () =>
-                act.on
-                  ? paneOn(act.pane, lanes.host, lanes.edge)
-                  : paneOff(act.pane, lanes.edge),
+              await this.setups.run(act.session, () =>
+                this.inPane.run(paneKey(act.pane), () =>
+                  act.on
+                    ? paneOn(act.pane, lanes.host, lanes.edge)
+                    : paneOff(act.pane, lanes.edge),
+                ),
               ),
             );
         }
@@ -236,7 +241,11 @@ export class Acts {
   ): Promise<Done> {
     this.restarting.set(session, (this.restarting.get(session) ?? 0) + 1);
     try {
-      return did(await this.inPane.run(paneKey(pane), restart));
+      return did(
+        await this.setups.run(session, () =>
+          this.inPane.run(paneKey(pane), restart),
+        ),
+      );
     } finally {
       const left = this.restarting.get(session)! - 1;
       if (left === 0) this.restarting.delete(session);
