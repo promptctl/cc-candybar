@@ -15,6 +15,13 @@ import {
   type RefreshTrigger,
 } from "../utils/refresh-ledger.js";
 import { inspect } from "node:util";
+import {
+  durationHistogram,
+  durationsOf,
+  encodedOf,
+  recordMs,
+  type Histogram,
+} from "./durations.js";
 import type { Frame } from "../render/frame";
 import type { Instant } from "../utils/instant";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
@@ -200,7 +207,12 @@ interface Feed {
   fault: string | null;
   faulted: number;
   pushed: number;
-  drawMs: number;
+  // [LAW:nothing-unseen] Each frame's draw, from asking the renderer to its
+  // answer, and its lateness, from the moment it fell due to the moment it was
+  // drawn, both in microseconds. The rate says how many frames a feed drew;
+  // the spread of their lateness says how evenly.
+  readonly drawTime: Histogram;
+  readonly lateness: Histogram;
   // Parts its frames evaluated: between data changes, those reading the instant.
   evaluated: number;
   // Strip items its frames' divided cells added: the feed is what shows how a
@@ -241,6 +253,26 @@ const answerOf = (answers: Answers, lane: Lane): string =>
 // defeating the dedupe; how many frames a lane was actually sent is feedsOf's
 // count.
 const paceOf = (period: number): number => Math.round(1000 / period);
+
+// One of a feed's timings over its life. For lateness, the spread between p50
+// and the tail is the jitter.
+const distributionOf = (h: Histogram): string => {
+  const d = durationsOf(h);
+  const ms = (v: number): string => v.toFixed(2);
+  return d.count === 0
+    ? "-"
+    : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
+};
+
+// [LAW:one-source-of-truth] The closing summary alone writes each whole
+// histogram, compressed: it holds every frame of the feed's life once, so any
+// other percentile, or a merge of many feeds' closing summaries, is read from
+// the log without asking the daemon. A running summary's would count the
+// same frames again each minute.
+const histogramsOf = (feed: Feed, state: "running" | "closed"): string =>
+  state === "running"
+    ? ""
+    : ` drawHistogram=${encodedOf(feed.drawTime)} latenessHistogram=${encodedOf(feed.lateness)}`;
 
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_MS = 60_000;
@@ -507,7 +539,8 @@ export class FrameFeeds<Req> {
       fault: null,
       faulted: 0,
       pushed: 0,
-      drawMs: 0,
+      drawTime: durationHistogram(),
+      lateness: durationHistogram(),
       evaluated: 0,
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
@@ -558,7 +591,13 @@ export class FrameFeeds<Req> {
   // frame set for a change shows it however early its timer fires, and none is
   // ever drawn further ahead of the wall than that, so nothing carries from
   // one frame to the next. Its moment on the monotonic clock is that instant's.
-  private async draw(feed: Feed, due: Instant): Promise<void> {
+  // `dueMoment` is when its timer was set to fire, which its lateness is
+  // measured from.
+  private async draw(
+    feed: Feed,
+    due: Instant,
+    dueMoment: number,
+  ): Promise<void> {
     feed.phase = { kind: "drawing", woken: false };
     const started = this.deps.clock.monotonic();
     const wall = this.deps.instant();
@@ -568,7 +607,7 @@ export class FrameFeeds<Req> {
     ) as Instant;
     const moment = started + (at - wall) * 1000;
     try {
-      await this.step(feed, started, moment, at);
+      await this.step(feed, started, moment, at, dueMoment);
       // A step is whole only once nothing of it threw, its push included; a
       // feed closed while it drew recovers nothing.
       if (feed.fault !== null && this.feeds.get(feed.sessionId) === feed) {
@@ -602,6 +641,7 @@ export class FrameFeeds<Req> {
     started: number,
     moment: number,
     at: Instant,
+    dueMoment: number,
   ): Promise<void> {
     // The renderer answers a failed render with its error frame; a rejection
     // is a fault in the adapter, `draw`'s to report.
@@ -627,7 +667,11 @@ export class FrameFeeds<Req> {
     const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed.drawn++;
-    feed.drawMs += finished - started;
+    // [LAW:single-enforcer] exception: these spans skip the whole-ms span,
+    // since a frame is read against a period of a few ms; they are kept to the
+    // microsecond in their histograms.
+    recordMs(feed.drawTime, finished - started);
+    recordMs(feed.lateness, finished - dueMoment);
     feed.evaluated += frame.evaluated;
     feed.cellBreaks += frame.cellBreaks;
     // Unsubscribed while this frame was drawn: the feed is gone, and so is
@@ -705,9 +749,18 @@ export class FrameFeeds<Req> {
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
   // its monotonic due time is what a wake compares against.
+  // [LAW:nothing-unseen] A frame already overdue when armed keeps the moment
+  // it fell due, in the past, and only its timer's wait is clamped: a draw
+  // that overran its period shows in the next frame's lateness, rather than
+  // the next frame counting from when it was armed.
   private arm(feed: Feed, due: Instant, wall: Instant): void {
-    const delay = Math.max(0, (due - wall) * 1000);
-    this.setTimer(feed, due, this.deps.clock.monotonic() + delay, delay);
+    const wait = (due - wall) * 1000;
+    this.setTimer(
+      feed,
+      due,
+      this.deps.clock.monotonic() + wait,
+      Math.max(0, wait),
+    );
   }
 
   private setTimer(
@@ -740,7 +793,7 @@ export class FrameFeeds<Req> {
   private fire(feed: Feed, due: Instant, dueMoment: number): void {
     const remaining = dueMoment - this.deps.clock.monotonic();
     if (remaining > 0) this.setTimer(feed, due, dueMoment, remaining);
-    else void this.draw(feed, due);
+    else void this.draw(feed, due, dueMoment);
   }
 
   private shown(feed: Feed): boolean {
@@ -832,7 +885,7 @@ export class FrameFeeds<Req> {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} meanDraw=${feed.drawn === 0 ? "-" : (feed.drawMs / feed.drawn).toFixed(2)}ms`,
+      `feed sid=${JSON.stringify(feed.sessionId)} ${state} subscribers=${feed.followers.size} lanes=${[...feed.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed.drawn} noted=${feed.noted} noView=${feed.noView} moving=${feed.moving} unseen=${feed.unseen} failed=${feed.failed} faulted=${feed.faulted} pushed=${feed.pushed} ceiling=${paceOf(this.spacingOf(feed))}fps achieved=${achieved} evaluated=${feed.evaluated} cellBreaks=${feed.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed.woke[cause]}`).join(",")} coalesced=${feed.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed.drawTime)} lateness=${distributionOf(feed.lateness)}${histogramsOf(feed, state)}`,
     );
     feed.summarizedAt = now;
   }

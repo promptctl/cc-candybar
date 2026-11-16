@@ -7,7 +7,10 @@ import {
 } from "./client-transport";
 import type { CliPlan } from "../cli-plan";
 import { RuntimeStats } from "./stats";
-import { type StatsSnapshot } from "./foundations/stats-snapshot";
+import {
+  type Durations,
+  type StatsSnapshot,
+} from "./foundations/stats-snapshot";
 import { fileEventsLine } from "./cache/file-events";
 import { PACKAGE_VERSION } from "../version";
 import { bakedDigest } from "./build-currency";
@@ -161,6 +164,9 @@ function fmtRate(hits: number, misses: number): string {
   return `${((hits / total) * 100).toFixed(1)}%`;
 }
 
+const durationsText = (d: Durations): string =>
+  `p50 ${d.p50Ms}ms · p90 ${d.p90Ms}ms · p99 ${d.p99Ms}ms · max ${d.maxMs}ms`;
+
 function fmtUptime(sec: number): string {
   if (sec < 60) return `${sec}s`;
   if (sec < 3600) return `${Math.floor(sec / 60)}m${sec % 60}s`;
@@ -190,6 +196,9 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  errored       ${s.requests.errored}`);
   lines.push(`  timedOut      ${s.requests.timedOut}`);
   lines.push(`  inFlight      ${s.requests.inFlight}`);
+  lines.push(
+    `  took          ${s.requests.took.count === 0 ? "-" : durationsText(s.requests.took)}`,
+  );
   // Each name as a JSON string: a client chose it, and one holding a newline
   // or an escape would otherwise forge rows or drive the terminal.
   lines.push(
@@ -305,8 +314,8 @@ export function formatStats(s: StatsSnapshot): string {
     `  draining      ${s.subprocesses.draining} (${s.subprocesses.drainedBytes} bytes dropped, ${s.subprocesses.drainsCut} cut)`,
   );
   lines.push(`  pipeErrors    ${s.subprocesses.pipeErrors}`);
-  // Snapshot already includes only executed categories (stats.ts:
-  // snapshotSubprocesses keeps byCategory and the histograms symmetric).
+  // Snapshot already includes only categories that have launched. One whose
+  // launches are all still running has a count and no durations yet.
   const activeCats = Object.entries(s.subprocesses.byCategory);
   const refusedRows = Object.entries(s.subprocesses.refused).map(
     ([cat, n]) => [`${cat} refused`, n] as const,
@@ -320,12 +329,9 @@ export function formatStats(s: StatsSnapshot): string {
     13,
   );
   for (const [cat, n] of activeCats) {
-    const p50 = s.subprocesses.p50DurationMs[cat];
-    const p99 = s.subprocesses.p99DurationMs[cat];
+    const durations = s.subprocesses.durations[cat];
     const timing =
-      p50 !== undefined && p99 !== undefined
-        ? `  (p50 ${p50}ms · p99 ${p99}ms)`
-        : "";
+      durations === undefined ? "" : `  (${durationsText(durations)})`;
     lines.push(`  ${cat.padEnd(colWidth)} ${n}${timing}`);
   }
   for (const [label, n] of refusedRows) {

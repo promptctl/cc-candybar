@@ -4,6 +4,7 @@
 // frame forward to the earliest the feed's spacing allows, two subscribers
 // share each render, and a feed with no subscriber draws nothing.
 
+import { decodeFromCompressedBase64 } from "hdr-histogram-js";
 import type { Monotonic } from "../src/time";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { ok } from "../src/utils/outcome";
@@ -655,6 +656,72 @@ describe("a feed's draws and its summary", () => {
         ` for=2s drawn=${state.renders} .* achieved=${(state.renders / 2).toFixed(1)}fps `,
       ),
     );
+  });
+
+  // [LAW:nothing-unseen] How evenly a feed's frames came, not only how many:
+  // each frame's lateness from the moment it fell due, as a distribution, and
+  // the whole histogram in the log for reading any other percentile later.
+  test("the summary states each frame's lateness from when it fell due, and writes the histogram it read that from", async () => {
+    const { feeds, note, state, log, clock } = harness({
+      motion: "moving",
+      renderMs: 5,
+    });
+    note(S, "bar");
+    const close = feeds.subscribe(
+      S,
+      sub(() => {}),
+    );
+    await clock.settle(1000);
+    close();
+    const summary = log.at(-1)!;
+    // Every render takes 5 ms and starts the moment its frame falls due, so
+    // each frame is drawn 5 ms after it fell due.
+    const fiveMs = `n:${state.renders},p50:5\\.00,p90:5\\.00,p99:5\\.00,p99\\.9:5\\.00,max:5\\.00,mean:5\\.00,stddev:0\\.00`;
+    expect(summary).toMatch(new RegExp(` draw=${fiveMs} `));
+    expect(summary).toMatch(new RegExp(` lateness=${fiveMs} `));
+    const logged = decodeFromCompressedBase64(
+      / latenessHistogram=(\S+)/.exec(summary)![1]!,
+    );
+    expect(logged.totalCount).toBe(state.renders);
+    // In µs, to the histogram's three significant digits.
+    expect(logged.getValueAtPercentile(99) / 1000).toBeCloseTo(5, 2);
+  });
+
+  // [LAW:nothing-unseen] A draw that overruns its period makes the next frame
+  // late from the moment it fell due, not from when it was armed: with 60 ms
+  // renders and a 20 ms period, each frame falls due 20 ms after the last was
+  // drawn for, starts 40 ms past that, and lands 60 ms later.
+  test("a frame armed after it fell due is late from the moment it fell due", async () => {
+    const { feeds, note, log, clock } = harness({
+      motion: "moving",
+      renderMs: 60,
+    });
+    note(S, "bar");
+    const close = feeds.subscribe(
+      S,
+      sub(() => {}),
+    );
+    await clock.settle(1000);
+    close();
+    expect(log.at(-1)).toMatch(/ lateness=n:\d+,p50:100\.00,/);
+  });
+
+  // [LAW:one-source-of-truth] A running summary states its distributions but
+  // writes no histogram: each would hold every frame since the feed opened, so
+  // a merge of a day's summaries would count early frames once a minute.
+  test("only the closing summary writes the histograms, so each frame is logged in one", async () => {
+    const { feeds, note, log, clock } = harness({ motion: "moving" });
+    note(S, "bar");
+    const close = feeds.subscribe(
+      S,
+      sub(() => {}),
+    );
+    await clock.settle(61_000);
+    const running = log.find((l) => / running /.test(l))!;
+    expect(running).toMatch(/ lateness=n:/);
+    expect(running).not.toMatch(/Histogram=/);
+    close();
+    expect(log.at(-1)).toMatch(/ closed .* latenessHistogram=\S+$/);
   });
 
   // brandon-unfiled-3248.8ro6 step 7: what the feed's frames evaluated rides

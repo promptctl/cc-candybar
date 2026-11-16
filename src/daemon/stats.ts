@@ -2,7 +2,14 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
+import {
+  durationHistogram,
+  durationsOf,
+  recordMs,
+  type Histogram,
+} from "./durations.js";
 import type {
+  Durations,
   RunStats,
   TmuxStatusStats,
   FeedStats,
@@ -47,12 +54,6 @@ const NO_RUNS: SourceRunsStats["shell"] = {
 // workload ever sustains higher rates.
 const ROLLING_WINDOW_MS = 60_000;
 const ROLLING_BUFFER_CAP = 16384;
-
-// Reservoir-sample histogram (16 entries) per category — sufficient for
-// rough p50/p99 without unbounded memory. Replacement uses a simple
-// counter-mod-N strategy: deterministic and adequate for human-eyeball
-// dashboards (no statistical claim of unbiased sampling).
-const HISTOGRAM_CAP = 16;
 
 export class RuntimeStats {
   readonly startedAt: Date;
@@ -107,11 +108,8 @@ export class RuntimeStats {
   // category's interval had not passed, or the caller had aborted first.
   private readonly subprocessRefusals = new Map<LaunchCategory, number>();
   private readonly subprocessCount = new Map<LaunchCategory, number>();
-  private readonly subprocessHistogram = new Map<LaunchCategory, number[]>();
-  private readonly subprocessHistogramRotator = new Map<
-    LaunchCategory,
-    number
-  >();
+  private readonly subprocessDurations = new Map<LaunchCategory, Histogram>();
+  private readonly took = durationHistogram();
   private readonly rollingTimestamps: Monotonic[] = [];
   private rollingHead = 0;
 
@@ -172,19 +170,15 @@ export class RuntimeStats {
   }
 
   private recordDuration(category: LaunchCategory, durationMs: number): void {
-    let hist = this.subprocessHistogram.get(category);
-    if (!hist) {
-      hist = [];
-      this.subprocessHistogram.set(category, hist);
-    }
-    if (hist.length < HISTOGRAM_CAP) {
-      hist.push(durationMs);
-      return;
-    }
-    const idx =
-      (this.subprocessHistogramRotator.get(category) ?? 0) % HISTOGRAM_CAP;
-    hist[idx] = durationMs;
-    this.subprocessHistogramRotator.set(category, idx + 1);
+    const held = this.subprocessDurations.get(category);
+    const hist = held ?? durationHistogram();
+    if (held === undefined) this.subprocessDurations.set(category, hist);
+    recordMs(hist, durationMs);
+  }
+
+  // A render's duration, from its start to its answer.
+  recordTook(tookMs: number): void {
+    recordMs(this.took, tookMs);
   }
 
   private snapshotSubprocesses(): StatsSnapshot["subprocesses"] {
@@ -195,7 +189,8 @@ export class RuntimeStats {
     }
 
     // [LAW:one-source-of-truth] Snapshot includes only categories that have
-    // actually executed — same shape as p50/p99 below. Consumers wanting the
+    // actually executed, as `durations` below holds only those that have
+    // ended. Consumers wanting the
     // full closed list can read LAUNCH_CATEGORIES (exported from src/proc/launch)
     // and treat missing keys as zero.
     const byCategory: Record<string, number> = {};
@@ -203,21 +198,9 @@ export class RuntimeStats {
       if (n > 0) byCategory[cat] = n;
     }
 
-    const p50: Record<string, number> = {};
-    const p99: Record<string, number> = {};
-    for (const [cat, hist] of this.subprocessHistogram) {
-      if (hist.length === 0) continue;
-      const sorted = [...hist].sort((a, b) => a - b);
-      const p50idx = Math.floor(sorted.length * 0.5);
-      const p99idx = Math.min(
-        sorted.length - 1,
-        Math.floor(sorted.length * 0.99),
-      );
-      const p50val = sorted[p50idx];
-      const p99val = sorted[p99idx];
-      if (p50val !== undefined) p50[cat] = p50val;
-      if (p99val !== undefined) p99[cat] = p99val;
-    }
+    const durations: Record<string, Durations> = {};
+    for (const [cat, hist] of this.subprocessDurations)
+      durations[cat] = durationsOf(hist);
 
     return {
       total: this.subprocessTotal,
@@ -229,8 +212,7 @@ export class RuntimeStats {
       drainedBytes: this.subprocessDrainedBytes,
       drainsCut: this.subprocessDrainsCut,
       pipeErrors: this.subprocessPipeErrors,
-      p50DurationMs: p50,
-      p99DurationMs: p99,
+      durations,
     };
   }
 
@@ -385,6 +367,7 @@ export class RuntimeStats {
         errored: this.requestsErrored,
         timedOut: this.requestsTimedOut,
         inFlight: this.inFlight,
+        took: durationsOf(this.took),
       },
       unknownHookFields: [...this.unknownHookFields],
       gitCache: extras.gitCache,

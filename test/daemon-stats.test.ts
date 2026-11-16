@@ -1,5 +1,20 @@
 import { RuntimeStats } from "../src/daemon/stats";
-import { type SourceSnapshots } from "../src/daemon/foundations/stats-snapshot";
+import {
+  type Durations,
+  type SourceSnapshots,
+} from "../src/daemon/foundations/stats-snapshot";
+
+// No durations recorded: every reading zero, never NaN.
+const NO_DURATIONS: Durations = {
+  count: 0,
+  p50Ms: 0,
+  p90Ms: 0,
+  p99Ms: 0,
+  p999Ms: 0,
+  maxMs: 0,
+  meanMs: 0,
+  stddevMs: 0,
+};
 import { EMPTY_STORES } from "./helpers/doctor-facts";
 import {
   formatStats,
@@ -99,6 +114,77 @@ const SOURCE_RUNS = {
   watches: 1,
 } as const;
 
+// What the daemon's parts report beside the counters RuntimeStats owns.
+const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
+  sourceDigest: null,
+  gitCache: {
+    size: 4,
+    held: 1,
+    hits: 100,
+    misses: 20,
+    changes: 3,
+    watchers: 2,
+  },
+  usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
+  sources: SOURCES,
+  fileEvents: FILE_EVENTS,
+  sourceRuns: SOURCE_RUNS,
+  transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
+  renderCache: {
+    size: 3,
+    held: 1,
+    retired: 0,
+    compiles: 1,
+    views: 0,
+    pinned: 0,
+    due: 0,
+    retiredViews: 0,
+    accountedBytes: 3,
+    budgetBytes: 9,
+  },
+  collector: { sessions: 1, retiring: 0 },
+  effectCache: { sessions: 2, effects: 5 },
+  menuIdle: { sessions: 2, armed: 1, pending: 0 },
+  journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
+  runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
+  sessionState: { sessions: 2, observers: 11, revision: 7 },
+  frameFeeds: {
+    feeds: 0,
+    subscribers: 0,
+    drawn: 0,
+    pushed: 0,
+    refused: 0,
+    lookups: 0,
+    found: 0,
+  },
+  tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
+  watchersActive: 2,
+  dirWatchesActive: 5,
+  handlerProbes: [{ nonce: "n", delivery: { kind: "forwarder", urlV: 1 } }],
+  clients: [
+    {
+      client: null,
+      sessionId: S1,
+      termCols: 148,
+      rateLimits: "carried",
+      claudeConfigDir: "/c",
+      projectDir: "/p",
+      transcript: { path: "/c/t.jsonl", answered: true },
+      frame: "still",
+      role: "statusline",
+      ago: 4,
+    },
+  ],
+  bundle: "/opt/cc/dist/index.mjs",
+  daemon: {
+    pid: 1234,
+    memory: { kind: "unmeasured" },
+    limit: 1,
+    postMortems: { kind: "ok", value: [] },
+  },
+  doctorStores: EMPTY_STORES,
+};
+
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
     const stats = new RuntimeStats(systemTimekeeper);
@@ -113,75 +199,7 @@ describe("RuntimeStats.snapshot", () => {
     stats.dirWatchesOpened = 9;
     stats.dirWatchesClosed = 4;
 
-    const snap = stats.snapshot({
-      sourceDigest: null,
-      gitCache: {
-        size: 4,
-        held: 1,
-        hits: 100,
-        misses: 20,
-        changes: 3,
-        watchers: 2,
-      },
-      usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
-      sources: SOURCES,
-      fileEvents: FILE_EVENTS,
-      sourceRuns: SOURCE_RUNS,
-      transcriptReads: { reads: 0, bytes: 0, longLines: 0, largestLine: 0 },
-      renderCache: {
-        size: 3,
-        held: 1,
-        retired: 0,
-        compiles: 1,
-        views: 0,
-        pinned: 0,
-        due: 0,
-        retiredViews: 0,
-        accountedBytes: 3,
-        budgetBytes: 9,
-      },
-      collector: { sessions: 1, retiring: 0 },
-      effectCache: { sessions: 2, effects: 5 },
-      menuIdle: { sessions: 2, armed: 1, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
-      runs: { started: 3, failed: 1, timedOut: 1, refused: 2, running: 0 },
-      sessionState: { sessions: 2, observers: 11, revision: 7 },
-      frameFeeds: {
-        feeds: 0,
-        subscribers: 0,
-        drawn: 0,
-        pushed: 0,
-        refused: 0,
-        lookups: 0,
-        found: 0,
-      },
-      tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
-      watchersActive: 2,
-      dirWatchesActive: 5,
-      handlerProbes: [{ nonce: "n", delivery: { kind: "forwarder", urlV: 1 } }],
-      clients: [
-        {
-          client: null,
-          sessionId: S1,
-          termCols: 148,
-          rateLimits: "carried",
-          claudeConfigDir: "/c",
-          projectDir: "/p",
-          transcript: { path: "/c/t.jsonl", answered: true },
-          frame: "still",
-          role: "statusline",
-          ago: 4,
-        },
-      ],
-      bundle: "/opt/cc/dist/index.mjs",
-      daemon: {
-        pid: 1234,
-        memory: { kind: "unmeasured" },
-        limit: 1,
-        postMortems: { kind: "ok", value: [] },
-      },
-      doctorStores: EMPTY_STORES,
-    });
+    const snap = stats.snapshot(EXTRAS);
     expect(snap.handlerProbes).toEqual([
       { nonce: "n", delivery: { kind: "forwarder", urlV: 1 } },
     ]);
@@ -207,6 +225,7 @@ describe("RuntimeStats.snapshot", () => {
       errored: 1,
       timedOut: 2,
       inFlight: 1,
+      took: NO_DURATIONS,
     });
     expect(snap.gitCache.hits).toBe(100);
     expect(snap.gitCache.held).toBe(1);
@@ -246,6 +265,68 @@ describe("RuntimeStats.snapshot", () => {
     const snap = RuntimeStats.referenceSnapshot();
     expect(snap.version).toBe(pkg.version);
     expect(snap.protocolVersion).toBe(PROTOCOL_VERSION);
+  });
+
+  // A percentile over every duration recorded, never a sample of them: with a
+  // thousand renders, the slowest twenty hold the p99 and the slowest one the
+  // max.
+  test("render and launch durations are reported as percentiles of every one recorded", () => {
+    const stats = new RuntimeStats(systemTimekeeper);
+    for (let i = 0; i < 980; i++) stats.recordTook(2);
+    for (let i = 0; i < 19; i++) stats.recordTook(40);
+    stats.recordTook(500);
+    for (let i = 0; i < 100; i++) {
+      stats.launchStats.onStart("git");
+      stats.launchStats.onEnd("git", 19);
+    }
+    const { requests, subprocesses } = stats.snapshot(EXTRAS);
+    expect(requests.took).toMatchObject({
+      count: 1000,
+      p50Ms: 2,
+      p90Ms: 2,
+      maxMs: 500,
+      meanMs: 3.22,
+    });
+    // To the histogram's three significant digits: 40 ms lies in a bucket
+    // whose highest value is 40.03.
+    expect(requests.took.p99Ms).toBeCloseTo(40, 1);
+    expect(requests.took.p999Ms).toBeCloseTo(40, 1);
+    expect(subprocesses.durations["git"]).toEqual({
+      count: 100,
+      p50Ms: 19,
+      p90Ms: 19,
+      p99Ms: 19,
+      p999Ms: 19,
+      maxMs: 19,
+      meanMs: 19,
+      stddevMs: 0,
+    });
+  });
+
+  // A percentile reads the value its bucket stands for, never one rounded
+  // below it: a frame 16.79 ms late does not read as inside a 16.7 ms period.
+  test("a percentile reads no lower than the durations it stands for", () => {
+    const stats = new RuntimeStats(systemTimekeeper);
+    for (let i = 0; i < 100; i++) stats.recordTook(16.79);
+    stats.recordTook(20);
+    expect(stats.snapshot(EXTRAS).requests.took).toMatchObject({
+      p99Ms: 16.8,
+      maxMs: 20,
+    });
+  });
+
+  // A value above where the histogram counts exactly falls in a bucket wider
+  // than a millisecond, whose highest value lies above it; a percentile still
+  // never reads above the largest value recorded.
+  test("no percentile reads above the largest duration recorded", () => {
+    const stats = new RuntimeStats(systemTimekeeper);
+    for (let i = 0; i < 10; i++) {
+      stats.launchStats.onStart("git");
+      stats.launchStats.onEnd("git", 9999);
+    }
+    expect(stats.snapshot(EXTRAS).subprocesses.durations["git"]).toMatchObject(
+      { p50Ms: 9999, p99Ms: 9999, p999Ms: 9999, maxMs: 9999 },
+    );
   });
 });
 
@@ -323,7 +404,22 @@ describe("formatStats", () => {
       heapTotalBytes: 30 * 1024 * 1024,
       externalBytes: 1 * 1024 * 1024,
       arrayBuffersBytes: 256 * 1024,
-      requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
+      requests: {
+        total: 100,
+        errored: 2,
+        timedOut: 1,
+        inFlight: 0,
+        took: {
+          count: 100,
+          p50Ms: 3.1,
+          p90Ms: 5,
+          p99Ms: 11.2,
+          p999Ms: 161,
+          maxMs: 161,
+          meanMs: 4.2,
+          stddevMs: 15.6,
+        },
+      },
       unknownHookFields: ["fast_mode", "x\n  inFlight      9"],
       gitCache: {
         size: 5,
@@ -384,8 +480,7 @@ describe("formatStats", () => {
         drainedBytes: 0,
         drainsCut: 0,
         pipeErrors: 0,
-        p50DurationMs: {},
-        p99DurationMs: {},
+        durations: {},
       },
       nextRestartReason: null,
       handlerProbes: [],
@@ -432,6 +527,9 @@ describe("formatStats", () => {
       "runs.file     entries=0 held=0 failures=0 abandoned=0 last=-",
     );
     expect(out).toContain("runs.watches  1");
+    expect(out).toContain(
+      "took          p50 3.1ms · p90 5ms · p99 11.2ms · max 161ms",
+    );
     expect(out).toContain("refused       1");
     expect(out).toContain("errors        3");
     expect(out).toContain("active        5");
@@ -450,8 +548,7 @@ describe("formatStats", () => {
       subprocesses: {
         ...snap.subprocesses,
         byCategory: { git: 1 },
-        p50DurationMs: {},
-        p99DurationMs: {},
+        durations: {},
         refused: { "click.pbcopy": 3 },
       },
     });
@@ -474,7 +571,13 @@ describe("formatStats", () => {
       heapTotalBytes: 100,
       externalBytes: 0,
       arrayBuffersBytes: 0,
-      requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
+      requests: {
+        total: 0,
+        errored: 0,
+        timedOut: 0,
+        inFlight: 0,
+        took: NO_DURATIONS,
+      },
       unknownHookFields: [],
       gitCache: {
         size: 0,
@@ -535,8 +638,7 @@ describe("formatStats", () => {
         drainedBytes: 0,
         drainsCut: 0,
         pipeErrors: 0,
-        p50DurationMs: {},
-        p99DurationMs: {},
+        durations: {},
       },
       nextRestartReason: null,
       handlerProbes: [],
