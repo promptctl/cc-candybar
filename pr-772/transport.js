@@ -49241,7 +49241,9 @@ var clickLaunchVia = (launcher) => (launch) => launcher.launch({
 });
 async function clickLaunch(launch, opts, what, said2) {
   const result = await launch(opts);
-  return result.ok ? said2 : clickFailed(result, what);
+  if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
+  const held = clickFailed(result, what);
+  return { outcome: { kind: "skipped", reason: held }, said: held };
 }
 function clickFailed(r, what) {
   if (r.reason === "rate-limited") return `${what} not run: ${failureText(r)}`;
@@ -74468,29 +74470,25 @@ var Acts = class {
     this.deps = deps;
     const { lanes } = deps;
     this.performers = {
-      copy: async (act2) => did(
-        await clickLaunch(
-          deps.launch,
-          {
-            bin: "/usr/bin/pbcopy",
-            stdinInput: act2.text,
-            category: "click.pbcopy"
-          },
-          "pbcopy",
-          "copied"
-        )
+      copy: (act2) => clickLaunch(
+        deps.launch,
+        {
+          bin: "/usr/bin/pbcopy",
+          stdinInput: act2.text,
+          category: "click.pbcopy"
+        },
+        "pbcopy",
+        "copied"
       ),
-      open: async (act2) => did(
-        await clickLaunch(
-          deps.launch,
-          {
-            bin: "/usr/bin/open",
-            args: ["-a", "Visual Studio Code", act2.target],
-            category: "click.open"
-          },
-          'open -a "Visual Studio Code"',
-          `opened ${act2.target}`
-        )
+      open: (act2) => clickLaunch(
+        deps.launch,
+        {
+          bin: "/usr/bin/open",
+          args: ["-a", "Visual Studio Code", act2.target],
+          category: "click.open"
+        },
+        'open -a "Visual Studio Code"',
+        `opened ${act2.target}`
       ),
       // [LAW:no-ambient-temporal-coupling] A session a restart holds is
       // about to exit its Claude Code: a line typed now would land in the
@@ -74525,19 +74523,25 @@ var Acts = class {
           // in turn with whatever else acts in the pane.
           case "band":
             return did(
-              await bandOn(
-                { ...act2.at, sessionId: act2.session },
-                act2.pane,
-                (pane, line) => this.typed(pane, line),
-                lanes.host,
-                lanes.edge
+              await this.setups.run(
+                act2.session,
+                () => bandOn(
+                  { ...act2.at, sessionId: act2.session },
+                  act2.pane,
+                  (pane, line) => this.typed(pane, line),
+                  lanes.host,
+                  lanes.edge
+                )
               )
             );
           case "pane":
             return did(
-              await this.inPane.run(
-                paneKey(act2.pane),
-                () => act2.on ? paneOn(act2.pane, lanes.host, lanes.edge) : paneOff(act2.pane, lanes.edge)
+              await this.setups.run(
+                act2.session,
+                () => this.inPane.run(
+                  paneKey(act2.pane),
+                  () => act2.on ? paneOn(act2.pane, lanes.host, lanes.edge) : paneOff(act2.pane, lanes.edge)
+                )
               )
             );
         }
@@ -74551,6 +74555,11 @@ var Acts = class {
   // so two at once would both find the bare input box and type into each
   // other.
   inPane = new KeyedSerialQueue();
+  // [LAW:no-ambient-temporal-coupling] A session's lane setups, one at a
+  // time, in the order asked: a band install ends, its /reload-plugins
+  // typed, before a restart the same click asked exits Claude Code, and two
+  // installs never run `claude plugin` over one config at once.
+  setups = new KeyedSerialQueue();
   // The sessions a restart holds now, by how many are queued or running on
   // each: their Claude Code is about to exit.
   restarting = /* @__PURE__ */ new Map();
@@ -74590,7 +74599,12 @@ var Acts = class {
   async restart(session, pane, restart) {
     this.restarting.set(session, (this.restarting.get(session) ?? 0) + 1);
     try {
-      return did(await this.inPane.run(paneKey(pane), restart));
+      return did(
+        await this.setups.run(
+          session,
+          () => this.inPane.run(paneKey(pane), restart)
+        )
+      );
     } finally {
       const left = this.restarting.get(session) - 1;
       if (left === 0) this.restarting.delete(session);
@@ -75061,7 +75075,7 @@ function putBack(written3, cause) {
 var message = (e) => e instanceof Error ? e.message : String(e);
 
 // src/daemon/renderer-host.ts
-var isAct = (effect) => effect.kind !== "present" && effect.kind !== "change";
+var performed = (effect) => effect.kind !== "present" && effect.kind !== "change" && effect.kind !== "approve-repo";
 function rendererHost(name, clock, renderer, log, collector, world) {
   const held = async (input) => {
     const session = sessionOf(input.event);
@@ -75096,7 +75110,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
             );
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
           inTurn2.push(settle3(effect, landed));
-        else if (isAct(effect)) {
+        else {
           const acted = landed.kind === "ok" ? before.then(() => world.perform(effect)) : Promise.resolve(unperformed);
           const settled3 = acted.then((outcome) => settle3(effect, outcome));
           if (outlives(effect)) void settled3;
@@ -75123,7 +75137,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     })
   );
   const settle3 = async (effect, outcome) => {
-    const failed3 = isAct(effect) && (outcome.kind === "failed" || outcome.kind === "refused");
+    const failed3 = performed(effect) && (outcome.kind === "failed" || outcome.kind === "refused");
     if (failed3 && effect.session === null) world.unheard(outcome.reason);
     const delivered = await deliver(
       {
@@ -75196,6 +75210,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
 }
 function sessionOf(event) {
   switch (event.kind) {
+    // A start is every session's: it holds none of them alone.
+    case "start":
+      return null;
     case "config":
     case "request":
       return event.context.hookData.session_id;
@@ -88750,7 +88767,6 @@ var ActsOnTheirWay = class {
 // src/renderer/lane-acts.ts
 init_globals();
 var MAX_SESSIONS_OWED = 1024;
-var NOTHING_OWED = /* @__PURE__ */ new Map();
 var atOf = (req) => ({
   sessionId: req.hookData.session_id,
   tmux: req.hints.tmux,
@@ -88878,10 +88894,10 @@ var LaneActs = class {
   // A request `req` arrived, finding its session's switches at `switches`:
   // the setups its clicks owe are asked now, in its turn's `effects`.
   noted(req, switches, effects) {
-    const at = atOf(req);
-    const owed = this.owed.get(at.sessionId) ?? NOTHING_OWED;
-    this.owed.delete(at.sessionId);
-    this.settle(at, owed, switches, () => "owed", effects);
+    const owed = this.owed.get(req.hookData.session_id);
+    if (owed === void 0) return;
+    this.owed.delete(req.hookData.session_id);
+    this.settle(atOf(req), owed, switches, () => "owed", effects);
   }
   take(sessionId2) {
     const owed = this.owed.get(sessionId2) ?? /* @__PURE__ */ new Map();
@@ -90636,6 +90652,10 @@ function mainRenderer(parts, pushed) {
   let subscriptions = { sources: {}, tmuxStatus: [] };
   const turn = async (event, at, record2, effects) => {
     switch (event.kind) {
+      case "start":
+        for (const { context, worldState } of event.sessions)
+          configureSession(parts, context, worldState, at, record2);
+        return;
       case "config":
         configureSession(parts, event.context, event.worldState, at, record2);
         return;
@@ -92933,30 +92953,23 @@ function createDaemon(inputs) {
     clock,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
-    // gets its `config` with its latest stamp, and every open feed its `pin`,
-    // through the host's one path to the renderer, each turn recorded there.
+    // gets its config with its latest stamp, all in the one `start` turn, so
+    // its output names every session it serves; and every open feed gets its
+    // `pin`. All through the host's one path to the renderer, each turn
+    // recorded there.
     start: async () => {
       const at = instant();
       for (const sessionId2 of frameFeeds.openFeeds())
         parts.renderer.tell({ kind: "pin", session: sessionId2 }, at);
-      await Promise.all(
-        [...collector.liveDocuments()].flatMap(([sessionId2, worldState]) => {
+      const sessions = [...collector.liveDocuments()].flatMap(
+        ([sessionId2, worldState]) => {
           const req = frameFeeds.latest(sessionId2);
-          return req === null ? [] : [
-            parts.renderer.deliver(
-              {
-                kind: "event",
-                at,
-                event: {
-                  kind: "config",
-                  context: located(req),
-                  worldState
-                }
-              },
-              [["why", "renderer-start"]]
-            )
-          ];
-        })
+          return req === null ? [] : [{ context: located(req), worldState }];
+        }
+      );
+      await parts.renderer.deliver(
+        { kind: "event", at, event: { kind: "start", sessions } },
+        [["why", "renderer-start"]]
       );
     },
     ended: (event) => {

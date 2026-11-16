@@ -4,15 +4,22 @@
     {
       "version": "pr-772",
       "ref": "refs/pull/772/merge",
-      "sha": "50f6703fd4ca30e9823122814c9a9971fd278f41",
-      "timestamp": "2026-11-16T20:16:04.681Z",
+      "sha": "432de1c6dbb0b0242b645230233baf9778984dee",
+      "timestamp": "2026-11-16T20:32:46.748Z",
       "commits": [
         {
-          "sha": "50f6703fd4ca30e9823122814c9a9971fd278f41",
+          "sha": "432de1c6dbb0b0242b645230233baf9778984dee",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T20:14:56Z",
-          "message": "Merge fc0609a43a86241fa0a16e03bf1caf8d4bcca5ac into df316f23603ca5bd744a8963232d120351758895\n"
+          "timestamp": "2026-11-16T20:31:48Z",
+          "message": "Merge 64da53dd303705ebbd6382455ee5b8c0eef65bd7 into df316f23603ca5bd744a8963232d120351758895\n"
+        },
+        {
+          "sha": "64da53dd303705ebbd6382455ee5b8c0eef65bd7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T13:31:26-07:00",
+          "message": "fix(acts): the second high review's fixes: setups in turn per session, a renderer start is one turn (candybar-host-renderer-x96a.lhy)\n\n- A session's lane setups run one at a time, beside the one queue per\n  pane: a band install ends, its /reload-plugins typed, before a restart\n  the same click asked begins, and two installs never overlap.\n- A renderer's start is one `start` turn carrying every live session's\n  config, so its first output names every session it serves and the host\n  releases no tmux status row or subscription it still holds for one.\n- A rate-limited copy or open settles skipped, and its act line warns.\n- The trust book's answer lands with the changes and is reported as they\n  are, not as a performed act.\n- A request that owes no lane setup builds nothing.\n"
         },
         {
           "sha": "fc0609a43a86241fa0a16e03bf1caf8d4bcca5ac",
