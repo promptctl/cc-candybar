@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "d94a73968cf18ae0789566c74a2a19558c4a6a55",
-      "timestamp": "2026-11-16T04:03:22.530Z",
+      "sha": "f7442d22183b18f0639b631d9e4dadfa3cc35c4f",
+      "timestamp": "2026-11-16T04:09:17.726Z",
       "commits": [
         {
-          "sha": "d94a73968cf18ae0789566c74a2a19558c4a6a55",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:02:18-07:00",
-          "message": "feat(stats): the spec's assumptions are read from real use, and every timing is a percentile of every value (candybar-host-renderer-x96a.bwr) (#763)\n\n* docs(spec): A-4 stands on three conditions, and A-1's in-process baseline is recorded (candybar-host-renderer-x96a.bwr)\n\n* feat(feed): each feed's summary states its frames' lateness as a distribution, and logs the histogram it read it from (candybar-host-renderer-x96a.bwr)\n\n* feat(stats): every timing candybar reports is a percentile of an HdrHistogram of every value: render times, launches by category and a feed's draws (candybar-host-renderer-x96a.bwr)\n\n* docs(spec): A-1 stands at 30 fps and falls at 60, A-5 stands at both, read from real use (candybar-host-renderer-x96a.bwr)\n\n* fix(stats): one duration histogram reads every timing, a feed logs its histograms once when it closes, and A-5 is judged at the rate it names (candybar-host-renderer-x96a.bwr)\n\n- Every timing is recorded and read through one module: microseconds in a\n  packed HdrHistogram, read as one Durations shape the stats snapshot and the\n  feed's summary both spell. A percentile never reads above the max.\n- A running feed summary states its distributions without the encoded\n  histograms; the closing summary alone writes them, so a merge of closing\n  summaries counts each frame once and the log grows once per feed.\n- The stats snapshot's `took` says it is the render event's, refusals included.\n- Spec §17: A-5 stands at 30 fps, the rate it names, and frames fall short at\n  60; lateness is said to include the draw; A-1's open item is owned by `cwq`.\n\n* fix(stats): a percentile reads the value its bucket stands for, never one rounded below it, and §17 states only what its readings support (candybar-host-renderer-x96a.bwr)\n\n* fix(feed): a frame armed after it fell due is late from the moment it fell due, and §17 reads A-5 strictly (candybar-host-renderer-x96a.bwr)"
+          "sha": "f7442d22183b18f0639b631d9e4dadfa3cc35c4f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-16T04:08:14Z",
+          "message": "chore(release): set `package.json` to 1.223.0\n\n## [1.223.0](https://github.com/promptctl/cc-candybar/compare/v1.222.1...v1.223.0) (2026-11-16)\n\n### Features\n\n* **stats:** the spec's assumptions are read from real use, and every timing is a percentile of every value (candybar-host-renderer-x96a.bwr) ([#763](https://github.com/promptctl/cc-candybar/issues/763)) ([d94a739](https://github.com/promptctl/cc-candybar/commit/d94a73968cf18ae0789566c74a2a19558c4a6a55))\n"
         }
       ]
     },
