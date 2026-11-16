@@ -47,20 +47,25 @@ export function runRenderer(world: World): void {
   const leave = async (code: number): Promise<void> => {
     if (leaving) return;
     leaving = true;
-    // [LAW:no-silent-failure] A flush that fails is said, and the process
-    // still ends.
-    if (renderer !== null)
-      await renderer
+    // [LAW:no-silent-failure] A flush that fails is said, whether its turn
+    // threw or the renderer rejected (as the host's ask judges a push), and
+    // the process still ends.
+    if (renderer !== null) {
+      const flushed = await renderer
         .answer({
           kind: "adapter",
           push: { kind: "close-session-state" },
           at: instantAt(world.clock),
         })
-        .catch((thrown: unknown) =>
-          process.stderr.write(
-            `the session state did not flush: ${failureOf(thrown).detail}\n`,
-          ),
+        .catch(
+          (thrown: unknown) =>
+            ({ kind: "threw", failure: failureOf(thrown) }) as const,
         );
+      if (flushed.kind === "threw")
+        process.stderr.write(
+          `the session state did not flush: ${flushed.failure.detail}\n`,
+        );
+    }
     // Each line written so far is on its way before the process ends.
     process.stdout.write("", () => process.exit(code));
   };

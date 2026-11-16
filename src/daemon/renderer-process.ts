@@ -47,6 +47,9 @@ export interface RendererLink {
   // Starts the renderer's process: nothing in process, where it started as
   // it was built.
   arm(): void;
+  // The daemon's close has begun: the live renderer takes the close's steps,
+  // and no renderer starts again.
+  closing(): void;
   // Ends the renderer's process, after the daemon's close has run the
   // renderer's own steps of it.
   close(): Promise<void>;
@@ -101,6 +104,8 @@ function inProcessRenderer(
   return {
     renderer,
     arm: () => {},
+    // Nothing restarts in process.
+    closing: () => {},
     close: async () => {},
     process: () => null,
   };
@@ -209,6 +214,9 @@ type Phase =
       readonly queued: Array<() => void>;
     }
   | { readonly kind: "live"; readonly link: Link }
+  // The daemon's close has begun: the live renderer takes its steps, and its
+  // end starts no other.
+  | { readonly kind: "closing"; readonly link: Link }
   | {
       readonly kind: "down";
       readonly why: string;
@@ -249,7 +257,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   const watches = new Map<WatchId, Minted<WatchId>>();
 
   const current = (): Link | null =>
-    phase.kind === "starting" || phase.kind === "live" ? phase.link : null;
+    phase.kind === "starting" ||
+    phase.kind === "live" ||
+    phase.kind === "closing"
+      ? phase.link
+      : null;
   const down = (): RendererDown =>
     new RendererDown(
       phase.kind === "down"
@@ -437,7 +449,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     link.lines.ended(new RendererDown(`renderer main ${how}`));
     if (link.tookOver) gone.push(link);
     else release(link);
-    if (phase.kind === "closed") return;
+    // [LAW:no-ambient-temporal-coupling] An end once the close has begun
+    // starts nothing: a fresh renderer holds nothing to flush, and the close's
+    // remaining steps would wait on its boot.
+    if (phase.kind === "closing" || phase.kind === "closed") {
+      phase = { kind: "closed" };
+      // [LAW:nothing-unseen] Said all the same: one that did not exit may have
+      // ended before its close steps ran.
+      log(
+        how === "exited" ? "info" : "warn",
+        `renderer main[${link.generation}] ${how} in the daemon's close`,
+      );
+      return;
+    }
     const booted = phase.kind === "live";
     const queued = phase.kind === "starting" ? phase.queued : [];
     const lived = clock.monotonic() - link.spawnedAt;
@@ -481,7 +505,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       link.kill.abort(new Error("the renderer stopped answering"));
       return;
     }
-    if (phase.kind === "live" && link.pingSentAt === null) ping(link);
+    // A renderer the close still waits on is judged as a live one is.
+    if (phase.kind !== "starting" && link.pingSentAt === null) ping(link);
   };
   const ping = (link: Link): void => {
     link.pingSentAt = clock.monotonic();
@@ -496,6 +521,48 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   };
   let stopPings: () => void = () => {};
 
+  // [LAW:single-enforcer] How the close ends a renderer: its stdin closes,
+  // and one that has not ended after the grace is signalled.
+  const ending = async (link: Link): Promise<void> => {
+    link.channel.end();
+    const grace = clock.after(CLOSE_GRACE_MS, () =>
+      link.kill.abort(new Error("the daemon closed")),
+    );
+    await link.channel.ended;
+    grace();
+  };
+  // A boot the close ended as it began, ending beside the close's steps.
+  let bootEnded: Promise<void> = Promise.resolve();
+  // [LAW:no-ambient-temporal-coupling] The close has begun, whichever phase it
+  // finds: the live renderer stays to take the close's steps, and nothing else
+  // runs or starts.
+  const closing = (): void => {
+    switch (phase.kind) {
+      case "live":
+        phase = { kind: "closing", link: phase.link };
+        return;
+      // A boot holds nothing to flush, and the close's steps would wait on it:
+      // it ends now, and what waited for it fails as a closed renderer's.
+      case "starting": {
+        const { link, queued } = phase;
+        phase = { kind: "closed" };
+        for (const send of queued) send();
+        bootEnded = ending(link);
+        return;
+      }
+      case "down":
+        phase.cancelRetry();
+        phase = { kind: "closed" };
+        return;
+      case "idle":
+        phase = { kind: "closed" };
+        return;
+      case "closing":
+      case "closed":
+        return;
+    }
+  };
+
   // [LAW:single-enforcer] An input no renderer takes: counted, and said with
   // the count as the next one starts.
   const refusal = (why: RendererDown): RendererDown => {
@@ -505,7 +572,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   // An input goes to the live renderer, waits for the one starting, or fails
   // as no renderer's.
   const sent = <O>(answer: (link: Link) => Promise<O>): Promise<O> => {
-    if (phase.kind === "live") return answer(phase.link);
+    if (phase.kind === "live" || phase.kind === "closing")
+      return answer(phase.link);
     if (phase.kind === "starting") {
       const { queued } = phase;
       return new Promise<O>((resolve, reject) =>
@@ -570,22 +638,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       spawn();
       stopPings = clock.every(PING_PERIOD_MS, pinged, { unref: true });
     },
+    closing,
     close: async () => {
-      const link = current();
-      const queued = phase.kind === "starting" ? phase.queued : [];
-      if (phase.kind === "down") phase.cancelRetry();
+      closing();
+      const link = phase.kind === "closing" ? phase.link : null;
       phase = { kind: "closed" };
-      // What waited for this boot fails as a closed renderer's.
-      for (const send of queued) send();
       stopPings();
-      if (link !== null) {
-        link.channel.end();
-        const grace = clock.after(CLOSE_GRACE_MS, () =>
-          link.kill.abort(new Error("the daemon closed")),
-        );
-        await link.channel.ended;
-        grace();
-      }
+      await Promise.all([bootEnded, link === null ? null : ending(link)]);
       releaseGone();
     },
     process: () => {
