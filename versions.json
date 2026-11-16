@@ -2,81 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-763",
-      "ref": "refs/pull/763/merge",
-      "sha": "fe2d8d4bd39159aebd5850b2e31ce68d12f50630",
-      "timestamp": "2026-11-16T03:55:21.730Z",
-      "commits": [
-        {
-          "sha": "fe2d8d4bd39159aebd5850b2e31ce68d12f50630",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:54:14-07:00",
-          "message": "Merge 85b89c9d0f208c9ae1b992c305b126fb2bd2c99b into 833345462e42c521a828b6776792cc4d1f575249\n"
-        },
-        {
-          "sha": "85b89c9d0f208c9ae1b992c305b126fb2bd2c99b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:54:02-07:00",
-          "message": "fix(feed): a frame armed after it fell due is late from the moment it fell due, and §17 reads A-5 strictly (candybar-host-renderer-x96a.bwr)\n"
-        },
-        {
-          "sha": "89f2d4643e329f7c5a2346634dd3f4945e767720",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:47:55-07:00",
-          "message": "fix(stats): a percentile reads the value its bucket stands for, never one rounded below it, and §17 states only what its readings support (candybar-host-renderer-x96a.bwr)\n"
-        },
-        {
-          "sha": "94b3223cbbda43ae1268797344669293eb375add",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:41:48-07:00",
-          "message": "fix(stats): one duration histogram reads every timing, a feed logs its histograms once when it closes, and A-5 is judged at the rate it names (candybar-host-renderer-x96a.bwr)\n\n- Every timing is recorded and read through one module: microseconds in a\n  packed HdrHistogram, read as one Durations shape the stats snapshot and the\n  feed's summary both spell. A percentile never reads above the max.\n- A running feed summary states its distributions without the encoded\n  histograms; the closing summary alone writes them, so a merge of closing\n  summaries counts each frame once and the log grows once per feed.\n- The stats snapshot's `took` says it is the render event's, refusals included.\n- Spec §17: A-5 stands at 30 fps, the rate it names, and frames fall short at\n  60; lateness is said to include the draw; A-1's open item is owned by `cwq`.\n"
-        },
-        {
-          "sha": "030fe86368e3484c69324f4eefa496d11d242252",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:32:03-07:00",
-          "message": "docs(spec): A-1 stands at 30 fps and falls at 60, A-5 stands at both, read from real use (candybar-host-renderer-x96a.bwr)\n"
-        },
-        {
-          "sha": "fca6081180fa11524c4c96341650db2ce167c608",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:03:31-07:00",
-          "message": "feat(stats): every timing candybar reports is a percentile of an HdrHistogram of every value: render times, launches by category and a feed's draws (candybar-host-renderer-x96a.bwr)\n"
-        },
-        {
-          "sha": "dae4e252701c3789cf0c0f64d178b4cee6150d91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T19:59:35-07:00",
-          "message": "feat(feed): each feed's summary states its frames' lateness as a distribution, and logs the histogram it read it from (candybar-host-renderer-x96a.bwr)\n"
-        },
-        {
-          "sha": "0f9395d6e5a5a8a5b3bac5345f8a824592d8d917",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T18:59:55-07:00",
-          "message": "docs(spec): A-4 stands on three conditions, and A-1's in-process baseline is recorded (candybar-host-renderer-x96a.bwr)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "833345462e42c521a828b6776792cc4d1f575249",
-      "timestamp": "2026-11-16T01:43:13.964Z",
+      "sha": "d94a73968cf18ae0789566c74a2a19558c4a6a55",
+      "timestamp": "2026-11-16T04:03:22.530Z",
       "commits": [
         {
-          "sha": "833345462e42c521a828b6776792cc4d1f575249",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-16T01:42:12Z",
-          "message": "chore(release): set `package.json` to 1.222.1\n\n## [1.222.1](https://github.com/promptctl/cc-candybar/compare/v1.222.0...v1.222.1) (2026-11-16)\n\n### Bug Fixes\n\n* **collector:** tok/s lasts a whole turn, speed configs load again, a quiet session logs nothing and every provider closes (candybar-host-renderer-x96a.xae) ([#761](https://github.com/promptctl/cc-candybar/issues/761)) ([3d8af44](https://github.com/promptctl/cc-candybar/commit/3d8af440ea7624f469ec0bdb62620124ea12c90f))\n"
+          "sha": "d94a73968cf18ae0789566c74a2a19558c4a6a55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T21:02:18-07:00",
+          "message": "feat(stats): the spec's assumptions are read from real use, and every timing is a percentile of every value (candybar-host-renderer-x96a.bwr) (#763)\n\n* docs(spec): A-4 stands on three conditions, and A-1's in-process baseline is recorded (candybar-host-renderer-x96a.bwr)\n\n* feat(feed): each feed's summary states its frames' lateness as a distribution, and logs the histogram it read it from (candybar-host-renderer-x96a.bwr)\n\n* feat(stats): every timing candybar reports is a percentile of an HdrHistogram of every value: render times, launches by category and a feed's draws (candybar-host-renderer-x96a.bwr)\n\n* docs(spec): A-1 stands at 30 fps and falls at 60, A-5 stands at both, read from real use (candybar-host-renderer-x96a.bwr)\n\n* fix(stats): one duration histogram reads every timing, a feed logs its histograms once when it closes, and A-5 is judged at the rate it names (candybar-host-renderer-x96a.bwr)\n\n- Every timing is recorded and read through one module: microseconds in a\n  packed HdrHistogram, read as one Durations shape the stats snapshot and the\n  feed's summary both spell. A percentile never reads above the max.\n- A running feed summary states its distributions without the encoded\n  histograms; the closing summary alone writes them, so a merge of closing\n  summaries counts each frame once and the log grows once per feed.\n- The stats snapshot's `took` says it is the render event's, refusals included.\n- Spec §17: A-5 stands at 30 fps, the rate it names, and frames fall short at\n  60; lateness is said to include the draw; A-1's open item is owned by `cwq`.\n\n* fix(stats): a percentile reads the value its bucket stands for, never one rounded below it, and §17 states only what its readings support (candybar-host-renderer-x96a.bwr)\n\n* fix(feed): a frame armed after it fell due is late from the moment it fell due, and §17 reads A-5 strictly (candybar-host-renderer-x96a.bwr)"
         }
       ]
     },
