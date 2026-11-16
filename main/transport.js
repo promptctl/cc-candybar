@@ -3358,13 +3358,13 @@ function __esDecorate(ctor, descriptorIn, decorators, contextIn, initializers, e
   var kind = contextIn.kind, key = kind === "getter" ? "get" : kind === "setter" ? "set" : "value";
   var target = !descriptorIn && ctor ? contextIn["static"] ? ctor : ctor.prototype : null;
   var descriptor = descriptorIn || (target ? Object.getOwnPropertyDescriptor(target, contextIn.name) : {});
-  var _, done2 = false;
+  var _, done = false;
   for (var i2 = decorators.length - 1; i2 >= 0; i2--) {
     var context = {};
     for (var p2 in contextIn) context[p2] = p2 === "access" ? {} : contextIn[p2];
     for (var p2 in contextIn.access) context.access[p2] = contextIn.access[p2];
     context.addInitializer = function(f) {
-      if (done2) throw new TypeError("Cannot add initializers after decoration has completed");
+      if (done) throw new TypeError("Cannot add initializers after decoration has completed");
       extraInitializers.push(accept(f || null));
     };
     var result = (0, decorators[i2])(kind === "accessor" ? { get: descriptor.get, set: descriptor.set } : descriptor[key], context);
@@ -3380,7 +3380,7 @@ function __esDecorate(ctor, descriptorIn, decorators, contextIn, initializers, e
     }
   }
   if (target) Object.defineProperty(target, contextIn.name, descriptor);
-  done2 = true;
+  done = true;
 }
 function __runInitializers(thisArg, initializers, value) {
   var useValue = arguments.length > 2;
@@ -6959,9 +6959,9 @@ var require_Superblock = __commonJS({
           let length = buf.length;
           try {
             while (length > 0) {
-              const written2 = this.write(fd, buf, offset, length, null);
-              offset += written2;
-              length -= written2;
+              const written3 = this.write(fd, buf, offset, length, null);
+              offset += written3;
+              length -= written3;
             }
           } finally {
             if (!isUserFd)
@@ -11307,9 +11307,9 @@ var require_from = __commonJS({
         const hadError = error !== void 0 && error !== null;
         const hasThrow = typeof iterator.throw === "function";
         if (hadError && hasThrow) {
-          const { value, done: done2 } = await iterator.throw(error);
+          const { value, done } = await iterator.throw(error);
           await value;
-          if (done2) {
+          if (done) {
             return;
           }
         }
@@ -11321,8 +11321,8 @@ var require_from = __commonJS({
       async function next() {
         for (; ; ) {
           try {
-            const { value, done: done2 } = isAsync ? await iterator.next() : iterator.next();
-            if (done2) {
+            const { value, done } = isAsync ? await iterator.next() : iterator.next();
+            if (done) {
               readable.push(null);
             } else {
               const res = value && typeof value.then === "function" ? await value : value;
@@ -13133,9 +13133,9 @@ var require_duplexify = __commonJS({
           while (true) {
             const _promise = promise;
             promise = null;
-            const { chunk: chunk3, done: done2, cb } = await _promise;
+            const { chunk: chunk3, done, cb } = await _promise;
             process2.nextTick(cb);
-            if (done2) return;
+            if (done) return;
             if (signal.aborted)
               throw new AbortError(void 0, {
                 cause: signal.reason
@@ -14112,11 +14112,11 @@ var require_compose = __commonJS({
           d._read = async function() {
             while (true) {
               try {
-                const { value, done: done2 } = await reader.read();
+                const { value, done } = await reader.read();
                 if (!d.push(value)) {
                   return;
                 }
-                if (done2) {
+                if (done) {
                   d.push(null);
                   return;
                 }
@@ -14228,10 +14228,10 @@ var require_operators = __commonJS({
         };
         let next;
         let resume;
-        let done2 = false;
+        let done = false;
         let cnt = 0;
         function onCatch() {
-          done2 = true;
+          done = true;
           afterItemProcessed();
         }
         function afterItemProcessed() {
@@ -14239,7 +14239,7 @@ var require_operators = __commonJS({
           maybeResume();
         }
         function maybeResume() {
-          if (resume && !done2 && cnt < concurrency && queue.length < highWaterMark) {
+          if (resume && !done && cnt < concurrency && queue.length < highWaterMark) {
             resume();
             resume = null;
           }
@@ -14247,7 +14247,7 @@ var require_operators = __commonJS({
         async function pump() {
           try {
             for await (let val of stream) {
-              if (done2) {
+              if (done) {
                 return;
               }
               if (signal.aborted) {
@@ -14269,7 +14269,7 @@ var require_operators = __commonJS({
                 next();
                 next = null;
               }
-              if (!done2 && (queue.length >= highWaterMark || cnt >= concurrency)) {
+              if (!done && (queue.length >= highWaterMark || cnt >= concurrency)) {
                 await new Promise2((resolve) => {
                   resume = resolve;
                 });
@@ -14281,7 +14281,7 @@ var require_operators = __commonJS({
             PromisePrototypeThen(val, afterItemProcessed, onCatch);
             queue.push(val);
           } finally {
-            done2 = true;
+            done = true;
             if (next) {
               next();
               next = null;
@@ -14310,7 +14310,7 @@ var require_operators = __commonJS({
             });
           }
         } finally {
-          done2 = true;
+          done = true;
           if (resume) {
             resume();
             resume = null;
@@ -19358,8 +19358,8 @@ var require_Dir = __commonJS({
         const recursive = options.recursive;
         while (levels.length) {
           const level = levels[levels.length - 1];
-          const { done: done2, value } = level.entries.next();
-          if (done2) {
+          const { done, value } = level.entries.next();
+          if (done) {
             levels.pop();
             continue;
           }
@@ -28784,6 +28784,14 @@ function eventHoldAt(event, holdS, at, render3) {
   if (at < event.at + holdS) return "held";
   return render3 === "request" && !event.answered ? "owed" : "over";
 }
+function joinedEvent(last2, text4, at) {
+  return {
+    text: last2 === null || last2.answered ? text4 : `${last2.text}
+${text4}`,
+    at,
+    answered: false
+  };
+}
 function answeredBy(last2, shown) {
   return !last2.answered && last2.at === shown.at && last2.text === shown.text;
 }
@@ -29829,13 +29837,13 @@ function linkSigner(key) {
       return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
     },
     signLink: (link) => {
-      let done2 = signed.get(link);
-      if (done2 === void 0) {
+      let done = signed.get(link);
+      if (done === void 0) {
         if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
-        done2 = signLinkWith(key, link);
-        signed.set(link, done2);
+        done = signLinkWith(key, link);
+        signed.set(link, done);
       }
-      return done2;
+      return done;
     },
     openLink: (link) => openLinkWith(key, link)
   };
@@ -30015,31 +30023,31 @@ var Runs = class {
   started = 0;
   failed = 0;
   timedOut = 0;
-  refusals = 0;
   closed = false;
   constructor(deps) {
     this.deps = deps;
     this.timeoutMs = deps.timeoutMs ?? RUN_TIMEOUT_MS;
   }
-  // Start one run and return at once. Every source it refreshes reads pending
-  // from now until the program has exited, and then is read fresh.
+  // Start one run; resolves with how it ended. Every source it refreshes
+  // reads pending from now until the program has exited, and then is read
+  // fresh.
   start(run3) {
     if (this.closed) throw new Error("run owner used after close");
     const resumes = run3.refreshes.map(
-      (r) => this.deps.supersede(r.folder, run3.sessionId)
+      (r) => this.deps.supersede(r.folder, run3.session)
     );
     const abort = new AbortController();
     this.inFlight.add(abort);
     this.started++;
-    const [program, ...args] = run3.argv;
+    const { program, args } = run3;
     const startedAt = this.deps.clock.monotonic();
-    void this.deps.launch({
+    return this.deps.launch({
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
       bin: program.includes("/") ? import_node_path.default.resolve(run3.cwd, program) : program,
-      args,
-      envOverlay: run3.envOverlay,
+      args: [...args],
+      envOverlay: run3.env,
       cwd: run3.cwd,
       timeoutMs: this.timeoutMs,
       signal: abort.signal,
@@ -30051,22 +30059,11 @@ var Runs = class {
       for (const resume of resumes) resume();
     });
   }
-  // A link refused before anything ran: counted, and its one event.
-  // The link's id as it arrived: a link refused at the checkpoint never
-  // parsed, so it is not a SessionId.
-  refused(sessionId2, action2, reason) {
-    this.refusals++;
-    this.deps.log(
-      "warn",
-      `run refused sid=${valueOf(sessionId2)} action=${valueOf(action2)} reason=${valueOf(reason)}`
-    );
-  }
   stats() {
     return {
       started: this.started,
       failed: this.failed,
       timedOut: this.timedOut,
-      refused: this.refusals,
       running: this.inFlight.size
     };
   }
@@ -30076,20 +30073,21 @@ var Runs = class {
     this.closed = true;
     for (const abort of this.inFlight) abort.abort();
   }
+  // [LAW:single-enforcer] How the run ended, said on its act's line
+  // (src/daemon/acts.ts), the one line an act's outcome has.
   ended(run3, result, took) {
-    const outcome = outcomeOf(result);
-    this.deps.log(
-      outcome === "ok" || outcome === "aborted" ? "info" : "warn",
-      `run sid=${valueOf(run3.sessionId)} action=${valueOf(run3.action)} program=${valueOf(run3.argv[0])} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`
-    );
-    if (outcome === "timeout") this.timedOut++;
-    if (result.ok || outcome === "aborted") return;
-    if (outcome !== "timeout") this.failed++;
-    this.deps.holdClickError(
-      run3.sessionId,
-      `run ${run3.action}: ${failureText(result)}`,
-      this.deps.now()
-    );
+    const ended = outcomeOf(result);
+    const said2 = `program=${valueOf(run3.program)} ended=${ended} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`;
+    if (ended === "timeout") this.timedOut++;
+    if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
+    if (ended === "aborted")
+      return {
+        outcome: { kind: "closing", reason: "the daemon closed under it" },
+        said: said2
+      };
+    if (ended !== "timeout") this.failed++;
+    const reason = failureText(result);
+    return { outcome: { kind: "failed", reason }, said: `${said2} \u2014 ${reason}` };
   }
 };
 
@@ -33331,12 +33329,12 @@ var ObservableMap = class {
     return makeIterableForMap({
       next() {
         const {
-          done: done2,
+          done,
           value
         } = keys2.next();
         return {
-          done: done2,
-          value: done2 ? void 0 : self2.get(value)
+          done,
+          value: done ? void 0 : self2.get(value)
         };
       }
     });
@@ -33347,12 +33345,12 @@ var ObservableMap = class {
     return makeIterableForMap({
       next() {
         const {
-          done: done2,
+          done,
           value
         } = keys2.next();
         return {
-          done: done2,
-          value: done2 ? void 0 : [value, self2.get(value)]
+          done,
+          value: done ? void 0 : [value, self2.get(value)]
         };
       }
     });
@@ -33610,14 +33608,14 @@ var ObservableSet = class {
       next() {
         const {
           value,
-          done: done2
+          done
         } = values2.next();
-        return !done2 ? {
+        return !done ? {
           value: [value, value],
-          done: done2
+          done
         } : {
           value: void 0,
-          done: done2
+          done
         };
       }
     });
@@ -33633,14 +33631,14 @@ var ObservableSet = class {
       next() {
         const {
           value,
-          done: done2
+          done
         } = values2.next();
-        return !done2 ? {
+        return !done ? {
           value: self2.dehanceValue_(value),
-          done: done2
+          done
         } : {
           value: void 0,
-          done: done2
+          done
         };
       }
     });
@@ -46928,7 +46926,7 @@ var Recolored = class {
     const drawn = colors.drawnColors(depth);
     const { wire, slots } = look;
     const rounded = this.respec(wire, slots, { fg: colors.color?.getTruecolor(theme24, true) ?? slots.fg, bg: colors.bgcolor?.getTruecolor(theme24, false) ?? slots.bg }, depth);
-    const written2 = (now2, before, wrote, drew, round2) => {
+    const written3 = (now2, before, wrote, drew, round2) => {
       if (sameSpec(now2, before))
         return wrote;
       if (now2 === void 0)
@@ -46936,8 +46934,8 @@ var Recolored = class {
       return terminals.has(now2) ? round2 : drew;
     };
     const writes = {
-      color: written2(colors.color, was.color, wire.color, drawn.color, rounded.color),
-      bgcolor: written2(colors.bgcolor, was.bgcolor, wire.bgcolor, drawn.bgcolor, rounded.bgcolor)
+      color: written3(colors.color, was.color, wire.color, drawn.color, rounded.color),
+      bgcolor: written3(colors.bgcolor, was.bgcolor, wire.bgcolor, drawn.bgcolor, rounded.bgcolor)
     };
     return new Segment(segment.text, writesAlike(writes, wire) ? style : style.add(Style.fromColor(writes.color, writes.bgcolor)));
   }
@@ -47914,15 +47912,15 @@ function wheel(curve, z) {
     const indexed = measuredIndexed(depth, theme24);
     const placeOf2 = segmentsOf(drawn);
     return Animation.continuous((t2) => {
-      const written2 = /* @__PURE__ */ new Map();
+      const written3 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
         const turn = hueTurned(color, turned(place, t2));
         return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf2(color, bound)) ?? UNBOUNDED);
       };
       const write = (color, bound, place) => {
         const key = `${keyOf2(color, bound)} ${place.row}:${place.centre}`;
-        const found2 = written2.get(key) ?? choose(color, bound, place);
-        written2.set(key, found2);
+        const found2 = written3.get(key) ?? choose(color, bound, place);
+        written3.set(key, found2);
         return found2;
       };
       return (shown, cell3) => {
@@ -48595,8 +48593,8 @@ function runOf({ text: text4, style }, depth) {
   };
 }
 function runLines(segments, depth) {
-  const written2 = segments.filter((s) => !s.isControl && s.text.length > 0);
-  return Segment.splitLines(written2).map(
+  const written3 = segments.filter((s) => !s.isControl && s.text.length > 0);
+  return Segment.splitLines(written3).map(
     (line) => line.map((segment) => runOf(segment, depth))
   );
 }
@@ -48826,9 +48824,9 @@ function located(req) {
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived3, id2, at, waitEndsAt, facts) {
-  const req = located(arrived3);
-  const done2 = (effect, reason) => void host.deliver(
+async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived2, id2, at, waitEndsAt, facts) {
+  const req = located(arrived2);
+  const done = (effect, reason) => void host.deliver(
     {
       kind: "event",
       at: instantAt(clock),
@@ -48884,14 +48882,14 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
   for (const effect of effects) {
     switch (effect.kind) {
       case "present":
-        if (delivered.kind === "threw") done2(effect, "its turn threw");
+        if (delivered.kind === "threw") done(effect, "its turn threw");
         else if (effect.request !== id2)
-          done2(
+          done(
             effect,
             `presents request ${effect.request}, not this turn's ${id2}`
           );
         else if (answer2 !== null)
-          done2(effect, `a second statusline frame for request ${id2}`);
+          done(effect, `a second statusline frame for request ${id2}`);
         else answer2 = effect;
         break;
       case "change":
@@ -48911,7 +48909,7 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
     resp = RENDER_ANSWERS[req.encoding](parseFrame(presented.frame));
   } catch (e) {
     const failure = failureOf(e);
-    done2(presented, `encoding its frame threw: ${failure.message}`);
+    done(presented, `encoding its frame threw: ${failure.message}`);
     return failed2(host, failure, "its frame could not be encoded: ");
   }
   noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
@@ -48919,7 +48917,7 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
     outcome: { kind: "ok" },
     resp,
     seen: presented.frame.motion,
-    settled: (took) => done2(presented, took ? null : "the client did not take the answer")
+    settled: (took) => done(presented, took ? null : "the client did not take the answer")
   };
 }
 
@@ -49241,11 +49239,14 @@ var clickLaunchVia = (launcher) => (launch) => launcher.launch({
   args: launch.args?.slice(),
   timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
 });
-function clickFailed(r, what, log) {
-  if (r.reason === "rate-limited") {
-    log("warn", failureText(r));
-    return;
-  }
+async function clickLaunch(launch, opts, what, said2) {
+  const result = await launch(opts);
+  if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
+  const held = clickFailed(result, what);
+  return { outcome: { kind: "skipped", reason: held }, said: held };
+}
+function clickFailed(r, what) {
+  if (r.reason === "rate-limited") return `${what} not run: ${failureText(r)}`;
   if (r.reason === "aborted") throw new DaemonClosing(what);
   throw new Error(`${what} failed (${failureText(r)})`);
 }
@@ -49263,10 +49264,12 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
     };
     const job = launcher.launchJobSync(opts, files);
     if (!job.ok) {
-      clickFailed(
-        { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
-        what,
-        log
+      log(
+        "warn",
+        clickFailed(
+          { ...job, stdout: "", stderr: "", exitCode: null, signal: null },
+          what
+        )
       );
       return;
     }
@@ -49293,8 +49296,7 @@ async function clickHandoff(launcher, opts, what, log, boundMs, tmp) {
             exitCode: null,
             signal: null
           },
-          what,
-          log
+          what
         );
         return;
       }
@@ -50309,7 +50311,7 @@ var SessionEffects = class {
         effect: fromGround(begun.effect, ground)
       };
     };
-    const over2 = ({ since, done: done2 }) => done2(at - since);
+    const over2 = ({ since, done }) => done(at - since);
     const shown = (id2, drawing2, last3) => ({
       drawing: drawing2,
       passage: before === null ? null : last3 === void 0 || last3.passage?.name === "dissolve" ? begin("fade", id2, drawing2) : last3.passage !== null && !over2(last3.passage) ? last3.passage : null
@@ -59846,9 +59848,9 @@ var readStores = (stores) => ({
 });
 function oneAskPerClick(edge) {
   const asked2 = /* @__PURE__ */ new Map();
-  const once2 = (question, ask) => {
+  const once2 = (question, ask2) => {
     const key = JSON.stringify(question);
-    const answer2 = asked2.get(key) ?? ask();
+    const answer2 = asked2.get(key) ?? ask2();
     asked2.set(key, answer2);
     return answer2;
   };
@@ -60277,6 +60279,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     if (checked.ok) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
+      parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
     const recorded2 = (rendered) => {
       if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
@@ -60540,20 +60543,27 @@ async function handleClick(parts, verb, value, arrival, facts, click3) {
         latest: session?.ok ? parts.frameFeeds.latest(session.id) : null
       }
     });
-    switch (delivered.kind) {
-      case "answered":
-        facts.push(...delivered.record);
-        return { kind: "ok" };
-      case "threw":
-        facts.push(...delivered.record);
-        return delivered.failure;
-    }
+    facts.push(...delivered.record);
+    if (delivered.kind === "threw") return delivered.failure;
+    const missed = delivered.settled.find(
+      (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped"
+    );
+    return missed === void 0 ? { kind: "ok" } : clickFailure(missed);
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
     __callDispose(_stack, _error, _hasError);
   }
 }
+function clickFailure(outcome) {
+  const kind = CLICK_FAILURE[outcome.kind];
+  return { kind, message: outcome.reason, detail: outcome.reason };
+}
+var CLICK_FAILURE = {
+  refused: "bad-request",
+  failed: "threw",
+  closing: "closing"
+};
 function clickReply(outcome) {
   switch (outcome.kind) {
     case "ok":
@@ -60624,19 +60634,19 @@ function actsDir(stateDir2, entryPath) {
 }
 function judgeAct(facts) {
   if (facts === null) return IDLE;
-  const { act, record: record2, alive, end, lastLine } = facts;
-  if (alive) return { kind: "running", act };
+  const { act: act2, record: record2, alive, end, lastLine } = facts;
+  if (alive) return { kind: "running", act: act2 };
   if (end === null) {
     return {
       kind: "failed",
-      act,
+      act: act2,
       identity: record2.identity,
       reason: "lost: the act ended without a verdict"
     };
   }
-  if (end.kind === "exit" && end.code === 0) return { kind: "succeeded", act };
+  if (end.kind === "exit" && end.code === 0) return { kind: "succeeded", act: act2 };
   const reason = end.kind === "timeout" ? "timeout" : `non-zero (exit ${end.code}): ${lastLine ?? "no output"}`;
-  return { kind: "failed", act, identity: record2.identity, reason };
+  return { kind: "failed", act: act2, identity: record2.identity, reason };
 }
 var filesOf = (actDir) => ({
   stdout: import_node_path15.default.join(actDir, "stdout"),
@@ -60666,10 +60676,10 @@ function lastLineOf(file) {
       return tail.value.buf.toString("utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s !== "").at(-1) ?? null;
   }
 }
-function removeAct(dir, act) {
-  const leaving = import_node_path15.default.join(dir, `.removed-${act}-${process.pid}`);
+function removeAct(dir, act2) {
+  const leaving = import_node_path15.default.join(dir, `.removed-${act2}-${process.pid}`);
   try {
-    fs_default.renameSync(import_node_path15.default.join(dir, String(act)), leaving);
+    fs_default.renameSync(import_node_path15.default.join(dir, String(act2)), leaving);
   } catch (err) {
     if (err.code === "ENOENT") return;
     throw err;
@@ -60693,8 +60703,8 @@ function readRecord(actDir) {
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
-  async function factsOf(act) {
-    const actDir = import_node_path15.default.join(dir, String(act));
+  async function factsOf(act2) {
+    const actDir = import_node_path15.default.join(dir, String(act2));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
@@ -60710,7 +60720,7 @@ function makeActReader(dir, read2, jobs, clock) {
     const end = readJobEnd(files.status);
     const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
     if (!fs_default.existsSync(actDir)) return null;
-    const facts = { act, record: record2, alive: known.ours, end, lastLine };
+    const facts = { act: act2, record: record2, alive: known.ours, end, lastLine };
     if (!facts.alive) known.final = facts;
     return facts;
   }
@@ -60718,16 +60728,16 @@ function makeActReader(dir, read2, jobs, clock) {
     async read() {
       let vanished = null;
       for (; ; ) {
-        const act = actNumbers(dir).at(-1);
-        if (act === void 0) return null;
-        if (act === vanished) {
+        const act2 = actNumbers(dir).at(-1);
+        if (act2 === void 0) return null;
+        if (act2 === vanished) {
           throw new Error(
-            `${import_node_path15.default.join(dir, String(act))}: an act with no record`
+            `${import_node_path15.default.join(dir, String(act2))}: an act with no record`
           );
         }
-        const facts = await factsOf(act);
+        const facts = await factsOf(act2);
         if (facts !== null) return facts;
-        vanished = act;
+        vanished = act2;
       }
     }
   };
@@ -60748,8 +60758,8 @@ function stakeClaim(dir, actDir, record2) {
   }
 }
 async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
-  const act = (after ?? 0) + 1;
-  const actDir = import_node_path15.default.join(dir, String(act));
+  const act2 = (after ?? 0) + 1;
+  const actDir = import_node_path15.default.join(dir, String(act2));
   const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
@@ -60763,8 +60773,8 @@ async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now
       deadline: now2 + timeoutMs
     };
     if (!stakeClaim(dir, actDir, record2)) return CLAIMED_FIRST;
-    if (actNumbers(dir).some((n) => n > act)) {
-      removeAct(dir, act);
+    if (actNumbers(dir).some((n) => n > act2)) {
+      removeAct(dir, act2);
       return CLAIMED_FIRST;
     }
     stood = true;
@@ -60772,10 +60782,10 @@ async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now
     if (stood) job.release();
     else job.withdraw();
   }
-  for (const n of actNumbers(dir).filter((n2) => n2 < act)) {
+  for (const n of actNumbers(dir).filter((n2) => n2 < act2)) {
     removeAct(dir, n);
   }
-  return { ok: true, act };
+  return { ok: true, act: act2 };
 }
 var CLAIMED_FIRST = {
   ok: false,
@@ -62327,10 +62337,10 @@ function confirms(key, disarm, fires) {
   const gates = [...new Set(fires.map((f) => f.when))].filter(
     (g) => g !== "true"
   );
-  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const nameOf3 = (held) => gates.length === 0 ? key : `${key}.${held}`;
   const actions = {};
   for (let held = 0; held < 2 ** gates.length; held++)
-    actions[nameOf2(held)] = {
+    actions[nameOf3(held)] = {
       do: [
         disarm,
         ...fires.filter(
@@ -62338,7 +62348,7 @@ function confirms(key, disarm, fires) {
         ).map((f) => f.action)
       ]
     };
-  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
+  const link = (i2, held) => i2 === gates.length ? `"${nameOf3(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
   return { link: link(0, 0), actions };
 }
 function confirmStep(key, labels, fires) {
@@ -63934,7 +63944,7 @@ function wordsOf(update) {
   }
 }
 var NO_NOTICE = { offer: [], failure: [] };
-function updateNotice(update, act, ctx) {
+function updateNotice(update, act2, ctx) {
   if (update === null) return NO_NOTICE;
   const identity2 = updateIdentity(update);
   if (!ctx.enabled || ctx.dismissed === identity2) return NO_NOTICE;
@@ -63945,8 +63955,8 @@ function updateNotice(update, act, ctx) {
     text: text4,
     copy: text4
   });
-  const failure = act.kind === "failed" && act.identity === identity2 ? [failedText(`${words2.act} failed: ${act.reason}`)] : [];
-  const actSpan = act.kind === "running" ? diagnosticSpan(`[${words2.busy}]`, null) : diagnosticSpan(
+  const failure = act2.kind === "failed" && act2.identity === identity2 ? [failedText(`${words2.act} failed: ${act2.reason}`)] : [];
+  const actSpan = act2.kind === "running" ? diagnosticSpan(`[${words2.busy}]`, null) : diagnosticSpan(
     `[${words2.act}]`,
     effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
   );
@@ -64868,9 +64878,9 @@ var TrailingEdge = class {
     return this.start(key, work);
   }
   start(key, work) {
-    const done2 = this.loop(key, work);
-    this.running.set(key, done2);
-    return done2;
+    const done = this.loop(key, work);
+    this.running.set(key, done);
+    return done;
   }
   async loop(key, work) {
     try {
@@ -65313,7 +65323,7 @@ var GitDataProvider = class {
       startedAt = this.clock.monotonic();
       return this.inner.resolvePullRequest(state.root, remote.value);
     }).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
-    const done2 = lookup2.then((outcome) => {
+    const done = lookup2.then((outcome) => {
       if (pr.inFlight?.key === key) pr.inFlight = null;
       if (this.repos.get(state.root) !== state) return;
       this.prRefreshes.recorded(
@@ -65338,8 +65348,8 @@ var GitDataProvider = class {
       settle(pr, outcome);
       pr.period.landed(prPeriodOf(answer2), at);
     });
-    pr.inFlight = { key, done: done2 };
-    return done2;
+    pr.inFlight = { key, done };
+    return done;
   }
   drop(state) {
     const gone = failed(`git state dropped: ${state.root}`, "read");
@@ -68206,20 +68216,20 @@ function step3(state, entry) {
   const activity = entry.activity;
   if (activity === void 0) return turn;
   let pending2 = turn.pending;
-  let done2 = turn.done;
+  let done = turn.done;
   if (activity.started !== void 0) {
     pending2 = [...pending2, ...activity.started];
   }
   for (const id2 of activity.finished ?? []) {
     const at = pending2.findIndex((call) => call.id === id2);
     if (at < 0) continue;
-    done2 = bump2(done2, pending2[at].name);
+    done = bump2(done, pending2[at].name);
     pending2 = [...pending2.slice(0, at), ...pending2.slice(at + 1)];
   }
   return {
     ...turn,
     pending: pending2,
-    done: done2,
+    done,
     todos: activity.todos ?? turn.todos
   };
 }
@@ -71842,7 +71852,7 @@ var RuntimeStats = class _RuntimeStats {
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
       journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
+      runs: { started: 0, failed: 0, timedOut: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -73488,6 +73498,31 @@ function bindingRestorePlan(prior, listKeys) {
     said: `restored MouseDown1Status to ${prior === null ? "unbound" : JSON.stringify(prior.line)}`
   };
 }
+var DeclaredStatusLines = class {
+  constructor(lines2, paneOf) {
+    this.lines = lines2;
+    this.paneOf = paneOf;
+  }
+  lines;
+  paneOf;
+  declared = /* @__PURE__ */ new Set();
+  // The whole declaration, as the renderer's latest output has it.
+  declare(sessions) {
+    const next = new Set(sessions);
+    for (const session of this.declared)
+      if (!next.has(session)) this.lines.observe(session, null, false);
+    for (const session of next)
+      if (!this.declared.has(session))
+        this.lines.observe(session, this.paneOf(session), true);
+    this.declared = next;
+  }
+  // A request of `session` arrived: its row follows the pane its newest
+  // request reports, which a late older request does not move.
+  arrived(session) {
+    if (this.declared.has(session))
+      this.lines.observe(session, this.paneOf(session), true);
+  }
+};
 var TmuxStatusLines = class {
   constructor(deps) {
     this.deps = deps;
@@ -73498,11 +73533,11 @@ var TmuxStatusLines = class {
   closed = false;
   writes = 0;
   failedWrites = 0;
-  // [LAW:dataflow-not-control-flow] Level-triggered, at events — a request's
-  // arrival with its own hints, a click's commit with its session's latest —
-  // never at a draw: a session whose switch is on and that reported a tmux
-  // pane is held, any other is not. A daemon restart picks each session up at
-  // its next request.
+  // [LAW:dataflow-not-control-flow] Level-triggered, at events — the
+  // renderer's declaration moving, a declared session's request arriving
+  // with its own hints (`DeclaredStatusLines`) — never at a draw: a session
+  // whose switch is on and that reported a tmux pane is held, any other is
+  // not.
   observe(sessionId2, tmux3, on2) {
     if (this.closed) return;
     const held = this.held.get(sessionId2);
@@ -74005,8 +74040,7 @@ function tmuxPaneOf(tmux3) {
   }
   return { kind: "pane", hint: tmux3 };
 }
-async function typeSlash(type3, hint, line) {
-  const pane = tmuxPaneOf(hint);
+async function typeSlash(type3, pane, line) {
   return pane.kind === "refused" ? pane : type3(pane.hint, line);
 }
 var typeInPane = (edge) => async (tmux3, line) => {
@@ -74017,6 +74051,9 @@ var typeInPane = (edge) => async (tmux3, line) => {
   const typed = await edge.type(tmux3, line);
   return typed.kind === "typed" ? { kind: "typed", pane: tmux3.pane } : typed;
 };
+
+// src/daemon/acts.ts
+init_globals();
 
 // src/daemon/lane-setup.ts
 init_globals();
@@ -74179,123 +74216,63 @@ var BAND_CLIENT = import_node_path34.default.join("bin", "cc-candybar-native");
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
-var done = (said2) => ({ kind: "done", said: said2 });
-function paneOf(session) {
-  const pane = tmuxPaneOf(session.hints.tmux);
-  if (pane.kind === "refused") throw new BadVerbArgs(pane.reason);
-  return pane.hint;
-}
-var LANE_SETUP = {
-  band: {
-    on: async (session, host, edge) => {
-      const checkout = sourceCheckoutOf(host.bundle);
-      if (checkout === null) {
-        throw new BadVerbArgs(
-          `${LANES.band.label} runs the band mod from a cc-candybar source checkout, and this daemon runs ${host.bundle} \u2014 run the daemon from a checkout (mod/README.md)`
-        );
-      }
-      const client = import_node_path34.default.join(checkout, BAND_CLIENT);
-      if (!edge.fileExists(client)) {
-        throw new BadVerbArgs(
-          `the band mod starts ${client}, which is not built \u2014 run \`just install-rust\` in ${checkout}`
-        );
-      }
-      return {
-        kind: "underway",
-        said: `installing ${BAND_PLUGIN} from ${checkout}`,
-        finished: installBand(session, checkout, edge)
-      };
-    },
-    // The installed mod draws nothing while the lane is off: the daemon
-    // refuses its subscriber, and it hands the band on.
-    off: async () => done("nothing to stop: the band mod draws nothing while the lane is off")
-  },
-  statusline: {
-    on: async (session, host, edge) => {
-      const tmux3 = paneOf(session);
-      const launcher = attachLauncherOf(host.preload);
-      const missing = [host.preload, launcher].find(
-        (file) => !edge.fileExists(file)
-      );
-      if (missing !== void 0) {
-        throw new BadVerbArgs(
-          `${LANES.statusline.label} restarts Claude Code under the attach launcher, and ${missing} is not there \u2014 run \`cc-candybar install\` (in a checkout, \`pnpm build\`)`
-        );
-      }
-      return {
-        kind: "underway",
-        said: `restarting Claude Code in ${tmux3.pane} under the attach launcher`,
-        finished: restartUnderAttach(
-          session,
-          tmux3,
-          { node: host.node[0], launcher, preload: host.preload },
-          edge
-        )
-      };
-    },
-    // Lane off, the attached statusline is refused frames and shows its
-    // command's output, as a stock one does.
-    off: async () => done(
-      "nothing to stop: the attached statusline draws its command's output while the lane is off"
-    )
-  },
-  pane: {
-    on: async (session, host, edge) => {
-      const tmux3 = paneOf(session);
-      const open2 = await edge.barPanes(tmux3);
-      if (open2.length > 0) {
-        return done(
-          `bar pane ${open2.join(", ")} already draws ${tmux3.pane}'s bar`
-        );
-      }
-      const opened = await edge.openBarPane(
-        tmux3,
-        [...host.node, host.bundle, "bar-pane", tmux3.pane],
-        { CC_CANDYBAR_SOCKET: host.socket }
-      );
-      return done(`opened bar pane ${opened} under ${tmux3.pane}`);
-    },
-    // Off is "no bar pane draws this session's bar", which a session with no
-    // tmux pane already is.
-    off: async (session, _host, edge) => {
-      const pane = tmuxPaneOf(session.hints.tmux);
-      if (pane.kind === "refused") {
-        return done(`no bar pane to close: ${pane.reason}`);
-      }
-      const tmux3 = pane.hint;
-      const open2 = await edge.barPanes(tmux3);
-      for (const pane2 of open2) await edge.closePane(tmux3, pane2);
-      return done(
-        open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`
-      );
-    }
-  },
-  // The daemon draws the tmux status line itself, for every session whose
-  // switch is on (src/daemon/tmux-status.ts), so there is nothing to start or
-  // stop — only a session outside tmux to tell why nothing will be drawn.
-  tmuxStatus: {
-    on: async (session) => {
-      const tmux3 = paneOf(session);
-      return done(`the daemon draws ${tmux3.pane}'s bar in its status line`);
-    },
-    off: async () => done(
-      "nothing to stop: the daemon puts the status line back once the lane is off"
-    )
+async function bandOn(session, pane, type3, host, edge) {
+  const checkout = sourceCheckoutOf(host.bundle);
+  if (checkout === null) {
+    throw new BadVerbArgs(
+      `${LANES.band.label} runs the band mod from a cc-candybar source checkout, and this daemon runs ${host.bundle} \u2014 run the daemon from a checkout (mod/README.md)`
+    );
   }
-};
-async function installBand(session, checkout, edge) {
+  const client = import_node_path34.default.join(checkout, BAND_CLIENT);
+  if (!edge.fileExists(client)) {
+    throw new BadVerbArgs(
+      `the band mod starts ${client}, which is not built \u2014 run \`just install-rust\` in ${checkout}`
+    );
+  }
+  return installBand(session, pane, type3, checkout, edge);
+}
+async function restartClaude(session, tmux3, host, edge) {
+  const launcher = attachLauncherOf(host.preload);
+  const missing = [host.preload, launcher].find(
+    (file) => !edge.fileExists(file)
+  );
+  if (missing !== void 0) {
+    throw new BadVerbArgs(
+      `${LANES.statusline.label} restarts Claude Code under the attach launcher, and ${missing} is not there \u2014 run \`cc-candybar install\` (in a checkout, \`pnpm build\`)`
+    );
+  }
+  return restartUnderAttach(
+    session,
+    tmux3,
+    { node: host.node[0], launcher, preload: host.preload },
+    edge
+  );
+}
+async function paneOn(tmux3, host, edge) {
+  const open2 = await edge.barPanes(tmux3);
+  if (open2.length > 0)
+    return `bar pane ${open2.join(", ")} already draws ${tmux3.pane}'s bar`;
+  const opened = await edge.openBarPane(
+    tmux3,
+    [...host.node, host.bundle, "bar-pane", tmux3.pane],
+    { CC_CANDYBAR_SOCKET: host.socket }
+  );
+  return `opened bar pane ${opened} under ${tmux3.pane}`;
+}
+async function paneOff(tmux3, edge) {
+  const open2 = await edge.barPanes(tmux3);
+  for (const pane of open2) await edge.closePane(tmux3, pane);
+  return open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`;
+}
+async function installBand(session, pane, type3, checkout, edge) {
   const facts = {
     sessionId: session.sessionId,
-    projectDir: session.origin.projectDir,
-    claudeConfigDir: session.hints.claudeConfigDir
+    projectDir: session.projectDir,
+    claudeConfigDir: session.claudeConfigDir ?? void 0
   };
   await edge.claude(["plugin", "marketplace", "add", checkout], facts);
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
-  const typed = await typeSlash(
-    typeInPane(edge.claudeInput),
-    session.hints.tmux,
-    RELOAD_PLUGINS
-  );
+  const typed = await typeSlash(type3, pane, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(
       `the band mod is installed, but /reload-plugins was not typed: ${typed.reason} \u2014 or type /reload-plugins yourself`
@@ -74454,109 +74431,184 @@ function endingLoses(snapshot) {
   }
   return null;
 }
-var MAX_SESSIONS_OWED = 1024;
-var LaneSetups = class {
+
+// src/daemon/acts.ts
+var OUTLIVES = {
+  copy: false,
+  open: false,
+  "type-slash": false,
+  "apply-update": false,
+  run: true,
+  "restart-claude": true,
+  surface: true
+};
+var outlives = (act2) => OUTLIVES[act2.kind];
+function nameOf2(act2) {
+  switch (act2.kind) {
+    case "copy":
+    case "open":
+    case "apply-update":
+      return act2.kind;
+    case "type-slash":
+      return act2.line;
+    case "run":
+      return `run ${act2.action}`;
+    case "restart-claude":
+      return "lane: statusline on";
+    case "surface":
+      return `lane: ${act2.surface} ${act2.on ? "on" : "off"}`;
+  }
+}
+var paneKey = (pane) => `${pane.socket}\0${pane.pane}`;
+var did = (said2) => ({ outcome: { kind: "ok" }, said: said2 });
+var not = (outcome) => ({
+  outcome,
+  said: outcome.reason
+});
+var Acts = class {
   constructor(deps) {
     this.deps = deps;
+    const { lanes } = deps;
+    this.performers = {
+      copy: (act2) => clickLaunch(
+        deps.launch,
+        {
+          bin: "/usr/bin/pbcopy",
+          stdinInput: act2.text,
+          category: "click.pbcopy"
+        },
+        "pbcopy",
+        "copied"
+      ),
+      open: (act2) => clickLaunch(
+        deps.launch,
+        {
+          bin: "/usr/bin/open",
+          args: ["-a", "Visual Studio Code", act2.target],
+          category: "click.open"
+        },
+        'open -a "Visual Studio Code"',
+        `opened ${act2.target}`
+      ),
+      // [LAW:no-ambient-temporal-coupling] A session a restart holds is
+      // about to exit its Claude Code: a line typed now would land in the
+      // shell the restart leaves, so it is refused at once, saying why.
+      "type-slash": async (act2) => {
+        if (this.restarting.has(act2.session))
+          return not({
+            kind: "refused",
+            reason: `a restart holds pane ${act2.pane.pane} \u2014 click again once it has finished`
+          });
+        const typed = await this.typed(act2.pane, act2.line);
+        return typed.kind === "typed" ? did(`typed into ${typed.pane}`) : not({ kind: "refused", reason: typed.reason });
+      },
+      run: (act2) => deps.run(act2),
+      "apply-update": async () => {
+        await deps.applyUpdate();
+        return did("applied");
+      },
+      "restart-claude": (act2) => this.restart(
+        act2.session,
+        act2.pane,
+        () => restartClaude(
+          { ...act2.at, sessionId: act2.session },
+          act2.pane,
+          lanes.host,
+          lanes.edge
+        )
+      ),
+      surface: async (act2) => {
+        switch (act2.surface) {
+          // The install acts in no pane: only its /reload-plugins is typed,
+          // in turn with whatever else acts in the pane.
+          case "band":
+            return did(
+              await this.setups.run(
+                act2.session,
+                () => bandOn(
+                  { ...act2.at, sessionId: act2.session },
+                  act2.pane,
+                  (pane, line) => this.typed(pane, line),
+                  lanes.host,
+                  lanes.edge
+                )
+              )
+            );
+          case "pane":
+            return did(
+              await this.setups.run(
+                act2.session,
+                () => this.inPane.run(
+                  paneKey(act2.pane),
+                  () => act2.on ? paneOn(act2.pane, lanes.host, lanes.edge) : paneOff(act2.pane, lanes.edge)
+                )
+              )
+            );
+        }
+      }
+    };
   }
   deps;
-  // Each session's owed lanes, least recently owed first.
-  owed = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time.
+  // [LAW:no-ambient-temporal-coupling] Whatever acts in a pane, one at a
+  // time, in the order asked: a slash line, the band's /reload-plugins, a
+  // restart, a bar pane split under it. Each reads the pane before it types,
+  // so two at once would both find the bare input box and type into each
+  // other.
+  inPane = new KeyedSerialQueue();
+  // [LAW:no-ambient-temporal-coupling] A session's lane setups, one at a
+  // time, in the order asked: a band install ends, its /reload-plugins
+  // typed, before a restart the same click asked exits Claude Code, and two
+  // installs never run `claude plugin` over one config at once.
   setups = new KeyedSerialQueue();
-  // A click of `sessionId` moved its switches from `before` to `after`.
-  // `session` is the session as its latest request reported it, or null when
-  // this daemon holds none yet.
-  clicked(sessionId2, session, before, after) {
-    const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
-    const owed = this.take(sessionId2);
-    for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
-    const byOf = (lane) => moved.includes(lane) ? "click" : "owed";
-    if (session !== null) {
-      this.settle(session, owed, after, byOf);
-      return;
-    }
-    for (const [lane, from] of owed)
-      if (from === after[lane]) owed.delete(lane);
-    if (moved.length > 0) {
-      const lanes = [...owed.keys()].map(
-        (lane) => `${lane} ${after[lane] ? "on" : "off"}`
-      );
-      this.deps.log(
-        "info",
-        `lane: owed ${lanes.join(",") || "nothing"} (session=${sessionId2})`
-      );
-    }
-    if (owed.size > 0) this.owed.set(sessionId2, owed);
-    for (const [oldest, lanes] of this.owed) {
-      if (this.owed.size <= MAX_SESSIONS_OWED) break;
-      this.owed.delete(oldest);
-      this.deps.log(
-        "warn",
-        `lane: owed dropped sid=${JSON.stringify(oldest)} lanes=${[...lanes.keys()].join(",")}`
-      );
-    }
+  // The sessions a restart holds now, by how many are queued or running on
+  // each: their Claude Code is about to exit.
+  restarting = /* @__PURE__ */ new Map();
+  performers;
+  // A slash line typed into `pane` in its turn.
+  typed(pane, line) {
+    return this.inPane.run(paneKey(pane), () => this.deps.type(pane, line));
   }
-  // A request of `session` arrived, finding its switches at `switches`: the
-  // setups its clicks owe start now.
-  noted(session, switches) {
-    this.settle(session, this.take(session.sessionId), switches, () => "owed");
-  }
-  take(sessionId2) {
-    const owed = this.owed.get(sessionId2) ?? /* @__PURE__ */ new Map();
-    this.owed.delete(sessionId2);
-    return owed;
-  }
-  // [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
-  // `now`, unless the switch stands where the lane already is, and either
-  // way is said, under what started it: this click's move, or one owed from
-  // before.
-  settle(session, owed, now2, byOf) {
-    for (const [lane, from] of owed) {
-      if (now2[lane] !== from) this.start(session, lane, now2[lane], byOf(lane));
-      else
-        this.deps.log(
-          "info",
-          `lane: ${lane} ${from ? "on" : "off"} \u2014 nothing owed: its switch is back where the lane is by=${byOf(lane)} (session=${session.sessionId})`
-        );
-    }
-  }
-  start(session, lane, on2, by) {
-    this.deps.defer(
-      () => void this.setups.run(
-        session.sessionId,
-        () => this.sync(session, lane, on2, by)
-      )
-    );
-  }
-  // Resolves once the setup has finished, however it ended.
-  async sync(session, lane, on2, by) {
-    const where = `by=${by} (session=${session.sessionId})`;
-    const failed3 = (error) => {
-      const text4 = `lane: ${lane} ${on2 ? "on" : "off"}: ${error instanceof Error ? error.message : String(error)}`;
-      this.deps.log("warn", `${text4} ${where}`);
-      this.deps.holdClickError(session.sessionId, text4, this.deps.now());
-    };
-    let outcome;
-    try {
-      outcome = await LANE_SETUP[lane][on2 ? "on" : "off"](
-        session,
-        this.deps.host,
-        this.deps.edge
-      );
-    } catch (error) {
-      failed3(error);
-      return;
-    }
+  // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
+  // throw is classified once, here: a refusal the user can act on, the
+  // daemon's close, or a failure.
+  async perform(act2) {
+    const { outcome, said: said2 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act2);
     this.deps.log(
-      "info",
-      `lane: ${lane} ${on2 ? "on" : "off"} \u2014 ${outcome.said} ${where}`
+      outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
+      `act kind=${act2.kind} sid=${valueOf(act2.session ?? "-")} id=${act2.id} outcome=${outcome.kind} \u2014 ${nameOf2(act2)}: ${said2}`
     );
-    if (outcome.kind === "underway") {
-      await outcome.finished.then(
-        (finished) => this.deps.log("info", `lane: ${lane} ${finished} ${where}`),
-        failed3
+    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act2)}: ${outcome.reason}` };
+  }
+  async performed(act2) {
+    try {
+      return await this.performers[act2.kind](act2);
+    } catch (thrown2) {
+      const failure = failureOf(thrown2);
+      switch (failure.kind) {
+        case "bad-request":
+          return not({ kind: "refused", reason: failure.message });
+        case "closing":
+          return not({ kind: "closing", reason: failure.message });
+        default:
+          return not({ kind: "failed", reason: failure.message });
+      }
+    }
+  }
+  // A restart in `pane`'s turn, holding `session` from now until it has
+  // finished.
+  async restart(session, pane, restart) {
+    this.restarting.set(session, (this.restarting.get(session) ?? 0) + 1);
+    try {
+      return did(
+        await this.setups.run(
+          session,
+          () => this.inPane.run(paneKey(pane), restart)
+        )
       );
+    } finally {
+      const left = this.restarting.get(session) - 1;
+      if (left === 0) this.restarting.delete(session);
+      else this.restarting.set(session, left);
     }
   }
 };
@@ -74625,8 +74677,8 @@ function diffChanges(before, after) {
   return rebuilt.kind === "applied" && rebuilt.text === after ? members : whole;
 }
 function diffNode(at, beforeText, was, afterText, will) {
-  const written2 = textOf(afterText, will);
-  if (textOf(beforeText, was) === written2) return [];
+  const written3 = textOf(afterText, will);
+  if (textOf(beforeText, was) === written3) return [];
   const whole = at.length === 0 ? [
     {
       op: "replace",
@@ -74644,15 +74696,15 @@ function diffNode(at, beforeText, was, afterText, will) {
   ];
   if (was.kind !== "object" || will.kind !== "object") return whole;
   const members = diffMembers(at, beforeText, was, afterText, will);
-  return rebuilds(beforeText, members, at, written2) ? members : whole;
+  return rebuilds(beforeText, members, at, written3) ? members : whole;
 }
-function rebuilds(text4, changes, at, written2) {
+function rebuilds(text4, changes, at, written3) {
   const result = applyChanges(text4, changes);
   if (result.kind !== "applied") return false;
   const parsed2 = parse2(result.text);
   if (parsed2.kind !== "document") return false;
   const node = nodeAt(parsed2.root, at);
-  return node !== void 0 && textOf(result.text, node) === written2;
+  return node !== void 0 && textOf(result.text, node) === written3;
 }
 function diffMembers(at, beforeText, was, afterText, will) {
   const prior = new Map(was.entries.map((e) => [e.key, e.value]));
@@ -74732,178 +74784,7 @@ function addressText(at) {
   return at.length === 0 ? "the whole file" : at.join(".");
 }
 
-// src/daemon/effect-interpreter.ts
-var writeText = (file, text4) => text4 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text4);
-var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.kind === "file" ? "the file as it was read" : read2.text;
-function performChanges(changes) {
-  const rewrites = /* @__PURE__ */ new Map();
-  try {
-    for (const { target, changes: list2 } of changes) {
-      const file = resolvedTarget(target.path);
-      const prior = rewrites.get(file);
-      const was = prior === void 0 ? readConfigText(file) : prior.was;
-      const applied3 = applyChanges(
-        prior === void 0 ? was : prior.will,
-        list2
-      );
-      if (applied3.kind === "moved")
-        return {
-          kind: "refused",
-          reason: `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said(applied3.read)}, it is ${said(applied3.found)}) \u2014 nothing was written`
-        };
-      rewrites.set(file, { file, was, will: applied3.text });
-    }
-  } catch (e) {
-    return { kind: "failed", reason: `config read failed: ${message(e)}` };
-  }
-  const written2 = [];
-  try {
-    for (const rewrite of rewrites.values()) {
-      writeText(rewrite.file, rewrite.will);
-      written2.push(rewrite);
-    }
-    return { kind: "ok" };
-  } catch (e) {
-    return { kind: "failed", reason: putBack(written2, e) };
-  }
-}
-function putBack(written2, cause) {
-  const reason = `config write failed: ${message(cause)}`;
-  try {
-    for (const { file, was } of [...written2].reverse()) writeText(file, was);
-    return `${reason} \u2014 nothing was written`;
-  } catch (e) {
-    return `${reason}; and putting back what was written failed, so it is half-written: ${message(e)}`;
-  }
-}
-var message = (e) => e instanceof Error ? e.message : String(e);
-
-// src/daemon/renderer-host.ts
-function rendererHost(name, clock, renderer, log, collector) {
-  const held = async (input) => {
-    const session = sessionOf(input.event);
-    const release4 = session === null ? () => {
-    } : collector.holding(session);
-    try {
-      const sentAt = clock.monotonic();
-      const { subscriptions, turnMs, ...answered } = await renderer.answer(input);
-      const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
-      const changes = output.effects.filter(
-        (effect) => effect.kind === "change"
-      );
-      const landed = changes.length === 0 ? null : performChanges(changes);
-      const settled3 = output.effects.flatMap(
-        (effect) => effect.kind === "change" ? [settle3(effect, landed)] : input.event.kind === "request" ? [] : [
-          settle3(effect, {
-            kind: "failed",
-            reason: `a ${input.event.kind} turn answers no request`
-          })
-        ]
-      );
-      collector.subscribed(subscriptions);
-      await Promise.all(settled3);
-      return output;
-    } finally {
-      release4();
-    }
-  };
-  const turn = (input) => held(input).catch(
-    (thrown2) => ({
-      kind: "threw",
-      failure: failureOf(thrown2),
-      record: [],
-      effects: [],
-      hopMs: null
-    })
-  );
-  const settle3 = (effect, outcome) => deliver(
-    {
-      kind: "event",
-      at: instantAt(clock),
-      event: {
-        kind: "effect-done",
-        session: effect.session,
-        of: effect.id,
-        outcome
-      }
-    },
-    [["effect", String(effect.id)]]
-  );
-  const record2 = (input, about, delivered) => {
-    const session = sessionOf(input.event);
-    const head = [
-      ["renderer", name],
-      ["input", input.event.kind],
-      ...session === null ? [] : [["sid", session]],
-      ...about
-    ];
-    switch (delivered.kind) {
-      case "answered":
-        if (delivered.record.length > 0)
-          log("info", eventLine("turn", [...head, ...delivered.record]));
-        return;
-      case "threw":
-        if (delivered.failure.kind === "down") return;
-        log(
-          LEVEL[delivered.failure.kind],
-          eventLine("turn", [
-            ...head,
-            ...delivered.record,
-            ["error", delivered.failure.detail]
-          ])
-        );
-    }
-  };
-  const deliver = async (input, about) => {
-    const delivered = await turn(input);
-    record2(input, about, delivered);
-    return delivered;
-  };
-  const ask = async (push, at) => {
-    const output = await renderer.answer({ kind: "adapter", push, at }).catch(
-      (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
-    );
-    if (output.kind === "threw")
-      throw new CrossedFailure({
-        ...output.failure,
-        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`
-      });
-    if (output.reply.kind !== push.kind)
-      throw new Error(
-        `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`
-      );
-    return output.reply;
-  };
-  const tell = (push, at) => void ask(push, at).catch((thrown2) => {
-    const failure = failureOf(thrown2);
-    if (failure.kind !== "down") log("error", failure.detail);
-  });
-  return { name, answer: turn, deliver, ask, tell };
-}
-function sessionOf(event) {
-  switch (event.kind) {
-    case "config":
-    case "request":
-      return event.context.hookData.session_id;
-    case "world-state":
-      return event.worldState.session;
-    case "click":
-      return event.session?.ok ? event.session.id : null;
-    case "retire":
-    case "effect-done":
-    case "menu-idle":
-      return event.session;
-  }
-}
-
-// src/renderer/main.ts
-init_globals();
-
-// src/renderer/draw-bar.ts
-init_globals();
-
-// src/renderer/repo-configs.ts
+// src/config/repo-configs.ts
 init_globals();
 var import_node_path36 = __toESM(require_path_browserify(), 1);
 
@@ -74985,6 +74866,8 @@ function presence(path43) {
 // src/doctor/state-file.ts
 init_globals();
 var import_node_path35 = __toESM(require_path_browserify(), 1);
+var textOf2 = (value) => `${JSON.stringify(value, null, 2)}
+`;
 function stateFile(dir, name, empty2, parse4) {
   const file = import_node_path35.default.join(dir, name);
   const read2 = () => {
@@ -75009,22 +74892,29 @@ function stateFile(dir, name, empty2, parse4) {
     const parsed2 = parse4(doc);
     return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
   };
-  return {
-    read: read2,
-    update: (next) => {
-      const current2 = read2();
-      if (current2.kind === "failed") return current2;
-      const value = next(current2.value);
-      if (value !== current2.value) {
-        writeAtomic(file, `${JSON.stringify(value, null, 2)}
-`);
+  const plan = (next) => {
+    const current2 = read2();
+    if (current2.kind === "failed") return current2;
+    const value = next(current2.value);
+    return {
+      kind: "ok",
+      value: {
+        file,
+        text: value === current2.value ? null : textOf2(value),
+        value
       }
-      return { kind: "ok", value };
-    }
+    };
   };
+  return { read: read2, plan, update: (next) => written2(plan(next)) };
+}
+function written2(planned) {
+  if (planned.kind === "failed") return planned;
+  const { file, text: text4, value } = planned.value;
+  if (text4 !== null) writeAtomic(file, text4);
+  return { kind: "ok", value };
 }
 
-// src/renderer/repo-configs.ts
+// src/config/repo-configs.ts
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
@@ -75042,32 +74932,47 @@ var repoConfigs = (dir) => {
   );
   const loose = stateFile(dir, REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
   const filed = () => fs_default.existsSync(repoConfigsPath(dir));
+  const plan = (next) => {
+    if (filed()) return book.plan(next);
+    const kept = loose.read();
+    if (kept.kind === "failed") return kept;
+    return book.plan(() => next(kept.value));
+  };
   return {
     read: () => (filed() ? book : loose).read(),
-    update: (next) => {
-      if (filed()) return book.update(next);
-      const kept = loose.read();
-      if (kept.kind === "failed") return kept;
-      return book.update(() => next(kept.value));
-    }
+    plan,
+    update: (next) => written2(plan(next))
   };
 };
-function recordAnswer(store, dir, answer2) {
-  let recorded2 = { superseded: [], absent: [], unchecked: [] };
-  const filed = store.update((book) => {
-    const others = Object.keys(book).filter((d) => d !== dir).map((d) => ({ d, found: presence(d) }));
-    recorded2 = {
-      superseded: others.filter(
-        ({ d, found: found2 }) => found2 === "present" && answerDir({ dir: d, link: worktreeLink(d) }) === dir
-      ).map(({ d }) => d),
-      absent: others.filter(({ found: found2 }) => found2 === "absent").map(({ d }) => d),
-      unchecked: others.flatMap(
-        ({ found: found2 }) => typeof found2 === "object" ? [found2] : []
-      )
-    };
-    return withAnswer(book, dir, answer2, recorded2.superseded);
-  });
-  return filed.kind === "failed" ? filed : ok(recorded2);
+function answering(book, dir, answer2) {
+  const others = Object.keys(book).filter((d) => d !== dir).map((d) => ({ d, found: presence(d) }));
+  const recorded2 = {
+    superseded: others.filter(
+      ({ d, found: found2 }) => found2 === "present" && answerDir({ dir: d, link: worktreeLink(d) }) === dir
+    ).map(({ d }) => d),
+    absent: others.filter(({ found: found2 }) => found2 === "absent").map(({ d }) => d),
+    unchecked: others.flatMap(
+      ({ found: found2 }) => typeof found2 === "object" ? [found2] : []
+    )
+  };
+  return {
+    book: withAnswer(book, dir, answer2, recorded2.superseded),
+    recorded: recorded2
+  };
+}
+function answeredBook(stateDir2, answers) {
+  const said2 = [];
+  const planned = repoConfigs(stateDir2).plan(
+    (current2) => answers.reduce((book, { session, dir, answer: answer2 }) => {
+      const answered = answering(book, dir, answer2);
+      const { superseded, absent, unchecked } = answered.recorded;
+      said2.push(
+        `repo-config: ${dir} ${answer2} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${session})`
+      );
+      return answered.book;
+    }, current2)
+  );
+  return planned.kind === "failed" ? planned : ok({ ...planned.value, said: said2 });
 }
 function repoAnswerFields(sessionId2, dir, answer2) {
   return {
@@ -75106,6 +75011,227 @@ function repoQuestions(gate2, sessionId2, signer) {
     };
   });
 }
+
+// src/daemon/effect-interpreter.ts
+var writeText = (file, text4) => text4 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text4);
+var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.kind === "file" ? "the file as it was read" : read2.text;
+function performChanges(changes, book) {
+  const rewrites = /* @__PURE__ */ new Map();
+  let answered = [];
+  try {
+    for (const { target, changes: list2 } of changes) {
+      const file = resolvedTarget(target.path);
+      const prior = rewrites.get(file);
+      const was = prior === void 0 ? readConfigText(file) : prior.was;
+      const applied3 = applyChanges(
+        prior === void 0 ? was : prior.will,
+        list2
+      );
+      if (applied3.kind === "moved")
+        return {
+          kind: "refused",
+          reason: `${addressText(applied3.at)} in ${file} changed since it was read (it was ${said(applied3.read)}, it is ${said(applied3.found)}) \u2014 nothing was written`
+        };
+      rewrites.set(file, { file, was, will: applied3.text });
+    }
+    if (book !== null && book.answers.length > 0) {
+      const planned = answeredBook(book.stateDir, book.answers);
+      if (planned.kind === "failed")
+        return {
+          kind: "failed",
+          reason: `the repository answers were not recorded: ${planned.reason} \u2014 nothing was written`
+        };
+      const { file, text: text4 } = planned.value;
+      answered = planned.value.said;
+      if (text4 !== null) {
+        const at = resolvedTarget(file);
+        rewrites.set(at, { file: at, was: readConfigText(at), will: text4 });
+      }
+    }
+  } catch (e) {
+    return { kind: "failed", reason: `config read failed: ${message(e)}` };
+  }
+  const written3 = [];
+  try {
+    for (const rewrite of rewrites.values()) {
+      writeText(rewrite.file, rewrite.will);
+      written3.push(rewrite);
+    }
+    for (const line of answered) book.said(line);
+    return { kind: "ok" };
+  } catch (e) {
+    return { kind: "failed", reason: putBack(written3, e) };
+  }
+}
+function putBack(written3, cause) {
+  const reason = `config write failed: ${message(cause)}`;
+  try {
+    for (const { file, was } of [...written3].reverse()) writeText(file, was);
+    return `${reason} \u2014 nothing was written`;
+  } catch (e) {
+    return `${reason}; and putting back what was written failed, so it is half-written: ${message(e)}`;
+  }
+}
+var message = (e) => e instanceof Error ? e.message : String(e);
+
+// src/daemon/renderer-host.ts
+var performed = (effect) => effect.kind !== "present" && effect.kind !== "change" && effect.kind !== "approve-repo";
+function rendererHost(name, clock, renderer, log, collector, world) {
+  const held = async (input) => {
+    const session = sessionOf(input.event);
+    const release4 = session === null ? () => {
+    } : collector.holding(session);
+    try {
+      const sentAt = clock.monotonic();
+      const { subscriptions, turnMs, ...answered } = await renderer.answer(input);
+      const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
+      const changes = output.effects.filter(
+        (effect) => effect.kind === "change"
+      );
+      const answers = output.effects.filter(
+        (effect) => effect.kind === "approve-repo"
+      );
+      const landed = world.closing() ? { kind: "closing", reason: "the daemon is closing" } : changes.length + answers.length === 0 ? { kind: "ok" } : performChanges(changes, {
+        stateDir: world.stateDir,
+        answers,
+        said: (line) => log("info", line)
+      });
+      const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
+      const inTurn2 = [];
+      let before = Promise.resolve();
+      for (const effect of output.effects) {
+        if (effect.kind === "present") {
+          if (input.event.kind !== "request")
+            inTurn2.push(
+              settle3(effect, {
+                kind: "failed",
+                reason: `a ${input.event.kind} turn answers no request`
+              })
+            );
+        } else if (effect.kind === "change" || effect.kind === "approve-repo")
+          inTurn2.push(settle3(effect, landed));
+        else {
+          const acted = landed.kind === "ok" ? before.then(() => world.perform(effect)) : Promise.resolve(unperformed);
+          const settled3 = acted.then((outcome) => settle3(effect, outcome));
+          if (outlives(effect)) void settled3;
+          else {
+            inTurn2.push(settled3);
+            before = acted;
+          }
+        }
+      }
+      collector.subscribed(subscriptions);
+      return { ...output, settled: await Promise.all(inTurn2) };
+    } finally {
+      release4();
+    }
+  };
+  const turn = (input) => held(input).catch(
+    (thrown2) => ({
+      kind: "threw",
+      failure: failureOf(thrown2),
+      record: [],
+      effects: [],
+      hopMs: null,
+      settled: []
+    })
+  );
+  const settle3 = async (effect, outcome) => {
+    const failed3 = performed(effect) && (outcome.kind === "failed" || outcome.kind === "refused");
+    if (failed3 && effect.session === null) world.unheard(outcome.reason);
+    const delivered = await deliver(
+      {
+        kind: "event",
+        at: instantAt(clock),
+        event: {
+          kind: "effect-done",
+          session: effect.session,
+          of: effect.id,
+          outcome
+        }
+      },
+      [["effect", String(effect.id)]]
+    );
+    if (failed3 && effect.session !== null && delivered.kind === "threw" && delivered.failure.kind === "down")
+      world.unheard(outcome.reason);
+    return outcome;
+  };
+  const record2 = (input, about, delivered) => {
+    const session = sessionOf(input.event);
+    const head = [
+      ["renderer", name],
+      ["input", input.event.kind],
+      ...session === null ? [] : [["sid", session]],
+      ...about
+    ];
+    switch (delivered.kind) {
+      case "answered":
+        if (delivered.record.length > 0)
+          log("info", eventLine("turn", [...head, ...delivered.record]));
+        return;
+      case "threw":
+        if (delivered.failure.kind === "down") return;
+        log(
+          LEVEL[delivered.failure.kind],
+          eventLine("turn", [
+            ...head,
+            ...delivered.record,
+            ["error", delivered.failure.detail]
+          ])
+        );
+    }
+  };
+  const deliver = async (input, about) => {
+    const delivered = await turn(input);
+    record2(input, about, delivered);
+    return delivered;
+  };
+  const ask2 = async (push, at) => {
+    const output = await renderer.answer({ kind: "adapter", push, at }).catch(
+      (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
+    );
+    if (output.kind === "threw")
+      throw new CrossedFailure({
+        ...output.failure,
+        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
+        detail: `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`
+      });
+    if (output.reply.kind !== push.kind)
+      throw new Error(
+        `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`
+      );
+    return output.reply;
+  };
+  const tell = (push, at) => void ask2(push, at).catch((thrown2) => {
+    const failure = failureOf(thrown2);
+    if (failure.kind !== "down") log("error", failure.detail);
+  });
+  return { name, answer: turn, deliver, ask: ask2, tell };
+}
+function sessionOf(event) {
+  switch (event.kind) {
+    // A start is every session's: it holds none of them alone.
+    case "start":
+      return null;
+    case "config":
+    case "request":
+      return event.context.hookData.session_id;
+    case "world-state":
+      return event.worldState.session;
+    case "click":
+      return event.session?.ok ? event.session.id : null;
+    case "retire":
+    case "effect-done":
+    case "menu-idle":
+      return event.session;
+  }
+}
+
+// src/renderer/main.ts
+init_globals();
+
+// src/renderer/draw-bar.ts
+init_globals();
 
 // src/daemon/foundations/render-origin.ts
 init_globals();
@@ -75227,9 +75353,9 @@ function asColor(value, func) {
   }
   return computable(colour, func, JSON.stringify(value));
 }
-function computable(colour, func, written2) {
+function computable(colour, func, written3) {
   if (colour.alpha === 0) {
-    throw new RangeError(`${func} got ${written2}, which is fully transparent: it draws no colour of its own, so there is nothing to compute with \u2014 use the colour of the surface it sits on, e.g. (color "background")`);
+    throw new RangeError(`${func} got ${written3}, which is fully transparent: it draws no colour of its own, so there is nothing to compute with \u2014 use the colour of the surface it sits on, e.g. (color "background")`);
   }
   return colour;
 }
@@ -82895,7 +83021,7 @@ var NO_FILE = {
 };
 function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
   const presence2 = presenceOf(authoredConfig.config.segments, rendering);
-  const written2 = layerInserts(
+  const written3 = layerInserts(
     { ...authoredConfig, path: filePath2 },
     beneath,
     presence2
@@ -82904,7 +83030,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     const inserted = placeInserts(
       authoredConfig.config,
       cells,
-      written2.authored
+      written3.authored
     );
     return judgeRenderable(
       authoredConfig,
@@ -82913,19 +83039,19 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       beneath,
       inserted.config,
       presence2,
-      written2.dropped,
+      written3.dropped,
       [...inserted.notices, ...refused]
     );
   };
   try {
-    return judge(written2.cells, []);
+    return judge(written3.cells, []);
   } catch (e) {
-    if (!(e instanceof ConfigError) || written2.cells.length === 0) throw e;
+    if (!(e instanceof ConfigError) || written3.cells.length === 0) throw e;
     const bare = judge([], []);
     const own2 = new Set(
       bare.dropped.flatMap((d) => d.issues.map((i2) => i2.message))
     );
-    const { taken, refused } = written2.cells.reduce(
+    const { taken, refused } = written3.cells.reduce(
       (acc, cell3) => {
         try {
           judge([...acc.taken, cell3], []);
@@ -85004,10 +85130,10 @@ function projectActivity(info) {
     }
   };
   const running = encodeTally(info.running);
-  const done2 = encodeTally(info.done);
-  const tool = running === void 0 && done2 === void 0 ? void 0 : {
+  const done = encodeTally(info.done);
+  const tool = running === void 0 && done === void 0 ? void 0 : {
     ...running !== void 0 && { running },
-    ...done2 !== void 0 && { done: done2 }
+    ...done !== void 0 && { done }
   };
   if (info.command === null && todo === void 0 && tool === void 0) {
     return void 0;
@@ -85107,7 +85233,11 @@ init_globals();
 var KEY = "click.error";
 var CLICK_ERROR_HOLD_S = 5;
 function holdClickError(state, sessionId2, text4, at) {
-  const record2 = { text: text4, at, answered: false };
+  const record2 = joinedEvent(
+    lastClickError(state, sessionId2),
+    text4,
+    at
+  );
   state.set(sessionId2, KEY, JSON.stringify(record2));
 }
 function answeredClickError(state, sessionId2, error) {
@@ -85401,14 +85531,17 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
   const { daemon: daemon3 } = document;
   const launched = launcherWarningsAt(daemon3.launcher, at, drawing2.by);
   const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
-  const ended = rendererEndedAt(daemon3.rendererEnded, at, drawing2.by);
-  const eventsShown = [pipeWarning?.event, ended?.event].flatMap(
+  const held = [
+    daemonEventAt("renderer-ended", daemon3.rendererEnded, at, drawing2.by),
+    daemonEventAt("act-failed", daemon3.actFailed, at, drawing2.by)
+  ].flatMap((w) => w === void 0 ? [] : [w]);
+  const eventsShown = [pipeWarning?.event, ...held.map((w) => w.event)].flatMap(
     (e) => e === void 0 ? [] : [e]
   );
   const standing2 = [
     ...daemon3.fileEvents,
     ...launched,
-    ...ended === void 0 ? [] : [ended],
+    ...held,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
     ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
@@ -85550,6 +85683,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
       case "lifeline":
       case "launch-pipes":
       case "renderer-ended":
+      case "act-failed":
       case "when":
         return w.kind;
     }
@@ -85611,8 +85745,8 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     lanes
   };
 }
-function rendererEndedAt(event, at, render3) {
-  return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind: "renderer-ended", message: event.text, event };
+function daemonEventAt(kind, event, at, render3) {
+  return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
 }
 function recordRequest(parts, req) {
   const { sessionState } = parts;
@@ -85627,49 +85761,16 @@ function recordRequest(parts, req) {
     sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
   }
 }
-function arrived2(parts, req, lanes) {
-  const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.noted(laneSessionOf(req), lanes);
-  tmuxStatusLines.observe({
-    sessionId: req.hookData.session_id,
-    tmux: req.hints.tmux,
-    on: lanes.tmuxStatus
-  });
-}
-function laneSessionOf(req) {
-  return {
-    sessionId: req.hookData.session_id,
-    hints: req.hints,
-    origin: req.requested,
-    transcript: req.hookData.transcript_path,
-    answered: answeredOf(req.hookData)
-  };
-}
-function laneClicked(parts, sessionId2, latest, before, after) {
-  const { laneSetups, tmuxStatusLines } = parts;
-  laneSetups.clicked(
-    sessionId2,
-    latest === null ? null : laneSessionOf(latest),
-    before,
-    after
-  );
-  if (latest !== null && before.tmuxStatus !== after.tmuxStatus)
-    tmuxStatusLines.observe({
-      sessionId: sessionId2,
-      tmux: latest.hints.tmux,
-      on: after.tmuxStatus
-    });
-}
-async function answerRequest(parts, req, at, waitMs, feed2, facts) {
+async function answerRequest(parts, req, at, waitMs, feed2, facts, effects) {
   var _stack = [];
   try {
     const { clock, log } = parts;
     const turnFrom = clock.monotonic();
     const setup = __using(_stack, setUpRender(parts, req, at, facts));
-    arrived2(
-      parts,
+    parts.laneActs.noted(
       req,
-      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux))
+      laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
+      effects
     );
     const waitFrom = clock.monotonic();
     const budget = waitMs - (waitFrom - turnFrom);
@@ -85875,18 +85976,18 @@ function placementDrafts(config2, sessionPick) {
   );
 }
 function placementPickProblems(config2, sessionPick, writes) {
-  const written2 = new Map(writes.map((w) => [w.key, w.value]));
+  const written3 = new Map(writes.map((w) => [w.key, w.value]));
   return presetNames(config2.presets).flatMap((preset) => {
     const slots = slotsOf(config2, preset);
     const touched = new Set(
-      slots.filter((s) => written2.has(s.key)).map((s) => s.id)
+      slots.filter((s) => written3.has(s.key)).map((s) => s.id)
     );
     return [...touched].flatMap((id2) => {
       const own2 = slots.filter((s) => s.id === id2);
       const decls = Object.fromEntries(own2.map((s) => [s.setting, s.decl]));
       const values2 = Object.fromEntries(
         own2.map((s) => {
-          const pick2 = written2.get(s.key) ?? sessionPick(s.key);
+          const pick2 = written3.get(s.key) ?? sessionPick(s.key);
           const value = pick2 === null ? void 0 : parseSettingSpelling(s.decl, pick2);
           return [s.setting, value ?? s.saved];
         })
@@ -86133,7 +86234,7 @@ function disclosureNest(config2) {
   return nest;
 }
 function closeNested(nest, read2, writes) {
-  const written2 = new Set(writes.map((w) => w.key));
+  const written3 = new Set(writes.map((w) => w.key));
   const held = (key) => read2(key) ?? nest.defaultOf(key);
   const folds = /* @__PURE__ */ new Set();
   for (const { key, value } of writes) {
@@ -86141,7 +86242,7 @@ function closeNested(nest, read2, writes) {
     if (was === value) continue;
     for (const nested of nest.inside({ key, member: was })) {
       const now2 = held(nested.key);
-      const closes = now2 !== nest.defaultOf(nested.key) && !nested.outside.has(now2) && !written2.has(nested.key);
+      const closes = now2 !== nest.defaultOf(nested.key) && !nested.outside.has(now2) && !written3.has(nested.key);
       if (closes) folds.add(nested.key);
     }
   }
@@ -86949,9 +87050,9 @@ var SettingsHistory = class {
       move: (sessionId2, history) => working.set(sessionId2, history)
     };
     const pending2 = /* @__PURE__ */ new Map();
-    let written2 = false;
+    let written3 = false;
     const note = (sessionId2, change) => {
-      written2 = true;
+      written3 = true;
       const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
       const earlier = changes.get(identity(change));
       changes.set(
@@ -86966,7 +87067,7 @@ var SettingsHistory = class {
       // Every key, since a write of any can move a lane: only settings are steps.
       () => true,
       (sessionId2, key, before, after) => {
-        written2 = true;
+        written3 = true;
         if (!isSettingKey(key) && key !== EDIT_MODE_KEY) return;
         if (key === EDIT_MODE_KEY) {
           const earlier = toggles.get(sessionId2);
@@ -87005,9 +87106,9 @@ var SettingsHistory = class {
         files.land(file, before, after);
       },
       wrote: () => {
-        written2 = true;
+        written3 = true;
       },
-      written: () => written2,
+      written: () => written3,
       undo: (sessionId2) => {
         step4();
         return this.undo(click3, sessionId2);
@@ -87405,22 +87506,10 @@ function requireSessionId(value) {
 function oneArg(value) {
   return decodeWire(() => decodeURIComponent(value));
 }
-async function clickLaunch(launch, opts, what, log) {
-  const result = await launch(opts);
-  if (result.ok) return;
-  clickFailed(result, what, log);
+function ask(ctx, act2) {
+  ctx.acts.ask(ctx.effects, act2);
 }
-function pbcopy(text4, ctx) {
-  return ctx.launch(
-    {
-      bin: "/usr/bin/pbcopy",
-      stdinInput: text4,
-      category: "click.pbcopy"
-    },
-    "pbcopy"
-  );
-}
-var copy = (value, ctx) => pbcopy(oneArg(value), ctx);
+var copy = async (value, ctx) => ask(ctx, { kind: "copy", session: ctx.session, text: oneArg(value) });
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
   "feed"
@@ -87440,16 +87529,9 @@ var copyDiagnostic = async (value, ctx) => {
     throw new BadVerbArgs(
       `that message is no longer listed in session ${sid}'s diagnostics \u2014 open the indicator beside the settings door again and copy from there`
     );
-  await pbcopy(text4, ctx);
+  ask(ctx, { kind: "copy", session: sid, text: text4 });
 };
-var openVscode = (value, ctx) => ctx.launch(
-  {
-    bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", oneArg(value)],
-    category: "click.open"
-  },
-  'open -a "Visual Studio Code"'
-);
+var openVscode = async (value, ctx) => ask(ctx, { kind: "open", session: ctx.session, target: oneArg(value) });
 var setState = async (rawValue, ctx) => {
   const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId2);
@@ -87588,13 +87670,13 @@ function recordedOrigin(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
 }
-function changeDone(ctx, id2, outcome) {
+function changeDone(ctx, id2, outcome, effects) {
   const landed = ctx.configWrites.settled(id2, outcome);
   if (landed === void 0) return false;
-  if (landed !== "owed") changeLanded(ctx, landed);
+  if (landed !== "owed") changeLanded(ctx, landed, effects);
   return true;
 }
-function changeLanded(ctx, { session, files, consequence, outcome }) {
+function changeLanded(ctx, { session, files, answered, consequence, outcome }, effects) {
   const failed3 = [];
   const step4 = (work) => {
     try {
@@ -87606,11 +87688,12 @@ function changeLanded(ctx, { session, files, consequence, outcome }) {
   if (outcome.kind === "ok") {
     step4(() => {
       const origin = recordedOrigin(ctx, session);
-      if (origin !== null && files.includes(originHome(ctx, origin).path))
+      if (origin !== null && (answered || files.includes(originHome(ctx, origin).path)))
         ctx.reloadConfig(origin);
     });
-    step4(consequence);
-  } else failed3.push(outcome.reason);
+    step4(() => consequence(effects));
+  } else if (outcome.kind === "closing") return;
+  else failed3.push(outcome.reason);
   if (failed3.length === 0) return;
   const reason = failed3.join("\n");
   ctx.log("warn", `config change: ${reason} (session=${session})`);
@@ -87822,7 +87905,7 @@ var saveThemeDefault = async (value, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  const written2 = writeThemeDefault(
+  const written3 = writeThemeDefault(
     editStore(ctx, sid),
     home,
     save2.theme,
@@ -87830,7 +87913,7 @@ var saveThemeDefault = async (value, ctx) => {
   );
   const pick2 = (key) => ctx.sessionState.get(sid, key);
   const drafted = new Set(
-    settingDrafts(written2, pick2).map((d) => d.sessionKey)
+    settingDrafts(written3, pick2).map((d) => d.sessionKey)
   );
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey
@@ -87973,10 +88056,7 @@ var redo = async (value, ctx) => {
   ctx.journal.wrote();
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
-var applyUpdate = async (value, ctx) => {
-  requireSessionId(oneArg(value));
-  await ctx.applyUpdate();
-};
+var applyUpdate = async (value, ctx) => ask(ctx, { kind: "apply-update", session: requireSessionId(oneArg(value)) });
 function sessionHints(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
   if (raw === null) {
@@ -88188,15 +88268,15 @@ var slash = async (value, ctx) => {
       `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
     );
   }
-  const result = await ctx.typing(sessionHints(ctx, sid).tmux, action2.slash);
-  if (result.kind === "refused") {
-    ctx.log(
-      "warn",
-      `slash: ${line} refused \u2014 ${result.reason} (session=${sid})`
-    );
-    throw new BadVerbArgs(`${line} was not typed: ${result.reason}`);
-  }
-  ctx.log("info", `slash: typed ${line} into ${result.pane} (session=${sid})`);
+  const pane = tmuxPaneOf(sessionHints(ctx, sid).tmux);
+  if (pane.kind === "refused")
+    throw new BadVerbArgs(`${line} was not typed: ${pane.reason}`);
+  ask(ctx, {
+    kind: "type-slash",
+    session: sid,
+    pane: pane.hint,
+    line: action2.slash
+  });
 };
 function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
   const sid = requireSessionId(sessionId2);
@@ -88226,12 +88306,14 @@ function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
   }
   const sources = ctx.sourcesFor(origin);
   return {
-    sessionId: sid,
+    kind: "run",
+    session: sid,
     action: action2,
-    argv: [program, ...args],
+    program,
+    args,
     // [LAW:single-enforcer] The session's process environment, the action's
     // own variables over it.
-    envOverlay: {
+    env: {
       ...sessionEnv({
         sessionId: sid,
         projectDir: origin.projectDir,
@@ -88249,21 +88331,13 @@ function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     }))
   };
 }
-var run2 = async (value, ctx) => {
-  let named3 = { sessionId: "-", action: "-" };
-  let request2;
-  try {
-    const parts = decodeWire(() => decodeSegments(value));
-    named3 = { sessionId: parts[0] || "-", action: parts[1] || "-" };
-    request2 = runOf3(parts, ctx);
-  } catch (e) {
-    if (e instanceof BadVerbArgs) {
-      ctx.runs.refused(named3.sessionId, named3.action, e.message);
-    }
-    throw e;
-  }
-  ctx.runs.start(request2);
-};
+var run2 = async (value, ctx) => ask(
+  ctx,
+  runOf3(
+    decodeWire(() => decodeSegments(value)),
+    ctx
+  )
+);
 var repoConfig = async (value, ctx) => {
   const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
     () => decodeSegments(value)
@@ -88275,17 +88349,8 @@ var repoConfig = async (value, ctx) => {
       "the answer's signature does not match what it carries: it was not drawn by this daemon"
     );
   }
-  const filed = recordAnswer(repoConfigs(ctx.stateDir), dir, answered);
-  if (filed.kind === "failed") {
-    throw new Error(`${dir} was not ${answered}: ${filed.reason}`);
-  }
+  ctx.configWrites.answer(dir, answered);
   ctx.journal.wrote();
-  const { superseded, absent, unchecked } = filed.value;
-  ctx.log(
-    "info",
-    `repo-config: ${dir} ${answered} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${sid})`
-  );
-  ctx.reloadConfig(sessionOrigin(ctx, sid));
 };
 var LEAF_VERBS = /* @__PURE__ */ new Map([
   [VERB_COPY, inTurn(copy)],
@@ -88320,17 +88385,20 @@ async function perform(verb, value, ctx, gathered) {
   const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
   await step4(ctx);
 }
-async function headGather(rawValue, ctx) {
-  const [head] = batchAdjacentWrites(parseEffects(rawValue));
+async function headGather(steps2, ctx) {
+  const [head] = steps2;
   const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
   return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
 }
-async function foldEffects(rawValue, ctx, gathered) {
+function stepsOf(verb, value) {
+  return batchAdjacentWrites(
+    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }]
+  );
+}
+async function foldEffects(steps2, sid, ctx, gathered) {
   const errors2 = [];
   let operational = false;
-  const effects = parseEffects(rawValue);
-  const session = sessionOfEffects(effects);
-  for (const [i2, { verb, value }] of batchAdjacentWrites(effects).entries()) {
+  for (const [i2, { verb, value }] of steps2.entries()) {
     const leaf = LEAF_VERBS.get(verb);
     if (!leaf) {
       errors2.push(`unknown effect verb "${verb}"`);
@@ -88339,25 +88407,19 @@ async function foldEffects(rawValue, ctx, gathered) {
     try {
       await perform(leaf, value, ctx, i2 === 0 ? gathered : void 0);
     } catch (e) {
-      if (e instanceof DaemonClosing) {
-        if (errors2.length > 0)
-          ctx.log("warn", `dispatch: ${errors2.join("; ")}`);
+      const failure = failureOf(e);
+      if (failure.kind !== "bad-request" && failure.kind !== "threw") {
+        if (errors2.length > 0) ctx.log("warn", `click: ${errors2.join("; ")}`);
         throw e;
       }
-      if (!(e instanceof BadVerbArgs)) operational = true;
-      errors2.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
+      if (failure.kind === "threw") operational = true;
+      errors2.push(`${verb}: ${failure.message}`);
     }
   }
   if (errors2.length > 0) {
-    if (session?.ok) {
-      holdClickError(
-        ctx.sessionState,
-        session.id,
-        errors2.join("\n"),
-        ctx.now()
-      );
-    }
-    const message2 = `dispatch: ${errors2.join("; ")}`;
+    if (sid !== null)
+      holdClickError(ctx.sessionState, sid, errors2.join("\n"), ctx.now());
+    const message2 = errors2.join("; ");
     throw operational ? new Error(message2) : new BadVerbArgs(message2);
   }
 }
@@ -88385,25 +88447,20 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
   );
   const journaling = {
     ...ctx,
+    session: sid,
     sessionState: closing(journal.sessionState),
     journal,
     navigating: closing(navigation.sessionState)
   };
-  const launches = {
-    launch: (opts, what) => turn.landed(clickLaunch(ctx.launch, opts, what, ctx.log)),
-    typing: (hint, line) => turn.landed(typeSlash(ctx.typeSlash, hint, line)),
-    applyUpdate: () => turn.landed(ctx.applyUpdate())
-  };
   try {
     await handler({
       ...journaling,
-      ...launches,
       gather: (work) => turn.landed(work(journaling))
     });
   } catch (e) {
     failures.push(e);
   }
-  const consequence = () => {
+  const consequence = (landedIn) => {
     const failed3 = [];
     for (const step4 of [navigation, journal]) {
       try {
@@ -88419,7 +88476,8 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
           lanes.sessionId,
           lanes.latest,
           journal.written() ? lanes.before : after,
-          after
+          after,
+          landedIn
         );
       } catch (e) {
         failed3.push(e);
@@ -88434,10 +88492,11 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
   }
   throwAll(failures);
 }
-function click(verb, gather, handler) {
+function click(verb) {
   return async (value, ctx) => {
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
+    const steps2 = stepsOf(verb, value);
     return ctx.journalTurns.click(
       verb,
       sid,
@@ -88447,10 +88506,10 @@ function click(verb, gather, handler) {
         gone: ctx.clientGone,
         gathered: ctx.gatherTook
       },
-      () => gather(value, ctx),
+      () => headGather(steps2, ctx),
       (gathered, turn) => journaled(sid, ctx.latest, ctx, ctx.effects, turn, async (c) => {
         try {
-          await handler(value, c, gathered);
+          await foldEffects(steps2, sid, c, gathered);
         } finally {
           if (sid !== null) ctx.clickLanded(sid);
         }
@@ -88458,19 +88517,11 @@ function click(verb, gather, handler) {
     );
   };
 }
-var VERBS = new Map([
-  ...[...LEAF_VERBS].map(
-    ([verb, leaf]) => [
-      verb,
-      click(
-        verb,
-        async (value, ctx) => leaf.gathers ? hoisted(leaf, value, ctx) : void 0,
-        (value, ctx, gathered) => perform(leaf, value, ctx, gathered)
-      )
-    ]
-  ),
-  [VERB_DISPATCH, click(VERB_DISPATCH, headGather, foldEffects)]
-]);
+var VERBS = new Map(
+  [...LEAF_VERBS.keys(), VERB_DISPATCH].map(
+    (verb) => [verb, click(verb)]
+  )
+);
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
@@ -88514,7 +88565,7 @@ function verbsOver(ctx, clicks) {
       }));
     },
     closeIdle: (sessionId2, latest, idle, effects) => closeIdleMenus(sessionId2, latest, idle, ctx, effects),
-    changeDone: (id2, outcome) => changeDone(ctx, id2, outcome)
+    changeDone: (id2, outcome, effects) => changeDone(ctx, id2, outcome, effects)
   };
 }
 
@@ -88687,6 +88738,204 @@ var RenderWarningRecords = class {
   }
 };
 var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
+
+// src/renderer/acts.ts
+init_globals();
+var ActsOnTheirWay = class {
+  constructor(mint, failed3) {
+    this.mint = mint;
+    this.failed = failed3;
+  }
+  mint;
+  failed;
+  owed = /* @__PURE__ */ new Set();
+  // `act` asked of the host, in the turn whose effects are `effects`.
+  ask(effects, act2) {
+    const id2 = this.mint();
+    this.owed.add(id2);
+    effects.push({ ...act2, id: id2 });
+  }
+  // An act's `effect-done`: false for an id no act of this renderer's holds.
+  done(id2, session, outcome) {
+    if (!this.owed.delete(id2)) return false;
+    if (session !== null && (outcome.kind === "failed" || outcome.kind === "refused"))
+      this.failed(session, outcome.reason);
+    return true;
+  }
+};
+
+// src/renderer/lane-acts.ts
+init_globals();
+var MAX_SESSIONS_OWED = 1024;
+var atOf = (req) => ({
+  sessionId: req.hookData.session_id,
+  tmux: req.hints.tmux,
+  session: {
+    projectDir: req.requested.projectDir,
+    claudeConfigDir: req.hints.claudeConfigDir ?? null,
+    transcript: req.hookData.transcript_path,
+    answered: answeredOf(req.hookData)
+  }
+});
+function inPane(at, act2) {
+  const pane = tmuxPaneOf(at.tmux);
+  return pane.kind === "refused" ? pane : act2(pane.hint);
+}
+var act = (request2) => ({ kind: "act", act: request2 });
+var nothing = (said2) => ({ kind: "nothing", said: said2 });
+var LANE_SETUP = {
+  // The install needs no pane: only its `/reload-plugins` does, which the
+  // host refuses with the session's own reason outside tmux.
+  band: {
+    on: (at) => act({
+      kind: "surface",
+      surface: "band",
+      on: true,
+      session: at.sessionId,
+      pane: tmuxPaneOf(at.tmux),
+      at: at.session
+    }),
+    // The installed mod draws nothing while the lane is off: the host
+    // refuses its subscriber, and it hands the band on.
+    off: () => nothing(
+      "nothing to stop: the band mod draws nothing while the lane is off"
+    )
+  },
+  statusline: {
+    on: (at) => inPane(
+      at,
+      (pane) => act({
+        kind: "restart-claude",
+        session: at.sessionId,
+        pane,
+        at: at.session
+      })
+    ),
+    // Lane off, the attached statusline is refused frames and shows its
+    // command's output, as a stock one does.
+    off: () => nothing(
+      "nothing to stop: the attached statusline draws its command's output while the lane is off"
+    )
+  },
+  pane: {
+    on: (at) => inPane(
+      at,
+      (pane) => act({
+        kind: "surface",
+        surface: "pane",
+        on: true,
+        session: at.sessionId,
+        pane
+      })
+    ),
+    // Off is "no bar pane draws this session's bar", which a session with no
+    // tmux pane already is.
+    off: (at) => {
+      const pane = tmuxPaneOf(at.tmux);
+      return pane.kind === "refused" ? nothing(`no bar pane to close: ${pane.reason}`) : act({
+        kind: "surface",
+        surface: "pane",
+        on: false,
+        session: at.sessionId,
+        pane: pane.hint
+      });
+    }
+  },
+  tmuxStatus: {
+    on: (at) => inPane(
+      at,
+      (pane) => nothing(`the daemon draws ${pane.pane}'s bar in its status line`)
+    ),
+    off: () => nothing(
+      "nothing to stop: the daemon puts the status line back once the lane is off"
+    )
+  }
+};
+var LaneActs = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  // Each session's owed lanes, least recently owed first.
+  owed = /* @__PURE__ */ new Map();
+  // A click of `sessionId` moved its switches from `before` to `after`.
+  // `latest` is its newest request the host holds, or null when it holds
+  // none yet. What it asks joins `effects`.
+  clicked(sessionId2, latest, before, after, effects) {
+    const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
+    const owed = this.take(sessionId2);
+    for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
+    const byOf = (lane) => moved.includes(lane) ? "click" : "owed";
+    if (latest !== null) {
+      this.settle(atOf(latest), owed, after, byOf, effects);
+      return;
+    }
+    for (const [lane, from] of owed)
+      if (from === after[lane]) owed.delete(lane);
+    if (moved.length > 0) {
+      const lanes = [...owed.keys()].map(
+        (lane) => `${lane} ${after[lane] ? "on" : "off"}`
+      );
+      this.deps.log(
+        "info",
+        `lane: owed ${lanes.join(",") || "nothing"} (session=${sessionId2})`
+      );
+    }
+    if (owed.size > 0) this.owed.set(sessionId2, owed);
+    for (const [oldest, lanes] of this.owed) {
+      if (this.owed.size <= MAX_SESSIONS_OWED) break;
+      this.owed.delete(oldest);
+      this.deps.log(
+        "warn",
+        `lane: owed dropped sid=${JSON.stringify(oldest)} lanes=${[...lanes.keys()].join(",")}`
+      );
+    }
+  }
+  // A request `req` arrived, finding its session's switches at `switches`:
+  // the setups its clicks owe are asked now, in its turn's `effects`.
+  noted(req, switches, effects) {
+    const owed = this.owed.get(req.hookData.session_id);
+    if (owed === void 0) return;
+    this.owed.delete(req.hookData.session_id);
+    this.settle(atOf(req), owed, switches, () => "owed", effects);
+  }
+  take(sessionId2) {
+    const owed = this.owed.get(sessionId2) ?? /* @__PURE__ */ new Map();
+    this.owed.delete(sessionId2);
+    return owed;
+  }
+  // [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
+  // `now`, unless the switch stands where the lane already is, and either
+  // way is said, under what started it: this click's move, or one owed from
+  // before.
+  settle(at, owed, now2, byOf, effects) {
+    for (const [lane, from] of owed) {
+      const on2 = now2[lane];
+      const what = `lane: ${lane} ${on2 ? "on" : "off"}`;
+      const where = `by=${byOf(lane)} (session=${at.sessionId})`;
+      if (on2 === from) {
+        this.deps.log(
+          "info",
+          `${what} \u2014 nothing owed: its switch is back where the lane is ${where}`
+        );
+        continue;
+      }
+      const setup = LANE_SETUP[lane][on2 ? "on" : "off"](at);
+      switch (setup.kind) {
+        case "act":
+          this.deps.log("info", `${what} \u2014 asked ${where}`);
+          this.deps.ask(effects, setup.act);
+          break;
+        case "nothing":
+          this.deps.log("info", `${what} \u2014 ${setup.said} ${where}`);
+          break;
+        case "refused":
+          this.deps.log("warn", `${what}: ${setup.reason} ${where}`);
+          this.deps.refused(at.sessionId, `${what}: ${setup.reason}`);
+      }
+    }
+  }
+};
 
 // src/renderer/world-states.ts
 init_globals();
@@ -90248,9 +90497,9 @@ var JournalTurns = class {
   // the gather does not, since a gather outlasts a client's budget through no
   // fault of a re-click. With no gather `left` is false, as it was just read.
   click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
-    const arrived3 = this.deps.monotonic();
+    const arrived2 = this.deps.monotonic();
     const inPlace = async () => {
-      placed2(elapsedMs(this.deps, arrived3));
+      placed2(elapsedMs(this.deps, arrived2));
       this.refuseClosed(verb);
       if (await gone()) throw new ClickAbandoned(verb);
       this.refuseClosed(verb);
@@ -90309,11 +90558,13 @@ var ConfigWrites = class {
   landing = null;
   waiting = [];
   closed = false;
+  // The open click's answers to the trust book, in the order it gave them.
+  answers = [];
   // [LAW:one-source-of-truth] `file` as the open click left it: its last
   // write, else the disk, which holds every click ahead of it.
   read(file) {
-    const written2 = this.open.get(file);
-    return written2 === void 0 ? this.disk(file) : written2.after;
+    const written3 = this.open.get(file);
+    return written3 === void 0 ? this.disk(file) : written3.after;
   }
   // A write of the open click, from the file as the click read it (`read`):
   // one change per file, from the click's first read of it to its last write.
@@ -90324,35 +90575,54 @@ var ConfigWrites = class {
       after
     });
   }
-  // The open click is over. Its changes join its turn's effects, and its
-  // consequence waits for them; a click that changed no file has its
-  // consequence now.
+  // The open click answers the trust book for `dir`: it lands with the
+  // click's changes.
+  answer(dir, answer2) {
+    this.answers.push({ dir, answer: answer2 });
+  }
+  // The open click is over. Its changes and its answers join its turn's
+  // effects, and its consequence waits for them; a click that changed no file
+  // and answered nothing has its consequence now.
   seal(effects, session, consequence) {
+    const answers = this.answers;
+    this.answers = [];
     if (this.closed) return this.open.clear();
-    const written2 = [...this.open].flatMap(([path43, { before, after }]) => {
+    const written3 = [...this.open].flatMap(([path43, { before, after }]) => {
       const list2 = diffChanges(before, after);
       return list2.length === 0 ? [] : [{ path: path43, list: list2 }];
     });
-    const files = written2.map(({ path: path43 }) => path43);
+    const files = written3.map(({ path: path43 }) => path43);
     this.open.clear();
-    if (written2.length === 0) return consequence();
+    if (written3.length === 0 && answers.length === 0)
+      return consequence(effects);
     if (session === null)
-      throw new Error(`a click with no session wrote ${files.join(", ")}`);
-    const changes = written2.map(
-      ({ path: path43, list: list2 }) => ({
-        kind: "change",
+      throw new Error(
+        `a click with no session wrote ${[...files, ...answers.map((a) => `the answer for ${a.dir}`)].join(", ")}`
+      );
+    const landing = [
+      ...written3.map(
+        ({ path: path43, list: list2 }) => ({
+          kind: "change",
+          id: this.mint(),
+          session,
+          target: { kind: "layer", path: path43 },
+          changes: list2
+        })
+      ),
+      ...answers.map(({ dir, answer: answer2 }) => ({
+        kind: "approve-repo",
         id: this.mint(),
         session,
-        target: { kind: "layer", path: path43 },
-        changes: list2
-      })
-    );
+        dir,
+        answer: answer2
+      }))
+    ];
     this.landing = {
-      of: { session, files, consequence },
-      owed: new Set(changes.map((c) => c.id)),
+      of: { session, files, answered: answers.length > 0, consequence },
+      owed: new Set(landing.map((c) => c.id)),
       missed: null
     };
-    effects.push(...changes);
+    effects.push(...landing);
   }
   // A change's `effect-done`: the landing once its last change is settled,
   // `owed` while others are still on their way, or undefined for an id no
@@ -90379,9 +90649,13 @@ var ConfigWrites = class {
 // src/renderer/main.ts
 function mainRenderer(parts, pushed) {
   const deliveries = /* @__PURE__ */ new Map();
-  let subscriptions = { sources: {} };
+  let subscriptions = { sources: {}, tmuxStatus: [] };
   const turn = async (event, at, record2, effects) => {
     switch (event.kind) {
+      case "start":
+        for (const { context, worldState } of event.sessions)
+          configureSession(parts, context, worldState, at, record2);
+        return;
       case "config":
         configureSession(parts, event.context, event.worldState, at, record2);
         return;
@@ -90396,7 +90670,8 @@ function mainRenderer(parts, pushed) {
             feeds: event.feeds,
             idleSince: event.idleSince
           },
-          record2
+          record2,
+          effects
         );
         const id2 = parts.mint();
         deliveries.set(id2, delivered);
@@ -90417,11 +90692,12 @@ function mainRenderer(parts, pushed) {
         retireSession(parts, event.session);
         return;
       case "effect-done": {
-        if (parts.verbs.changeDone(event.of, event.outcome)) return;
+        if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
+        if (parts.acts.done(event.of, event.session, event.outcome)) return;
         const delivered = deliveries.get(event.of);
         if (delivered === void 0)
           throw new Error(
-            `effect-done for effect ${event.of}, which is neither a present nor a change on its way`
+            `effect-done for effect ${event.of}, which is no present, change or act on its way`
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
@@ -90458,7 +90734,15 @@ function mainRenderer(parts, pushed) {
       const from = parts.clock.monotonic();
       const effects = [];
       const ended = await turn(input.event, input.at, record2, effects).finally(() => {
-        subscriptions = parts.renderCache.subscriptions();
+        const { sources } = parts.renderCache.subscriptions();
+        subscriptions = {
+          sources,
+          // [LAW:one-source-of-truth] Read off the same open views: a
+          // session whose view closes stops being named, so its row goes.
+          tmuxStatus: Object.keys(sources).filter(
+            (session) => viewLanes(parts, session)?.tmuxStatus === true
+          )
+        };
       }).then(
         () => ({ kind: "answered" }),
         // [LAW:single-enforcer] Classified here, where it was thrown: a
@@ -90494,6 +90778,13 @@ function startOver(inputs, sessionState, history, host) {
   let minted = 0;
   const mint = () => ++minted;
   const configWrites = new ConfigWrites(mint, readConfigText);
+  const actFailed = (session, reason) => holdClickError(sessionState, session, reason, now2());
+  const acts = new ActsOnTheirWay(mint, actFailed);
+  const laneActs = new LaneActs({
+    ask: (effects, act2) => acts.ask(effects, act2),
+    refused: actFailed,
+    log
+  });
   const journalTurns = new JournalTurns({
     monotonic: () => clock.monotonic(),
     changesLanded: () => configWrites.landed()
@@ -90561,7 +90852,8 @@ function startOver(inputs, sessionState, history, host) {
     renderCache,
     worldStates,
     renderWarnings,
-    effectSessions
+    effectSessions,
+    laneActs
   };
   const reloadConfig = (origin) => renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
     kind: "write"
@@ -90576,9 +90868,8 @@ function startOver(inputs, sessionState, history, host) {
     configWrites,
     clickLanded: (sessionId2) => host.menuIdle.clicked(sessionId2, now2()),
     log,
-    launch: host.launch,
+    acts,
     now: now2,
-    applyUpdate: host.applyUpdate,
     doctor: {
       ...machineReads,
       // The load the session's bar is drawn from: its cache entry's load
@@ -90606,7 +90897,6 @@ function startOver(inputs, sessionState, history, host) {
     clients: host.renderSightings,
     bundle: inputs.bundle,
     serving: host.serving,
-    typeSlash: host.typeSlash,
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -90616,10 +90906,9 @@ function startOver(inputs, sessionState, history, host) {
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state.sources,
     links: linkSigner2,
-    runs: host.runs,
     lanes: {
       of: (origin, sessionId2, latest) => lanesAt(parts, origin, sessionId2, latest),
-      clicked: (sessionId2, latest, before, after) => laneClicked(parts, sessionId2, latest, before, after)
+      clicked: (sessionId2, latest, before, after, effects) => laneActs.clicked(sessionId2, latest, before, after, effects)
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
@@ -90688,9 +90977,6 @@ function startOver(inputs, sessionState, history, host) {
       case "watch":
         watches.pushed(push.id, push.heard, push.deaf);
         return { kind: "watch" };
-      case "hold-click-error":
-        holdClickError(sessionState, push.session, push.text, at);
-        return { kind: "hold-click-error" };
       case "reload-every":
         renderCache.reloadEvery({ kind: "events-resumed", since: push.since });
         return { kind: "reload-every" };
@@ -90712,7 +90998,7 @@ function startOver(inputs, sessionState, history, host) {
     }
   };
   return mainRenderer(
-    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint },
+    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint, acts },
     pushed
   );
 }
@@ -90744,10 +91030,6 @@ function bootEnv(env2) {
 var REACH_KINDS = {
   wake: "notice",
   log: "notice",
-  launch: "call",
-  typeSlash: "call",
-  applyUpdate: "call",
-  runs: { start: "notice", refused: "notice" },
   doctor: {
     probeTmux: "call",
     remoteLogin: "call",
@@ -90757,8 +91039,6 @@ var REACH_KINDS = {
     transcript: "call",
     install: "call"
   },
-  laneSetups: { noted: "notice", clicked: "notice" },
-  tmuxStatusLines: { observe: "notice" },
   menuIdle: {
     clicked: "notice",
     clickArrived: "notice",
@@ -92326,16 +92606,18 @@ function createDaemon(inputs) {
     clock
   });
   const daemonFaults = observable.box(
-    { fileEvents: [], launcher: [], rendererEnded: null },
+    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
     { deep: false, equals: compareStructural }
   );
   let rendererEnded = null;
+  let actFailed = null;
   function restateFaults() {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
         launcher: launcher.standing(),
-        rendererEnded
+        rendererEnded,
+        actFailed
       })
     );
   }
@@ -92440,37 +92722,34 @@ function createDaemon(inputs) {
       `menu-idle: close failed (session=${sessionId2}): ${failure.detail}`
     )
   });
-  const holdClickError2 = (sessionId2, text4, at) => parts.renderer.tell(
-    { kind: "hold-click-error", session: sessionId2, text: text4 },
-    at
-  );
   const runs = new Runs({
     supersede: (folder, sessionId2) => managedStorage.supersede(folder, sessionId2),
     launch: launcher.launch,
-    holdClickError: holdClickError2,
-    log,
-    now: instant,
     clock
   });
-  const laneSetups = new LaneSetups({
-    edge: inputs.laneEdge(
-      launcher,
-      (sessionId2) => frameFeeds.following(sessionId2),
-      closing.signal,
-      probe2
-    ),
-    // A bar pane runs this bundle under the node running it now, with the
-    // flags it runs with (tsx's loader, under the test harness).
-    host: {
-      bundle: bundle.path,
-      node: bundle.node,
-      socket: paths2.socket,
-      preload: stableAttachPreload(bundle.path, host)
+  const acts = new Acts({
+    launch: clickLaunchVia(launcher),
+    type: typeInPane(inputs.claudeInput(launcher)),
+    run: (run3) => runs.start(run3),
+    applyUpdate: () => updateWatch.act(),
+    lanes: {
+      edge: inputs.laneEdge(
+        launcher,
+        (sessionId2) => frameFeeds.following(sessionId2),
+        closing.signal,
+        probe2
+      ),
+      // A bar pane runs this bundle under the node running it now, with the
+      // flags it runs with (tsx's loader, under the test harness).
+      host: {
+        bundle: bundle.path,
+        node: bundle.node,
+        socket: paths2.socket,
+        preload: stableAttachPreload(bundle.path, host)
+      }
     },
-    holdClickError: holdClickError2,
-    log,
-    now: instant,
-    defer: (run3) => void clock.defer(run3)
+    closing: () => closing.signal.aborted,
+    log
   });
   const tmuxStatusLines = new TmuxStatusLines({
     edge: {
@@ -92488,6 +92767,10 @@ function createDaemon(inputs) {
     owner: paths2.socket,
     log
   });
+  const declaredStatusLines = new DeclaredStatusLines(
+    tmuxStatusLines,
+    (sessionId2) => frameFeeds.latest(sessionId2)?.hints.tmux
+  );
   const frameFeeds = new FrameFeeds({
     frame: async (sessionId2, fps, at, following, feeds) => {
       const { frame: frame2 } = await parts.renderer.ask(
@@ -92613,29 +92896,14 @@ function createDaemon(inputs) {
   const clicks = new ClicksInFlight();
   const rendererWatches = /* @__PURE__ */ new Map();
   const doctorEdge = inputs.doctorEdge(launcher, host);
-  const claudeInput = inputs.claudeInput(launcher);
   const reaches = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice, or an awaited call.
     wake: (sessionId2, cause) => frameFeeds.wake(sessionId2, cause),
     log,
-    launch: clickLaunchVia(launcher),
-    typeSlash: typeInPane(claudeInput),
-    applyUpdate: () => updateWatch.act(),
-    runs: {
-      start: (run3) => runs.start(run3),
-      refused: (sessionId2, action2, reason) => runs.refused(sessionId2, action2, reason)
-    },
     doctor: {
       ...doctorEdge,
       install: async (daemonBundle, clients) => installFacts(doctorEdge.install, daemonBundle, clients)
-    },
-    laneSetups: {
-      noted: (session, switches) => laneSetups.noted(session, switches),
-      clicked: (sessionId2, session, before, after) => laneSetups.clicked(sessionId2, session, before, after)
-    },
-    tmuxStatusLines: {
-      observe: ({ sessionId: sessionId2, tmux: tmux3, on: on2 }) => tmuxStatusLines.observe(sessionId2, tmux3, on2)
     },
     menuIdle: {
       clicked: (sessionId2, at) => menuIdle.clicked(sessionId2, at),
@@ -92653,6 +92921,8 @@ function createDaemon(inputs) {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
         rendererEnded = { ...rendererEnded, answered: true };
+      if (actFailed !== null && answeredBy(actFailed, event))
+        actFailed = { ...actFailed, answered: true };
       restateFaults();
     },
     watches: {
@@ -92683,30 +92953,23 @@ function createDaemon(inputs) {
     clock,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
-    // gets its `config` with its latest stamp, and every open feed its `pin`,
-    // through the host's one path to the renderer, each turn recorded there.
+    // gets its config with its latest stamp, all in the one `start` turn, so
+    // its output names every session it serves; and every open feed gets its
+    // `pin`. All through the host's one path to the renderer, each turn
+    // recorded there.
     start: async () => {
       const at = instant();
       for (const sessionId2 of frameFeeds.openFeeds())
         parts.renderer.tell({ kind: "pin", session: sessionId2 }, at);
-      await Promise.all(
-        [...collector.liveDocuments()].flatMap(([sessionId2, worldState]) => {
+      const sessions = [...collector.liveDocuments()].flatMap(
+        ([sessionId2, worldState]) => {
           const req = frameFeeds.latest(sessionId2);
-          return req === null ? [] : [
-            parts.renderer.deliver(
-              {
-                kind: "event",
-                at,
-                event: {
-                  kind: "config",
-                  context: located(req),
-                  worldState
-                }
-              },
-              [["why", "renderer-start"]]
-            )
-          ];
-        })
+          return req === null ? [] : [{ context: located(req), worldState }];
+        }
+      );
+      await parts.renderer.deliver(
+        { kind: "event", at, event: { kind: "start", sessions } },
+        [["why", "renderer-start"]]
       );
     },
     ended: (event) => {
@@ -92735,13 +92998,36 @@ function createDaemon(inputs) {
     menuIdle,
     runs,
     sourceRuns,
-    laneSetups,
     tmuxStatusLines,
+    declaredStatusLines,
     frameFeeds,
     updateWatch,
     limits,
     collector,
-    renderer: rendererHost("main", clock, link.renderer, log, collector)
+    renderer: rendererHost(
+      "main",
+      clock,
+      link.renderer,
+      log,
+      {
+        subscribed: (subscriptions) => {
+          collector.subscribed(subscriptions);
+          declaredStatusLines.declare(subscriptions.tmuxStatus);
+        },
+        holding: (session) => collector.holding(session)
+      },
+      {
+        perform: (act2) => acts.perform(act2),
+        stateDir: paths2.state,
+        closing: () => closing.signal.aborted,
+        // [LAW:no-silent-failure] Joined to the last while it is owed, by the
+        // one rule for events that follow each other.
+        unheard: (text4) => {
+          actFailed = joinedEvent(actFailed, text4, instant());
+          restateFaults();
+        }
+      }
+    )
   };
   return {
     stats,
@@ -92835,7 +93121,7 @@ function writeAt(fd, bytes) {
     (resolve, reject2) => fs_default.write(
       fd,
       bytes,
-      (err, written2) => err === null ? resolve(written2) : reject2(err)
+      (err, written3) => err === null ? resolve(written3) : reject2(err)
     )
   );
 }
@@ -93035,10 +93321,10 @@ var DaemonLog = class {
     const { bytes } = batch;
     const endsAt = size + bytes.length;
     batch.state = { kind: "issued", fd: held.fd, endsAt };
-    for (let done2 = 0; done2 < bytes.length; ) {
-      const written2 = await writeAt(held.fd, bytes.subarray(done2));
-      if (written2 === 0) throw new Error("the disk took 0 bytes of a write");
-      done2 += written2;
+    for (let done = 0; done < bytes.length; ) {
+      const written3 = await writeAt(held.fd, bytes.subarray(done));
+      if (written3 === 0) throw new Error("the disk took 0 bytes of a write");
+      done += written3;
     }
     batch.state = { kind: "landed" };
     if (endsAt >= MAX_BYTES2) {
@@ -93859,17 +94145,17 @@ function readOrCreate(file) {
 }
 function create(file) {
   fs_default.mkdirSync(import_node_path48.default.dirname(file), { recursive: true });
-  const written2 = `${file}.${process.pid}.${randomBytes(6).toString("hex")}`;
-  fs_default.writeFileSync(written2, randomBytes(LINK_KEY_BYTES), {
+  const written3 = `${file}.${process.pid}.${randomBytes(6).toString("hex")}`;
+  fs_default.writeFileSync(written3, randomBytes(LINK_KEY_BYTES), {
     mode: 384,
     flag: "wx"
   });
   try {
-    fs_default.linkSync(written2, file);
+    fs_default.linkSync(written3, file);
   } catch (e) {
     if (e.code !== "EEXIST") throw e;
   } finally {
-    fs_default.unlinkSync(written2);
+    fs_default.unlinkSync(written3);
   }
 }
 
