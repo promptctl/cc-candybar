@@ -36,9 +36,6 @@ import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import type { World } from "../host";
-import type { OneShotLauncher } from "../proc/launch";
-import { runTmuxAtExit } from "../proc/tmux";
-import type { TmuxAtExit } from "./tmux-status";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { productionAdapters } from "./production-adapters.js";
 import { daemonGates } from "./foundations/update-keys.js";
@@ -459,16 +456,6 @@ function writeLeaseFile(sockPath: string): void {
 
 // --- shutdown ---
 
-// [LAW:single-enforcer] exception: the one launch a daemon holds its loop for,
-// outside `launch`'s settle-at-exit path. Serving has stopped and the restore is
-// one synchronous step of the close, so it holds the loop only while it runs. A
-// holder of tmux's stdout can hold this restore, bounded by shutdown's SIGKILL
-// backstop only once it returns.
-const tmuxAtExit =
-  (launcher: OneShotLauncher): TmuxAtExit =>
-  (socket, args, stdin) =>
-    runTmuxAtExit(launcher, { socket }, "tmux-status", args, stdin);
-
 let shuttingDown = false;
 function shutdown(code: number): void {
   if (shuttingDown) return;
@@ -525,7 +512,7 @@ async function closeThenExit(code: number): Promise<void> {
   // would only reach a shutdown already under way, and the backstop's SIGKILL
   // would end the process in place of the exit below.
   const steps: ReadonlyArray<readonly [string, () => unknown]> = [
-    ["close", () => serving?.close(tmuxAtExit(daemonProcess().world.launcher))],
+    ["close", () => serving?.close()],
     // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
     // displaced daemon (socket stolen, thief wrote its own lease) must not
     // delete the live owner's lease on its way out, or the next EADDRINUSE

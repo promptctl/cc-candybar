@@ -46,13 +46,15 @@ function parseCommands(text: string): string[][] {
 // each session's `status` falling back to the global one, an array option
 // unset whole by its bare name, the root table as `list-keys` prints it,
 // `if-shell -F` over an option, and `display-message -p` of plain text. While
-// `gate` is set, each invocation waits for it before it runs, as one in flight
-// would.
+// `gate` is set, each invocation `gates` names waits for it before it runs, as
+// one in flight would.
 class FakeTmux implements TmuxStatusEdge {
   readonly sessions = new Map<string, Map<string, string>>();
   readonly global = new Map<string, string>([["status", "on"]]);
   binding: string | null = DEFAULT_BINDING;
   gate: Promise<void> | null = null;
+  // Which invocations wait for `gate`: every one, unless narrowed.
+  gates: (args: readonly string[]) => boolean = () => true;
   // The spaces `list-keys` pads the key column with: the width of the
   // table's longest key, which any other root binding can change.
   pad = 10;
@@ -64,7 +66,7 @@ class FakeTmux implements TmuxStatusEdge {
   }
 
   async run(socket: string, args: readonly string[], stdin?: string): Promise<TmuxRun> {
-    if (this.gate !== null) await this.gate;
+    if (this.gate !== null && this.gates(args)) await this.gate;
     return this.runSync(socket, args, stdin);
   }
 
@@ -335,7 +337,7 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1", "%2": "$2" }, { $1: "%1", $2: "%2" });
     await h.frame(S1, frameOf("a"));
     await h.frame(S2, frameOf("b"));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    await h.owner.close();
     expect([...session(h, "$1")]).toEqual([]);
     expect([...session(h, "$2")]).toEqual([]);
     expect(h.tmux.binding).toBe(DEFAULT_BINDING);
@@ -352,10 +354,11 @@ describe("TmuxStatusLines", () => {
     // The draw's write is in tmux's hands when the shutdown restores.
     const drawing = h.frame(S1, frameOf("two\nthree"));
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    const closing = h.owner.close();
     h.tmux.gate = null;
     release();
     await drawing;
+    await closing;
     expect([...session(h)]).toEqual([]);
   });
 
@@ -456,13 +459,34 @@ describe("TmuxStatusLines", () => {
     h.tmux.gate = new Promise((resolve) => (release = resolve));
     h.owner.answered(SOCKET, { sessionOf: new Map([["%1", "$1"]]), shownBy: new Map([["$1", "%1"]]) });
     await new Promise((resolve) => setImmediate(resolve));
-    h.owner.restoreAll((socket, args, stdin) => h.tmux.runSync(socket, args, stdin));
+    const closing = h.owner.close();
     h.tmux.gate = null;
     release();
-    await h.owner.settled();
+    await closing;
     expect([...session(h)]).toEqual([]);
     expect(h.tmux.binding).toBe(DEFAULT_BINDING);
     expect(h.tmux.global.has(BINDING_OPTION)).toBe(false);
+  });
+
+  test("a layout whose write is in flight when the daemon shuts down is put back after it lands", async () => {
+    const h = harness();
+    await h.answer({}, {});
+    h.hold(S1, "%1");
+    let release = (): void => {};
+    // Only the lay-out write waits — the one call that sets the record of
+    // what it replaced — so the shutdown finds the session's layout in tmux's
+    // hands while its own calls run past it.
+    h.tmux.gate = new Promise((resolve) => (release = resolve));
+    h.tmux.gates = (args) =>
+      args.some((arg, i) => arg === "@cc-candybar-status-prior" && args[i - 3] === "set-option");
+    h.owner.answered(SOCKET, { sessionOf: new Map([["%1", "$1"]]), shownBy: new Map([["$1", "%1"]]) });
+    await new Promise((resolve) => setImmediate(resolve));
+    const closing = h.owner.close();
+    await new Promise((resolve) => setImmediate(resolve));
+    h.tmux.gate = null;
+    release();
+    await closing;
+    expect([...session(h)]).toEqual([]);
   });
 
   test("an unchanged frame writes nothing", async () => {

@@ -3,7 +3,6 @@
 // close begins cannot hold the restore past shutdown's backstop, which kills
 // the process half a second in.
 
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,7 +14,6 @@ import {
   inProcessPort,
   type RendererPort,
 } from "../../../src/daemon/renderer-process";
-import type { TmuxAtExit } from "../../../src/daemon/tmux-status";
 import { rendererOf } from "../../../src/renderer-interface/interface";
 import { configFlag, render } from "../../helpers/daemon-e2e";
 import type { DaemonEndpoint } from "../../helpers/daemon-wire";
@@ -45,17 +43,6 @@ const heldOnClose =
       },
     };
   };
-
-// The process's own at-exit runner, as a blocking tmux call.
-const atExit: TmuxAtExit = (socket, args, input) => {
-  const run = spawnSync("tmux", ["-S", socket, ...args], {
-    encoding: "utf8",
-    input,
-  });
-  return run.status === 0
-    ? { kind: "ok", stdout: run.stdout }
-    : { kind: "failed", reason: run.stderr };
-};
 
 (HAS_TMUX ? test : test.skip)(
   "the tmux status lines are back while the renderer has not answered the close",
@@ -106,7 +93,7 @@ const atExit: TmuxAtExit = (socket, args, input) => {
       }, "the daemon's layout on the session");
 
       let closed = false;
-      closing = daemon.close(atExit);
+      closing = daemon.close();
       void closing.then(() => (closed = true));
       await until(
         () => tmux.own() === before,
@@ -115,7 +102,7 @@ const atExit: TmuxAtExit = (socket, args, input) => {
       expect(closed).toBe(false);
     } finally {
       release();
-      await (await (closing ?? daemon.close(atExit))).settled;
+      await (await (closing ?? daemon.close())).settled;
       await daemonLog.drained();
       daemonLog.dispose();
       tmux.kill();
