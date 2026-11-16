@@ -2,24 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-766",
-      "ref": "refs/pull/766/merge",
-      "sha": "3557945eded31f7e67fa5cc6ba3868d5178dacef",
-      "timestamp": "2026-11-16T05:10:50.914Z",
+      "version": "pr-767",
+      "ref": "refs/pull/767/merge",
+      "sha": "ac2eebfa406ab3eadd65868ca028d65516e40952",
+      "timestamp": "2026-11-16T05:17:38.879Z",
       "commits": [
         {
-          "sha": "3557945eded31f7e67fa5cc6ba3868d5178dacef",
+          "sha": "ac2eebfa406ab3eadd65868ca028d65516e40952",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T22:09:56-07:00",
-          "message": "Merge 0be5fbe6ba99c4b42b0dffca3f443321125f7467 into de3c13c9486c8ef1f1e628f961ce4877c1199dd8\n"
+          "timestamp": "2026-11-15T22:16:27-07:00",
+          "message": "Merge f26a6ef527240317b3eebb6692cf2803b682b21a into de3c13c9486c8ef1f1e628f961ce4877c1199dd8\n"
         },
         {
-          "sha": "0be5fbe6ba99c4b42b0dffca3f443321125f7467",
+          "sha": "f26a6ef527240317b3eebb6692cf2803b682b21a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T22:09:38-07:00",
-          "message": "fix(renderer): a frame push draws on a turn of its own, after the events heard with it (candybar-host-renderer-x96a.cwq)\n\nThe renderer is one thread, and a stdin chunk's lines are heard in one\nsynchronous loop, so a frame drawn as it is heard went ahead of every\nrequest heard with it or after it, and of the request's continuations.\nThe renderer's input reader now starts every event as it is heard and\ndraws each frame push on an event-loop turn of its own, after the frame\nbefore it, so a request waits behind at most the frame drawing as it\narrives.\n"
+          "timestamp": "2026-11-15T22:16:14-07:00",
+          "message": "docs(spec): A-1's open item says a request waits for the renderer's thread, not for turns taken one at a time (candybar-host-renderer-x96a.cwq)\n"
         }
       ]
     },
