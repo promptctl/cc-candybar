@@ -1,3 +1,9 @@
+## [1.222.1](https://github.com/promptctl/cc-candybar/compare/v1.222.0...v1.222.1) (2026-11-16)
+
+### Bug Fixes
+
+* **collector:** tok/s lasts a whole turn, speed configs load again, a quiet session logs nothing and every provider closes (candybar-host-renderer-x96a.xae) ([#761](https://github.com/promptctl/cc-candybar/issues/761)) ([3d8af44](https://github.com/promptctl/cc-candybar/commit/3d8af440ea7624f469ec0bdb62620124ea12c90f))
+
 ## [1.222.0](https://github.com/promptctl/cc-candybar/compare/v1.221.0...v1.222.0) (2026-11-16)
 
 ### Features
