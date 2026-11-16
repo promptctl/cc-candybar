@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-773",
+      "ref": "refs/pull/773/merge",
+      "sha": "b30f74c4700dca9ee96c5cc35ad30788cfa566e1",
+      "timestamp": "2026-11-16T20:43:11.484Z",
+      "commits": [
+        {
+          "sha": "b30f74c4700dca9ee96c5cc35ad30788cfa566e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T13:42:18-07:00",
+          "message": "Merge 3089862b1fd757073819e7355882b06dd867fa22 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+        },
+        {
+          "sha": "3089862b1fd757073819e7355882b06dd867fa22",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T13:42:03-07:00",
+          "message": "test(daemon): the fork-bomb ceiling test asserts how a refused daemon ends, not how fast it boots\n\nThe (ceiling+1)th daemon was given 5 s from spawn to exit. That measures\na Node boot on whatever runner it lands on, and it failed main's Release\nrun while fourteen process suites booted daemons at once. The breaker's\nproof is that the daemon exits with failure and never binds its socket;\na daemon the breaker wrongly admitted never exits, which the test's own\ntimeout fails.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "d7dfe00a0b58a559b3f47e2058445eff3c2f3960",
