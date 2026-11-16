@@ -4,7 +4,7 @@ import { ABSENT, failed, ok, type Outcome } from "../utils/outcome.js";
 import type { Holds } from "../utils/holds.js";
 import { KeyedSource, NO_WATCH } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
-import { RefreshLedger } from "../utils/refresh-ledger.js";
+import { RefreshLedger, REFRESH_TRIGGERS } from "../utils/refresh-ledger.js";
 import type { Lane } from "../utils/reading.js";
 import type { Timekeeper } from "../time.js";
 
@@ -70,6 +70,7 @@ export class HostService {
       every: () => HOST_EVERY,
       watch: NO_WATCH,
       maxEntries: 1,
+      lines: REFRESH_TRIGGERS,
       logger,
       ledger,
       clock: opts.clock,

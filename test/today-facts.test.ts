@@ -78,13 +78,18 @@ describe("projectToday", () => {
 
 describe("todayReading", () => {
   const SID = sessionIdOf("s1");
+  const TRANSCRIPT = "/elsewhere/s1.jsonl";
   const own = { [key(NOON)]: day(0.5, 5) };
   // A usage store that answers `days`, and says which roots it was asked about.
   const usage = (days: Outcome<Readonly<Record<string, DayUsage>>>) => {
     const asked: Array<readonly string[]> = [];
     return {
       asked,
-      daysOutside: (_session: string, roots: readonly string[]) => {
+      daysOutside: (
+        _session: string,
+        _transcript: string | undefined,
+        roots: readonly string[],
+      ) => {
         asked.push(roots);
         return days;
       },
@@ -93,19 +98,29 @@ describe("todayReading", () => {
 
   test("folds the set with the session's days outside its roots", () => {
     const store = usage(ok(own));
-    const fact = todayReading(settledLane(ok(SET)), store, SID);
+    const fact = todayReading(settledLane(ok(SET)), store, SID, TRANSCRIPT);
     expect(fact).toEqual(ok({ sums: SET.sums, own }));
     expect(store.asked).toEqual([SET.roots]);
   });
 
   test("a session with no days outside the set has none of its own", () => {
-    const fact = todayReading(settledLane(ok(SET)), usage(ABSENT), SID);
+    const fact = todayReading(
+      settledLane(ok(SET)),
+      usage(ABSENT),
+      SID,
+      TRANSCRIPT,
+    );
     expect(fact).toEqual(ok({ sums: SET.sums, own: {} }));
   });
 
   test("the session's ingest failing is the fact failing", () => {
     const fault = failed("transcript unreadable", "read");
-    const fact = todayReading(settledLane(ok(SET)), usage(fault), SID);
+    const fact = todayReading(
+      settledLane(ok(SET)),
+      usage(fault),
+      SID,
+      TRANSCRIPT,
+    );
     expect(fact).toEqual(fault);
   });
 
@@ -116,6 +131,7 @@ describe("todayReading", () => {
         settledLane(scan),
         usage(failed("transcript unreadable", "read")),
         SID,
+        TRANSCRIPT,
       ),
     ).toEqual(scan);
   });

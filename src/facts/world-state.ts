@@ -136,28 +136,27 @@ export interface UpdateState {
 }
 
 // [LAW:one-source-of-truth] One observation of the active session's cumulative
-// token counts at a single instant. tok/s is the delta between two of these —
-// the prior sample lives in the session usage store (the single owner of
-// per-session token totals), never in a parallel counter. `input` folds the cache lanes into the
-// prompt-side total so `total === input + output`. `atMs` is the render's clock
-// instant (the daemon's single-enforcer clock), so a frozen test clock makes
-// the rate deterministic.
+// token counts, taken when its transcript is written. tok/s is the delta
+// between two of these — the prior sample lives in the session usage store (the
+// single owner of per-session token totals), never in a parallel counter.
+// `input` folds the cache lanes into the prompt-side total so
+// `total === input + output`. `atMs` is the refresh's clock instant (the
+// daemon's single-enforcer clock), so a frozen test clock makes the rate
+// deterministic. `turnOpen` is whether Claude was still working on a turn as
+// of that write: the interval after a sample in an open turn is generation,
+// and the one after a closed turn is the person's idle time.
 export interface SpeedSample {
   readonly input: number;
   readonly output: number;
   readonly total: number;
   readonly atMs: number;
+  readonly turnOpen: boolean;
 }
 
-// The prior observation (absent on the very first render of a session), the one
-// just taken, and the recent ring (oldest→newest, INCLUDING `cur`). The pure
-// projections live at the render-payload boundary; the session usage store only
-// remembers and reports. [LAW:one-source-of-truth] `prev === samples[samples.length - 2]` — the
-// tok/s baseline and the burn-rate history fold from the SAME owned ring, not two
-// parallel stores. tok/s reads the last pair; the sparkline reads every pair.
+// The session's recent samples, oldest→newest. The pure projections live at
+// the render-payload boundary; the session usage store only remembers and
+// reports. tok/s and the burn-rate history fold from this one ring.
 export interface SpeedObservation {
-  readonly prev?: SpeedSample;
-  readonly cur: SpeedSample;
   readonly samples: readonly SpeedSample[];
 }
 

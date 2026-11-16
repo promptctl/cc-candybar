@@ -372,11 +372,10 @@ describe("SessionUsageStore — session projection", () => {
       expect(store.sweepStale()).toBe(1);
       expect(store.getStats()).toMatchObject({ size: 0 });
       expect(lines).toContain("usageStore sweep dropped=1 noRecord=1 held=0");
-      // The ring went with it: the next observation starts a new baseline.
+      // The ring went with it: the next observation starts a new one.
       const next = await store.refresh(SID_R, undefined, "change").speed(2_000);
-      expect(next.kind).toBe("ok");
-      if (next.kind !== "ok") return;
-      expect(next.value.prev).toBeUndefined();
+      if (next.kind !== "ok") throw new Error("no observation");
+      expect(next.value.samples.map((s) => s.atMs)).toEqual([2_000]);
     } finally {
       store.close();
       clock.mockRestore();
@@ -443,7 +442,7 @@ describe("SessionUsageStore — session projection", () => {
   });
 
   // The session's own days, which the `today` fact carries beside the set's.
-  test("a session's own days are absent before a record or under the set's roots, its transcript's days outside them, and its ingest failure when the refresh failed", async () => {
+  test("a session's own days are absent before a record or under the set's roots, its transcript's days outside them, and its ingest failure there when the refresh failed", async () => {
     const t = join(dir, "A.jsonl");
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
@@ -454,16 +453,20 @@ describe("SessionUsageStore — session projection", () => {
     });
     try {
       const elsewhere = ["/not/this/dir/"];
-      expect(store.daysOutside(SID_A, elsewhere)).toEqual(ABSENT);
+      expect(store.daysOutside(SID_A, t, elsewhere)).toEqual(ABSENT);
       await usageFold(store, SID_A, t);
-      const own = store.daysOutside(SID_A, elsewhere);
+      const own = store.daysOutside(SID_A, t, elsewhere);
       expect(Object.keys(own.kind === "ok" ? own.value : {})).toHaveLength(1);
       // Under the set's roots the days are in its sums already.
-      expect(store.daysOutside(SID_A, [dir])).toEqual(ABSENT);
-      // A directory is no transcript: the refresh fails, and so does the read.
+      expect(store.daysOutside(SID_A, t, [dir])).toEqual(ABSENT);
+      // A directory is no transcript: the refresh fails, and so does the read
+      // of days only the session holds. Under the roots they are the set's,
+      // whose scan answers for them, so the session's failure is not today's.
       await usageFold(store, SID_G, dir);
-      expect(store.daysOutside(SID_G, elsewhere).kind).toBe("failed");
-      expect(store.daysOutside(SID_G, [dir]).kind).toBe("failed");
+      expect(store.daysOutside(SID_G, dir, elsewhere).kind).toBe("failed");
+      expect(store.daysOutside(SID_G, join(dir, "G.jsonl"), [dir])).toEqual(
+        ABSENT,
+      );
     } finally {
       store.close();
     }

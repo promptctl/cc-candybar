@@ -69,7 +69,7 @@ export class AutoCompactProvider {
       name: "autocompact",
       scope: "configDir",
       refresh: ["first", "period", "change"],
-      event: "step",
+      lines: [],
     });
   }
 

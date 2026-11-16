@@ -163,7 +163,7 @@ export class ActivityProvider {
         name: "activity",
         scope: "session",
         refresh: ["first", "period", "change"],
-        event: "step",
+        lines: [],
       }),
       opts.clock,
       logger,

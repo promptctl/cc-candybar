@@ -1,14 +1,14 @@
 // Token-speed segment (brandon-usage-cob). Four layers, same shape as the
 // burn-rate ticket it builds on:
 //   1. the pure projection math (projectTokensPerSecond),
-//   2. the SessionUsageStore retaining the prior (counts, time) sample — the
-//      single owner of per-session totals, no parallel counter,
-//   3. payloadOf folding the prev+cur pair into speed.{in,out,total}
-//      under the closure gate,
+//   2. the SessionUsageStore keeping each session's ring of samples — the
+//      single owner of per-session totals, no parallel counter — each saying
+//      whether its turn was open,
+//   3. speedPayloadOf folding the ring into speed.{in,out,total,history},
 //   4. the speed segment formatting it — including the "—" absence path.
 //
-// [LAW:no-silent-failure] The headline assertion across all layers: idle /
-// between-turns / a too-stale baseline yields ABSENCE (missing field → -1
+// [LAW:no-silent-failure] The headline assertion across all layers: no turn
+// open, or idle time between turns, yields ABSENCE (missing field → -1
 // default → "—"), never a stale or divide-by-zero number.
 
 import { textOf } from "../src/render/frame";
@@ -23,10 +23,10 @@ import { join } from "node:path";
 
 import {
   projectTokensPerSecond,
-  speedOf,
+  speedPayloadOf,
 } from "../src/renderer/render-payload";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
-import { failed, ok, pendingOf } from "../src/utils/outcome";
+import type { SpeedSample } from "../src/facts/world-state";
 import { validateConfig } from "./helpers/parse-and-validate";
 import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -44,6 +44,7 @@ const C_2 = sessionIdOf("C");
 const R_2 = sessionIdOf("R");
 const O_2 = sessionIdOf("O");
 const U_2 = sessionIdOf("U");
+const T_2 = sessionIdOf("T");
 
 // ─── projectTokensPerSecond (pure) ───────────────────────────────────────────
 
@@ -64,36 +65,53 @@ describe("projectTokensPerSecond (pure)", () => {
     expect(projectTokensPerSecond(1000, 0, 1500, 10)).toBeUndefined();
   });
 
-  test("window over the ceiling (prior sample predates idle gap) → undefined", () => {
-    expect(projectTokensPerSecond(1000, 0, 1500, 30_000)).toBeUndefined();
+  test("a long interval is still a rate: idle time is the turn's to rule out", () => {
+    expect(projectTokensPerSecond(1000, 0, 4000, 30_000)).toBe(100);
   });
 });
 
-// ─── SessionUsageStore request speed (the prior-sample owner) ──────────────────
+// ─── SessionUsageStore speed (the sample ring's owner) ────────────────────────
 
-function usageLine(tag: string, input: number, output: number): string {
+function usageLine(
+  tag: string,
+  input: number,
+  output: number,
+  stopReason?: string,
+): string {
   return (
     JSON.stringify({
       timestamp: new Date().toISOString(),
       requestId: `req-${tag}`,
       costUSD: 0.01,
+      ...(stopReason !== undefined && { type: "assistant" }),
       message: {
         id: `msg-${tag}`,
         model: "claude-opus-4-8",
         usage: { input_tokens: input, output_tokens: output },
+        ...(stopReason !== undefined && { stop_reason: stopReason }),
       },
     }) + "\n"
   );
 }
 
-describe("SessionUsageStore request speed — prior-sample retention", () => {
+function promptLine(): string {
+  return (
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      type: "user",
+      message: { role: "user", content: "go" },
+    }) + "\n"
+  );
+}
+
+describe("SessionUsageStore speed — the sample ring", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "cc-candybar-speed-"));
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  test("first observation has no prior sample; the second sees the first", async () => {
+  test("a first observation is the ring's one sample; the next write appends to it", async () => {
     const t = join(dir, "S.jsonl");
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
@@ -104,40 +122,51 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
     });
     try {
       const first = await store.refresh(S_2, t, "change").speed(1_000);
-      expect(first.kind).toBe("ok");
-      if (first.kind !== "ok") return;
-      expect(first.value.prev).toBeUndefined();
+      if (first.kind !== "ok") throw new Error("no observation");
       // input folds the cache lanes (here zero) onto raw input; total = in + out.
-      expect(first.value.cur).toMatchObject({
-        input: 10,
-        output: 5,
-        total: 15,
-      });
+      expect(first.value.samples).toEqual([
+        { input: 10, output: 5, total: 15, atMs: 1_000, turnOpen: false },
+      ]);
 
       // Transcript grows by one more turn; bump mtime so the store re-parses.
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
       utimesSync(t, new Date(2000), new Date(2000));
       const second = await store.refresh(S_2, t, "change").speed(2_000);
-      expect(second.kind).toBe("ok");
-      if (second.kind !== "ok") return;
-      expect(second.value.prev).toMatchObject({
-        input: 10,
-        output: 5,
-        atMs: 1_000,
-      });
-      expect(second.value.cur).toMatchObject({
-        input: 20,
-        output: 10,
-        atMs: 2_000,
-      });
-      // Δoutput = 5 over Δt = 1s ⇒ 5 tok/s when projected at the boundary.
-      const rate = projectTokensPerSecond(
-        second.value.prev!.output,
-        second.value.prev!.atMs,
-        second.value.cur.output,
-        second.value.cur.atMs,
-      );
-      expect(rate).toBe(5);
+      if (second.kind !== "ok") throw new Error("no observation");
+      expect(second.value.samples).toMatchObject([
+        { input: 10, output: 5, atMs: 1_000 },
+        { input: 20, output: 10, atMs: 2_000 },
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  // [LAW:one-source-of-truth] Whether Claude is working is read from the
+  // transcript itself, so the rate ends at the write that ends the turn.
+  test("a sample says whether its turn is open: a prompt opens it, a tool call keeps it, a final message closes it", async () => {
+    const t = join(dir, "T.jsonl");
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const writes = [
+        promptLine(),
+        usageLine("call", 10, 5, "tool_use"),
+        usageLine("done", 10, 5, "end_turn"),
+      ];
+      const open: boolean[] = [];
+      for (let i = 0; i < writes.length; i++) {
+        writeFileSync(t, writes.slice(0, i + 1).join(""));
+        const ms = (i + 1) * 1000;
+        utimesSync(t, new Date(ms), new Date(ms));
+        const r = await store.refresh(T_2, t, "change").speed(ms);
+        if (r.kind !== "ok") throw new Error("no observation");
+        open.push(r.value.samples.at(-1)!.turnOpen);
+      }
+      expect(open).toEqual([true, true, false]);
     } finally {
       store.close();
     }
@@ -160,14 +189,13 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
       const again = await store.refresh(U_2, t, "period").speed(11_000);
       expect(again).toBe(first);
       if (again.kind !== "ok") throw new Error("no observation");
-      expect(again.value.samples).toHaveLength(1);
-      expect(again.value.cur.atMs).toBe(1_000);
+      expect(again.value.samples.map((s) => s.atMs)).toEqual([1_000]);
     } finally {
       store.close();
     }
   });
 
-  test("concurrent same-state observations coalesce to ONE baseline transition", async () => {
+  test("concurrent same-state observations coalesce to ONE sample", async () => {
     const t = join(dir, "C.jsonl");
     writeFileSync(t, usageLine("a", 10, 5));
     utimesSync(t, new Date(1000), new Date(1000));
@@ -184,30 +212,23 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
       writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 20));
       utimesSync(t, new Date(2000), new Date(2000));
 
-      // Two renders observe the SAME new state concurrently. Without the
-      // single-flight, the second would see the first's just-committed sample
-      // (output 25) as its prev and degrade to a zero delta. Coalesced, both
-      // share ONE observation: prev = the baseline (5), cur = the new state (25).
+      // Two refreshes observe the SAME new state concurrently. Without the
+      // single-flight, each would append its own sample of it, and the pair
+      // between them would read as a flat interval. Coalesced, both share ONE
+      // observation, whose ring holds the baseline (5) and the new state (25).
       const [a, b] = await Promise.all([
         store.refresh(C_2, t, "change").speed(2_000),
         store.refresh(C_2, t, "change").speed(2_000),
       ]);
-      expect(a.kind).toBe("ok");
-      expect(b.kind).toBe("ok");
-      if (a.kind !== "ok" || b.kind !== "ok") return;
-      expect(a.value.prev?.output).toBe(5);
-      expect(b.value.prev?.output).toBe(5);
-      expect(a.value.cur.output).toBe(25);
-      expect(b.value.cur.output).toBe(25);
-      // Neither render lost its delta to a clobber (prev never the new state).
-      expect(a.value.prev?.output).not.toBe(25);
-      expect(b.value.prev?.output).not.toBe(25);
+      expect(b).toBe(a);
+      if (a.kind !== "ok") throw new Error("no observation");
+      expect(a.value.samples.map((s) => s.output)).toEqual([5, 25]);
     } finally {
       store.close();
     }
   });
 
-  test("the ring accumulates recent samples oldest→newest; prev is its last", async () => {
+  test("the ring accumulates recent samples oldest→newest", async () => {
     const t = join(dir, "R.jsonl");
     const store = new SessionUsageStore({
       clock: systemTimekeeper,
@@ -233,9 +254,6 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
       expect(results.map((r) => r.samples.length)).toEqual([1, 2, 3]);
       const last = results[2]!;
       expect(last.samples.map((s) => s.atMs)).toEqual([1000, 2000, 3000]);
-      // [LAW:one-source-of-truth] prev is exactly the ring's penultimate sample —
-      // the tok/s baseline and the history fold read the same owned ring.
-      expect(last.prev).toBe(last.samples[last.samples.length - 2]);
     } finally {
       store.close();
     }
@@ -268,82 +286,81 @@ describe("SessionUsageStore request speed — prior-sample retention", () => {
 
       // Sorted by atMs despite reverse insertion order.
       expect(second.value.samples.map((s) => s.atMs)).toEqual([1000, 3000]);
-      // No existing sample is strictly before atMs 1000, so this observe has no
-      // baseline — completion order never fabricates one.
-      expect(second.value.prev).toBeUndefined();
     } finally {
       store.close();
     }
   });
 });
 
-// ─── speedOf — the draw's projection ─────────────────────────────────────────
+// ─── speedPayloadOf — the ring's projection ──────────────────────────────────
 
-const sample = (output: number, atMs: number) => ({
+const sample = (
+  output: number,
+  atMs: number,
+  turnOpen = true,
+): SpeedSample => ({
   input: 1000,
   output,
   total: 1000 + output,
   atMs,
+  turnOpen,
 });
 
-describe("speedOf — the draw's projection", () => {
-  const at = (ms: number) => instantOf(new Date(ms));
-
+describe("speedPayloadOf — the ring's projection", () => {
   test("projectable: output/total rates land; idle input lane is absent", () => {
-    const prev = sample(1000, 0);
-    const cur = sample(1500, 1000);
-    const speed = speedOf(ok({ prev, cur, samples: [prev, cur] }), at(1000));
+    const samples = [sample(1000, 0), sample(1500, 1000)];
     // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
-    expect(speed).toEqual({ output: 500, total: 500, history: "500" });
+    expect(speedPayloadOf({ samples })).toEqual({
+      output: 500,
+      total: 500,
+      history: "500",
+    });
   });
 
-  test("an idle session's rate ends a sample window after its last sample, and its history stays", () => {
-    const prev = sample(1000, 0);
-    const cur = sample(1500, 1000);
-    const obs = ok({ prev, cur, samples: [prev, cur] });
-    expect(speedOf(obs, at(11_000))).toMatchObject({ total: 500 });
-    expect(speedOf(obs, at(11_001))).toEqual({ history: "500" });
+  test("a long generation is one rate, however far apart its writes", () => {
+    const samples = [sample(0, 0), sample(3000, 30_000)];
+    expect(speedPayloadOf({ samples })).toMatchObject({ total: 100 });
   });
 
-  test("first sample (no prior) ⇒ no speed key, never a fabricated rate", () => {
-    const cur = sample(5, 1000);
-    expect(speedOf(ok({ cur, samples: [cur] }), at(1000))).toBeUndefined();
+  test("the rate ends at the write that closes the turn, and its history stays", () => {
+    const samples = [sample(1000, 0), sample(1500, 1000, false)];
+    expect(speedPayloadOf({ samples })).toEqual({ history: "500" });
   });
 
-  test("burn-rate history projects each adjacent total-lane pair; idle gaps are 0", () => {
-    // total/atMs: +100/s, idle ⇒ 0, +300/s.
+  test("while a tool runs, the turn shows its last measured rate and the history a 0", () => {
+    // A tool call written at 1 s, its answer a minute later carries no tokens.
+    const samples = [sample(0, 0), sample(500, 1000), sample(500, 61_000)];
+    expect(speedPayloadOf({ samples })).toEqual({
+      output: 500,
+      total: 500,
+      history: "500,0",
+    });
+  });
+
+  test("idle time between turns is no interval: no bar, and no rate from the last turn", () => {
     const samples = [
       sample(0, 0),
-      sample(100, 1000),
-      sample(100, 2000),
-      sample(400, 3000),
+      sample(100, 1000, false), // the turn ends
+      sample(100, 600_000), // the next prompt, ten minutes later
     ];
-    const speed = speedOf(
-      ok({ prev: samples[2], cur: samples[3]!, samples }),
-      at(3000),
-    );
-    expect(speed).toMatchObject({ history: "100,0,300" });
+    expect(speedPayloadOf({ samples })).toEqual({ history: "100" });
+    // Once the new turn writes, its own interval is the rate.
+    expect(
+      speedPayloadOf({ samples: [...samples, sample(400, 601_000)] }),
+    ).toEqual({ output: 300, total: 300, history: "100,300" });
   });
 
-  test("history skips unmeasurable (out-of-window) pairs instead of fabricating a 0 bar", () => {
-    // +100/s in-window, a 29s stale gap, then a 5ms rapid pair: only the
-    // first survives, never shown as 0.
-    const samples = [
-      sample(0, 0),
-      sample(100, 1000),
-      sample(400, 30_000),
-      sample(410, 30_005),
-    ];
-    const speed = speedOf(
-      ok({ prev: samples[2], cur: samples[3]!, samples }),
-      at(30_005),
-    );
-    expect(speed).toEqual({ history: "100" });
+  test("first sample ⇒ no speed key, never a fabricated rate", () => {
+    expect(speedPayloadOf({ samples: [sample(5, 1000)] })).toBeUndefined();
   });
 
-  test("a pending observation draws pending; a failed one draws nothing", () => {
-    expect(speedOf(pendingOf("unread"), at(0))).toEqual(pendingOf("unread"));
-    expect(speedOf(failed("parse", "read"), at(0))).toBeUndefined();
+  test("history skips samples too close to time instead of fabricating a 0 bar", () => {
+    const samples = [sample(0, 0), sample(100, 1000), sample(110, 1005)];
+    expect(speedPayloadOf({ samples })).toEqual({
+      output: 100,
+      total: 100,
+      history: "100",
+    });
   });
 });
 

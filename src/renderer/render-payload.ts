@@ -56,6 +56,7 @@ import { isBundledPreset } from "./bundled-presets.js";
 import {
   type BuiltinFacts,
   type SpeedObservation,
+  type SpeedSample,
   type TodayFacts,
   UNREAD_RUN,
   type WorldState,
@@ -77,7 +78,7 @@ import {
   type ValuedField,
   type ValuedGlobals,
 } from "../config/globals-fields.js";
-import { dateOf, type Instant } from "../utils/instant.js";
+import { type Instant } from "../utils/instant.js";
 import type { Fact } from "../facts/fact.js";
 import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
@@ -292,7 +293,7 @@ export type DrawnPayload = RenderPayloadOf<Pending>;
 // [LAW:types-are-the-program] What a view keeps of it: everything but the
 // facts of the draw's own instant (DRAW_PROJECTIONS, which each draw hands
 // its binding), so no stored value moves with the clock.
-export type ViewPayload = Omit<DrawnPayload, "feeds" | "today" | "speed">;
+export type ViewPayload = Omit<DrawnPayload, "feeds" | "today">;
 // The control's facts (src/segments/autocompact.ts) — or the refusal that the
 // settings file could not be read, carried as text, so the control says why
 // it cannot show the window.
@@ -433,9 +434,9 @@ export interface BurnPayload {
 // second on each of three lanes (prompt-side input, generated output, their
 // total). Each lane is INDEPENDENTLY optional: during streaming `output` moves
 // while `input` (fixed at turn start) is idle, so an absent `input` rate beside a
-// live `output` rate is the honest shape, not a zero. Absence (no baseline yet,
-// idle between turns, or a too-stale prior sample) travels as a missing field to
-// the -1 default, which the `formatSpeed` helper reads as "—". [LAW:no-silent-failure]
+// live `output` rate is the honest shape, not a zero. Absence (nothing measured
+// yet this turn, or no turn open) travels as a missing field to the -1 default,
+// which the `formatSpeed` helper reads as "—". [LAW:no-silent-failure]
 export interface SpeedPayload {
   readonly input?: number;
   readonly output?: number;
@@ -446,7 +447,7 @@ export interface SpeedPayload {
   // instantaneous rates do, but it is INDEPENDENTLY optional — a session that
   // burst then went idle has no current rate yet still has a history to draw. It
   // travels as a string because a series cannot cross the scalar var-system seam;
-  // the helper decodes it. Absent (no measurable in-window pair) → missing → "".
+  // the helper decodes it. Absent (no measurable pair inside a turn) → missing → "".
   readonly history?: string;
 }
 
@@ -534,14 +535,12 @@ export interface ActivityToolPayload {
 // rather than a sustained burn.
 const MIN_BURN_SECONDS = 60;
 
-// tok/s is a delta between two successive render observations. The wall-time
-// between them must clear a tiny floor (the clock has to have advanced — below
-// it the rate is divide-by-near-zero noise) and stay under a ceiling: a gap
-// wider than this means the prior sample predates an idle stretch, so the rate
-// would be diluted by dead time. Both bounds → no reading (re-baseline silently
-// on the next render) rather than a misleading number. [LAW:no-silent-failure]
+// tok/s is a delta between two successive samples. The wall-time between them
+// must clear a tiny floor (the clock has to have advanced — below it the rate
+// is divide-by-near-zero noise) → no reading rather than a misleading number.
+// [LAW:no-silent-failure] No ceiling: whether an interval holds idle time is
+// the turn's to say (`turnIntervals`), and a long generation is still one.
 const MIN_SPEED_SAMPLE_MS = 50;
-const MAX_SPEED_SAMPLE_MS = 10 * 1000;
 
 /**
  * Session spend rate in dollars per hour: cost over wall-clock duration.
@@ -558,13 +557,12 @@ export function projectCostPerHour(
 }
 
 /**
- * Instantaneous tokens-per-second between two successive render observations of
- * one cumulative token count. Returns undefined when the sample window is too
- * small or too large to be honest (see the floor/ceiling constants) or when the
- * count did not advance (idle / between turns — a true 0 over a real window is
- * reported as 0, but a flat count carries no throughput to report). A real
- * positive rate is always >= 0, so callers use -1 as the absence default — 0
- * tok/s never doubles as the "no reading" marker. [LAW:no-silent-failure]
+ * Instantaneous tokens-per-second between two successive samples of one
+ * cumulative token count. Returns undefined when the samples are too close to
+ * time (see the floor constant) or when the count did not advance (a flat count
+ * carries no throughput to report). A real positive rate is always >= 0, so
+ * callers use -1 as the absence default — 0 tok/s never doubles as the "no
+ * reading" marker. [LAW:no-silent-failure]
  */
 export function projectTokensPerSecond(
   prevTokens: number,
@@ -573,21 +571,52 @@ export function projectTokensPerSecond(
   nowMs: number,
 ): number | undefined {
   const deltaMs = nowMs - prevMs;
-  if (deltaMs < MIN_SPEED_SAMPLE_MS || deltaMs > MAX_SPEED_SAMPLE_MS)
-    return undefined;
+  if (deltaMs < MIN_SPEED_SAMPLE_MS) return undefined;
   const deltaTokens = curTokens - prevTokens;
   if (deltaTokens <= 0) return undefined;
   return (deltaTokens * 1000) / deltaMs;
 }
 
+type Interval = readonly [prev: SpeedSample, cur: SpeedSample];
+
+// [LAW:dataflow-not-control-flow] The intervals that are Claude's time: each
+// adjacent pair whose earlier sample was taken while a turn was open, far
+// enough apart to time. A pair after a closed turn spans the person's idle
+// time, which is no throughput at all, so it is no interval of the rate.
+function turnIntervals(samples: readonly SpeedSample[]): readonly Interval[] {
+  return samples
+    .slice(1)
+    .map((cur, i): Interval => [samples[i]!, cur])
+    .filter(
+      ([prev, cur]) =>
+        prev.turnOpen && cur.atMs - prev.atMs >= MIN_SPEED_SAMPLE_MS,
+    );
+}
+
+// The samples of the turn in progress: the trailing run taken while a turn
+// was open, so none once the last write closed it.
+function openTurn(samples: readonly SpeedSample[]): readonly SpeedSample[] {
+  let start = samples.length;
+  while (start > 0 && samples[start - 1]!.turnOpen) start--;
+  return samples.slice(start);
+}
+
 // [LAW:effects-at-boundaries] Pure fold of one speed observation into the
-// payload's three rate lanes. No baseline (first render of a session) or every
-// lane un-projectable → undefined (the whole `speed` key is dropped); otherwise
-// each lane that projects contributes its rate, each that doesn't is a missing
-// field → the -1 default → "—".
+// payload's three rate lanes: the turn in progress's latest measured interval,
+// since a write that carries no tokens (a tool's answer) times the tool, not
+// Claude. No turn open, or nothing measured in it yet → undefined (the whole
+// `speed` key is dropped); otherwise each lane that projects contributes its
+// rate, each that doesn't is a missing field → the -1 default → "—".
 function projectSpeed(obs: SpeedObservation): SpeedPayload | undefined {
-  const { prev, cur } = obs;
-  if (prev === undefined) return undefined;
+  const intervals = turnIntervals(openTurn(obs.samples));
+  for (let i = intervals.length - 1; i >= 0; i--) {
+    const rates = intervalRates(intervals[i]!);
+    if (rates !== undefined) return rates;
+  }
+  return undefined;
+}
+
+function intervalRates([prev, cur]: Interval): SpeedPayload | undefined {
   const input = projectTokensPerSecond(
     prev.input,
     prev.atMs,
@@ -616,37 +645,18 @@ function projectSpeed(obs: SpeedObservation): SpeedPayload | undefined {
 }
 
 // [LAW:effects-at-boundaries] Pure fold of the observation's sample ring into the
-// burn-rate history string. Each adjacent pair becomes one total-lane tok/s; an
-// un-projectable pair (no new tokens, or a gap outside the sample window) is a
-// real ZERO-throughput interval, not absence — the series is a string of numbers,
-// and 0 is the honest value for "burned nothing here" ([LAW:no-silent-failure] —
-// the gap is reported, not dropped to misalign the graph). Fewer than two samples
-// ⇒ no pair ⇒ undefined (the whole field drops to the "" default).
+// burn-rate history string: one total-lane tok/s per interval of a turn. One
+// with no new tokens (a tool running) is a real ZERO-throughput interval, not
+// absence — 0 is the honest value for "burned nothing here"
+// ([LAW:no-silent-failure]). Idle time between turns, and samples too close to
+// time, are no interval at all (`turnIntervals`), so they draw no bar that
+// would read as activity. No interval ⇒ undefined (the whole field drops to
+// the "" default).
 function projectSpeedHistory(obs: SpeedObservation): string | undefined {
-  const { samples } = obs;
-  const rates: number[] = [];
-  for (let i = 1; i < samples.length; i++) {
-    const prev = samples[i - 1]!;
-    const cur = samples[i]!;
-    // [LAW:no-silent-failure] Only an in-window interval is a measurable reading.
-    // An out-of-window pair — samples too close to time a rate reliably, or a
-    // stale gap spanning idle time — is UNMEASURABLE, not zero burn, so it is
-    // SKIPPED rather than fabricated as a 0 bar that would read as real activity.
-    // projectTokensPerSecond stays the single formula+window authority (same
-    // module constants); this classifier disambiguates its undefined: out-of-
-    // window ⇒ skip, in-window ⇒ undefined means a non-positive token delta, a
-    // genuine zero-burn reading that stays 0.
-    const deltaMs = cur.atMs - prev.atMs;
-    if (deltaMs < MIN_SPEED_SAMPLE_MS || deltaMs > MAX_SPEED_SAMPLE_MS)
-      continue;
-    const rate = projectTokensPerSecond(
-      prev.total,
-      prev.atMs,
-      cur.total,
-      cur.atMs,
-    );
-    rates.push(rate ?? 0);
-  }
+  const rates = turnIntervals(obs.samples).map(
+    ([prev, cur]) =>
+      projectTokensPerSecond(prev.total, prev.atMs, cur.total, cur.atMs) ?? 0,
+  );
   if (rates.length === 0) return undefined;
   return rates.join(",");
 }
@@ -815,6 +825,7 @@ export function composePayload(
     metrics: metricsOver(unstamped(built.metrics), hookData),
     activity: unstamped(built.activity),
     cache: unstamped(built.cache),
+    speed: unstamped(built.speed),
     autoCompact: unstamped(built.autocompact),
     git: unstamped(built.git),
     pr: unstamped(built.pr),
@@ -884,6 +895,7 @@ export function composePayload(
   const burn: BurnPayload | Pending | undefined =
     firstPending(lanes.usage, lanes.metrics) ??
     burnOf(valueOf(lanes.usage)?.cost, valueOf(lanes.metrics)?.sessionDuration);
+  const speedPayload = over(lanes.speed, speedPayloadOf);
   // [LAW:types-are-the-program] Partial projections so absent provider data
   // travels as missing fields all the way to the inputs. Each provider's
   // null sub-fields become absent keys here; an input's fallback chain
@@ -973,6 +985,7 @@ export function composePayload(
     resumeCommand: resumeCommand(workspace, sessionId, hints.claudeConfigDir),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(burn !== undefined && { burn }),
+    ...(speedPayload !== undefined && { speed: speedPayload }),
     ...(fiveHour !== undefined && {
       block: {
         // [LAW:one-source-of-truth] Both fields read straight from the
@@ -1101,23 +1114,18 @@ function burnOf(
   return costPerHour === undefined ? undefined : { costPerHour };
 }
 
-// [LAW:one-source-of-truth] `speed` at a draw's instant: a rate is the burn
-// between the last two samples, which says nothing of now once the draw is
-// further past the last sample than one sample window, so an idle session's
-// rate ends with no sample taken (DRAW_PROJECTIONS).
+// [LAW:one-source-of-truth] `speed` from its samples alone: a rate is current
+// while the turn it measures is open, which the transcript says, so an idle
+// session's rate ends at the write that closed its turn and the payload holds
+// it with no clock.
 // [LAW:dataflow-not-control-flow] The rates and the burn-rate history fold
 // independently from one observation — an
 // idle-after-burst session has a history but no current rate — and the whole
 // `speed` key drops only when both are absent.
-export function speedOf(
-  fact: Reading<SpeedObservation>,
-  at: Instant,
-): SpeedPayload | Pending | undefined {
-  if (fact.kind === "pending") return pendingOf(fact.why);
-  if (fact.kind !== "ok") return undefined;
-  const obs = fact.value;
-  const current = dateOf(at).getTime() - obs.cur.atMs <= MAX_SPEED_SAMPLE_MS;
-  const rates = current ? projectSpeed(obs) : undefined;
+export function speedPayloadOf(
+  obs: SpeedObservation,
+): SpeedPayload | undefined {
+  const rates = projectSpeed(obs);
   const history = projectSpeedHistory(obs);
   return rates !== undefined || history !== undefined
     ? { ...rates, ...(history !== undefined && { history }) }
@@ -1128,19 +1136,10 @@ export function speedOf(
 // its own instant (DRAW_PROJECTIONS) — the daemon's, the demo's and check's
 // alike, so none of them draws a projection another leaves out.
 export function instantFacts(
-  builtins: {
-    readonly today: Reading<TodayFacts>;
-    readonly speed: Reading<SpeedObservation>;
-  },
+  builtins: { readonly today: Reading<TodayFacts> },
   at: Instant,
-): {
-  readonly today: TodayPayload | Pending | undefined;
-  readonly speed: SpeedPayload | Pending | undefined;
-} {
-  return {
-    today: todayOf(builtins.today, at),
-    speed: speedOf(builtins.speed, at),
-  };
+): { readonly today: TodayPayload | Pending | undefined } {
+  return { today: todayOf(builtins.today, at) };
 }
 
 // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the

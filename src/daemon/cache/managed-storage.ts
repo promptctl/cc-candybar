@@ -20,7 +20,7 @@ import { KeyedSource, NO_WATCH, type Resume } from "../../utils/keyed-source";
 import type { Lane } from "../../utils/reading";
 import { ABSENT, failed, type Outcome } from "../../utils/outcome";
 import type { DaemonLogger } from "../../utils/logger";
-import { RefreshLedger } from "../../utils/refresh-ledger";
+import { RefreshLedger, REFRESH_TRIGGERS } from "../../utils/refresh-ledger";
 import { valueOf } from "../../utils/logfmt";
 import { jsonParser } from "../../var-system/parse";
 import { sessionFileName } from "../../config/loader/plugins";
@@ -193,6 +193,7 @@ export class ManagedStorage {
       every: () => null,
       watch: NO_WATCH,
       maxEntries: MAX_ENTRIES,
+      lines: REFRESH_TRIGGERS,
       logger: opts.logger,
       ledger: opts.ledger ?? new RefreshLedger(opts.logger),
       clock: opts.clock,

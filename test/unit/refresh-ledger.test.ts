@@ -21,7 +21,7 @@ describe("RefreshLedger", () => {
       name: "git",
       scope: "repo",
       refresh: ["first", "period", "change"],
-      event: "own",
+      lines: ["first", "period", "change"],
     });
     expect(ledger.snapshot()).toEqual([
       {
@@ -55,19 +55,19 @@ describe("RefreshLedger", () => {
       name: "var.x",
       scope: "directory",
       refresh: ["first", "period"],
-      event: "own",
+      lines: ["first", "period"],
     });
     const b = ledger.declare({
       name: "var.x",
       scope: "directory",
       refresh: ["first", "period"],
-      event: "own",
+      lines: ["first", "period"],
     });
     const view = ledger.declare({
       name: "var.x",
       scope: "view",
       refresh: ["first", "change"],
-      event: "own",
+      lines: ["first", "change"],
     });
     a.recorded("", "first", ok(null), 1);
     b.recorded("", "period", ok(null), 1);
@@ -87,13 +87,13 @@ describe("RefreshLedger", () => {
       name: "tmux",
       scope: "pane",
       refresh: ["first", "period"],
-      event: "own",
+      lines: ["first", "period"],
     });
     const usage = ledger.declare({
       name: "usage",
       scope: "session",
       refresh: ["change"],
-      event: "step",
+      lines: [],
     });
     tmux.recorded("", "period", ok(null), 1);
     tmux.recorded("", "period", ok(null), 1);
@@ -115,7 +115,7 @@ describe("RefreshLedger", () => {
       name: "tmux",
       scope: "pane",
       refresh: ["period"],
-      event: "own",
+      lines: ["period"],
     });
     tmux.recorded("pane=%1", "period", ok(null), 5);
     tmux.recorded("pane=%1", "period", failed("no server", "read"), 6);
@@ -134,7 +134,7 @@ describe("RefreshLedger", () => {
       name: "usage",
       scope: "session",
       refresh: ["change"],
-      event: "step",
+      lines: [],
     });
     usage.recorded("sid=s", "change", ok(null), 2);
     usage.recorded("sid=s", "change", failed("parse error", "read"), 3);
@@ -144,6 +144,30 @@ describe("RefreshLedger", () => {
     ]);
     expect(usage.record()).toMatchObject({
       refreshes: { change: 2 },
+      failures: 1,
+    });
+  });
+
+  // A backstop's clean read over a quiet session is no news: a session held
+  // for hours adds nothing to the log, while a write's read still writes.
+  test("a trigger the source names no line for writes one only when it fails, and still counts", () => {
+    const { ledger, lines } = ledgerWithLog();
+    const transcript = ledger.declare({
+      name: "transcript",
+      scope: "session",
+      refresh: ["change", "period"],
+      lines: ["change"],
+    });
+    transcript.recorded("sid=s", "period", ok(null), 1);
+    transcript.recorded("sid=s", "change", ok(null), 2);
+    transcript.recorded("sid=s", "period", failed("gone", "read"), 3);
+
+    expect(lines).toEqual([
+      "info transcript refresh sid=s by=change outcome=ok took=2ms",
+      'warn transcript refresh sid=s by=period outcome=failed reason="gone" took=3ms',
+    ]);
+    expect(transcript.record()).toMatchObject({
+      refreshes: { change: 1, period: 2 },
       failures: 1,
     });
   });

@@ -23,7 +23,11 @@ export async function todayInfo(
 ) {
   const lane = store.declareToday(holds, claudeConfigDir);
   await store
-    .refresh(sessionIdOf(hookData.session_id), hookData.transcript_path, "change")
+    .refresh(
+      sessionIdOf(hookData.session_id),
+      hookData.transcript_path,
+      "change",
+    )
     .usage();
   await laneOutcome(lane);
   return projected(store, lane, hookData, at);
@@ -51,7 +55,12 @@ function projected(
   hookData: ClaudeHookData,
   at: Instant,
 ) {
-  const fact = todayReading(lane, store, sessionIdOf(hookData.session_id));
+  const fact = todayReading(
+    lane,
+    store,
+    sessionIdOf(hookData.session_id),
+    hookData.transcript_path,
+  );
   return fact.kind === "ok" ? projectToday(fact.value, at) : fact;
 }
 

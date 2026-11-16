@@ -234,7 +234,6 @@ export const PAYLOAD_INPUTS: Readonly<Record<string, VariableDecl>> = {
 // load error says it.
 export const DRAW_PROJECTIONS = {
   today: "the day the draw is at",
-  speed: "a rate ends once the draw is a sample window past its last sample",
   feeds: "the frames a lane was sent up to the draw's instant",
   drawing: "who the draw is for",
   diagnostics: "the errors and warnings the draw owes its reader",

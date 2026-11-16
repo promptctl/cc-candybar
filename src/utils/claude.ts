@@ -247,6 +247,8 @@ export interface ParsedEntry {
     model?: string;
     role?: string;
     type?: string;
+    // Why an assistant message stopped: `tool_use` while its turn goes on.
+    stopReason?: string;
   };
   costUSD?: number;
   isSidechain?: boolean;
@@ -307,6 +309,37 @@ export function userEntryOf(
     : "prompt";
 }
 
+// The stop reasons that end a turn: any other (a tool call, a message still
+// streaming) leaves Claude working on it.
+const TURN_ENDS: ReadonlySet<string> = new Set([
+  "end_turn",
+  "stop_sequence",
+  "max_tokens",
+  "refusal",
+]);
+
+// [LAW:one-source-of-truth] Whether the session's turn is open after `entry`:
+// input Claude answers opens one, an interrupt or a final assistant message
+// ends it, and everything else (a tool's answer, what Claude Code writes on
+// its own, a subagent's sidechain) leaves it as it was.
+export function turnOpenAfter(open: boolean, entry: ParsedEntry): boolean {
+  if (entry.isSidechain) return open;
+  switch (entry.userEntry) {
+    case "prompt":
+    case "turn":
+      return true;
+    case "interrupt":
+      return false;
+    case "tool-result":
+    case "claude-code":
+      return open;
+    case undefined:
+      return entry.type === "assistant"
+        ? !TURN_ENDS.has(entry.message?.stopReason ?? "")
+        : open;
+  }
+}
+
 const CLAUDE_CODE_TEXT =
   /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
 
@@ -339,6 +372,8 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
           usage,
           role: typeof msg.role === "string" ? msg.role : undefined,
           type: typeof msg.type === "string" ? msg.type : undefined,
+          stopReason:
+            typeof msg.stop_reason === "string" ? msg.stop_reason : undefined,
         }
       : undefined,
     costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,

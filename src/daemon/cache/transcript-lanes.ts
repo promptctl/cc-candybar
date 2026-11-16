@@ -91,6 +91,10 @@ export class TranscriptLanes {
       every: () => deps.every ?? TRANSCRIPT_PERIOD,
       watch: (followed, changed) => this.watch(followed, changed),
       maxEntries: MAX_UNHELD,
+      // [LAW:nothing-unseen] The period is a backstop for a dropped event, and
+      // its clean read over a quiet session says nothing: it counts in the
+      // ledger and writes no line, while a write's read writes one.
+      lines: ["first", "change", "supersede"],
       logger: deps.logger,
       ledger: deps.ledger,
       clock: deps.clock,

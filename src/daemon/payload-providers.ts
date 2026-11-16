@@ -105,13 +105,32 @@ export function createPayloadProviders(opts: {
     // entry's period re-arms after every read, so an owner a caller forgets
     // keeps its timers for good. The transcript lanes go before the usage
     // store their reads fill.
-    close: () => {
-      owners.gitProvider.close();
-      owners.transcriptLanes.close();
-      lanes.usageStore.close();
-      owners.tmuxService.close();
-      owners.hostService.close();
-      owners.managedStorage.close();
-    },
+    close: () =>
+      closeEach([
+        ["gitProvider", () => owners.gitProvider.close()],
+        ["transcriptLanes", () => owners.transcriptLanes.close()],
+        ["usageStore", () => lanes.usageStore.close()],
+        ["tmuxService", () => owners.tmuxService.close()],
+        ["hostService", () => owners.hostService.close()],
+        ["managedStorage", () => owners.managedStorage.close()],
+      ]),
   };
+}
+
+// [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every close runs,
+// whatever an earlier one threw, and the throws come back as one, each by its
+// owner's name, so the caller's teardown says which owner failed and none is
+// left holding its timers.
+function closeEach(
+  closes: ReadonlyArray<readonly [owner: string, close: () => void]>,
+): void {
+  const failures = closes.flatMap(([owner, close]) => {
+    try {
+      close();
+      return [];
+    } catch (e) {
+      return [`${owner}: ${e instanceof Error ? e.message : String(e)}`];
+    }
+  });
+  if (failures.length > 0) throw new Error(failures.join("; "));
 }

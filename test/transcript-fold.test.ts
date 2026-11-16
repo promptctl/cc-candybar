@@ -39,7 +39,7 @@ const REFRESHES = new RefreshLedger().declare({
   name: "count",
   scope: "session",
   refresh: ["change"],
-  event: "step",
+  lines: [],
 });
 
 // Every fold here counts entries: the smallest projection that makes "how much
