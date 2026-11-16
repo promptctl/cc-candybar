@@ -4,39 +4,39 @@
     {
       "version": "pr-764",
       "ref": "refs/pull/764/merge",
-      "sha": "4b0b012044352c446a63f28fbb9a69749507ae19",
-      "timestamp": "2026-11-16T04:28:10.894Z",
+      "sha": "42a144753a5bf29de27a96d198a11bf1b79814a1",
+      "timestamp": "2026-11-16T04:35:46.393Z",
       "commits": [
         {
-          "sha": "4b0b012044352c446a63f28fbb9a69749507ae19",
+          "sha": "42a144753a5bf29de27a96d198a11bf1b79814a1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T04:27:14Z",
-          "message": "Merge 71251a78dbfabab1dde7952681f25d1f4fac236c into f7442d22183b18f0639b631d9e4dadfa3cc35c4f\n"
+          "timestamp": "2026-11-16T04:34:44Z",
+          "message": "Merge 34e1b980d1f4dfa2e585973ecaf3e56bbcf62374 into f7442d22183b18f0639b631d9e4dadfa3cc35c4f\n"
         },
         {
-          "sha": "71251a78dbfabab1dde7952681f25d1f4fac236c",
+          "sha": "34e1b980d1f4dfa2e585973ecaf3e56bbcf62374",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T21:27:05-07:00",
           "message": "fix(demo): the resume command has no default, because every payload carries one (candybar-host-renderer-x96a.7q2)\n"
         },
         {
-          "sha": "650369d182bacf1ca07d0f161edafc1ab2dededf",
+          "sha": "2b44a2cba458c83ba7b00ccd9e9dfaf7e230e184",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T21:23:50-07:00",
           "message": "fix(demo): comments that list a preview signer's or a spelled session id's callers name them all (candybar-host-renderer-x96a.7q2)\n"
         },
         {
-          "sha": "e8c86caa35ef8a9c6b9e7246570364d136543e59",
+          "sha": "ea63541f235fcb06aa8e690e5336364dcabb08a9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T21:18:55-07:00",
           "message": "fix(demo): the examples render through check, and comments the deletion left stale say what is true (candybar-host-renderer-x96a.7q2)\n\nEvery payload carries a resume command now that only composePayload builds\none, so the toolbar's ⎘ resume is drawn ungated.\n"
         },
         {
-          "sha": "f0a89fb5510260ca2dd18b609b6bbdd863fbbf24",
+          "sha": "251c2e6997cd8bb6b5c3fd14144a09e4238ea0c6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T21:09:58-07:00",
