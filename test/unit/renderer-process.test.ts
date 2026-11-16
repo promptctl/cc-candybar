@@ -6,6 +6,7 @@
 import type { Asked } from "../../src/utils/outcome";
 import {
   BACKOFF_FIRST_MS,
+  BACKOFF_MAX_MS,
   HUNG_AFTER_MS,
   PING_PERIOD_MS,
   YOUNG_MS,
@@ -571,7 +572,9 @@ describe("ids a renderer mints", () => {
       output: {
         kind: "answered",
         record: [],
-        effects: [{ kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" }],
+        effects: [
+          { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
+        ],
         subscriptions: { sources: {}, tmuxStatus: [] },
         turnMs: 0,
       },
@@ -608,15 +611,71 @@ describe("ids a renderer mints", () => {
 
 describe("a renderer process's close", () => {
   test("what waits for a boot the close lands in fails as a closed renderer's", async () => {
-    const { link, clock } = rig();
+    const { link, children, clock } = rig();
     link.arm();
     const waiting = link.renderer.answer(pin);
-    const closed = link.close();
+    let endedBeforeTeardown = false;
+    const closed = link.close(async () => {
+      endedBeforeTeardown = children[0]!.stdinEnded;
+    });
     await expect(waiting).rejects.toThrow(
       new RendererDown("renderer main is closed"),
     );
+    // A fresh boot holds nothing to flush, so the teardown never waits on it.
+    expect(endedBeforeTeardown).toBe(true);
     clock.advance(1_000);
     await closed;
+  });
+
+  test("a live renderer takes inputs while the teardown runs, and its stdin closes after it", async () => {
+    const { link, children } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say({ kind: "started", pid: 9001 });
+    await settled();
+    let release = (): void => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const closed = link.close(() => released);
+    const heard = child.written.length;
+    void link.renderer.answer(pin).catch(() => {});
+    await settled();
+    expect(child.written.length).toBeGreaterThan(heard);
+    expect(child.stdinEnded).toBe(false);
+    release();
+    await settled();
+    expect(child.stdinEnded).toBe(true);
+    child.exit(EXITED);
+    await closed;
+  });
+
+  test("a renderer that ends while the teardown runs is not started again", async () => {
+    const { link, children, clock } = rig();
+    link.arm();
+    children[0]!.say({ kind: "started", pid: 9001 });
+    clock.advance(YOUNG_MS);
+    await settled();
+    let release = (): void => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const closed = link.close(() => released);
+    children[0]!.exit(CRASHED);
+    await settled();
+    clock.advance(BACKOFF_MAX_MS);
+    expect(children).toHaveLength(1);
+    await expect(link.renderer.answer(pin)).rejects.toThrow(
+      new RendererDown("renderer main is closed"),
+    );
+    release();
+    await closed;
+  });
+
+  test("a down renderer's next start never comes once the close begins", async () => {
+    const { link, children, clock } = rig();
+    link.arm();
+    children[0]!.exit(CRASHED);
+    await settled();
+    await link.close(async () => {});
+    clock.advance(BACKOFF_MAX_MS);
+    expect(children).toHaveLength(1);
   });
 
   test("its stdin closes, and one that does not end is signalled after the grace", async () => {
@@ -625,7 +684,8 @@ describe("a renderer process's close", () => {
     const child = children[0]!;
     child.say({ kind: "started", pid: 9001 });
     await settled();
-    const closed = link.close();
+    const closed = link.close(async () => {});
+    await settled();
     expect(child.stdinEnded).toBe(true);
     expect(child.opts.signal?.aborted).toBe(false);
     clock.advance(1_000);

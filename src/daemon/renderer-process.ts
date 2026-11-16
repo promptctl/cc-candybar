@@ -47,9 +47,11 @@ export interface RendererLink {
   // Starts the renderer's process: nothing in process, where it started as
   // it was built.
   arm(): void;
-  // Ends the renderer's process, after the daemon's close has run the
-  // renderer's own steps of it.
-  close(): Promise<void>;
+  // The daemon's close: the renderer stays live, and is never started again,
+  // while the teardown runs, then ends, flushing its session state as it goes.
+  // [LAW:no-ambient-temporal-coupling] The closing phase spans the teardown it
+  // is handed, so no close can begin without the link knowing it has.
+  close(teardown: () => Promise<unknown>): Promise<void>;
   // The renderer's own process from its spawn to its end, booting included:
   // its pid, and its memory as its latest ping read it. Null in process,
   // where the host's charge is the renderer's.
@@ -80,7 +82,7 @@ export type RendererPort = (prepared: {
 // daemon and the page run. It loads as the daemon's build begins.
 export const inProcessPort: RendererPort = ({ load }) => {
   const loaded = load();
-  return { start: (own) => inProcessRenderer(loaded, own.reaches) };
+  return { start: (own) => inProcessRenderer(loaded, own) };
 };
 
 // The renderer in a process of its own, which loads there, so the host never
@@ -95,13 +97,22 @@ export function processPort(
 
 function inProcessRenderer(
   loaded: LoadedMainRenderer,
-  reaches: AdapterToHost,
+  { reaches, clock }: LinkOwner,
 ): RendererLink {
   const renderer = loaded.start(reaches);
   return {
     renderer,
     arm: () => {},
-    close: async () => {},
+    // [LAW:single-enforcer] The flush a process renderer runs as its stdin
+    // ends (src/renderer-process.ts), here where it has no stdin.
+    close: async (teardown) => {
+      await teardown();
+      await renderer.answer({
+        kind: "adapter",
+        push: { kind: "close-session-state" },
+        at: instantAt(clock),
+      });
+    },
     process: () => null,
   };
 }
@@ -209,6 +220,9 @@ type Phase =
       readonly queued: Array<() => void>;
     }
   | { readonly kind: "live"; readonly link: Link }
+  // The daemon's teardown is running: the live renderer takes its steps, and
+  // its end starts no other.
+  | { readonly kind: "closing"; readonly link: Link }
   | {
       readonly kind: "down";
       readonly why: string;
@@ -249,7 +263,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   const watches = new Map<WatchId, Minted<WatchId>>();
 
   const current = (): Link | null =>
-    phase.kind === "starting" || phase.kind === "live" ? phase.link : null;
+    phase.kind === "starting" ||
+    phase.kind === "live" ||
+    phase.kind === "closing"
+      ? phase.link
+      : null;
   const down = (): RendererDown =>
     new RendererDown(
       phase.kind === "down"
@@ -437,6 +455,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     link.lines.ended(new RendererDown(`renderer main ${how}`));
     if (link.tookOver) gone.push(link);
     else release(link);
+    // [LAW:no-ambient-temporal-coupling] An end in the close starts nothing:
+    // the renderer flushed its own state on its way out, and a fresh one would
+    // hold nothing to flush while the close's steps waited on its boot.
+    if (phase.kind === "closing") phase = { kind: "closed" };
     if (phase.kind === "closed") return;
     const booted = phase.kind === "live";
     const queued = phase.kind === "starting" ? phase.queued : [];
@@ -505,7 +527,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   // An input goes to the live renderer, waits for the one starting, or fails
   // as no renderer's.
   const sent = <O>(answer: (link: Link) => Promise<O>): Promise<O> => {
-    if (phase.kind === "live") return answer(phase.link);
+    if (phase.kind === "live" || phase.kind === "closing")
+      return answer(phase.link);
     if (phase.kind === "starting") {
       const { queued } = phase;
       return new Promise<O>((resolve, reject) =>
@@ -570,14 +593,21 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       spawn();
       stopPings = clock.every(PING_PERIOD_MS, pinged, { unref: true });
     },
-    close: async () => {
+    close: async (teardown) => {
       const link = current();
       const queued = phase.kind === "starting" ? phase.queued : [];
       if (phase.kind === "down") phase.cancelRetry();
-      phase = { kind: "closed" };
-      // What waited for this boot fails as a closed renderer's.
+      phase =
+        phase.kind === "live"
+          ? { kind: "closing", link: phase.link }
+          : { kind: "closed" };
+      // What waited for this boot fails as a closed renderer's, and the boot
+      // ends now: it holds nothing to flush, and nothing waits on it.
       for (const send of queued) send();
+      if (link !== null && phase.kind === "closed") link.channel.end();
       stopPings();
+      await teardown();
+      phase = { kind: "closed" };
       if (link !== null) {
         link.channel.end();
         const grace = clock.after(CLOSE_GRACE_MS, () =>

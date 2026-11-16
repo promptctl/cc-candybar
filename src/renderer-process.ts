@@ -37,10 +37,10 @@ export function runRenderer(world: World): void {
     process.stdout.write(`${JSON.stringify(line)}\n`);
   };
   const host = hostOverLines(send);
-  // [LAW:single-enforcer] Every way out flushes the session state first, as
-  // the host's close does: through the renderer's own close step, so a
-  // renderer the host never closed (its host died, a throw ended it) loses
-  // only what no flush could save.
+  // [LAW:single-enforcer] Every way out flushes the session state first,
+  // through the renderer's own close step: the host's close (the stdin end it
+  // sends once its teardown has run) and every end the host never asked for
+  // (its death, a throw), so a renderer loses only what no flush could save.
   let renderer: Renderer | null = null;
   // [LAW:single-enforcer] One way out, taken once, whichever end came first.
   let leaving = false;

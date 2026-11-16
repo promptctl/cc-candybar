@@ -866,13 +866,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       link.arm();
     },
     async close() {
-      // The renderer's three steps of the teardown, each awaited where it
-      // stands: the renderer takes them in the order they are sent.
+      // The renderer's steps of the teardown, each awaited where it stands:
+      // the renderer takes them in the order they are sent.
       const rendererStep =
-        (kind: "close-journal" | "close-views" | "close-session-state") =>
-        (): Promise<unknown> =>
+        (kind: "close-journal" | "close-views") => (): Promise<unknown> =>
           parts.renderer.ask({ kind }, instant());
-      // The session state still flushes after a close failed (runTeardown).
+      // The renderer still ends after a step failed (runTeardown).
       const teardown: readonly TeardownStep[] = [
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
@@ -902,13 +901,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["sourceRuns close", () => sourceRuns.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        // Last: a run that ends in the teardown holds its click error first.
-        ["sessionState close", rendererStep("close-session-state")],
-        // After every step the renderer takes: its process, when it has one,
-        // ends with nothing left to flush.
-        ["renderer process close", () => link.close()],
       ];
-      await runTeardown(teardown, log);
+      // [LAW:single-enforcer] The renderer ends after the teardown, flushing
+      // its session state as it goes: last, so a run that ends in the teardown
+      // holds its click error first. While the teardown runs, a renderer that
+      // ends is not started again.
+      await link.close(() => runTeardown(teardown, log));
       closed = true;
       return { settled: launcher.settled() };
     },
