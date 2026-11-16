@@ -4,15 +4,22 @@
     {
       "version": "pr-774",
       "ref": "refs/pull/774/merge",
-      "sha": "e7bcbe6a38be238985695e98d80b263227810a99",
-      "timestamp": "2026-11-16T20:50:47.038Z",
+      "sha": "c380d6c882b7b4274a3335be92a7b0bacd347992",
+      "timestamp": "2026-11-16T20:55:23.618Z",
       "commits": [
         {
-          "sha": "e7bcbe6a38be238985695e98d80b263227810a99",
+          "sha": "c380d6c882b7b4274a3335be92a7b0bacd347992",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T13:49:43-07:00",
-          "message": "Merge b9e1c6ffc618e0ff3cff11ab6588397667372f54 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+          "timestamp": "2026-11-16T20:54:27Z",
+          "message": "Merge fb2c175b111587e754f289a3107a9625cdd6dfe3 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+        },
+        {
+          "sha": "fb2c175b111587e754f289a3107a9625cdd6dfe3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T13:54:16-07:00",
+          "message": "test(daemon): the fork-bomb test pins the breaker's own refusal, waits on its liveness read, and checks the sweep\n\n- d3's rejection must quote the breaker's refusal line, which the daemon\n  log writes out as the process exits, so a boot failing for another\n  reason no longer passes.\n- d2 is waited out by the breaker's own read, the registered pid and\n  start time, so a zombie or a reused pid answers as the breaker would.\n- d2's registration is asserted to be the one new entry, and d4's\n  admission is asserted to have swept it.\n"
         },
         {
           "sha": "b9e1c6ffc618e0ff3cff11ab6588397667372f54",
