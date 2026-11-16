@@ -2,31 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-773",
-      "ref": "refs/pull/773/merge",
-      "sha": "7237fdb7f0f159d371f9626dcf79f22a1e592394",
-      "timestamp": "2026-11-16T20:46:22.439Z",
+      "version": "pr-774",
+      "ref": "refs/pull/774/merge",
+      "sha": "e7bcbe6a38be238985695e98d80b263227810a99",
+      "timestamp": "2026-11-16T20:50:47.038Z",
       "commits": [
         {
-          "sha": "7237fdb7f0f159d371f9626dcf79f22a1e592394",
+          "sha": "e7bcbe6a38be238985695e98d80b263227810a99",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T20:45:10Z",
-          "message": "Merge 1c8baf4044289ec31ea55ab84f3b8db50404f5ca into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
+          "timestamp": "2026-11-16T13:49:43-07:00",
+          "message": "Merge b9e1c6ffc618e0ff3cff11ab6588397667372f54 into d7dfe00a0b58a559b3f47e2058445eff3c2f3960\n"
         },
         {
-          "sha": "1c8baf4044289ec31ea55ab84f3b8db50404f5ca",
+          "sha": "b9e1c6ffc618e0ff3cff11ab6588397667372f54",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T13:44:58-07:00",
-          "message": "test(daemon): every wait in the fork-bomb ceiling test is named and bounded only against a hang\n\n- Each step (two boots, the refused daemon's exit, the killed worker's\n  death, the control's boot) waits through `until` with one bound that\n  catches a hang and claims nothing about speed. A stuck step fails by\n  name, and its rejection still runs the test's cleanup.\n- The reclaim waits until d2's socket stops answering, i.e. its worker is\n  gone, not just its tsx wrapper: the worker's registry entry holds the\n  slot.\n- The local exit helper is gone.\n"
-        },
-        {
-          "sha": "3089862b1fd757073819e7355882b06dd867fa22",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T13:42:03-07:00",
-          "message": "test(daemon): the fork-bomb ceiling test asserts how a refused daemon ends, not how fast it boots\n\nThe (ceiling+1)th daemon was given 5 s from spawn to exit. That measures\na Node boot on whatever runner it lands on, and it failed main's Release\nrun while fourteen process suites booted daemons at once. The breaker's\nproof is that the daemon exits with failure and never binds its socket;\na daemon the breaker wrongly admitted never exits, which the test's own\ntimeout fails.\n"
+          "timestamp": "2026-11-16T13:49:25-07:00",
+          "message": "test(daemon): the fork-bomb ceiling test boots through the suite's isolated-daemon helper\n\nThe test hand-rolled its fixtures, a dedicated daemon pool, and a 5 s\nexit budget for the refused daemon. It failed main's Release run when a\nNode boot under fourteen parallel process suites ran past that budget.\n\nEvery daemon now boots through `spawnDaemonWithEnv`: the suite's one\nreadiness budget, the shared pool that caps how many daemons the suite\nruns, and a refusal named at once with the daemon's log and stderr. The\nrefused daemon is asserted by that helper's diagnosis: no socket, exited\nwith code 1. The reclaim waits until the killed worker's registered pid\nhas been reaped, since a zombie still counts live. d4 is d3's control: a\ndaemon set up as d3 was boots once a slot is free.\n"
         }
       ]
     },
