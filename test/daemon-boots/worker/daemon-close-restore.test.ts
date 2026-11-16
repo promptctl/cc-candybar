@@ -4,10 +4,11 @@
 // the process half a second in.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import type { Daemon } from "../../../src/daemon/daemon";
 import { daemonPaths } from "../../../src/daemon/paths";
 import { classifyInbound } from "../../../src/daemon/foundations/protocol";
 import {
@@ -15,17 +16,13 @@ import {
   type RendererPort,
 } from "../../../src/daemon/renderer-process";
 import type { TmuxAtExit } from "../../../src/daemon/tmux-status";
-import type {
-  Renderer,
-  RendererInput,
-} from "../../../src/renderer-interface/interface";
+import { rendererOf } from "../../../src/renderer-interface/interface";
 import { configFlag, render } from "../../helpers/daemon-e2e";
 import type { DaemonEndpoint } from "../../helpers/daemon-wire";
 import { hostOf } from "../../helpers/host";
 import { buildDaemon, bundleAt } from "../../helpers/in-worker-daemon";
+import { HAS_TMUX, privateTmux } from "../../helpers/private-tmux";
 import { until } from "../../helpers/until";
-
-const HAS_TMUX = spawnSync("tmux", ["-V"]).status === 0;
 
 // The in-process renderer, holding its answer to the close's first step until
 // `released` settles.
@@ -36,34 +33,35 @@ const heldOnClose =
     return {
       start: (own) => {
         const link = port.start(own);
-        const answer = (async (input: RendererInput) => {
-          if (input.kind === "adapter" && input.push.kind === "close-journal")
-            await released;
-          return link.renderer.answer(input as never);
-        }) as Renderer["answer"];
-        return { ...link, renderer: { answer } };
+        const inner = link.renderer;
+        const renderer = rendererOf({
+          event: (input) => inner.answer(input),
+          adapter: async (input) => {
+            if (input.push.kind === "close-journal") await released;
+            return inner.answer(input);
+          },
+        });
+        return { ...link, renderer };
       },
     };
   };
+
+// The process's own at-exit runner, as a blocking tmux call.
+const atExit: TmuxAtExit = (socket, args, input) => {
+  const run = spawnSync("tmux", ["-S", socket, ...args], {
+    encoding: "utf8",
+    input,
+  });
+  return run.status === 0
+    ? { kind: "ok", stdout: run.stdout }
+    : { kind: "failed", reason: run.stderr };
+};
 
 (HAS_TMUX ? test : test.skip)(
   "the tmux status lines are back while the renderer has not answered the close",
   async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "ccb-close-restore-"));
-    const socket = path.join(dir, "tmux.sock");
-    const tmux = (...args: string[]): string => {
-      const run = spawnSync("tmux", ["-S", socket, ...args], {
-        encoding: "utf8",
-      });
-      if (run.status !== 0) throw new Error(`tmux ${args[0]}: ${run.stderr}`);
-      return run.stdout;
-    };
-    const config = path.join(dir, "tmux.json5");
-    writeFileSync(
-      config,
-      `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a mark' } }, root: { h: ['mark'] } }`,
-    );
-    tmux("-f", "/dev/null", "new-session", "-d", "-s", "bar", "-x", "120", "-y", "40");
+    const tmux = privateTmux(dir);
     let release = (): void => {};
     const released = new Promise<void>((resolve) => (release = resolve));
     const host = hostOf({
@@ -92,49 +90,35 @@ const heldOnClose =
       log: paths.log,
       now: () => daemon.clock.now(),
     };
-    // The process's own at-exit runner, as a blocking tmux call.
-    const atExit: TmuxAtExit = (at, args, input) => {
-      const run = spawnSync("tmux", ["-S", at, ...args], {
-        encoding: "utf8",
-        input,
-      });
-      return run.status === 0
-        ? { kind: "ok", stdout: run.stdout }
-        : { kind: "failed", reason: run.stderr };
-    };
+    // The one close of the daemon, whichever way the case ends.
+    let closing: ReturnType<Daemon["close"]> | null = null;
     try {
-      const pane = tmux("list-panes", "-t", "bar", "-F", "#{pane_id}").trim();
-      const own = (): string => tmux("show-options", "-t", "bar");
-      const before = own();
+      const before = tmux.own();
       await until(async () => {
         await render(
           endpoint,
           "close-restore",
           dir,
-          {
-            termCols: 120,
-            termRows: 40,
-            tmux: { socket, pane, truecolor: null },
-          },
-          configFlag(config),
+          tmux.hints,
+          configFlag(tmux.config),
         );
-        return own() !== before;
+        return tmux.own() !== before;
       }, "the daemon's layout on the session");
 
       let closed = false;
-      const closing = daemon.close(atExit).then((c) => {
-        closed = true;
-        return c;
-      });
-      await until(() => own() === before, "the session's own status options");
+      closing = daemon.close(atExit);
+      void closing.then(() => (closed = true));
+      await until(
+        () => tmux.own() === before,
+        "the session's own status options",
+      );
       expect(closed).toBe(false);
-      release();
-      await (await closing).settled;
     } finally {
       release();
+      await (await (closing ?? daemon.close(atExit))).settled;
       await daemonLog.drained();
       daemonLog.dispose();
-      spawnSync("tmux", ["-S", socket, "kill-session", "-t", "bar"]);
+      tmux.kill();
       rmSync(dir, { recursive: true, force: true });
     }
   },
