@@ -44,16 +44,26 @@ test("past the hold, a request is owed them until an answer has carried them", (
   });
 });
 
-test("an answer carrying an older failure leaves a newer one owed", () => {
+// A click's own failure, then its run's: both show until an answer carries
+// them.
+test("a failure while the last is still owed joins it, and an answer carrying only the older leaves both owed", () => {
   const state = new SessionState();
   holdClickError(state, SID, "set-state: refused", at(100));
-  holdClickError(state, SID, "dispatch: boom", at(102));
+  holdClickError(state, SID, "run a: exited with code 1", at(102));
   answeredClickError(state, SID, error);
   expect(lastClickError(state, SID)).toEqual({
-    text: "dispatch: boom",
+    text: "set-state: refused\nrun a: exited with code 1",
     at: at(102),
     answered: false,
   });
+});
+
+test("a failure once an answer carried the last starts afresh", () => {
+  const state = new SessionState();
+  holdClickError(state, SID, "set-state: refused", at(100));
+  answeredClickError(state, SID, error);
+  holdClickError(state, SID, "run a: exited with code 1", at(102));
+  expect(lastClickError(state, SID)?.text).toBe("run a: exited with code 1");
 });
 
 test("reading a click's errors writes nothing, so a later render inside the hold still shows them", () => {

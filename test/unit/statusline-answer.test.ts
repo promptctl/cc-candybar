@@ -11,7 +11,7 @@
 
 import { UNFOLLOWED } from "../helpers/daemon-facts";
 import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
-import { eventRenderer, hearingEvents } from "../helpers/renderers";
+import { eventRenderer, hearingEvents, NO_ACTS } from "../helpers/renderers";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
@@ -48,7 +48,7 @@ const REQ = {
 } as unknown as CheckedRenderRequest;
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
-const NO_SUBSCRIPTIONS: Subscriptions = { sources: {} };
+const NO_SUBSCRIPTIONS: Subscriptions = { sources: {}, tmuxStatus: [] };
 const CLOCK = {
   monotonic: () => 0 as Monotonic,
   now: () => 1_700_000_000_000,
@@ -141,7 +141,7 @@ async function answer(
         holds.sessions.push(session);
         return () => void holds.count--;
       },
-    }),
+    }, NO_ACTS),
     {
       requested: (req) => {
         named.add(req.hookData.session_id);
@@ -311,6 +311,7 @@ test("a renderer that rejects is the turn's failure, said on its line, and the s
 test("a turn that throws still hands the host what its open views read", async () => {
   const left: Subscriptions = {
     sources: { [SESSION]: [] },
+    tmuxStatus: [],
   };
   const subscribed: Subscriptions[] = [];
   const { renderer } = scripted(threwWith([], "the draw broke", left));
@@ -338,8 +339,9 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
 test("the session's config reaches the renderer first, with the world state read at the request's keys, and its subscriptions reach the host before the request does", async () => {
   const opened: Subscriptions = {
     sources: { [SESSION]: [] },
+    tmuxStatus: [],
   };
-  const drawn: Subscriptions = { sources: {} };
+  const drawn: Subscriptions = { sources: {}, tmuxStatus: [] };
   const subscribed: Subscriptions[] = [];
   const { renderer, configs, requests } = scripted(
     { ...output([present(1)]), subscriptions: drawn },

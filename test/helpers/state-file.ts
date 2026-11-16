@@ -10,6 +10,17 @@ export function memoryStateFile<T>(initial: T): StateFile<T> & {
   return {
     read: () => ({ kind: "ok", value }),
     update: (next) => ({ kind: "ok", value: (value = next(value)) }),
+    plan: (next) => {
+      const planned = next(value);
+      return {
+        kind: "ok",
+        value: {
+          file: "memory",
+          text: planned === value ? null : JSON.stringify(planned),
+          value: planned,
+        },
+      };
+    },
     value: () => value,
   };
 }

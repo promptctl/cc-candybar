@@ -12,6 +12,7 @@ import {
   type StatuslineAnswer,
 } from "./statusline-answer.js";
 import { checkRenderRequest } from "./render-checkpoint.js";
+import type { EffectOutcome } from "../renderer-interface/interface.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import {
   PROTOCOL_VERSION,
@@ -359,6 +360,11 @@ export async function replyTo(
       // says how that answer is spelled, and no feed reads it
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
+      // A declared session's row follows the pane its newest request reports.
+      parts.declaredStatusLines.arrived(
+        checked.req.hookData.session_id,
+        checked.req.hints.tmux,
+      );
     }
     // The request's event, written on every exit, and its reply.
     const recorded = (rendered: {
@@ -738,15 +744,28 @@ async function handleClick(
       latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
     },
   });
-  switch (delivered.kind) {
-    case "answered":
-      facts.push(...delivered.record);
-      return { kind: "ok" };
-    case "threw":
-      facts.push(...delivered.record);
-      return delivered.failure;
-  }
+  facts.push(...delivered.record);
+  if (delivered.kind === "threw") return delivered.failure;
+  // [LAW:no-silent-failure] A click whose changes did not land, or whose act
+  // did not go, says so in its answer: by the first that did not.
+  const missed = delivered.settled.find((outcome) => outcome.kind !== "ok");
+  return missed === undefined ? { kind: "ok" } : clickFailure(missed);
 }
+
+// [LAW:types-are-the-program] An effect's outcome as its click's: a refusal is
+// the user's to act on, a close is the daemon's, anything else failed.
+function clickFailure(
+  outcome: Exclude<EffectOutcome, { kind: "ok" }>,
+): RequestOutcome {
+  const kind = CLICK_FAILURE[outcome.kind];
+  return { kind, message: outcome.reason, detail: outcome.reason };
+}
+
+const CLICK_FAILURE = {
+  refused: "bad-request",
+  failed: "threw",
+  closing: "closing",
+} as const;
 
 // [LAW:single-enforcer] The reply a click's outcome is answered with.
 function clickReply(outcome: RequestOutcome): Response {

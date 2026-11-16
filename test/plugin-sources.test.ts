@@ -5,7 +5,7 @@
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
 import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
-import { eventRenderer, NO_PUSHES } from "./helpers/renderers";
+import { eventRenderer, NO_ACTS, NO_PUSHES } from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { withTranscriptLanes } from "./helpers/payload-owners";
 import { reaction, runInAction } from "mobx";
@@ -844,7 +844,7 @@ function statusline(r: Rig, configFile: string) {
       return output;
     }),
     () => {},
-    r.collector,
+    r.collector, NO_ACTS,
   );
   // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
   // request delivered has settled, the present's `effect-done` among them, so

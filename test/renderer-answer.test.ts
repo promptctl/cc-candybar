@@ -48,7 +48,7 @@ import type {
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { HeldEvent } from "../src/utils/event-hold";
-import { hearingEvents, NO_PUSHES } from "./helpers/renderers";
+import { hearingEvents, NO_ACTS, NO_PUSHES } from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
@@ -296,6 +296,23 @@ describe("a statusline request", () => {
     expect(t.pipesAnswered).toEqual([event]);
   });
 
+  test("draws an act's failure no session's bar held as the daemon's warning, and an answer that carried it tells the host once it arrived", async () => {
+    const event = {
+      text: "copy: pbcopy failed: exit 1",
+      at: AT,
+      answered: false,
+    };
+    const t = renderer(undefined, () => ({
+      ...daemonFactsOf(),
+      actFailed: event,
+    }));
+    const { effects, record } = answered(await request(t));
+    expect(new Map(record).get("warn")).toBe("act-failed");
+    expect(t.pipesAnswered).toEqual([]);
+    answered(await done(t.r, presentOf(effects), true));
+    expect(t.pipesAnswered).toEqual([event]);
+  });
+
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
     const { r, recorded, rig } = renderer();
     const { effects } = answered(await request({ r, rig }));
@@ -310,7 +327,7 @@ describe("a statusline request", () => {
     await done(r, present, false);
     expect(recorded).toEqual([]);
     expect(threw(await done(r, present, true)).failure.message).toMatch(
-      /neither a present nor a change on its way/,
+      /no present, change or act on its way/,
     );
   });
 });
@@ -466,7 +483,7 @@ describe("the session's config, ahead of its request", () => {
       systemTimekeeper,
       hearingEvents(t.r, (input) => kinds.push(input.event.kind)),
       () => {},
-      t.rig.served.collector,
+      t.rig.served.collector, NO_ACTS,
     );
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
@@ -549,7 +566,7 @@ describe("two requests of one session at different keys", () => {
           requests.push(input.event.worldState);
       }),
       () => {},
-      t.rig.served.collector,
+      t.rig.served.collector, NO_ACTS,
     );
     const ask = (pane: string, id: number) =>
       answerStatusline(

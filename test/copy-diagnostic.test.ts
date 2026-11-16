@@ -9,7 +9,7 @@ import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
 import { SessionState } from "../src/renderer/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
-import { clickUrl, testVerbContext,
+import { clickActing, testVerbContext,
   verbContextWith } from "./helpers/click";
 
 const launched: LaunchOpts[] = [];
@@ -46,11 +46,15 @@ test("the first line's click copies the full prompt, though its link carries onl
   const link = list[0]!.lines[0]![0].link!;
   expect(link.length).toBeLessThan(200);
   expect(link).not.toContain("placement");
-  await clickUrl(link, verbContextWith(testVerbContext(new SessionState()), {
-    launch: clickLaunchVia(recording),
-    diagnosticCopy: (sid, by, key) =>
-      sid === SID && by === "request" ? copies.get(key) : undefined
-}));
+  const outcomes = await clickActing(
+    link,
+    verbContextWith(testVerbContext(new SessionState()), {
+      diagnosticCopy: (sid, by, key) =>
+        sid === SID && by === "request" ? copies.get(key) : undefined,
+    }),
+    { launch: clickLaunchVia(recording) },
+  );
+  expect(outcomes).toEqual([{ kind: "ok" }]);
   expect(launched).toHaveLength(1);
   expect(launched[0]!.bin).toBe("/usr/bin/pbcopy");
   expect(launched[0]!.stdinInput).toBe(PROMPT);
@@ -60,10 +64,13 @@ test("a key the session's last draw no longer lists is refused, and nothing is c
   const { list } = drawn();
   const link = list[0]!.lines[0]![0].link!;
   await expect(
-    clickUrl(link, verbContextWith(testVerbContext(new SessionState()), {
-      launch: clickLaunchVia(recording),
-      diagnosticCopy: () => undefined
-})),
+    clickActing(
+      link,
+      verbContextWith(testVerbContext(new SessionState()), {
+        diagnosticCopy: () => undefined,
+      }),
+      { launch: clickLaunchVia(recording) },
+    ),
   ).rejects.toThrow(/no longer listed/);
   expect(launched).toHaveLength(0);
 });

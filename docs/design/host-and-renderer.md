@@ -171,6 +171,10 @@ interface RendererOutput {
 
 interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
+  // The sessions whose tmux status row is on. The host holds each one's row
+  // at the pane its newest request reports, and lets a row go once its
+  // session is no longer named.
+  readonly tmuxStatus: readonly SessionId[];
 }
 
 // Where a declaration came from is what repository trust is judged on. A layer
@@ -235,14 +239,14 @@ type Effect =
   | { kind: "present"; session: SessionId; surface: PushedSurface; frame: Frame }
   | { kind: "change"; target: FileTarget; changes: readonly Change[] }
   | { kind: "store"; store: StoreName; key: string; value: JsonValue | null }
-  | { kind: "type-slash"; session: SessionId; line: SlashLine }
+  | { kind: "type-slash"; session: SessionId; pane: Pane; line: SlashLine }
   | { kind: "run"; session: SessionId; program: Program; refreshes: readonly SourceId[] }
-  | { kind: "restart-claude"; session: SessionId }
-  | { kind: "surface"; session: SessionId; surface: PushedSurface; on: boolean }
+  | { kind: "restart-claude"; session: SessionId; pane: Pane }
+  | { kind: "surface"; session: SessionId; surface: "band" | "pane"; pane: Pane; on: boolean }
   | { kind: "approve-repo"; session: SessionId; role: LayerRole; answer: boolean }
-  | { kind: "apply-update"; version: Version }
-  | { kind: "open"; url: string }
-  | { kind: "copy"; text: string }
+  | { kind: "apply-update"; session: SessionId }
+  | { kind: "open"; session: SessionId | null; url: string }
+  | { kind: "copy"; session: SessionId | null; text: string }
   | { kind: "schedule"; at: Instant; due: Scheduled };
 
 type Surface = "statusline" | PushedSurface;
@@ -274,8 +278,10 @@ interface Program {
 }
 ```
 
-`Address` is a setting's place inside its document, the keys and indexes from the document's root. `StoreName` is one name per durable store the profile holds; `SlashLine` is a slash command and its arguments, already parsed by the grammar the bar uses today; `Scheduled` is a token the renderer chose and gets back.
+`Address` is a setting's place inside its document, the keys and indexes from the document's root. `StoreName` is one name per durable store the profile holds; `SlashLine` is a slash command and its arguments, already parsed by the grammar the bar uses today; `Pane` is a tmux pane and its server, from the client hints the renderer holds for the session; `Scheduled` is a token the renderer chose and gets back.
 
+- **An act carries where it goes.** A slash line, a restart and a surface name the pane they act in, from the client hints the renderer holds for the session, so an act after a daemon restart goes where the bar the user clicked was drawn. A session that reported no pane is refused by the renderer, with the hints' own reason, and no act is sent. The host decides nothing about where an act goes.
+- **A turn's acts follow its landing.** Every act in a turn is performed only once the turn's changes and its trust-book answers have landed, in the order the turn returned them, and otherwise settles with the landing's outcome. A turn with no changes lands at once, and the daemon's close is one more landing outcome, `closing`, so no act starts once the close has begun. An act over in its turn (copy, open, a slash line, an update) is settled before the click is answered; a run, a restart and a surface outlive the click, and their `effect-done` arrives when they end. An act's failure shows on its session's bar, joining a click error no answer has carried yet. One with no session, or whose renderer has ended, shows on every bar as the daemon's.
 - **Every effect names its operation.** There is no `tmux { args }` and no free-form command, because a raw command admits every command and the safety of a slash line or a run could not be expressed in it. A run link's program is the declaration its link signed, as today. [LAW:types-are-the-program]
 - **Every write target is named, never spelled.** A `layer` is reached through a session the renderer holds and named by its role in that session's chain, and so is `claude-settings`. Durable state is written by `store`, so no target names a file under the profile. Undo stores these names, so a history copied to another renderer resolves only against what that renderer was handed.
 - **Which layer a write goes to is a value.** Every action that writes config names its target: a role, or `ask`, which offers the session's approved layers. The bundled config sets today's behaviour: steppers, persist actions and edit mode write the user layer, and save asks. Changing a default is a config edit. Undo writes to the layer its step wrote.
@@ -289,11 +295,11 @@ interface Program {
 - **The host splices, and refuses a setting that moved.** It splices each value in place and keeps every other byte, comments included, and a change's list lands whole or not at all. `read` is the value the renderer saw at that address. If it has moved, the host refuses the whole change and names the setting. That is how undo refuses a setting someone else changed, how save cannot overwrite a hand edit made after its config was read, and how the doctor's fix lands only on the settings it diagnosed. The guard is per setting because dozens of sessions write Claude Code's settings file, and a whole-file guard would fail on every unrelated write.
 - **A turn that changes a config layer ends when the change lands.** The host hands the layer's new text to config discovery, the one writer of every `ConfigSnapshot`. Every session whose chain holds that file gets it before its renderer's next input, so each click sees what the one before it left, and the watcher then finds nothing new. Every other writer reaches discovery through the watcher, as today. A turn's changes land together or not at all, and each is settled with that one outcome.
 - **A click lands whole or not at all.** Whatever else a click did — the picks a save releases, a history step — assumes its changes landed, so it is the next step of the chain: it applies in the changes' `effect-done` turn, or is dropped when they are refused, leaving the drafts and history as they were and the reason on the `⚠`. Until step 5, the renderer stands in for discovery: a layer is named by its path, the clicking session reloads in that turn, and a journal turn opens only once the changes ahead of it have landed.
-- **`type-slash` checks, then acts.** The interpreter reads the pane and refuses unless it shows Claude Code's bare input box, then stashes, pastes and submits. Nothing in the bar can come between the check and the act, because the interpreter runs one effect at a time; the user can, in the gap between two tmux calls, as today.
+- **`type-slash` checks, then acts.** The interpreter reads the pane and refuses unless it shows Claude Code's bare input box, then stashes, pastes and submits, in one effect. A pane's lane setups run one at a time, and a slash line for a pane a setup holds is refused at once, saying so: it would land in whatever the setup leaves there. Nothing else waits behind a setup, so a copy is never held behind a restart. The user can still come between the check and the act, in the gap between two tmux calls, as today.
 - **`run` carries its refreshes.** The collector holds each named source pending from the run's start until the program exits and the source has been re-read. The host owns that order. A run's program runs in its session's environment (above).
-- **Repository trust is the host's.** Which repositories may run commands is a security decision, so the host keeps the answers and resolves config by them; a click that answers the question returns `approve-repo` for the layer it asked about. [LAW:single-enforcer]
+- **Repository trust is the host's.** Which repositories may run commands is a security decision, so the host keeps the answers and resolves config by them; a click that answers the question returns `approve-repo` for the layer it asked about. The answer lands with the turn's config changes, its book rewritten and put back with theirs, so a click whose changes are refused records no answer. [LAW:single-enforcer]
 - **The interpreter is the one checkpoint for effects.** It parses each effect from the wire, refuses a target the renderer was not handed and a slash line that does not parse, and reports a refusal as a failed `effect-done`. A refusal is a fact the renderer holds for the bar like any other failed effect. Every renderer may ask for every effect; validation is about where, never what. [LAW:parse-dont-validate]
-- **Everything the bar does today has a place.** The tmux status options and the status-line binding are part of the host turning the `tmux-status` surface on, and splitting or killing the bar pane, with the plugin install the pane's setup runs, part of turning `pane` on; each surface's setup lives in the host's adapter for that surface. Plugin storage folders are created by discovery. The doctor's probes are subscriptions to doctor sources, its verdicts the renderer's, and its fixes a `change` or, for the marks book, `store`. Applying an update is `apply-update`. The `env` source stays, reading the session's environment rather than the daemon's.
+- **Everything the bar does today has a place.** The tmux status row is held by declaration, not by an act: the host's tmux adapter owns the status options, the status-line binding and the layout, holds a row for each session the renderer's subscriptions name, follows the session's pane at each of its requests, and releases a session the subscriptions stop naming. A row the host released on its own is held again at the session's next request. An act would make the renderer remember what it asked, and that memory drifts from the host's whenever the host releases a row, an act is refused, or the renderer restarts. Splitting or killing the bar pane is turning `pane` on or off, and installing the band mod is turning `band` on; each surface's setup lives in the host's adapter for that surface. Plugin storage folders are created by discovery. The doctor's probes are subscriptions to doctor sources, its verdicts the renderer's, and its fixes a `change` or, for the marks book, `store`. Applying an update is `apply-update`, and what it applies is the update watch's to decide from its own provenance, so the effect names no version. The `env` source stays, reading the session's environment rather than the daemon's.
 - **One verb is removed under goals.md R-4:** `load-config`, which points a session at a path a click supplies and so would store an absolute path (R-13). The file `--config` names, set when Claude Code starts, is how a session uses another file.
 
 ## 8. Addressing and lifetime

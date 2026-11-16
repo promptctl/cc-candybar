@@ -13,7 +13,6 @@
 import {
   answerRequest,
   configureSession,
-  laneClicked,
   lanesAt,
   renderFrame,
   retireSession,
@@ -57,6 +56,8 @@ import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { RenderWarningRecords } from "./render-warnings.js";
+import { ActsOnTheirWay } from "./acts.js";
+import { LaneActs } from "./lane-acts.js";
 import { WorldStates } from "./world-states.js";
 import { UpdateGate } from "./update-gate.js";
 import { Watches } from "./watches.js";
@@ -100,7 +101,7 @@ export function mainRenderer(
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, () => void>();
   // The subscriptions this renderer last returned: none before its first turn.
-  let subscriptions: Subscriptions = { sources: {} };
+  let subscriptions: Subscriptions = { sources: {}, tmuxStatus: [] };
 
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
@@ -127,6 +128,7 @@ export function mainRenderer(
             idleSince: event.idleSince,
           },
           record,
+          effects,
         );
         const id = parts.mint();
         deliveries.set(id, delivered);
@@ -147,13 +149,14 @@ export function mainRenderer(
         retireSession(parts, event.session);
         return;
       case "effect-done": {
-        if (parts.verbs.changeDone(event.of, event.outcome)) return;
+        if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
+        if (parts.acts.done(event.of, event.session, event.outcome)) return;
         const delivered = deliveries.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
         // one already settled, is the host's bug: said, never ignored.
         if (delivered === undefined)
           throw new Error(
-            `effect-done for effect ${event.of}, which is neither a present nor a change on its way`,
+            `effect-done for effect ${event.of}, which is no present, change or act on its way`,
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
@@ -203,7 +206,15 @@ export function mainRenderer(
       // `effect-done`; the subscriptions last returned then stand.
       const ended = await turn(input.event, input.at, record, effects)
         .finally(() => {
-          subscriptions = parts.renderCache.subscriptions();
+          const { sources } = parts.renderCache.subscriptions();
+          subscriptions = {
+            sources,
+            // [LAW:one-source-of-truth] Read off the same open views: a
+            // session whose view closes stops being named, so its row goes.
+            tmuxStatus: (Object.keys(sources) as SessionId[]).filter(
+              (session) => viewLanes(parts, session)?.tmuxStatus === true,
+            ),
+          };
         })
         .then(
           () => ({ kind: "answered" }) as const,
@@ -293,6 +304,16 @@ function startOver(
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const configWrites = new ConfigWrites(mint, readConfigText);
+  // [LAW:single-enforcer] A failed act of a session's, on its bar the way its
+  // click's own failure is.
+  const actFailed = (session: SessionId, reason: string): void =>
+    holdClickError(sessionState, session, reason, now());
+  const acts = new ActsOnTheirWay(mint, actFailed);
+  const laneActs = new LaneActs({
+    ask: (effects, act) => acts.ask(effects, act),
+    refused: actFailed,
+    log,
+  });
   // [LAW:single-enforcer] The one queue every journal waits its turn in, the
   // renderer's own: no host part takes a turn.
   const journalTurns = new JournalTurns({
@@ -375,6 +396,7 @@ function startOver(
     worldStates,
     renderWarnings,
     effectSessions,
+    laneActs,
   };
   const reloadConfig = (origin: RenderOrigin): void =>
     renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
@@ -391,9 +413,8 @@ function startOver(
     configWrites,
     clickLanded: (sessionId) => host.menuIdle.clicked(sessionId, now()),
     log,
-    launch: host.launch,
+    acts,
     now,
-    applyUpdate: host.applyUpdate,
     doctor: {
       ...machineReads,
       // The load the session's bar is drawn from: its cache entry's load
@@ -421,7 +442,6 @@ function startOver(
     clients: host.renderSightings,
     bundle: inputs.bundle,
     serving: host.serving,
-    typeSlash: host.typeSlash,
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -435,12 +455,11 @@ function startOver(
       renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
         .state.sources,
     links: linkSigner,
-    runs: host.runs,
     lanes: {
       of: (origin, sessionId, latest) =>
         lanesAt(parts, origin, sessionId, latest),
-      clicked: (sessionId, latest, before, after) =>
-        laneClicked(parts, sessionId, latest, before, after),
+      clicked: (sessionId, latest, before, after, effects) =>
+        laneActs.clicked(sessionId, latest, before, after, effects),
     },
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
@@ -520,9 +539,6 @@ function startOver(
       case "watch":
         watches.pushed(push.id, push.heard, push.deaf);
         return { kind: "watch" };
-      case "hold-click-error":
-        holdClickError(sessionState, push.session, push.text, at);
-        return { kind: "hold-click-error" };
       case "reload-every":
         renderCache.reloadEvery({ kind: "events-resumed", since: push.since });
         return { kind: "reload-every" };
@@ -544,7 +560,7 @@ function startOver(
     }
   };
   return mainRenderer(
-    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint },
+    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint, acts },
     pushed,
   );
 }

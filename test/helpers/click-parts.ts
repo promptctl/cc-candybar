@@ -11,7 +11,8 @@ import type { Collector } from "../../src/daemon/collector";
 import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
 import type { MenuIdle } from "../../src/daemon/menu-idle";
-import { rendererHost } from "../../src/daemon/renderer-host";
+import { rendererHost, type HostWorld } from "../../src/daemon/renderer-host";
+import type { ActsOnTheirWay } from "../../src/renderer/acts";
 import { mainRenderer } from "../../src/renderer/main";
 import { systemTimekeeper } from "../../src/time";
 import {
@@ -27,6 +28,17 @@ export function clickParts(
     holding: () => () => {},
     clicked: () => {},
   },
+  // What the host's turns act in: by default, an act it is handed fails by
+  // name, so a test whose click asks one hands in its own performer.
+  world: HostWorld = {
+    perform: async (act) => ({
+      kind: "failed",
+      reason: `${act.kind}: no host part in this rig`,
+    }),
+    stateDir: verbCtx.stateDir,
+    closing: () => false,
+    unheard: () => {},
+  },
 ): Pick<DaemonParts, "renderer" | "clicks" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
 } {
@@ -37,9 +49,13 @@ export function clickParts(
     verbs: verbsOver(verbCtx, { gone: async (click) => clicks.gone(click) }),
     menuIdle,
     renderCache: { subscriptions: () => ({ sources: {} }) },
+    // No view is open, so no lane is read.
+    laneActs: { noted: () => {}, clicked: () => {} },
     // What the renderer times each turn by.
     clock: systemTimekeeper,
     mint: minter(),
+    // The acts the test's verb context asks, settled by this rig's host.
+    acts: verbCtx.acts as ActsOnTheirWay,
   } as unknown as MainRendererParts;
   return {
     renderer: rendererHost(
@@ -48,6 +64,7 @@ export function clickParts(
       mainRenderer(parts, NO_PUSHES),
       () => {},
       { subscribed: () => {}, holding: collector.holding },
+      world,
     ),
     clicks,
     collector,

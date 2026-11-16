@@ -621,6 +621,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         const marks: DoctorStores["marks"] = {
           read: () => ({ kind: "ok", value: {} }),
           update: fileMarkBook(dir).update,
+          plan: fileMarkBook(dir).plan,
         };
         const ctx = {
           ...rt.ctx,
@@ -645,7 +646,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       await rt.openTools();
       await expect(VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).rejects.toThrow(
         new BadVerbArgs(
-          "the doctor looked at the font less than a second ago — click again",
+          "doctor-run: the doctor looked at the font less than a second ago — click again",
         ),
       );
       expect(rt.render()).not.toContain("Nerd Font");

@@ -22,7 +22,21 @@ export interface StateFile<T> {
   // other contents are never lost to a filing. A `next` that returns what it
   // was given writes nothing. Only a write that fails throws.
   readonly update: (next: (current: T) => T) => Asked<T>;
+  // What `update` would write, unwritten: the file, its next text — null when
+  // `next` returns what it was given — and the value, so a caller that lands
+  // several files together writes this one with the rest.
+  readonly plan: (next: (current: T) => T) => Asked<Planned<T>>;
 }
+
+export interface Planned<T> {
+  readonly file: string;
+  readonly text: string | null;
+  readonly value: T;
+}
+
+// [LAW:one-source-of-truth] How every state file spells what it holds.
+const textOf = (value: unknown): string =>
+  `${JSON.stringify(value, null, 2)}\n`;
 
 // The store named `name` under the daemon's state directory. `parse` reads
 // the parsed document; its failure reason is told after the file's name
@@ -65,16 +79,26 @@ export function stateFile<T>(
       ? parsed
       : { kind: "failed", reason: `${file} ${parsed.reason}` };
   };
-  return {
-    read,
-    update: (next) => {
-      const current = read();
-      if (current.kind === "failed") return current;
-      const value = next(current.value);
-      if (value !== current.value) {
-        writeAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
-      }
-      return { kind: "ok", value };
-    },
+  const plan = (next: (current: T) => T): Asked<Planned<T>> => {
+    const current = read();
+    if (current.kind === "failed") return current;
+    const value = next(current.value);
+    return {
+      kind: "ok",
+      value: {
+        file,
+        text: value === current.value ? null : textOf(value),
+        value,
+      },
+    };
   };
+  return { read, plan, update: (next) => written(plan(next)) };
+}
+
+// [LAW:single-enforcer] A plan written: its text, when it has any.
+export function written<T>(planned: Asked<Planned<T>>): Asked<T> {
+  if (planned.kind === "failed") return planned;
+  const { file, text, value } = planned.value;
+  if (text !== null) writeAtomic(file, text);
+  return { kind: "ok", value };
 }

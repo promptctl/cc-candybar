@@ -4,6 +4,7 @@
 
 import {
   BINDING_OPTION,
+  DeclaredStatusLines,
   PRIOR_OPTION,
   TmuxStatusLines,
   rowFormat,
@@ -14,6 +15,7 @@ import {
 import type { Subscriber } from "../src/daemon/frame-feed";
 import type { StatusLines } from "../src/daemon/pane-visibility";
 import type { TmuxRun } from "../src/proc/tmux";
+import type { TmuxHint } from "../src/tmux-hint";
 import { rangeOf } from "../src/tmux-status/frames";
 import { barOf } from "./helpers/drawn-frame";
 
@@ -478,5 +480,53 @@ describe("tmuxArg", () => {
   test("a value ending in ; keeps it", () => {
     expect(tmuxArg("a;")).toBe("a\\;");
     expect(tmuxArg("a")).toBe("a");
+  });
+});
+
+// [LAW:verifiable-goals] The rows the host holds are the ones the renderer
+// declares: a session named is held in the pane its newest request reports,
+// one no longer named is let go, and one the host released on its own is held
+// again at its next request.
+describe("the declared status lines", () => {
+  const PANE_A: TmuxHint = { socket: "/tmp/t", pane: "%1", truecolor: null };
+  const PANE_B: TmuxHint = { socket: "/tmp/t", pane: "%2", truecolor: null };
+  const rig = () => {
+    const seen: string[] = [];
+    const panes = new Map<SessionId, TmuxHint | null>([[S1, PANE_A]]);
+    const declared = new DeclaredStatusLines(
+      {
+        observe: (session, tmux, on) =>
+          void seen.push(`${session} ${tmux?.pane ?? String(tmux)} ${on ? "on" : "off"}`),
+      },
+      (session) => panes.get(session),
+    );
+    return { declared, seen, panes };
+  };
+
+  test("a session newly named is held in its newest request's pane; one no longer named is let go", () => {
+    const { declared, seen } = rig();
+    declared.declare([S1]);
+    expect(seen).toEqual(["s1 %1 on"]);
+    // The same declaration again holds nothing again.
+    declared.declare([S1]);
+    expect(seen).toHaveLength(1);
+    declared.declare([]);
+    expect(seen).toEqual(["s1 %1 on", "s1 null off"]);
+  });
+
+  test("a named session's request is held in the pane it reports; an unnamed one's is not", () => {
+    const { declared, seen } = rig();
+    declared.arrived(S1, PANE_A);
+    expect(seen).toEqual([]);
+    declared.declare([S1]);
+    declared.arrived(S1, PANE_B);
+    expect(seen).toEqual(["s1 %1 on", "s1 %2 on"]);
+  });
+
+  test("a session named before its first request is held once that request reports its pane", () => {
+    const { declared, seen } = rig();
+    declared.declare([S2]);
+    declared.arrived(S2, PANE_B);
+    expect(seen).toEqual(["s2 undefined on", "s2 %2 on"]);
   });
 });

@@ -525,7 +525,7 @@ describe("ids a renderer mints", () => {
       kind: "answered",
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {} },
+      subscriptions: { sources: {}, tmuxStatus: [] },
       turnMs: 0,
     };
     child.say({ kind: "output", n: inputs(child)[0]!.n, output: answeredWith });
@@ -548,6 +548,61 @@ describe("ids a renderer mints", () => {
     expect(inputs(child)[1]!.input).toMatchObject({
       event: { kind: "effect-done", of: 7 },
     });
+  });
+
+  // A run or a restart outlives the renderer that asked for it: its end is
+  // owed to that renderer alone, and the next one, whose ids start again,
+  // would take it for one of its own.
+  test("an effect-done for an effect an ended renderer returned reaches no newer renderer", async () => {
+    const { link, children, inputs, clock } = rig();
+    link.arm();
+    const first = children[0]!;
+    first.say({ kind: "started", pid: 9001 });
+    await settled();
+    const output = link.renderer.answer({
+      kind: "event",
+      at: 0,
+      event: { kind: "retire", session: SESSION },
+    } as never);
+    await settled();
+    first.say({
+      kind: "output",
+      n: inputs(first)[0]!.n,
+      output: {
+        kind: "answered",
+        record: [],
+        effects: [{ kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" }],
+        subscriptions: { sources: {}, tmuxStatus: [] },
+        turnMs: 0,
+      },
+    });
+    const answered = await output;
+    if (answered.kind !== "answered") throw new Error("the turn threw");
+    const hostId = answered.effects[0]!.id;
+    first.exit(CRASHED);
+    await settled();
+    clock.advance(BACKOFF_FIRST_MS);
+    const second = children[1]!;
+    second.say({ kind: "started", pid: 9002 });
+    await settled();
+    const heard = inputs(second).length;
+    await expect(
+      link.renderer.answer({
+        kind: "event",
+        at: 0,
+        event: {
+          kind: "effect-done",
+          session: SESSION,
+          of: hostId,
+          outcome: { kind: "failed", reason: "copy: pbcopy failed" },
+        },
+      } as never),
+    ).rejects.toThrow(
+      new RendererDown(
+        `renderer main: effect ${hostId} was returned by a renderer that has ended`,
+      ),
+    );
+    expect(inputs(second)).toHaveLength(heard);
   });
 });
 

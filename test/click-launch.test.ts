@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { HOST } from "./helpers/host";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { clickLaunch } from "../src/renderer/verbs";
+import { clickLaunch } from "../src/daemon/foundations/click-launch";
 import { clickHandoff } from "../src/daemon/click-handoff";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { systemTimekeeper } from "../src/time";

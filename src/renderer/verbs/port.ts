@@ -1,8 +1,7 @@
 // What the renderer's click and menu-idle turns act through: the verb table's
-// handlers over the daemon's verb context (src/renderer/verbs/index.ts). Every
-// verb still acts in place, on the session state, the render cache, the
-// launcher and tmux, until the spec's plan step 2 returns its act as an
-// effect (docs/design/host-and-renderer.md §12).
+// handlers over the daemon's verb context (src/renderer/verbs/index.ts). A
+// verb writes the session state and the config in its turn, and asks
+// everything else of the host as an act its turn returns.
 
 import type { RendererParts } from "../draw-bar.js";
 import type { SessionId } from "../../daemon/foundations/session-id.js";
@@ -14,6 +13,7 @@ import type {
   RequestId,
 } from "../../renderer-interface/interface.js";
 import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
+import type { ActsOnTheirWay } from "../acts.js";
 import {
   changeDone,
   closeIdleMenus,
@@ -59,9 +59,9 @@ export interface RendererVerbs {
     idle: IdleClose,
     effects: Effect[],
   ): Promise<void>;
-  // A change's `effect-done`, in its turn: false for an id no click's change
-  // holds.
-  changeDone(id: EffectId, outcome: EffectOutcome): boolean;
+  // A change's `effect-done`, in its turn, whose effects what its click's
+  // consequence asks joins: false for an id no click's change holds.
+  changeDone(id: EffectId, outcome: EffectOutcome, effects: Effect[]): boolean;
 }
 
 // The main renderer's parts: the draw's, which the host's own frames share,
@@ -69,17 +69,19 @@ export interface RendererVerbs {
 export type MainRendererParts = RendererParts & {
   readonly verbs: RendererVerbs;
   // [LAW:one-source-of-truth] The one minter of this renderer's effect ids,
-  // a present's and a change's alike.
+  // a present's, a change's and an act's alike.
   readonly mint: () => EffectId;
+  // The acts this renderer's turns asked of the host, until each is settled.
+  readonly acts: Pick<ActsOnTheirWay, "done">;
 };
 
 // [LAW:single-enforcer] The verb table over the one verb context the daemon
 // builds. [LAW:dataflow-not-control-flow] The dispatch is a table lookup: the
 // verb table (src/renderer/verbs/index.ts) is the one list of supported verbs,
 // and their handlers live there.
-// [LAW:effects-at-boundaries] exception: the verbs still act in place, so the
-// port is where a click's id meets the host's answer of whether its client
-// left.
+// [LAW:effects-at-boundaries] exception: a click's waits ask the host in place
+// whether its client left, so the port is where a click's id meets the host's
+// answer.
 export function verbsOver(
   ctx: DaemonVerbContext,
   clicks: AdapterToHost["clicks"],
@@ -99,6 +101,6 @@ export function verbsOver(
     },
     closeIdle: (sessionId, latest, idle, effects) =>
       closeIdleMenus(sessionId, latest, idle, ctx, effects),
-    changeDone: (id, outcome) => changeDone(ctx, id, outcome),
+    changeDone: (id, outcome, effects) => changeDone(ctx, id, outcome, effects),
   };
 }

@@ -31,7 +31,7 @@ import {
   repoConfigs,
   repoConfigsPath,
   repoQuestions,
-} from "../src/renderer/repo-configs";
+} from "../src/config/repo-configs";
 import { SessionState } from "../src/renderer/session-state";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";

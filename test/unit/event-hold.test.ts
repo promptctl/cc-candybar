@@ -1,8 +1,9 @@
 // The daemon's one rule for how long an event-shaped error shows
 // (src/utils/event-hold.ts): every render inside the hold, and past it a
-// request until an answer has carried it.
+// request until an answer has carried it; and the one rule for an event that
+// follows another.
 
-import { answeredBy, eventHoldAt } from "../../src/utils/event-hold";
+import { answeredBy, eventHoldAt, joinedEvent } from "../../src/utils/event-hold";
 import type { Instant } from "../../src/utils/instant";
 
 const at = (seconds: number): Instant => seconds as Instant;
@@ -34,4 +35,22 @@ test("an answer marks the latest event it carried, once, and never a newer one",
   expect(answeredBy(answered, fresh)).toBe(false);
   expect(answeredBy({ ...fresh, at: at(101) }, fresh)).toBe(false);
   expect(answeredBy({ ...fresh, text: "2× e" }, fresh)).toBe(false);
+});
+
+test("an event while the last is still owed joins it; once an answer carried the last, the next starts afresh", () => {
+  expect(joinedEvent(null, "run failed", at(200))).toEqual({
+    text: "run failed",
+    at: at(200),
+    answered: false,
+  });
+  expect(joinedEvent(fresh, "run failed", at(200))).toEqual({
+    text: "e\nrun failed",
+    at: at(200),
+    answered: false,
+  });
+  expect(joinedEvent(answered, "run failed", at(200))).toEqual({
+    text: "run failed",
+    at: at(200),
+    answered: false,
+  });
 });

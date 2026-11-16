@@ -10,6 +10,7 @@ import type {
   RendererOutput,
 } from "../../src/renderer-interface/interface";
 import { rendererOf } from "../../src/renderer-interface/interface";
+import type { HostWorld } from "../../src/daemon/renderer-host";
 
 // A renderer whose events `answered` answers, and which no push reaches.
 export function eventRenderer(
@@ -39,6 +40,21 @@ export function pushRenderer(
 // bug, said.
 export const NO_PUSHES = (): never => {
   throw new Error("this rig hands the renderer no push");
+};
+
+// The world of a rig whose renderer asks no act: one it is handed fails by
+// name, the daemon is not closing, and an act's failure no bar holds would be
+// the rig's bug.
+export const NO_ACTS: HostWorld = {
+  perform: async (act) => ({
+    kind: "failed",
+    reason: `${act.kind}: this rig performs no act`,
+  }),
+  stateDir: "/nonexistent/this-rig-has-no-state-dir",
+  closing: () => false,
+  unheard: (text) => {
+    throw new Error(`an act's failure no bar holds: ${text}`);
+  },
 };
 
 // `renderer`, with `heard` told each event before it answers.

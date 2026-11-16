@@ -46,7 +46,7 @@ Menus close themselves after a timeout counted from the session's last click. Th
 
 ## Slash commands
 
-A slash click types into the session's tmux pane. The daemon reads the pane first and refuses unless the pane shows the bare input box: a permission dialog would take the Enter as approval, and a held ctrl+s stash would get popped into the command. The keys go in one tmux call: ctrl+s (Claude Code restores the draft afterwards), then a bracketed paste, then Enter. Only lines the config declares get typed.
+A slash click types into the session's tmux pane. The daemon reads the pane first and refuses unless the pane shows the bare input box: a permission dialog would take the Enter as approval, and a held ctrl+s stash would get popped into the command. The keys go in one tmux call: ctrl+s (Claude Code restores the draft afterwards), then a bracketed paste, then Enter. Only lines the config declares get typed. A slash line for a pane a lane setup holds is refused at once rather than queued, because it would land in whatever the setup leaves there; nothing else waits behind a setup, so a copy is never held behind a restart.
 
 ## Running a program
 
@@ -58,7 +58,7 @@ The click is answered at once and the program runs after it. Its failure therefo
 
 ## A failed click's error
 
-A failed click's error shows for a few seconds of reruns, and after that until an answer has actually carried it to a client. With no refresh interval, Claude Code asks only on events, so a time limit alone could expire the error before anyone sees it. It counts as delivered only once an answer carrying it has been flushed successfully. The same hold rule serves every event-shaped error, such as a launched program's pipe cut or failing after its launch, each with its own hold length, so two errors can never disagree on when an event stops showing. The launcher's event is daemon-wide: one session's answer carrying it is what makes it seen.
+A failed click's error shows for a few seconds of reruns, and after that until an answer has actually carried it to a client. With no refresh interval, Claude Code asks only on events, so a time limit alone could expire the error before anyone sees it. It counts as delivered only once an answer carrying it has been flushed successfully. The same hold rule serves every event-shaped error, such as a launched program's pipe cut or failing after its launch, each with its own hold length, so two errors can never disagree on when an event stops showing. The launcher's event is daemon-wide: one session's answer carrying it is what makes it seen. A failure that comes while the last is still owed joins it rather than replacing it, because a click's own failure and the failure of the run it started arrive apart and both must be seen. An act's failure with no session to show it on, or whose renderer has ended, is the daemon's, held on every bar like the launcher's.
 
 ## Copying a diagnostic
 

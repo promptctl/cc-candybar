@@ -160,7 +160,7 @@ These are word matches across the 301 test files. `links(` is a heuristic, and t
 - `src/render/carousel.ts`: two sites.
 - `src/render/diagnostics.ts`: `copyLink`, `viewerLink`.
 - `src/daemon/update-notice.ts`: three sites.
-- `src/renderer/repo-configs.ts`: `repoQuestions`, signed.
+- `src/config/repo-configs.ts`: `repoQuestions`, signed.
 - `src/renderer/lane-handoff.ts`: `laneHandoff`.
 - Click drivers only: `scripts/load-gate.ts` and `scripts/bench/suites/wire.ts`. 21 test files also call it.
 
