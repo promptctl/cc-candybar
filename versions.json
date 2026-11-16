@@ -4,15 +4,29 @@
     {
       "version": "pr-763",
       "ref": "refs/pull/763/merge",
-      "sha": "7996b97a9874254814cd4e66f4018cff1d7d9813",
-      "timestamp": "2026-11-16T03:33:30.266Z",
+      "sha": "ef0e9da0ed53d84cf58431cdb87195574bdda3cb",
+      "timestamp": "2026-11-16T03:49:11.063Z",
       "commits": [
         {
-          "sha": "7996b97a9874254814cd4e66f4018cff1d7d9813",
+          "sha": "ef0e9da0ed53d84cf58431cdb87195574bdda3cb",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T20:32:20-07:00",
-          "message": "Merge 030fe86368e3484c69324f4eefa496d11d242252 into 833345462e42c521a828b6776792cc4d1f575249\n"
+          "timestamp": "2026-11-16T03:48:06Z",
+          "message": "Merge 89f2d4643e329f7c5a2346634dd3f4945e767720 into 833345462e42c521a828b6776792cc4d1f575249\n"
+        },
+        {
+          "sha": "89f2d4643e329f7c5a2346634dd3f4945e767720",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T20:47:55-07:00",
+          "message": "fix(stats): a percentile reads the value its bucket stands for, never one rounded below it, and §17 states only what its readings support (candybar-host-renderer-x96a.bwr)\n"
+        },
+        {
+          "sha": "94b3223cbbda43ae1268797344669293eb375add",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T20:41:48-07:00",
+          "message": "fix(stats): one duration histogram reads every timing, a feed logs its histograms once when it closes, and A-5 is judged at the rate it names (candybar-host-renderer-x96a.bwr)\n\n- Every timing is recorded and read through one module: microseconds in a\n  packed HdrHistogram, read as one Durations shape the stats snapshot and the\n  feed's summary both spell. A percentile never reads above the max.\n- A running feed summary states its distributions without the encoded\n  histograms; the closing summary alone writes them, so a merge of closing\n  summaries counts each frame once and the log grows once per feed.\n- The stats snapshot's `took` says it is the render event's, refusals included.\n- Spec §17: A-5 stands at 30 fps, the rate it names, and frames fall short at\n  60; lateness is said to include the draw; A-1's open item is owned by `cwq`.\n"
         },
         {
           "sha": "030fe86368e3484c69324f4eefa496d11d242252",

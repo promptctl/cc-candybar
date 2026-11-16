@@ -71577,7 +71577,31 @@ async function runTeardown(steps2, log) {
 
 // src/daemon/stats.ts
 init_globals();
+
+// src/daemon/durations.ts
+init_globals();
 var import_hdr_histogram_js = __toESM(require_hdrhistogram_umd(), 1);
+var durationHistogram = () => (0, import_hdr_histogram_js.build)({ bitBucketSize: "packed" });
+var recordMs = (h, ms) => {
+  h.recordValue(Math.round(ms * 1e3));
+};
+var msOf = (us) => Math.round(us / 10) / 100;
+var durationsOf = (h) => {
+  const max3 = h.maxValue;
+  const at = (p2) => msOf(Math.min(h.getValueAtPercentile(p2), max3));
+  return {
+    count: h.totalCount,
+    p50Ms: at(50),
+    p90Ms: at(90),
+    p99Ms: at(99),
+    p999Ms: at(99.9),
+    maxMs: msOf(max3),
+    meanMs: msOf(h.mean),
+    stddevMs: msOf(h.stdDeviation)
+  };
+};
+
+// src/daemon/stats.ts
 var NO_RUNS = {
   entries: 0,
   held: 0,
@@ -71588,18 +71612,6 @@ var NO_RUNS = {
 };
 var ROLLING_WINDOW_MS = 6e4;
 var ROLLING_BUFFER_CAP = 16384;
-var durationHistogram = () => (0, import_hdr_histogram_js.build)({ bitBucketSize: "packed" });
-var msOf = (us) => Math.round(us / 100) / 10;
-var durationsOf = (h) => {
-  const s = h.summary;
-  return {
-    count: s.totalCount,
-    p50Ms: msOf(s.p50),
-    p90Ms: msOf(s.p90),
-    p99Ms: msOf(s.p99),
-    maxMs: msOf(s.max)
-  };
-};
 var RuntimeStats = class _RuntimeStats {
   // [LAW:one-source-of-truth] The daemon's clock, which these counters read
   // like everything else the daemon times.
@@ -71709,11 +71721,11 @@ var RuntimeStats = class _RuntimeStats {
     const held = this.subprocessDurations.get(category);
     const hist = held ?? durationHistogram();
     if (held === void 0) this.subprocessDurations.set(category, hist);
-    hist.recordValue(Math.round(durationMs * 1e3));
+    recordMs(hist, durationMs);
   }
   // A render's duration, from its start to its answer.
   recordTook(tookMs) {
-    this.took.recordValue(Math.round(tookMs * 1e3));
+    recordMs(this.took, tookMs);
   }
   snapshotSubprocesses() {
     const cutoff = this.clock.monotonic() - ROLLING_WINDOW_MS;
@@ -72498,10 +72510,11 @@ function noteSent(rate, at) {
 var answerOf = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
 var paceOf = (period) => Math.round(1e3 / period);
 var distributionOf = (h) => {
-  const ms = (us) => (us / 1e3).toFixed(2);
-  const s = h.summary;
-  return s.totalCount === 0 ? "-" : `n:${s.totalCount},p50:${ms(s.p50)},p90:${ms(s.p90)},p99:${ms(s.p99)},p99.9:${ms(s.p99_9)},max:${ms(s.max)},mean:${ms(h.mean)},stddev:${ms(h.stdDeviation)}`;
+  const d = durationsOf(h);
+  const ms = (v) => v.toFixed(2);
+  return d.count === 0 ? "-" : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
 };
+var histogramsOf = (feed2, state) => state === "running" ? "" : ` drawHistogram=${(0, import_hdr_histogram_js2.encodeIntoCompressedBase64)(feed2.drawTime)} latenessHistogram=${(0, import_hdr_histogram_js2.encodeIntoCompressedBase64)(feed2.lateness)}`;
 var SUMMARY_EVERY_MS = 6e4;
 var MAX_REQUESTS = 256;
 function wokenWhileOut(feed2) {
@@ -72704,8 +72717,8 @@ var FrameFeeds = class {
       fault: null,
       faulted: 0,
       pushed: 0,
-      drawTime: (0, import_hdr_histogram_js2.build)({ bitBucketSize: "packed" }),
-      lateness: (0, import_hdr_histogram_js2.build)({ bitBucketSize: "packed" }),
+      drawTime: durationHistogram(),
+      lateness: durationHistogram(),
       evaluated: 0,
       cellBreaks: 0,
       woke: { data: 0, state: 0, reload: 0, visibility: 0 },
@@ -72807,8 +72820,8 @@ var FrameFeeds = class {
     const finished = this.deps.clock.monotonic();
     this.drawn++;
     feed2.drawn++;
-    feed2.drawTime.recordValue(Math.round((finished - started2) * 1e3));
-    feed2.lateness.recordValue(Math.round((finished - dueMoment) * 1e3));
+    recordMs(feed2.drawTime, finished - started2);
+    recordMs(feed2.lateness, finished - dueMoment);
     feed2.evaluated += frame2.evaluated;
     feed2.cellBreaks += frame2.cellBreaks;
     if (this.feeds.get(feed2.sessionId) !== feed2) return;
@@ -72978,7 +72991,7 @@ var FrameFeeds = class {
     ).join(",");
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} faulted=${feed2.faulted} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed2.drawTime)} drawHistogram=${(0, import_hdr_histogram_js2.encodeIntoCompressedBase64)(feed2.drawTime)} lateness=${distributionOf(feed2.lateness)} latenessHistogram=${(0, import_hdr_histogram_js2.encodeIntoCompressedBase64)(feed2.lateness)}`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} subscribers=${feed2.followers.size} lanes=${[...feed2.followers.keys()].map((s) => s.lane).join(",") || "-"} for=${Math.round(seconds)}s drawn=${feed2.drawn} noted=${feed2.noted} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} faulted=${feed2.faulted} pushed=${feed2.pushed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} daemonRefreshed=${refreshed} draw=${distributionOf(feed2.drawTime)} lateness=${distributionOf(feed2.lateness)}${histogramsOf(feed2, state)}`
     );
     feed2.summarizedAt = now2;
   }
