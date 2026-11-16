@@ -12,11 +12,9 @@ export type LayerChoice = LayerRole | "ask";
 export function layerFlags(
   roles: readonly LayerRole[],
 ): Readonly<Record<LayerRole, boolean>> {
-  return {
-    user: roles.includes("user"),
-    project: roles.includes("project"),
-    local: roles.includes("local"),
-  };
+  return Object.fromEntries(
+    LAYER_ROLES.map((role) => [role, roles.includes(role)]),
+  ) as Record<LayerRole, boolean>;
 }
 
 // [LAW:parse-dont-validate] A role off a wire or out of a file, or null.

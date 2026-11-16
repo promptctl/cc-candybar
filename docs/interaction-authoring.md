@@ -98,7 +98,7 @@ declares exactly one value source:
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ rewind: true }` | put back everything this session changed since edit mode opened (layout edits, setting picks, configure-mode picks) and leave nothing to redo — edit mode's `↩ cancel`. Refused when edit mode is not open (so fire it before anything that closes edit mode); a file edited since by anything else is kept as it is, everything else is put back, and the refusal names the file |
-| `{ save: true, layer }` | write every setting this session renders differently from your config to the layer `layer` names, in one edit, and drop those picks from the session. `layer` defaults to `"ask"`: each link binds the layer as its value — see below |
+| `{ save: true, layer }` | write every setting this session renders differently from your config to the layer `layer` names, in one edit, and drop those picks from the session. `layer` defaults to `"user"`; `"ask"` has each link bind the layer as its value — see below |
 | `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
 | `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |
 | `{ themeDefault: "save" }` | write this session's shade, variation and style into your config file as the active theme's default (`themeDefaults.<theme>`), and drop the session's picks the file now draws; refused when a rule chose the theme — see below |
@@ -298,8 +298,9 @@ names goes into `presets.<name>.globals`, since a top-level value would be
 shadowed there, and every other field into `globals`. The daemon reloads the
 file before it drops those picks from the session, so the bar reads the saved
 values from the very next render and follows the file from then on.
-A save asks which layer by default, so its link binds one as the action's
-value; `layer: "user"` (or `"project"`, `"local"`) fixes it instead. The
+A save writes the user's own file by default; `layer: "project"` or
+`"local"` fixes another, and `layer: "ask"` has each link bind one as the
+action's value. The
 settings menu's `💾 save N` is exactly this, shown while `unsaved` is above
 zero, with a link per layer the session can write:
 
@@ -310,7 +311,7 @@ zero, with a link per layer the session can write:
   },
   actions: {
     applyTheme: { set: "theme", from: "themes" },
-    keep: { save: true },
+    keep: { save: true, layer: "ask" },
   },
   segments: {
     themeControl: {
@@ -357,7 +358,7 @@ is a render error on the bar:
 
 ```json5 check:fail
 {
-  actions: { keep: { save: true } },
+  actions: { keep: { save: true, layer: "ask" } },
   segments: { saveButton: { template: '{{ action "keep" "💾 save" }}' } },
   root: { h: ["saveButton"] },
 }

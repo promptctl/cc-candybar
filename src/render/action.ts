@@ -649,7 +649,7 @@ function compileAction(
   if ("redo" in action) return { kind: "redo" };
   if ("back" in action) return { kind: "back" };
   if ("rewind" in action) return { kind: "rewind" };
-  if ("save" in action) return { kind: "save", layer: action.layer ?? "ask" };
+  if ("save" in action) return { kind: "save", layer: action.layer ?? "user" };
   if ("preset" in action) {
     const layer = action.layer ?? "user";
     return action.preset === "save"

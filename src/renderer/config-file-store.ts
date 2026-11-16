@@ -25,12 +25,12 @@
 // when the file already authors it.
 
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
-import fs from "node:fs";
 import JSON5 from "json5";
 import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import {
   inheritedConfig,
   loadConfigChain,
+  type ConfigLayer,
   type WriteLayer,
   type LoadedChain,
 } from "../config/dsl-loader.js";
@@ -431,6 +431,36 @@ export interface EditStore {
   readonly record: (file: string, before: string | null, after: string) => void;
 }
 
+// [LAW:one-source-of-truth] A write as its click sees it: each neighbouring
+// layer read through the click, so a file the same click already changed or
+// created reads as the click left it, and one it holds no text for is no
+// layer. A click writes several files (a `do` across layers, an undo step), and
+// each write is proved against the chain the click leaves, never the disk's.
+interface Seen extends WriteLayer {
+  readonly below: readonly HeldLayer[];
+  readonly above: readonly HeldLayer[];
+}
+type HeldLayer = ConfigLayer & { readonly text: string };
+
+function seenBy(
+  layer: WriteLayer,
+  read: (file: string) => string | null,
+): Seen {
+  const held = (layers: readonly ConfigLayer[]): HeldLayer[] =>
+    layers.flatMap((l) => {
+      const text = read(l.path);
+      return text === null ? [] : [{ ...l, text }];
+    });
+  return { ...layer, below: held(layer.below), above: held(layer.above) };
+}
+
+// The loader's read over a chain of held layers: every path it asks for is
+// one of theirs.
+function textsOf(layers: readonly HeldLayer[]): (path: string) => string {
+  const texts = new Map(layers.map((l) => [l.path, l.text]));
+  return (path) => texts.get(path)!;
+}
+
 // [LAW:one-source-of-truth] Every tracked write lands here, once, as the
 // click's record of it. Returns the config the write's own load proved, which
 // is what the session renders once the click lands.
@@ -445,10 +475,10 @@ export interface EditStore {
 // written layer stops holding what it held, which a layer above cannot hide.
 function commit(
   store: EditStore,
-  into: WriteLayer,
+  into: Seen,
   before: string | null,
   after: string,
-  refuse: (into: WriteLayer, was: Was, will: LoadedChain) => void,
+  refuse: (into: Seen, was: Was, will: LoadedChain) => void,
 ): DslConfig {
   const will = loadOrRefuse(into, after);
   // [LAW:one-source-of-truth] The file before the click is loaded at most
@@ -468,11 +498,11 @@ type Was = () => LoadedChain | null;
 
 // A write the written layer takes and a layer above hides would change the file and
 // not the bar — refused, naming the layer that holds it.
-function refuseHidden(into: WriteLayer, was: Was, will: LoadedChain): void {
+function refuseHidden(into: Seen, was: Was, will: LoadedChain): void {
   const hidden = hiddenBy(into, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
-      `refused: ${into.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${into.path}, so this click would change nothing on the bar — edit it there`,
+      `refused: ${into.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${into.path}, so this click would change nothing on the bar — write it to that layer instead`,
     );
   }
 }
@@ -480,15 +510,16 @@ function refuseHidden(into: WriteLayer, was: Was, will: LoadedChain): void {
 const releases = (): void => {};
 
 // [LAW:no-silent-failure] A structural read finds only what the written layer and the
-// layers beneath it declare; what it misses may be a layer above's, which no
-// click writes — the refusal says so rather than calling the bar stale.
-function writtenOnly<T>(into: WriteLayer, read: () => T): T {
+// layers beneath it declare; what it misses may be a layer above's, which a
+// write to that layer edits — the refusal says so rather than calling the bar
+// stale.
+function writtenOnly<T>(into: Seen, read: () => T): T {
   try {
     return read();
   } catch (e) {
     if (!(e instanceof BadVerbArgs) || into.above.length === 0) throw e;
     throw new BadVerbArgs(
-      `${e.message} — or it is declared by ${into.above.map((l) => l.path).join(", ")}, which the bar does not edit`,
+      `${e.message} — or it is declared by ${into.above.map((l) => l.path).join(", ")}, above it: write to that layer instead`,
     );
   }
 }
@@ -498,7 +529,7 @@ function writtenOnly<T>(into: WriteLayer, read: () => T): T {
 // click could hide — the bar runs on its last good load — so a click that
 // repairs it compares against no prior chain and hides nothing.
 function hiddenBy(
-  into: WriteLayer,
+  into: Seen,
   was: LoadedChain | null,
   will: LoadedChain,
 ): string[] {
@@ -510,10 +541,7 @@ function hiddenBy(
   ).filter((p) => !drawn.has(p));
 }
 
-function loadedOrNull(
-  into: WriteLayer,
-  text: string | null,
-): LoadedChain | null {
+function loadedOrNull(into: Seen, text: string | null): LoadedChain | null {
   try {
     return chainOver(into, text);
   } catch (e) {
@@ -524,36 +552,48 @@ function loadedOrNull(
 
 // What the written file inherits: the merge of every layer beneath it, which
 // each of its by-name reads looks through when the file itself is silent.
-function inheritedOf(into: WriteLayer): DslConfig {
-  return inheritedConfig(into.locs, into.below, DEFAULT_DSL_CONFIG, {
-    repo: into.repo,
-    cwd: into.cwd,
-  });
+// [LAW:no-silent-failure] A layer beneath that does not load refuses the
+// click, naming why, as the written file's own failure to load does.
+function inheritedOf(into: Seen): DslConfig {
+  try {
+    return inheritedConfig(
+      into.locs,
+      into.below,
+      DEFAULT_DSL_CONFIG,
+      { repo: into.repo, cwd: into.cwd },
+      textsOf(into.below),
+    );
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    throw new BadVerbArgs(
+      `refused: a layer beneath ${into.path} does not load — ${e.message}`,
+    );
+  }
 }
 
-// The chain the written layer's text — or its absence — loads to, read from disk
-// above it, exactly as resolveDslConfig orders it: an existing file is a
-// layer whatever it holds.
-function chainOver(into: WriteLayer, text: string | null): LoadedChain {
+// The chain the written layer's text — or its absence — loads to, between
+// the layers the click holds, exactly as resolveDslConfig orders it: an
+// existing file is a layer whatever it holds.
+function chainOver(into: Seen, text: string | null): LoadedChain {
+  const layers = [
+    ...into.below,
+    ...(text !== null ? [{ path: into.path, role: into.role, text }] : []),
+    ...into.above,
+  ];
   return loadConfigChain(
     into.locs,
-    [
-      ...into.below,
-      ...(text !== null ? [{ path: into.path, role: into.role }] : []),
-      ...into.above,
-    ],
+    layers,
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
     { repo: into.repo, cwd: into.cwd },
-    (p) =>
-      p === into.path && text !== null ? text : fs.readFileSync(p, "utf8"),
+    textsOf(layers),
   );
 }
 
 // The chain merged up to the written layer: each loaded layer is merged over
 // the ones under it, and those are the same on both sides of a write, so a
 // difference between two of these is the written layer's alone.
-function writtenConfig(into: WriteLayer, chain: LoadedChain): DslConfig {
+function writtenConfig(into: Seen, chain: LoadedChain): DslConfig {
   const upTo = new Set([...into.below.map((l) => l.path), into.path]);
   return (
     chain.layers.filter((l) => upTo.has(l.path)).at(-1)?.config ?? chain.base
@@ -584,15 +624,19 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 // [LAW:single-enforcer] The gate a text no verb loaded passes before a click
-// writes it (a history step's, over the file as it stands): the gate every
-// write passes.
-export function proveLoads(into: WriteLayer, text: string | null): void {
-  loadOrRefuse(into, text);
+// writes it (a history step's, between the files as the step leaves them):
+// the gate every write passes.
+export function proveLoads(
+  layer: WriteLayer,
+  text: string | null,
+  read: (file: string) => string | null,
+): void {
+  loadOrRefuse(seenBy(layer, read), text);
 }
 
 // The config `text` loads to as the written layer, or the click's refusal naming why
 // it does not load.
-function loadOrRefuse(into: WriteLayer, text: string | null): LoadedChain {
+function loadOrRefuse(into: Seen, text: string | null): LoadedChain {
   try {
     return chainOver(into, text);
   } catch (e) {
@@ -610,7 +654,7 @@ function loadOrRefuse(into: WriteLayer, text: string | null): LoadedChain {
 // click over it would lock the bar's own controls. A file that does not load
 // now has drops nobody can know — the bar runs on its last good load, as
 // hiddenBy reads it — so a click that repairs it is not blamed for them.
-function refuseNewDrops(into: WriteLayer, was: Was, will: LoadedChain): void {
+function refuseNewDrops(into: Seen, was: Was, will: LoadedChain): void {
   if (will.dropped.length === 0) return;
   const prior = was();
   if (prior === null) return;
@@ -667,10 +711,11 @@ export interface PlacementValue {
 /** `save`'s write: every value key and every placement setting, as ONE tracked write. */
 export function writeDrafts(
   store: EditStore,
-  into: WriteLayer,
+  layer: WriteLayer,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
 ): void {
+  const into = seenBy(layer, (file) => store.read(file));
   const before = store.read(into.path);
   const under = inheritedOf(into);
   const valued = pairs.reduce(
@@ -784,9 +829,10 @@ function deleteAtPath(
  */
 export function deleteValues(
   store: EditStore,
-  into: WriteLayer,
+  layer: WriteLayer,
   keys: readonly string[],
 ): void {
+  const into = seenBy(layer, (file) => store.read(file));
   const targets = keys.map(requireTarget);
   const before = store.read(into.path);
   if (before === null) return;
@@ -816,7 +862,7 @@ function presetKeys(doc: Node | null): string[] {
 function freePresetName(
   doc: Node | null,
   under: DslConfig,
-  into: WriteLayer,
+  into: Seen,
 ): string {
   const taken = new Set(
     [
@@ -826,8 +872,7 @@ function freePresetName(
       // all) — the editor refuses files the loader renders.
       ...into.above.flatMap((l) =>
         Object.keys(
-          (JSON5.parse(fs.readFileSync(l.path, "utf8")) as { presets?: object })
-            .presets ?? {},
+          (JSON5.parse(l.text) as { presets?: object }).presets ?? {},
         ),
       ),
     ].map(ident),
@@ -849,12 +894,13 @@ function freePresetName(
  */
 export function writePreset(
   store: EditStore,
-  into: WriteLayer,
+  layer: WriteLayer,
   from: string,
   globals: Globals,
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
+  const into = seenBy(layer, (file) => store.read(file));
   const before = store.read(into.path);
   const doc = docOf(before ?? "");
   const under = inheritedOf(into);
@@ -912,10 +958,11 @@ export function writePreset(
  */
 export function writeThemeDefault(
   store: EditStore,
-  into: WriteLayer,
+  layer: WriteLayer,
   theme: string,
   look: Readonly<Record<ThemeDefaultField, string>>,
 ): DslConfig {
+  const into = seenBy(layer, (file) => store.read(file));
   const before = store.read(into.path);
   const after = setValue(
     before ?? "",
@@ -936,9 +983,10 @@ export function writeThemeDefault(
  */
 export function deletePreset(
   store: EditStore,
-  into: WriteLayer,
+  layer: WriteLayer,
   name: string,
 ): void {
+  const into = seenBy(layer, (file) => store.read(file));
   const under = inheritedOf(into);
   if (under.presets[name] !== undefined) {
     throw new BadVerbArgs(
@@ -978,10 +1026,11 @@ export function deletePreset(
  */
 export function applyLayoutOp(
   store: EditStore,
-  into: WriteLayer,
+  layer: WriteLayer,
   key: string,
   op: LayoutOp,
 ): { readonly placed: NewPlacement | null; readonly config: DslConfig } {
+  const into = seenBy(layer, (file) => store.read(file));
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);

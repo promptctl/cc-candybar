@@ -443,6 +443,7 @@ export function inheritedConfig(
   chain: readonly ConfigLayer[],
   dflt: DslConfig,
   session: SessionDirs,
+  read: (path: string) => string,
 ): DslConfig {
   const { base, layers } = mergeChain(
     locs,
@@ -450,7 +451,7 @@ export function inheritedConfig(
     dflt,
     { warned: () => {} },
     session,
-    (p) => fs.readFileSync(p, "utf-8"),
+    read,
   );
   return layers.at(-1)?.config ?? base;
 }

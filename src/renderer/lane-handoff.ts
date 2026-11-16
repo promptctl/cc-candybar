@@ -41,9 +41,10 @@ export const HANDOFF_BUTTON = "[⟲ claude]";
 // The handoff row for `lanes` (non-empty): the button alone; the error
 // indicator is laid after it where the row is drawn (src/render/diagnostics.ts).
 // The button resets each lane's switch in every layer the session can write
-// (the settings menu's ↺ for it resets the user's alone): it is the way out
-// of a lane that took the bar wherever the switch was saved, so it puts the
-// renderer back to `claude` and turns a 🧪 lane off;
+// that is this person's own — the user's file and the project's local one,
+// never the file the project checks in, which is every clone's: it is the way
+// out of a lane however this person saved it. It puts the renderer back to
+// `claude` and turns a 🧪 lane off;
 // what the lane runs follows the switch (src/daemon/lane-setup.ts), so a pane
 // it opened closes.
 export function laneHandoff(
@@ -52,14 +53,16 @@ export function laneHandoff(
   lanes: readonly [Lane, ...Lane[]],
 ): ChannelMessage {
   const reset = effectsUrl(
-    writable.map((layer) => ({
-      verb: VERB_RESET_CONFIG,
-      args: [
-        sessionId,
-        layer,
-        ...lanes.map((lane) => LANES[lane].switch.setting),
-      ],
-    })),
+    writable
+      .filter((layer) => layer !== "project")
+      .map((layer) => ({
+        verb: VERB_RESET_CONFIG,
+        args: [
+          sessionId,
+          layer,
+          ...lanes.map((lane) => LANES[lane].switch.setting),
+        ],
+      })),
   );
   return {
     severity: HANDOFF_SEVERITY,

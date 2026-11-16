@@ -112,7 +112,7 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectLayer();
-  expect(home).toEqual({ kind: "layer", path: userFile, role: "user", below: [], above: [{ path: projectFile, role: "project" }], repo: project, cwd: project, locs: locations(host) });
+  expect(home).toEqual({ kind: "layer", path: userFile, role: "user", below: [], above: [{ path: projectFile, role: "project" }, { path: path.join(project, ".cc-candybar.local.json5"), role: "local" }], repo: project, cwd: project, locs: locations(host) });
   writeValues(EDITS_IN_PLACE, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -192,6 +192,33 @@ describe("a write to a layer above the user's", () => {
     expect(
       writePreset(EDITS_IN_PLACE, projectLayer("project"), "default", {}, [], []),
     ).toBe("custom-2");
+  });
+
+  // A click that writes two layers proves each write against the files as
+  // the click leaves them: a value it set in the project's file hides the
+  // user's write of the same field, though the disk does not hold it yet.
+  test("a later write of one click is judged against what the click's earlier write left", () => {
+    const staged = new Map<string, string>();
+    const click = {
+      read: (file: string) =>
+        staged.get(file) ??
+        (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null),
+      record: (file: string, _before: string | null, after: string) => {
+        staged.set(file, after);
+      },
+    };
+    writeValues(click, projectLayer("project"), [["menuGlyph", "P"]]);
+    expect(fs.existsSync(projectFile)).toBe(false);
+    expect(() =>
+      writeValues(click, projectLayer("user"), [["menuGlyph", "Q"]]),
+    ).toThrow(/would change nothing on the bar/);
+  });
+
+  test("a write over a layer beneath that does not load is refused, naming why", () => {
+    fs.writeFileSync(userFile, `{ globals: { menuGlyph: `);
+    expect(() =>
+      writeValues(EDITS_IN_PLACE, projectLayer("project"), [["menuGlyph", "P"]]),
+    ).toThrow(/^refused: a layer beneath .* does not load/);
   });
 
   // What a file inherits is the merge of the layers beneath it, never a

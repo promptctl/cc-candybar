@@ -343,7 +343,10 @@ function userHome(locs: Locations, layers: readonly ConfigLayer[]): string {
 export interface WriteLayer {
   readonly path: string;
   readonly role: LayerRole;
-  // The chain's layers under and over `path`, lowest first.
+  // The other roles' files under and over `path`, lowest first: each where
+  // the chain holds it or a first write there creates it. Which of them is a
+  // layer is the click's to say, since a click may create or change one
+  // before it writes `path`.
   readonly below: readonly ConfigLayer[];
   readonly above: readonly ConfigLayer[];
   // The approved project whose plugins the chain loads, and the working
@@ -382,6 +385,10 @@ export function writeLayers(
 ): Readonly<Record<LayerRole, LayerWrite>> {
   const resolved = resolveDslConfig(locs, answers, query);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
+  const places = LAYER_ROLES.flatMap((role): ConfigLayer[] => {
+    const place = placeOf(resolved, layers, query, role);
+    return place.kind === "at" ? [{ path: place.path, role }] : [];
+  });
   const writeOf = (role: LayerRole): LayerWrite => {
     const place = placeOf(resolved, layers, query, role);
     if (place.kind === "refused") return place;
@@ -389,18 +396,16 @@ export function writeLayers(
       kind: "layer",
       path: place.path,
       role,
-      below: layers.filter((l) => rank(l.role) < rank(role)),
-      above: layers.filter((l) => rank(l.role) > rank(role)),
+      below: places.filter((l) => rank(l.role) < rank(role)),
+      above: places.filter((l) => rank(l.role) > rank(role)),
       repo: resolved.repos.plugins,
       cwd: query.cwd ?? null,
       locs,
     };
   };
-  return {
-    user: writeOf("user"),
-    project: writeOf("project"),
-    local: writeOf("local"),
-  };
+  return Object.fromEntries(
+    LAYER_ROLES.map((role) => [role, writeOf(role)]),
+  ) as Record<LayerRole, LayerWrite>;
 }
 
 // [LAW:dataflow-not-control-flow] The file a role names in the session's

@@ -93,7 +93,7 @@ const ASKING = `{
     pickA: { set: "theme", to: "${A}" },
     pickB: { set: "theme", to: "${B}" },
     pickC: { set: "theme", to: "${C}" },
-    keep: { save: true },
+    keep: { save: true, layer: "ask" },
   },
   variables: {
     project: { kind: "input", path: "layers.project", type: "boolean", default: false },

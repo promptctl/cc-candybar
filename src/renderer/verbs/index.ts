@@ -786,13 +786,14 @@ function changeLanded(
 
 // [LAW:no-silent-failure] A history step's text loads as the layer of the
 // session stepping it that the step wrote, or the step is refused: a step
-// only ever wrote one of that session's layers, and a file it no longer
-// renders from has no chain to prove the text in.
+// only ever wrote that session's layers, and a file it no longer renders from
+// has no chain to prove the text in.
 function proveLoadsAsLayer(
   ctx: Omit<DaemonContext, TurnBound>,
   sid: SessionId | null,
   file: string,
   text: string | null,
+  read: (file: string) => string | null,
 ): void {
   const origin = sid === null ? null : recordedOrigin(ctx, sid);
   const layer =
@@ -803,7 +804,7 @@ function proveLoadsAsLayer(
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from — its step is not taken`,
     );
-  proveLoads(layer, text);
+  proveLoads(layer, text, read);
 }
 
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
@@ -1991,7 +1992,7 @@ async function journaled<C extends DaemonContext>(
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
-    prove: (file, text) => proveLoadsAsLayer(ctx, sid, file, text),
+    prove: (file, text, read) => proveLoadsAsLayer(ctx, sid, file, text, read),
   });
   const navigation = ctx.navigation.begin(journal.sessionState);
   const failures: unknown[] = [];

@@ -72,47 +72,50 @@ export const VERB_SET_STATE = "set-state";
 export const VERB_STEP_STATE = "step-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
+// Every config write's args begin `[sessionId, layer]`: the session whose
+// chain the write resolves in, and the role of the layer it writes there
+// (configWire, src/renderer/verbs/index.ts).
 // [LAW:one-source-of-truth] `persist`'s twin of set-state/step-state: writes
-// land in the session's config FILE (candybar-config-dqe — the one durable
-// store), spliced in place so comments survive, and reach the bar through
-// the SAME file-watcher path a hand edit already takes. Args: `[sessionId, key, value]` — the
-// sessionId is carried only for click.error surfacing, exactly like
-// set-state; the write itself is daemon-global, not session-scoped.
+// land in a config FILE of the session's chain (the one durable store),
+// spliced in place so comments survive, and reach the bar through the SAME
+// file-watcher path a hand edit already takes. Args: `[sessionId, layer, key,
+// value]`.
 export const VERB_SET_CONFIG = "set-config";
 // [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-file
 // key (e.g. a padding stepper) — the config twin of step-state. Args:
-// `[sessionId, key, by]`.
+// `[sessionId, layer, key, by]`.
 export const VERB_STEP_CONFIG = "step-config";
 // [LAW:no-ambient-temporal-coupling] Write every one of the session's unsaved
 // settings (src/renderer/setting-drafts.ts) to its config file, then release
 // them from the session — one handler, so a refused write keeps every draft.
-// Args: `[sessionId]`: which settings are drafts, and their values, are read
-// at click time from the session itself, never carried by the URL.
+// Args: `[sessionId, layer]`: which settings are drafts, and their values, are
+// read at click time from the session itself, never carried by the URL.
 export const VERB_SAVE = "save";
 // Save as preset (brandon-save-undo-bwi.o6u): write the bar the session
 // renders into the config file as a new `presets.custom-N`, then switch the
-// session to it. Args: `[sessionId]` — the name, the arrangement and the
-// settings are all read at click time, like `save`'s drafts.
+// session to it. Args: `[sessionId, layer]` — the name, the arrangement and
+// the settings are all read at click time, like `save`'s drafts.
 export const VERB_SAVE_PRESET = "save-preset";
 // Save the look the session draws as the active theme's default
 // (candybar-theme-colours-6fq5.ix8): write its shade, variation and style into
 // `themeDefaults.<theme>` in the config file, then release those picks. Args:
-// `[sessionId]` — the theme and the look are read at click time.
+// `[sessionId, layer]` — the theme and the look are read at click time.
 export const VERB_SAVE_THEME_DEFAULT = "save-theme-default";
-// Delete a preset the config file authors (never a bundled one). Args:
-// `[sessionId, name]` — the name the bar showed, so the click removes the
-// preset its label named, and a name the file no longer declares is refused.
+// Delete a preset the written file authors (never one it inherits). Args:
+// `[sessionId, layer, name]` — the name the bar showed, so the click removes
+// the preset its label named, and a name the file no longer declares is
+// refused.
 export const VERB_DELETE_PRESET = "delete-preset";
-// [LAW:one-source-of-truth] Return each named config key to its bundled
-// default at every layer that holds it — its paths in the config file, in one
-// write, and the session's pick (resetLayers, src/renderer/setting-drafts.ts).
-// Args: `[sessionId, key, …key]`.
+// [LAW:one-source-of-truth] Return each named config key to what the
+// written layer inherits — its paths in that layer's file, in one write, and
+// the session's pick (resetLayers, src/renderer/setting-drafts.ts). Args:
+// `[sessionId, layer, key, …key]`.
 export const VERB_RESET_CONFIG = "reset-config";
 // [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's structural-edit
 // verb — a THIRD write semantic beside set-config's plain overwrite and
 // step-config's numeric read-modify-write: apply one tree op to the layout
 // the config file authors at `key` (a "presets.<name>.root" target). Args:
-// `[sessionId, key, op]` — `op` is one opaque token from
+// `[sessionId, layer, key, op]` — `op` is one opaque token from
 // src/config/layout-ops.ts's codec, the SAME shape a `persist … to` literal's
 // value would be, gated the SAME way (configGate) — only the write's
 // SHAPE (a tree edit vs. a value) differs, which is exactly why this is its

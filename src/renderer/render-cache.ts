@@ -315,8 +315,8 @@ export interface DslRenderState {
   // The config keys the FILE holds a value for at a layer a reset clears
   // (fileHeldSettings) — from the same raw parse, for the same reason.
   readonly fileHeldSettings: ReadonlySet<string>;
-  // The file this load's durable clicks edit (the chain's home), once it
-  // exists — what the menu's `↗ config` opens; null while it does not.
+  // The user layer's file (the chain's home), once it exists — what the
+  // menu's `↗ config` opens; null while it does not.
   readonly configPath: string | null;
   // The roles of the chain a click can write — what the save offers.
   readonly writable: readonly LayerRole[];
@@ -924,7 +924,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       store,
       registry,
       compiled: registration.compiled,
-      // What a reset clears is the home's: resets write nowhere else.
+      // What the menu's resets clear is the user layer's: they name no other.
       authoredRoots: authoredRoots(merged, homeRaw),
       fileHeldSettings: fileHeldSettings(homeRaw),
       configPath: chain.layers.some((l) => l.path === chain.home)

@@ -86,9 +86,14 @@ const EMPTY: SessionHistory = { past: [], future: [] };
 // Where a click's config writes go: changes its turn returns
 // (src/renderer/config-writes.ts).
 // [LAW:single-enforcer] `prove` is the gate every click's write passes: the
-// text loads as the file it is written to, or the click is refused.
+// text loads as the file it is written to, between the files as `read` gives
+// them, or the click is refused.
 export type ConfigFiles = Pick<ConfigWrites, "land" | "read"> & {
-  readonly prove: (file: string, text: string | null) => void;
+  readonly prove: (
+    file: string,
+    text: string | null,
+    read: (file: string) => string | null,
+  ) => void;
 };
 
 // Records one click's changes. Handlers write through `sessionState` (which
@@ -380,7 +385,14 @@ export class SettingsHistory {
       );
     }
     const files = stepped.flatMap((s) => (s.kind === "file" ? [s] : []));
-    for (const { file, text } of files) click.files.prove(file, text);
+    // Each file is proved between the others as the step leaves them: a step
+    // that wrote two layers is only ever loaded whole.
+    const stepTexts = new Map(files.map(({ file, text }) => [file, text]));
+    const read = (file: string): string | null => {
+      const text = stepTexts.get(file);
+      return text === undefined ? click.files.read(file) : text;
+    };
+    for (const { file, text } of files) click.files.prove(file, text, read);
     for (const { file, text } of files)
       click.files.land(file, click.files.read(file), text);
     for (const s of stepped)
