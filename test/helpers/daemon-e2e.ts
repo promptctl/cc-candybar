@@ -62,10 +62,12 @@ const REPLY_BUDGET_MS = 5000;
 // first config parse + template compile — can genuinely exceed 200ms on a
 // loaded CI runner even though it's fast on a warm local machine. A real client
 // shows a blank line and lets the next natural render tick retry; a test has no
-// "next tick" to lean on, so it retries inline, bounded, matching the
-// documented transient contract rather than treating an expected-occasionally
-// condition as a hard failure.
-const TIMEOUT_RETRY_BUDGET = 5;
+// "next tick" to lean on, so it asks again inline until the request's reply
+// budget runs out, measured from its first ask. Each ask waits on the daemon's
+// own answer, so the budget is a backstop for a daemon that never answers,
+// not a guess at how long a cold one takes: a count of asks was one, and a
+// first render queued behind a cold config load on a loaded runner outlasted
+// five 200ms guards.
 
 // [LAW:no-ambient-temporal-coupling] The same contract for an answer drawn at
 // its deadline: a request is answered by its client's deadline, and a source
@@ -122,6 +124,7 @@ async function renderAnswer(
     (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
   );
   const asked = logLines(log).length;
+  const firstAskMs = Date.now();
   for (let attempt = 1; ; attempt++) {
     const before = answeredEvents(log, sessionId).length;
     const linesBefore = logLines(log).length;
@@ -140,7 +143,8 @@ async function renderAnswer(
       replyBudgetMs,
     );
     if (!resp.ok) {
-      if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
+      if (resp.code === "TIMEOUT" && Date.now() - firstAskMs < replyBudgetMs)
+        continue;
       // [LAW:nothing-unseen] What the daemon logged across every attempt,
       // so a runner that failed says where its turns' time went.
       throw new Error(
