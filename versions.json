@@ -2,31 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-771",
-      "ref": "refs/pull/771/merge",
-      "sha": "4d9639f3891d71e215f197ec49bf1d9383e24645",
-      "timestamp": "2026-11-16T18:48:36.782Z",
+      "version": "pr-772",
+      "ref": "refs/pull/772/merge",
+      "sha": "8a22a05f8a50affaa296941c7b183ae89088e17b",
+      "timestamp": "2026-11-16T19:40:53.958Z",
       "commits": [
         {
-          "sha": "4d9639f3891d71e215f197ec49bf1d9383e24645",
+          "sha": "8a22a05f8a50affaa296941c7b183ae89088e17b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T18:47:29Z",
-          "message": "Merge 1abcfb179f2d28965bc7d01d65953b00d99a0344 into df316f23603ca5bd744a8963232d120351758895\n"
+          "timestamp": "2026-11-16T12:39:59-07:00",
+          "message": "Merge c92bfe25edb154c4018ec468a94df34419baba8b into df316f23603ca5bd744a8963232d120351758895\n"
         },
         {
-          "sha": "1abcfb179f2d28965bc7d01d65953b00d99a0344",
+          "sha": "c92bfe25edb154c4018ec468a94df34419baba8b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T11:47:15-07:00",
-          "message": "fix(effects): the close performs nothing, a repository answer lands with its click, and the tmux row is asked only when its switch moves (candybar-host-renderer-x96a.lhy)\n\n- An effect the daemon's close cut off answers `closing`: the host performs\n  no change or act once its close begins, a run the close aborted ends\n  `closing`, and neither holds an error on any bar. A click's acts the close\n  cut off answer its click `closing`, as its own steps do.\n- A repository answer is performed only once its click's changes landed, and\n  answered as they were otherwise, so the click lands whole.\n- An act's failure joins a click error no answer has carried yet, at the\n  input's instant, rather than replacing it.\n- The tmux row is asked of the host only when a session's switch differs from\n  the last ask. Once on, the host's adapter follows the session's pane at each\n  request and forgets it when the session retires, so a request costs no act,\n  no act line and no `effect-done` turn.\n- Whatever types into a pane (a slash line, a lane setup) waits in one queue\n  per pane.\n- The act interpreter classifies a performer's throw, a synchronous one\n  included; the act line is the one log of an outcome, and a reason names its\n  act once.\n- An act on a session reads it through a tagged result, not a structural guess.\n"
-        },
-        {
-          "sha": "addc1c5d1e71bf927db64f1f82d2d0652015da91",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T11:14:18-07:00",
-          "message": "feat(effects): every act a click or a lane switch causes is an effect the host performs (candybar-host-renderer-x96a.lhy)\n\nThe renderer no longer acts in place. A click's copy, open, slash line,\nrun, repository answer and update, and every lane setup, leave its turn as\na typed effect (`copy`, `open`, `type-slash`, `run`, `approve-repo`,\n`apply-update`, `restart-claude`, `surface`). The host's act interpreter\nperforms each by kind and hands its outcome back as `effect-done`.\n\n- One click path: a leaf link and a `dispatch` fold the same steps, and\n  the per-verb wrappers are gone.\n- The renderer's `Acts` ledger holds a failed act on its session's bar.\n  One whose click named no session, or whose outcome reached no renderer,\n  is the daemon's own `act-failed` warning on every bar.\n- The host waits for the acts that end in a click's turn (copy, open,\n  type-slash, approve-repo, apply-update), and the click is answered with\n  how they ended. Runs, restarts and surfaces outlive it.\n- Lane decisions (owed setups, the tmux row at each request) live in the\n  renderer's `LaneSurfaces`. The host's `LaneSetups` only performs a\n  surface or a restart, one at a time per session.\n- The repository answer lands with the click's config changes, and its\n  landing reloads the session's config before the click's lanes are\n  measured, so an approved config that switches a lane on sets it up.\n- The trust book's reader is shared and its writer is the host's.\n- The adapter loses launch, typeSlash, applyUpdate, runs, laneSetups and\n  tmuxStatusLines, and the hold-click-error push.\n- The run owner's refusal count goes: a refused link is the click's bad\n  request on its event line.\n"
+          "timestamp": "2026-11-16T12:39:31-07:00",
+          "message": "feat(click): every act a click or a lane switch causes is an effect the host performs once its turn has landed (candybar-host-renderer-x96a.lhy)\n\nA run, a slash line, open, copy, apply-update, relaunching Claude Code and\nthe band and pane surfaces are effects. The host performs a turn's acts only\nonce its config changes and trust-book answers have landed, in order, and\nsettles each with an effect-done. A slash line, a restart and a surface carry\nthe pane from the session's client hints. The tmux status row is held by\ndeclaration in the renderer's subscriptions, not by an act.\n\nSpec deviation from host-and-renderer.md section 7: PushedSurface acts are\nband | pane only, the tmux row is a subscription, apply-update names no\nversion, and acts carry their pane. Section 7 is updated to match.\n"
         }
       ]
     },
