@@ -195,3 +195,76 @@ describe("performChanges with the trust book", () => {
     expect(fs.existsSync(repoConfigsPath(state))).toBe(false);
   });
 });
+
+// [LAW:verifiable-goals] A local layer is one person's settings for a
+// project, so git never shows it: the change that creates it names it in the
+// repository's shared exclude file, in the same landing.
+describe("a created local layer is kept out of git", () => {
+  const LOCAL = `{ globals: { padding: 2 } }\n`;
+  const repo = (): string => {
+    const root = path.join(dir, "repo");
+    fs.mkdirSync(path.join(root, ".git", "info"), { recursive: true });
+    return root;
+  };
+
+  test("its repository's exclude names it, beside what it already held", () => {
+    const root = repo();
+    const exclude = path.join(root, ".git", "info", "exclude");
+    fs.writeFileSync(exclude, "# mine\n*.log");
+    const local = path.join(root, ".cc-candybar.local.json5");
+    expect(performChanges([change(local, null, LOCAL)], null)).toEqual({
+      kind: "ok",
+    });
+    expect(read(local)).toBe(LOCAL);
+    expect(read(exclude)).toBe("# mine\n*.log\n/.cc-candybar.local.json5\n");
+    // Written again, it is already named: the exclude is left as it is.
+    fs.rmSync(local);
+    performChanges([change(local, null, LOCAL)], null);
+    expect(read(exclude)).toBe("# mine\n*.log\n/.cc-candybar.local.json5\n");
+  });
+
+  test("a linked worktree's goes in the exclude every worktree shares", () => {
+    const main = repo();
+    const meta = path.join(main, ".git", "worktrees", "wt");
+    fs.mkdirSync(meta, { recursive: true });
+    fs.writeFileSync(path.join(meta, "commondir"), "../..\n");
+    const tree = path.join(dir, "wt");
+    fs.mkdirSync(tree);
+    fs.writeFileSync(path.join(tree, ".git"), `gitdir: ${meta}\n`);
+    const local = path.join(tree, ".cc-candybar.local.json5");
+    expect(performChanges([change(local, null, LOCAL)], null)).toEqual({
+      kind: "ok",
+    });
+    expect(read(path.join(main, ".git", "info", "exclude"))).toBe(
+      "/.cc-candybar.local.json5\n",
+    );
+    expect(fs.existsSync(path.join(meta, "info", "exclude"))).toBe(false);
+  });
+
+  test("an edit to a local layer that exists, or a project layer created, writes no exclude", () => {
+    const root = repo();
+    const exclude = path.join(root, ".git", "info", "exclude");
+    const local = path.join(root, ".cc-candybar.local.json5");
+    fs.writeFileSync(local, LOCAL);
+    const shared = path.join(root, ".cc-candybar.json5");
+    performChanges(
+      [
+        change(local, LOCAL, LOCAL.replace("2", "3")),
+        change(shared, null, LOCAL),
+      ],
+      null,
+    );
+    expect(fs.existsSync(exclude)).toBe(false);
+  });
+
+  test("an exclude that cannot be found refuses the whole change", () => {
+    const tree = path.join(dir, "wt");
+    fs.mkdirSync(tree);
+    fs.writeFileSync(path.join(tree, ".git"), "not a gitdir line\n");
+    const local = path.join(tree, ".cc-candybar.local.json5");
+    expect(performChanges([change(local, null, LOCAL)], null)).toMatchObject({
+      kind: "failed",
+    });
+    expect(fs.existsSync(local)).toBe(false);
+  });
+});

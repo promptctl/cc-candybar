@@ -84,6 +84,7 @@ import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SourceRun } from "../var-system/sources.js";
 import type { ViewFacts } from "../renderer-interface/request-context";
+import type { LayerRole } from "../config/layer-role.js";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -242,6 +243,9 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   // entry's home); absent while that file does not exist, so the menu's
   // `↗ config` shows exactly while there is a file to open.
   readonly configPath?: string;
+  // Per role, whether this session's chain can write that layer, so the
+  // save cell offers exactly the layers a click there would write.
+  readonly layers: Readonly<Record<LayerRole, boolean>>;
   // The shell command that resumes this session (src/claude-resume.ts) —
   // what the menu's `⎘ resume` copies.
   readonly resumeCommand: string;
@@ -673,6 +677,7 @@ export type SettingCounts = Pick<
 // `null` while it does not exist.
 export type ConfigFileFacts = SettingCounts & {
   readonly configPath: string | null;
+  readonly layers: RenderPayload["layers"];
 };
 
 // What a view's payload reads of its view besides the world state and the

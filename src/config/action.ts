@@ -33,6 +33,7 @@
 import type { OptionDomain } from "./option-domain.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import type { GlyphMark } from "../doctor/checks.js";
+import { LAYER_ROLES, type LayerChoice, type LayerRole } from "./layer-role.js";
 export type { OptionDomain } from "./option-domain.js";
 
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
@@ -78,6 +79,19 @@ export const ACTION_KEYS = [
   "do",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
+
+// [LAW:one-source-of-truth] The layers each config-writing action may name:
+// a role of the session's chain, or, for save alone, `ask` — the one write
+// whose click binds no value of its own, so it can bind the layer. An action
+// absent here writes no config and names no layer.
+export const LAYER_CHOICES: Partial<Record<ActionKey, readonly LayerChoice[]>> =
+  {
+    persist: LAYER_ROLES,
+    reset: LAYER_ROLES,
+    preset: LAYER_ROLES,
+    themeDefault: LAYER_ROLES,
+    save: [...LAYER_ROLES, "ask"],
+  };
 
 // [LAW:types-are-the-program] An ActionDecl is the click effect a named action
 // binds to. The top-level discriminator is which of `set`/`copy`/`open` is
@@ -177,6 +191,12 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 // segment names and relation are DATA the loader proves at load, not a
 // runtime picker — so each declared action has exactly one legal request,
 // gated the same one-member-allow-list way a literal `to` already is.
+//
+// Every action that writes config names the layer of the session's chain it
+// writes; absent, the user's.
+interface Writes {
+  readonly layer?: LayerRole;
+}
 export type ActionDecl =
   | { readonly set: string; readonly to: string }
   | { readonly set: string; readonly from: OptionDomain }
@@ -188,22 +208,22 @@ export type ActionDecl =
     }
   | { readonly set: string; readonly int: true }
   | { readonly set: string; readonly cycle: readonly string[] }
-  | { readonly persist: string; readonly to: string }
-  | { readonly persist: string; readonly from: OptionDomain }
-  | {
+  | ({ readonly persist: string; readonly to: string } & Writes)
+  | ({ readonly persist: string; readonly from: OptionDomain } & Writes)
+  | ({
       readonly persist: string;
       readonly min: number;
       readonly max: number;
       readonly by: number;
-    }
-  | { readonly persist: string; readonly cycle: readonly string[] }
-  | { readonly persist: string; readonly removeSegment: string }
-  | {
+    } & Writes)
+  | ({ readonly persist: string; readonly cycle: readonly string[] } & Writes)
+  | ({ readonly persist: string; readonly removeSegment: string } & Writes)
+  | ({
       readonly persist: string;
       readonly insertSegment: string;
       readonly anchor: string;
       readonly relation: "before" | "after";
-    }
+    } & Writes)
   // [LAW:one-source-of-truth] brandon-layout-edit-2gc.3's DOMAIN-SOURCED
   // sibling of `insertSegment`: the same tree op, but the segment name comes
   // from the template's bound option (a picker/menu cell) instead of being
@@ -216,30 +236,31 @@ export type ActionDecl =
   // `encodeLayoutOp({ op: "insert", segment: <picked>, anchor, relation })` —
   // the SAME wire shape a literal `insertSegment` action emits, so undo/redo
   // and the daemon's apply-layout-op handler need no changes at all.
-  | {
+  | ({
       readonly persist: string;
       readonly insertSegmentFrom: OptionDomain;
       readonly anchor: string;
       readonly relation: "before" | "after";
-    }
+    } & Writes)
   | { readonly copy: string }
   | { readonly open: string }
-  | { readonly reset: string }
+  | ({ readonly reset: string } & Writes)
   | { readonly undo: true }
   | { readonly redo: true }
   | { readonly back: true }
   | { readonly rewind: true }
-  | { readonly save: true }
+  // Save asks by default: `ask` offers the session's writable layers.
+  | { readonly save: true; readonly layer?: LayerChoice }
   // Save as preset (brandon-save-undo-bwi.o6u). `save` takes nothing — the
   // daemon names the preset and reads what it holds at click time — while
   // `delete` names its preset by a template, like `copy`'s text, so one
   // declaration serves "delete the preset I am in" and "delete this one".
-  | { readonly preset: "save" }
-  | { readonly preset: "delete"; readonly name: string }
+  | ({ readonly preset: "save" } & Writes)
+  | ({ readonly preset: "delete"; readonly name: string } & Writes)
   // The active theme's default look (candybar-theme-colours-6fq5.ix8): the
   // daemon reads the theme and the look at click time, as `preset: "save"`
   // reads the bar it copies, so the declaration carries nothing but the verb.
-  | { readonly themeDefault: "save" }
+  | ({ readonly themeDefault: "save" } & Writes)
   // [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a): `run` folds
   // every check over the session's recorded client facts and writes the
   // report into SessionState; `fix` performs the repair the named check's

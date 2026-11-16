@@ -590,7 +590,7 @@ describe("persist action click → the config file", () => {
       const openUrls = ownUrls(render());
       const depthUrl = openUrls.find((u) =>
         effectsOf(u).some(
-          (e) => e.verb === "set-config" && e.args[2] === "256",
+          (e) => e.verb === "set-config" && e.args[3] === "256",
         ),
       );
       expect(depthUrl).toBeDefined();
@@ -749,7 +749,7 @@ describe("persist action click → the config file", () => {
     }`, S1, EMPTY_DEFAULT, { colorCompatibility: "256" });
     const active = boldUrls(render()).map(effectsOf);
     expect(active).toHaveLength(1);
-    expect(active[0]![0]!.args[2]).toBe("256");
+    expect(active[0]![0]!.args[3]).toBe("256");
   });
 
   // [LAW:verifiable-goals] candybar-config-engine-71o.3: autoWrap is the one
@@ -791,7 +791,7 @@ describe("persist action click → the config file", () => {
     const setConfig = VERBS.get("set-config")!;
     await expect(
       setConfig(
-        `${encodeURIComponent("s1")}/${encodeURIComponent("not-a-real-key")}/${encodeURIComponent("x")}`,
+        `${encodeURIComponent("s1")}/user/${encodeURIComponent("not-a-real-key")}/${encodeURIComponent("x")}`,
         ctx,
       ),
     ).rejects.toThrow(/unknown config key "not-a-real-key"/);
@@ -868,7 +868,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       durable.host,
     );
     await VERBS.get("set-config")!(
-      encodeSegments(["s1", "palette", "nord"]),
+      encodeSegments(["s1", "user", "palette", "nord"]),
       ctx,
     );
     expect(
@@ -906,7 +906,7 @@ describe("a durable click lands in the file the next reload reads", () => {
     );
     const click = async (palette: string): Promise<void> =>
       await VERBS.get("set-config")!(
-        encodeSegments(["s1", "palette", palette]),
+        encodeSegments(["s1", "user", "palette", palette]),
         ctx,
       );
     expect(durable.text()).toBeNull();
@@ -970,7 +970,7 @@ describe("RenderCache: the config file is the durable store", () => {
         }
         clicked = true;
         await VERBS.get("set-config")!(
-          ["s1", "palette", "nord"].map(encodeURIComponent).join("/"),
+          ["s1", "user", "palette", "nord"].map(encodeURIComponent).join("/"),
           ctx,
         );
       });

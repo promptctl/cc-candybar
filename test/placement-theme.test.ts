@@ -284,7 +284,7 @@ describe("configure mode picks a placement's theme", () => {
     expect(rt.bgOf("pinned")).toBe(pinnedBefore);
 
     const logged: string[] = [];
-    await VERBS.get(VERB_SAVE)!(SID, {
+    await VERBS.get(VERB_SAVE)!(`${SID}/user`, {
       ...rt.ctx,
       log: (_level, message) => logged.push(message),
     });

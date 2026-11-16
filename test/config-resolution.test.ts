@@ -6,7 +6,7 @@
 //   - .json5 wins over .json at the same location (documented > legacy)
 //   - every location's file is a layer: XDG < cwd < project
 //   - detectConfigCollisions surfaces same-location duplicates
-//   - durableConfig names the user's file and the layers above it
+//   - writeLayer names a role's file and the chain's layers either side of it
 
 import {
   chmodSync,
@@ -25,7 +25,8 @@ import { join } from "node:path";
 import {
   resolveDslConfig,
   configResolutionNotice,
-  durableConfig,
+  writeLayer,
+  writableRoles,
   dslConfigCandidatePaths,
   detectConfigCollisions,
 } from "../src/config/dsl-loader";
@@ -233,13 +234,48 @@ describe("resolveDslConfig", () => {
           approved: [realpathSync(proj)],
         },
       });
-      expect(durableConfig(L, approving(proj), proj, dir)).toEqual({
+      const query = { projectDir: proj, cwd: dir };
+      expect(writeLayer(L, approving(proj), query, "user")).toEqual({
+        kind: "layer",
         path: xdgJson5,
+        role: "user",
+        below: [],
         above: [{ path: projJson, role: "project" }],
         repo,
         cwd: dir,
         locs: L,
       });
+      // The project's own file, under the user's; and the local file a first
+      // write there creates, beside it, over both.
+      expect(writeLayer(L, approving(proj), query, "project")).toEqual({
+        kind: "layer",
+        path: projJson,
+        role: "project",
+        below: [{ path: xdgJson5, role: "user" }],
+        above: [],
+        repo,
+        cwd: dir,
+        locs: L,
+      });
+      expect(writeLayer(L, approving(proj), query, "local")).toMatchObject({
+        kind: "layer",
+        path: join(proj, ".cc-candybar.local.json5"),
+        below: [
+          { path: xdgJson5, role: "user" },
+          { path: projJson, role: "project" },
+        ],
+        above: [],
+      });
+      expect(writableRoles(resolveDslConfig(L, approving(proj), query), query)).toEqual(
+        ["user", "project", "local"],
+      );
+      // Unapproved, the project's layers are not the session's to write.
+      const unanswered = { kind: "ok", value: {} } as const;
+      expect(writeLayer(L, unanswered, query, "project")).toEqual({
+        kind: "refused",
+        why: "the project layer is the project's, and this session has no approved project",
+      });
+      expect(writableRoles(resolveDslConfig(L, unanswered, query), query)).toEqual(["user"]);
     } finally {
       cleanup();
     }
@@ -261,8 +297,11 @@ describe("resolveDslConfig", () => {
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
-      expect(durableConfig(L, approving(), undefined, dir)).toEqual({
+      expect(writeLayer(L, approving(), { cwd: dir }, "user")).toEqual({
+        kind: "layer",
         path: home,
+        role: "user",
+        below: [],
         above: [],
         repo: null,
         cwd: dir,
@@ -291,13 +330,19 @@ describe("resolveDslConfig", () => {
         unchecked: [],
         repos: NOTHING_GATED,
       });
-      expect(durableConfig(L, approving(), dir, dir, named)).toEqual({
+      const query = { projectDir: dir, cwd: dir, configFile: named };
+      expect(writeLayer(L, approving(), query, "user")).toEqual({
+        kind: "layer",
         path: named,
+        role: "user",
+        below: [],
         above: [],
         repo: null,
         cwd: dir,
         locs: L,
       });
+      // The named file is the chain's one layer: there is no other to write.
+      expect(writeLayer(L, approving(dir), query, "local").kind).toBe("refused");
     } finally {
       cleanup();
     }
@@ -328,13 +373,19 @@ describe("resolveDslConfig", () => {
         `Config file not found: ${named} — rendering the bundled default until it appears`,
       );
       // A durable write creates the file the bar is waiting for.
-      expect(durableConfig(L, approving(), dir, dir, named)).toEqual({
+      const query = { projectDir: dir, cwd: dir, configFile: named };
+      expect(writeLayer(L, approving(), query, "user")).toEqual({
+        kind: "layer",
         path: named,
+        role: "user",
+        below: [],
         above: [],
         repo: null,
         cwd: dir,
         locs: L,
       });
+      // The named file is the chain's one layer: there is no other to write.
+      expect(writeLayer(L, approving(dir), query, "local").kind).toBe("refused");
     } finally {
       cleanup();
     }

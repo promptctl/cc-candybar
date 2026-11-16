@@ -155,7 +155,8 @@ export function updateNotice(
       effectsUrl([
         {
           verb: VERB_SET_CONFIG,
-          args: [ctx.sessionId, UPDATE_NOTICE_FIELD, "false"],
+          // The user's own file: the notice is the user's to turn off.
+          args: [ctx.sessionId, "user", UPDATE_NOTICE_FIELD, "false"],
         },
         {
           verb: VERB_SET_STATE,

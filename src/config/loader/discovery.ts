@@ -17,6 +17,7 @@ import {
   type RepoProject,
 } from "./repo-gate.js";
 import type { PluginScope } from "./plugin-scope.js";
+import { LAYER_ROLES, type LayerRole } from "../layer-role.js";
 
 // [LAW:one-source-of-truth] The set of accepted extensions lives here once.
 // Both .json5 and .json are accepted: JSON ⊂ JSON5, so the same parser
@@ -24,12 +25,6 @@ import type { PluginScope } from "./plugin-scope.js";
 // load-bearing: .json5 wins over .json at the same location (documented
 // format > compatibility tail).
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
-
-// [LAW:types-are-the-program] A layer's place in its session's chain, lowest
-// precedence first: the user's own file, the project's checked-in file, and
-// the local file beside it that holds one person's settings for the project.
-export type LayerRole = "user" | "project" | "local";
-export const LAYER_ROLES: readonly LayerRole[] = ["user", "project", "local"];
 
 // One place a config file can be: its role, and its path without extension.
 interface ConfigLocation {
@@ -105,6 +100,13 @@ export function dslConfigCandidatePaths(
 // checked-in one, and the local one beside it.
 const REPO_CONFIG_BASE = ".cc-candybar";
 const LOCAL_CONFIG_BASE = ".cc-candybar.local";
+
+// Whether a file is a project's local layer, by the name it is found under.
+export function isLocalConfigFile(file: string): boolean {
+  return CONFIG_EXTENSIONS.some(
+    (ext) => path.basename(file) === `${LOCAL_CONFIG_BASE}.${ext}`,
+  );
+}
 
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
@@ -320,24 +322,24 @@ function userHome(locs: Locations, layers: readonly ConfigLayer[]): string {
 }
 
 /**
- * The file a DURABLE write lands in, and the layers above it.
+ * The file a DURABLE write to one role of the session's chain lands in, and
+ * the chain's layers below and above it.
  *
- * The home is the user's own file (or the session's explicit one), never a
- * project's: a project file is checked into somebody's repository, and a
- * theme picked from the bar is the user's taste, not the project's. A value
- * a layer ABOVE the home holds wins over anything the home says, so a write
- * the home takes but the chain hides is refused by the writer, naming the
- * layer that holds it (`config-file-store`'s commit) — never a click that
- * silently does nothing.
+ * The file is the layer the chain holds for the role, or, where it holds
+ * none, the file a first write there creates. A value a layer ABOVE it holds
+ * wins over anything it says, so a write the chain hides is refused by the
+ * writer, naming the layer that holds it (`config-file-store`'s commit) —
+ * never a click that silently does nothing.
  *
  * [LAW:one-source-of-truth] A projection of the same resolution the render
  * runs, so the file a click writes is a layer the next reload reads — by
  * construction, not by two lists agreeing.
  */
-export interface ConfigHome {
+export interface WriteLayer {
   readonly path: string;
-  // The chain's layers over `path`, lowest first. The home is the chain's
-  // bottom, so a layer is either the home or above it.
+  readonly role: LayerRole;
+  // The chain's layers under and over `path`, lowest first.
+  readonly below: readonly ConfigLayer[];
   readonly above: readonly ConfigLayer[];
   // The approved project whose plugins the chain loads, and the working
   // directory their checkout data paths resolve against.
@@ -347,22 +349,78 @@ export interface ConfigHome {
   readonly locs: Locations;
 }
 
-export function durableConfig(
+// [LAW:types-are-the-program] A role the session's chain has no place for:
+// a project's layers are an approved project's, and an explicit config file
+// is the chain's one layer.
+interface Refused {
+  readonly kind: "refused";
+  readonly why: string;
+}
+export type LayerWrite = ({ readonly kind: "layer" } & WriteLayer) | Refused;
+
+const rank = (role: LayerRole): number => LAYER_ROLES.indexOf(role);
+
+export function writeLayer(
   locs: Locations,
   answers: RepoAnswers,
-  projectDir?: string,
-  cwd?: string,
-  configFile?: string,
-): ConfigHome {
-  const resolved = resolveDslConfig(locs, answers, { projectDir, configFile });
+  query: ConfigQuery & { readonly cwd?: string },
+  role: LayerRole,
+): LayerWrite {
+  const resolved = resolveDslConfig(locs, answers, query);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
+  const place = placeOf(resolved, layers, query, role);
+  if (place.kind === "refused") return place;
   return {
-    path: resolved.home,
-    above: layers.filter((l) => l.path !== resolved.home),
+    kind: "layer",
+    path: place.path,
+    role,
+    below: layers.filter((l) => rank(l.role) < rank(role)),
+    above: layers.filter((l) => rank(l.role) > rank(role)),
     repo: resolved.repos.plugins,
-    cwd: cwd ?? null,
+    cwd: query.cwd ?? null,
     locs,
   };
+}
+
+// [LAW:dataflow-not-control-flow] The file a role names in the session's
+// chain, or why it names none.
+function placeOf(
+  resolved: ConfigResolution,
+  layers: readonly ConfigLayer[],
+  { projectDir, configFile }: ConfigQuery,
+  role: LayerRole,
+): { readonly kind: "at"; readonly path: string } | Refused {
+  if (role === "user") return { kind: "at", path: resolved.home };
+  if (configFile !== undefined)
+    return refused(
+      `${configFile} is the session's one config layer (it was named explicitly), so there is no ${role} layer to write`,
+    );
+  if (projectDir === undefined || resolved.repos.plugins === null)
+    return refused(
+      `the ${role} layer is the project's, and this session has no approved project`,
+    );
+  const base = role === "project" ? REPO_CONFIG_BASE : LOCAL_CONFIG_BASE;
+  return {
+    kind: "at",
+    path:
+      layers.find((l) => l.role === role)?.path ??
+      `${path.join(projectDir, base)}.${CONFIG_EXTENSIONS[0]}`,
+  };
+}
+
+const refused = (why: string): Refused => ({ kind: "refused", why });
+
+// [LAW:one-source-of-truth] The roles a session's chain can write: what its
+// save offers, read off the same placement a write resolves, so the bar never
+// offers a layer its click would refuse.
+export function writableRoles(
+  resolved: ConfigResolution,
+  query: ConfigQuery,
+): readonly LayerRole[] {
+  const layers = resolved.kind === "chain" ? resolved.layers : [];
+  return LAYER_ROLES.filter(
+    (role) => placeOf(resolved, layers, query, role).kind === "at",
+  );
 }
 
 /**

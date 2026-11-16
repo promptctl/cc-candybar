@@ -205,7 +205,7 @@ describe("updateNotice", () => {
       { verb: "set-state", args: [SID, UPDATE_DISMISSED_KEY, NEWER.digest] },
     ]);
     expect(clicksOf(disable!.link)).toEqual([
-      { verb: "set-config", args: [SID, UPDATE_NOTICE_FIELD, "false"] },
+      { verb: "set-config", args: [SID, "user", UPDATE_NOTICE_FIELD, "false"] },
       { verb: "set-state", args: [SID, UPDATE_NOTICE_SESSION_KEY, "false"] },
     ]);
   });

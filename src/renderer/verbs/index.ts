@@ -20,9 +20,14 @@
 
 import {
   type Locations,
-  durableConfig,
-  type ConfigHome,
+  writeLayer,
+  type WriteLayer,
 } from "../../config/loader/discovery";
+import {
+  LAYER_ROLES,
+  layerRoleOf,
+  type LayerRole,
+} from "../../config/layer-role";
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
@@ -563,7 +568,7 @@ const stepState: VerbHandler = async (rawValue, ctx) => {
   const sid = requireSessionId(sessionId);
   if (!key) {
     throw new BadVerbArgs(
-      "step-state: <key> is required (shape: <sessionId>/<key>/<by>)",
+      "step-state: <key> is required (shape: <sessionId>/<layer>/<key>/<by>)",
     );
   }
   if (!STEP_INT_RE.test(byRaw)) {
@@ -764,7 +769,8 @@ function changeLanded(
       const origin = recordedOrigin(ctx, session);
       if (
         origin !== null &&
-        (answered || files.includes(originHome(ctx, origin).path))
+        (answered ||
+          originLayers(ctx, origin).some((l) => files.includes(l.path)))
       )
         ctx.reloadConfig(origin);
     });
@@ -777,23 +783,26 @@ function changeLanded(
   holdClickError(ctx.sessionState, session, reason, ctx.now());
 }
 
-// [LAW:no-silent-failure] A history step's text loads as the home of the
-// session stepping it, or the step is refused: a step only ever wrote that
-// session's home, and a file it no longer renders from has no chain to prove
-// the text in.
-function proveLoadsAsHome(
+// [LAW:no-silent-failure] A history step's text loads as the layer of the
+// session stepping it that the step wrote, or the step is refused: a step
+// only ever wrote one of that session's layers, and a file it no longer
+// renders from has no chain to prove the text in.
+function proveLoadsAsLayer(
   ctx: Omit<DaemonContext, TurnBound>,
   sid: SessionId | null,
   file: string,
   text: string | null,
 ): void {
   const origin = sid === null ? null : recordedOrigin(ctx, sid);
-  const home = origin === null ? null : originHome(ctx, origin);
-  if (home?.path !== file)
+  const layer =
+    origin === null
+      ? undefined
+      : originLayers(ctx, origin).find((l) => l.path === file);
+  if (layer === undefined)
     throw new BadVerbArgs(
-      `${file} is not the config file this session renders from — its step is not taken`,
+      `${file} is not a config file this session renders from — its step is not taken`,
     );
-  proveLoads(home, text);
+  proveLoads(layer, text);
 }
 
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
@@ -835,19 +844,64 @@ function nestOf(
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
 
-// [LAW:single-enforcer] The home as the render resolves it, under the same
-// answers: a click's chain leaves out what the bar's leaves out.
-function originHome(
+// [LAW:single-enforcer] The layer a config write names in the session's
+// chain, resolved as the render resolves it under the same answers: a click's
+// chain leaves out what the bar's leaves out. A layer the chain has no place
+// for is refused, never written somewhere else.
+function originLayer(
   ctx: Pick<ClickContext, "stateDir" | "locations">,
   origin: RenderOrigin,
-): ConfigHome {
-  return durableConfig(
+  role: LayerRole,
+): WriteLayer {
+  const write = writeLayer(
     ctx.locations,
     repoConfigs(ctx.stateDir).read(),
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
+    {
+      projectDir: origin.projectDir,
+      configFile: origin.target.path,
+      cwd: origin.cwd,
+    },
+    role,
   );
+  if (write.kind === "refused")
+    throw new BadVerbArgs(`the ${role} layer is not writable: ${write.why}`);
+  return write;
+}
+
+// Every config layer this session's chain can write: what a landing in any
+// of them reloads, and what a history step may have written.
+function originLayers(
+  ctx: Pick<ClickContext, "stateDir" | "locations">,
+  origin: RenderOrigin,
+): readonly WriteLayer[] {
+  const answers = repoConfigs(ctx.stateDir).read();
+  const query = {
+    projectDir: origin.projectDir,
+    configFile: origin.target.path,
+    cwd: origin.cwd,
+  };
+  return LAYER_ROLES.flatMap((role) => {
+    const write = writeLayer(ctx.locations, answers, query, role);
+    return write.kind === "layer" ? [write] : [];
+  });
+}
+
+// [LAW:parse-dont-validate] A config write's wire: the session, the layer of
+// its chain it writes, then the verb's own arguments.
+function configWire(
+  verb: string,
+  raw: string,
+): { sid: SessionId; role: LayerRole; args: string[] } {
+  const [sessionId = "", layer = "", ...args] = decodeWire(() =>
+    decodeSegments(raw),
+  );
+  const sid = requireSessionId(sessionId);
+  const role = layerRoleOf(layer);
+  if (role === null)
+    throw new BadVerbArgs(
+      `${verb}: "${layer}" is not a config layer (one of ${LAYER_ROLES.join(", ")})`,
+    );
+  return { sid, role, args };
 }
 
 function editStore(ctx: ClickContext, sid: SessionId): EditStore {
@@ -866,10 +920,11 @@ function editStore(ctx: ClickContext, sid: SessionId): EditStore {
 // BAD_REQUEST — the config-file twin of `set-state`'s gate (configGate),
 // derived from the SAME action table.
 const setConfig: VerbHandler = async (rawValue, ctx) => {
-  const [sessionId = "", key = "", incoming = ""] = decodeWire(() =>
-    decodeSegments(rawValue),
-  );
-  const sid = requireSessionId(sessionId);
+  const {
+    sid,
+    role,
+    args: [key = "", incoming = ""],
+  } = configWire("set-config", rawValue);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const gate = ctx.gates.config.gateFor(config);
@@ -880,16 +935,16 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
   }
   const result = gate.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const home = originHome(ctx, origin);
+  const into = originLayer(ctx, origin, role);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
-  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
+  writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
   ctx.log(
     "info",
-    `set-config: ${landing.key}=${result.value} → ${home.path} (session=${sid})`,
+    `set-config: ${landing.key}=${result.value} → ${into.path} (session=${sid})`,
   );
 };
 
@@ -898,13 +953,14 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
 // when it declares none, what the bar renders there — configKeySeed), wrapped
 // and re-validated through the SAME range gate, then written durably.
 const stepConfig: VerbHandler = async (rawValue, ctx) => {
-  const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
-    decodeSegments(rawValue),
-  );
-  const sid = requireSessionId(sessionId);
+  const {
+    sid,
+    role,
+    args: [key = "", byRaw = ""],
+  } = configWire("step-config", rawValue);
   if (!key) {
     throw new BadVerbArgs(
-      "step-config: <key> is required (shape: <sessionId>/<key>/<by>)",
+      "step-config: <key> is required (shape: <sessionId>/<layer>/<key>/<by>)",
     );
   }
   if (!STEP_INT_RE.test(byRaw)) {
@@ -923,14 +979,14 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const home = originHome(ctx, origin);
+  const into = originLayer(ctx, origin, role);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(store.read(home.path), landing.key);
+  const stored = readValue(store.read(into.path), landing.key);
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
@@ -943,10 +999,10 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
   const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
+  writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
   ctx.log(
     "info",
-    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${home.path} (session=${sid})`,
+    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${into.path} (session=${sid})`,
   );
 };
 
@@ -964,8 +1020,7 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
 // session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
 const save: VerbHandler = async (value, ctx) => {
-  const [sessionId = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId);
+  const { sid, role } = configWire("save", value);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const pick = (key: string) => ctx.sessionState.get(sid, key);
@@ -985,8 +1040,8 @@ const save: VerbHandler = async (value, ctx) => {
     return [d.target, result.value];
   });
   gatePlacements("save", gate, placements);
-  const home = originHome(ctx, origin);
-  writeDrafts(editStore(ctx, sid), home, pairs, placements);
+  const into = originLayer(ctx, origin, role);
+  writeDrafts(editStore(ctx, sid), into, pairs, placements);
   for (const key of [
     ...drafts.map((d) => d.sessionKey),
     ...placements.map((p) => p.key),
@@ -998,7 +1053,7 @@ const save: VerbHandler = async (value, ctx) => {
     `save: ${[
       ...pairs.map(([k, v]) => `${k}=${v}`),
       ...placements.map(placementLog),
-    ].join(" ")} → ${home.path} (session=${sid})`,
+    ].join(" ")} → ${into.path} (session=${sid})`,
   );
 };
 
@@ -1029,8 +1084,7 @@ function gatePlacements(
 // [LAW:single-enforcer] Each pinned value re-crosses the session gate that
 // admitted it, as a save's do.
 const savePreset: VerbHandler = async (value, ctx) => {
-  const [sessionId = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId);
+  const { sid, role } = configWire("save-preset", value);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const snapshot = presetSnapshot(config, (key) =>
@@ -1043,10 +1097,10 @@ const savePreset: VerbHandler = async (value, ctx) => {
     return [d.configKey, result.value];
   });
   gatePlacements("save-preset", gate, snapshot.placements);
-  const home = originHome(ctx, origin);
+  const into = originLayer(ctx, origin, role);
   const name = writePreset(
     editStore(ctx, sid),
-    home,
+    into,
     snapshot.from,
     snapshot.globals,
     picks,
@@ -1061,13 +1115,13 @@ const savePreset: VerbHandler = async (value, ctx) => {
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   ctx.log(
     "info",
-    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${home.path} (session=${sid})`,
+    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${into.path} (session=${sid})`,
   );
 };
 
 // Save the look the session draws as the active theme's default
 // (candybar-theme-colours-6fq5.ix8): `themeDefaults.<theme>` in the session's
-// home file takes the session's shade, variation and style, and each of the
+// written layer takes the session's shade, variation and style, and each of the
 // session's picks of those three that the written file draws is released,
 // so the session follows the file again, as a save's do. A field the config's
 // globals declare is not the rung's to save (themeDefaultSave), so a pick of it
@@ -1078,8 +1132,7 @@ const savePreset: VerbHandler = async (value, ctx) => {
 // evaluates it, and a theme's default is keyed by name: refused, naming the
 // rule, never a guess at what it would have rendered.
 const saveThemeDefault: VerbHandler = async (value, ctx) => {
-  const [sessionId = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId);
+  const { sid, role } = configWire("save-theme-default", value);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
   const save = themeDefaultSave(config, (key) =>
@@ -1090,10 +1143,10 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default — pick one in the menu first",
     );
   }
-  const home = originHome(ctx, origin);
+  const into = originLayer(ctx, origin, role);
   const written = writeThemeDefault(
     editStore(ctx, sid),
-    home,
+    into,
     save.theme,
     save.look,
   );
@@ -1107,7 +1160,7 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
   for (const key of released) ctx.sessionState.clear(sid, key);
   ctx.log(
     "info",
-    `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${home.path} (session=${sid})`,
+    `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${into.path} (session=${sid})`,
   );
 };
 
@@ -1115,19 +1168,22 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
 // it returns to the file's default arrangement; any other session in it
 // falls to the floor, as it would for a name deleted by hand.
 const deletePreset: VerbHandler = async (value, ctx) => {
-  const [sessionId = "", name = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId);
+  const {
+    sid,
+    role,
+    args: [name = ""],
+  } = configWire("delete-preset", value);
   if (!name) {
     throw new BadVerbArgs(
-      "delete-preset: <name> is required (shape: <sessionId>/<name>)",
+      "delete-preset: <name> is required (shape: <sessionId>/<layer>/<name>)",
     );
   }
   const origin = sessionOrigin(ctx, sid);
-  const home = originHome(ctx, origin);
-  deletePresetFromFile(editStore(ctx, sid), home, name);
+  const into = originLayer(ctx, origin, role);
+  deletePresetFromFile(editStore(ctx, sid), into, name);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.log("info", `delete-preset: ${name} ← ${home.path} (session=${sid})`);
+  ctx.log("info", `delete-preset: ${name} ← ${into.path} (session=${sid})`);
 };
 
 // [LAW:one-source-of-truth] `reset`: return each key to its bundled default
@@ -1142,8 +1198,7 @@ const deletePreset: VerbHandler = async (value, ctx) => {
 // together, as a save's do, so no frame draws a pick's absence over a file
 // that still holds the value.
 const resetConfig: VerbHandler = async (value, ctx) => {
-  const [sessionId = "", ...keys] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId);
+  const { sid, role, args: keys } = configWire("reset-config", value);
   const origin = sessionOrigin(ctx, sid);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
   const unknown =
@@ -1153,15 +1208,15 @@ const resetConfig: VerbHandler = async (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`,
     );
   }
-  const home = originHome(ctx, origin);
+  const into = originLayer(ctx, origin, role);
   const layers = keys.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
-  deleteValues(editStore(ctx, sid), home, fileKeys);
+  deleteValues(editStore(ctx, sid), into, fileKeys);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
   ctx.log(
     "info",
-    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${home.path} (session=${sid})`,
+    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${into.path} (session=${sid})`,
   );
 };
 
@@ -1219,10 +1274,11 @@ function endedSessionKeys(
 // shape, and the store proves the KEY is a preset-root target — a globals
 // or segment-palette key smuggled through this verb is refused there.
 const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
-  const [sessionId = "", key = "", opToken = ""] = decodeWire(() =>
-    decodeSegments(rawValue),
-  );
-  const sid = requireSessionId(sessionId);
+  const {
+    sid,
+    role,
+    args: [key = "", opToken = ""],
+  } = configWire("apply-layout-op", rawValue);
   const origin = sessionOrigin(ctx, sid);
   const before = ctx.configFor(origin);
   const gate = ctx.gates.config.gateFor(before);
@@ -1239,10 +1295,10 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const home = originHome(ctx, origin);
+  const into = originLayer(ctx, origin, role);
   const { placed, config } = applyLayoutOpToFile(
     editStore(ctx, sid),
-    home,
+    into,
     key,
     op,
   );
@@ -1259,7 +1315,7 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
   // the one fact of the edit the op token does not already carry.
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${home.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
   );
 };
 
@@ -1935,7 +1991,7 @@ async function journaled<C extends DaemonContext>(
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
-    prove: (file, text) => proveLoadsAsHome(ctx, sid, file, text),
+    prove: (file, text) => proveLoadsAsLayer(ctx, sid, file, text),
   });
   const navigation = ctx.navigation.begin(journal.sessionState);
   const failures: unknown[] = [];

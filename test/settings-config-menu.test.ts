@@ -236,10 +236,15 @@ function urlsOf(rendered: Frame): string[] {
 // The affordances that write `key`, whatever verb carries them — the question
 // every assertion here asks is "does any click in this bar write X", never
 // "which link is at position N".
+// A config write names its layer before the key it writes.
+const CONFIG_WRITES = new Set(["set-config", "step-config", "reset-config"]);
+const keyOf = (e: { verb: string; args: readonly string[] }) =>
+  e.args[CONFIG_WRITES.has(e.verb) ? 2 : 1];
+
 function writesTo(rendered: Frame, key: string): string[] {
   return urlsOf(rendered).filter((u) => {
     try {
-      return effectsOf(u).some((e) => e.args[1] === key);
+      return effectsOf(u).some((e) => keyOf(e) === key);
     } catch {
       return false;
     }
@@ -693,7 +698,7 @@ describe("reset returns settings to the bundled default", () => {
       (l) =>
         l.text === "↺" &&
         effectsOf(l.url).some(
-          (e) => e.verb === "reset-config" && e.args[1] === configKey,
+          (e) => e.verb === "reset-config" && e.args[2] === configKey,
         ),
     )!.url;
   };
@@ -871,7 +876,7 @@ describe("the drift marker", () => {
         .filter((l) => l.text === "↺")
         .flatMap((l) => effectsOf(l.url))
         .filter((e) => e.verb === "reset-config")
-        .forEach((e) => keys.add(e.args[1]!));
+        .forEach((e) => keys.add(e.args[2]!));
     }
     return [...keys].sort();
   };
@@ -1205,7 +1210,7 @@ describe("save as preset", () => {
     await start(source, { preset: "compact" });
     expect(textOf(r.render())).not.toContain(PRESET_DELETE_GLYPH);
     // The click a stale or hand-built URL could still carry.
-    await expect(r.click(`cc-candybar://delete-preset/${SID}/compact`),
+    await expect(r.click(`cc-candybar://delete-preset/${SID}/user/compact`),
     ).rejects.toThrow('cannot delete preset "compact": it is bundled');
     expect(durable.text()).toBe(source);
   });
@@ -1296,6 +1301,39 @@ describe("the preset action", () => {
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(message);
+  });
+});
+
+// [LAW:verifiable-goals] Which layer of the session's chain an action writes
+// is the action's `layer`: a role on any config write, `ask` on a save alone,
+// and nothing on an action that writes no config.
+describe("an action's layer", () => {
+  const load = (action: unknown) =>
+    parseAndValidate(
+      "<user>",
+      JSON.stringify({ actions: { a: action } }),
+      ALLOWED,
+      DEFAULT_DSL_CONFIG,
+    ).actions["a"];
+
+  test.each([
+    [{ persist: "padding", to: "2", layer: "project" }],
+    [{ reset: "palette", layer: "local" }],
+    [{ preset: "save", layer: "project" }],
+    [{ themeDefault: "save", layer: "local" }],
+    [{ save: true, layer: "ask" }],
+    [{ save: true, layer: "user" }],
+  ])("%j loads as declared", (action) => {
+    expect(load(action)).toEqual(action);
+  });
+
+  test.each([
+    [{ copy: "x", layer: "user" }, "a copy action writes no config, so it names no layer"],
+    [{ set: "wrap", to: "true", layer: "user" }, "a set action writes no config, so it names no layer"],
+    [{ persist: "padding", to: "2", layer: "ask" }, 'layer must be one of user, project, local, got "ask"'],
+    [{ save: true, layer: "repo" }, 'layer must be one of user, project, local, ask, got "repo"'],
+  ])("%j is refused at load", (action, message) => {
+    expect(() => load(action)).toThrow(message);
   });
 });
 
@@ -1458,7 +1496,7 @@ describe("a theme's default look, set from the bar", () => {
       (l) =>
         l.text === "↺" &&
         effectsOf(l.url).some(
-          (e) => e.verb === "reset-config" && e.args[1] === "shade",
+          (e) => e.verb === "reset-config" && e.args[2] === "shade",
         ),
     );
     expect(reset).toBeDefined();
@@ -1489,7 +1527,7 @@ describe("a theme's default look, set from the bar", () => {
     pick({ shade: "deepest" });
     expect(textOf(r.render())).not.toContain("⤓ default");
     // The click a stale or hand-built URL could still carry.
-    await expect(r.click(`cc-candybar://save-theme-default/${SID}`)).rejects.toThrow(
+    await expect(r.click(`cc-candybar://save-theme-default/${SID}/user`)).rejects.toThrow(
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default",
     );
     expect(durable.text()).toBe(source);

@@ -18,6 +18,10 @@ import type {
   EffectOutcome,
 } from "../renderer-interface/interface.js";
 import { answeredBook } from "../config/repo-configs.js";
+import { isLocalConfigFile } from "../config/loader/discovery.js";
+import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
+import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
+import path from "node:path";
 import {
   readConfigText,
   resolvedTarget,
@@ -83,6 +87,20 @@ export function performChanges(
         };
       rewrites.set(file, { file, was, will: applied.text });
     }
+    // [LAW:single-enforcer] A local layer a change creates is one person's,
+    // so git never shows it: its repository's shared exclude names it, in the
+    // same write as the file, or neither is written.
+    for (const { file, was, will } of [...rewrites.values()]) {
+      if (was !== null || will === null || !isLocalConfigFile(file)) continue;
+      const excluded = excludeRewrite(file, rewrites);
+      if (excluded.kind === "failed")
+        return {
+          kind: "failed",
+          reason: `${file} could not be kept out of git: ${excluded.reason} — nothing was written`,
+        };
+      if (excluded.kind === "ok")
+        rewrites.set(excluded.value.file, excluded.value);
+    }
     if (book !== null && book.answers.length > 0) {
       const planned = answeredBook(book.stateDir, book.answers);
       if (planned.kind === "failed")
@@ -111,6 +129,26 @@ export function performChanges(
   } catch (e) {
     return { kind: "failed", reason: putBack(written, e) };
   }
+}
+
+// The rewrite of the exclude file of `file`'s repository that names it, or
+// absent when it is in no checkout or already named.
+function excludeRewrite(
+  file: string,
+  rewrites: ReadonlyMap<string, Rewrite>,
+): Outcome<Rewrite> {
+  const root = gitRootOf(path.dirname(file));
+  if (root === undefined) return ABSENT;
+  const at = sharedExcludeOf(root);
+  if (at.kind !== "ok") return at.kind === "absent" ? ABSENT : at;
+  const exclude = resolvedTarget(at.value);
+  const prior = rewrites.get(exclude);
+  const was = prior === undefined ? readConfigText(exclude) : prior.was;
+  const text = prior === undefined ? (was ?? "") : (prior.will ?? "");
+  const entry = `/${path.relative(root, file).split(path.sep).join("/")}`;
+  if (text.split("\n").includes(entry)) return ABSENT;
+  const lead = text === "" || text.endsWith("\n") ? "" : "\n";
+  return ok({ file: exclude, was, will: `${text}${lead}${entry}\n` });
 }
 
 // The files a failed write already wrote, put back as they stood.

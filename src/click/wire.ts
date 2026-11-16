@@ -268,14 +268,28 @@ const SAYS = {
   [VERB_STEP_STATE]: ([, key, by]) => [sayStep(key!, by!)],
   [VERB_COPY]: ([text]) => [`copy ${saidCopy(text!)}`],
   [VERB_OPEN_VSCODE]: ([target]) => [`open ${target} in vs code`],
-  [VERB_SET_CONFIG]: ([, key, value]) => [`save ${key} as ${value}`],
-  [VERB_STEP_CONFIG]: ([, key, by]) => [`save ${sayStep(key!, by!)}`],
-  [VERB_SAVE]: () => ["save settings"],
-  [VERB_SAVE_PRESET]: () => ["save as a new preset"],
-  [VERB_SAVE_THEME_DEFAULT]: () => ["save this look for the theme"],
-  [VERB_DELETE_PRESET]: ([, name]) => [`delete preset ${name}`],
-  [VERB_RESET_CONFIG]: ([, ...keys]) => keys.map((key) => `reset ${key}`),
-  [VERB_APPLY_LAYOUT_OP]: ([, key, op]) => [`edit ${op} in ${key}`],
+  // A config write says the layer of the session's chain it writes.
+  [VERB_SET_CONFIG]: ([, layer, key, value]) => [
+    `save ${key} as ${value} in ${layer} config`,
+  ],
+  [VERB_STEP_CONFIG]: ([, layer, key, by]) => [
+    `save ${sayStep(key!, by!)} in ${layer} config`,
+  ],
+  [VERB_SAVE]: ([, layer]) => [`save settings to ${layer} config`],
+  [VERB_SAVE_PRESET]: ([, layer]) => [
+    `save as a new preset in ${layer} config`,
+  ],
+  [VERB_SAVE_THEME_DEFAULT]: ([, layer]) => [
+    `save this look for the theme in ${layer} config`,
+  ],
+  [VERB_DELETE_PRESET]: ([, layer, name]) => [
+    `delete preset ${name} from ${layer} config`,
+  ],
+  [VERB_RESET_CONFIG]: ([, layer, ...keys]) =>
+    keys.map((key) => `reset ${key} in ${layer} config`),
+  [VERB_APPLY_LAYOUT_OP]: ([, layer, key, op]) => [
+    `edit ${op} in ${key} of ${layer} config`,
+  ],
   [VERB_UNDO]: () => ["undo"],
   [VERB_REDO]: () => ["redo"],
   [VERB_BACK]: () => ["go back"],
@@ -378,12 +392,15 @@ export function parseEffects(rawValue: string): ParsedEffect[] {
 // one file write and one reload, so `⟲ reset all` is one write however many
 // settings it names. Only adjacency merges: effects still run in the order the
 // click lists them, so an effect between two writes keeps its place, and a
-// different verb or session id starts a new run rather than borrowing the
-// previous one's. The tail stays encoded — splitVerb one level down splits
-// `<sid>/<args…>`, and joining encoded runs is the codec's own join.
-const BATCHED_VERBS: ReadonlySet<string> = new Set([
-  VERB_SET_STATE,
-  VERB_RESET_CONFIG,
+// different verb or a different head starts a new run rather than borrowing
+// the previous one's. The head is what a run's members share: a session
+// write's session, and a config write's session and the layer it writes, so
+// two layers are never one write. The tail stays encoded, so its segments
+// split at `/`, and joining encoded runs is the codec's own join.
+// [LAW:dataflow-not-control-flow] Each batched verb's head width, as data.
+const BATCHED_VERBS: ReadonlyMap<string, number> = new Map([
+  [VERB_SET_STATE, 1],
+  [VERB_RESET_CONFIG, 2],
 ]);
 
 export function batchAdjacentWrites(
@@ -397,15 +414,17 @@ export function batchAdjacentWrites(
 }
 
 // Two effects as one batch, or undefined when they are not the same batched
-// verb for the same session.
+// verb with the same head.
 function joinWrites(
   a: ParsedEffect,
   b: ParsedEffect,
 ): ParsedEffect | undefined {
-  if (a.verb !== b.verb || !BATCHED_VERBS.has(a.verb)) return undefined;
-  const [x, y] = [splitVerb(a.value), splitVerb(b.value)];
-  return x.verb === y.verb
-    ? { verb: a.verb, value: `${x.verb}/${x.value}/${y.value}` }
+  const width = BATCHED_VERBS.get(a.verb);
+  if (a.verb !== b.verb || width === undefined) return undefined;
+  const [x, y] = [a.value.split("/"), b.value.split("/")];
+  const head = x.slice(0, width).join("/");
+  return head === y.slice(0, width).join("/")
+    ? { verb: a.verb, value: [...x, ...y.slice(width)].join("/") }
     : undefined;
 }
 

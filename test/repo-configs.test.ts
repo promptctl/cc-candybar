@@ -15,7 +15,7 @@ import path from "node:path";
 import { checkConfig } from "../src/check";
 import {
   configResolutionNotice,
-  durableConfig,
+  writeLayer,
   resolveDslConfig,
 } from "../src/config/dsl-loader";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
@@ -136,8 +136,13 @@ describe("the gate over a project's config file", () => {
   test("the durable writer's chain leaves out what the bar's leaves out", () => {
     write(".cc-candybar.json5", "{}");
     expect(
-      durableConfig(locations(host), book({}), project, project).above,
-    ).toEqual([]);
+      writeLayer(
+        locations(host),
+        book({}),
+        { projectDir: project, cwd: project },
+        "user",
+      ),
+    ).toMatchObject({ above: [] });
   });
 
   test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {

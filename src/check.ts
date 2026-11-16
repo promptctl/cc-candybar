@@ -93,6 +93,7 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "./config/effective-globals.js";
+import { LAYER_ROLES, layerFlags } from "./config/layer-role.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
 // of the config alone, not of whichever terminal invoked the check. Templates
@@ -393,6 +394,9 @@ export function checkPayload(
         // drawn.
         configPath:
           configPath ?? `${CHECK_HOME}/.config/cc-candybar/config.json5`,
+        // Every layer writable, so the save cell draws every link it can and
+        // each gets its template checked.
+        layers: layerFlags(LAYER_ROLES),
       },
       // One step each way, so undo, redo and back render.
       history: { undo: 1, redo: 1, sinceEdit: 1 },

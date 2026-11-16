@@ -77,6 +77,22 @@ export function gitDirNamed(root: string): Outcome<string> {
     : ok(path.resolve(root, named));
 }
 
+// [LAW:one-source-of-truth] The exclude file every worktree of a checkout
+// root's repository shares — what `git rev-parse --git-path info/exclude`
+// names: the `info/exclude` of the repository's common git directory.
+export function sharedExcludeOf(root: string): Outcome<string> {
+  const dotGit = path.join(root, ".git");
+  const isDir = probe(() => fs.statSync(dotGit).isDirectory());
+  if (isDir.kind !== "ok") return isDir;
+  if (isDir.value) return ok(path.join(dotGit, "info", "exclude"));
+  const gitDir = gitDirNamed(root);
+  if (gitDir.kind !== "ok") return gitDir;
+  const common = commonDirOf(gitDir.value);
+  if (common.kind === "failed") return common;
+  const shared = common.kind === "ok" ? common.value : gitDir.value;
+  return ok(path.join(shared, "info", "exclude"));
+}
+
 // [LAW:one-source-of-truth] The common git directory a linked worktree's git
 // dir shares with its repository, from its `commondir` file (a path relative
 // to the git dir). `absent` is a git dir that is its own common dir.

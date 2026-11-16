@@ -50,7 +50,12 @@ export function laneHandoff(
   const reset = effectsUrl([
     {
       verb: VERB_RESET_CONFIG,
-      args: [sessionId, ...lanes.map((lane) => LANES[lane].switch.setting)],
+      // In the user's own file, where the menu's switches write.
+      args: [
+        sessionId,
+        "user",
+        ...lanes.map((lane) => LANES[lane].switch.setting),
+      ],
     },
   ]);
   return {

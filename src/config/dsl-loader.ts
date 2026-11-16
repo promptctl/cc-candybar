@@ -143,12 +143,14 @@ export {
   dslConfigCandidatePaths,
   resolveDslConfig,
   configResolutionNotice,
-  durableConfig,
+  writeLayer,
+  writableRoles,
   detectConfigCollisions,
   homeLayer,
 } from "./loader/discovery.js";
 export type {
-  ConfigHome,
+  WriteLayer,
+  LayerWrite,
   ConfigLayer,
   ConfigResolution,
 } from "./loader/discovery.js";

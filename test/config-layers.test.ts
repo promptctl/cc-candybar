@@ -10,7 +10,8 @@ import { locations } from "../src/daemon/paths";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, NO_REPO, prepareConfig, type CheckOutcome } from "../src/check";
-import { durableConfig, homeLayer, loadConfigChain } from "../src/config/dsl-loader";
+import { homeLayer, loadConfigChain, writeLayer } from "../src/config/dsl-loader";
+import type { LayerRole } from "../src/config/layer-role";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   deleteValues,
@@ -66,9 +67,18 @@ function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
 }
 
 
-// The home a click in the project writes, under the answers the bar reads.
-const projectHome = () =>
-  durableConfig(locations(host), repoConfigs(stateDir(host)).read(), project, project);
+// The layer of `role` a click in the project writes, under the answers the
+// bar reads.
+const projectLayer = (role: LayerRole = "user") => {
+  const write = writeLayer(
+    locations(host),
+    repoConfigs(stateDir(host)).read(),
+    { projectDir: project, cwd: project },
+    role,
+  );
+  if (write.kind !== "layer") throw new Error(write.why);
+  return write;
+};
 
 test("a project file that places one segment renders over the user's whole config", async () => {
   // `mine` is declared only by the user's file: the project file loads only
@@ -101,8 +111,8 @@ test("a layer that does not load fails naming its own file", async () => {
 
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
-  const home = projectHome();
-  expect(home).toEqual({ path: userFile, above: [{ path: projectFile, role: "project" }], repo: project, cwd: project, locs: locations(host) });
+  const home = projectLayer();
+  expect(home).toEqual({ kind: "layer", path: userFile, role: "user", below: [], above: [{ path: projectFile, role: "project" }], repo: project, cwd: project, locs: locations(host) });
   writeValues(EDITS_IN_PLACE, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -112,7 +122,7 @@ test("a click a project layer would hide is refused, naming the layer", () => {
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
   const before = fs.readFileSync(userFile, "utf8");
   expect(() =>
-    writeValues(EDITS_IN_PLACE, projectHome(), [["palette", "nord"]]),
+    writeValues(EDITS_IN_PLACE, projectLayer(), [["palette", "nord"]]),
   ).toThrow(new RegExp(`${projectFile} sets globals\\.palette`));
   expect(fs.readFileSync(userFile, "utf8")).toBe(before);
 });
@@ -123,14 +133,14 @@ test("a reset the project layer hides still clears the user's file", () => {
     `{ globals: { palette: "nord" }, segments: { mine: { template: "USERSEG" } }, root: { h: ["mine"] } }`,
   );
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
-  deleteValues(EDITS_IN_PLACE, projectHome(), ["palette"]);
+  deleteValues(EDITS_IN_PLACE, projectLayer(), ["palette"]);
   expect(fs.readFileSync(userFile, "utf8")).not.toContain("nord");
 });
 
 test("a click that repairs a broken user file is not refused under a project layer", () => {
   fs.writeFileSync(userFile, `{ globals: { palette: "no-such-theme" } }`);
   fs.writeFileSync(projectFile, `{ globals: { menuGlyph: "P" } }`);
-  writeValues(EDITS_IN_PLACE, projectHome(), [["palette", "nord"]]);
+  writeValues(EDITS_IN_PLACE, projectLayer(), [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
 });
 
@@ -138,7 +148,7 @@ test("save-as-preset never mints a name a project layer declares", () => {
   fs.writeFileSync(projectFile, `{ presets: { "custom-1": {} } }`);
   const name = writePreset(
     EDITS_IN_PLACE,
-    projectHome(),
+    projectLayer(),
     "default",
     {},
     [],
@@ -165,7 +175,7 @@ test("save-as-preset reads a layer above that the editor would refuse", () => {
     `{ presets: { "custom-1": {} }, globals: { menuGlyph: "a", menuGlyph: "b" } }`,
   );
   expect(
-    writePreset(EDITS_IN_PLACE, projectHome(), "default", {}, [], []),
+    writePreset(EDITS_IN_PLACE, projectLayer(), "default", {}, [], []),
   ).toBe("custom-2");
 });
 
@@ -180,7 +190,7 @@ test("a first durable write with no user file succeeds beside an installed plugi
     fs.mkdirSync(path.dirname(def), { recursive: true });
     fs.writeFileSync(def, `{ data: "./d.json", segments: { status: { template: "x" } } }`);
     fs.writeFileSync(projectFile, `{ root: { h: ["plugins.deploy.status"] } }`);
-    writeValues(EDITS_IN_PLACE, projectHome(), [["palette", "nord"]]);
+    writeValues(EDITS_IN_PLACE, projectLayer(), [["palette", "nord"]]);
     expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   }
 });
@@ -408,7 +418,7 @@ describe("a project layer inserting into the user's row", () => {
       // A layout op aimed at the inserted id writes nothing.
       const before = fs.readFileSync(userFile, "utf8");
       expect(() =>
-        applyLayoutOp(EDITS_IN_PLACE, projectHome(), "presets.default.root", {
+        applyLayoutOp(EDITS_IN_PLACE, projectLayer(), "presets.default.root", {
           op: "remove",
           target: "theirs",
         }),

@@ -243,7 +243,7 @@ describe("the add menu is a segment library", () => {
     const row = linksOf(out).find((l) => l.text.startsWith("directory "))!;
     const [layoutOp] = effectsOf(row.url);
     expect(layoutOp!.verb).toBe("apply-layout-op");
-    expect(layoutOp!.args[2]).toMatch(/^insert:directory:/);
+    expect(layoutOp!.args[3]).toMatch(/^insert:directory:/);
     r.dispose();
   });
 });

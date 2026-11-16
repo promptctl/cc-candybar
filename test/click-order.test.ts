@@ -326,7 +326,7 @@ describe("a gather is a snapshot of one config", () => {
         })
 });
       const url = effectsUrl([
-        { verb: VERB_SET_CONFIG, args: [A, "palette", [...ALLOWED][0]!] },
+        { verb: VERB_SET_CONFIG, args: [A, "user", "palette", [...ALLOWED][0]!] },
         { verb: VERB_DOCTOR_RUN, args: [A] },
       ]);
       await VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);

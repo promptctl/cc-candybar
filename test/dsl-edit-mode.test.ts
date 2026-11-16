@@ -594,7 +594,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
     ownUrls(rendered).flatMap((u) =>
       effectsOf(u)
         .filter((e) => e.verb === "apply-layout-op")
-        .map((e) => String(e.args[2])),
+        .map((e) => String(e.args[3])),
     );
 
   test("a segment its own `when` or its container's hides still shows its name and its `-`", async () => {
@@ -738,7 +738,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
       effectsOf(u).some(
         (e) =>
           e.verb === "apply-layout-op" &&
-          e.args[2] === encodeLayoutOp({ op: "remove", target: "directory" }),
+          e.args[3] === encodeLayoutOp({ op: "remove", target: "directory" }),
       ),
     )!;
     expect(removeUrl).toBeDefined();
@@ -765,7 +765,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
       effectsOf(u).some(
         (e) =>
           e.verb === "apply-layout-op" &&
-          decodeURIComponent(String(e.args[2])).startsWith("insert:gitPr:git:"),
+          decodeURIComponent(String(e.args[3])).startsWith("insert:gitPr:git:"),
       ),
     )!;
     expect(pickUrl).toBeDefined();

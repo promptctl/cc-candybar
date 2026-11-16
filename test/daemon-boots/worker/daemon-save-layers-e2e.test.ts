@@ -1,0 +1,198 @@
+// [LAW:verifiable-goals] candybar-host-renderer-x96a.u2t's done-when: in a
+// project whose repository is approved, a setting saved to user, project and
+// local in turn lands in each one's file, the bar draws the winning value after
+// each, and git sees nothing of the local file. And which layer a click writes
+// is the config's to say: a save that writes the user layer beside a stepper
+// that writes the project's needs no code. Every click is a link the bar drew,
+// found by its text and sent over the wire.
+
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import JSON5 from "json5";
+import os from "node:os";
+import path from "node:path";
+
+import { linksOf } from "../../../src/click/read";
+import { textOf, type Frame } from "../../../src/render/frame";
+import { listResolvablePaletteNames } from "../../../src/themes/policy";
+import { click, render, renderUntil } from "../../helpers/daemon-e2e";
+import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
+import { answerRepo } from "../../helpers/repo-approval";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+
+jest.setTimeout(60_000);
+
+const [A, B, C] = listResolvablePaletteNames().filter((t) => t !== "dusk");
+
+const git = (cwd: string, ...args: string[]): string =>
+  execFileSync(
+    "git",
+    ["-c", "user.name=t", "-c", "user.email=t@t", ...args],
+    { cwd, encoding: "utf8" },
+  );
+
+interface Case {
+  readonly daemon: InWorkerDaemon;
+  readonly project: string;
+  readonly userFile: string;
+  readonly projectFile: string;
+  readonly localFile: string;
+}
+
+// A daemon over an approved repository, the user's config `config`.
+async function withProject(
+  config: string,
+  body: (c: Case) => Promise<void>,
+): Promise<void> {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-layers");
+  const project = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "ccb-layers-repo-")),
+  );
+  git(project, "init", "-q");
+  git(project, "commit", "-q", "--allow-empty", "-m", "root");
+  answerRepo(project, "approved", env);
+  const userFile = path.join(env.XDG_CONFIG_HOME!, "cc-candybar", "config.json5");
+  fs.mkdirSync(path.dirname(userFile), { recursive: true });
+  fs.writeFileSync(userFile, config);
+  const daemon = startDaemon(env);
+  try {
+    await body({
+      daemon,
+      project,
+      userFile,
+      projectFile: path.join(project, ".cc-candybar.json5"),
+      localFile: path.join(project, ".cc-candybar.local.json5"),
+    });
+  } finally {
+    await daemon.stop();
+    removeTmpDirs();
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+}
+
+// The globals a layer's file sets; none for a file that does not exist.
+const globalsOf = (file: string): Record<string, unknown> =>
+  fs.existsSync(file)
+    ? ((JSON5.parse(fs.readFileSync(file, "utf8")) as { globals?: Record<string, unknown> })
+        .globals ?? {})
+    : {};
+
+const linkTo = (frame: Frame, text: string): string => {
+  const hit = linksOf(frame).find((l) => l.text === text);
+  if (hit === undefined)
+    throw new Error(`no link "${text}" in:\n${textOf(frame)}`);
+  return hit.url;
+};
+
+const SID = "save-layers";
+
+// The bar draws the theme it renders, a link to pick each theme, and a save
+// link per layer the session can write.
+const ASKING = `{
+  actions: {
+    pickA: { set: "theme", to: "${A}" },
+    pickB: { set: "theme", to: "${B}" },
+    pickC: { set: "theme", to: "${C}" },
+    keep: { save: true },
+  },
+  variables: {
+    project: { kind: "input", path: "layers.project", type: "boolean", default: false },
+    local: { kind: "input", path: "layers.local", type: "boolean", default: false },
+  },
+  segments: {
+    shown: { template: 'THEME={{ .theme.effective }}' },
+    picks: { template: '{{ action "pickA" "A" }} {{ action "pickB" "B" }} {{ action "pickC" "C" }}' },
+    saves: {
+      template: '{{ action "keep" "U" "user" }}{{ if .project }} {{ action "keep" "P" "project" }}{{ end }}{{ if .local }} {{ action "keep" "L" "local" }}{{ end }}',
+    },
+  },
+  root: { h: ["shown", "picks", "saves"] },
+}
+`;
+
+describe("save writes the layer it is asked for", () => {
+  test("user, then project, then local: each lands in its own file, the bar draws the winner, and git sees no local file", async () => {
+    await withProject(ASKING, async (c) => {
+      const { daemon, project } = c;
+      let frame = await render(daemon, SID, project);
+
+      const pickAndSave = async (pick: string, save: string, theme: string) => {
+        await click(daemon, linkTo(frame, pick));
+        frame = await render(daemon, SID, project);
+        await click(daemon, linkTo(frame, save));
+        frame = await renderUntil(
+          daemon,
+          SID,
+          project,
+          (f) => textOf(f).includes(`THEME=${theme}`),
+          `the bar drawing ${theme}`,
+        );
+      };
+
+      await pickAndSave("A", "U", A!);
+      expect(globalsOf(c.userFile)).toEqual({ palette: A });
+      expect(fs.existsSync(c.projectFile)).toBe(false);
+
+      await pickAndSave("B", "P", B!);
+      expect(globalsOf(c.projectFile)).toEqual({ palette: B });
+      expect(globalsOf(c.userFile)).toEqual({ palette: A });
+      // The project's setting is shared by committing it.
+      git(project, "add", ".cc-candybar.json5");
+      git(project, "commit", "-q", "-m", "share the theme");
+
+      await pickAndSave("C", "L", C!);
+      expect(globalsOf(c.localFile)).toEqual({ palette: C });
+      expect(globalsOf(c.projectFile)).toEqual({ palette: B });
+      expect(globalsOf(c.userFile)).toEqual({ palette: A });
+      expect(git(project, "status", "--porcelain")).toBe("");
+
+      // The winner is the highest layer: without the local file, the
+      // project's value is drawn again.
+      fs.rmSync(c.localFile);
+      await renderUntil(
+        daemon,
+        SID,
+        project,
+        (f) => textOf(f).includes(`THEME=${B}`),
+        `the bar drawing the project's ${B}`,
+      );
+    });
+  });
+
+  test("a save that writes the user layer beside a stepper that writes the project's needs no code", async () => {
+    const config = `{
+  actions: {
+    pickA: { set: "theme", to: "${A}" },
+    keep: { save: true, layer: "user" },
+    wider: { persist: "padding", min: 0, max: 4, by: 1, layer: "project" },
+  },
+  segments: {
+    shown: { template: 'THEME={{ .theme.effective }}' },
+    controls: { template: '{{ action "pickA" "A" }} {{ action "keep" "SAVE" }} {{ action "wider" "+" }}' },
+  },
+  root: { h: ["shown", "controls"] },
+}
+`;
+    await withProject(config, async (c) => {
+      const { daemon, project } = c;
+      let frame = await render(daemon, SID, project);
+      await click(daemon, linkTo(frame, "+"));
+      expect(globalsOf(c.projectFile)).toEqual({ padding: expect.any(Number) });
+      expect(globalsOf(c.userFile)).toEqual({});
+
+      frame = await render(daemon, SID, project);
+      await click(daemon, linkTo(frame, "A"));
+      frame = await render(daemon, SID, project);
+      await click(daemon, linkTo(frame, "SAVE"));
+      await renderUntil(
+        daemon,
+        SID,
+        project,
+        (f) => textOf(f).includes(`THEME=${A}`),
+        `the bar drawing ${A}`,
+      );
+      expect(globalsOf(c.userFile)).toEqual({ palette: A });
+      expect(globalsOf(c.projectFile)).toEqual({ padding: expect.any(Number) });
+    });
+  });
+});

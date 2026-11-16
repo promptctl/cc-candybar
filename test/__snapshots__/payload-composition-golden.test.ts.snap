@@ -99,6 +99,11 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "ssh": true,
       "user": "tester",
     },
+    "layers": {
+      "local": true,
+      "project": true,
+      "user": true,
+    },
     "menuTimeout": {
       "effective": 120,
     },
@@ -305,6 +310,11 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
       "name": "tester-box",
       "ssh": true,
       "user": "tester",
+    },
+    "layers": {
+      "local": true,
+      "project": true,
+      "user": true,
     },
     "menuTimeout": {
       "effective": 120,
@@ -513,6 +523,11 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "ssh": true,
       "user": "tester",
     },
+    "layers": {
+      "local": true,
+      "project": true,
+      "user": true,
+    },
     "menuTimeout": {
       "effective": 120,
     },
@@ -719,6 +734,11 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "name": "tester-box",
       "ssh": true,
       "user": "tester",
+    },
+    "layers": {
+      "local": true,
+      "project": true,
+      "user": true,
     },
     "menuTimeout": {
       "effective": 120,
@@ -927,6 +947,11 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "ssh": true,
       "user": "tester",
     },
+    "layers": {
+      "local": true,
+      "project": true,
+      "user": true,
+    },
     "menuTimeout": {
       "effective": 120,
     },
@@ -1133,6 +1158,11 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "name": "tester-box",
       "ssh": true,
       "user": "tester",
+    },
+    "layers": {
+      "local": true,
+      "project": true,
+      "user": true,
     },
     "menuTimeout": {
       "effective": 120,
@@ -1341,6 +1371,11 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "ssh": true,
       "user": "tester",
     },
+    "layers": {
+      "local": true,
+      "project": true,
+      "user": true,
+    },
     "menuTimeout": {
       "effective": 120,
     },
@@ -1548,6 +1583,11 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "name": "tester-box",
     "user": "tester",
   },
+  "layers": {
+    "local": false,
+    "project": false,
+    "user": true,
+  },
   "menuTimeout": {
     "effective": 120,
   },
@@ -1752,6 +1792,11 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
   "host": {
     "name": "tester-box",
     "user": "tester",
+  },
+  "layers": {
+    "local": false,
+    "project": false,
+    "user": true,
   },
   "menuTimeout": {
     "effective": 120,
@@ -1958,6 +2003,11 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
     "name": "tester-box",
     "user": "tester",
   },
+  "layers": {
+    "local": false,
+    "project": false,
+    "user": true,
+  },
   "menuTimeout": {
     "effective": 120,
   },
@@ -2162,6 +2212,11 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
   "host": {
     "name": "tester-box",
     "user": "tester",
+  },
+  "layers": {
+    "local": false,
+    "project": false,
+    "user": true,
   },
   "menuTimeout": {
     "effective": 120,
@@ -2368,6 +2423,11 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "name": "tester-box",
     "user": "tester",
   },
+  "layers": {
+    "local": false,
+    "project": false,
+    "user": true,
+  },
   "menuTimeout": {
     "effective": 120,
   },
@@ -2573,6 +2633,11 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
   "host": {
     "name": "tester-box",
     "user": "tester",
+  },
+  "layers": {
+    "local": false,
+    "project": false,
+    "user": true,
   },
   "menuTimeout": {
     "effective": 120,
@@ -2781,6 +2846,11 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
     "name": "tester-box",
     "user": "tester",
   },
+  "layers": {
+    "local": false,
+    "project": false,
+    "user": true,
+  },
   "menuTimeout": {
     "effective": 120,
   },
@@ -2982,6 +3052,11 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
   "host": {
     "name": "tester-box",
     "user": "tester",
+  },
+  "layers": {
+    "local": false,
+    "project": false,
+    "user": true,
   },
   "menuTimeout": {
     "effective": 120,

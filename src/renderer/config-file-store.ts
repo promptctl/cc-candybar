@@ -33,9 +33,8 @@ import {
 } from "../config/default-dsl-config.js";
 import {
   loadConfigChain,
-  type ConfigHome,
+  type WriteLayer,
   type LoadedChain,
-  homeLayer,
 } from "../config/dsl-loader.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
@@ -418,23 +417,23 @@ export interface EditStore {
 // and the file — and everything the verb does after its write — stays as it
 // was. `refuse` is what else the click promised: a value or layout click
 // promises the bar changes (refuseHidden); a reset promises only that the
-// home stops holding what it held, which a layer above cannot hide.
+// written layer stops holding what it held, which a layer above cannot hide.
 function commit(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   before: string | null,
   after: string,
-  refuse: (home: ConfigHome, was: Was, will: LoadedChain) => void,
+  refuse: (into: WriteLayer, was: Was, will: LoadedChain) => void,
 ): DslConfig {
-  const will = loadOrRefuse(home, after);
+  const will = loadOrRefuse(into, after);
   // [LAW:one-source-of-truth] The file before the click is loaded at most
   // once, and only by a refusal that reads it; every refusal judges against
   // that one load.
   let held: { readonly chain: LoadedChain | null } | undefined;
-  const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
-  refuseNewDrops(home, was, will);
-  refuse(home, was, will);
-  store.record(home.path, before, after);
+  const was: Was = () => (held ??= { chain: loadedOrNull(into, before) }).chain;
+  refuseNewDrops(into, was, will);
+  refuse(into, was, will);
+  store.record(into.path, before, after);
   return will.config;
 }
 
@@ -442,86 +441,94 @@ function commit(
 // when that file does not load.
 type Was = () => LoadedChain | null;
 
-// A write the home takes and a layer above hides would change the file and
+// A write the written layer takes and a layer above hides would change the file and
 // not the bar — refused, naming the layer that holds it.
-function refuseHidden(home: ConfigHome, was: Was, will: LoadedChain): void {
-  const hidden = hiddenBy(home, was(), will);
+function refuseHidden(into: WriteLayer, was: Was, will: LoadedChain): void {
+  const hidden = hiddenBy(into, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
-      `refused: ${home.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${home.path}, so this click would change nothing on the bar — edit it there`,
+      `refused: ${into.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${into.path}, so this click would change nothing on the bar — edit it there`,
     );
   }
 }
 
 const releases = (): void => {};
 
-// [LAW:no-silent-failure] A structural read finds only what the home and the
+// [LAW:no-silent-failure] A structural read finds only what the written layer and the
 // bundled default declare; what it misses may be a layer above's, which no
 // click writes — the refusal says so rather than calling the bar stale.
-function homeOnly<T>(home: ConfigHome, read: () => T): T {
+function writtenOnly<T>(into: WriteLayer, read: () => T): T {
   try {
     return read();
   } catch (e) {
-    if (!(e instanceof BadVerbArgs) || home.above.length === 0) throw e;
+    if (!(e instanceof BadVerbArgs) || into.above.length === 0) throw e;
     throw new BadVerbArgs(
-      `${e.message} — or it is declared by ${home.above.map((l) => l.path).join(", ")}, which the bar does not edit`,
+      `${e.message} — or it is declared by ${into.above.map((l) => l.path).join(", ")}, which the bar does not edit`,
     );
   }
 }
 
-// What the home's change would say that the chain above it would not draw.
-// [LAW:types-are-the-program] A home that does not load now drew nothing a
+// What the written layer's change would say that the chain above it would not draw.
+// [LAW:types-are-the-program] A written layer that does not load now drew nothing a
 // click could hide — the bar runs on its last good load — so a click that
 // repairs it compares against no prior chain and hides nothing.
 function hiddenBy(
-  home: ConfigHome,
+  into: WriteLayer,
   was: LoadedChain | null,
   will: LoadedChain,
 ): string[] {
   if (was === null) return [];
   const drawn = new Set(changedPaths(topConfig(was), topConfig(will)));
-  return changedPaths(homeConfig(home, was), homeConfig(home, will)).filter(
-    (p) => !drawn.has(p),
-  );
+  return changedPaths(
+    writtenConfig(into, was),
+    writtenConfig(into, will),
+  ).filter((p) => !drawn.has(p));
 }
 
 function loadedOrNull(
-  home: ConfigHome,
+  into: WriteLayer,
   text: string | null,
 ): LoadedChain | null {
   try {
-    return chainOver(home, text);
+    return chainOver(into, text);
   } catch (e) {
     if (e instanceof ConfigError) return null;
     throw e;
   }
 }
 
-// The chain the home's text — or its absence — loads to, read from disk
+// The chain the written layer's text — or its absence — loads to, read from disk
 // above it, exactly as resolveDslConfig orders it: an existing file is a
 // layer whatever it holds.
-function chainOver(home: ConfigHome, text: string | null): LoadedChain {
+function chainOver(into: WriteLayer, text: string | null): LoadedChain {
   return loadConfigChain(
-    home.locs,
-    text !== null ? [homeLayer(home.path), ...home.above] : home.above,
+    into.locs,
+    [
+      ...into.below,
+      ...(text !== null ? [{ path: into.path, role: into.role }] : []),
+      ...into.above,
+    ],
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
-    { repo: home.repo, cwd: home.cwd },
+    { repo: into.repo, cwd: into.cwd },
     (p) =>
-      p === home.path && text !== null ? text : fs.readFileSync(p, "utf8"),
+      p === into.path && text !== null ? text : fs.readFileSync(p, "utf8"),
   );
 }
 
-// The home's own layer merged over the chain's base, and the whole
-// chain's merge — what the file says, and what the bar draws.
-function homeConfig(home: ConfigHome, chain: LoadedChain): DslConfig {
-  const [bottom] = chain.layers;
-  return bottom?.path === home.path ? bottom.config : chain.base;
+// The chain merged up to the written layer: each loaded layer is merged over
+// the ones under it, and those are the same on both sides of a write, so a
+// difference between two of these is the written layer's alone.
+function writtenConfig(into: WriteLayer, chain: LoadedChain): DslConfig {
+  const upTo = new Set([...into.below.map((l) => l.path), into.path]);
+  return (
+    chain.layers.filter((l) => upTo.has(l.path)).at(-1)?.config ?? chain.base
+  );
 }
 
-// An absent home reads as the chain's base — installed plugins included —
+// An absent written layer reads as the chain's base — installed plugins included —
 // never the bare bundled default, or an installed plugin's names would read
-// as a change the home's write is hidden behind.
+// as a change the written layer's write is hidden behind.
 function topConfig(chain: LoadedChain): DslConfig {
   return chain.layers.at(-1)?.config ?? chain.base;
 }
@@ -545,15 +552,15 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 // [LAW:single-enforcer] The gate a text no verb loaded passes before a click
 // writes it (a history step's, over the file as it stands): the gate every
 // write passes.
-export function proveLoads(home: ConfigHome, text: string | null): void {
-  loadOrRefuse(home, text);
+export function proveLoads(into: WriteLayer, text: string | null): void {
+  loadOrRefuse(into, text);
 }
 
-// The config `text` loads to as the home, or the click's refusal naming why
+// The config `text` loads to as the written layer, or the click's refusal naming why
 // it does not load.
-function loadOrRefuse(home: ConfigHome, text: string | null): LoadedChain {
+function loadOrRefuse(into: WriteLayer, text: string | null): LoadedChain {
   try {
-    return chainOver(home, text);
+    return chainOver(into, text);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -569,7 +576,7 @@ function loadOrRefuse(home: ConfigHome, text: string | null): LoadedChain {
 // click over it would lock the bar's own controls. A file that does not load
 // now has drops nobody can know — the bar runs on its last good load, as
 // hiddenBy reads it — so a click that repairs it is not blamed for them.
-function refuseNewDrops(home: ConfigHome, was: Was, will: LoadedChain): void {
+function refuseNewDrops(into: WriteLayer, was: Was, will: LoadedChain): void {
   if (will.dropped.length === 0) return;
   const prior = was();
   if (prior === null) return;
@@ -608,10 +615,10 @@ export function readValue(
  */
 export function writeValues(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
 ): void {
-  writeDrafts(store, home, pairs, []);
+  writeDrafts(store, into, pairs, []);
 }
 
 // One placement's setting as a save writes it: the value, and the placement
@@ -626,11 +633,11 @@ export interface PlacementValue {
 /** `save`'s write: every value key and every placement setting, as ONE tracked write. */
 export function writeDrafts(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
 ): void {
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
       setValue(
@@ -643,10 +650,10 @@ export function writeDrafts(
   );
   commit(
     store,
-    home,
+    into,
     before,
-    homeOnly(home, () =>
-      withPlacements(valued, home.path, placements, (text) => text),
+    writtenOnly(into, () =>
+      withPlacements(valued, into.path, placements, (text) => text),
     ),
     refuseHidden,
   );
@@ -730,18 +737,18 @@ function deleteAtPath(text: string, path: ConfigPath): string {
  */
 export function deleteValues(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   keys: readonly string[],
 ): void {
   const targets = keys.map(requireTarget);
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   if (before === null) return;
   const after = targets.reduce(
     (text, target) => deleteAtPath(text, resetPathOf(docOf(text), target)),
     before,
   );
   if (after === before) return;
-  commit(store, home, before, after, releases);
+  commit(store, into, before, after, releases);
 }
 
 const SAVED_PRESET_PREFIX = "custom-";
@@ -756,14 +763,14 @@ function presetKeys(doc: Node | null): string[] {
 // file's own read from the very text the write lands in, and every layer's
 // above it (a name a project holds would merge the copy into its preset) —
 // compared by `ident`, the collapse the loader refuses two preset names sharing.
-function freePresetName(doc: Node | null, home: ConfigHome): string {
+function freePresetName(doc: Node | null, into: WriteLayer): string {
   const taken = new Set(
     [
       ...BUNDLED_PRESETS,
       ...presetKeys(doc),
       // Each layer above as the loader reads it (JSON5, duplicate keys and
       // all) — the editor refuses files the loader renders.
-      ...home.above.flatMap((l) =>
+      ...into.above.flatMap((l) =>
         Object.keys(
           (JSON5.parse(fs.readFileSync(l.path, "utf8")) as { presets?: object })
             .presets ?? {},
@@ -788,17 +795,17 @@ function freePresetName(doc: Node | null, home: ConfigHome): string {
  */
 export function writePreset(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   from: string,
   globals: Globals,
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   const doc = docOf(before ?? "");
-  const name = freePresetName(doc, home);
+  const name = freePresetName(doc, into);
   const own: ConfigPath = ["presets", name];
-  const staged = homeOnly(home, () => presetLayer(doc, from));
+  const staged = writtenOnly(into, () => presetLayer(doc, from));
   const copied: ReadonlyArray<readonly [ConfigPath, string]> = [
     ...(staged === null
       ? []
@@ -827,15 +834,15 @@ export function writePreset(
   );
   // The placements the session configured, each in a row the new preset
   // owns — never in a layer the preset it was copied from renders too.
-  const placed = homeOnly(home, () =>
+  const placed = writtenOnly(into, () =>
     withPlacements(
       after,
-      home.path,
+      into.path,
       placements.map((p) => ({ ...p, preset: name })),
       ownRow,
     ),
   );
-  commit(store, home, before, placed, refuseHidden);
+  commit(store, into, before, placed, refuseHidden);
   return name;
 }
 
@@ -849,18 +856,18 @@ export function writePreset(
  */
 export function writeThemeDefault(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   theme: string,
   look: Readonly<Record<ThemeDefaultField, string>>,
 ): DslConfig {
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme],
     json5Text(look),
     JSON5_DIALECT,
   );
-  return commit(store, home, before, after, refuseHidden);
+  return commit(store, into, before, after, refuseHidden);
 }
 
 /**
@@ -873,7 +880,7 @@ export function writeThemeDefault(
  */
 export function deletePreset(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   name: string,
 ): void {
   if (isBundledPreset(name)) {
@@ -882,11 +889,11 @@ export function deletePreset(
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
-      `cannot delete preset "${name}": ${home.path} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
+      `cannot delete preset "${name}": ${into.path} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
     );
   }
   const selected = nodeAt(doc, ["globals", "preset"]);
@@ -898,7 +905,7 @@ export function deletePreset(
   ];
   commit(
     store,
-    home,
+    into,
     before,
     paths.reduce((text, at) => deleteAtPath(text, at), before),
     releases,
@@ -914,7 +921,7 @@ export function deletePreset(
  */
 export function applyLayoutOp(
   store: EditStore,
-  home: ConfigHome,
+  into: WriteLayer,
   key: string,
   op: LayoutOp,
 ): { readonly placed: NewPlacement | null; readonly config: DslConfig } {
@@ -922,9 +929,9 @@ export function applyLayoutOp(
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = store.read(home.path);
+  const before = store.read(into.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
-  const placement = homeOnly(home, () =>
+  const placement = writtenOnly(into, () =>
     layoutPlacementOf(docOf(before ?? ""), target.preset, subject),
   );
   const authored = ensureAuthored(before ?? "", placement);
@@ -932,17 +939,17 @@ export function applyLayoutOp(
     // [LAW:no-ambient-temporal-coupling] Minted over the text this click
     // splices, never a cached render of it: a hand edit, or a click an
     // instant earlier, is in the text before any watcher reloads it.
-    const config = loadOrRefuse(home, authored).config;
+    const config = loadOrRefuse(into, authored).config;
     return presetNames(config.presets).map(
       (preset) => presetRoot(config, preset).node,
     );
   });
   if (after === null) {
     throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${home.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
+      `${placement.path.join(".")} in ${into.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  return { placed, config: commit(store, home, before, after, refuseHidden) };
+  return { placed, config: commit(store, into, before, after, refuseHidden) };
 }
 
 // [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:

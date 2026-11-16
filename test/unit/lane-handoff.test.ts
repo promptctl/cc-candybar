@@ -60,7 +60,7 @@ describe("laneHandoff", () => {
       effectsUrl([
         {
           verb: VERB_RESET_CONFIG,
-          args: ["s1", "experimentalBand", "renderer"],
+          args: ["s1", "user", "experimentalBand", "renderer"],
         },
       ]),
     );

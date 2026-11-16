@@ -61,7 +61,7 @@ import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { NO_FILL } from "../template-engine/colors.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./edit-glyphs.js";
-import { SAVE_SEG, UNSAVED_VAR } from "./settings-menu.js";
+import { UNSAVED_VAR } from "./settings-menu.js";
 import {
   menuActionName,
   menuMember,
@@ -96,6 +96,7 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 // settings (a placement's configure-mode picks among them — the layout edits
 // were written as they were made), then leave.
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
+const EDIT_SAVE_ACTION = `${EDIT_NS}save`;
 // `↩ cancel`: put back everything changed since edit mode opened, then leave
 // (src/renderer/settings-history.ts `rewind`).
 export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
@@ -980,10 +981,11 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     type: "number",
     default: 0,
   };
-  // [LAW:one-source-of-truth] Saving is the settings menu's own `💾 save`
-  // action, so the two cannot disagree about what saving writes.
+  // Edit mode keeps what it made in the user's own file, as its layout edits
+  // are: the save it ends with names that layer, where the menu's asks.
+  artifacts.actions[EDIT_SAVE_ACTION] = { save: true, layer: "user" };
   artifacts.actions[EDIT_DONE_SEG] = {
-    do: [SAVE_SEG, EDIT_TOGGLE_ACTION],
+    do: [EDIT_SAVE_ACTION, EDIT_TOGGLE_ACTION],
   };
   artifacts.segments[EDIT_DONE_SEG] = {
     template:

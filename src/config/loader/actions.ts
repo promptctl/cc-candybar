@@ -20,6 +20,7 @@
 
 import {
   ACTION_KEYS,
+  LAYER_CHOICES,
   type ActionDecl,
   type ActionKey,
   type OptionDomain,
@@ -138,7 +139,30 @@ function validateActionDecl(
     );
     return null;
   }
-  return actionArms(home)[present[0] as ActionKey](ctx, path, raw);
+  const key = present[0] as ActionKey;
+  // [LAW:single-enforcer] The layer an action writes is read here, once, for
+  // every arm: the arm parses the rest of the record.
+  const { layer, ...rest } = raw;
+  const layers = LAYER_CHOICES[key];
+  if (layer === undefined) return actionArms(home)[key](ctx, path, rest);
+  if (layers === undefined) {
+    issue(
+      ctx,
+      `${path}.layer`,
+      `a ${key} action writes no config, so it names no layer`,
+    );
+    return null;
+  }
+  if (!(layers as readonly unknown[]).includes(layer)) {
+    issue(
+      ctx,
+      `${path}.layer`,
+      `layer must be one of ${layers.join(", ")}, got ${describeValue(layer)}`,
+    );
+    return null;
+  }
+  const parsed = actionArms(home)[key](ctx, path, rest);
+  return parsed === null ? null : ({ ...parsed, layer } as ActionDecl);
 }
 
 // [LAW:types-are-the-program] Where an action table is declared: the directory
@@ -207,22 +231,34 @@ function actionDeclJson(): JsonNode {
   return {
     anyOf: [
       ...SET_ARMS.map((arm) => arm.json),
-      ...PERSIST_ARMS.map((arm) => arm.json),
+      ...PERSIST_ARMS.map((arm) => writesJson("persist", arm.json)),
       templateArmJson("copy"),
       templateArmJson("open"),
-      templateArmJson("reset"),
+      writesJson("reset", templateArmJson("reset")),
       markerArmJson("undo"),
       markerArmJson("redo"),
       markerArmJson("back"),
       markerArmJson("rewind"),
-      markerArmJson("save"),
-      ...presetArmJson(),
-      THEME_DEFAULT_ARM_JSON,
+      writesJson("save", markerArmJson("save")),
+      ...presetArmJson().map((json) => writesJson("preset", json)),
+      writesJson("themeDefault", THEME_DEFAULT_ARM_JSON),
       ...doctorArmJson(),
       SLASH_ARM_JSON,
       RUN_ARM_JSON,
       DO_ARM_JSON,
     ],
+  };
+}
+
+// [LAW:one-source-of-truth] A config-writing arm's schema admits the layers
+// the dispatcher admits for it (LAYER_CHOICES).
+function writesJson(key: ActionKey, json: JsonNode): JsonNode {
+  return {
+    ...json,
+    properties: {
+      ...(json.properties as JsonNode),
+      layer: { enum: LAYER_CHOICES[key] },
+    },
   };
 }
 
