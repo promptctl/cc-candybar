@@ -514,6 +514,49 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
+  // A fork (or a resume into a new id) is a new transcript that starts with a
+  // copy of the earlier session's entries, each marked `forkedFrom`, with the
+  // original message id, requestId and timestamp.
+  test("a forked session's copied history counts once in today and not in the fork's own totals", async () => {
+    const pdir = join(dir, "projects", "proj");
+    mkdirSync(pdir, { recursive: true });
+    const noon = new Date();
+    noon.setHours(12, 0, 0, 0);
+    const original = join(pdir, "orig.jsonl");
+    const fork = join(pdir, "fork.jsonl");
+    const copied = (line: string) =>
+      JSON.stringify({
+        ...JSON.parse(line),
+        forkedFrom: { sessionId: "orig", messageUuid: "u-1" },
+      }) + "\n";
+    writeFileSync(original, usageLine("a", noon, 1) + usageLine("b", noon, 2));
+    writeFileSync(
+      fork,
+      copied(usageLine("a", noon, 1)) +
+        copied(usageLine("b", noon, 2)) +
+        usageLine("c", noon, 4),
+    );
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const own = await usageFold(store, sessionIdOf("fork"), fork);
+      expect(own.kind === "ok" && own.value.calculatedCost).toBeCloseTo(4, 5);
+      const today = await todayInfo(
+        store,
+        holds,
+        hook("fork", fork),
+        dir,
+        instantOf(noon),
+      );
+      expect(today.kind === "ok" && today.value.cost).toBeCloseTo(7, 5);
+    } finally {
+      store.close();
+    }
+  });
+
   test("`today` is not answered until a scan has finished over its directories, never a partial sum", async () => {
     const t = join(dir, "A.jsonl");
     const at = new Date();

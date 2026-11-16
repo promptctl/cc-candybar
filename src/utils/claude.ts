@@ -252,6 +252,10 @@ export interface ParsedEntry {
   };
   costUSD?: number;
   isSidechain?: boolean;
+  // Whether Claude Code copied this entry from the session this one was
+  // forked or resumed from (its `forkedFrom`): another session's work, whose
+  // original stays in that session's file.
+  copied: boolean;
   // Who wrote a "user" entry; undefined on every other entry.
   userEntry?: UserEntry;
   // [LAW:one-source-of-truth] What this entry says Claude is DOING, projected
@@ -379,6 +383,7 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
       : undefined,
     costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,
     isSidechain: parsed.isSidechain === true,
+    copied: typeof parsed.forkedFrom === "object" && parsed.forkedFrom !== null,
     userEntry,
     activity: entryActivity(parsed, userEntry),
     raw: {

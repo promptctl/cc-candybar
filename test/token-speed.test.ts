@@ -110,6 +110,7 @@ describe("turnOpenAfter — an assistant message's stop", () => {
     timestamp: new Date(0),
     type: "assistant",
     message: { stopReason },
+    copied: false,
     raw: {},
   });
 

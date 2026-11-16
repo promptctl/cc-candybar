@@ -284,7 +284,10 @@ async function foldFile(
   for (const entry of entries) {
     turnOpen = turnOpenAfter(turnOpen, entry);
     const u = entry.message?.usage;
-    if (!u) continue;
+    // [LAW:one-source-of-truth] A copied entry's response is counted in the
+    // file it was copied from, so a fork's history is neither in its own
+    // totals nor in `today` a second time.
+    if (!u || entry.copied) continue;
     const response = responseOf(entry);
     if (response !== undefined && response === last) continue;
     last = response;
