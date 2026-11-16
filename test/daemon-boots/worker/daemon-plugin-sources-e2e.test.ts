@@ -201,7 +201,7 @@ describe("a daemon reads a plugin's session source and runs its program", () => 
       (lines) =>
         lines.some((l) =>
           l.includes(
-            `run sid=${SESSION} action=plugins.p.go program=./write.sh outcome=ok exit=0 `,
+            `outcome=ok — run plugins.p.go: program=./write.sh ended=ok exit=0 `,
           ),
         ) &&
         lines.some(

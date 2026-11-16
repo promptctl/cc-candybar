@@ -41,6 +41,9 @@ type SetupCause = "click" | "owed";
 // each by where its switch stood before the first of those clicks: what the
 // lane runs, as far as this renderer knows.
 type Owed = Map<Lane, boolean>;
+// What a request settles for a session whose clicks owe nothing, which is
+// nearly every request.
+const NOTHING_OWED: ReadonlyMap<Lane, boolean> = new Map();
 
 // [LAW:types-are-the-program] What bringing a lane to a switch asks: an act,
 // nothing (said why), or a refusal the user can act on, shown on the bar.
@@ -86,18 +89,18 @@ const LANE_SETUP: Readonly<
     { readonly on: (at: At) => Setup; readonly off: (at: At) => Setup }
   >
 > = {
+  // The install needs no pane: only its `/reload-plugins` does, which the
+  // host refuses with the session's own reason outside tmux.
   band: {
     on: (at) =>
-      inPane(at, (pane) =>
-        act({
-          kind: "surface",
-          surface: "band",
-          on: true,
-          session: at.sessionId,
-          pane,
-          at: at.session,
-        }),
-      ),
+      act({
+        kind: "surface",
+        surface: "band",
+        on: true,
+        session: at.sessionId,
+        pane: tmuxPaneOf(at.tmux),
+        at: at.session,
+      }),
     // The installed mod draws nothing while the lane is off: the host
     // refuses its subscriber, and it hands the band on.
     off: () =>
@@ -229,7 +232,9 @@ export class LaneActs {
     effects: Effect[],
   ): void {
     const at = atOf(req);
-    this.settle(at, this.take(at.sessionId), switches, () => "owed", effects);
+    const owed = this.owed.get(at.sessionId) ?? NOTHING_OWED;
+    this.owed.delete(at.sessionId);
+    this.settle(at, owed, switches, () => "owed", effects);
   }
 
   private take(sessionId: SessionId): Owed {
@@ -244,7 +249,7 @@ export class LaneActs {
   // before.
   private settle(
     at: At,
-    owed: Owed,
+    owed: ReadonlyMap<Lane, boolean>,
     now: LaneSwitches,
     byOf: (lane: Lane) => SetupCause,
     effects: Effect[],

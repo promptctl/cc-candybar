@@ -9,8 +9,17 @@ import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
 import { SessionState } from "../src/renderer/session-state";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
-import { clickActing, testVerbContext,
+import { clickActing, clickUrl, testVerbContext,
   verbContextWith } from "./helpers/click";
+import {
+  effectsUrl,
+  VERB_APPLY_UPDATE,
+  VERB_COPY,
+  VERB_COPY_DIAGNOSTIC,
+} from "../src/click/wire";
+import { CrossedFailure } from "../src/daemon/foundations/verb-error";
+import { lastClickError } from "../src/daemon/foundations/click-error";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const launched: LaunchOpts[] = [];
 const recording = {
@@ -73,6 +82,63 @@ test("a key the session's last draw no longer lists is refused, and nothing is c
     ),
   ).rejects.toThrow(/no longer listed/);
   expect(launched).toHaveLength(0);
+});
+
+// A copy names no session of its own: one in a click that names a session is
+// that session's act, so its failure holds on that bar, not on every bar.
+test("a copy in a click that names a session fails on that session's bar", async () => {
+  const state = new SessionState();
+  const ctx = testVerbContext(state);
+  const outcomes = await clickActing(
+    effectsUrl([
+      { verb: VERB_APPLY_UPDATE, args: [SID] },
+      { verb: VERB_COPY, args: ["x"] },
+    ]),
+    ctx,
+    {
+      launch: async () => ({
+        ok: false,
+        reason: "non-zero",
+        stdout: "",
+        stderr: "no pasteboard",
+        exitCode: 1,
+        signal: null,
+      }),
+      applyUpdate: async () => {},
+    },
+  );
+  expect(outcomes).toEqual([
+    { kind: "ok" },
+    { kind: "failed", reason: expect.stringMatching(/^copy: pbcopy failed/) },
+  ]);
+  expect(lastClickError(state, sessionIdOf(SID))?.text).toMatch(
+    /^copy: pbcopy failed/,
+  );
+});
+
+// [LAW:single-enforcer] A step cut off by the daemon's close keeps that class
+// through the click's fold: no error of its own on the bar, and the click
+// answered as closing, not as a failure.
+test("a step the daemon's close cut off keeps its class, and holds nothing on the bar", async () => {
+  const state = new SessionState();
+  const closing = new CrossedFailure({
+    kind: "closing",
+    message: "the daemon closed: copy-diagnostic refused",
+    detail: "",
+  });
+  const clicked = clickUrl(
+    effectsUrl([
+      { verb: VERB_APPLY_UPDATE, args: [SID] },
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "k"] },
+    ]),
+    verbContextWith(testVerbContext(state), {
+      diagnosticCopy: () => {
+        throw closing;
+      },
+    }),
+  );
+  await expect(clicked).rejects.toBe(closing);
+  expect(lastClickError(state, sessionIdOf(SID))).toBeNull();
 });
 
 test("a dropped placement's prompt names the file to edit and carries the error whole", () => {

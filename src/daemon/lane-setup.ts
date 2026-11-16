@@ -36,6 +36,7 @@ import type { TmuxHint } from "../tmux-hint.js";
 import {
   typeInPane,
   typeSlash,
+  type SessionPane,
   type ClaudeInputEdge,
 } from "../claude-input/typing.js";
 import { slashLine } from "../claude-input/slash-line.js";
@@ -179,10 +180,10 @@ export type LaneAt = LaneSession & { readonly sessionId: SessionId };
 // to do.
 
 // The band mod installed from this daemon's checkout and loaded into the
-// session's Claude Code.
+// session's Claude Code, through its pane when the session reported one.
 export async function bandOn(
   session: LaneAt,
-  tmux: TmuxHint,
+  pane: SessionPane,
   host: LaneHost,
   edge: LaneEdge,
 ): Promise<string> {
@@ -198,7 +199,7 @@ export async function bandOn(
       `the band mod starts ${client}, which is not built — run \`just install-rust\` in ${checkout}`,
     );
   }
-  return installBand(session, tmux, checkout, edge);
+  return installBand(session, pane, checkout, edge);
 }
 
 // Claude Code in the pane restarted under the attach launcher.
@@ -256,7 +257,7 @@ export async function paneOff(tmux: TmuxHint, edge: LaneEdge): Promise<string> {
 // so the install runs off the daemon's loop, after the click is answered.
 async function installBand(
   session: LaneAt,
-  tmux: TmuxHint,
+  pane: SessionPane,
   checkout: string,
   edge: LaneEdge,
 ): Promise<string> {
@@ -269,7 +270,7 @@ async function installBand(
   await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
   const typed = await typeSlash(
     typeInPane(edge.claudeInput),
-    tmux,
+    pane,
     RELOAD_PLUGINS,
   );
   if (typed.kind === "refused") {

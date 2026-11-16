@@ -253,7 +253,6 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     clock: systemTimekeeper,
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
     launch,
-    log,
   });
   cleanups.push(() => {
     runs.close();
@@ -798,7 +797,13 @@ describe("a click on a run link", () => {
     );
     const { view, link } = await drawnLink(r);
 
-    await clickActing(link.url, clickContext(r, view), running(r));
+    await clickActing(
+      link.url,
+      clickContext(r, view, {
+        log: (level, message) => r.lines.push(`${level} ${message}`),
+      }),
+      running(r),
+    );
     await until(
       () => draw(view).text.includes("home=/h/new"),
       "the program's write",
@@ -819,11 +824,10 @@ describe("a click on a run link", () => {
       tmux: "unset",
       pane: "unset",
     });
-    expect(r.lines).toContainEqual(
-      expect.stringMatching(
-        /^info run sid=s1 action=plugins\.p\.go program=\.\/write\.sh outcome=ok exit=0 took=\d+ refreshed=plugins\.p\.status$/,
-      ),
-    );
+    // The run's one line comes once it has ended, its sources resumed.
+    const line =
+      /^info act kind=run sid=s1 id=\d+ outcome=ok — run plugins\.p\.go: program=\.\/write\.sh ended=ok exit=0 took=\d+ refreshed=plugins\.p\.status$/;
+    await until(() => r.lines.some((l) => line.test(l)), "the run's line");
   });
 });
 
@@ -842,7 +846,6 @@ describe("the run owner", () => {
     timeoutMs?: number,
     launch: Launcher["launch"] = processLauncher.launch,
   ) {
-    const lines: string[] = [];
     const held: string[] = [];
     const runs = new Runs({
       clock: systemTimekeeper,
@@ -851,7 +854,6 @@ describe("the run owner", () => {
         return () => held.push(`resume ${folder} ${sid}`);
       },
       launch,
-      log: (level, message) => lines.push(`${level} ${message}`),
       timeoutMs,
     });
     cleanups.push(() => runs.close());
@@ -870,7 +872,7 @@ describe("the run owner", () => {
       cwd: dir,
       refreshes: [{ name: STATUS, folder: FOLDER }],
     });
-    return { runs, lines, held, run };
+    return { runs, held, run };
   }
 
   test("a non-zero exit fails with the trimmed stderr, and counts as failed", async () => {
@@ -878,7 +880,7 @@ describe("the run owner", () => {
     const ended = o.runs.start(o.run(`echo "  it broke  " >&2; exit 3`));
     expect(o.held).toEqual([`supersede /s ${SID}`]);
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(await ended).toEqual({
+    expect((await ended).outcome).toEqual({
       kind: "failed",
       reason: "exited with code 3: it broke",
     });
@@ -888,10 +890,8 @@ describe("the run owner", () => {
       failed: 1,
       timedOut: 0,
     });
-    expect(o.lines).toContainEqual(
-      expect.stringMatching(
-        /^warn run sid=s1 action=act program=\/bin\/sh outcome=exit exit=3 took=\d+ refreshed=plugins\.p\.status$/,
-      ),
+    expect((await ended).said).toMatch(
+      /^program=\/bin\/sh ended=exit exit=3 took=\d+ refreshed=plugins\.p\.status — exited with code 3: it broke$/,
     );
   });
 
@@ -899,7 +899,7 @@ describe("the run owner", () => {
     const o = owner();
     const ended = o.runs.start(o.run("exit 4"));
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(await ended).toEqual({
+    expect((await ended).outcome).toEqual({
       kind: "failed",
       reason: "exited with code 4",
     });
@@ -909,7 +909,7 @@ describe("the run owner", () => {
     const o = owner(200);
     const ended = o.runs.start(o.run("sleep 5"));
     await until(() => o.runs.stats().running === 0, "the timeout");
-    expect(await ended).toEqual({
+    expect((await ended).outcome).toEqual({
       kind: "failed",
       reason: "timed out after 0.2 s",
     });
@@ -919,22 +919,20 @@ describe("the run owner", () => {
       failed: 0,
       timedOut: 1,
     });
-    expect(o.lines).toContainEqual(expect.stringContaining("outcome=timeout"));
+    expect((await ended).said).toContain("ended=timeout");
   });
 
   test("a program that floods its output fails with the limit, not the flood, and counts as failed", async () => {
     const o = owner();
     const ended = o.runs.start(o.run("yes >&2"));
     await until(() => o.runs.stats().running === 0, "the flood's end");
-    expect(await ended).toEqual({
+    expect((await ended).outcome).toEqual({
       kind: "failed",
       reason: `output exceeded ${MAX_CAPTURED_BYTES} bytes`,
     });
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({ failed: 1, timedOut: 0 });
-    expect(o.lines).toContainEqual(
-      expect.stringContaining("outcome=output-limit"),
-    );
+    expect((await ended).said).toContain("ended=output-limit");
   });
 
   test("a run its launcher ended for a failed pipe fails with the pipe's error, not its cut-short words", async () => {
@@ -949,12 +947,12 @@ describe("the run owner", () => {
     }));
     const ended = o.runs.start(o.run(""));
     await until(() => o.runs.stats().running === 0, "the run's end");
-    expect(await ended).toEqual({
+    expect((await ended).outcome).toEqual({
       kind: "failed",
       reason: "a pipe failed to read: EIO",
     });
     expect(o.runs.stats()).toMatchObject({ failed: 1 });
-    expect(o.lines).toContainEqual(expect.stringContaining("outcome=pipe"));
+    expect((await ended).said).toContain("ended=pipe");
   });
 
   test("a program that cannot start fails saying why, and counts as failed", async () => {
@@ -965,16 +963,14 @@ describe("the run owner", () => {
       args: [],
     });
     await until(() => o.runs.stats().running === 0, "the failed launch");
-    expect(await ended).toEqual({
+    expect((await ended).outcome).toEqual({
       kind: "failed",
       reason: expect.stringMatching(/ENOENT/),
     });
     expect(o.held).toContain(`resume /s ${SID}`);
     expect(o.runs.stats()).toMatchObject({ failed: 1 });
-    expect(o.lines).toContainEqual(
-      expect.stringContaining(
-        "program=./no-such-program outcome=launch exit=-",
-      ),
+    expect((await ended).said).toContain(
+      "program=./no-such-program ended=launch exit=-",
     );
   });
 
@@ -985,8 +981,8 @@ describe("the run owner", () => {
     o.runs.close();
     await until(() => o.runs.stats().running === 0, "the aborted run's end");
     expect(o.held).toEqual([`supersede /s ${SID}`, `resume /s ${SID}`]);
-    expect(o.lines).toContainEqual(expect.stringContaining("outcome=aborted"));
-    expect(await ended).toEqual({
+    expect((await ended).said).toContain("ended=aborted");
+    expect((await ended).outcome).toEqual({
       kind: "closing",
       reason: "the daemon closed under it",
     });

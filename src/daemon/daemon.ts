@@ -457,7 +457,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     supersede: (folder, sessionId) =>
       managedStorage.supersede(folder, sessionId),
     launch: launcher.launch,
-    log,
     clock,
   });
   // [LAW:single-enforcer] The host's one performer of the acts the renderer's

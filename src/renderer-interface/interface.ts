@@ -26,6 +26,7 @@ import type { Lane, LaneFeeds } from "../config/lanes";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
 import type { SlashLine } from "../claude-input/slash-line";
+import type { SessionPane } from "../claude-input/typing";
 import type { RepoAnswer } from "../config/loader/repo-gate";
 import type { Answered } from "../daemon/foundations/sighting-roles";
 
@@ -203,7 +204,10 @@ export type EffectOutcome =
   | { readonly kind: "refused"; readonly reason: string }
   // The daemon's close began before it acted, or cut it off: no failure of
   // its own, so no bar holds it.
-  | { readonly kind: "closing"; readonly reason: string };
+  | { readonly kind: "closing"; readonly reason: string }
+  // An act not performed because its turn's changes did not land: their own
+  // outcome says why, so no bar holds it a second time.
+  | { readonly kind: "skipped"; readonly reason: string };
 
 // [LAW:one-type-per-behavior] Every frame reaches its surface by `present`;
 // the statusline's arm carries the request it answers.
@@ -325,12 +329,15 @@ export type Act = { readonly id: EffectId } & (
     }
   | {
       // The band mod installed and loaded into the session's Claude Code.
-      // Off, it draws nothing, so turning it off asks nothing.
+      // Off, it draws nothing, so turning it off asks nothing. Only its
+      // `/reload-plugins` is typed into a pane, so it carries the session's
+      // pane or why it has none: outside tmux, the mod still installs, and
+      // the session is told to type that line itself.
       readonly kind: "surface";
       readonly session: SessionId;
       readonly surface: "band";
       readonly on: true;
-      readonly pane: TmuxHint;
+      readonly pane: SessionPane;
       readonly at: LaneSession;
     }
 );

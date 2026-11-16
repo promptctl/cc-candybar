@@ -104,7 +104,9 @@ export function rendererHost(
       // anything else here can throw and before the turn's caller hears it:
       // the renderer opens its next journal only once they have landed. Its
       // acts are performed only once they have, in the order it returned
-      // them, and none is once the daemon's close has begun. A present
+      // them, and none is once the daemon's close has begun: an act whose
+      // landing did not go is skipped, since the changes' own outcome says
+      // why. A present
       // answers the request whose turn returned it, so one another turn
       // returns is refused here. No effect is left owed its `effect-done`,
       // and the turn's caller hears it only after each `effect-done` turn of
@@ -141,7 +143,10 @@ export function rendererHost(
           const acted = (
             landed.kind === "ok"
               ? world.perform(effect)
-              : Promise.resolve(landed)
+              : Promise.resolve<EffectOutcome>({
+                  kind: "skipped",
+                  reason: `not performed: ${landed.reason}`,
+                })
           ).then((outcome) => settle(effect, outcome));
           if (outlives(effect)) void acted;
           else inTurn.push(acted);

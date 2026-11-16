@@ -139,24 +139,34 @@ test("an act is performed once the turn's changes have landed, and both are sett
   expect(answered.settled).toEqual([{ kind: "ok" }, { kind: "ok" }]);
 });
 
-test("a landing that failed performs no act: each is settled with the landing's outcome", async () => {
+test("a landing that failed performs no act: each is skipped, and only the changes say why", async () => {
   // The file moved since the change read it.
   fs.writeFileSync(file, FILE.replace("dusk", "noon"));
   const set = change(FILE, FILE.replace("dusk", "dawn"));
-  const act = copy();
-  const { turn, did } = hostOver([set, act]);
+  const [act, sessionless] = [copy(), copy(null)];
+  const { turn, did, unheard } = hostOver([set, act, sessionless]);
   const answered = await turn();
-  expect(did).toEqual([`done ${set.id} refused`, `done ${act.id} refused`]);
-  expect(answered.settled.map((o) => o.kind)).toEqual(["refused", "refused"]);
+  expect(did).toEqual([
+    `done ${set.id} refused`,
+    `done ${act.id} skipped`,
+    `done ${sessionless.id} skipped`,
+  ]);
+  expect(answered.settled.map((o) => o.kind)).toEqual([
+    "refused",
+    "skipped",
+    "skipped",
+  ]);
+  // A skipped act with no session is no failure of the daemon's.
+  expect(unheard).toEqual([]);
 });
 
-test("once the daemon's close has begun, nothing lands and no act is performed: each is settled closing", async () => {
+test("once the daemon's close has begun, nothing lands and no act is performed", async () => {
   const set = change(FILE, FILE.replace("dusk", "dawn"));
   const act = copy();
   const { turn, did } = hostOver([set, act], { closing: () => true });
   await turn();
   expect(fs.readFileSync(file, "utf8")).toBe(FILE);
-  expect(did).toEqual([`done ${set.id} closing`, `done ${act.id} closing`]);
+  expect(did).toEqual([`done ${set.id} closing`, `done ${act.id} skipped`]);
 });
 
 test("the acts of one turn are performed in the order the turn returned them", async () => {

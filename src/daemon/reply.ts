@@ -747,16 +747,20 @@ async function handleClick(
   facts.push(...delivered.record);
   if (delivered.kind === "threw") return delivered.failure;
   // [LAW:no-silent-failure] A click whose changes did not land, or whose act
-  // did not go, says so in its answer: by the first that did not.
-  const missed = delivered.settled.find((outcome) => outcome.kind !== "ok");
+  // did not go, says so in its answer: by the first that did not. A skipped
+  // act's cause is its changes' own outcome, which answers instead.
+  const missed = delivered.settled.find(
+    (outcome): outcome is Answering =>
+      outcome.kind !== "ok" && outcome.kind !== "skipped",
+  );
   return missed === undefined ? { kind: "ok" } : clickFailure(missed);
 }
 
+type Answering = Exclude<EffectOutcome, { kind: "ok" | "skipped" }>;
+
 // [LAW:types-are-the-program] An effect's outcome as its click's: a refusal is
 // the user's to act on, a close is the daemon's, anything else failed.
-function clickFailure(
-  outcome: Exclude<EffectOutcome, { kind: "ok" }>,
-): RequestOutcome {
+function clickFailure(outcome: Answering): RequestOutcome {
   const kind = CLICK_FAILURE[outcome.kind];
   return { kind, message: outcome.reason, detail: outcome.reason };
 }

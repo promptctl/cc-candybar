@@ -9,6 +9,7 @@ import type { LaunchResult } from "../proc/launcher.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { TypeResult } from "../claude-input/typing.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
+import type { SessionId } from "./foundations/session-id.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
@@ -22,7 +23,7 @@ import {
   type LaneEdge,
   type LaneHost,
 } from "./lane-setup.js";
-import type { RunAct } from "./runs.js";
+import type { RunAct, RunEnd } from "./runs.js";
 
 // An act the landing performs with the config files, not here.
 type Landed = "approve-repo";
@@ -33,7 +34,7 @@ export interface ActDeps {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
   // A slash line typed into a pane, once the prompt there reads ready.
   readonly type: (pane: TmuxHint, line: SlashLine) => Promise<TypeResult>;
-  readonly run: (run: RunAct) => Promise<EffectOutcome>;
+  readonly run: (run: RunAct) => Promise<RunEnd>;
   // The update notice's act: what it applies is the update watch's.
   readonly applyUpdate: () => Promise<void>;
   readonly lanes: { readonly edge: LaneEdge; readonly host: LaneHost };
@@ -78,15 +79,26 @@ function nameOf(act: HostAct): string {
 
 const paneKey = (pane: TmuxHint): string => `${pane.socket}\0${pane.pane}`;
 
-// What an act did, said, or how it ended.
-type Done = string | EffectOutcome;
+// [LAW:types-are-the-program] How an act ended: its outcome, and what its
+// line says of it — what it did, or why it did not.
+type Done = RunEnd;
+const did = (said: string): Done => ({ outcome: { kind: "ok" }, said });
+const not = (outcome: Exclude<EffectOutcome, { kind: "ok" }>): Done => ({
+  outcome,
+  said: outcome.reason,
+});
 
 export class Acts {
-  // [LAW:no-ambient-temporal-coupling] Each pane's setups, one at a time:
-  // two restarts of one pane would type over each other.
-  private readonly setups = new KeyedSerialQueue<string>();
-  // The panes a setup holds now, by how many are queued or running on each.
-  private readonly held = new Map<string, number>();
+  // [LAW:no-ambient-temporal-coupling] Each session's setups, one at a time:
+  // two restarts of one Claude Code would type over each other.
+  private readonly setups = new KeyedSerialQueue<SessionId>();
+  // The sessions a setup holds now, by how many are queued or running on
+  // each.
+  private readonly held = new Map<SessionId, number>();
+  // [LAW:no-ambient-temporal-coupling] Each pane's slash lines, one at a
+  // time: each reads the pane before it types, so two at once would both
+  // find the bare input box and type into each other.
+  private readonly typing = new KeyedSerialQueue<string>();
   private readonly performers: {
     readonly [K in HostAct["kind"]]: (act: Of<K>) => Promise<Done>;
   };
@@ -105,7 +117,7 @@ export class Acts {
           "pbcopy",
           deps.log,
         );
-        return "copied";
+        return did("copied");
       },
       open: async (act) => {
         await clickLaunch(
@@ -118,29 +130,31 @@ export class Acts {
           'open -a "Visual Studio Code"',
           deps.log,
         );
-        return `opened ${act.target}`;
+        return did(`opened ${act.target}`);
       },
-      // [LAW:no-ambient-temporal-coupling] A pane a setup holds is about to
-      // be restarted or typed into: a line typed now would land in whatever
-      // the setup leaves there, so it is refused at once, saying why.
-      "type-slash": async (act) => {
-        if (this.held.has(paneKey(act.pane)))
-          return {
-            kind: "refused",
-            reason: `a lane setup holds pane ${act.pane.pane} — click again once it has finished`,
-          };
-        const typed = await deps.type(act.pane, act.line);
-        return typed.kind === "typed"
-          ? `typed into ${typed.pane}`
-          : { kind: "refused", reason: typed.reason };
-      },
+      // [LAW:no-ambient-temporal-coupling] A session a setup holds is about
+      // to be restarted or typed into: a line typed now would land in
+      // whatever the setup leaves there, so it is refused at once, saying
+      // why.
+      "type-slash": (act) =>
+        this.typing.run(paneKey(act.pane), async () => {
+          if (this.held.has(act.session))
+            return not({
+              kind: "refused",
+              reason: `a lane setup holds pane ${act.pane.pane} — click again once it has finished`,
+            });
+          const typed = await deps.type(act.pane, act.line);
+          return typed.kind === "typed"
+            ? did(`typed into ${typed.pane}`)
+            : not({ kind: "refused", reason: typed.reason });
+        }),
       run: (act) => deps.run(act),
       "apply-update": async () => {
         await deps.applyUpdate();
-        return "applied";
+        return did("applied");
       },
       "restart-claude": (act) =>
-        this.holding(act.pane, () =>
+        this.holding(act.session, () =>
           restartClaude(
             { ...act.at, sessionId: act.session },
             act.pane,
@@ -149,7 +163,7 @@ export class Acts {
           ),
         ),
       surface: (act) =>
-        this.holding(act.pane, () => {
+        this.holding(act.session, () => {
           switch (act.surface) {
             case "band":
               return bandOn(
@@ -171,26 +185,16 @@ export class Acts {
   // throw is classified once, here: a refusal the user can act on, the
   // daemon's close, or a failure.
   async perform(act: HostAct): Promise<EffectOutcome> {
-    const done: Done = this.deps.closing()
-      ? { kind: "closing", reason: "the daemon is closing" }
+    const { outcome, said } = this.deps.closing()
+      ? not({ kind: "closing", reason: "the daemon is closing" })
       : await this.performed(act);
-    const outcome: EffectOutcome =
-      typeof done === "string"
-        ? { kind: "ok" }
-        : done.kind === "ok"
-          ? done
-          : { ...done, reason: `${nameOf(act)}: ${done.reason}` };
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} — ${
-        typeof done === "string"
-          ? `${nameOf(act)}: ${done}`
-          : outcome.kind === "ok"
-            ? nameOf(act)
-            : outcome.reason
-      }`,
+      `act kind=${act.kind} sid=${valueOf(act.session ?? "-")} id=${act.id} outcome=${outcome.kind} — ${nameOf(act)}: ${said}`,
     );
-    return outcome;
+    return outcome.kind === "ok"
+      ? outcome
+      : { ...outcome, reason: `${nameOf(act)}: ${outcome.reason}` };
   }
 
   private async performed(act: HostAct): Promise<Done> {
@@ -204,27 +208,28 @@ export class Acts {
       const failure = failureOf(thrown);
       switch (failure.kind) {
         case "bad-request":
-          return { kind: "refused", reason: failure.message };
+          return not({ kind: "refused", reason: failure.message });
         case "closing":
-          return { kind: "closing", reason: failure.message };
+          return not({ kind: "closing", reason: failure.message });
         default:
-          return { kind: "failed", reason: failure.message };
+          return not({ kind: "failed", reason: failure.message });
       }
     }
   }
 
-  // A setup in `pane`'s queue, holding the pane from now until it has
+  // A setup in `session`'s queue, holding the session from now until it has
   // finished.
-  private holding(
-    pane: TmuxHint,
+  private async holding(
+    session: SessionId,
     setup: () => Promise<string>,
-  ): Promise<string> {
-    const key = paneKey(pane);
-    this.held.set(key, (this.held.get(key) ?? 0) + 1);
-    return this.setups.run(key, setup).finally(() => {
-      const left = this.held.get(key)! - 1;
-      if (left === 0) this.held.delete(key);
-      else this.held.set(key, left);
-    });
+  ): Promise<Done> {
+    this.held.set(session, (this.held.get(session) ?? 0) + 1);
+    try {
+      return did(await this.setups.run(session, setup));
+    } finally {
+      const left = this.held.get(session)! - 1;
+      if (left === 0) this.held.delete(session);
+      else this.held.set(session, left);
+    }
   }
 }

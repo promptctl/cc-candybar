@@ -188,7 +188,6 @@ import {
 } from "../../doctor/gather";
 import {
   BadVerbArgs,
-  DaemonClosing,
   decodeWire,
   failureOf,
 } from "../../daemon/foundations/verb-error";
@@ -322,6 +321,9 @@ type Unbound = Omit<VerbContext, TurnBound>;
 
 // A context with the journals the verb table opens around a write.
 export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
+  // The session the click names, whose bar its acts' failures show on; null
+  // for a link that names none.
+  readonly session: SessionId | null;
   readonly journal: Journal;
   readonly navigating: SessionStateRW;
   // [LAW:single-enforcer] Every await of a handler is this one: the click's
@@ -391,10 +393,10 @@ function ask(ctx: ClickContext, act: ActRequest): void {
   ctx.acts.ask(ctx.effects, act);
 }
 
-// A copy link names no session: whatever it copies, a failure to is the
-// daemon's to show.
+// A copy's failure shows on the bar of the session its click names; a plain
+// copy link names none, so its failure is the daemon's to show.
 const copy: VerbHandler = async (value, ctx) =>
-  ask(ctx, { kind: "copy", session: null, text: oneArg(value) });
+  ask(ctx, { kind: "copy", session: ctx.session, text: oneArg(value) });
 
 // [LAW:parse-dont-validate] The renderer a copy click names: the surface it
 // was drawn on, whose last frame it copies from.
@@ -425,7 +427,7 @@ const copyDiagnostic: VerbHandler = async (value, ctx) => {
 };
 
 const openVscode: VerbHandler = async (value, ctx) =>
-  ask(ctx, { kind: "open", session: null, target: oneArg(value) });
+  ask(ctx, { kind: "open", session: ctx.session, target: oneArg(value) });
 
 // [LAW:single-enforcer] One verb writes SessionState — for every key the
 // session's gate holds, for every pair in a batch. That gate
@@ -1867,15 +1869,17 @@ async function foldEffects(
     try {
       await perform(leaf, value, ctx, i === 0 ? gathered : undefined);
     } catch (e) {
-      // [LAW:single-enforcer] The turn is over: no later effect runs, and the
-      // journal holdClickError writes through is finished. What failed before
-      // it has no bar left to reach, so the log has it.
-      if (e instanceof DaemonClosing) {
+      // [LAW:single-enforcer] Classified once, by failureOf. A click the
+      // daemon's close, its client leaving or no live renderer cut off is
+      // over: no later effect runs, it keeps its own class, and what failed
+      // before it has no bar left to reach, so the log has it.
+      const failure = failureOf(e);
+      if (failure.kind !== "bad-request" && failure.kind !== "threw") {
         if (errors.length > 0) ctx.log("warn", `click: ${errors.join("; ")}`);
         throw e;
       }
-      if (!(e instanceof BadVerbArgs)) operational = true;
-      errors.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
+      if (failure.kind === "threw") operational = true;
+      errors.push(`${verb}: ${failure.message}`);
     }
   }
   if (errors.length > 0) {
@@ -1947,6 +1951,7 @@ async function journaled<C extends DaemonContext>(
   // reach.
   const journaling = {
     ...ctx,
+    session: sid,
     sessionState: closing(journal.sessionState),
     journal,
     navigating: closing(navigation.sessionState),

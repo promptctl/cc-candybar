@@ -12,13 +12,18 @@ import {
 } from "../proc/launcher.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { Resume } from "../utils/keyed-source.js";
-import type { DaemonLogger } from "../utils/logger.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { RunStats } from "./foundations/stats-snapshot";
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
 
 export type RunAct = Extract<Act, { kind: "run" }>;
+
+// How a run ended: its outcome, and its facts for its act's line.
+export interface RunEnd {
+  readonly outcome: EffectOutcome;
+  readonly said: string;
+}
 
 // One timeout for every run: long enough for a program that reads a file and
 // writes another, short enough that a hung one does not hold its sources
@@ -39,7 +44,6 @@ export interface RunsDeps {
   // [LAW:one-source-of-truth] The storage owner's one supersede.
   readonly supersede: (folder: string, sessionId: SessionId) => Resume;
   readonly launch: Launcher["launch"];
-  readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] The daemon's clock, which times each run.
   readonly clock: Pick<Timekeeper, "monotonic">;
   readonly timeoutMs?: number;
@@ -92,7 +96,7 @@ export class Runs {
   // Start one run; resolves with how it ended. Every source it refreshes
   // reads pending from now until the program has exited, and then is read
   // fresh.
-  start(run: RunAct): Promise<EffectOutcome> {
+  start(run: RunAct): Promise<RunEnd> {
     if (this.closed) throw new Error("run owner used after close");
     // [LAW:no-ambient-temporal-coupling] Superseded before the program
     // starts, so no draw after the click shows the value from before it.
@@ -144,22 +148,21 @@ export class Runs {
     for (const abort of this.inFlight) abort.abort();
   }
 
-  private ended(
-    run: RunAct,
-    result: LaunchResult,
-    took: number,
-  ): EffectOutcome {
-    const outcome = outcomeOf(result);
-    this.deps.log(
-      outcome === "ok" || outcome === "aborted" ? "info" : "warn",
-      `run sid=${valueOf(run.session)} action=${valueOf(run.action)} program=${valueOf(run.program)} outcome=${outcome} exit=${exitOf(result)} took=${took} refreshed=${run.refreshes.map((r) => r.name).join(",") || "-"}`,
-    );
-    if (outcome === "timeout") this.timedOut++;
-    if (result.ok) return { kind: "ok" };
+  // [LAW:single-enforcer] How the run ended, said on its act's line
+  // (src/daemon/acts.ts), the one line an act's outcome has.
+  private ended(run: RunAct, result: LaunchResult, took: number): RunEnd {
+    const ended = outcomeOf(result);
+    const said = `program=${valueOf(run.program)} ended=${ended} exit=${exitOf(result)} took=${took} refreshed=${run.refreshes.map((r) => r.name).join(",") || "-"}`;
+    if (ended === "timeout") this.timedOut++;
+    if (result.ok) return { outcome: { kind: "ok" }, said };
     // An aborted run is the daemon going down, not the program failing.
-    if (outcome === "aborted")
-      return { kind: "closing", reason: "the daemon closed under it" };
-    if (outcome !== "timeout") this.failed++;
-    return { kind: "failed", reason: failureText(result) };
+    if (ended === "aborted")
+      return {
+        outcome: { kind: "closing", reason: "the daemon closed under it" },
+        said,
+      };
+    if (ended !== "timeout") this.failed++;
+    const reason = failureText(result);
+    return { outcome: { kind: "failed", reason }, said: `${said} — ${reason}` };
   }
 }
