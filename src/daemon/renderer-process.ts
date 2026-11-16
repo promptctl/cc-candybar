@@ -539,6 +539,17 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   };
   let stopPings: () => void = () => {};
 
+  // [LAW:single-enforcer] How the close ends a renderer: its stdin closes,
+  // and one that has not ended after the grace is signalled.
+  const ending = async (link: Link): Promise<void> => {
+    link.channel.end();
+    const grace = clock.after(CLOSE_GRACE_MS, () =>
+      link.kill.abort(new Error("the daemon closed")),
+    );
+    await link.channel.ended;
+    grace();
+  };
+
   // [LAW:single-enforcer] An input no renderer takes: counted, and said with
   // the count as the next one starts.
   const refusal = (why: RendererDown): RendererDown => {
@@ -615,7 +626,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       stopPings = clock.every(PING_PERIOD_MS, pinged, { unref: true });
     },
     close: async (teardown) => {
-      const link = current();
+      const booting = phase.kind === "starting" ? phase.link : null;
       const queued = phase.kind === "starting" ? phase.queued : [];
       if (phase.kind === "down") phase.cancelRetry();
       phase =
@@ -623,22 +634,21 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           ? { kind: "closing", link: phase.link }
           : { kind: "closed" };
       // What waited for this boot fails as a closed renderer's, and the boot
-      // ends now: it holds nothing to flush, and nothing waits on it.
+      // ends now, beside the teardown: it holds nothing to flush, and nothing
+      // waits on it.
       for (const send of queued) send();
-      if (link !== null && phase.kind === "closed") link.channel.end();
+      const bootEnded = booting === null ? null : ending(booting);
       try {
         await teardown();
       } finally {
         stopPings();
+        // A renderer that ended while the teardown ran has already gone.
+        const closing = phase.kind === "closing" ? phase.link : null;
         phase = { kind: "closed" };
-        if (link !== null) {
-          link.channel.end();
-          const grace = clock.after(CLOSE_GRACE_MS, () =>
-            link.kill.abort(new Error("the daemon closed")),
-          );
-          await link.channel.ended;
-          grace();
-        }
+        await Promise.all([
+          bootEnded,
+          closing === null ? null : ending(closing),
+        ]);
         releaseGone();
       }
     },

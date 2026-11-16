@@ -7,6 +7,7 @@ import type { Asked } from "../../src/utils/outcome";
 import {
   BACKOFF_FIRST_MS,
   BACKOFF_MAX_MS,
+  CLOSE_GRACE_MS,
   HUNG_AFTER_MS,
   PING_PERIOD_MS,
   YOUNG_MS,
@@ -716,6 +717,21 @@ describe("a renderer process's close", () => {
       ),
     );
     expect(ends).toEqual([]);
+    release();
+    await closed;
+  });
+
+  test("a boot the close ends is signalled after the grace, while the teardown still runs", async () => {
+    const { link, children, clock } = rig();
+    link.arm();
+    const child = children[0]!;
+    let release = (): void => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const closed = link.close(() => released);
+    expect(child.stdinEnded).toBe(true);
+    clock.advance(CLOSE_GRACE_MS);
+    await settled();
+    expect(child.opts.signal?.aborted).toBe(true);
     release();
     await closed;
   });

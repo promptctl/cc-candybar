@@ -905,8 +905,17 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       // [LAW:single-enforcer] The renderer ends after the teardown, flushing
       // its session state as it goes: last, so a run that ends in the teardown
       // holds its click error first. While the teardown runs, a renderer that
-      // ends is not started again.
-      await link.close(() => runTeardown(teardown, log));
+      // ends is not started again. Its end is a step too, so a failure in it
+      // is said by name and the close still finishes.
+      await runTeardown(
+        [
+          [
+            "renderer close",
+            () => link.close(() => runTeardown(teardown, log)),
+          ],
+        ],
+        log,
+      );
       closed = true;
       return { settled: launcher.settled() };
     },
