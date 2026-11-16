@@ -2,11 +2,13 @@
 // which answers with the turn's output or with how the turn failed: a turn's
 // throw comes back as a value, never as a rejection. Every turn's
 // subscriptions are taken here, in the order the turns answered, and so is
-// every effect a turn that answers no request returned, refused. A caller
+// every effect but a request's frame: a config change is performed, and a
+// frame no request asked for is refused. A caller
 // whose own event records the turn takes it by `answer`; every other input is
 // taken by `deliver`, which writes the turn's own line.
 
 import {
+  type EffectOutcome,
   type Effect,
   type Event,
   type Renderer,
@@ -23,6 +25,7 @@ import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import { CrossedFailure, failureOf } from "./foundations/verb-error.js";
+import type { ConfigInterpreter } from "./effect-interpreter.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
@@ -63,6 +66,7 @@ export function rendererHost(
     // a session under a turn on it, however long the turn waits.
     readonly holding: (session: SessionId) => () => void;
   },
+  interpreter: ConfigInterpreter,
 ): RendererHost {
   const held = async (input: EventInput): Promise<HostTurn> => {
     const session = sessionOf(input.event);
@@ -75,12 +79,26 @@ export function rendererHost(
       // turn, so what the process boundary costs is read from the event.
       const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
       collector.subscribed(subscriptions);
-      // [LAW:single-enforcer] A present answers the request whose turn
-      // returned it, so every effect another turn returns is refused here,
-      // and none is left owed its `effect-done`.
-      if (output.kind === "answered" && input.event.kind !== "request")
+      // [LAW:single-enforcer] Each effect is owed one `effect-done`. A present
+      // answers the request whose turn returned it, so one from any other
+      // turn is refused here. A config change is performed here, whatever turn
+      // returned it, and the turn's caller hears the turn only once the
+      // renderer has heard how each change landed: a click is answered after
+      // its write.
+      if (output.kind === "answered")
         for (const effect of output.effects)
-          refuse(effect, `a ${input.event.kind} turn answers no request`);
+          switch (effect.kind) {
+            case "present":
+              if (input.event.kind !== "request")
+                void done(effect, {
+                  kind: "failed",
+                  reason: `a ${input.event.kind} turn answers no request`,
+                });
+              break;
+            case "change":
+              await done(effect, interpreter.change(effect));
+              break;
+          }
       return output;
     } finally {
       release();
@@ -99,8 +117,8 @@ export function rendererHost(
         hopMs: null,
       }),
     );
-  const refuse = (effect: Effect, reason: string): void =>
-    void deliver(
+  const done = (effect: Effect, outcome: EffectOutcome): Promise<unknown> =>
+    deliver(
       {
         kind: "event",
         at: instantAt(clock),
@@ -108,7 +126,7 @@ export function rendererHost(
           kind: "effect-done",
           session: effect.session,
           of: effect.id,
-          outcome: { kind: "failed", reason },
+          outcome,
         },
       },
       [["effect", String(effect.id)]],

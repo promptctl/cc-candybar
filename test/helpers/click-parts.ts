@@ -18,6 +18,7 @@ import {
   type DaemonVerbContext,
   type MainRendererParts,
 } from "../../src/renderer/verbs/port";
+import { NO_CHANGES } from "./interpreter";
 
 export function clickParts(
   verbCtx: DaemonVerbContext,
@@ -46,6 +47,7 @@ export function clickParts(
       mainRenderer(parts, NO_PUSHES),
       () => {},
       { subscribed: () => {}, holding: collector.holding },
+      NO_CHANGES,
     ),
     clicks,
     collector,

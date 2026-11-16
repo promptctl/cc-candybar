@@ -2,6 +2,8 @@
 
 import { Runs } from "./runs.js";
 import { locations, type DaemonPaths } from "./paths";
+import { configInterpreter } from "./effect-interpreter";
+import { userLayerPath } from "../config/loader/discovery";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
@@ -826,7 +828,22 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     updateWatch,
     limits,
     collector,
-    renderer: rendererHost("main", clock, link.renderer, log, collector),
+    renderer: rendererHost(
+      "main",
+      clock,
+      link.renderer,
+      log,
+      collector,
+      configInterpreter({
+        userLayer: (session) => {
+          const latest = frameFeeds.latest(session);
+          return latest === null
+            ? null
+            : userLayerPath(locs, latest.requested.target.path);
+        },
+        log,
+      }),
+    ),
   };
 
   return {

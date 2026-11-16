@@ -6,6 +6,7 @@
 import path from "node:path";
 import type {
   Effect,
+  Present,
   RequestId,
   TurnOutcome,
 } from "../renderer-interface/interface.js";
@@ -174,12 +175,12 @@ export async function answerStatusline(
   const { effects } = delivered;
   noteFacts(facts, {
     renderer: host.name,
-    effects: effects.map((e) => `${e.kind}:${e.surface}`).join(",") || "-",
+    effects: effects.map(effectFact).join(",") || "-",
   });
   // [LAW:types-are-the-program] Every effect the turn returned, in its order,
   // is performed or refused: the first statusline frame for this request
   // answers it, and nothing else may.
-  let answer: Effect | null = null;
+  let answer: Present | null = null;
   for (const effect of effects) {
     switch (effect.kind) {
       case "present":
@@ -191,6 +192,10 @@ export async function answerStatusline(
         else if (answer !== null)
           done(effect, `a second statusline frame for request ${id}`);
         else answer = effect;
+        break;
+      case "change":
+        // Performed on the host's one path to the renderer, as every turn's
+        // changes are (renderer-host.ts).
         break;
     }
   }
@@ -219,4 +224,14 @@ export async function answerStatusline(
     settled: (took) =>
       done(presented, took ? null : "the client did not take the answer"),
   };
+}
+
+// An effect as the render event lists it: what it is, and where it goes.
+function effectFact(effect: Effect): string {
+  switch (effect.kind) {
+    case "present":
+      return `present:${effect.surface}`;
+    case "change":
+      return `change:${effect.target.role}`;
+  }
 }

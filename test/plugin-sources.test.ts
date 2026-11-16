@@ -82,6 +82,7 @@ import type {
 import type { RequestFacts } from "../src/daemon/foundations/request-event";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { NO_CHANGES } from "./helpers/interpreter";
 
 const S1 = sessionIdOf("s1");
 
@@ -839,11 +840,13 @@ function statusline(r: Rig, configFile: string) {
       const output = await renderer.answer(input);
       if (output.kind === "answered")
         for (const effect of output.effects)
-          presented.push(parseFrame(effect.frame));
+          if (effect.kind === "present")
+            presented.push(parseFrame(effect.frame));
       return output;
     }),
     () => {},
     r.collector,
+    NO_CHANGES,
   );
   // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
   // request delivered has settled, the present's `effect-done` among them, so

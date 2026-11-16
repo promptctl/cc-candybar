@@ -86,7 +86,7 @@ const REPO_CONFIG_BASE = ".cc-candybar";
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
 // (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
-// appends each accepted extension; `userHome` appends the documented one.
+// appends each accepted extension; `userLayerPath` appends the documented one.
 function xdgConfigBase(locs: Locations): string {
   return path.join(locs.configHome, "cc-candybar", "config");
 }
@@ -248,7 +248,7 @@ export function resolveDslConfig(
     return {
       kind: "chain",
       layers,
-      home: userHome(locs, layers),
+      home: userLayerPath(locs, undefined),
       unchecked,
       repos,
     };
@@ -289,13 +289,23 @@ export function repoProject(
   };
 }
 
-// The user's file: the XDG layer when the chain holds one, else the file a
-// first-ever write creates there — CONFIG_EXTENSIONS' head, the documented
-// format, the one that wins a same-location tie.
-function userHome(locs: Locations, layers: readonly ConfigLayer[]): string {
+// [LAW:one-source-of-truth] The file a session's user layer is, which a
+// durable click writes: the explicit file its origin names; else the user's
+// XDG file at the first extension present, as the search finds it; else the
+// file a first-ever write creates there — CONFIG_EXTENSIONS' head, the
+// documented format, the one that wins a same-location tie. The render's
+// resolution names it as `home`, and the host that writes the layer finds it
+// here.
+export function userLayerPath(
+  locs: Locations,
+  configFile: string | undefined,
+): string {
+  if (configFile !== undefined) return configFile;
+  const base = xdgConfigBase(locs);
   return (
-    layers.find((l) => isUserFile(locs, l.path))?.path ??
-    `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`
+    CONFIG_EXTENSIONS.map((e) => `${base}.${e}`).find(
+      (file) => presence(file) === "present",
+    ) ?? `${base}.${CONFIG_EXTENSIONS[0]}`
   );
 }
 

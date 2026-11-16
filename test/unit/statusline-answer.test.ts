@@ -23,6 +23,7 @@ import {
 } from "../../src/daemon/foundations/verb-error";
 import {
   type Effect,
+  type Present,
   type EffectId,
   type Event,
   type Renderer,
@@ -34,6 +35,7 @@ import type { WorldState } from "../../src/facts/world-state";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
+import { NO_CHANGES } from "../helpers/interpreter";
 
 const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
@@ -53,7 +55,7 @@ const CLOCK = {
   now: () => 1_700_000_000_000,
 };
 
-const present = (id: number, request = REQUEST): Effect => ({
+const present = (id: number, request = REQUEST): Present => ({
   kind: "present",
   id: id as EffectId,
   session: SESSION,
@@ -130,16 +132,23 @@ async function answer(
   const facts: RequestFacts = [];
   const named = new Set<string>();
   const answered = await answerStatusline(
-    rendererHost("main", CLOCK, renderer, (_level, line) => logged.push(line), {
-      subscribed: (subscriptions) => void subscribed.push(subscriptions),
-      // Mirrors the collector: only a session a request has named is held.
-      holding: (session) => {
-        if (!named.has(session)) return () => {};
-        holds.count++;
-        holds.sessions.push(session);
-        return () => void holds.count--;
+    rendererHost(
+      "main",
+      CLOCK,
+      renderer,
+      (_level, line) => logged.push(line),
+      {
+        subscribed: (subscriptions) => void subscribed.push(subscriptions),
+        // Mirrors the collector: only a session a request has named is held.
+        holding: (session) => {
+          if (!named.has(session)) return () => {};
+          holds.count++;
+          holds.sessions.push(session);
+          return () => void holds.count--;
+        },
       },
-    }),
+      NO_CHANGES,
+    ),
     {
       requested: (req) => {
         named.add(req.hookData.session_id);

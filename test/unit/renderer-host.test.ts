@@ -8,6 +8,7 @@ import type { AdapterOutput } from "../../src/renderer-interface/interface";
 import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
 import { pushRenderer } from "../helpers/renderers";
+import { NO_CHANGES } from "../helpers/interpreter";
 
 const AT = instantOf(new Date(0));
 
@@ -29,6 +30,7 @@ function hostOver(output: AdapterOutput) {
         throw new Error("a push holds no session");
       },
     },
+    NO_CHANGES,
   );
   return { host, said };
 }

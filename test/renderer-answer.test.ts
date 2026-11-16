@@ -17,6 +17,7 @@ import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
+  Present,
   Event,
   Renderer,
   RendererOutput,
@@ -49,6 +50,7 @@ import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { HeldEvent } from "../src/utils/event-hold";
 import { hearingEvents, NO_PUSHES } from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
+import { NO_CHANGES } from "./helpers/interpreter";
 
 let dir: string;
 let cleanups: Array<() => void>;
@@ -215,9 +217,10 @@ const threw = (output: RendererOutput) => {
   return output;
 };
 
-const presentOf = (effects: readonly Effect[]): Effect => {
+const presentOf = (effects: readonly Effect[]): Present => {
   expect(effects).toHaveLength(1);
-  return effects[0]!;
+  expect(effects[0]!.kind).toBe("present");
+  return effects[0] as Present;
 };
 
 describe("a statusline request", () => {
@@ -464,6 +467,7 @@ describe("the session's config, ahead of its request", () => {
       hearingEvents(t.r, (input) => kinds.push(input.event.kind)),
       () => {},
       t.rig.served.collector,
+      NO_CHANGES,
     );
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
@@ -547,6 +551,7 @@ describe("two requests of one session at different keys", () => {
       }),
       () => {},
       t.rig.served.collector,
+      NO_CHANGES,
     );
     const ask = (pane: string, id: number) =>
       answerStatusline(
