@@ -85,8 +85,7 @@ const validateEndcaps: KeyValidator = (raw) => {
 
 // [LAW:dataflow-not-control-flow] Boolean-ish accepts exactly four canonical
 // inputs and normalizes to two canonical outputs: truthy ("1"/"true") → "1",
-// falsy ("0"/"false") → "" (empty). The empty falsy sentinel matches what
-// `toolbar-toggle` produces via `clear()` for the next render.
+// falsy ("0"/"false") → "" (empty), which reads as the key's absence.
 const BOOLEAN_TRUTHY = new Set(["1", "true"]);
 const BOOLEAN_FALSY = new Set(["0", "false"]);
 const validateBoolean: KeyValidator = (raw) => {
