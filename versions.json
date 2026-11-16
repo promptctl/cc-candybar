@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-768",
+      "ref": "refs/pull/768/merge",
+      "sha": "69555471ec21ff61099f63fdb9cfe47366d56490",
+      "timestamp": "2026-11-16T14:42:38.589Z",
+      "commits": [
+        {
+          "sha": "69555471ec21ff61099f63fdb9cfe47366d56490",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T07:41:41-07:00",
+          "message": "Merge 31ac779b244475d956fba43e389a1cbfaa0e4688 into bfd86d4f92a91f2678bed4d48c6e38f0aa03998d\n"
+        },
+        {
+          "sha": "31ac779b244475d956fba43e389a1cbfaa0e4688",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T07:41:17-07:00",
+          "message": "feat(renderer): a settings click writes no file: each write lands as a change the host performs, and undo is guarded per setting (candybar-host-renderer-x96a.axx)\n\nA writer builds the text it would leave, and the click lands the changes\nfrom the text it read through its turn: the turn answers with the change,\nand the change's effect-done turn carries the click on, so a click hears\nhow each write landed before its reload or next write. A write enters the\nundo history only once it landed. Undo, redo and cancel land the\ndifference between a step's texts, so a hand edit to a setting the step\nchanged refuses it by name, and an edit elsewhere in the file is kept.\nA lint rule leaves the atomic writer to the host's side.\n"
+        },
+        {
+          "sha": "04a350910b161581f88651ccd52b5e99fc552051",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T22:53:30-07:00",
+          "message": "feat(daemon): the host performs a config change a turn returns, and the renderer hears how it landed before the turn is answered (candybar-host-renderer-x96a.axx)\n\nA change names its layer by role. The host finds the user layer's file from\nthe newest request it holds of the session, by the same derivation the\nrender's resolution names as home, splices the changes in, and refuses the\nwhole change when a setting it read has moved. Refused is its own outcome,\napart from a write that failed.\n"
+        },
+        {
+          "sha": "45126a2ee212b82b2b2cf8e412d538648f82d91b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T22:46:56-07:00",
+          "message": "feat(config): a config write is a list of changes at addresses, each carrying what it read, and applying them refuses a setting that moved (candybar-host-renderer-x96a.axx)\n\nconfig-changes derives the changes between two documents and applies them\nback byte for byte, both ways, over the json5 editor's new address-level\nset and remove. A value travels as its JSON5 text, so a copied row keeps its\ncomments and undo restores the bytes it found; an object whose member\nchanges would not rebuild it as written is set whole. Spec section 7 says a\nchange carries text.\n"
+        },
+        {
+          "sha": "39ddc2ee7ae10f20184d6d6f1b659e6e25161959",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T22:46:13-07:00",
+          "message": "refactor(click): load-config and toolbar-toggle are deleted, so a session's config is only what its client named (candybar-host-renderer-x96a.axx)\n\nNo draw emits either verb. A load-config pick stored an absolute path in\nsession state and let a click redirect which file a session reads and\nwrites, so the renderer's home and the file the host will write could\ndisagree. With the pick gone, no click moves a session's origin, and the\nrender cache's follow, the views port and the pick's config-target source\ngo with it. A session uses another file through --config or\nCC_CANDYBAR_CONFIG.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "bfd86d4f92a91f2678bed4d48c6e38f0aa03998d",
@@ -13,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-15T22:16:56-07:00",
           "message": "docs(spec): A-1's open item says a request waits for the renderer's thread, not for turns taken one at a time (candybar-host-renderer-x96a.cwq) (#767)"
-        }
-      ]
-    },
-    {
-      "version": "pr-762",
-      "ref": "refs/pull/762/merge",
-      "sha": "1ba3ee6a47ed75735dd14c0670d85536ed4d9937",
-      "timestamp": "2026-11-16T01:37:52.896Z",
-      "commits": [
-        {
-          "sha": "1ba3ee6a47ed75735dd14c0670d85536ed4d9937",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T18:36:57-07:00",
-          "message": "Merge 09f0cb3e5387b703a68d4a18b5b254a8a7f621ca into 3d8af440ea7624f469ec0bdb62620124ea12c90f\n"
-        },
-        {
-          "sha": "09f0cb3e5387b703a68d4a18b5b254a8a7f621ca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T18:36:41-07:00",
-          "message": "fix(usage): a forked or resumed session's copied history counts once, in the session it was copied from (candybar-host-renderer-x96a.au0)\n\nClaude Code marks each entry it copies into a fork's transcript with\nforkedFrom. Across the 80 newest transcripts here, all 947 response ids\nheld by more than one file have exactly one unmarked copy, so the fold\nskips copied entries and needs no set of response ids.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
         }
       ]
     }
