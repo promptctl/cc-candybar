@@ -4,15 +4,22 @@
     {
       "version": "pr-763",
       "ref": "refs/pull/763/merge",
-      "sha": "ef0e9da0ed53d84cf58431cdb87195574bdda3cb",
-      "timestamp": "2026-11-16T03:49:11.063Z",
+      "sha": "fe2d8d4bd39159aebd5850b2e31ce68d12f50630",
+      "timestamp": "2026-11-16T03:55:21.730Z",
       "commits": [
         {
-          "sha": "ef0e9da0ed53d84cf58431cdb87195574bdda3cb",
+          "sha": "fe2d8d4bd39159aebd5850b2e31ce68d12f50630",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T03:48:06Z",
-          "message": "Merge 89f2d4643e329f7c5a2346634dd3f4945e767720 into 833345462e42c521a828b6776792cc4d1f575249\n"
+          "timestamp": "2026-11-15T20:54:14-07:00",
+          "message": "Merge 85b89c9d0f208c9ae1b992c305b126fb2bd2c99b into 833345462e42c521a828b6776792cc4d1f575249\n"
+        },
+        {
+          "sha": "85b89c9d0f208c9ae1b992c305b126fb2bd2c99b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T20:54:02-07:00",
+          "message": "fix(feed): a frame armed after it fell due is late from the moment it fell due, and §17 reads A-5 strictly (candybar-host-renderer-x96a.bwr)\n"
         },
         {
           "sha": "89f2d4643e329f7c5a2346634dd3f4945e767720",

@@ -71585,17 +71585,19 @@ var durationHistogram = () => (0, import_hdr_histogram_js.build)({ bitBucketSize
 var recordMs = (h, ms) => {
   h.recordValue(Math.round(ms * 1e3));
 };
+var msUpOf = (us) => Math.ceil(us / 10) / 100;
 var msOf = (us) => Math.round(us / 10) / 100;
+var encodedOf = (h) => (0, import_hdr_histogram_js.encodeIntoCompressedBase64)(h);
 var durationsOf = (h) => {
   const max3 = h.maxValue;
-  const at = (p2) => msOf(Math.min(h.getValueAtPercentile(p2), max3));
+  const at = (p2) => msUpOf(Math.min(h.getValueAtPercentile(p2), max3));
   return {
     count: h.totalCount,
     p50Ms: at(50),
     p90Ms: at(90),
     p99Ms: at(99),
     p999Ms: at(99.9),
-    maxMs: msOf(max3),
+    maxMs: msUpOf(max3),
     meanMs: msOf(h.mean),
     stddevMs: msOf(h.stdDeviation)
   };
@@ -72490,7 +72492,6 @@ var Collector = class {
 
 // src/daemon/frame-feed.ts
 init_globals();
-var import_hdr_histogram_js2 = __toESM(require_hdrhistogram_umd(), 1);
 
 // src/renderer-interface/adapter.ts
 init_globals();
@@ -72514,7 +72515,7 @@ var distributionOf = (h) => {
   const ms = (v) => v.toFixed(2);
   return d.count === 0 ? "-" : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
 };
-var histogramsOf = (feed2, state) => state === "running" ? "" : ` drawHistogram=${(0, import_hdr_histogram_js2.encodeIntoCompressedBase64)(feed2.drawTime)} latenessHistogram=${(0, import_hdr_histogram_js2.encodeIntoCompressedBase64)(feed2.lateness)}`;
+var histogramsOf = (feed2, state) => state === "running" ? "" : ` drawHistogram=${encodedOf(feed2.drawTime)} latenessHistogram=${encodedOf(feed2.lateness)}`;
 var SUMMARY_EVERY_MS = 6e4;
 var MAX_REQUESTS = 256;
 function wokenWhileOut(feed2) {
@@ -72889,9 +72890,18 @@ var FrameFeeds = class {
   // that is. Its wait is measured from `wall`, the caller's own reading, so
   // the instant a caller set is never rebuilt from a second, truncated one;
   // its monotonic due time is what a wake compares against.
+  // [LAW:nothing-unseen] A frame already overdue when armed keeps the moment
+  // it fell due, in the past, and only its timer's wait is clamped: a draw
+  // that overran its period shows in the next frame's lateness, rather than
+  // the next frame counting from when it was armed.
   arm(feed2, due, wall) {
-    const delay = Math.max(0, (due - wall) * 1e3);
-    this.setTimer(feed2, due, this.deps.clock.monotonic() + delay, delay);
+    const wait = (due - wall) * 1e3;
+    this.setTimer(
+      feed2,
+      due,
+      this.deps.clock.monotonic() + wait,
+      Math.max(0, wait)
+    );
   }
   setTimer(feed2, due, dueMoment, delay) {
     if (feed2.phase.kind === "due") feed2.phase.clear();
