@@ -16,8 +16,14 @@ import type { Asked } from "../../utils/outcome";
 
 // The keyed sources whose entries a view holds, so a period visits only
 // those held: a repo's, a pane's, the host's name and user, a directory
-// set's scans, a plugin's session files.
-export type HeldSource = "git" | "tmux" | "host" | "today" | "pluginStorage";
+// set's scans, a plugin's session files, a session's transcript lanes.
+export type HeldSource =
+  | "git"
+  | "tmux"
+  | "host"
+  | "today"
+  | "pluginStorage"
+  | "transcript";
 
 // [LAW:nothing-unseen] Every source and every home, from the owners that keep
 // them (design-docs/SOURCES-AND-FRAMES.md, "Seen").

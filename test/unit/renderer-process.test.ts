@@ -102,7 +102,7 @@ function rig(start: () => Promise<void> = async () => {}) {
   };
   const link = processRenderer({
     reaches: {
-      ...inertHost({} as never),
+      ...inertHost(),
       watches: {
         watch: (id) => watched.push(["watch", id]),
         unwatch: (id) => watched.push(["unwatch", id]),

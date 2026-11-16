@@ -14,7 +14,11 @@
 
 import fs from "node:fs";
 import { ObservableLru } from "../../utils/observable-lru.js";
-import { RefreshLedger, type Refreshes } from "../../utils/refresh-ledger.js";
+import {
+  RefreshLedger,
+  type RefreshTrigger,
+  type Refreshes,
+} from "../../utils/refresh-ledger.js";
 import type { SourceStats } from "../../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../../utils/logger.js";
 import { valueOf } from "../../utils/logfmt.js";
@@ -44,15 +48,16 @@ interface Known {
 }
 
 // [LAW:single-enforcer] The one owner of the auto-compact window
-// (brandon-unfiled-3248.8ro6, step 1). Each statusline request asks, and the
-// file is read again only when its stamp moved — Claude Code rewrites it on
-// `/autocompact`, so the session's next request reads what it wrote, and two
-// sessions sharing one Claude Code directory read it once between them.
+// (brandon-unfiled-3248.8ro6, step 1). Each session's transcript lanes ask
+// (src/daemon/cache/transcript-lanes.ts), on a watch of this file and their
+// period, and the file is read again only when its stamp moved — Claude Code
+// rewrites it on `/autocompact`, and two sessions sharing one Claude Code
+// directory read it once between them.
 export class AutoCompactProvider {
   // Observable, so a view's payload over a window is recomputed in the turn
   // it is stored.
   private readonly known = new ObservableLru<string, Known>(MAX_FILES);
-  private readonly refreshes: Refreshes<"request">;
+  private readonly refreshes: Refreshes<RefreshTrigger>;
 
   constructor(
     // [LAW:effects-at-boundaries] Times each read of the settings file.
@@ -60,14 +65,15 @@ export class AutoCompactProvider {
     logger: DaemonLogger = quietLogger,
     ledger: RefreshLedger = new RefreshLedger(logger),
   ) {
-    this.refreshes = ledger.declare({
+    this.refreshes = ledger.declare<RefreshTrigger>({
       name: "autocompact",
       scope: "configDir",
-      refresh: ["request"],
+      refresh: ["first", "period", "change"],
+      event: "step",
     });
   }
 
-  window(settingsPath: string): Outcome<AutoCompactWindow> {
+  window(settingsPath: string, by: RefreshTrigger): Outcome<AutoCompactWindow> {
     const stamp = stampAt(settingsPath);
     const known = this.known.get(settingsPath);
     // [LAW:no-ambient-temporal-coupling] A hit is a use, which wakes no view:
@@ -80,7 +86,7 @@ export class AutoCompactProvider {
     const outcome = readAutoCompactWindow(settingsPath);
     this.refreshes.recorded(
       `path=${valueOf(settingsPath)} stamp=${valueOf(stamp)}`,
-      "request",
+      by,
       outcome,
       elapsedMs(this.clock, startedAt),
     );
@@ -88,7 +94,7 @@ export class AutoCompactProvider {
     return outcome;
   }
 
-  // The window as the last request left it, for a draw: the file is not
+  // The window as the last refresh left it, for a draw: the file is not
   // touched.
   stored(settingsPath: string): Reading<AutoCompactWindow> {
     return this.known.get(settingsPath)?.outcome ?? pendingOf("unread");

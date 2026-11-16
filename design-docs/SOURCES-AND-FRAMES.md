@@ -36,7 +36,6 @@ A user source's scope is derived, never authored: it is `view` when its key or d
 |---|---|
 | `every` | a period, which may differ after a failure (a good read and a bad one are retried on different clocks) |
 | `watch` | a file changed |
-| `request` | each statusline request of a session that holds the source |
 | `reads` | values the source names changed (a `shell` keyed on an input) |
 | `never` | read once |
 
@@ -67,9 +66,9 @@ The draw keeps one record of what each placement last drew, its frame memory. It
 
 ## Two paths, one draw
 
-There is one renderer, and it is synchronous. A feed's frame is that draw alone. A statusline request declares its view, starts the refreshes its arrival triggers, waits, then calls the same draw.
+There is one renderer, and it is synchronous. A feed's frame is that draw alone. A statusline request declares its view, waits, then calls the same draw. It triggers no read: reads follow the world, so how often a client ticks never decides what is read.
 
-- **A request waits until its client's deadline.** Its answer must show the model, context and cost it was sent with, so it awaits the refreshes its arrival started and the first value of every source its view newly holds. Only the client knows when it will hang up, so it sends its deadline with the request, and the daemon ends the wait early enough to leave room for the draw. What is still not answered draws as pending, and its landing wakes the next frame.
+- **A request waits until its client's deadline.** Its answer shows the hook fields it was sent with, and it awaits the first value of every source its view newly holds. A warm session's sources are as current as their watches made them, so a request that lands before the watch has delivered the transcript's last write draws the stored folds, and the frame the read's landing wakes redraws them. Only the client knows when it will hang up, so it sends its deadline with the request, and the daemon ends the wait early enough to leave room for the draw. What is still not answered draws as pending, and its landing wakes the next frame.
 - **A view's payload is derived; a draw writes no input.** The payload is one computed over the view's request facts, its declared sources, the session's picks and the config's facts. So a source keyed on an input re-runs in the turn that input changes, never from a draw.
 - **What moves with the instant is never stored.** Today's spend for the frame's day, a countdown, the click-error hold and the feed counters are computed at draw from stored instants against the frame's `at`.
 
@@ -89,4 +88,4 @@ The render cache owns directory entries and views, and bounds them by one byte b
 
 ## Seen
 
-A failed refresh is logged once, by the refresh that failed, never per draw. Every source records each refresh in one ledger, by its trigger, with its outcome and its length. A refresh on any trigger but a request writes one event of its own. A request's refreshes are facts of its render event, which names each lane its arrival refreshed and how long it took, what drew pending, and how long the request waited against its deadline. The daemon's stats list every source's refreshes by trigger, its failures and its last refresh's length, with the homes of each scope. The feed's summary line counts its wakes by cause, how many coalesced, and the refreshes the whole daemon ran while it was open (`daemonRefreshed=`, every session's), beside the frames it drew.
+A failed refresh is logged once, by the refresh that failed, never per draw. Every source records each refresh in one ledger, by its trigger, with its outcome and its length. A refresh that is a unit of work writes one event of its own. A session lane's refresh is a step of its transcript entry's refresh and writes a line only when it fails, so the entry's event is the one line, and a lane that never lands leaves that line missing. A request's render event names what drew pending and how long the request waited against its deadline. The daemon's stats list every source's refreshes by trigger, its failures and its last refresh's length, with the homes of each scope. The feed's summary line counts its wakes by cause, how many coalesced, and the refreshes the whole daemon ran while it was open (`daemonRefreshed=`, every session's), beside the frames it drew.

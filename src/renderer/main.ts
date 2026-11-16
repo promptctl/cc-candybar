@@ -110,7 +110,6 @@ export function mainRenderer(
       case "request": {
         const { frame, delivered } = await answerRequest(
           parts,
-          event.id,
           event.context,
           at,
           event.waitMs,

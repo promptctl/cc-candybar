@@ -83,7 +83,7 @@ async function folded(
   transcript: string,
   turns: number,
 ): Promise<void> {
-  const usage = await store.request(SESSION, transcript).usage();
+  const usage = await store.refresh(SESSION, transcript, "change").usage();
   if (usage.kind !== "ok") {
     throw new Error(`usage fold ended ${JSON.stringify(usage)}`);
   }

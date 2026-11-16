@@ -56,10 +56,9 @@ import {
   renderOptionsOf,
   renderWidth,
   settleWorld,
-  todayOf,
+  instantFacts,
 } from "../renderer/render-payload.js";
 import { Collector } from "../daemon/collector.js";
-import { refreshPayload } from "../daemon/readings.js";
 import { WorldStates } from "../renderer/world-states.js";
 import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { sessionSource } from "../renderer/session-source.js";
@@ -252,7 +251,6 @@ async function renderFrames(): Promise<void> {
         // instant, sampled here as the daemon samples it per request.
         const at = instantOf(new Date(world.clock.now()));
         await settleWorld(
-          () => refreshPayload({ hookData, deps: providers, cwd, hints }, at),
           () => worldStates.of(sessionId),
           () => view.registry.namedRuns().values(),
           // The demo's frames have no client to hang up.
@@ -266,7 +264,7 @@ async function renderFrames(): Promise<void> {
           {
             drawing: { by: "request" },
             feeds: UNFOLLOWED_FEEDS,
-            today: todayOf(view.source.facts().builtins.today, at),
+            ...instantFacts(view.source.facts().builtins, at),
           },
           at,
           renderOptionsOf(effective, width),
@@ -305,10 +303,6 @@ try {
 } finally {
   // The providers own their timers and watchers; all of them are released so
   // the process ends when the frames do.
-  providers.gitProvider.close();
-  providers.usageStore.close();
-  providers.tmuxService.close();
-  providers.hostService.close();
-  providers.managedStorage.close();
+  providers.close();
   watchers.closeAll();
 }

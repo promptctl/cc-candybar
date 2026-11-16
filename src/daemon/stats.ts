@@ -264,7 +264,14 @@ export class RuntimeStats {
           view: 0,
           pane: 0,
         },
-        held: { git: 0, tmux: 0, host: 0, today: 0, pluginStorage: 0 },
+        held: {
+          git: 0,
+          tmux: 0,
+          host: 0,
+          today: 0,
+          pluginStorage: 0,
+          transcript: 0,
+        },
         pluginStorage: {
           folders: 0,
           faults: { unusable: 0, refused: 0, error: 0 },

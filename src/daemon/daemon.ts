@@ -64,7 +64,6 @@ import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import { bootEnv } from "../renderer-interface/wire.js";
 import { answeredBy, type HeldEvent } from "../utils/event-hold.js";
 import { located } from "./statusline-answer.js";
-import { readingsHost } from "./readings.js";
 import { installFacts } from "../doctor/edge.js";
 import { ClicksInFlight } from "./clicks-in-flight.js";
 import { compareStructural, observable, runInAction } from "mobx";
@@ -416,13 +415,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     ledger: refreshLedger,
     sourceRuns,
   });
-  const {
-    gitProvider: gitService,
-    usageStore,
-    tmuxService,
-    hostService,
-    managedStorage,
-  } = payloadProviders;
+  const { managedStorage } = payloadProviders;
   // [LAW:single-enforcer] Each session's idle clock and the timer that closes
   // its menus (src/daemon/menu-idle.ts): a click restarts the clock, and the
   // close is a `menu-idle` turn of the renderer, the journaled write a ✕ makes,
@@ -686,7 +679,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const rendererWatches = new Map<WatchId, WatcherHandle>();
   const doctorEdge = inputs.doctorEdge(launcher, host);
   const claudeInput = inputs.claudeInput(launcher);
-  const readings = readingsHost(payloadProviders);
   // [LAW:one-way-deps] The host's parts the main renderer reaches: the
   // compiler checks each against its entry in `AdapterToHost` here, so no
   // renderer file names a host type.
@@ -703,7 +695,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       refused: (sessionId, action, reason) =>
         runs.refused(sessionId, action, reason),
     },
-    refresh: readings.refresh,
     doctor: {
       ...doctorEdge,
       install: async (daemonBundle, clients) =>
@@ -903,15 +894,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
         ["renderer views close", rendererStep("close-views")],
-        ["gitService close", () => gitService.close()],
-        ["usageStore close", () => usageStore.close()],
-        ["tmuxService close", () => tmuxService.close()],
-        ["hostService close", () => hostService.close()],
+        ["payloadProviders close", () => payloadProviders.close()],
         ["runs close", () => runs.close()],
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
-        ["managedStorage close", () => managedStorage.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.

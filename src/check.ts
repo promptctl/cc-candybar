@@ -73,7 +73,7 @@ import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
   composePayload,
   renderOptionsOf,
-  todayOf,
+  instantFacts,
   type RenderPayload,
   type ViewPayload,
 } from "./renderer/render-payload.js";
@@ -200,11 +200,10 @@ function bindPass(
 // [LAW:types-are-the-program] The readings are the owners' own types, so a
 // field the daemon's payload requires is a compile error here until the
 // fixture carries it. `term` is the draw's (bindPayload writes it from the
-// width), so it is left out; `today` is the draw's projection of the
-// document's `today` fact, handed beside the payload as a draw hands it.
-export type CheckPayload = Omit<ViewPayload, "term"> & {
-  readonly today: ReturnType<typeof todayOf>;
-};
+// width), so it is left out; `today` and `speed` are the draw's projections
+// of the document's facts, handed beside the payload as a draw hands them.
+export type CheckPayload = Omit<ViewPayload, "term"> &
+  ReturnType<typeof instantFacts>;
 
 const CHECK_HOME = "/home/tester";
 const CHECK_SESSION = sessionIdOf("test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
@@ -399,7 +398,7 @@ export function checkPayload(
       back: 1,
     },
   );
-  return { ...payload, today: todayOf(document.builtins.today, at) };
+  return { ...payload, ...instantFacts(document.builtins, at) };
 }
 
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of
@@ -724,7 +723,7 @@ export async function prepareConfig(
 // (a source keyed on an input the payload moved) awaited under the prepared
 // config's window, and the draw over what they yielded
 // [LAW:no-ambient-temporal-coupling] — the daemon's request order, where a
-// request awaits the refreshes its arrival triggered before it answers. A
+// request awaits its world state's first readings before it answers. A
 // source still out at the deadline is this pass's advisory, so the verdict
 // names the preset that drew without it.
 export async function renderEffective(

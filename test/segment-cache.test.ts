@@ -165,28 +165,28 @@ describe("CacheExpiryProvider", () => {
     const provider = new CacheExpiryProvider(systemTimekeeper);
     chmodSync(path, 0o000);
     try {
-      expect((await provider.refresh("s", path)).kind).toBe("failed");
+      expect((await provider.refresh("s", path, "change")).kind).toBe("failed");
     } finally {
       chmodSync(path, 0o600);
     }
-    expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
+    expect(await provider.refresh("s", path, "change")).toEqual(ok(at(A)));
   });
 
-  // [LAW:nothing-unseen] A request's refreshes are facts of its render event,
-  // so a read of the tail is counted, never a line of its own; a failed one is
-  // its own line.
-  test("each read of the tail is one refresh counted; an answer believed under its stamp is none", async () => {
+  // [LAW:nothing-unseen] Each read of the tail is a refresh: counted under the
+  // trigger that asked. It is a step of its transcript entry's refresh, whose
+  // line says it, so a read that answers writes none; a hit is no refresh.
+  test("each read of the tail is one refresh, counted but not said; an answer believed under its stamp is none", async () => {
     const lines: string[] = [];
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
     const provider = new CacheExpiryProvider(systemTimekeeper, (level, msg) =>
       lines.push(`${level} ${msg}`),
     );
-    await provider.refresh("s", path);
-    await provider.refresh("s", path);
+    await provider.refresh("s", path, "change");
+    await provider.refresh("s", path, "change");
     expect(lines).toEqual([]);
     expect(provider.getStats()).toEqual({
       entries: 1,
-      refreshes: { request: 1 },
+      refreshes: { first: 0, period: 0, change: 1 },
       failures: 0,
       abandoned: 0,
       lastMs: expect.any(Number),
@@ -199,17 +199,17 @@ describe("CacheExpiryProvider", () => {
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
     utimesSync(path, MTIME, MTIME);
     const provider = new CacheExpiryProvider(systemTimekeeper);
-    expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
+    expect(await provider.refresh("s", path, "change")).toEqual(ok(at(A)));
     expect(provider.expiryOf("s")).toEqual(ok(at(A)));
 
     // New bytes under the old stamp: the request believes the stamp.
     writeFileSync(path, entry({ ts: B, cacheRead: 1 }) + "\n");
     utimesSync(path, MTIME, MTIME);
-    expect(await provider.refresh("s", path)).toEqual(ok(at(A)));
+    expect(await provider.refresh("s", path, "change")).toEqual(ok(at(A)));
 
     // The stamp moved: read again.
     writeFileSync(path, entry({ ts: B, cacheRead: 1 }) + "\n\n");
-    expect(await provider.refresh("s", path)).toEqual(ok(at(B)));
+    expect(await provider.refresh("s", path, "change")).toEqual(ok(at(B)));
     expect(provider.expiryOf("s")).toEqual(ok(at(B)));
   });
 });

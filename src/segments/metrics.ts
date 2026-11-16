@@ -11,7 +11,7 @@ import type { ClaudeHookData, ParsedEntry, UserEntry } from "../utils/claude";
 // second instance (brandon-activity-ue7): what is left here is the projection.
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { debug, quietLogger, type DaemonLogger } from "../utils/logger";
-import { RefreshLedger } from "../utils/refresh-ledger";
+import { RefreshLedger, type RefreshTrigger } from "../utils/refresh-ledger";
 import type { Timekeeper } from "../time";
 import type { SessionId } from "../daemon/foundations/session-id";
 
@@ -121,10 +121,11 @@ export class MetricsProvider {
     this.fold = new TranscriptFold<MetricsState>(
       EMPTY,
       step,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
+      (opts.ledger ?? new RefreshLedger(logger)).declare<RefreshTrigger>({
         name: "metrics",
         scope: "session",
-        refresh: ["request"],
+        refresh: ["first", "period", "change"],
+        event: "step",
       }),
       opts.clock,
       logger,
@@ -137,9 +138,13 @@ export class MetricsProvider {
   async refresh(
     sessionId: SessionId,
     transcriptPath: string,
+    by: RefreshTrigger,
   ): Promise<Outcome<MetricsFold>> {
     debug(`Getting metrics from the transcript for session: ${sessionId}`);
-    return foldFrom(sessionId, await this.fold.read(sessionId, transcriptPath));
+    return foldFrom(
+      sessionId,
+      await this.fold.read(sessionId, transcriptPath, by),
+    );
   }
 
   // The session's metrics fold as its last refresh left it, for a draw.

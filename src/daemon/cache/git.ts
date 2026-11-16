@@ -348,11 +348,13 @@ export class GitDataProvider {
       name: "git",
       scope: "repo",
       refresh: ["first", "period", "change"],
+      event: "own",
     });
     this.prRefreshes = ledger.declare({
       name: "pr",
       scope: "repo",
       refresh: ["first", "period"],
+      event: "own",
     });
     if (opts.watchers) {
       this.watchers = opts.watchers;

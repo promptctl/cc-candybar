@@ -7,9 +7,9 @@ import { ok } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
 
 // [LAW:behavior-not-structure] The owner of the auto-compact window
-// (brandon-unfiled-3248.8ro6, step 1): every request asks, the file is read
+// (brandon-unfiled-3248.8ro6, step 1): every refresh asks, the file is read
 // only when it changed, and each read is logged once — a refusal that stands
-// is logged by the read that found it, never again by the requests after.
+// is logged by the read that found it, never again by the refreshes after.
 
 let dir: string;
 let settings: string;
@@ -38,41 +38,41 @@ const write = (text: string, mtimeS: number): void => {
 
 describe("AutoCompactProvider", () => {
   test("no file is Claude Code's own window, read once", () => {
-    expect(provider.window(settings)).toEqual(ok("auto"));
-    expect(provider.window(settings)).toEqual(ok("auto"));
-    expect(provider.getStats().refreshes).toEqual({ request: 1 });
+    expect(provider.window(settings, "change")).toEqual(ok("auto"));
+    expect(provider.window(settings, "change")).toEqual(ok("auto"));
+    expect(provider.getStats().refreshes).toEqual({ first: 0, period: 0, change: 1 });
   });
 
   test("the file is read again only when its stamp moved", () => {
     write(JSON.stringify({ autoCompactWindow: 400_000 }), 1_000);
-    expect(provider.window(settings)).toEqual(ok(400_000));
-    expect(provider.window(settings)).toEqual(ok(400_000));
-    expect(provider.getStats().refreshes).toEqual({ request: 1 });
+    expect(provider.window(settings, "change")).toEqual(ok(400_000));
+    expect(provider.window(settings, "change")).toEqual(ok(400_000));
+    expect(provider.getStats().refreshes).toEqual({ first: 0, period: 0, change: 1 });
 
     write(JSON.stringify({ autoCompactWindow: 1_000_000 }), 2_000);
-    expect(provider.window(settings)).toEqual(ok(1_000_000));
+    expect(provider.window(settings, "change")).toEqual(ok(1_000_000));
     expect(provider.getStats()).toEqual({
       entries: 1,
-      refreshes: { request: 2 },
+      refreshes: { first: 0, period: 0, change: 2 },
       failures: 0,
       abandoned: 0,
       lastMs: expect.any(Number),
     });
   });
 
-  test("a request whose stamp did not move wakes no reader of the window", () => {
+  test("a refresh whose stamp did not move wakes no reader of the window", () => {
     write(JSON.stringify({ autoCompactWindow: 400_000 }), 1_000);
-    provider.window(settings);
+    provider.window(settings, "change");
     let reads = 0;
     const stop = autorun(() => {
       provider.stored(settings);
       reads++;
     });
     try {
-      for (let request = 0; request < 3; request++) provider.window(settings);
+      for (let refresh = 0; refresh < 3; refresh++) provider.window(settings, "change");
       expect(reads).toBe(1);
       write(JSON.stringify({ autoCompactWindow: 1_000_000 }), 2_000);
-      provider.window(settings);
+      provider.window(settings, "change");
       expect(reads).toBe(2);
     } finally {
       stop();
@@ -81,13 +81,13 @@ describe("AutoCompactProvider", () => {
 
   test("a refusal is logged once, by the read that found it", () => {
     write(JSON.stringify({ autoCompactWindow: 5 }), 1_000);
-    const first = provider.window(settings);
+    const first = provider.window(settings, "change");
     expect(first.kind).toBe("failed");
-    expect(provider.window(settings)).toBe(first);
-    expect(provider.window(settings)).toBe(first);
+    expect(provider.window(settings, "change")).toBe(first);
+    expect(provider.window(settings, "change")).toBe(first);
     expect(lines).toEqual([
       expect.stringMatching(
-        /^warn autocompact refresh path=\S*settings\.json stamp=\S+ by=request outcome=failed reason=".*not a window \/autocompact accepts.*" took=\d+ms$/,
+        /^warn autocompact refresh path=\S*settings\.json stamp=\S+ by=change outcome=failed reason=".*not a window \/autocompact accepts.*" took=\d+ms$/,
       ),
     ]);
     expect(provider.getStats().failures).toBe(1);
@@ -97,12 +97,12 @@ describe("AutoCompactProvider", () => {
     const other = path.join(dir, "other.json");
     fs.writeFileSync(other, JSON.stringify({ autoCompactWindow: 300_000 }));
     write(JSON.stringify({ autoCompactWindow: 400_000 }), 1_000);
-    expect(provider.window(settings)).toEqual(ok(400_000));
-    expect(provider.window(other)).toEqual(ok(300_000));
-    expect(provider.window(settings)).toEqual(ok(400_000));
+    expect(provider.window(settings, "change")).toEqual(ok(400_000));
+    expect(provider.window(other, "change")).toEqual(ok(300_000));
+    expect(provider.window(settings, "change")).toEqual(ok(400_000));
     expect(provider.getStats()).toMatchObject({
       entries: 2,
-      refreshes: { request: 2 },
+      refreshes: { first: 0, period: 0, change: 2 },
     });
   });
 });

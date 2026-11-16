@@ -54,7 +54,7 @@ import {
 } from "../utils/outcome.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import {
-  REFRESH_LANES,
+  type BuiltinFacts,
   type SpeedObservation,
   type TodayFacts,
   UNREAD_RUN,
@@ -77,15 +77,12 @@ import {
   type ValuedField,
   type ValuedGlobals,
 } from "../config/globals-fields.js";
-import { type Instant } from "../utils/instant.js";
+import { dateOf, type Instant } from "../utils/instant.js";
 import type { Fact } from "../facts/fact.js";
 import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SourceRun } from "../var-system/sources.js";
-import type {
-  RefreshTimes,
-  ViewFacts,
-} from "../renderer-interface/request-context";
+import type { ViewFacts } from "../renderer-interface/request-context";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
@@ -295,7 +292,7 @@ export type DrawnPayload = RenderPayloadOf<Pending>;
 // [LAW:types-are-the-program] What a view keeps of it: everything but the
 // facts of the draw's own instant (DRAW_PROJECTIONS, which each draw hands
 // its binding), so no stored value moves with the clock.
-export type ViewPayload = Omit<DrawnPayload, "feeds" | "today">;
+export type ViewPayload = Omit<DrawnPayload, "feeds" | "today" | "speed">;
 // The control's facts (src/segments/autocompact.ts) — or the refusal that the
 // settings file could not be read, carried as text, so the control says why
 // it cannot show the window.
@@ -689,20 +686,9 @@ export function renderWidth(hints: ClientHints): number {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
 
-// [LAW:nothing-unseen] The render event's `refreshed=`: each lane the
-// request's arrival refreshed, with how long it took, or `…` while the refresh
-// was still out when the answer was drawn: its times then land on a
-// `refreshed` line of their own, which names the request.
-export function refreshedFact(refreshed: RefreshTimes | null): string {
-  return refreshed === null
-    ? "…"
-    : REFRESH_LANES.map((lane) => `${lane}:${refreshed[lane]}ms`).join(",");
-}
-
 // Whether a request still waits on its world state before it draws: some
-// fact whose key has never answered, among every built-in a declaration keys
-// and every plugin source, except the two whose first answer is slow and
-// external: today's day sums (a scan of every transcript under the Claude Code
+// fact that has never answered, among every built-in and every plugin source,
+// except the two whose first answer is slow and external: today's day sums (a scan of every transcript under the Claude Code
 // directory) and the branch's PR (a forge's network call). A first bar that
 // waited on them would be as slow as the slowest, and a bar with every
 // built-in placed always reads both, so they draw pending and land in a later
@@ -718,14 +704,32 @@ export function awaitsReading(
   named: Iterable<Run>,
 ): boolean {
   return [
-    builtins.git,
-    builtins.tmux,
-    builtins.hostName,
-    builtins.hostUser,
+    ...AWAITED_BUILTINS.map((name) => builtins[name]),
     ...Object.values(sources),
     ...[...named].map((run) => (runs[run.digest] ?? UNREAD_RUN).reading),
   ].some(awaitedReading);
 }
+
+// [LAW:types-are-the-program] Whether a request waits on each built-in, every
+// one named, so a new built-in fails the build here until it says.
+const AWAITED: Readonly<Record<keyof BuiltinFacts, boolean>> = {
+  session: true,
+  today: false,
+  speed: true,
+  context: true,
+  metrics: true,
+  activity: true,
+  cache: true,
+  autocompact: true,
+  git: true,
+  pr: false,
+  tmux: true,
+  hostName: true,
+  hostUser: true,
+};
+const AWAITED_BUILTINS = (
+  Object.keys(AWAITED) as ReadonlyArray<keyof BuiltinFacts>
+).filter((name) => AWAITED[name]);
 
 // [LAW:single-enforcer] The one rule for whether a draw waits on a fact: it
 // has never answered. Why it is pending decides, never which fact it is
@@ -734,20 +738,17 @@ export function awaitsReading(
 export const awaitedReading = (fact: Reading<unknown>): boolean =>
   fact.kind === "pending" && fact.why === "unread";
 
-// A request's wait on its world state (rule 1 of the model): it refreshes
-// what its arrival triggers (`refresh`, the host's), then waits until its session's world state has
-// no fact it waits on that has never answered (`awaitsReading`), or `signal`
-// ends it. The collector stamps a refresh's landing in the action that stored
-// it and hands it in at once, so the store holds it before the refresh
-// resolves; the answer is then drawn from the same world state a frame drawn
-// after it reads.
+// A request's wait on its world state (rule 1 of the model): it waits until
+// its session's world state has no fact it waits on that has never answered
+// (`awaitsReading`), or `signal` ends it. The request triggers no read: the
+// collector's reads follow the world, and their landings reach the renderer
+// as world states, so the answer is drawn from the same world state a frame
+// drawn after it reads.
 export async function settleWorld(
-  refresh: () => Promise<unknown>,
   worldState: () => WorldState,
   named: () => Iterable<Run>,
   signal: AbortSignal,
 ): Promise<void> {
-  await refresh();
   try {
     await when(() => !awaitsReading(worldState(), named()), { signal });
   } catch (e) {
@@ -814,7 +815,6 @@ export function composePayload(
     metrics: metricsOver(unstamped(built.metrics), hookData),
     activity: unstamped(built.activity),
     cache: unstamped(built.cache),
-    speed: unstamped(built.speed),
     autoCompact: unstamped(built.autocompact),
     git: unstamped(built.git),
     pr: unstamped(built.pr),
@@ -884,13 +884,6 @@ export function composePayload(
   const burn: BurnPayload | Pending | undefined =
     firstPending(lanes.usage, lanes.metrics) ??
     burnOf(valueOf(lanes.usage)?.cost, valueOf(lanes.metrics)?.sessionDuration);
-  // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
-  // history fold independently from one observation — either can be present
-  // without the other (a fresh burst has rates but a one-sample history; an
-  // idle-after-burst session has a history but no current rate). Merge
-  // whatever each yields; the whole `speed` key drops only when both are
-  // absent.
-  const speedPayload = over(lanes.speed, speedPayloadOf);
   // [LAW:types-are-the-program] Partial projections so absent provider data
   // travels as missing fields all the way to the inputs. Each provider's
   // null sub-fields become absent keys here; an input's fallback chain
@@ -980,7 +973,6 @@ export function composePayload(
     resumeCommand: resumeCommand(workspace, sessionId, hints.claudeConfigDir),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(burn !== undefined && { burn }),
-    ...(speedPayload !== undefined && { speed: speedPayload }),
     ...(fiveHour !== undefined && {
       block: {
         // [LAW:one-source-of-truth] Both fields read straight from the
@@ -1109,12 +1101,46 @@ function burnOf(
   return costPerHour === undefined ? undefined : { costPerHour };
 }
 
-function speedPayloadOf(obs: SpeedObservation): SpeedPayload | undefined {
-  const rates = projectSpeed(obs);
+// [LAW:one-source-of-truth] `speed` at a draw's instant: a rate is the burn
+// between the last two samples, which says nothing of now once the draw is
+// further past the last sample than one sample window, so an idle session's
+// rate ends with no sample taken (DRAW_PROJECTIONS).
+// [LAW:dataflow-not-control-flow] The rates and the burn-rate history fold
+// independently from one observation — an
+// idle-after-burst session has a history but no current rate — and the whole
+// `speed` key drops only when both are absent.
+export function speedOf(
+  fact: Reading<SpeedObservation>,
+  at: Instant,
+): SpeedPayload | Pending | undefined {
+  if (fact.kind === "pending") return pendingOf(fact.why);
+  if (fact.kind !== "ok") return undefined;
+  const obs = fact.value;
+  const current = dateOf(at).getTime() - obs.cur.atMs <= MAX_SPEED_SAMPLE_MS;
+  const rates = current ? projectSpeed(obs) : undefined;
   const history = projectSpeedHistory(obs);
   return rates !== undefined || history !== undefined
     ? { ...rates, ...(history !== undefined && { history }) }
     : undefined;
+}
+
+// [LAW:one-source-of-truth] The world state's facts every draw projects at
+// its own instant (DRAW_PROJECTIONS) — the daemon's, the demo's and check's
+// alike, so none of them draws a projection another leaves out.
+export function instantFacts(
+  builtins: {
+    readonly today: Reading<TodayFacts>;
+    readonly speed: Reading<SpeedObservation>;
+  },
+  at: Instant,
+): {
+  readonly today: TodayPayload | Pending | undefined;
+  readonly speed: SpeedPayload | Pending | undefined;
+} {
+  return {
+    today: todayOf(builtins.today, at),
+    speed: speedOf(builtins.speed, at),
+  };
 }
 
 // [LAW:one-source-of-truth] `today` at a draw's instant: the day of the

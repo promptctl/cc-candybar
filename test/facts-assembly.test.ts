@@ -124,7 +124,7 @@ function rig(git?: Outcome<unknown>) {
 }
 
 const sampled = async (r: ReturnType<typeof rig>) => {
-  await settleLanes(r.inputs, T0);
+  await settleLanes(r.inputs);
   return r;
 };
 

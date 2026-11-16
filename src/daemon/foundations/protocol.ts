@@ -63,7 +63,7 @@ export interface RenderRequest {
   args: string[];
   cwd: string;
   // When the client hangs up, in epoch milliseconds: the daemon's wait for
-  // this request's refreshes ends early enough to draw before it
+  // this request's world state ends early enough to draw before it
   // (src/daemon/foundations/request-deadline.ts). Absent from a client too old to state
   // one. Never a hint: it is new on every request, and the hints are recorded
   // per session whenever they change.

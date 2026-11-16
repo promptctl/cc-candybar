@@ -20,11 +20,11 @@
 // is now shared, so independence costs one more bounded, gated tail read of
 // O(bytes appended since the last render).
 
-import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
+import type { ParsedEntry } from "../utils/claude";
 import type { ToolCall, TodoItem } from "../utils/transcript-activity";
 import { TranscriptFold, type FoldOutcome } from "../utils/transcript-fold";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
-import { RefreshLedger } from "../utils/refresh-ledger";
+import { RefreshLedger, type RefreshTrigger } from "../utils/refresh-ledger";
 import type { Timekeeper } from "../time";
 import { failed, ok, type Outcome, type Reading } from "../utils/outcome";
 import type { SessionId } from "../daemon/foundations/session-id";
@@ -159,10 +159,11 @@ export class ActivityProvider {
     this.fold = new TranscriptFold<ActivityState>(
       EMPTY,
       step,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
+      (opts.ledger ?? new RefreshLedger(logger)).declare<RefreshTrigger>({
         name: "activity",
         scope: "session",
-        refresh: ["request"],
+        refresh: ["first", "period", "change"],
+        event: "step",
       }),
       opts.clock,
       logger,
@@ -174,13 +175,14 @@ export class ActivityProvider {
   // transcript yet, or one that has done nothing, is a real EMPTY record — and
   // the payload projection drops every field of an empty one, so "nothing is
   // happening" reaches the templates as absence either way.
-  async getActivityInfo(
+  async refresh(
     sessionId: SessionId,
-    hookData: ClaudeHookData,
+    transcriptPath: string,
+    by: RefreshTrigger,
   ): Promise<Outcome<ActivityInfo>> {
     return activityFrom(
       sessionId,
-      await this.fold.read(sessionId, hookData.transcript_path),
+      await this.fold.read(sessionId, transcriptPath, by),
     );
   }
 

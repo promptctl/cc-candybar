@@ -98,7 +98,7 @@ describe("`check`'s representative payload", () => {
       (key) => (key === "preset" ? preset : null),
       () => false,
     );
-    const { today, ...payload } = checkPayload(config, effective, null, AT);
-    expect({ payload, today }).toMatchSnapshot();
+    const { today, speed, ...payload } = checkPayload(config, effective, null, AT);
+    expect({ payload, today, speed }).toMatchSnapshot();
   });
 });

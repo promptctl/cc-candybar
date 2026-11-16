@@ -187,12 +187,12 @@ export interface TodayFacts {
   readonly own: Readonly<Record<string, DayUsage>>;
 }
 
-// The lanes a request's own arrival refreshes (refreshPayload). [LAW:one-source-of-truth]
-// The list is the one declaration: the type derives from it, and a facts
-// document's diagnostics walk it in this order.
+// The lanes a session's transcript read refreshes
+// (src/daemon/cache/transcript-lanes.ts). [LAW:one-source-of-truth] The list is
+// the one declaration: the type derives from it, and a facts document's
+// diagnostics walk it in this order.
 export const REFRESH_LANES = [
   "session",
-  "today",
   "context",
   "metrics",
   "activity",

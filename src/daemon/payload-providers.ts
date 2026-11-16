@@ -31,6 +31,7 @@ import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
 import { ManagedStorage } from "./cache/managed-storage.js";
 import type { SourceRuns } from "./source-runs.js";
+import { TranscriptLanes, type LaneOwners } from "./cache/transcript-lanes.js";
 
 // [LAW:single-enforcer] Every provider records its refreshes in the caller's
 // one ledger, so its stats read every source in one place.
@@ -51,18 +52,11 @@ export function createPayloadProviders(opts: {
   // The caller's one owner of every `shell` and `file` run, whose stats and
   // close are the caller's.
   readonly sourceRuns: SourceRuns;
-}): RenderPayloadDeps {
+}): RenderPayloadDeps & { close(): void } {
   const { launcher, clock, logger, ledger } = opts;
-  return {
-    home: opts.host.home,
-    hostService: new HostService({ clock, logger, ledger }),
-    gitProvider: new GitDataProvider({
-      inner: new GitService(launcher),
-      watchers: opts.watchers,
-      clock,
-      logger,
-      ledger,
-    }),
+  // [LAW:one-source-of-truth] The owners the transcript lanes refresh are the
+  // ones the payload reads.
+  const lanes = {
     usageStore: new SessionUsageStore({
       host: opts.host,
       clock,
@@ -72,9 +66,27 @@ export function createPayloadProviders(opts: {
     contextProvider: new ContextProvider({ clock, logger, ledger }),
     metricsProvider: new MetricsProvider({ clock, logger, ledger }),
     activityProvider: new ActivityProvider({ clock, logger, ledger }),
-    tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
     autoCompact: new AutoCompactProvider(clock, logger, ledger),
     cacheExpiry: new CacheExpiryProvider(clock, logger, ledger),
+    faults: new RefreshFaults(),
+  } satisfies LaneOwners;
+  const owners = {
+    hostService: new HostService({ clock, logger, ledger }),
+    gitProvider: new GitDataProvider({
+      inner: new GitService(launcher),
+      watchers: opts.watchers,
+      clock,
+      logger,
+      ledger,
+    }),
+    tmuxService: new TmuxService({ launcher, clock, logger, ledger }),
+    transcriptLanes: new TranscriptLanes({
+      owners: lanes,
+      watchers: opts.watchers,
+      clock,
+      logger,
+      ledger,
+    }),
     managedStorage: new ManagedStorage({
       watchers: opts.watchers,
       fileEvents: opts.fileEvents,
@@ -82,9 +94,24 @@ export function createPayloadProviders(opts: {
       logger,
       ledger,
     }),
+  };
+  return {
+    ...lanes,
+    ...owners,
+    home: opts.host.home,
     sourceRuns: opts.sourceRuns,
-    faults: new RefreshFaults(),
     log: opts.logger,
-    clock,
+    // [LAW:single-enforcer] The one close of every owner built here: a held
+    // entry's period re-arms after every read, so an owner a caller forgets
+    // keeps its timers for good. The transcript lanes go before the usage
+    // store their reads fill.
+    close: () => {
+      owners.gitProvider.close();
+      owners.transcriptLanes.close();
+      lanes.usageStore.close();
+      owners.tmuxService.close();
+      owners.hostService.close();
+      owners.managedStorage.close();
+    },
   };
 }

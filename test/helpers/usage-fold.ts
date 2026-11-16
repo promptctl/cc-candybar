@@ -9,5 +9,5 @@ export function usageFold(
   sessionId: SessionId,
   transcriptPath: string | undefined,
 ) {
-  return store.request(sessionId, transcriptPath).usage();
+  return store.refresh(sessionId, transcriptPath, "change").usage();
 }

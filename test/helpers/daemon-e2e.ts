@@ -121,6 +121,7 @@ async function renderAnswer(
   const sessionId = String(
     (request.hookData as Partial<ClaudeHookData> | undefined)?.session_id,
   );
+  const asked = logLines(log).length;
   for (let attempt = 1; ; attempt++) {
     const before = answeredEvents(log, sessionId).length;
     const linesBefore = logLines(log).length;
@@ -140,7 +141,11 @@ async function renderAnswer(
     );
     if (!resp.ok) {
       if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
-      throw new Error(`render failed: ${resp.error} (${resp.code})`);
+      // [LAW:nothing-unseen] What the daemon logged across every attempt,
+      // so a runner that failed says where its turns' time went.
+      throw new Error(
+        `render failed: ${resp.error} (${resp.code})\n${logLines(log).slice(asked).join("\n")}`,
+      );
     }
     let event = "";
     await until(

@@ -1,9 +1,9 @@
-// [LAW:single-enforcer] The host's reads of a session's world: the refreshes a
-// request's arrival triggers and the lanes the collector declares and reads,
-// over the providers that own each source.
+// [LAW:single-enforcer] The host's reads of a session's world: the lanes the
+// collector declares and reads, over the providers that own each source.
 
 import { inspect } from "node:util";
 import type { ClientHints } from "./foundations/protocol.js";
+import type { TranscriptLanes } from "./cache/transcript-lanes.js";
 import type { GitInfo } from "../segments/git.js";
 import {
   ABSENT,
@@ -38,7 +38,6 @@ import type { AutoCompactWindow } from "../segments/autocompact.js";
 import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type { Holds } from "../utils/holds.js";
-import { dateOf, type Instant } from "../utils/instant.js";
 import type { RefreshFaults } from "./refresh-faults.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { ManagedStorage } from "./cache/managed-storage.js";
@@ -48,11 +47,8 @@ import {
   type SourceRuns,
 } from "./source-runs.js";
 import type { JsonValue } from "../var-system/types.js";
-import type { AdapterToHost } from "../renderer-interface/adapter.js";
-import { elapsedMs, type Timekeeper } from "../time";
 import type {
   ViewFacts,
-  RefreshTimes,
   Subscribed,
 } from "../renderer-interface/request-context";
 
@@ -87,11 +83,12 @@ export interface RenderPayloadDeps {
   readonly cacheExpiry: CacheExpiryProvider;
   // The machine's identity: its host name and the daemon's user.
   readonly hostService: HostService;
-  // The log for a session lane whose refresh threw: a bug no owner saw.
+  // [LAW:single-enforcer] The one trigger of every session's transcript
+  // lanes: a session's declaration holds its entry, whose watch and period
+  // refresh the providers above.
+  readonly transcriptLanes: TranscriptLanes;
+  // The log for a read that threw: a bug no owner saw.
   readonly log: DaemonLogger;
-  // [LAW:effects-at-boundaries] The daemon's clock, which times each lane's
-  // refresh and stamps its facts.
-  readonly clock: Pick<Timekeeper, "monotonic" | "now">;
   // Each session lane whose refresh threw, until one runs clean.
   readonly faults: RefreshFaults;
 }
@@ -109,29 +106,6 @@ function settingsPathOf(hints: ClientHints, home: string): string {
   return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir, home));
 }
 
-// [LAW:single-enforcer] A statusline request's own triggers
-// (brandon-unfiled-3248.8ro6, step 3): it refreshes every session source the
-// session has — the transcript's folds, the cache expiry, the speed sample,
-// the auto-compact window, today's first scan — each stamp-gated by its
-// owner, so an unchanged transcript reads nothing. A frame never calls this:
-// it draws the values these refreshes stored.
-//
-// [LAW:no-silent-failure] A refresh's contract is to answer, never to throw or
-// reject, so a throw — the owner's or the lane's own code around it — is a
-// bug, logged here where it is caught and stored as that lane's failure
-// (RefreshFaults) until a refresh of it runs clean, so the view's payload,
-// derived from what is stored, reads it failed rather than not answered.
-//
-// `at` is the request's arrival, the instant its speed sample is taken at.
-// It answers how long each lane took, once every lane has landed.
-// [LAW:one-source-of-truth] What a renderer reaches of the host's readings:
-// the refresh over these providers.
-export const readingsHost = (
-  deps: RenderPayloadDeps,
-): Pick<AdapterToHost, "refresh"> => ({
-  refresh: (facts, at) => refreshPayload({ ...facts, deps }, at),
-});
-
 // [LAW:nothing-unseen] The repository and usage caches' tallies, as a render
 // event's facts show them: what the host's caches answered by the end of a
 // render.
@@ -147,55 +121,6 @@ export function cacheTallyFacts(
     git: tally(deps.gitProvider.getStats()),
     usage: tally(deps.usageStore.getStats()),
   };
-}
-
-export async function refreshPayload(
-  inputs: PayloadInputs,
-  at: Instant,
-): Promise<RefreshTimes> {
-  const { hookData, deps, hints } = inputs;
-  const sessionId = hookData.session_id;
-  // The request's one refresh of its session's record, which the session,
-  // today and speed lanes share.
-  const session = deps.usageStore.request(sessionId, hookData.transcript_path);
-  const lane = async (
-    name: RefreshLane,
-    run: () => Promise<unknown>,
-  ): Promise<readonly [RefreshLane, number]> => {
-    const startedAt = deps.clock.monotonic();
-    let threw: string | null = null;
-    try {
-      await run();
-    } catch (e) {
-      deps.log("error", `${name} lane threw: ${inspect(e)}`);
-      threw = `${name}: ${String(e)}`;
-    }
-    deps.faults.refreshed(sessionId, name, threw);
-    return [name, elapsedMs(deps.clock, startedAt)];
-  };
-  // [LAW:types-are-the-program] One run per lane, every lane named.
-  const runs: Readonly<Record<RefreshLane, () => Promise<unknown>>> = {
-    session: () => session.usage(),
-    today: () => session.today(),
-    context: () =>
-      deps.contextProvider.refresh(sessionId, hookData.transcript_path),
-    metrics: () =>
-      deps.metricsProvider.refresh(sessionId, hookData.transcript_path),
-    activity: () => deps.activityProvider.getActivityInfo(sessionId, hookData),
-    // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
-    // seam, made only when the transcript's stamp moved.
-    cache: () => deps.cacheExpiry.refresh(sessionId, hookData.transcript_path),
-    // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
-    // lane reads, one sample per request: a frame takes none, so how often the
-    // bar is drawn moves no rate.
-    speed: () => session.speed(dateOf(at).getTime()),
-    autocompact: async () =>
-      deps.autoCompact.window(settingsPathOf(hints, deps.home)),
-  };
-  const took = await Promise.all(
-    REFRESH_LANES.map((name) => lane(name, runs[name])),
-  );
-  return Object.fromEntries(took) as RefreshTimes;
 }
 
 // Each lane's value as its owner holds it now. The keyed lanes' (git, tmux)
@@ -238,10 +163,12 @@ export interface Readings {
 // The owners of the keyed lanes, which a declaration takes its holds in.
 export type KeyedOwners = Pick<
   RenderPayloadDeps,
+  | "home"
   | "gitProvider"
   | "tmuxService"
   | "hostService"
   | "usageStore"
+  | "transcriptLanes"
   | "managedStorage"
   | "sourceRuns"
 >;
@@ -255,6 +182,10 @@ export interface DeclaredLanes {
   readonly hostName: Lane<string>;
   readonly hostUser: Lane<string>;
   readonly today: Lane<DaySums>;
+  // The session's transcript lanes' entry: its readings live with each
+  // lane's owner, so it answers only whether the entry is there to refresh
+  // them.
+  readonly transcript: Lane<null>;
   // [LAW:dataflow-not-control-flow] One lane per plugin source the config
   // declares, by the source variable's name: no fixed list — the set is what
   // the loaded plugins declare.
@@ -282,6 +213,7 @@ export function settledLanes(
     hostName: lane,
     hostUser: lane,
     today: lane,
+    transcript: lane,
     sources: new Map([...plugins.keys()].map((name) => [name, lane])),
     runs: new Map(
       [...runs.keys()].map((digest) => [
@@ -346,6 +278,13 @@ export function declareLanes(
     today: declare("today", () =>
       owners.usageStore.declareToday(holds, facts.hints.claudeConfigDir),
     ),
+    transcript: declare("transcript", () =>
+      owners.transcriptLanes.declare(holds, {
+        session: facts.hookData.session_id,
+        transcript: facts.hookData.transcript_path,
+        settings: settingsPathOf(facts.hints, owners.home),
+      }),
+    ),
     // [LAW:one-source-of-truth] Each source's hold at (its storage folder,
     // the session the checkpoint parsed).
     sources: new Map(
@@ -390,15 +329,24 @@ export function readingsOf(
   // [LAW:no-silent-failure] A read that throws is a bug in its owner: logged
   // here, by the read that met it — a frame's included, whose failures go
   // nowhere else — and that lane's failure, so it costs its own cells, never
-  // the bar. A lane whose refresh threw is that failure (RefreshFaults).
-  const read = <T>(lane: RefreshLane, value: () => T): T | Outcome<never> => {
+  // the bar. A lane whose refresh threw is that failure (RefreshFaults), and
+  // every lane is the failure of an entry that cannot refresh them (its
+  // declaration threw, its source closed).
+  const entry = lanes.transcript.current();
+  // `name` is what the read is of, which is its lane but for `today`.
+  const read = <T>(
+    lane: RefreshLane,
+    value: () => T,
+    name: string = lane,
+  ): T | Outcome<never> => {
+    if (entry.kind === "failed") return entry;
     const fault = deps.faults.of(sessionId, lane);
     if (fault !== undefined) return fault;
     try {
       return value();
     } catch (e) {
-      deps.log("error", `${lane} read threw: ${inspect(e)}`);
-      return failed(`${lane}: ${String(e)}`, "read");
+      deps.log("error", `${name} read threw: ${inspect(e)}`);
+      return failed(`${name}: ${String(e)}`, "read");
     }
   };
   const laneReadings: Lanes = {
@@ -429,8 +377,12 @@ export function readingsOf(
   };
   return {
     lanes: laneReadings,
-    today: read("today", () =>
-      todayReading(lanes.today, deps.usageStore, sessionId),
+    // The session's own days are its record's, so its lane's failure is
+    // today's.
+    today: read(
+      "session",
+      () => todayReading(lanes.today, deps.usageStore, sessionId),
+      "today",
     ),
     faults: REFRESH_LANES.flatMap((lane) => {
       const fault = deps.faults.of(sessionId, lane);

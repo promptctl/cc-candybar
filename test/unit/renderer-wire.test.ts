@@ -51,7 +51,7 @@ function recordingHost(): { host: AdapterToHost; saw: string[] } {
   return {
     saw,
     host: {
-      ...inertHost({} as never),
+      ...inertHost(),
       log: (_level, msg) => saw.push(`log ${msg}`),
       clicks: {
         gone: async () => {

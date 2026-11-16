@@ -138,6 +138,29 @@ describe("KeyedSource", () => {
     expect(f.calls).toHaveLength(2);
   });
 
+  test("a change heard while nobody holds a key is read at once when held again, not on its period", async () => {
+    const f = fakeRead();
+    source = sourceOf(f.read);
+    const holds = new Holds();
+    const first = laneOutcome(source.declare(holds, "a"));
+    f.answer(0, ok("before"));
+    await first;
+    holds.declare(() => {});
+    await jest.advanceTimersByTimeAsync(EVERY.okMs / 2);
+    // Written while nobody held it: the change reads nothing yet.
+    source.changed(() => true);
+    expect(f.calls).toHaveLength(1);
+    // The period is not due, but the change is owed: the hold's return
+    // reads it, drawing the kept value meanwhile.
+    const lane = source.declare(holds, "a");
+    expect(f.calls).toHaveLength(2);
+    expect(lane.current()).toEqual(ok("before"));
+    f.answer(1, ok("written"));
+    await settled();
+    expect(lane.current()).toEqual(ok("written"));
+    expect(source.stats().refreshes).toMatchObject({ first: 1, change: 1 });
+  });
+
   test("two homes holding one key: the period runs until the last releases it", async () => {
     const f = fakeRead();
     source = sourceOf(f.read);

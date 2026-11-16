@@ -4,13 +4,13 @@ import { quietLogger, type DaemonLogger } from "./logger";
 // What asks a source to read, one vocabulary for every source
 // (design-docs/SOURCES-AND-FRAMES.md, "Refresh"): a key's first read, its
 // period's tick, a change (a watched file, a key's input, a hold returning to
-// an entry of a source with no period), a session's statusline request, or a
-// supersede's resume (the daemon itself changed what the key reads).
+// an entry of a source with no period), or a supersede's resume (the daemon
+// itself changed what the key reads). A request is none of them: reads follow
+// the world, so how often a client ticks never decides what is read.
 export const REFRESH_TRIGGERS = [
   "first",
   "period",
   "change",
-  "request",
   "supersede",
 ] as const;
 export type RefreshTrigger = (typeof REFRESH_TRIGGERS)[number];
@@ -35,6 +35,11 @@ export interface SourceDeclaration<Trigger extends RefreshTrigger> {
   readonly name: string;
   readonly scope: SourceScope;
   readonly refresh: readonly Trigger[];
+  // [LAW:nothing-unseen] Which event a refresh is. `own`: a unit of work, so
+  // each writes its line. `step`: one step of another source's refresh (a
+  // session lane read inside its transcript entry's), which is the unit's one
+  // event, so a step writes a line only when it fails; it still counts.
+  readonly event: "own" | "step";
 }
 
 // [LAW:verifiable-goals] What one source has done since the daemon started:
@@ -84,7 +89,7 @@ export class RefreshLedger {
     };
     for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
     this.tallies.set(key, tally);
-    return new Refreshes(tally, this.logger);
+    return new Refreshes(tally, declaration.event, this.logger);
   }
 
   // Every source declared, by scope then name.
@@ -109,18 +114,6 @@ export class RefreshLedger {
   }
 }
 
-// [LAW:nothing-unseen] Which refreshes are an event of their own. A request's
-// are facts of its render event (`refreshed=`), the one event of that unit of
-// work, so they write no line beside it; every other trigger's refresh is its
-// own unit of work. A failed refresh writes its line whatever asked for it.
-const OWN_EVENT: Readonly<Record<RefreshTrigger, boolean>> = {
-  first: true,
-  period: true,
-  change: true,
-  request: false,
-  supersede: true,
-};
-
 // [LAW:one-source-of-truth] The one spelling of a source's refresh event and
 // of the counts its record reports, whatever schedules its reads: a failed
 // refresh logs at warn, once, so a read of the stored value never logs it
@@ -128,6 +121,7 @@ const OWN_EVENT: Readonly<Record<RefreshTrigger, boolean>> = {
 export class Refreshes<Trigger extends RefreshTrigger> {
   constructor(
     private readonly tally: Tally,
+    private readonly event: SourceDeclaration<Trigger>["event"],
     private readonly logger: DaemonLogger,
   ) {}
 
@@ -147,8 +141,10 @@ export class Refreshes<Trigger extends RefreshTrigger> {
     this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
+    // [LAW:nothing-unseen] A unit of work writes its line; a step is a fact
+    // of its unit's event, so it writes one only to say it failed.
     const failure = outcome.kind === "failed";
-    if (!failure && !OWN_EVENT[by]) return;
+    if (!failure && this.event === "step") return;
     const why = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure ? "warn" : "info",

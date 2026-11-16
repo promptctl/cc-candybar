@@ -6,6 +6,7 @@
 // owners, the three whose answers the hook used to be laid into.
 
 import { daemonFactsOf } from "./helpers/daemon-facts";
+import { heldClock } from "./helpers/held-clock";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +16,6 @@ import { assembleFacts } from "../src/daemon/facts-assembly";
 import { composePayload } from "../src/renderer/render-payload";
 import {
   readingsOf,
-  refreshPayload,
   settledLanes,
   type PayloadInputs,
   type RenderPayloadDeps,
@@ -30,7 +30,10 @@ import { instantOf } from "../src/utils/instant";
 import { ABSENT, pendingOf } from "../src/utils/outcome";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
 import { HOST } from "./helpers/host";
-import { absentOwners } from "./helpers/payload-owners";
+import {
+  absentOwners,
+  readTranscriptLanes,
+} from "./helpers/payload-owners";
 import { globalsFor } from "./helpers/selection";
 
 const SID = sessionIdOf("hook-split");
@@ -137,10 +140,14 @@ test("two hooks that differ only in their instantaneous fields read one document
   const one = inputsOf(hookAt(path, 1));
   const two = inputsOf(hookAt(path, 2));
 
-  // Each document is its own hook's refresh and read, so a hook value either
+  // Each document is its own hook's read of the lanes, so a hook value either
   // one stored would show as a difference.
   const documentOf = async (inputs: PayloadInputs) => {
-    await refreshPayload(inputs, AT);
+    await readTranscriptLanes(
+      inputs.deps,
+      inputs,
+      heldClock(new Date(1_700_000_000_000)),
+    );
     return assembleFacts(
       undefined,
       SID,

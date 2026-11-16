@@ -222,7 +222,7 @@ test("the config load line names the load's projections", () => {
     /: projections=(\S+) /
       .exec(text)![1]!
       .split(",")
-      .filter((name) => !/^(today|feeds|drawing)\./.test(name));
+      .filter((name) => !/^(today|speed|feeds|drawing)\./.test(name));
   try {
     expect(
       named(

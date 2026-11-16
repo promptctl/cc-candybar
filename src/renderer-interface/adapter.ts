@@ -18,7 +18,6 @@ import type { ClientHint } from "../client-hint.js";
 import type { LaunchCategory, LaunchResult } from "../proc/launcher.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import type { TypeResult } from "../claude-input/typing.js";
-import type { RefreshTimes, ViewFacts } from "./request-context.js";
 import type {
   RenderCacheStats,
   StatsSnapshot,
@@ -177,9 +176,6 @@ export interface AdapterToHost {
       reason: string,
     ) => void;
   };
-  // The providers' refresh a request's arrival triggers, answered by how
-  // long each lane took.
-  readonly refresh: (facts: ViewFacts, at: Instant) => Promise<RefreshTimes>;
   readonly doctor: DoctorReads;
   // What turning an animation lane on or off takes.
   readonly laneSetups: {
