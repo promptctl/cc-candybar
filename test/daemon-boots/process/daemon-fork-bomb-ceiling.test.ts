@@ -19,6 +19,11 @@ import { until } from "../../helpers/until";
 // acceptance asks for ("a regression that lets the count run away fails CI").
 
 const CEILING = 2;
+// [LAW:verifiable-goals] How long any one step may take before the test
+// calls it hung, by name. It claims nothing about speed: every step here
+// boots Node or waits on one, and how long that takes measures the machine's
+// load, not the breaker. A rejected wait still runs the test's cleanup.
+const HUNG_MS = 20_000;
 
 // A dedicated pool (not the suite's shared default) and a dedicated registry
 // dir (not the machine's real shared one, see daemonRegistryDir()'s
@@ -71,21 +76,13 @@ function makeFixture(prefix: string, registryDir: string): Fixture {
   };
 }
 
-// [LAW:verifiable-goals] How the child ended, with no clock of its own: how
-// long a Node boot takes measures the machine's load, not the breaker, and
-// the test's timeout bounds a child that never exits.
-function exited(
-  child: ChildProcess,
-): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
-  if (child.exitCode !== null || child.signalCode !== null)
-    return Promise.resolve({ code: child.exitCode, signal: child.signalCode });
-  return new Promise((resolve) =>
-    child.once("exit", (code, signal) => resolve({ code, signal })),
-  );
-}
+const ended = (child: ChildProcess): boolean =>
+  child.exitCode !== null || child.signalCode !== null;
 
 describe("daemon-side fork-bomb circuit breaker (integration)", () => {
-  jest.setTimeout(30_000);
+  // Five named steps, each bounded by HUNG_MS, so the test's own timeout
+  // never fires before one of them has said which hung.
+  jest.setTimeout(6 * HUNG_MS);
 
   test("refuses the (ceiling+1)th isolated daemon; a dead sibling's slot is reclaimed", async () => {
     const pool = createDaemonPool(tmpDir("cc-candybar-breaker-pool-"), 4);
@@ -112,8 +109,8 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
         d2.release();
       });
 
-      await until(() => isConnectable(fx1.sockPath), "d1's socket");
-      await until(() => isConnectable(fx2.sockPath), "d2's socket");
+      await until(() => isConnectable(fx1.sockPath), "d1's socket", HUNG_MS);
+      await until(() => isConnectable(fx2.sockPath), "d2's socket", HUNG_MS);
 
       // Ceiling is full (2/2 live isolated daemons registered). The 3rd must
       // refuse — exiting with failure, never binding its own socket.
@@ -129,17 +126,24 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
       // this breaker), so the file's on-disk content right after exit is not
       // a reliable signal. Exit code + "never bound a socket" are the
       // load-bearing, deterministic proof that the breaker fired.
-      const { code, signal } = await exited(d3.child);
-      expect(signal).toBeNull();
-      expect(code).toBe(1);
+      await until(() => ended(d3.child), "d3's exit", HUNG_MS);
+      expect(d3.child.signalCode).toBeNull();
+      expect(d3.child.exitCode).toBe(1);
       expect(fs.existsSync(fx3.sockPath)).toBe(false);
 
       // Kill one of the two admitted daemons WITHOUT its graceful shutdown
       // path (SIGKILL — the runaway/OOM case this epic fights) so its
       // registry entry is left behind as a stale file: the exact condition
       // admitDaemon()'s sweep exists to reclaim.
+      // The wrapper's exit is not the worker's, and the worker's live
+      // registry entry is what holds the slot: its socket stops answering
+      // once the worker itself is gone.
       d2.killTree();
-      await exited(d2.child);
+      await until(
+        () => isConnectable(fx2.sockPath).then((up) => !up),
+        "d2's worker gone",
+        HUNG_MS,
+      );
 
       const fx4 = makeFixture("cc-candybar-breaker-4-", registryDir);
       const d4 = await spawnTestDaemon(fx4.env, pool);
@@ -147,7 +151,9 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
         d4.killTree();
         d4.release();
       });
-      await until(() => isConnectable(fx4.sockPath), "d4's socket");
+      // d4 is d3's control: a fixture like it boots once a slot is free, so
+      // d3's refusal was the ceiling's.
+      await until(() => isConnectable(fx4.sockPath), "d4's socket", HUNG_MS);
     } finally {
       for (const cleanup of cleanups.reverse()) {
         try {
