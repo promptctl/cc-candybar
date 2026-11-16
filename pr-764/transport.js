@@ -59339,7 +59339,8 @@ var PAYLOAD_INPUTS = {
   },
   // The session's resume command and the config file it renders from
   // (RenderPayload.resumeCommand / .configPath), read by the quick-action
-  // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
+  // tray's `⎘ resume` and `↗ config`; a config path of "" is "none", which
+  // hides `↗ config`.
   resume_command: { kind: "input", path: "resumeCommand", default: "" },
   config_path: { kind: "input", path: "configPath", default: "" },
   // [LAW:one-source-of-truth] The value every setting and config-only global
@@ -62275,11 +62276,11 @@ var QUICK_ACTIONS = {
 function quickActions(prefix) {
   const name = (action2) => `${prefix}${action2}`;
   return {
-    // [LAW:dataflow-not-control-flow] `⎘ resume`, `↗ repo` and `↗ config`
-    // are gated on their values: a payload the daemon did not build
-    // carries no resume command, a local-only repo no page, and a bar
-    // on the bundled default no file, and the glyph is absent.
-    template: `{{ action "${name("copySession")}" "\u2398 id" }}{{ if ne .resume_command "" }} {{ action "${name("copyResume")}" "\u2398 resume" }}{{ end }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
+    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
+    // their values: a local-only repo has no page and a bar on the bundled
+    // default no file, and the glyph is absent. Every payload carries a
+    // resume command, so `⎘ resume` is not gated.
+    template: `{{ action "${name("copySession")}" "\u2398 id" }} {{ action "${name("copyResume")}" "\u2398 resume" }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
     actions: Object.fromEntries(
       Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
         `${prefix}${action2}`,
