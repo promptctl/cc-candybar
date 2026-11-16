@@ -93394,7 +93394,15 @@ function createDaemon(inputs) {
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()]
       ];
-      await link.close(() => runTeardown(teardown, log));
+      await runTeardown(
+        [
+          [
+            "renderer close",
+            () => link.close(() => runTeardown(teardown, log))
+          ]
+        ],
+        log
+      );
       closed = true;
       return { settled: launcher.settled() };
     }

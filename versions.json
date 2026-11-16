@@ -4,15 +4,22 @@
     {
       "version": "pr-777",
       "ref": "refs/pull/777/merge",
-      "sha": "4ba3d9ac80130b8ce3c588265b7e395fcc8c64ca",
-      "timestamp": "2026-11-16T23:43:18.766Z",
+      "sha": "3d6f6492d26bd8b81b8880085c3ccc6ebb62a2cf",
+      "timestamp": "2026-11-16T23:47:24.457Z",
       "commits": [
         {
-          "sha": "4ba3d9ac80130b8ce3c588265b7e395fcc8c64ca",
+          "sha": "3d6f6492d26bd8b81b8880085c3ccc6ebb62a2cf",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T23:42:22Z",
-          "message": "Merge a083e51cd61f2f359b74b672f35c510a574db7bc into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
+          "timestamp": "2026-11-16T23:46:04Z",
+          "message": "Merge 18bd58115ed5bd496fb60c10ce1f4fe05907c8b6 into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
+        },
+        {
+          "sha": "18bd58115ed5bd496fb60c10ce1f4fe05907c8b6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T16:45:52-07:00",
+          "message": "fix(daemon): a boot the close ends gets its grace beside the teardown, and the renderer's end is a named teardown step (candybar-host-renderer-x96a.w8l)\n"
         },
         {
           "sha": "a083e51cd61f2f359b74b672f35c510a574db7bc",
