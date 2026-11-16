@@ -4,15 +4,22 @@
     {
       "version": "pr-764",
       "ref": "refs/pull/764/merge",
-      "sha": "7ae8bb7a2022a593b255c011f8247bc6860f5f1c",
-      "timestamp": "2026-11-16T04:25:00.717Z",
+      "sha": "4b0b012044352c446a63f28fbb9a69749507ae19",
+      "timestamp": "2026-11-16T04:28:10.894Z",
       "commits": [
         {
-          "sha": "7ae8bb7a2022a593b255c011f8247bc6860f5f1c",
+          "sha": "4b0b012044352c446a63f28fbb9a69749507ae19",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T04:24:00Z",
-          "message": "Merge 650369d182bacf1ca07d0f161edafc1ab2dededf into f7442d22183b18f0639b631d9e4dadfa3cc35c4f\n"
+          "timestamp": "2026-11-16T04:27:14Z",
+          "message": "Merge 71251a78dbfabab1dde7952681f25d1f4fac236c into f7442d22183b18f0639b631d9e4dadfa3cc35c4f\n"
+        },
+        {
+          "sha": "71251a78dbfabab1dde7952681f25d1f4fac236c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T21:27:05-07:00",
+          "message": "fix(demo): the resume command has no default, because every payload carries one (candybar-host-renderer-x96a.7q2)\n"
         },
         {
           "sha": "650369d182bacf1ca07d0f161edafc1ab2dededf",
