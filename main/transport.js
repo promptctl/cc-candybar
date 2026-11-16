@@ -59339,8 +59339,10 @@ var PAYLOAD_INPUTS = {
   },
   // The session's resume command and the config file it renders from
   // (RenderPayload.resumeCommand / .configPath), read by the quick-action
-  // tray's `⎘ resume` and `↗ config`; "" is "none", which hides the glyph.
-  resume_command: { kind: "input", path: "resumeCommand", default: "" },
+  // tray's `⎘ resume` and `↗ config`. Every payload carries a resume command,
+  // so it has no default: a payload without one is a recorded error. A config
+  // path of "" is "none", which hides `↗ config`.
+  resume_command: { kind: "input", path: "resumeCommand" },
   config_path: { kind: "input", path: "configPath", default: "" },
   // [LAW:one-source-of-truth] The value every setting and config-only global
   // renders with, whichever rung produced it — the theme, style and effect as
@@ -62275,11 +62277,11 @@ var QUICK_ACTIONS = {
 function quickActions(prefix) {
   const name = (action2) => `${prefix}${action2}`;
   return {
-    // [LAW:dataflow-not-control-flow] `⎘ resume`, `↗ repo` and `↗ config`
-    // are gated on their values: a payload the daemon did not build (the
-    // demo) carries no resume command, a local-only repo no page, and a bar
-    // on the bundled default no file, and the glyph is absent.
-    template: `{{ action "${name("copySession")}" "\u2398 id" }}{{ if ne .resume_command "" }} {{ action "${name("copyResume")}" "\u2398 resume" }}{{ end }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
+    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
+    // their values: a local-only repo has no page and a bar on the bundled
+    // default no file, and the glyph is absent. Every payload carries a
+    // resume command, so `⎘ resume` is not gated.
+    template: `{{ action "${name("copySession")}" "\u2398 id" }} {{ action "${name("copyResume")}" "\u2398 resume" }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
     actions: Object.fromEntries(
       Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
         `${prefix}${action2}`,
@@ -74664,95 +74666,7 @@ init_globals();
 
 // src/renderer/repo-configs.ts
 init_globals();
-var import_node_path38 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/discovery.ts
-init_globals();
 var import_node_path36 = __toESM(require_path_browserify(), 1);
-
-// src/utils/presence.ts
-init_globals();
-function presence(path43) {
-  try {
-    return fs_default.statSync(path43, { throwIfNoEntry: false }) === void 0 ? "absent" : "present";
-  } catch (e) {
-    return { path: path43, error: e.message };
-  }
-}
-
-// src/config/loader/plugin-folders.ts
-init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
-function pluginRoots(locs, repo2) {
-  const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path35.default.join(d, "cc-candybar", "plugins")),
-    userPluginRoot(locs)
-  ];
-  return [
-    ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path35.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
-  ];
-}
-function userPluginRoot(locs) {
-  return import_node_path35.default.join(locs.dataHome, "cc-candybar", "plugins");
-}
-var REPO_PLUGIN_DIR = import_node_path35.default.join(".cc-candybar", "plugins");
-function installedPlugins(locs, repo2) {
-  const roots = pluginRoots(locs, repo2);
-  const byNs = /* @__PURE__ */ new Map();
-  const unchecked = [];
-  const strays = [];
-  for (const { dir: root, scope } of roots) {
-    const listed = listFolders(root);
-    if ("error" in listed) {
-      unchecked.push(listed);
-      continue;
-    }
-    for (const name of listed.folders) {
-      const definition = pluginDefinition(
-        import_node_path35.default.join(root, name, DEFINITION_FILE),
-        scope
-      );
-      const key = `${scope}\0${name}`;
-      byNs.delete(key);
-      byNs.set(key, definition);
-    }
-    for (const file of listed.files) {
-      strays.push({
-        path: import_node_path35.default.join(root, file),
-        scope,
-        name: void 0,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path35.default.join(root, "<name>", DEFINITION_FILE)}`
-      });
-    }
-  }
-  return {
-    roots: roots.map((r) => r.dir),
-    definitions: [...byNs.values()],
-    unchecked,
-    strays
-  };
-}
-function listFolders(root) {
-  try {
-    const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-    const isFolder = (e) => e.isDirectory() || isDirectoryLink(root, e);
-    return {
-      folders: entries.filter(isFolder).map((e) => e.name),
-      files: entries.filter((e) => !isFolder(e)).map((e) => e.name)
-    };
-  } catch (e) {
-    return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
-  }
-}
-function isDirectoryLink(root, e) {
-  if (!e.isSymbolicLink()) return false;
-  try {
-    return fs_default.statSync(import_node_path35.default.join(root, e.name)).isDirectory();
-  } catch {
-    return true;
-  }
-}
 
 // src/config/loader/repo-gate.ts
 init_globals();
@@ -74819,163 +74733,21 @@ function repoUnreadNotice(gate2) {
   return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
 }
 
-// src/config/loader/discovery.ts
-var CONFIG_EXTENSIONS = ["json5", "json"];
-function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
-  if (configFile !== void 0) return [configFile];
-  const effectiveCwd = cwd2 ?? process.cwd();
-  return [
-    .../* @__PURE__ */ new Set([
-      ...projectDir ? CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path36.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
-      ) : [],
-      ...CONFIG_EXTENSIONS.map(
-        (ext) => import_node_path36.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
-      ),
-      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
-    ])
-  ];
-}
-var REPO_CONFIG_BASE = ".cc-candybar";
-function xdgConfigBase(locs) {
-  return import_node_path36.default.join(locs.configHome, "cc-candybar", "config");
-}
-function homeLayer(path43) {
-  return { path: path43, scope: "plugins" };
-}
-function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
-  const unchecked = [];
-  const atLocation = /* @__PURE__ */ new Map();
-  for (const candidate of dslConfigCandidatePaths(
-    locs,
-    projectDir,
-    cwd2,
-    configFile
-  )) {
-    const p2 = presence(candidate);
-    if (p2 === "absent") continue;
-    if (p2 !== "present") {
-      unchecked.push(p2);
-      continue;
-    }
-    const dir = fs_default.realpathSync.native(import_node_path36.default.dirname(candidate));
-    const location = import_node_path36.default.join(
-      dir,
-      import_node_path36.default.basename(candidate).replace(/\.(json5|json)$/, "")
-    );
-    if (!atLocation.has(location)) {
-      atLocation.set(location, {
-        file: candidate,
-        repo: configFile !== void 0 || isUserFile(locs, candidate) ? null : { dir, link: worktreeLink(dir) }
-      });
-    }
+// src/utils/presence.ts
+init_globals();
+function presence(path43) {
+  try {
+    return fs_default.statSync(path43, { throwIfNoEntry: false }) === void 0 ? "absent" : "present";
+  } catch (e) {
+    return { path: path43, error: e.message };
   }
-  const found2 = [...atLocation.values()];
-  const repos = gateRepos(
-    answers,
-    found2.flatMap((f) => f.repo === null ? [] : [f.repo]),
-    repoProject(projectDir)
-  );
-  const kept = found2.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
-  const layers = kept.map(
-    (f) => ({
-      path: f.file,
-      scope: f.repo === null ? "plugins" : "repo"
-    })
-  );
-  if (configFile === void 0) {
-    return {
-      kind: "chain",
-      layers,
-      home: userHome(locs, layers),
-      unchecked,
-      repos
-    };
-  }
-  const [own2] = unchecked;
-  const home = configFile;
-  if (layers.length > 0) {
-    return { kind: "chain", layers, home, unchecked, repos };
-  }
-  return own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos };
-}
-function isUserFile(locs, candidate) {
-  return CONFIG_EXTENSIONS.some(
-    (e) => candidate === `${xdgConfigBase(locs)}.${e}`
-  );
-}
-function repoProject(projectDir) {
-  if (projectDir === void 0 || presence(projectDir) !== "present") {
-    return null;
-  }
-  const listed = listFolders(import_node_path36.default.join(projectDir, REPO_PLUGIN_DIR));
-  const dir = fs_default.realpathSync.native(projectDir);
-  return {
-    dir,
-    link: worktreeLink(dir),
-    path: projectDir,
-    ships: !("error" in listed) && listed.folders.length > 0
-  };
-}
-function userHome(locs, layers) {
-  return layers.find((l) => isUserFile(locs, l.path))?.path ?? `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`;
-}
-function durableConfig(locs, answers, projectDir, cwd2, configFile) {
-  const resolved = resolveDslConfig(locs, answers, projectDir, cwd2, configFile);
-  const layers = resolved.kind === "chain" ? resolved.layers : [];
-  return {
-    path: resolved.home,
-    above: layers.filter((l) => l.path !== resolved.home),
-    repo: resolved.repos.plugins,
-    cwd: cwd2 ?? null,
-    locs
-  };
-}
-function configResolutionNotice(resolution) {
-  return noticeLines(resolution).join("\n") || null;
-}
-function noticeLines(resolution) {
-  switch (resolution.kind) {
-    case "chain":
-      return resolution.unchecked.map(
-        (u) => `Config location could not be checked: ${u.path} \u2014 ${u.error}`
-      );
-    case "missing":
-      return [
-        `Config file not found: ${resolution.path} \u2014 rendering the bundled default until it appears`
-      ];
-    case "unreadable":
-      return [
-        `Config file could not be read: ${resolution.path} \u2014 ${resolution.error} \u2014 rendering the bundled default until it can be`
-      ];
-  }
-}
-function detectConfigCollisions(locs, projectDir, cwd2) {
-  const existing = dslConfigCandidatePaths(locs, projectDir, cwd2).filter(
-    (candidate) => presence(candidate) === "present"
-  );
-  const groups = /* @__PURE__ */ new Map();
-  for (const candidate of existing) {
-    const dir = import_node_path36.default.dirname(candidate);
-    const base = import_node_path36.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path36.default.join(dir, base);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(candidate);
-  }
-  const collisions = [...groups.values()].filter((g) => g.length > 1);
-  if (collisions.length === 0) return null;
-  const lines2 = collisions.map((g) => {
-    const [winner, ...shadowed] = g;
-    return `${winner} shadows ${shadowed.join(", ")}`;
-  });
-  return `config-extension collision: ${lines2.join("; ")} \u2014 remove the duplicate`;
 }
 
 // src/doctor/state-file.ts
 init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
+var import_node_path35 = __toESM(require_path_browserify(), 1);
 function stateFile(dir, name, empty2, parse3) {
-  const file = import_node_path37.default.join(dir, name);
+  const file = import_node_path35.default.join(dir, name);
   const read2 = () => {
     let text4;
     try {
@@ -75017,10 +74789,10 @@ function stateFile(dir, name, empty2, parse3) {
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path38.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path36.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path38.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path36.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 var repoConfigs = (dir) => {
   const book = stateFile(
@@ -75098,6 +74870,236 @@ function repoQuestions(gate2, sessionId2, signer) {
 
 // src/renderer/verbs/index.ts
 init_globals();
+
+// src/config/loader/discovery.ts
+init_globals();
+var import_node_path38 = __toESM(require_path_browserify(), 1);
+
+// src/config/loader/plugin-folders.ts
+init_globals();
+var import_node_path37 = __toESM(require_path_browserify(), 1);
+function pluginRoots(locs, repo2) {
+  const installed = [
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path37.default.join(d, "cc-candybar", "plugins")),
+    userPluginRoot(locs)
+  ];
+  return [
+    ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
+    ...repo2 === null ? [] : [{ dir: import_node_path37.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+  ];
+}
+function userPluginRoot(locs) {
+  return import_node_path37.default.join(locs.dataHome, "cc-candybar", "plugins");
+}
+var REPO_PLUGIN_DIR = import_node_path37.default.join(".cc-candybar", "plugins");
+function installedPlugins(locs, repo2) {
+  const roots = pluginRoots(locs, repo2);
+  const byNs = /* @__PURE__ */ new Map();
+  const unchecked = [];
+  const strays = [];
+  for (const { dir: root, scope } of roots) {
+    const listed = listFolders(root);
+    if ("error" in listed) {
+      unchecked.push(listed);
+      continue;
+    }
+    for (const name of listed.folders) {
+      const definition = pluginDefinition(
+        import_node_path37.default.join(root, name, DEFINITION_FILE),
+        scope
+      );
+      const key = `${scope}\0${name}`;
+      byNs.delete(key);
+      byNs.set(key, definition);
+    }
+    for (const file of listed.files) {
+      strays.push({
+        path: import_node_path37.default.join(root, file),
+        scope,
+        name: void 0,
+        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path37.default.join(root, "<name>", DEFINITION_FILE)}`
+      });
+    }
+  }
+  return {
+    roots: roots.map((r) => r.dir),
+    definitions: [...byNs.values()],
+    unchecked,
+    strays
+  };
+}
+function listFolders(root) {
+  try {
+    const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    const isFolder = (e) => e.isDirectory() || isDirectoryLink(root, e);
+    return {
+      folders: entries.filter(isFolder).map((e) => e.name),
+      files: entries.filter((e) => !isFolder(e)).map((e) => e.name)
+    };
+  } catch (e) {
+    return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
+  }
+}
+function isDirectoryLink(root, e) {
+  if (!e.isSymbolicLink()) return false;
+  try {
+    return fs_default.statSync(import_node_path37.default.join(root, e.name)).isDirectory();
+  } catch {
+    return true;
+  }
+}
+
+// src/config/loader/discovery.ts
+var CONFIG_EXTENSIONS = ["json5", "json"];
+function dslConfigCandidatePaths(locs, projectDir, cwd2, configFile) {
+  if (configFile !== void 0) return [configFile];
+  const effectiveCwd = cwd2 ?? process.cwd();
+  return [
+    .../* @__PURE__ */ new Set([
+      ...projectDir ? CONFIG_EXTENSIONS.map(
+        (ext) => import_node_path38.default.join(projectDir, `${REPO_CONFIG_BASE}.${ext}`)
+      ) : [],
+      ...CONFIG_EXTENSIONS.map(
+        (ext) => import_node_path38.default.join(effectiveCwd, `${REPO_CONFIG_BASE}.${ext}`)
+      ),
+      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase(locs)}.${ext}`)
+    ])
+  ];
+}
+var REPO_CONFIG_BASE = ".cc-candybar";
+function xdgConfigBase(locs) {
+  return import_node_path38.default.join(locs.configHome, "cc-candybar", "config");
+}
+function homeLayer(path43) {
+  return { path: path43, scope: "plugins" };
+}
+function resolveDslConfig(locs, answers, projectDir, cwd2, configFile) {
+  const unchecked = [];
+  const atLocation = /* @__PURE__ */ new Map();
+  for (const candidate of dslConfigCandidatePaths(
+    locs,
+    projectDir,
+    cwd2,
+    configFile
+  )) {
+    const p2 = presence(candidate);
+    if (p2 === "absent") continue;
+    if (p2 !== "present") {
+      unchecked.push(p2);
+      continue;
+    }
+    const dir = fs_default.realpathSync.native(import_node_path38.default.dirname(candidate));
+    const location = import_node_path38.default.join(
+      dir,
+      import_node_path38.default.basename(candidate).replace(/\.(json5|json)$/, "")
+    );
+    if (!atLocation.has(location)) {
+      atLocation.set(location, {
+        file: candidate,
+        repo: configFile !== void 0 || isUserFile(locs, candidate) ? null : { dir, link: worktreeLink(dir) }
+      });
+    }
+  }
+  const found2 = [...atLocation.values()];
+  const repos = gateRepos(
+    answers,
+    found2.flatMap((f) => f.repo === null ? [] : [f.repo]),
+    repoProject(projectDir)
+  );
+  const kept = found2.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
+  const layers = kept.map(
+    (f) => ({
+      path: f.file,
+      scope: f.repo === null ? "plugins" : "repo"
+    })
+  );
+  if (configFile === void 0) {
+    return {
+      kind: "chain",
+      layers,
+      home: userHome(locs, layers),
+      unchecked,
+      repos
+    };
+  }
+  const [own2] = unchecked;
+  const home = configFile;
+  if (layers.length > 0) {
+    return { kind: "chain", layers, home, unchecked, repos };
+  }
+  return own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos };
+}
+function isUserFile(locs, candidate) {
+  return CONFIG_EXTENSIONS.some(
+    (e) => candidate === `${xdgConfigBase(locs)}.${e}`
+  );
+}
+function repoProject(projectDir) {
+  if (projectDir === void 0 || presence(projectDir) !== "present") {
+    return null;
+  }
+  const listed = listFolders(import_node_path38.default.join(projectDir, REPO_PLUGIN_DIR));
+  const dir = fs_default.realpathSync.native(projectDir);
+  return {
+    dir,
+    link: worktreeLink(dir),
+    path: projectDir,
+    ships: !("error" in listed) && listed.folders.length > 0
+  };
+}
+function userHome(locs, layers) {
+  return layers.find((l) => isUserFile(locs, l.path))?.path ?? `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`;
+}
+function durableConfig(locs, answers, projectDir, cwd2, configFile) {
+  const resolved = resolveDslConfig(locs, answers, projectDir, cwd2, configFile);
+  const layers = resolved.kind === "chain" ? resolved.layers : [];
+  return {
+    path: resolved.home,
+    above: layers.filter((l) => l.path !== resolved.home),
+    repo: resolved.repos.plugins,
+    cwd: cwd2 ?? null,
+    locs
+  };
+}
+function configResolutionNotice(resolution) {
+  return noticeLines(resolution).join("\n") || null;
+}
+function noticeLines(resolution) {
+  switch (resolution.kind) {
+    case "chain":
+      return resolution.unchecked.map(
+        (u) => `Config location could not be checked: ${u.path} \u2014 ${u.error}`
+      );
+    case "missing":
+      return [
+        `Config file not found: ${resolution.path} \u2014 rendering the bundled default until it appears`
+      ];
+    case "unreadable":
+      return [
+        `Config file could not be read: ${resolution.path} \u2014 ${resolution.error} \u2014 rendering the bundled default until it can be`
+      ];
+  }
+}
+function detectConfigCollisions(locs, projectDir, cwd2) {
+  const existing = dslConfigCandidatePaths(locs, projectDir, cwd2).filter(
+    (candidate) => presence(candidate) === "present"
+  );
+  const groups = /* @__PURE__ */ new Map();
+  for (const candidate of existing) {
+    const dir = import_node_path38.default.dirname(candidate);
+    const base = import_node_path38.default.basename(candidate).replace(/\.(json5|json)$/, "");
+    const key = import_node_path38.default.join(dir, base);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(candidate);
+  }
+  const collisions = [...groups.values()].filter((g) => g.length > 1);
+  if (collisions.length === 0) return null;
+  const lines2 = collisions.map((g) => {
+    const [winner, ...shadowed] = g;
+    return `${winner} shadows ${shadowed.join(", ")}`;
+  });
+  return `config-extension collision: ${lines2.join("; ")} \u2014 remove the duplicate`;
+}
 
 // src/daemon/foundations/click-error.ts
 init_globals();

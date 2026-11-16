@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-764",
-      "ref": "refs/pull/764/merge",
-      "sha": "42a144753a5bf29de27a96d198a11bf1b79814a1",
-      "timestamp": "2026-11-16T04:35:46.393Z",
-      "commits": [
-        {
-          "sha": "42a144753a5bf29de27a96d198a11bf1b79814a1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T04:34:44Z",
-          "message": "Merge 34e1b980d1f4dfa2e585973ecaf3e56bbcf62374 into f7442d22183b18f0639b631d9e4dadfa3cc35c4f\n"
-        },
-        {
-          "sha": "34e1b980d1f4dfa2e585973ecaf3e56bbcf62374",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:27:05-07:00",
-          "message": "fix(demo): the resume command has no default, because every payload carries one (candybar-host-renderer-x96a.7q2)\n"
-        },
-        {
-          "sha": "2b44a2cba458c83ba7b00ccd9e9dfaf7e230e184",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:23:50-07:00",
-          "message": "fix(demo): comments that list a preview signer's or a spelled session id's callers name them all (candybar-host-renderer-x96a.7q2)\n"
-        },
-        {
-          "sha": "ea63541f235fcb06aa8e690e5336364dcabb08a9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:18:55-07:00",
-          "message": "fix(demo): the examples render through check, and comments the deletion left stale say what is true (candybar-host-renderer-x96a.7q2)\n\nEvery payload carries a resume command now that only composePayload builds\none, so the toolbar's ⎘ resume is drawn ungated.\n"
-        },
-        {
-          "sha": "251c2e6997cd8bb6b5c3fd14144a09e4238ea0c6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-15T21:09:58-07:00",
-          "message": "chore(demo): the demo and the gallery are deleted, with their scripts, their test and their zone row (candybar-host-renderer-x96a.7q2)\n\nEach assembled its own draw from renderer internals, so every change to\nthose internals paid to keep them compiling; nothing in CI, release or\nthe docs ran either. What existed only for them goes too: the repo gate\na one-shot load built (its one test builds it inline), and the exports\nof loadChain, subscriptionsOf and buildRenderState. Comments, memory and\nthe live docs stop naming them; dated reports and inventories keep the\nrecord of what was measured then.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f7442d22183b18f0639b631d9e4dadfa3cc35c4f",
-      "timestamp": "2026-11-16T04:09:17.726Z",
+      "sha": "de3c13c9486c8ef1f1e628f961ce4877c1199dd8",
+      "timestamp": "2026-11-16T04:42:39.831Z",
       "commits": [
         {
-          "sha": "f7442d22183b18f0639b631d9e4dadfa3cc35c4f",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-16T04:08:14Z",
-          "message": "chore(release): set `package.json` to 1.223.0\n\n## [1.223.0](https://github.com/promptctl/cc-candybar/compare/v1.222.1...v1.223.0) (2026-11-16)\n\n### Features\n\n* **stats:** the spec's assumptions are read from real use, and every timing is a percentile of every value (candybar-host-renderer-x96a.bwr) ([#763](https://github.com/promptctl/cc-candybar/issues/763)) ([d94a739](https://github.com/promptctl/cc-candybar/commit/d94a73968cf18ae0789566c74a2a19558c4a6a55))\n"
+          "sha": "de3c13c9486c8ef1f1e628f961ce4877c1199dd8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-15T21:41:47-07:00",
+          "message": "chore(demo): the demo and the gallery are deleted (candybar-host-renderer-x96a.7q2) (#764)\n\n* chore(demo): the demo and the gallery are deleted, with their scripts, their test and their zone row (candybar-host-renderer-x96a.7q2)\n\nEach assembled its own draw from renderer internals, so every change to\nthose internals paid to keep them compiling; nothing in CI, release or\nthe docs ran either. What existed only for them goes too: the repo gate\na one-shot load built (its one test builds it inline), and the exports\nof loadChain, subscriptionsOf and buildRenderState. Comments, memory and\nthe live docs stop naming them; dated reports and inventories keep the\nrecord of what was measured then.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(demo): the examples render through check, and comments the deletion left stale say what is true (candybar-host-renderer-x96a.7q2)\n\nEvery payload carries a resume command now that only composePayload builds\none, so the toolbar's ⎘ resume is drawn ungated.\n\n* fix(demo): comments that list a preview signer's or a spelled session id's callers name them all (candybar-host-renderer-x96a.7q2)\n\n* fix(demo): the resume command has no default, because every payload carries one (candybar-host-renderer-x96a.7q2)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     },
