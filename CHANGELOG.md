@@ -1,3 +1,9 @@
+## [1.225.0](https://github.com/promptctl/cc-candybar/compare/v1.224.0...v1.225.0) (2026-11-16)
+
+### Features
+
+* **config:** every config write names its layer, and save offers each layer the session can write ([#776](https://github.com/promptctl/cc-candybar/issues/776)) ([b4de6bf](https://github.com/promptctl/cc-candybar/commit/b4de6bf0870b9a6462b1b7aa4c3469acf2415a29))
+
 ## [1.224.0](https://github.com/promptctl/cc-candybar/compare/v1.223.0...v1.224.0) (2026-11-16)
 
 ### Features
