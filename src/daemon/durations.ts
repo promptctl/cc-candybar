@@ -17,19 +17,21 @@ export const recordMs = (h: Histogram, ms: number): void => {
 
 const msOf = (us: number): number => Math.round(us / 10) / 100;
 
-// A percentile is read as the highest value its bucket stands for, which can
-// lie above the largest value recorded; no recorded value lies above the
-// largest, so that is the tightest true bound.
+// A percentile is the highest value its bucket stands for, which can lie above
+// the largest value recorded; no recorded value lies above the largest, so that
+// is the tightest true bound. (The histogram's own summary rounds each
+// percentile down to three digits, below the values it stands for.)
 export const durationsOf = (h: Histogram): Durations => {
-  const s = h.summary;
-  const at = (us: number): number => msOf(Math.min(us, s.max));
+  const max = h.maxValue;
+  const at = (p: number): number =>
+    msOf(Math.min(h.getValueAtPercentile(p), max));
   return {
-    count: s.totalCount,
-    p50Ms: at(s.p50),
-    p90Ms: at(s.p90),
-    p99Ms: at(s.p99),
-    p999Ms: at(s.p99_9),
-    maxMs: msOf(s.max),
+    count: h.totalCount,
+    p50Ms: at(50),
+    p90Ms: at(90),
+    p99Ms: at(99),
+    p999Ms: at(99.9),
+    maxMs: msOf(max),
     meanMs: msOf(h.mean),
     stddevMs: msOf(h.stdDeviation),
   };

@@ -284,11 +284,13 @@ describe("RuntimeStats.snapshot", () => {
       count: 1000,
       p50Ms: 2,
       p90Ms: 2,
-      p99Ms: 40,
-      p999Ms: 40,
       maxMs: 500,
       meanMs: 3.22,
     });
+    // To the histogram's three significant digits: 40 ms lies in a bucket
+    // whose highest value is 40.03.
+    expect(requests.took.p99Ms).toBeCloseTo(40, 1);
+    expect(requests.took.p999Ms).toBeCloseTo(40, 1);
     expect(subprocesses.durations["git"]).toEqual({
       count: 100,
       p50Ms: 19,
@@ -298,6 +300,18 @@ describe("RuntimeStats.snapshot", () => {
       maxMs: 19,
       meanMs: 19,
       stddevMs: 0,
+    });
+  });
+
+  // A percentile reads the value its bucket stands for, never one rounded
+  // below it: a frame 16.79 ms late does not read as inside a 16.7 ms period.
+  test("a percentile reads no lower than the durations it stands for", () => {
+    const stats = new RuntimeStats(systemTimekeeper);
+    for (let i = 0; i < 100; i++) stats.recordTook(16.79);
+    stats.recordTook(20);
+    expect(stats.snapshot(EXTRAS).requests.took).toMatchObject({
+      p99Ms: 16.8,
+      maxMs: 20,
     });
   });
 

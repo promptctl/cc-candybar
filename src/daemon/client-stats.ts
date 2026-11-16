@@ -314,8 +314,8 @@ export function formatStats(s: StatsSnapshot): string {
     `  draining      ${s.subprocesses.draining} (${s.subprocesses.drainedBytes} bytes dropped, ${s.subprocesses.drainsCut} cut)`,
   );
   lines.push(`  pipeErrors    ${s.subprocesses.pipeErrors}`);
-  // Snapshot already includes only executed categories (stats.ts:
-  // snapshotSubprocesses keeps byCategory and the histograms symmetric).
+  // Snapshot already includes only categories that have launched. One whose
+  // launches are all still running has a count and no durations yet.
   const activeCats = Object.entries(s.subprocesses.byCategory);
   const refusedRows = Object.entries(s.subprocesses.refused).map(
     ([cat, n]) => [`${cat} refused`, n] as const,

@@ -43,7 +43,7 @@ export interface SourceSnapshots {
   >;
 }
 
-// A distribution of durations, in ms to three significant digits: how many,
+// A distribution of durations, in ms to the hundredth: how many,
 // the percentiles, the largest, and the mean and standard deviation. Read
 // from a histogram of every one, never a sample, so p99 means the 99th
 // percentile of all of them.

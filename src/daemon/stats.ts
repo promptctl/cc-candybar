@@ -189,7 +189,8 @@ export class RuntimeStats {
     }
 
     // [LAW:one-source-of-truth] Snapshot includes only categories that have
-    // actually executed — same shape as p50/p99 below. Consumers wanting the
+    // actually executed, as `durations` below holds only those that have
+    // ended. Consumers wanting the
     // full closed list can read LAUNCH_CATEGORIES (exported from src/proc/launch)
     // and treat missing keys as zero.
     const byCategory: Record<string, number> = {};
