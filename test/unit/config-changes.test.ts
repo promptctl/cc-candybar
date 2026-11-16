@@ -91,6 +91,18 @@ describe("diffChanges and applyChanges", () => {
     expect(changes[0]!.op === "set" && changes[0]!.text).toContain("// where we are");
   });
 
+  test("a key taken out of the object it was added to is guarded on that key alone", () => {
+    const pinned = `{ globals: { palette: 'dracula' }, root: 'x' }`;
+    const bare = `{ globals: {}, root: 'x' }`;
+    expect(diffChanges(pinned, bare)).toEqual([
+      { op: "remove", at: ["globals", "palette"], read: "dracula" },
+    ]);
+    expect(applyChanges(pinned, diffChanges(pinned, bare))).toEqual({
+      kind: "applied",
+      text: bare,
+    });
+  });
+
   test("the same document is no change", () => {
     expect(diffChanges(CONFIG, CONFIG)).toEqual([]);
     expect(diffChanges(null, null)).toEqual([]);

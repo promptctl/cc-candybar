@@ -77,29 +77,42 @@ export function rendererHost(
         await renderer.answer(input);
       // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
       // turn, so what the process boundary costs is read from the event.
-      const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
+      const output: HostTurn = {
+        ...answered,
+        hopMs: elapsedMs(clock, sentAt) - turnMs,
+      };
       collector.subscribed(subscriptions);
+      if (output.kind === "threw") return output;
       // [LAW:single-enforcer] Each effect is owed one `effect-done`. A present
       // answers the request whose turn returned it, so one from any other
       // turn is refused here. A config change is performed here, whatever turn
-      // returned it, and the turn's caller hears the turn only once the
-      // renderer has heard how each change landed: a click is answered after
-      // its write.
-      if (output.kind === "answered")
-        for (const effect of output.effects)
-          switch (effect.kind) {
-            case "present":
-              if (input.event.kind !== "request")
-                void done(effect, {
-                  kind: "failed",
-                  reason: `a ${input.event.kind} turn answers no request`,
-                });
-              break;
-            case "change":
-              await done(effect, interpreter.change(effect));
-              break;
+      // returned it, and its `effect-done` turn is the rest of this one: the
+      // click goes on in it (src/renderer/landings.ts), so the caller hears
+      // both as one turn, its record and its failure included, and a click is
+      // answered after its writes.
+      let whole: HostTurn = output;
+      for (const effect of output.effects)
+        switch (effect.kind) {
+          case "present":
+            if (input.event.kind !== "request")
+              void done(effect, {
+                kind: "failed",
+                reason: `a ${input.event.kind} turn answers no request`,
+              });
+            break;
+          case "change": {
+            const rest = await turn(
+              effectDone(effect, interpreter.change(effect)),
+            );
+            const record: TurnRecord = [...whole.record, ...rest.record];
+            whole =
+              rest.kind === "threw"
+                ? { ...rest, record, hopMs: output.hopMs }
+                : { ...whole, record };
+            break;
           }
-      return output;
+        }
+      return whole;
     } finally {
       release();
     }
@@ -117,20 +130,18 @@ export function rendererHost(
         hopMs: null,
       }),
     );
+  const effectDone = (effect: Effect, outcome: EffectOutcome): EventInput => ({
+    kind: "event",
+    at: instantAt(clock),
+    event: {
+      kind: "effect-done",
+      session: effect.session,
+      of: effect.id,
+      outcome,
+    },
+  });
   const done = (effect: Effect, outcome: EffectOutcome): Promise<unknown> =>
-    deliver(
-      {
-        kind: "event",
-        at: instantAt(clock),
-        event: {
-          kind: "effect-done",
-          session: effect.session,
-          of: effect.id,
-          outcome,
-        },
-      },
-      [["effect", String(effect.id)]],
-    );
+    deliver(effectDone(effect, outcome), [["effect", String(effect.id)]]);
   // A turn's line, when it learned something or failed.
   const record = (
     input: EventInput,

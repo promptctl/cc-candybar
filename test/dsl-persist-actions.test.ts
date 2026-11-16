@@ -68,6 +68,7 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { STORE_IN_PLACE } from "./helpers/land";
 
 const S1 = sessionIdOf("s1");
 const S2_NO_PICK = sessionIdOf("s2-no-pick");
@@ -162,13 +163,13 @@ describe("persistValueText", () => {
   // after this call, so a swallowed failure would let that log lie. Point
   // the write at a path whose parent cannot be a directory (a file standing
   // where one is expected) to force a real fs failure.
-  test("writeValues throws (not silently swallows) when the write fails", () => {
+  test("writeValues throws (not silently swallows) when the write fails", async () => {
     const blocker = join(durable.projectDir, "blocker");
     writeFileSync(blocker, "not a directory");
     const impossiblePath = join(blocker, "config.json5");
-    expect(() =>
+    await expect(
       writeValues(
-        { record: () => {}, logger: () => {} },
+        STORE_IN_PLACE,
         {
           path: impossiblePath,
           above: [],
@@ -178,7 +179,7 @@ describe("persistValueText", () => {
         },
         [["palette", "nord"]],
       ),
-    ).toThrow();
+    ).rejects.toThrow();
   });
 });
 

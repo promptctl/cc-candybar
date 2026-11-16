@@ -7,11 +7,13 @@
 // config file < session pick, and the session pick never claims to be the
 // durable answer.
 //
-// [LAW:effects-at-boundaries] This module is the ONE edge that reads and
-// writes the config file. Everything it computes over
-// the file's text is the pure editor in src/config/json5-edit.ts, so a
-// hand-authored file keeps its comments, key order, quoting, and trailing
-// commas: exactly one span changes per edit.
+// [LAW:effects-at-boundaries] This module decides every config write and
+// performs none: a write is the text the click would leave, which lands
+// through the click's port as the changes from the text it read
+// (src/renderer/landings.ts), and the host splices them into the file.
+// Everything it computes over the file's text is the pure editor in
+// src/config/json5-edit.ts, so a hand-authored file keeps its comments, key
+// order, quoting, and trailing commas: exactly one span changes per edit.
 //
 // [LAW:dataflow-not-control-flow] A VALUE write is one splice at the path its
 // key spells: `globals` merge per field, and so do `segments.<name>` and
@@ -27,7 +29,6 @@
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
 import fs from "node:fs";
 import JSON5 from "json5";
-import { resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
@@ -82,7 +83,7 @@ import {
   type ConfigPath,
   type PersistTarget,
 } from "../config/loader/persist-target.js";
-import type { DaemonLogger } from "../utils/logger.js";
+import type { EffectOutcome } from "../renderer-interface/interface.js";
 import { BUNDLED_PRESETS, isBundledPreset } from "./bundled-presets.js";
 import { ident } from "../config/ident.js";
 
@@ -129,30 +130,6 @@ export function readConfigText(file: string): string | null {
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw e;
-  }
-}
-
-// [LAW:no-silent-failure] The existing file's mode survives (a hand-authored
-// file keeps whatever the user gave it) and a first-ever file takes the
-// process umask like any file the user would create. `null` text is the
-// absent file — undo of a first-ever write removes what that write created.
-// Logs at "error" for the daemon-log breadcrumb, then RETHROWS so the click
-// fails loudly instead of claiming a success that didn't happen.
-export function writeConfigText(
-  file: string,
-  text: string | null,
-  logger: DaemonLogger,
-): void {
-  try {
-    if (text === null) {
-      fs.rmSync(resolvedTarget(file), { force: true });
-      return;
-    }
-    writeAtomic(file, text);
-  } catch (e) {
-    const message = `config write failed (${file}): ${(e as Error).message}`;
-    logger("error", message);
-    throw new Error(message);
   }
 }
 
@@ -431,17 +408,23 @@ function requireValueTarget(key: string): ValueTarget {
 
 // ─── Tracked edits ───────────────────────────────────────────────────────────
 
-// [LAW:locality-or-seam] Where a tracked write reports what it changed: the
-// click's journal (src/renderer/settings-history.ts), which turns the click into
-// one undoable step. This module writes the file and never keeps history.
+// [LAW:locality-or-seam] Where a file's text moves from `before` to `after`:
+// the changes between them land, and the outcome says how. The click's own
+// writes go through `EditStore`, which records what landed in the click's
+// journal (src/renderer/settings-history.ts) as one undoable step; undo lands
+// through the bare port, recording nothing.
+export type FileLand = (
+  file: string,
+  before: string | null,
+  after: string | null,
+) => Promise<EffectOutcome>;
+
 export interface EditStore {
-  readonly record: (file: string, before: string | null, after: string) => void;
-  readonly logger: DaemonLogger;
+  readonly land: FileLand;
 }
 
-// [LAW:one-source-of-truth] Every tracked write lands here — the file write
-// and its record in one place, so recording cannot drift from mutation. The
-// file is the truth, so it goes first.
+// [LAW:one-source-of-truth] Every tracked write lands here, and only what
+// landed is recorded.
 // [LAW:single-enforcer] THE gate on what a click may write: text the loader
 // accepts, proved by the loader itself — over the whole chain the file is
 // the bottom of — before the file changes. A write that would not load (a
@@ -451,13 +434,13 @@ export interface EditStore {
 // was. `refuse` is what else the click promised: a value or layout click
 // promises the bar changes (refuseHidden); a reset promises only that the
 // home stops holding what it held, which a layer above cannot hide.
-function commit(
+async function commit(
   store: EditStore,
   home: ConfigHome,
   before: string | null,
   after: string,
   refuse: (home: ConfigHome, was: Was, will: LoadedChain) => void,
-): void {
+): Promise<void> {
   const will = loadOrRefuse(home, after);
   // [LAW:one-source-of-truth] The file before the click is loaded at most
   // once, and only by a refusal that reads it; every refusal judges against
@@ -466,8 +449,21 @@ function commit(
   const was: Was = () => (held ??= { chain: loadedOrNull(home, before) }).chain;
   refuseNewDrops(home, was, will);
   refuse(home, was, will);
-  writeConfigText(home.path, after, store.logger);
-  store.record(home.path, before, after);
+  landedOrThrow(await store.land(home.path, before, after));
+}
+
+// [LAW:no-silent-failure] A write that did not land is the click's error: a
+// setting that moved since the click read it is the click's bad request, and
+// a write that failed is its failure.
+function landedOrThrow(outcome: EffectOutcome): void {
+  switch (outcome.kind) {
+    case "ok":
+      return;
+    case "refused":
+      throw new BadVerbArgs(`refused: ${outcome.reason}`);
+    case "failed":
+      throw new Error(outcome.reason);
+  }
 }
 
 // The chain the file before a click loads to, loaded when first asked; null
@@ -631,12 +627,12 @@ export function readValue(
  * pair, `save` every draft. The splices fold over the text in memory and the
  * file is written once, so a reload can never read a half-saved file.
  */
-export function writeValues(
+export async function writeValues(
   store: EditStore,
   home: ConfigHome,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
-): void {
-  writeDrafts(store, home, pairs, []);
+): Promise<void> {
+  return writeDrafts(store, home, pairs, []);
 }
 
 // One placement's setting as a save writes it: the value, and the placement
@@ -649,12 +645,12 @@ export interface PlacementValue {
 }
 
 /** `save`'s write: every value key and every placement setting, as ONE tracked write. */
-export function writeDrafts(
+export async function writeDrafts(
   store: EditStore,
   home: ConfigHome,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
-): void {
+): Promise<void> {
   const before = readConfigText(home.path);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
@@ -666,7 +662,7 @@ export function writeDrafts(
       ),
     before ?? "",
   );
-  commit(
+  await commit(
     store,
     home,
     before,
@@ -753,11 +749,11 @@ function deleteAtPath(text: string, path: ConfigPath): string {
  * the config's own root). Paths the file never authored change nothing, and a
  * reset that changes nothing records nothing.
  */
-export function deleteValues(
+export async function deleteValues(
   store: EditStore,
   home: ConfigHome,
   keys: readonly string[],
-): void {
+): Promise<void> {
   const targets = keys.map(requireTarget);
   const before = readConfigText(home.path);
   if (before === null) return;
@@ -766,7 +762,7 @@ export function deleteValues(
     before,
   );
   if (after === before) return;
-  commit(store, home, before, after, releases);
+  await commit(store, home, before, after, releases);
 }
 
 const SAVED_PRESET_PREFIX = "custom-";
@@ -811,14 +807,14 @@ function freePresetName(doc: Node | null, home: ConfigHome): string {
  * A preset that stages the config's own root carries no root, and one with
  * nothing to pin is `{}`: the name alone is the declaration.
  */
-export function writePreset(
+export async function writePreset(
   store: EditStore,
   home: ConfigHome,
   from: string,
   globals: Globals,
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
-): string {
+): Promise<string> {
   const before = readConfigText(home.path);
   const doc = docOf(before ?? "");
   const name = freePresetName(doc, home);
@@ -860,7 +856,7 @@ export function writePreset(
       ownRow,
     ),
   );
-  commit(store, home, before, placed, refuseHidden);
+  await commit(store, home, before, placed, refuseHidden);
   return name;
 }
 
@@ -872,12 +868,12 @@ export function writePreset(
  * move it. The values are names as the session spells them; the commit's
  * load is what proves they are a theme default the loader accepts.
  */
-export function writeThemeDefault(
+export async function writeThemeDefault(
   store: EditStore,
   home: ConfigHome,
   theme: string,
   look: Readonly<Record<ThemeDefaultField, string>>,
-): void {
+): Promise<void> {
   const before = readConfigText(home.path);
   const after = setValue(
     before ?? "",
@@ -885,7 +881,7 @@ export function writeThemeDefault(
     json5Text(look),
     JSON5_DIALECT,
   );
-  commit(store, home, before, after, refuseHidden);
+  await commit(store, home, before, after, refuseHidden);
 }
 
 /**
@@ -896,11 +892,11 @@ export function writeThemeDefault(
  * name the file does not declare: the stale click. What else the file says
  * about the preset (an action targeting it) is commit's to refuse.
  */
-export function deletePreset(
+export async function deletePreset(
   store: EditStore,
   home: ConfigHome,
   name: string,
-): void {
+): Promise<void> {
   if (isBundledPreset(name)) {
     throw new BadVerbArgs(
       `cannot delete preset "${name}": it is bundled — reset its settings instead`,
@@ -921,7 +917,7 @@ export function deletePreset(
       ? [["globals", "preset"]]
       : []),
   ];
-  commit(
+  await commit(
     store,
     home,
     before,
@@ -937,12 +933,12 @@ export function deletePreset(
  * [LAW:no-silent-failure] A target/anchor no row holds is a loud error — the
  * click came from a bar rendered before the row changed.
  */
-export function applyLayoutOp(
+export async function applyLayoutOp(
   store: EditStore,
   home: ConfigHome,
   key: string,
   op: LayoutOp,
-): NewPlacement | null {
+): Promise<NewPlacement | null> {
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
@@ -967,7 +963,7 @@ export function applyLayoutOp(
       `${placement.path.join(".")} in ${home.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  commit(store, home, before, after, refuseHidden);
+  await commit(store, home, before, after, refuseHidden);
   return placed;
 }
 

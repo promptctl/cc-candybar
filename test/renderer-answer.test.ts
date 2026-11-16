@@ -310,7 +310,7 @@ describe("a statusline request", () => {
     await done(r, present, false);
     expect(recorded).toEqual([]);
     expect(threw(await done(r, present, true)).failure.message).toMatch(
-      /not a present on its way/,
+      /neither a present nor a change on its way/,
     );
   });
 });

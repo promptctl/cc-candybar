@@ -21,6 +21,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import JSON5 from "json5";
+import { STORE_IN_PLACE } from "./helpers/land";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const config = (source: string) =>
@@ -161,12 +162,12 @@ describe("a save under a preset that pins the field lands where it renders", () 
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-  const save = (source: string, p: Record<string, string>) => {
+  const save = async (source: string, p: Record<string, string>) => {
     const file = join(dir, "config.json5");
     writeFileSync(file, source);
     const before = drafts(source, p);
-    writeValues(
-      { record: () => {}, logger: () => {} },
+    await writeValues(
+      STORE_IN_PLACE,
       { path: file, above: [], repo: null, cwd: null, locs: locs() },
       before.map(({ target, value }) => [target, value] as const),
     );
@@ -176,13 +177,13 @@ describe("a save under a preset that pins the field lands where it renders", () 
 
   test.each(Object.entries(PIN_AND_PICK) as [PinnedSetting, { pin: string; pick: string }][])(
     "%s",
-    (name, { pin, pick }) => {
+    async (name, { pin, pick }) => {
       const { configKey, sessionKey } = SETTINGS[name];
       const target = `presets.mine.globals.${configKey}`;
       const preset = `presets: { mine: { globals: { ${configKey}: ${pin} } } }`;
 
       // The file names the preset: only the field is a draft.
-      const named = save(`{ globals: { preset: 'mine' }, ${preset} }`, {
+      const named = await save(`{ globals: { preset: 'mine' }, ${preset} }`, {
         [sessionKey]: pick,
       });
       expect(named.before).toEqual([{ sessionKey, value: pick, target }]);
@@ -191,7 +192,7 @@ describe("a save under a preset that pins the field lands where it renders", () 
 
       // The session picks the preset: it saves too, and the field still lands
       // in the preset the file will now name (the `landed` resolution).
-      const picked = save(`{ ${preset} }`, { preset: "mine", [sessionKey]: pick });
+      const picked = await save(`{ ${preset} }`, { preset: "mine", [sessionKey]: pick });
       expect(picked.before).toContainEqual({ sessionKey, value: pick, target });
       expect(picked.left).toEqual([]);
       expect(JSON5.parse(picked.after).globals).toEqual({ preset: "mine" });

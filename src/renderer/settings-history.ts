@@ -13,15 +13,18 @@
 // Another session's write to a file this session also wrote is not in this
 // session's history, and undo never reaches it. Undo and redo apply a change
 // only while its target still reads as the state the change promised to step
-// from. A target changed since by anything else (another session's click, a
-// hand edit) makes every change this session holds for that target
-// unreachable, because each of them chains through the state that is gone. So
-// the step refuses loudly, applies nothing, and drops those changes from both
-// stacks. The session's other changes stay steppable.
+// from: a session key by its whole value, and a file by each setting the step
+// changed there, as the host checks the changes it lands (§7), so a hand edit
+// elsewhere in the file leaves the step steppable. A target changed since by
+// anything else (another session's click, a hand edit) makes every change this
+// session holds for that target unreachable, because each of them chains
+// through the state that is gone. So the step refuses loudly, applies nothing,
+// and drops those changes from both stacks. The session's other changes stay
+// steppable.
 
 import { observable, runInAction } from "mobx";
 import { EDIT_MODE_KEY, EDIT_MODE_REF } from "../config/loader/edit-mode";
-import { readConfigText, writeConfigText } from "./config-file-store";
+import type { FileLand } from "./config-file-store";
 import type { DaemonLogger } from "../utils/logger";
 import { recordingView } from "./session-state";
 import { type SessionStateRW } from "../renderer-interface/session-state";
@@ -67,6 +70,9 @@ const MAX_SESSIONS = 32;
 const MAX_BYTES = 8 * 1024 * 1024;
 
 const EMPTY: SessionHistory = { past: [], future: [] };
+
+type FileChange = Extract<Change, { kind: "file" }>;
+type SessionChange = Extract<Change, { kind: "session" }>;
 
 // Records one click's changes. Handlers write through `sessionState` (which
 // records settings keys once they are written) and report their config-file
@@ -212,13 +218,20 @@ export class SettingsHistory {
   }
 
   // Returns the step it restored, so the caller can say what changed.
-  undo(sessionId: SessionId): Step {
+  async undo(sessionId: SessionId, land: FileLand): Promise<Step> {
     const history = this.history(sessionId);
     const step = history.past.at(-1);
     if (step === undefined) {
       throw new BadVerbArgs("undo: nothing to undo");
     }
-    this.apply(sessionId, step, "before", "undo", afterUndo(history, step));
+    await this.apply(
+      sessionId,
+      step,
+      "before",
+      "undo",
+      afterUndo(history, step),
+      land,
+    );
     return step;
   }
 
@@ -232,7 +245,7 @@ export class SettingsHistory {
   // refusal names what was kept, loudly. Edit mode stays where it is — the
   // click that cancels also leaves — so the savepoint is taken again at the
   // stack as it now stands. Returns what it put back.
-  rewind(sessionId: SessionId): Step {
+  async rewind(sessionId: SessionId, land: FileLand): Promise<Step> {
     const history = this.history(sessionId);
     const { savepoint } = history;
     if (savepoint === undefined) {
@@ -240,17 +253,39 @@ export class SettingsHistory {
         "rewind: edit mode has no savepoint — nothing to cancel",
       );
     }
-    const stale = savepoint.net.filter(
-      (c) => this.read(sessionId, c) !== c.after,
+    const staleKeys = savepoint.net.filter(
+      (c) =>
+        c.kind === "session" &&
+        this.sessionState.get(sessionId, c.key) !== c.after,
     );
+    // A file whose landing the host refused is stale too: each is landed
+    // alone, so one that moved keeps none of the others from going back.
+    const staleFiles: Change[] = [];
+    const landed: FileChange[] = [];
+    for (const c of savepoint.net) {
+      if (c.kind !== "file") continue;
+      const outcome = await land(c.file, c.after, c.before);
+      if (outcome.kind === "failed") {
+        await unland(landed, "before", land);
+        throw new Error(outcome.reason);
+      }
+      if (outcome.kind === "refused") staleFiles.push(c);
+      else landed.push(c);
+    }
+    const stale = [...staleKeys, ...staleFiles];
     const gone = new Set(stale.map(identity));
     const putBack = savepoint.net.filter((c) => !gone.has(identity(c)));
     const past = capped(without(pastAt(history, savepoint), gone));
-    this.apply(sessionId, putBack, "before", "rewind", {
-      past,
-      future: [],
-      savepoint: { at: past.length, net: [], below: [] },
-    });
+    try {
+      this.applyKeys(sessionId, putBack, "before", {
+        past,
+        future: [],
+        savepoint: { at: past.length, net: [], below: [] },
+      });
+    } catch (e) {
+      await unland(landed, "before", land);
+      throw e;
+    }
     if (stale.length > 0) {
       throw new BadVerbArgs(
         `rewind: ${stale.map(describe).join(", ")} changed since edit mode opened — kept as it is; everything else edit mode changed was put back`,
@@ -259,7 +294,7 @@ export class SettingsHistory {
     return putBack;
   }
 
-  redo(sessionId: SessionId): Step {
+  async redo(sessionId: SessionId, land: FileLand): Promise<Step> {
     const history = this.history(sessionId);
     const { past, future } = history;
     const step = future.at(-1);
@@ -268,93 +303,124 @@ export class SettingsHistory {
     }
     const all = [...past, step];
     const kept = capped(all);
-    this.apply(sessionId, step, "after", "redo", {
-      past: kept,
-      future: future.slice(0, -1),
-      ...savepointAfter(history.savepoint, all.length - kept.length, step),
-    });
+    await this.apply(
+      sessionId,
+      step,
+      "after",
+      "redo",
+      {
+        past: kept,
+        future: future.slice(0, -1),
+        ...savepointAfter(history.savepoint, all.length - kept.length, step),
+      },
+      land,
+    );
     return step;
   }
 
   // [LAW:no-silent-failure] A step lands whole, together with the history
-  // that records it, or not at all: every change is checked before any is
-  // written, and a failure while writing it or saving `then` puts back what
-  // was already written before the error goes on. A stale target is refused
-  // by name, and its now-unreachable changes leave both stacks (see the
-  // header).
-  private apply(
+  // that records it, or not at all. Its session keys are checked first, then
+  // its files land, each refused by the host if a setting it changes has
+  // moved; a failure after that puts back what already landed before the
+  // error goes on. A stale target is refused by name, and its now-unreachable
+  // changes leave both stacks (see the header).
+  private async apply(
     sessionId: SessionId,
     step: Step,
     to: "before" | "after",
-    verb: "undo" | "redo" | "rewind",
+    verb: "undo" | "redo",
+    then: SessionHistory,
+    land: FileLand,
+  ): Promise<void> {
+    const from = to === "before" ? "after" : "before";
+    const staleKeys = step.filter(
+      (c) =>
+        c.kind === "session" &&
+        this.sessionState.get(sessionId, c.key) !== c[from],
+    );
+    if (staleKeys.length > 0) {
+      this.forget(sessionId, staleKeys);
+      throw new BadVerbArgs(
+        `${verb}: ${staleKeys.map(describe).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
+      );
+    }
+    const landed: FileChange[] = [];
+    for (const c of step) {
+      if (c.kind !== "file") continue;
+      const outcome = await land(c.file, c[from], c[to]);
+      if (outcome.kind !== "ok") {
+        await unland(landed, to, land);
+        if (outcome.kind === "failed") throw new Error(outcome.reason);
+        this.forget(sessionId, [c]);
+        throw new BadVerbArgs(
+          `${verb}: ${outcome.reason}; this session's undo history no longer steps it`,
+        );
+      }
+      landed.push(c);
+    }
+    try {
+      this.applyKeys(sessionId, step, to, then);
+    } catch (e) {
+      await unland(landed, to, land);
+      throw e;
+    }
+  }
+
+  // The step's session keys set to `to`, with the history that records it, or
+  // none of them.
+  private applyKeys(
+    sessionId: SessionId,
+    step: Step,
+    to: "before" | "after",
     then: SessionHistory,
   ): void {
     const from = to === "before" ? "after" : "before";
-    const stale = step.filter((c) => this.read(sessionId, c) !== c[from]);
-    if (stale.length > 0) {
-      const gone = new Set(stale.map(identity));
-      const { past, future, savepoint } = this.history(sessionId);
-      // Edit mode's net change forgets those targets too: putting them back
-      // would overwrite whatever changed them.
-      this.put(sessionId, {
-        past: without(past, gone),
-        future: without(future, gone),
-        ...(savepoint !== undefined && {
-          savepoint: {
-            // A step left empty leaves the stack, so the position counts the
-            // steps below it that survive.
-            at: without(
-              [...past, ...[...future].reverse()].slice(0, savepoint.at),
-              gone,
-            ).length,
-            net: savepoint.net.filter((c) => !gone.has(identity(c))),
-            below: without(savepoint.below, gone),
-          },
-        }),
-      });
-      throw new BadVerbArgs(
-        `${verb}: ${stale.map(describe).join(", ")} changed since that edit — refusing to overwrite it; this session's undo history no longer steps it`,
-      );
-    }
-    const written: Change[] = [];
+    const written: SessionChange[] = [];
     try {
       for (const change of step) {
+        if (change.kind !== "session") continue;
         this.write(sessionId, change, change[to]);
         written.push(change);
       }
       this.put(sessionId, then);
     } catch (e) {
-      try {
-        for (const change of written.reverse()) {
-          this.write(sessionId, change, change[from]);
-        }
-      } catch (restoring) {
-        throw new Error(
-          `${(e as Error).message}; and putting the step back failed, so it is half-applied: ${(restoring as Error).message}`,
-        );
+      for (const change of written.reverse()) {
+        this.write(sessionId, change, change[from]);
       }
       throw e;
     }
   }
 
-  private read(sessionId: SessionId, change: Change): string | null {
-    return change.kind === "session"
-      ? this.sessionState.get(sessionId, change.key)
-      : readConfigText(change.file);
+  // Changes to targets that moved leave both stacks and edit mode's net
+  // change: putting them back would overwrite whatever changed them.
+  private forget(sessionId: SessionId, stale: readonly Change[]): void {
+    const gone = new Set(stale.map(identity));
+    const { past, future, savepoint } = this.history(sessionId);
+    this.put(sessionId, {
+      past: without(past, gone),
+      future: without(future, gone),
+      ...(savepoint !== undefined && {
+        savepoint: {
+          // A step left empty leaves the stack, so the position counts the
+          // steps below it that survive.
+          at: without(
+            [...past, ...[...future].reverse()].slice(0, savepoint.at),
+            gone,
+          ).length,
+          net: savepoint.net.filter((c) => !gone.has(identity(c))),
+          below: without(savepoint.below, gone),
+        },
+      }),
+    });
   }
 
   private write(
     sessionId: SessionId,
-    change: Change,
+    change: SessionChange,
     value: string | null,
   ): void {
-    if (change.kind === "file") {
-      writeConfigText(change.file, value, this.logger);
-    } else if (value === null) {
-      this.sessionState.clear(sessionId, change.key);
-    } else {
-      this.sessionState.set(sessionId, change.key, value);
-    }
+    if (value === null) this.sessionState.clear(sessionId, change.key);
+    else this.sessionState.set(sessionId, change.key, value);
   }
 
   // Move-to-end keeps insertion order as recency, so the bounds drop the
@@ -387,6 +453,23 @@ export class SettingsHistory {
     }
     this.storage.save(Object.fromEntries(next));
     this.state = next;
+  }
+}
+
+// [LAW:no-silent-failure] What a step had landed when it could not finish,
+// put back last first; one that cannot be is said as a half-applied step.
+async function unland(
+  landed: readonly FileChange[],
+  to: "before" | "after",
+  land: FileLand,
+): Promise<void> {
+  const from = to === "before" ? "after" : "before";
+  for (const c of [...landed].reverse()) {
+    const outcome = await land(c.file, c[to], c[from]);
+    if (outcome.kind !== "ok")
+      throw new Error(
+        `putting the step back failed, so it is half-applied: ${outcome.reason}`,
+      );
   }
 }
 

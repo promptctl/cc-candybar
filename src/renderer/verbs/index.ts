@@ -57,7 +57,10 @@ import {
   writeThemeDefault,
   writeValues,
   type EditStore,
+  type FileLand,
 } from "../config-file-store";
+import { diffChanges } from "../../config/config-changes";
+import type { Land } from "../landings";
 import {
   describeStep,
   type Journal,
@@ -312,6 +315,10 @@ export interface VerbContext extends DaemonContext {
   readonly clientGone: () => Promise<boolean>;
   // The newest request of THIS click's session the host holds.
   readonly latest: CheckedRenderRequest | null;
+  // [LAW:effects-at-boundaries] Where THIS click's config writes land: the
+  // host performs each, and the click goes on once it hears how
+  // (src/renderer/landings.ts).
+  readonly land: Land;
 }
 
 // What only the turn may wait on: a handler reaches a launch through `launch`,
@@ -319,6 +326,7 @@ export interface VerbContext extends DaemonContext {
 // daemon's close would not stop it after. The doctor's reads of the host are
 // the gather's alone.
 type TurnBound =
+  | "land"
   | "launch"
   | "doctor"
   | "typeSlash"
@@ -342,6 +350,7 @@ export type Journaled<C extends DaemonContext> = Omit<C, TurnBound> & {
     line: SlashLine,
   ) => ReturnType<typeof typeSlash>;
   readonly applyUpdate: () => Promise<void>;
+  readonly land: Land;
   // Read-only work in the turn, over what the click has written so far.
   readonly gather: <T>(work: (ctx: C) => Promise<T>) => Promise<T>;
 };
@@ -828,10 +837,34 @@ function originHome(
   );
 }
 
+// [LAW:single-enforcer] Where a click's file text lands: the changes from
+// what it read to what it would leave, to the session's user layer, which is
+// the one file a click writes. A history step recorded against another file
+// (the session's config moved since) fails rather than land on this one.
+function fileLand(ctx: ClickContext, sid: SessionId): FileLand {
+  return async (file, before, after) => {
+    const changes = diffChanges(before, after);
+    if (changes.length === 0) return { kind: "ok" };
+    const home = originHome(ctx, sessionOrigin(ctx, sid)).path;
+    if (file !== home)
+      return {
+        kind: "failed",
+        reason: `that edit was to ${file}, and session ${sid} now writes ${home}`,
+      };
+    return ctx.land(sid, changes);
+  };
+}
+
+// A click's own writes: each lands, and what landed is the click's step.
 function editStore(ctx: ClickContext, sid: SessionId): EditStore {
+  const land = fileLand(ctx, sid);
   return {
-    record: (file, before, after) => ctx.journal.file(sid, file, before, after),
-    logger: ctx.log,
+    land: async (file, before, after) => {
+      const outcome = await land(file, before, after);
+      if (outcome.kind === "ok" && after !== null)
+        ctx.journal.file(sid, file, before, after);
+      return outcome;
+    },
   };
 }
 
@@ -864,7 +897,7 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
     (k) => ctx.sessionState.get(sid, k),
     key,
   );
-  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
+  await writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
   ctx.log(
     "info",
@@ -921,7 +954,7 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
   const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
+  await writeValues(editStore(ctx, sid), home, [[landing.key, result.value]]);
   ctx.reloadConfig(origin);
   ctx.log(
     "info",
@@ -965,7 +998,7 @@ const save: VerbHandler = async (value, ctx) => {
   });
   gatePlacements("save", gate, placements);
   const home = originHome(ctx, origin);
-  writeDrafts(editStore(ctx, sid), home, pairs, placements);
+  await writeDrafts(editStore(ctx, sid), home, pairs, placements);
   ctx.reloadConfig(origin);
   for (const key of [
     ...drafts.map((d) => d.sessionKey),
@@ -1023,7 +1056,7 @@ const savePreset: VerbHandler = async (value, ctx) => {
   });
   gatePlacements("save-preset", gate, snapshot.placements);
   const home = originHome(ctx, origin);
-  const name = writePreset(
+  const name = await writePreset(
     editStore(ctx, sid),
     home,
     snapshot.from,
@@ -1070,7 +1103,7 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
+  await writeThemeDefault(editStore(ctx, sid), home, save.theme, save.look);
   ctx.reloadConfig(origin);
   const pick = (key: string) => ctx.sessionState.get(sid, key);
   const drafted = new Set(
@@ -1099,7 +1132,7 @@ const deletePreset: VerbHandler = async (value, ctx) => {
   }
   const origin = sessionOrigin(ctx, sid);
   const home = originHome(ctx, origin);
-  deletePresetFromFile(editStore(ctx, sid), home, name);
+  await deletePresetFromFile(editStore(ctx, sid), home, name);
   ctx.reloadConfig(origin);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
@@ -1133,7 +1166,7 @@ const resetConfig: VerbHandler = async (value, ctx) => {
   const layers = keys.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
-  deleteValues(editStore(ctx, sid), home, fileKeys);
+  await deleteValues(editStore(ctx, sid), home, fileKeys);
   ctx.reloadConfig(origin);
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
   ctx.log(
@@ -1217,7 +1250,7 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
     );
   }
   const home = originHome(ctx, origin);
-  const placed = applyLayoutOpToFile(editStore(ctx, sid), home, key, op);
+  const placed = await applyLayoutOpToFile(editStore(ctx, sid), home, key, op);
   // A removed placement's session state ends with it (endedSessionKeys).
   // Measured on the file as it now reads, and released in the same click, so
   // its undo brings the placement and its drafts back.
@@ -1248,7 +1281,7 @@ const undo: VerbHandler = async (value, ctx) => {
   // The click's own earlier changes are a step of their own first, so one
   // click behaves exactly as the same clicks made one at a time.
   ctx.journal.commit();
-  const step = ctx.history.undo(sid);
+  const step = await ctx.history.undo(sid, fileLand(ctx, sid));
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step);
   ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
@@ -1279,7 +1312,7 @@ const rewind: VerbHandler = async (value, ctx) => {
   ctx.journal.commit();
   // Said first: a stale target throws after the rest were put back.
   ctx.journal.wrote();
-  const restored = ctx.history.rewind(sid);
+  const restored = await ctx.history.rewind(sid, fileLand(ctx, sid));
   reloadIfWritten(ctx, sid, restored);
   ctx.log(
     "info",
@@ -1292,7 +1325,7 @@ const redo: VerbHandler = async (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   ctx.journal.commit();
-  const step = ctx.history.redo(sid);
+  const step = await ctx.history.redo(sid, fileLand(ctx, sid));
   ctx.journal.wrote();
   reloadIfWritten(ctx, sid, step);
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
@@ -1923,6 +1956,7 @@ async function journaled<C extends DaemonContext>(
   sid: SessionId | null,
   latest: CheckedRenderRequest | null,
   ctx: C,
+  land: Land,
   turn: JournalTurn,
   handler: (ctx: Journaled<C>) => Promise<void>,
 ): Promise<void> {
@@ -1959,12 +1993,13 @@ async function journaled<C extends DaemonContext>(
   };
   const launches: Pick<
     Journaled<DaemonContext>,
-    "launch" | "typing" | "applyUpdate"
+    "launch" | "typing" | "applyUpdate" | "land"
   > = {
     launch: (opts, what) =>
       turn.landed(clickLaunch(ctx.launch, opts, what, ctx.log)),
     typing: (hint, line) => turn.landed(typeSlash(ctx.typeSlash, hint, line)),
     applyUpdate: () => turn.landed(ctx.applyUpdate()),
+    land: (session, changes) => turn.landed(land(session, changes)),
   };
   try {
     await handler({
@@ -2025,7 +2060,7 @@ function click(
       },
       () => gather(value, ctx),
       (gathered, turn) =>
-        journaled(sid, ctx.latest, ctx, turn, async (c) => {
+        journaled(sid, ctx.latest, ctx, ctx.land, turn, async (c) => {
           try {
             await handler(value, c, gathered);
           } finally {
@@ -2071,6 +2106,11 @@ export interface IdleClose extends IdleSpan {
   readonly confirm: () => Promise<boolean>;
 }
 
+// An idle close writes no config: its menus are session state.
+const NO_LANDING: Land = async () => {
+  throw new Error("menu-idle: an idle close lands no config change");
+};
+
 // [LAW:single-enforcer] The idle timer's close (brandon-menus-sjhy.my3) takes
 // a click's own path: the journals the verb table opens — so an exit from edit
 // mode releases its savepoint, and ◁ back can reopen what it closed — and the
@@ -2091,7 +2131,7 @@ export function closeIdleMenus(
       gone: async () => false,
     },
     (turn) =>
-      journaled(sid, latest, ctx, turn, async (c) => {
+      journaled(sid, latest, ctx, NO_LANDING, turn, async (c) => {
         if (!(await turn.landed(idle.confirm()))) {
           c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
           return;

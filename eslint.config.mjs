@@ -188,6 +188,21 @@ const OWNED_IMPORTS = {
     ],
     message: "A daemon is handed its link signer (production-adapters.ts).",
   },
+  // A file a person reads is written whole, by the host's side: the config by
+  // the interpreter that performs a renderer's `change`, the stores the host
+  // keeps, and install. A renderer that would write one returns a change.
+  writeAtomic: {
+    group: ["**/utils/atomic-write", "**/utils/atomic-write.js"],
+    owners: [
+      "src/daemon/effect-interpreter.ts",
+      "src/daemon/history-file.ts",
+      "src/doctor/state-file.ts",
+      "src/doctor/gather.ts",
+      "src/install/index.ts",
+    ],
+    message:
+      "A renderer returns a `change` effect and the host's interpreter writes the file (src/daemon/effect-interpreter.ts).",
+  },
   // Where files are, read from the environment by a process's entry point and
   // handed down. The daemon process reads it once, in server.ts.
   daemonPaths: {

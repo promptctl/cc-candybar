@@ -6,6 +6,7 @@ import {
   resolvedTarget,
   writeAtomic,
 } from "../src/utils/atomic-write.js";
+import { landInPlace } from "./helpers/land";
 
 let dir: string;
 beforeEach(() => {
@@ -126,13 +127,11 @@ describe("linkChain", () => {
 
 // Undo of a first-ever config write removes what that write created — the
 // target behind a dangling link, never the link.
-test("writeConfigText(null) through a link removes the target, keeps the link", async () => {
-  const { writeConfigText } =
-    await import("../src/renderer/config-file-store.js");
+test("a landing that removes the file through a link removes the target, keeps the link", async () => {
   const link = path.join(dir, "config.json5");
   fs.symlinkSync("dotfiles-config.json5", link);
-  writeConfigText(link, "{}", () => {});
-  writeConfigText(link, null, () => {});
+  expect(await landInPlace(link, null, "{}")).toEqual({ kind: "ok" });
+  expect(await landInPlace(link, "{}", null)).toEqual({ kind: "ok" });
   expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
   expect(fs.existsSync(path.join(dir, "dotfiles-config.json5"))).toBe(false);
 });

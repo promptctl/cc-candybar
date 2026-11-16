@@ -72,6 +72,7 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { STORE_IN_PLACE } from "./helpers/land";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -92,35 +93,35 @@ function fileSegments(durable: DurableConfig): SegmentDecls {
 // ─── parsePersistTarget: the shared key-classification authority ────────────
 
 describe("parsePersistTarget", () => {
-  test("classifies a real Globals field", () => {
+  test("classifies a real Globals field", async () => {
     expect(parsePersistTarget("palette")).toEqual({
       scope: "globals",
       field: "palette",
     });
   });
 
-  test("classifies segments.<name>.palette", () => {
+  test("classifies segments.<name>.palette", async () => {
     expect(parsePersistTarget("segments.directory.palette")).toEqual({
       scope: "segment-palette",
       segment: "directory",
     });
   });
 
-  test("a segment-palette target IS the config-file path the key spells", () => {
+  test("a segment-palette target IS the config-file path the key spells", async () => {
     expect(
       persistPath({ scope: "segment-palette", segment: "directory" }),
     ).toEqual(["segments", "directory", "palette"]);
   });
 
-  test("rejects an unrelated string", () => {
+  test("rejects an unrelated string", async () => {
     expect(parsePersistTarget("bogus")).toBeNull();
   });
 
-  test("rejects a segment field other than palette", () => {
+  test("rejects a segment field other than palette", async () => {
     expect(parsePersistTarget("segments.directory.bg")).toBeNull();
   });
 
-  test("rejects a nested/malformed segments path", () => {
+  test("rejects a nested/malformed segments path", async () => {
     expect(parsePersistTarget("segments.a.b.palette")).toBeNull();
     expect(parsePersistTarget("segments..palette")).toBeNull();
     expect(parsePersistTarget("segments.palette")).toBeNull();
@@ -138,7 +139,7 @@ describe("loader: segment-palette persist/reset target validation", () => {
       root: 'sidebar',
     }`;
 
-  test("persist targeting a declared segment's palette passes", () => {
+  test("persist targeting a declared segment's palette passes", async () => {
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -148,7 +149,7 @@ describe("loader: segment-palette persist/reset target validation", () => {
     ).not.toThrow();
   });
 
-  test("reset targeting a declared segment's palette passes", () => {
+  test("reset targeting a declared segment's palette passes", async () => {
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -158,7 +159,7 @@ describe("loader: segment-palette persist/reset target validation", () => {
     ).not.toThrow();
   });
 
-  test("persist targeting an undeclared segment is a load error naming declared segments", () => {
+  test("persist targeting an undeclared segment is a load error naming declared segments", async () => {
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -170,7 +171,7 @@ describe("loader: segment-palette persist/reset target validation", () => {
     );
   });
 
-  test("reset targeting an undeclared segment is a load error", () => {
+  test("reset targeting an undeclared segment is a load error", async () => {
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -180,7 +181,7 @@ describe("loader: segment-palette persist/reset target validation", () => {
     ).toThrow(/names segment "ghost" which is not declared/);
   });
 
-  test("a bounded stepper over a segment-palette target is a load error", () => {
+  test("a bounded stepper over a segment-palette target is a load error", async () => {
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -194,7 +195,7 @@ describe("loader: segment-palette persist/reset target validation", () => {
     );
   });
 
-  test("a key that is neither a Globals field nor a segments.<name>.palette shape still gets the original error", () => {
+  test("a key that is neither a Globals field nor a segments.<name>.palette shape still gets the original error", async () => {
     expect(() =>
       parseAndValidate(
         "<test>",
@@ -208,7 +209,7 @@ describe("loader: segment-palette persist/reset target validation", () => {
 // ─── config-validators: the persistent-write gate over a segment key ────────
 
 describe("config-validators: segment-palette persist keys", () => {
-  test("deriveConfigActionValidators derives the SAME allow-list shape for a segment-palette key", () => {
+  test("deriveConfigActionValidators derives the SAME allow-list shape for a segment-palette key", async () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -229,7 +230,7 @@ describe("config-validators: segment-palette persist keys", () => {
     expect(contributions[0]!.spec.kind).toBe("allow-list");
   });
 
-  test("derive→validate round trip over a segment-palette key", () => {
+  test("derive→validate round trip over a segment-palette key", async () => {
     const gate = configGate(
       parseAndValidate(
         "<test>",
@@ -416,24 +417,21 @@ describe("config-file-store: segment-palette placement", () => {
     durable.dispose();
   });
 
-  const store = (): EditStore => ({
-    record: () => {},
-    logger: () => {},
-  });
+  const store = (): EditStore => STORE_IN_PLACE;
 
   // [LAW:no-silent-failure] The gate admits keys from the config a session
   // rendered; a key naming a segment that neither this file nor the bundled
   // default declares has nothing for a `ghost: { palette }` delta to overlay:
   // it would be a declaration with no template. The store refuses loudly and
   // touches nothing.
-  test("a segment neither the file nor the bundled default declares cannot be pinned", () => {
+  test("a segment neither the file nor the bundled default declares cannot be pinned", async () => {
     const text = `{
       globals: {},
       segments: { sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' } },
       root: 'sidebar',
     }`;
     durable.write(text);
-    expect(() =>
+    await expect(
       writeValues(
         store(),
         {
@@ -445,7 +443,7 @@ describe("config-file-store: segment-palette placement", () => {
         },
         [["segments.ghost.palette", "nord"]],
       ),
-    ).toThrow(
+    ).rejects.toThrow(
       /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
     );
     expect(durable.text()).toBe(text);
@@ -505,10 +503,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     durable.dispose();
   });
 
-  const store = (): EditStore => ({
-    record: () => {},
-    logger: () => {},
-  });
+  const store = (): EditStore => STORE_IN_PLACE;
 
   const OTHER_DECL =
     "other: { template: 'other-text', bg: 'panel', fg: 'foreground' }";
@@ -567,13 +562,13 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }
   });
 
-  test("a segment-palette pin survives a real restart — the file IS the store", () => {
+  test("a segment-palette pin survives a real restart — the file IS the store", async () => {
     durable.write(`{
       globals: {},
       segments: { sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' } },
       root: 'sidebar',
     }`);
-    writeValues(
+    await writeValues(
       store(),
       {
         path: durable.configPath,
@@ -612,13 +607,13 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }
   });
 
-  test("a pin on a bundled segment the file never declared renders that segment with the bundled template AND the pin", () => {
+  test("a pin on a bundled segment the file never declared renders that segment with the bundled template AND the pin", async () => {
     durable.write(`{
       globals: {},
       segments: { sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' } },
       root: { h: ['directory', 'sidebar'] },
     }`);
-    writeValues(
+    await writeValues(
       store(),
       {
         path: durable.configPath,

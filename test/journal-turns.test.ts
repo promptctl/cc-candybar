@@ -45,6 +45,7 @@ import { recordRender, testVerbContext } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { landInPlace } from "./helpers/land";
 
 const SID = sessionIdOf("s1");
 const IDLE = {
@@ -126,7 +127,7 @@ describe("journals take turns", () => {
     expect(sessionState.get(SID, "theme")).toBe("dracula");
     expect(sessionState.get(SID, "endcaps")).toBe("powerline");
     expect(undoDepth(ctx)).toBe(2);
-    ctx.history.undo(SID);
+    await ctx.history.undo(SID, landInPlace);
     expect(sessionState.get(SID, "theme")).toBe("nord");
     expect(sessionState.get(SID, "endcaps")).toBe("plain");
   });
@@ -271,7 +272,7 @@ test("a navigation commit that throws leaves the settings journal committed", as
     click(encodeSegments([SID, "theme", "nord"]), ctx),
   ).rejects.toThrow("navigation broke");
   expect(undoDepth(ctx)).toBe(1);
-  ctx.history.undo(SID);
+  await ctx.history.undo(SID, landInPlace);
   expect(sessionState.get(SID, "theme")).toBeNull();
 });
 
@@ -303,7 +304,7 @@ describe("close", () => {
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
     expect(sessionState.get(SID, "endcaps")).toBeNull();
     expect(undoDepth(ctx)).toBe(1);
-    ctx.history.undo(SID);
+    await ctx.history.undo(SID, landInPlace);
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
 

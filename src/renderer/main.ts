@@ -82,6 +82,7 @@ import {
   type Renderer,
 } from "../renderer-interface/interface.js";
 import { JournalTurns } from "./journal-turns.js";
+import { Landings } from "./landings.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
@@ -97,6 +98,7 @@ export function mainRenderer(
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, () => void>();
   let minted = 0;
+  const landings = new Landings(() => ++minted as EffectId);
 
   const turn = async (
     event: Event,
@@ -140,20 +142,25 @@ export function mainRenderer(
         retireSession(parts, event.session);
         return [];
       case "effect-done": {
+        // A change's: the click that returned it goes on, and this turn
+        // answers with its next stretch.
+        const next = landings.done(event.of, event.outcome);
+        if (next !== undefined) return await next;
         const delivered = deliveries.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
         // one already settled, is the host's bug: said, never ignored.
         if (delivered === undefined)
           throw new Error(
-            `effect-done for effect ${event.of}, which is not a present on its way`,
+            `effect-done for effect ${event.of}, which is neither a present nor a change on its way`,
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") delivered();
         return [];
       }
       case "click":
-        await clickTurn(parts, event, record);
-        return [];
+        return await landings.run((land) =>
+          clickTurn(parts, event, record, land),
+        );
       case "menu-idle":
         // [LAW:no-ambient-temporal-coupling] Whether the session is still
         // idle is the clock's to say, in the close's own journal turn: a

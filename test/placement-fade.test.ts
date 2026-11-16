@@ -39,6 +39,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { landInPlace } from "./helpers/land";
 
 const SID_S = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -316,7 +317,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     }
   });
 
-  test("an undo is a write like a click's: the frame after it compares against nothing", () => {
+  test("an undo is a write like a click's: the frame after it compares against nothing", async () => {
     const on = renderer(ROW);
     try {
       const history = new SettingsHistory(on.session, () => {});
@@ -327,7 +328,7 @@ describe("nothing fades in where the frame is drawn from another source", () => 
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       on.render({ shown: false, when: at(1) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("compared");
-      history.undo(SID_S);
+      await history.undo(SID_S, landInPlace);
       on.render({ shown: false, when: at(2) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("fresh");
     } finally {
@@ -498,14 +499,14 @@ describe("a session's state revision moves with every change to it, whoever writ
     expect(state.revision(SID_S)).toBeGreaterThan(state.revision(T));
   });
 
-  test("the settings history's undo moves it, though it writes past the click's journal", () => {
+  test("the settings history's undo moves it, though it writes past the click's journal", async () => {
     const state = new SessionState();
     const history = new SettingsHistory(state, () => {});
     const journal = history.begin();
     journal.sessionState.set(SID_S, "theme", "nord");
     journal.commit();
     const before = state.revision(SID_S);
-    history.undo(SID_S);
+    await history.undo(SID_S, landInPlace);
     expect(state.revision(SID_S)).not.toBe(before);
   });
 });

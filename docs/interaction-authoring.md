@@ -884,20 +884,24 @@ pick of the value already in place) records no step.
 The history is kept per session in
 `$XDG_STATE_HOME/cc-candybar/settings-history.json`, fifty steps deep — the
 oldest fall off. A config-file change holds the whole file before and after,
-so `undo` writes the `before` text back; a first-ever write's `before` is the
-absent file, so undoing it removes the file rather than leaving an empty one
-the loader rejects.
+and `undo` puts back each setting the step changed, keeping every other byte
+of the file as it is now; a first-ever write's `before` is the absent file,
+so undoing it removes the file rather than leaving an empty one the loader
+rejects.
 
-`undo` applies a step only while everything it touched still reads exactly
-as the step left it; `redo` makes the mirror check. If the config file changed
+`undo` applies a step only while every setting it touched still reads as the
+step left it; `redo` makes the mirror check. If one of those settings changed
 since — you hand-edited it, or **another session** wrote to it — the click
-refuses, loudly, naming the file (`undo: <file> changed since that edit —
-refusing to overwrite it; this session's undo history no longer steps it`),
-and writes nothing. Every step this session holds for that file chains
-through the state that is now gone, so they all leave this session's history
-at that moment; its other steps stay undoable. Another session's changes are
-never in your history: two sessions on one config file each undo only their
-own clicks, and neither can overwrite the other's.
+refuses, loudly, naming the setting (`undo: <file>: globals.padding changed
+since it was read: it was 10, and is now 5 — refusing to overwrite it; this
+session's undo history no longer steps it`), and writes nothing. Every step
+this session holds for that file chains through the state that is now gone,
+so they all leave this session's history at that moment; its other steps stay
+undoable. A change to some other setting in the same file, by hand or by
+another session, doesn't stand in the way: the undo lands and keeps it.
+Another session's changes are never in your history: two sessions on one
+config file each undo only their own clicks, and neither can overwrite the
+other's.
 
 Clicking `undo` with nothing to undo — or `redo` with nothing to redo — is a
 loud, transient message in the bar (`undo: nothing to undo`

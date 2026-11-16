@@ -952,7 +952,12 @@ export function setAt(
   );
 }
 
-/** Remove the member at an address, with its separator and, alone on its lines, its lines. */
+/**
+ * Remove the member at an address, with its separator and, alone on its lines,
+ * its lines. A container it leaves holding only whitespace is `{}` or `[]`,
+ * as an author writes an empty one, so a key added to `{}` and removed again
+ * gives back the bytes it started from.
+ */
 export function removeAt(text: string, at: Address): string {
   const { container, step } = containerAt(parseDocument(text), at, "remove");
   const member = memberOf(container, step);
@@ -962,7 +967,12 @@ export function removeAt(text: string, at: Address): string {
       container.span.start,
     );
   }
-  return removeMember(text, member.span);
+  const removed = removeMember(text, member.span);
+  const end = container.span.end - (text.length - removed.length);
+  const left = removed.slice(container.span.start, end);
+  return /^[{[]\s*[}\]]$/.test(left)
+    ? splice(removed, container.span.start, end, `${left[0]}${left.at(-1)}`)
+    : removed;
 }
 
 /** An address as a person reads it: `globals.theme`, `root.h[2]`. */

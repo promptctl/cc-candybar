@@ -28,6 +28,7 @@ import { fragmentNode } from "../src/config/root";
 import { loadConfigOnce } from "../src/doctor/cli";
 import { textOf, type Frame } from "../src/render/frame";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { STORE_IN_PLACE } from "./helpers/land";
 
 let dir: string;
 let project: string;
@@ -64,7 +65,7 @@ function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
   return o;
 }
 
-const noRecord = { record: () => {}, logger: () => {} };
+const noRecord = STORE_IN_PLACE;
 
 // The home a click in the project writes, under the answers the bar reads.
 const projectHome = () =>
@@ -99,44 +100,44 @@ test("a layer that does not load fails naming its own file", async () => {
   if (outcome.kind === "fatal") expect(outcome.message).toContain(projectFile);
 });
 
-test("a durable click writes the user's file, never the project's", () => {
+test("a durable click writes the user's file, never the project's", async () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectHome();
   expect(home).toEqual({ path: userFile, above: [{ path: projectFile, scope: "repo" }], repo: project, cwd: project, locs: locations(host) });
-  writeValues(noRecord, home, [["palette", "nord"]]);
+  await writeValues(noRecord, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
 });
 
-test("a click a project layer would hide is refused, naming the layer", () => {
+test("a click a project layer would hide is refused, naming the layer", async () => {
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
   const before = fs.readFileSync(userFile, "utf8");
-  expect(() =>
+  await expect(
     writeValues(noRecord, projectHome(), [["palette", "nord"]]),
-  ).toThrow(new RegExp(`${projectFile} sets globals\\.palette`));
+  ).rejects.toThrow(new RegExp(`${projectFile} sets globals\\.palette`));
   expect(fs.readFileSync(userFile, "utf8")).toBe(before);
 });
 
-test("a reset the project layer hides still clears the user's file", () => {
+test("a reset the project layer hides still clears the user's file", async () => {
   fs.writeFileSync(
     userFile,
     `{ globals: { palette: "nord" }, segments: { mine: { template: "USERSEG" } }, root: { h: ["mine"] } }`,
   );
   fs.writeFileSync(projectFile, `{ globals: { palette: "dracula" } }`);
-  deleteValues(noRecord, projectHome(), ["palette"]);
+  await deleteValues(noRecord, projectHome(), ["palette"]);
   expect(fs.readFileSync(userFile, "utf8")).not.toContain("nord");
 });
 
-test("a click that repairs a broken user file is not refused under a project layer", () => {
+test("a click that repairs a broken user file is not refused under a project layer", async () => {
   fs.writeFileSync(userFile, `{ globals: { palette: "no-such-theme" } }`);
   fs.writeFileSync(projectFile, `{ globals: { menuGlyph: "P" } }`);
-  writeValues(noRecord, projectHome(), [["palette", "nord"]]);
+  await writeValues(noRecord, projectHome(), [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
 });
 
-test("save-as-preset never mints a name a project layer declares", () => {
+test("save-as-preset never mints a name a project layer declares", async () => {
   fs.writeFileSync(projectFile, `{ presets: { "custom-1": {} } }`);
-  const name = writePreset(
+  const name = await writePreset(
     noRecord,
     projectHome(),
     "default",
@@ -159,19 +160,19 @@ test("the user's file is a layer even when the session's cwd is its directory", 
   ]);
 });
 
-test("save-as-preset reads a layer above that the editor would refuse", () => {
+test("save-as-preset reads a layer above that the editor would refuse", async () => {
   fs.writeFileSync(
     projectFile,
     `{ presets: { "custom-1": {} }, globals: { menuGlyph: "a", menuGlyph: "b" } }`,
   );
   expect(
-    writePreset(noRecord, projectHome(), "default", {}, [], []),
+    await writePreset(noRecord, projectHome(), "default", {}, [], []),
   ).toBe("custom-2");
 });
 
 // An absent user file reads as the chain's base, installed plugins included:
 // an installed plugin's names are not a change the first write is hidden by.
-test("a first durable write with no user file succeeds beside an installed plugin", () => {
+test("a first durable write with no user file succeeds beside an installed plugin", async () => {
   host = hostOf({ ...host.env, XDG_DATA_HOME: path.join(dir, "data") });
   world = worldOf(host);
   {
@@ -180,7 +181,7 @@ test("a first durable write with no user file succeeds beside an installed plugi
     fs.mkdirSync(path.dirname(def), { recursive: true });
     fs.writeFileSync(def, `{ data: "./d.json", segments: { status: { template: "x" } } }`);
     fs.writeFileSync(projectFile, `{ root: { h: ["plugins.deploy.status"] } }`);
-    writeValues(noRecord, projectHome(), [["palette", "nord"]]);
+    await writeValues(noRecord, projectHome(), [["palette", "nord"]]);
     expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   }
 });
@@ -407,12 +408,12 @@ describe("a project layer inserting into the user's row", () => {
       );
       // A layout op aimed at the inserted id writes nothing.
       const before = fs.readFileSync(userFile, "utf8");
-      expect(() =>
+      await expect(
         applyLayoutOp(noRecord, projectHome(), "presets.default.root", {
           op: "remove",
           target: "theirs",
         }),
-      ).toThrow();
+      ).rejects.toThrow();
       expect(fs.readFileSync(userFile, "utf8")).toBe(before);
     } finally {
       prepared.registry.dispose();

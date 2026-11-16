@@ -17,7 +17,7 @@ import {
 } from "./index.js";
 
 // What the verb context holds of one click: how it arrived, where its waits
-// are noted, and whether its client is gone.
+// are noted, whether its client is gone, and where its config writes land.
 type VerbClickFacts = Pick<
   VerbContext,
   | "arrival"
@@ -26,6 +26,7 @@ type VerbClickFacts = Pick<
   | "turnWaited"
   | "clientGone"
   | "latest"
+  | "land"
 >;
 
 // The facts the renderer brings of one click: the same, the click named by its

@@ -10,11 +10,7 @@ import path from "node:path";
 
 import { applyLayoutOp, writeValues } from "../src/renderer/config-file-store";
 import type { ConfigHome } from "../src/config/loader/discovery";
-
-const store = {
-  record: () => {},
-  logger: { info: () => {}, warn: () => {}, error: () => {} },
-} as unknown as Parameters<typeof applyLayoutOp>[0];
+import { STORE_IN_PLACE as store } from "./helpers/land";
 
 let dir: string;
 const homeWith = (text: string): ConfigHome => {
@@ -28,25 +24,25 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-test("a click that would leave a new undeclared placement is refused, and the file is untouched", () => {
+test("a click that would leave a new undeclared placement is refused, and the file is untouched", async () => {
   const text = `{ segments: { a: { template: "a" } }, root: { h: ["a"] } }`;
   const home = homeWith(text);
-  expect(() =>
+  await expect(
     applyLayoutOp(store, home, "presets.default.root", {
       op: "insert",
       segment: "ghost",
       anchor: "a",
       relation: "after",
     }),
-  ).toThrow(/refused: this click would leave[\s\S]*"ghost" does not match/);
+  ).rejects.toThrow(/refused: this click would leave[\s\S]*"ghost" does not match/);
   expect(fs.readFileSync(home.path, "utf8")).toBe(text);
 });
 
-test("a file that already drops a placement still takes a click", () => {
+test("a file that already drops a placement still takes a click", async () => {
   const home = homeWith(
     `{ segments: { a: { template: "a" }, b: { template: "b" } }, root: { h: ["a", "gti"] } }`,
   );
-  applyLayoutOp(store, home, "presets.default.root", {
+  await applyLayoutOp(store, home, "presets.default.root", {
     op: "insert",
     segment: "b",
     anchor: "a",
@@ -55,10 +51,10 @@ test("a file that already drops a placement still takes a click", () => {
   expect(fs.readFileSync(home.path, "utf8")).toContain('"b"');
 });
 
-test("a click that repairs a file that would not load is not blamed for the file's own drop", () => {
+test("a click that repairs a file that would not load is not blamed for the file's own drop", async () => {
   const home = homeWith(
     `{ globals: { palette: "no-such-theme" }, segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`,
   );
-  writeValues(store, home, [["palette", "nord"]]);
+  await writeValues(store, home, [["palette", "nord"]]);
   expect(fs.readFileSync(home.path, "utf8")).toContain("nord");
 });

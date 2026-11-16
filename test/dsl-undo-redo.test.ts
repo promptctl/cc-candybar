@@ -1,3 +1,4 @@
+import JSON5 from "json5";
 // [LAW:verifiable-goals] brandon-layout-edit-2gc.2 done-gates, driven through
 // the real spine (mirroring dsl-layout-edit.test.ts's model one arm over):
 //
@@ -40,6 +41,7 @@ import { deriveConfigActionValidators } from "../src/daemon/foundations/config-v
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
 import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import { landInPlace } from "./helpers/land";
 
 const S1 = sessionIdOf("s1");
 const SID_A = sessionIdOf("a");
@@ -375,9 +377,11 @@ describe("undo/redo click → the session's settings history", () => {
     expect(handEdited).not.toBe(written);
     writeFileSync(durable.configPath, handEdited);
 
-    await expect(press(runtime, "back")).rejects.toThrow(/changed since that edit/);
+    await expect(press(runtime, "back")).rejects.toThrow(
+      /config\.json5: globals\.palette changed since it was read: it was "dracula", and is now "gruvbox"/,
+    );
     // Nothing was overwritten, and the file step is gone: every change this
-    // session made to that file chains through the state the hand edit replaced.
+    // session made to that setting chains through the state the hand edit replaced.
     expect(durable.text()).toBe(handEdited);
     expect(runtime.history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
@@ -386,11 +390,11 @@ describe("undo/redo click → the session's settings history", () => {
     expect(durable.text()).toBe(handEdited);
   });
 
-  // The decision the ticket asked for: a session's history is its OWN clicks.
-  // Another session's write to the same file is not a step here, and it makes
-  // this session's earlier steps on that file unreachable — refused loudly,
-  // never overwritten.
-  test("another session's write to the same file is never undone from here, and makes this session's earlier file steps refuse", async () => {
+  // A session's history is its OWN clicks. Another session's write to the
+  // same file is not a step here, and undo is guarded per setting (spec §7):
+  // undoing this session's setting keeps the other session's, and each
+  // session can still undo its own.
+  test("another session's write to the same file is never undone from here, and leaves this session's step on another setting steppable", async () => {
     const sessionState = new SessionState();
     const history = durable.historyFor(sessionState);
     const a = undoBar(SRC, SID_A, { sessionState, history });
@@ -401,13 +405,14 @@ describe("undo/redo click → the session's settings history", () => {
     expect(history.depth(SID_A)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
     expect(history.depth(B)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
-    await expect(press(a, "back")).rejects.toThrow(/changed since that edit/);
-    expect(durable.text()).toBe(afterB);
-    expect(history.depth(SID_A)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+    await press(a, "back");
+    expect(globals().palette).toBeUndefined();
+    expect(durable.parsed().root).toEqual(JSON5.parse(afterB).root);
+    expect(history.depth(SID_A)).toEqual({ undo: 0, redo: 1, sinceEdit: 0 });
 
     await press(b, "back"); // b's own step is intact
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
-    expect(globals().palette).toBe("dracula");
+    expect(globals().palette).toBeUndefined();
   });
 
   test("undo at the bottom of the stack is a loud no-op, never silent", async () => {
@@ -463,7 +468,7 @@ describe("settings history: a step lands whole, and records only what landed", (
     durable.dispose();
   });
 
-  test("an undo whose file write fails puts back the session change it already made", () => {
+  test("an undo whose file write fails puts back the session change it already made", async () => {
     const sessionState = new SessionState();
     const history = durable.historyFor(sessionState);
     const file = durable.configPath;
@@ -474,13 +479,13 @@ describe("settings history: a step lands whole, and records only what landed", (
     journal.commit();
 
     chmodSync(dirname(durable.configPath), 0o500); // the file write cannot land
-    expect(() => history.undo(S1)).toThrow(/config write failed/);
+    await expect(history.undo(S1, landInPlace)).rejects.toThrow(/config write failed/);
     expect(sessionState.get(S1, "theme")).toBe("nord");
     expect(durable.text()).toBe("{ after: 1 }");
     expect(history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
     chmodSync(dirname(durable.configPath), 0o700); // and once it can, the step is intact
-    history.undo(S1);
+    await history.undo(S1, landInPlace);
     expect(sessionState.get(S1, "theme")).toBeNull();
     expect(durable.text()).toBe("{ before: 1 }");
   });
@@ -554,19 +559,19 @@ describe("settings history: the step and its record land together", () => {
     return { sessionState, gate, history };
   }
 
-  test("an undo whose history save fails puts its writes back", () => {
+  test("an undo whose history save fails puts its writes back", async () => {
     const { sessionState, gate, history } = refusingHistory();
     const journal = history.begin();
     journal.sessionState.set(S1, "theme", "nord");
     journal.commit();
 
     gate.refusing = true;
-    expect(() => history.undo(S1)).toThrow(/history save refused/);
+    await expect(history.undo(S1, landInPlace)).rejects.toThrow(/history save refused/);
     expect(sessionState.get(S1, "theme")).toBe("nord");
     expect(history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
 
     gate.refusing = false;
-    history.undo(S1);
+    await history.undo(S1, landInPlace);
     expect(sessionState.get(S1, "theme")).toBeNull();
   });
 

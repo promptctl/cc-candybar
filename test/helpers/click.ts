@@ -36,6 +36,7 @@ import {
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
+import { landForSessions } from "./land";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -88,6 +89,7 @@ export function testVerbContext(
     navigation: new NavigationHistory(),
     clientGone: async () => false,
     latest: null,
+    land: landForSessions(sessionState, locations(host)),
     journalTurns: new JournalTurns({
       log: () => {},
       monotonic: () => systemTimekeeper.monotonic(),

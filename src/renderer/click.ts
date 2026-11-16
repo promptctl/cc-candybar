@@ -1,6 +1,7 @@
 // The renderer's click turn: what a click means is the verb its link names,
-// acted on in this turn, so the turn's output reads the subscriptions as they
-// stand once the act has landed (its commit, and its view's follow).
+// acted on in this turn and in the turn each config write it lands takes
+// (src/renderer/landings.ts), so the last turn's output reads the
+// subscriptions as they stand once the act has landed.
 
 import {
   noteFacts,
@@ -9,6 +10,7 @@ import {
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
 import type { Event } from "../renderer-interface/interface.js";
 import type { MainRendererParts } from "./verbs/port.js";
+import type { Land } from "./landings.js";
 
 type ClickEvent = Extract<Event, { kind: "click" }>;
 
@@ -20,6 +22,7 @@ export async function clickTurn(
   { verbs, menuIdle }: Pick<MainRendererParts, "verbs" | "menuIdle">,
   { verb, value, session, arrival, id, latest }: ClickEvent,
   record: RequestFacts,
+  land: Land,
 ): Promise<void> {
   const handler = verbs.handler(verb);
   if (handler === undefined)
@@ -36,6 +39,7 @@ export async function clickTurn(
       turnWaited: (ms) => noteFacts(record, { turnWait: `${ms}ms` }),
       click: id,
       latest,
+      land,
     });
   } finally {
     if (pending !== null) menuIdle.clickSettled(pending);
