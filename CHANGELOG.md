@@ -1,3 +1,9 @@
+## [1.223.0](https://github.com/promptctl/cc-candybar/compare/v1.222.1...v1.223.0) (2026-11-16)
+
+### Features
+
+* **stats:** the spec's assumptions are read from real use, and every timing is a percentile of every value (candybar-host-renderer-x96a.bwr) ([#763](https://github.com/promptctl/cc-candybar/issues/763)) ([d94a739](https://github.com/promptctl/cc-candybar/commit/d94a73968cf18ae0789566c74a2a19558c4a6a55))
+
 ## [1.222.1](https://github.com/promptctl/cc-candybar/compare/v1.222.0...v1.222.1) (2026-11-16)
 
 ### Bug Fixes
