@@ -218,7 +218,7 @@ export function fakeUsage(
   } = {},
 ): Pick<
   SessionUsageStore,
-  "refresh" | "usageOf" | "declareToday" | "daysOutside" | "speedOf"
+  "refresh" | "usageOf" | "declareToday" | "daysOf" | "speedOf"
 > {
   const usage = refreshed<TranscriptUsage>();
   const speed = refreshed<SpeedObservation>();
@@ -246,7 +246,7 @@ export function fakeUsage(
       scans(holds, claudeConfigDir);
       return { current: () => scans(holds, claudeConfigDir) };
     },
-    daysOutside: (): Outcome<never> => ABSENT,
+    daysOf: (): Outcome<never> => ABSENT,
     speedOf: (sessionId: string): Reading<SpeedObservation> =>
       speed.read(sessionId),
   };

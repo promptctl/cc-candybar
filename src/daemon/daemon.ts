@@ -28,6 +28,7 @@ import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { stableAttachPreload } from "../install/index.js";
 import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
+import { runTeardown, type TeardownStep } from "../utils/teardown";
 import { FileEventDelivery } from "./cache/file-events";
 import type { Timekeeper } from "../time";
 import { LEVEL, type Acceptance } from "./foundations/request-event.js";
@@ -870,12 +871,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         (kind: "close-journal" | "close-views" | "close-session-state") =>
         (): Promise<unknown> =>
           parts.renderer.ask({ kind }, instant());
-      // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every teardown step
-      // runs, each in order, and one that throws is logged by name without
-      // skipping the rest: the session state still flushes after a close failed.
-      const teardown: ReadonlyArray<
-        readonly [string, () => void | Promise<unknown>]
-      > = [
+      // The session state still flushes after a close failed (runTeardown).
+      const teardown: readonly TeardownStep[] = [
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes it,
         // the journal in flight commits what landed; none opens after.
         ["journalTurns close", rendererStep("close-journal")],
@@ -894,7 +891,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
         ["renderer views close", rendererStep("close-views")],
-        ["payloadProviders close", () => payloadProviders.close()],
+        ...payloadProviders.closes,
         ["runs close", () => runs.close()],
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
@@ -907,13 +904,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // ends with nothing left to flush.
         ["renderer process close", () => link.close()],
       ];
-      for (const [step, run] of teardown) {
-        try {
-          await run();
-        } catch (e) {
-          log("warn", `${step} failed: ${(e as Error).message}`);
-        }
-      }
+      await runTeardown(teardown, log);
       closed = true;
       return { settled: launcher.settled() };
     },

@@ -72,7 +72,7 @@ async function countFsOps(body: () => Promise<unknown>): Promise<number> {
 }
 
 // One JSONL line of usage for `day` with the given cost. Unique requestId/msgId
-// so the dedup in the parser keeps every line.
+// so each line is a response of its own and the fold counts every one.
 function usageLine(tag: string, day: Date, cost: number): string {
   return (
     JSON.stringify({
@@ -185,10 +185,7 @@ describe("SessionUsageStore — session projection", () => {
       const late = join(dir, "C.jsonl");
       mkdirSync(late);
       const request = store.refresh(SID_C, late, "change");
-      await Promise.all([
-        request.usage(),
-        request.speed(Date.now()),
-      ]);
+      await Promise.all([request.usage(), request.speed(Date.now())]);
       expect(usage()).toMatchObject({ refreshes: { change: 3 }, failures: 2 });
       expect(
         lines.filter((l) => l.startsWith("warn usage refresh sid=C ")),
@@ -441,8 +438,9 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  // The session's own days, which the `today` fact carries beside the set's.
-  test("a session's own days are absent before a record or under the set's roots, its transcript's days outside them, and its ingest failure there when the refresh failed", async () => {
+  // The session's own days, which the `today` fact carries beside the set's
+  // when no set sums its transcript.
+  test("a session's own days are absent before a record, its transcript's days after one, and its ingest failure when the refresh failed", async () => {
     const t = join(dir, "A.jsonl");
     const at = new Date();
     writeFileSync(t, usageLine("a", at, 0.01));
@@ -452,21 +450,62 @@ describe("SessionUsageStore — session projection", () => {
       sweepIntervalMs: 0,
     });
     try {
-      const elsewhere = ["/not/this/dir/"];
-      expect(store.daysOutside(SID_A, t, elsewhere)).toEqual(ABSENT);
+      expect(store.daysOf(SID_A)).toEqual(ABSENT);
       await usageFold(store, SID_A, t);
-      const own = store.daysOutside(SID_A, t, elsewhere);
+      const own = store.daysOf(SID_A);
       expect(Object.keys(own.kind === "ok" ? own.value : {})).toHaveLength(1);
-      // Under the set's roots the days are in its sums already.
-      expect(store.daysOutside(SID_A, t, [dir])).toEqual(ABSENT);
-      // A directory is no transcript: the refresh fails, and so does the read
-      // of days only the session holds. Under the roots they are the set's,
-      // whose scan answers for them, so the session's failure is not today's.
+      // A directory is no transcript: the refresh fails, and so does the read.
       await usageFold(store, SID_G, dir);
-      expect(store.daysOutside(SID_G, dir, elsewhere).kind).toBe("failed");
-      expect(store.daysOutside(SID_G, join(dir, "G.jsonl"), [dir])).toEqual(
-        ABSENT,
-      );
+      expect(store.daysOf(SID_G).kind).toBe("failed");
+    } finally {
+      store.close();
+    }
+  });
+
+  // Claude Code writes each content block of one API response as its own
+  // entry, every one repeating the response's usage.
+  test("a response written as several entries is counted once", async () => {
+    const t = join(dir, "A.jsonl");
+    const at = new Date();
+    const block = (id: string, request: string) =>
+      JSON.stringify({
+        timestamp: at.toISOString(),
+        type: "assistant",
+        requestId: request,
+        costUSD: 0.01,
+        message: {
+          id,
+          model: "claude-opus-4-8",
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      }) + "\n";
+    writeFileSync(
+      t,
+      block("msg-1", "req-1") +
+        block("msg-1", "req-1") +
+        block("msg-1", "req-1") +
+        block("msg-2", "req-2"),
+    );
+    const store = new SessionUsageStore({
+      clock: systemTimekeeper,
+      host: HOST,
+      sweepIntervalMs: 0,
+    });
+    try {
+      const info = await usageFold(store, SID_A, t);
+      expect(info).toMatchObject({
+        kind: "ok",
+        value: {
+          tokens: 30,
+          tokenBreakdown: { input: 20, output: 10 },
+        },
+      });
+      if (info.kind !== "ok") return;
+      expect(info.value.calculatedCost).toBeCloseTo(0.02, 5);
+      // A run split across two appends is still one response.
+      appendFileSync(t, block("msg-2", "req-2"));
+      const again = await usageFold(store, SID_A, t);
+      expect(again).toMatchObject({ value: { tokens: 30 } });
     } finally {
       store.close();
     }

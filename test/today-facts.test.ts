@@ -3,8 +3,7 @@
 // the document's fact and the draw's instant. These tests state that
 // contract: the sum, the rendering session's days beside the set's, the day
 // turning over with no owner moving, and the one order in which the fact
-// fails. That a session under the set's roots is not counted twice is the
-// store's read (test/daemon-session-usage-store.test.ts).
+// fails, a session under the set's roots counted once, by the set.
 
 import type { DaySums } from "../src/daemon/cache/session-usage-store";
 import { dayKey, projectToday } from "../src/daemon/foundations/today-facts";
@@ -19,7 +18,7 @@ import {
   pendingOf,
   type Outcome,
 } from "../src/utils/outcome";
-import { settledLane } from "../src/utils/reading";
+import { pending, settledLane } from "../src/utils/reading";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const NOON = instantOf(new Date(2031, 0, 2, 12, 0, 0));
@@ -78,50 +77,73 @@ describe("projectToday", () => {
 
 describe("todayReading", () => {
   const SID = sessionIdOf("s1");
-  const TRANSCRIPT = "/elsewhere/s1.jsonl";
+  const OUTSIDE = "/elsewhere/s1.jsonl";
+  const UNDER = "/claude/projects/p/s1.jsonl";
+  const ENTRY = ok(null);
   const own = { [key(NOON)]: day(0.5, 5) };
-  // A usage store that answers `days`, and says which roots it was asked about.
+  // A usage store that answers `days`, and says which sessions it was asked
+  // about.
   const usage = (days: Outcome<Readonly<Record<string, DayUsage>>>) => {
-    const asked: Array<readonly string[]> = [];
+    const asked: string[] = [];
     return {
       asked,
-      daysOutside: (
-        _session: string,
-        _transcript: string | undefined,
-        roots: readonly string[],
-      ) => {
-        asked.push(roots);
+      daysOf: (session: string) => {
+        asked.push(session);
         return days;
       },
     };
   };
 
-  test("folds the set with the session's days outside its roots", () => {
+  test("folds the set with the days of a session outside its roots", () => {
     const store = usage(ok(own));
-    const fact = todayReading(settledLane(ok(SET)), store, SID, TRANSCRIPT);
+    const fact = todayReading(settledLane(ok(SET)), store, SID, OUTSIDE, ENTRY);
     expect(fact).toEqual(ok({ sums: SET.sums, own }));
-    expect(store.asked).toEqual([SET.roots]);
+    expect(store.asked).toEqual([SID]);
   });
 
-  test("a session with no days outside the set has none of its own", () => {
+  test("a session with no record outside the set has no days of its own", () => {
     const fact = todayReading(
       settledLane(ok(SET)),
       usage(ABSENT),
       SID,
-      TRANSCRIPT,
+      OUTSIDE,
+      ENTRY,
     );
     expect(fact).toEqual(ok({ sums: SET.sums, own: {} }));
   });
 
-  test("the session's ingest failing is the fact failing", () => {
-    const fault = failed("transcript unreadable", "read");
+  test("a session under the set's roots is the set's: its record and its entry are not asked", () => {
+    const store = usage(failed("transcript unreadable", "read"));
     const fact = todayReading(
       settledLane(ok(SET)),
-      usage(fault),
+      store,
       SID,
-      TRANSCRIPT,
+      UNDER,
+      failed("declaration threw", "read"),
     );
-    expect(fact).toEqual(fault);
+    expect(fact).toEqual(ok({ sums: SET.sums, own: {} }));
+    expect(store.asked).toEqual([]);
+  });
+
+  test("outside the roots, the transcript entry failing is the fact failing, record or none", () => {
+    const entry = failed("usage store closed", "read");
+    expect(
+      todayReading(settledLane(ok(SET)), usage(ABSENT), SID, OUTSIDE, entry),
+    ).toEqual(entry);
+  });
+
+  test("outside the roots, an entry not answered yet is a fact not answered yet", () => {
+    const entry = pending("unread");
+    expect(
+      todayReading(settledLane(ok(SET)), usage(ABSENT), SID, OUTSIDE, entry),
+    ).toEqual(entry);
+  });
+
+  test("the session's ingest failing outside the roots is the fact failing", () => {
+    const fault = failed("transcript unreadable", "read");
+    expect(
+      todayReading(settledLane(ok(SET)), usage(fault), SID, OUTSIDE, ENTRY),
+    ).toEqual(fault);
   });
 
   test("the lane's own failure comes before the session's", () => {
@@ -131,7 +153,8 @@ describe("todayReading", () => {
         settledLane(scan),
         usage(failed("transcript unreadable", "read")),
         SID,
-        TRANSCRIPT,
+        OUTSIDE,
+        failed("declaration threw", "read"),
       ),
     ).toEqual(scan);
   });

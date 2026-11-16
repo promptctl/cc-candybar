@@ -13,7 +13,7 @@
 // draw reads are of one request.
 //
 // [LAW:effects-at-boundaries] No instant is read here: what moves with the
-// clock (`today`, `speed`, `feeds`, `drawing`) is a projection each draw hands its
+// clock (`today`, `feeds`, `drawing`) is a projection each draw hands its
 // binding (DRAW_PROJECTIONS, src/config/payload-inputs.ts), so a key policy
 // over the payload re-runs in the turn a fact it reads moves — a request's
 // arrival, a world state's landing, a click — and never inside a draw.

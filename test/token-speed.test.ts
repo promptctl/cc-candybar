@@ -26,6 +26,7 @@ import {
   speedPayloadOf,
 } from "../src/renderer/render-payload";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
+import { turnOpenAfter, type ParsedEntry } from "../src/utils/claude";
 import type { SpeedSample } from "../src/facts/world-state";
 import { validateConfig } from "./helpers/parse-and-validate";
 import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
@@ -103,6 +104,34 @@ function promptLine(): string {
     }) + "\n"
   );
 }
+
+describe("turnOpenAfter — an assistant message's stop", () => {
+  const assistant = (stopReason?: string): ParsedEntry => ({
+    timestamp: new Date(0),
+    type: "assistant",
+    message: { stopReason },
+    raw: {},
+  });
+
+  test("a tool call, a paused turn and a block still streaming keep the turn open", () => {
+    for (const reason of [undefined, "tool_use", "pause_turn"]) {
+      expect(turnOpenAfter(true, assistant(reason))).toBe(true);
+    }
+  });
+
+  test("any other stop ends the turn, one the API adds later included", () => {
+    for (const reason of [
+      "end_turn",
+      "max_tokens",
+      "stop_sequence",
+      "refusal",
+      "model_context_window_exceeded",
+      "a_reason_added_later",
+    ]) {
+      expect(turnOpenAfter(true, assistant(reason))).toBe(false);
+    }
+  });
+});
 
 describe("SessionUsageStore speed — the sample ring", () => {
   let dir: string;

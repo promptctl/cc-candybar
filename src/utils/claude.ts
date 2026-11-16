@@ -309,13 +309,14 @@ export function userEntryOf(
     : "prompt";
 }
 
-// The stop reasons that end a turn: any other (a tool call, a message still
-// streaming) leaves Claude working on it.
-const TURN_ENDS: ReadonlySet<string> = new Set([
-  "end_turn",
-  "stop_sequence",
-  "max_tokens",
-  "refusal",
+// The stop reasons that leave Claude working on its turn: a tool call, and the
+// server pausing a long turn. A block of a message still streaming states
+// none. Any other reason ends the turn, one the API adds later included, so
+// an unknown stop ends a rate rather than holding it.
+const TURN_GOES_ON: ReadonlySet<string | undefined> = new Set([
+  undefined,
+  "tool_use",
+  "pause_turn",
 ]);
 
 // [LAW:one-source-of-truth] Whether the session's turn is open after `entry`:
@@ -335,7 +336,7 @@ export function turnOpenAfter(open: boolean, entry: ParsedEntry): boolean {
       return open;
     case undefined:
       return entry.type === "assistant"
-        ? !TURN_ENDS.has(entry.message?.stopReason ?? "")
+        ? TURN_GOES_ON.has(entry.message?.stopReason)
         : open;
   }
 }

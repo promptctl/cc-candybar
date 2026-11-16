@@ -15,9 +15,10 @@ import {
 import type { CacheExpiryProvider } from "../segments/cache.js";
 import { settledLane, type Current, type Lane } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import type {
-  DaySums,
-  SessionUsageStore,
+import {
+  under,
+  type DaySums,
+  type SessionUsageStore,
 } from "./cache/session-usage-store.js";
 import {
   type SpeedObservation,
@@ -375,14 +376,15 @@ export function readingsOf(
   };
   return {
     lanes: laneReadings,
-    // The session's own days fail today only where the directory set does not
-    // already sum them (`daysOutside`), so no transcript lane gates it.
+    // The session's own days gate today only where the directory set does not
+    // already sum them, so no transcript lane fault gates it.
     today: guarded("today", () =>
       todayReading(
         lanes.today,
         deps.usageStore,
         sessionId,
         inputs.hookData.transcript_path,
+        entry,
       ),
     ),
     faults: REFRESH_LANES.flatMap((lane) => {
@@ -395,19 +397,28 @@ export function readingsOf(
 }
 
 // [LAW:single-enforcer] Today's facts as the session reads them: the directory
-// set's day sums with the session's own days beside them, failing if the
-// session's last ingest did and the set does not hold its transcript. The
-// draw's projection (`todayOf`) and the facts document read through this one
+// set's day sums with the session's own days beside them. The draw's
+// projection (`todayOf`) and the facts document read through this one
 // definition, behind `readingsOf`'s guard on a throw.
 export function todayReading(
   lane: Lane<DaySums>,
-  usage: Pick<SessionUsageStore, "daysOutside">,
+  usage: Pick<SessionUsageStore, "daysOf">,
   sessionId: SessionId,
   transcriptPath: string | undefined,
+  entry: Current<null>,
 ): Current<TodayFacts> {
   const set = lane.current();
   if (set.kind !== "ok") return set;
-  const own = usage.daysOutside(sessionId, transcriptPath, set.value.roots);
+  // A transcript under the set's roots is the set's to sum: its scan reads
+  // it, and fails if it cannot.
+  if (under(transcriptPath, set.value.roots)) {
+    return ok({ sums: set.value.sums, own: {} });
+  }
+  // [LAW:no-silent-failure] Outside them, the session's days are its record's
+  // alone, so the transcript entry that refreshes the record failing, or not
+  // having answered yet, is today's too.
+  if (entry.kind !== "ok") return entry;
+  const own = usage.daysOf(sessionId);
   if (own.kind === "failed") return own;
   return ok({ sums: set.value.sums, own: own.kind === "ok" ? own.value : {} });
 }

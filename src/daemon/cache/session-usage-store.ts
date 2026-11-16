@@ -220,19 +220,21 @@ function emptyBreakdown(): TokenBreakdown {
 
 // [LAW:one-source-of-truth] The incremental fold of ONE append-only transcript
 // file (a session's main transcript or one agent sidechain): the sums over
-// every usage-bearing entry seen so far, and whether its turn is open after
+// every response seen so far, and whether its turn is open after
 // the last entry. The cursor marking the bytes folded is the `Folded` pair's,
 // never a field of its own here.
 // The session aggregate is the MERGE of its files' folds (mergeFolds), so a file
 // rewritten by /compact re-folds in isolation without disturbing the others.
 interface FileFold {
-  entries: number; // usage-bearing entries folded (0 ⇒ empty session, all-null)
+  entries: number; // responses whose usage is folded (0 ⇒ empty session, all-null)
   cost: number;
   breakdown: TokenBreakdown;
   days: Map<string, DayUsage>; // keys >= seed cutoff only (pruned on fold)
   // An agent sidechain's entries move no turn (turnOpenAfter), so only the
   // main transcript's fold can be open.
   turnOpen: boolean;
+  // The API response the last usage folded came from (responseOf).
+  response: string | undefined;
 }
 
 const EMPTY_FILE_FOLD: FileFold = {
@@ -241,7 +243,18 @@ const EMPTY_FILE_FOLD: FileFold = {
   breakdown: emptyBreakdown(),
   days: new Map(),
   turnOpen: false,
+  response: undefined,
 };
+
+// [LAW:one-source-of-truth] The API response an entry belongs to. Claude Code
+// writes each content block of one response as its own entry, in a run, and
+// every entry of the run repeats the response's usage: the usage is the
+// response's, counted once, at the run's first entry. An entry naming no
+// message is a response of its own.
+function responseOf(entry: ParsedEntry): string | undefined {
+  const id = entry.message?.id;
+  return id === undefined ? undefined : `${id}:${entry.raw.requestId ?? ""}`;
+}
 
 // [LAW:effects-at-boundaries] The fold step: NEW entries onto a file fold.
 // Returns a FRESH FileFold (the state is never mutated) so two concurrent
@@ -264,6 +277,7 @@ async function foldFile(
   let count = state.entries;
   let cost = state.cost;
   let turnOpen = state.turnOpen;
+  let last = state.response;
   const breakdown = { ...state.breakdown };
   const days = new Map<string, DayUsage>();
   for (const [k, v] of state.days) if (k >= keep) days.set(k, { ...v });
@@ -271,6 +285,9 @@ async function foldFile(
     turnOpen = turnOpenAfter(turnOpen, entry);
     const u = entry.message?.usage;
     if (!u) continue;
+    const response = responseOf(entry);
+    if (response !== undefined && response === last) continue;
+    last = response;
     count++;
     const priced =
       entry.costUSD ??
@@ -294,7 +311,7 @@ async function foldFile(
     d.cacheRead += u.cache_read_input_tokens || 0;
     days.set(key, d);
   }
-  return { entries: count, cost, breakdown, days, turnOpen };
+  return { entries: count, cost, breakdown, days, turnOpen, response: last };
 }
 
 // A session's files folded again: each file's fold, their merge, and the main
@@ -302,6 +319,9 @@ async function foldFile(
 type Refolded = {
   readonly files: Map<string, Folded<FileFold>>;
   readonly mainStamp: string;
+  // Whether the session's turn is open: the main transcript's fold alone,
+  // since a sidechain's entries move no turn (turnOpenAfter).
+  readonly turnOpen: boolean;
 } & ReturnType<typeof mergeFolds>;
 
 // [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
@@ -311,17 +331,14 @@ type Refolded = {
 function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
   usage: TranscriptUsage;
   days: Map<string, DayUsage>;
-  turnOpen: boolean;
 } {
   let count = 0;
   let cost = 0;
-  let turnOpen = false;
   const bd = emptyBreakdown();
   const days = new Map<string, DayUsage>();
   for (const { value: f } of files.values()) {
     count += f.entries;
     cost += f.cost;
-    turnOpen ||= f.turnOpen;
     bd.input += f.breakdown.input;
     bd.output += f.breakdown.output;
     bd.cacheCreation += f.breakdown.cacheCreation;
@@ -332,7 +349,7 @@ function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
       days.set(k, d);
     }
   }
-  if (count === 0) return { usage: EMPTY_USAGE, days, turnOpen };
+  if (count === 0) return { usage: EMPTY_USAGE, days };
   const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
   return {
     usage: {
@@ -341,13 +358,15 @@ function mergeFolds(files: ReadonlyMap<string, Folded<FileFold>>): {
       tokenBreakdown: bd,
     },
     days,
-    turnOpen,
   };
 }
 
 // Whether a transcript path lies under one of a directory set's `projects/`
 // roots — exactly when its session's `today` is that set's.
-function under(path: string | undefined, roots: readonly string[]): boolean {
+export function under(
+  path: string | undefined,
+  roots: readonly string[],
+): boolean {
   return path !== undefined && roots.some((root) => path.startsWith(root));
 }
 
@@ -652,19 +671,12 @@ export class SessionUsageStore {
     };
   }
 
-  // The rendering session's own days the set's sums do not hold, as the
-  // records stand, for the `today` fact: no I/O, no fold. A transcript under
-  // the set's roots is the set's to sum (its scan reads it, and fails if it
-  // cannot), so the session has none beyond them whatever its record holds.
-  // [LAW:no-silent-failure] Outside the roots, the session's last ingest
-  // failing is this read failing, so the fact fails with it and the draw shows
-  // a gap, never a total silently missing the session's own work.
-  daysOutside(
-    sessionId: SessionId,
-    transcriptPath: string | undefined,
-    roots: readonly string[],
-  ): Outcome<Readonly<Record<string, DayUsage>>> {
-    if (under(transcriptPath, roots)) return ABSENT;
+  // A session's own days as its record stands, for the `today` fact of a
+  // session whose transcript no directory set sums: no I/O, no fold.
+  // [LAW:no-silent-failure] Its last ingest failing is this read failing, so
+  // the fact fails with it and the draw shows a gap, never a total silently
+  // missing the session's own work.
+  daysOf(sessionId: SessionId): Outcome<Readonly<Record<string, DayUsage>>> {
     const slot = this.sessions.get(sessionId);
     if (slot === undefined) return ABSENT;
     const failure = slot.failure.get();
@@ -918,7 +930,12 @@ export class SessionUsageStore {
       newFiles.set(filePath, folded);
       if (filePath === transcriptPath) mainStamp = folded.cursor.stamp;
     }
-    return ok({ files: newFiles, ...mergeFolds(newFiles), mainStamp });
+    return ok({
+      files: newFiles,
+      ...mergeFolds(newFiles),
+      mainStamp,
+      turnOpen: newFiles.get(transcriptPath)?.value.turnOpen ?? false,
+    });
   }
 
   // The one whole-tree scan of a directory set — its seed, or a rescan:

@@ -215,7 +215,7 @@ describe("a frame's payload", () => {
   test("a `today` read that throws is today's failure, logged; the rest of the frame draws", async () => {
     const { inputs, request, deps, logs } = counted();
     await request();
-    deps.usageStore.daysOutside = () => {
+    deps.usageStore.daysOf = () => {
       throw new Error("days bug");
     };
     expect(todayReadingOf(inputs())).toMatchObject({
