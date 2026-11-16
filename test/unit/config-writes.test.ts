@@ -23,6 +23,12 @@ function writes() {
   );
 }
 
+// A click's landing that answers no refusal.
+const landing = (consequence: () => unknown) => ({
+  consequence: () => void consequence(),
+  refused: () => {},
+});
+
 const ids = (effects: readonly Effect[]): EffectId[] =>
   effects.map((e) => e.id);
 
@@ -32,7 +38,7 @@ describe("a click's config writes", () => {
     const effects: Effect[] = [];
     let applied = false;
     w.land("/a.json5", DISK["/a.json5"]!, DISK["/a.json5"]!);
-    w.seal(effects, SID, () => (applied = true));
+    w.seal(effects, SID, landing(() => (applied = true)));
     expect(effects).toEqual([]);
     expect(applied).toBe(true);
   });
@@ -49,7 +55,7 @@ describe("a click's config writes", () => {
     const effects: Effect[] = [];
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/a.json5", "{ a: 2 }\n", "{ a: 3 }\n");
-    w.seal(effects, SID, () => {});
+    w.seal(effects, SID, landing(() => {}));
     expect(effects).toEqual([
       {
         kind: "change",
@@ -74,7 +80,7 @@ describe("a click's config writes", () => {
     let applied = false;
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
-    w.seal(effects, SID, () => (applied = true));
+    w.seal(effects, SID, landing(() => (applied = true)));
     const [a, b] = ids(effects);
     let opened = false;
     const next = w.landed().then(() => (opened = true));
@@ -100,11 +106,38 @@ describe("a click's config writes", () => {
     const effects: Effect[] = [];
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
-    w.seal(effects, SID, () => {});
+    w.seal(effects, SID, landing(() => {}));
     const [a, b] = ids(effects);
     w.settled(a!, { kind: "refused", reason: "a moved" });
     expect(w.settled(b!, { kind: "ok" })).toMatchObject({
       outcome: { kind: "refused", reason: "a moved" },
+    });
+  });
+
+  test("a write from text other than the click's lands its changes over what the click wrote", () => {
+    const w = writes();
+    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 1, x: 1 }\n");
+    // A history step, recorded before the click added `x`.
+    w.land("/a.json5", "{ a: 1 }\n", "{ a: 6 }\n");
+    expect(w.read("/a.json5")).toBe("{ a: 6, x: 1 }\n");
+  });
+
+  test("a write whose setting the click itself moved is refused", () => {
+    const w = writes();
+    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
+    expect(() => w.land("/a.json5", "{ a: 5 }\n", "{ a: 6 }\n")).toThrow(
+      "a in /a.json5 was changed earlier in this click",
+    );
+  });
+
+  test("a landing names only the files its changes change", () => {
+    const w = writes();
+    const effects: Effect[] = [];
+    w.land("/a.json5", DISK["/a.json5"]!, DISK["/a.json5"]!);
+    w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
+    w.seal(effects, SID, landing(() => {}));
+    expect(w.settled(ids(effects)[0]!, { kind: "ok" })).toMatchObject({
+      files: ["/b.json5"],
     });
   });
 
@@ -115,7 +148,7 @@ describe("a click's config writes", () => {
   test("a write with no session to land for is the click's bug, said", () => {
     const w = writes();
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
-    expect(() => w.seal([], null, () => {})).toThrow(
+    expect(() => w.seal([], null, landing(() => {}))).toThrow(
       "a click with no session wrote /a.json5",
     );
   });

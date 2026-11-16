@@ -80,6 +80,7 @@ import {
   type EffectId,
   type Event,
   type Renderer,
+  type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { JournalTurns } from "./journal-turns.js";
 import { ConfigWrites } from "./config-writes.js";
@@ -98,6 +99,8 @@ export function mainRenderer(
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, () => void>();
+  // The subscriptions this renderer last returned: none before its first turn.
+  let subscriptions: Subscriptions = { sources: {} };
 
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
@@ -193,21 +196,27 @@ export function mainRenderer(
       const record: RequestFacts = [];
       const from = parts.clock.monotonic();
       const effects: Effect[] = [];
-      const ended = await turn(input.event, input.at, record, effects).then(
-        () => ({ kind: "answered" }) as const,
-        // [LAW:single-enforcer] Classified here, where it was thrown: a
-        // class crosses no process.
-        (thrown: unknown) =>
-          ({ kind: "threw", failure: failureOf(thrown) }) as const,
-      );
       // [LAW:one-source-of-truth] What the renderer needs read: the open
       // views' subscriptions as they stand when the turn ends, however it
-      // ended.
+      // ended. Read as part of the turn, so a read that throws fails the
+      // turn and still hands on its effects, which are owed their
+      // `effect-done`; the subscriptions last returned then stand.
+      const ended = await turn(input.event, input.at, record, effects)
+        .finally(() => {
+          subscriptions = parts.renderCache.subscriptions();
+        })
+        .then(
+          () => ({ kind: "answered" }) as const,
+          // [LAW:single-enforcer] Classified here, where it was thrown: a
+          // class crosses no process.
+          (thrown: unknown) =>
+            ({ kind: "threw", failure: failureOf(thrown) }) as const,
+        );
       return {
         ...ended,
         effects,
         record,
-        subscriptions: parts.renderCache.subscriptions(),
+        subscriptions,
         turnMs: elapsedMs(parts.clock, from),
       };
     },
@@ -287,7 +296,6 @@ function startOver(
   const mint = (): EffectId => ++minted as EffectId;
   const configWrites = new ConfigWrites(mint, readConfigText);
   const journalTurns = new JournalTurns({
-    log,
     monotonic: () => clock.monotonic(),
     changesLanded: () => configWrites.landed(),
   });
@@ -521,8 +529,8 @@ function startOver(
       case "reload-config":
         reloadConfig(push.origin);
         return { kind: "reload-config" };
-      // [LAW:no-ambient-temporal-coupling] The journal in flight commits what
-      // landed before the host's abort cuts it off.
+      // [LAW:no-ambient-temporal-coupling] No journal opens after this, and
+      // the one in flight stops at its next await once the host's abort lands.
       case "close-journal":
         journalTurns.close();
         return { kind: "close-journal" };

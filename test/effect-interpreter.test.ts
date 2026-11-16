@@ -48,6 +48,16 @@ const change = (
 const read = (file: string): string => fs.readFileSync(file, "utf8");
 
 describe("performChanges", () => {
+  test("a change after one that removed its file reads the file as absent", () => {
+    const removed = change(user, USER, null);
+    // Read from the file as it stood: the removal ahead of it moved it.
+    const edited = change(user, USER, USER.replace("padding: 1", "padding: 3"));
+    expect(performChanges([removed, edited])).toMatchObject({
+      kind: "refused",
+    });
+    expect(read(user)).toBe(USER);
+  });
+
   test("splices a setting into the file as it stands, keeping every other byte", () => {
     const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     fs.writeFileSync(user, USER.replace("// mine", "// mine, edited"));

@@ -113,7 +113,6 @@ function setup(over: Partial<DoctorEdge> = {}) {
   const logged: string[] = [];
   const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT);
   const turns = new JournalTurns({
-    log: () => {},
     monotonic: () => systemTimekeeper.monotonic(),
     changesLanded: () => base.configWrites.landed(),
   });

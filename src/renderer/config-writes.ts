@@ -2,13 +2,19 @@
 // `change`s its turn returns, which the host performs, never as a file the
 // renderer writes. A click lands whole or not at all, so what else it did is
 // its consequence (its journal's commit), held here from its turn until its
-// changes' `effect-done`s: applied once they land, dropped when they are
-// refused. A journal turn opens only once no click's changes are on their way
+// changes' `effect-done`s: applied once they land, dropped when they do not,
+// and the history's answer to the refusal run when a setting moved under
+// them. A journal turn opens only once no click's changes are on their way
 // (src/renderer/journal-turns.ts), so each click reads the files the clicks
 // ahead of it wrote, and at most one click is ever landing. The host owes every
 // change it is handed its `effect-done` (src/daemon/renderer-host.ts).
 
-import { diffChanges } from "../config/config-changes.js";
+import {
+  addressText,
+  applyChanges,
+  diffChanges,
+} from "../config/config-changes.js";
+import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type {
   ConfigChange,
@@ -18,11 +24,12 @@ import type {
 } from "../renderer-interface/interface.js";
 
 // A click whose changes are on their way: the session it clicked, the files
-// it wrote, and its consequence.
+// they change, its consequence, and what a refusal of them leaves behind.
 export interface Landing {
   readonly session: SessionId;
   readonly files: readonly string[];
   readonly consequence: () => void;
+  readonly refused: () => void;
 }
 
 // How a landing ended: every change of its click landed, or the first reason
@@ -56,12 +63,23 @@ export class ConfigWrites {
   }
 
   // A write of the open click: one change per file, from the click's first
-  // read of it to its last write.
+  // read of it to its last write. A write from text other than the click's
+  // own (a history step, from what it recorded) lands as the changes between
+  // its two texts, applied over what the click already wrote.
   land(file: string, before: string | null, after: string | null): void {
-    this.open.set(file, {
-      before: this.open.get(file)?.before ?? before,
-      after,
-    });
+    const open = this.open.get(file);
+    if (open === undefined) {
+      this.open.set(file, { before, after });
+      return;
+    }
+    const applied = applyChanges(open.after, diffChanges(before, after));
+    // [LAW:no-silent-failure] The click's own writes moved a setting its
+    // later write steps from: the click contradicts itself.
+    if (applied.kind === "moved")
+      throw new BadVerbArgs(
+        `${addressText(applied.at)} in ${file} was changed earlier in this click — nothing was written`,
+      );
+    this.open.set(file, { before: open.before, after: applied.text });
   }
 
   // The open click is over. Its changes join its turn's effects, and its
@@ -70,13 +88,13 @@ export class ConfigWrites {
   seal(
     effects: Effect[],
     session: SessionId | null,
-    consequence: () => void,
+    { consequence, refused }: Pick<Landing, "consequence" | "refused">,
   ): void {
     const written = [...this.open].flatMap(([path, { before, after }]) => {
       const list = diffChanges(before, after);
       return list.length === 0 ? [] : [{ path, list }];
     });
-    const files = [...this.open.keys()];
+    const files = written.map(({ path }) => path);
     this.open.clear();
     if (written.length === 0) return consequence();
     // [LAW:no-silent-failure] A write is a session's: one with none is the
@@ -93,7 +111,7 @@ export class ConfigWrites {
       }),
     );
     this.landing = {
-      of: { session, files, consequence },
+      of: { session, files, consequence, refused },
       owed: new Set(changes.map((c) => c.id)),
       missed: null,
     };

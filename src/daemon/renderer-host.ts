@@ -83,20 +83,27 @@ export function rendererHost(
       // and before the turn's caller hears it: the renderer opens its next
       // journal only once they have landed. A present answers the request
       // whose turn returned it, so one another turn returns is refused here.
-      // No effect is left owed its `effect-done`.
+      // No effect is left owed its `effect-done`, and the turn's caller
+      // hears it only after each `effect-done` turn, so a click is answered
+      // after what its landing did, in or out of process.
       const changes = output.effects.filter(
         (effect): effect is ConfigChange => effect.kind === "change",
       );
       const landed = changes.length === 0 ? null : performChanges(changes);
-      for (const effect of output.effects) {
-        if (effect.kind === "change") settle(effect, landed!);
-        else if (input.event.kind !== "request")
-          settle(effect, {
-            kind: "failed",
-            reason: `a ${input.event.kind} turn answers no request`,
-          });
-      }
+      const settled = output.effects.flatMap((effect) =>
+        effect.kind === "change"
+          ? [settle(effect, landed!)]
+          : input.event.kind === "request"
+            ? []
+            : [
+                settle(effect, {
+                  kind: "failed",
+                  reason: `a ${input.event.kind} turn answers no request`,
+                }),
+              ],
+      );
       collector.subscribed(subscriptions);
+      await Promise.all(settled);
       return output;
     } finally {
       release();
@@ -116,8 +123,8 @@ export function rendererHost(
         hopMs: null,
       }),
     );
-  const settle = (effect: Effect, outcome: EffectOutcome): void =>
-    void deliver(
+  const settle = (effect: Effect, outcome: EffectOutcome): Promise<unknown> =>
+    deliver(
       {
         kind: "event",
         at: instantAt(clock),

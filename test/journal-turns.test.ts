@@ -93,7 +93,6 @@ function setup() {
   const logged: string[] = [];
   const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT);
   const turns = new JournalTurns({
-    log: (_level, msg) => logged.push(msg),
     monotonic: () => systemTimekeeper.monotonic(),
     changesLanded: () => base.configWrites.landed(),
   });
@@ -294,16 +293,12 @@ test("a verb stamps its session's landing, though its handler threw", async () =
 });
 
 describe("close", () => {
-  test("a click in flight stays undoable as one step, its verb logged, and is not committed again", async () => {
-    const { sessionState, ctx, turns, logged, click } = setup();
+  test("a click in flight lands what it did before the close, as one undoable step", async () => {
+    const { sessionState, ctx, turns, click } = setup();
     const held = gate();
     const cut = click("nord", "plain", held.wait);
     await drain();
     turns.close();
-    expect(logged).toContain(
-      "journal: dispatch cut off by close, committing what landed",
-    );
-    expect(undoDepth(ctx)).toBe(1);
     held.open();
     await expect(cut).rejects.toBeInstanceOf(DaemonClosing);
     expect(sessionState.get(SID, "endcaps")).toBeNull();
@@ -312,11 +307,10 @@ describe("close", () => {
     expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
-  test("a click that lands normally commits, and its commit is no cut-off", async () => {
-    const { ctx, turns, logged, click } = setup();
+  test("a click that landed before the close stays one step", async () => {
+    const { ctx, turns, click } = setup();
     await click("nord", "plain", Promise.resolve());
     turns.close();
-    expect(logged.filter((l) => l.includes("cut off"))).toEqual([]);
     expect(undoDepth(ctx)).toBe(1);
   });
 

@@ -53,8 +53,14 @@ export function performChanges(
   try {
     for (const { target, changes: list } of changes) {
       const file = target.path;
-      const was = landings.get(file)?.was ?? readText(file);
-      const applied = applyChanges(landings.get(file)?.will ?? was, list);
+      // A file an earlier change of the turn named, as that change left it,
+      // an absent one included.
+      const prior = landings.get(file);
+      const was = prior === undefined ? readText(file) : prior.was;
+      const applied = applyChanges(
+        prior === undefined ? was : prior.will,
+        list,
+      );
       if (applied.kind === "moved")
         return {
           kind: "refused",

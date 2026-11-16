@@ -783,9 +783,11 @@ function recordedOrigin(
 // reaches the sessions that render it through the fs watcher.
 // [LAW:no-silent-failure] Not landed, the click's consequence is dropped: its
 // drafts, picks and history stay as they were, and the reason shows on its
-// session's ⚠. Refused, since a setting moved under it, its session's history
-// also forgets those files: the move would refuse every step back over them
-// too. A write that failed leaves them, to step again once it can land.
+// session's ⚠. Refused, since a setting moved under it, the history forgets
+// the files of any step the click took, which stayed where it was and would be
+// refused again at every click. A write that failed leaves them, to step
+// again once it can land. No click answers this turn, so whatever fails in it
+// shows on the session's ⚠ itself.
 export function changeDone(
   ctx: Omit<DaemonContext, TurnBound>,
   id: EffectId,
@@ -799,28 +801,32 @@ export function changeDone(
 
 function changeLanded(
   ctx: Omit<DaemonContext, TurnBound>,
-  { session, files, consequence, outcome }: Landed,
+  { session, files, consequence, refused, outcome }: Landed,
 ): void {
-  if (outcome.kind !== "ok") {
-    ctx.log("warn", `config change: ${outcome.reason} (session=${session})`);
-    if (outcome.kind === "refused")
-      for (const file of files) ctx.history.forgetFile(session, file);
-    holdClickError(ctx.sessionState, session, outcome.reason, ctx.now());
-    return;
+  const failed: string[] = [];
+  const step = (work: () => void): void => {
+    try {
+      work();
+    } catch (e) {
+      failed.push(failureOf(e).message);
+    }
+  };
+  if (outcome.kind === "ok") {
+    // A session with no recorded render has no cache entry to draw stale.
+    step(() => {
+      const origin = recordedOrigin(ctx, session);
+      if (origin !== null && files.includes(originHome(ctx, origin).path))
+        ctx.reloadConfig(origin);
+    });
+    step(consequence);
+  } else {
+    failed.push(outcome.reason);
+    if (outcome.kind === "refused") step(refused);
   }
-  // A session with no recorded render has no cache entry to draw stale.
-  const origin = recordedOrigin(ctx, session);
-  if (origin !== null && files.includes(originHome(ctx, origin).path))
-    ctx.reloadConfig(origin);
-  // [LAW:no-silent-failure] No click answers this turn, so what fails here
-  // shows on the session's ⚠ itself.
-  try {
-    consequence();
-  } catch (e) {
-    const reason = failureOf(e).message;
-    ctx.log("warn", `config change landed: ${reason} (session=${session})`);
-    holdClickError(ctx.sessionState, session, reason, ctx.now());
-  }
+  if (failed.length === 0) return;
+  const reason = failed.join("\n");
+  ctx.log("warn", `config change: ${reason} (session=${session})`);
+  holdClickError(ctx.sessionState, session, reason, ctx.now());
 }
 
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
@@ -1966,8 +1972,7 @@ function throwAll(failures: readonly unknown[]): void {
 //
 // [LAW:single-enforcer] It runs in the journal's turn `click` took
 // (src/renderer/journal-turns.ts), begin through the lanes' read, so an awaited
-// handler keeps its step whole. A turn the daemon's close cut off was committed
-// there, and the daemon is gone from under what follows the commit.
+// handler keeps its step whole.
 async function journaled<C extends DaemonContext>(
   sid: SessionId | null,
   latest: CheckedRenderRequest | null,
@@ -1979,18 +1984,6 @@ async function journaled<C extends DaemonContext>(
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin(ctx.configWrites);
   const navigation = ctx.navigation.begin(journal.sessionState);
-  // Each commit runs whatever the other did: both record what landed.
-  const commit = turn.holds(() => {
-    const failed: unknown[] = [];
-    for (const step of [navigation, journal]) {
-      try {
-        step.commit();
-      } catch (e) {
-        failed.push(e);
-      }
-    }
-    throwAll(failed);
-  });
   const failures: unknown[] = [];
   // Both views close what a write closes, the navigating one above its
   // recording, so ◁ back restores a closed menu with what was open in it.
@@ -2025,15 +2018,17 @@ async function journaled<C extends DaemonContext>(
   } catch (e) {
     failures.push(e);
   }
+  // Each commit runs whatever the other did: both record what landed.
   const consequence = (): void => {
     const failed: unknown[] = [];
-    let live = true;
-    try {
-      live = commit();
-    } catch (e) {
-      failed.push(e);
+    for (const step of [navigation, journal]) {
+      try {
+        step.commit();
+      } catch (e) {
+        failed.push(e);
+      }
     }
-    if (live && lanes !== null) {
+    if (lanes !== null) {
       try {
         // [LAW:no-ambient-temporal-coupling] Only a click that wrote can have
         // moved its lanes: for one that wrote nothing, what moved while it
@@ -2052,7 +2047,10 @@ async function journaled<C extends DaemonContext>(
     throwAll(failed);
   };
   try {
-    ctx.configWrites.seal(effects, sid, consequence);
+    ctx.configWrites.seal(effects, sid, {
+      consequence,
+      refused: () => journal.refused(),
+    });
   } catch (e) {
     failures.push(e);
   }

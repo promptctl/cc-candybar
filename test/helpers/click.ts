@@ -20,7 +20,10 @@ import {
 } from "./doctor-facts";
 import { clickOf } from "../../src/click/read";
 import { changeDone, VERBS } from "../../src/renderer/verbs";
-import { ConfigWrites } from "../../src/renderer/config-writes";
+import {
+  ConfigWrites,
+  type Landing,
+} from "../../src/renderer/config-writes";
 import { readConfigText } from "../../src/renderer/config-file-store";
 import { performChanges } from "../../src/daemon/effect-interpreter";
 import type {
@@ -96,10 +99,10 @@ class LandingAtOnce extends ConfigWrites {
   override seal(
     effects: Effect[],
     session: SessionId | null,
-    consequence: () => void,
+    landing: Pick<Landing, "consequence" | "refused">,
   ): void {
     const from = effects.length;
-    super.seal(effects, session, consequence);
+    super.seal(effects, session, landing);
     const changes = effects
       .splice(from)
       .filter((e): e is ConfigChange => e.kind === "change");
@@ -144,7 +147,6 @@ export function testVerbContext(
     clientGone: async () => false,
     latest: null,
     journalTurns: new JournalTurns({
-      log: () => {},
       monotonic: () => systemTimekeeper.monotonic(),
       changesLanded: () => configWrites.landed(),
     }),

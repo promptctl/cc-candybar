@@ -102,6 +102,10 @@ export interface Journal {
   redo(sessionId: SessionId): Step;
   rewind(sessionId: SessionId): Step;
   commit(): void;
+  // The click's changes were refused: every file a step it took steps drops
+  // off that session's stacks, since the step stayed where it was and would
+  // be refused at every click that takes it again.
+  refused(): void;
   // A write this journal holds no step for (a history step, the repo book).
   wrote(): void;
   // Whether the click wrote at all, a value it found included, across commits.
@@ -159,12 +163,20 @@ export class SettingsHistory {
     const held = heldWrites(this.sessionState);
     // Each session's history as this click leaves it.
     const working = new Map<SessionId, SessionHistory>();
+    // The files each session's steps taken by this click step.
+    const stepped = new Map<SessionId, Set<string>>();
     const click: Click = {
       held,
       files,
       historyOf: (sessionId) =>
         working.get(sessionId) ?? this.history(sessionId),
       move: (sessionId, history) => working.set(sessionId, history),
+      stepped: (sessionId, step) => {
+        const files = stepped.get(sessionId) ?? new Set<string>();
+        for (const change of step)
+          if (change.kind === "file") files.add(change.file);
+        stepped.set(sessionId, files);
+      },
     };
     const pending: Pending = new Map();
     let written = false;
@@ -263,6 +275,10 @@ export class SettingsHistory {
         // click whose step was not saved applies nothing of its own.
         for (const [sessionId, history] of moved) this.put(sessionId, history);
         held.flush();
+      },
+      refused: () => {
+        for (const [sessionId, files] of stepped)
+          for (const file of files) this.forgetFile(sessionId, file);
       },
     };
   }
@@ -370,6 +386,7 @@ export class SettingsHistory {
       else if (value === null) click.held.clear(sessionId, change.key);
       else click.held.set(sessionId, change.key, value);
     }
+    click.stepped(sessionId, step);
     click.move(sessionId, then);
   }
 
@@ -595,6 +612,7 @@ interface Click {
   readonly files: ConfigFiles;
   readonly historyOf: (sessionId: SessionId) => SessionHistory;
   readonly move: (sessionId: SessionId, history: SessionHistory) => void;
+  readonly stepped: (sessionId: SessionId, step: Step) => void;
 }
 
 // A session pick that no longer holds the value a step would step from. A
