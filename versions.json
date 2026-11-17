@@ -4,15 +4,22 @@
     {
       "version": "pr-779",
       "ref": "refs/pull/779/merge",
-      "sha": "a7ef8eb6509199f43651f207f593f27109d23e2e",
-      "timestamp": "2026-11-17T01:17:02.129Z",
+      "sha": "2826ce8641b37bb1782be22f252365f3a3c4e685",
+      "timestamp": "2026-11-17T01:30:05.040Z",
       "commits": [
         {
-          "sha": "a7ef8eb6509199f43651f207f593f27109d23e2e",
+          "sha": "2826ce8641b37bb1782be22f252365f3a3c4e685",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T01:16:09Z",
-          "message": "Merge bac1370b0e5e521f30c840ece7b465e39a09c47d into cace2e3245afefd551669afd6dd6c7b7b35875ba\n"
+          "timestamp": "2026-11-17T01:29:10Z",
+          "message": "Merge 6fa438cfb60b9dd4f8fed78b317a673290b43a21 into cace2e3245afefd551669afd6dd6c7b7b35875ba\n"
+        },
+        {
+          "sha": "6fa438cfb60b9dd4f8fed78b317a673290b43a21",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T18:28:53-07:00",
+          "message": "fix(doctor): every failure of a run's lane names the run, and a run is read whether or not its session has a view (8ts)\n\nThe medium review's findings:\n\n- The doctor lane is declared for one ask, so it is the one place that names\n  the run on every way the lane fails: the read, its declaration, the\n  session's whole declaration, the source's close. A failure from an earlier\n  run is never taken for a later one.\n- A session's doctor run joins the renderer's subscriptions whether or not a\n  view of the session is open, so a run asked after an eviction is read.\n- A run is read once its report is written; a report that throws fails the\n  run with the reason on the bar instead of leaving it read and unreported.\n- A fix or a mark judges the URL handler by how its own click arrived, and\n  files the clicked terminal for each link click, as before the move.\n- A whitespace-only file is its own parse, an empty object with no text, so\n  no span points into a document it is not.\n"
         },
         {
           "sha": "bac1370b0e5e521f30c840ece7b465e39a09c47d",

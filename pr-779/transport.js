@@ -36119,7 +36119,12 @@ function declareLanes(owners, holds2, facts, sources) {
   };
   return { lanes, faults };
 }
-var doctorLane = (ask2, take) => ask2 === null ? settledLane(ABSENT) : take(ask2);
+function doctorLane(ask2, take) {
+  if (ask2 === null) return settledLane(ABSENT);
+  const lane = take(ask2);
+  return { current: () => ofRun(ask2, lane.current()) };
+}
+var ofRun = ({ run: run3 }, current2) => current2.kind === "failed" ? ok({ run: run3, kind: "failed", reason: current2.reason }) : current2;
 function readingsOf(inputs, lanes) {
   const { deps } = inputs;
   const sessionId2 = inputs.hookData.session_id;
@@ -72081,7 +72086,7 @@ function capturing(pattern2) {
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
-var writableOf = ({ doctor }, kept) => doctor.kind === "ok" ? writableSettingsFiles(doctor.value) : kept;
+var writableOf = ({ doctor }, kept) => doctor.kind === "ok" && doctor.value.kind === "read" ? writableSettingsFiles(doctor.value) : kept;
 var locatorOf = (req) => ({
   hookData: req.hookData,
   cwd: req.cwd,
@@ -74547,10 +74552,9 @@ init_globals();
 init_globals();
 var import_json53 = __toESM(require_dist(), 1);
 var ABSENT3 = { kind: "absent" };
-var EMPTY_OBJECT2 = parseDocument("{}");
 function parse2(text4) {
   if (text4 === null) return { kind: "none" };
-  if (/^\s*$/.test(text4)) return { kind: "document", root: EMPTY_OBJECT2 };
+  if (/^\s*$/.test(text4)) return { kind: "empty" };
   try {
     return { kind: "document", root: parseDocument(text4) };
   } catch (e) {
@@ -74560,9 +74564,15 @@ function parse2(text4) {
 }
 function readAt(text4, parsed2, at) {
   if (text4 === null) return ABSENT3;
-  if (at.length === 0 || parsed2.kind !== "document")
-    return { kind: "file", text: text4 };
-  return readOf(text4, nodeAt(parsed2.root, at));
+  if (at.length === 0) return { kind: "file", text: text4 };
+  switch (parsed2.kind) {
+    case "empty":
+      return ABSENT3;
+    case "document":
+      return readOf(text4, nodeAt(parsed2.root, at));
+    default:
+      return { kind: "file", text: text4 };
+  }
 }
 function readOf(text4, node) {
   return node === void 0 ? ABSENT3 : { kind: "value", text: movableTextOf(text4, node) };
@@ -74681,6 +74691,7 @@ function applyChanges(text4, changes, dialect = JSON5_DIALECT) {
 }
 function movedAncestor(parsed2, at) {
   if (at.length === 0) return null;
+  if (parsed2.kind === "empty") return at.length === 1 ? null : at.slice(0, 1);
   if (parsed2.kind !== "document") return [];
   for (let depth = 0; depth < at.length; depth++) {
     const up = at.slice(0, depth);
@@ -88243,7 +88254,7 @@ function startRun(ctx, sid) {
   });
 }
 function reportedFacts(ctx, sid, verb) {
-  const facts = ctx.doctorRuns.facts(sid);
+  const facts = ctx.doctorRuns.facts(sid, ctx.arrival);
   if (facts !== null) return facts;
   if (!ctx.doctorRuns.running(sid)) startRun(ctx, sid);
   throw new BadVerbArgs(
@@ -89094,31 +89105,34 @@ var DoctorRuns = class {
     );
   }
   // A world state taken: the first that carries the reading of its session's
-  // unread run writes the run's report. A failed fact is that run's: the
-  // session subscribes to no other.
+  // unread run writes the run's report, or shows why the run was not read.
+  // The run is read once its report is written: one that could not be
+  // written fails the run, with the reason on the bar.
   took({ session, doctor }) {
     const run3 = this.runs.get(session);
-    if (run3 === void 0 || run3.reading !== null) return;
-    if (doctor.kind === "failed") {
-      this.runs.delete(session);
-      this.deps.failed(session, `doctor: ${doctor.reason}`);
+    if (run3 === void 0 || run3.reading !== null || doctor.kind !== "ok" || doctor.value.run !== run3.ask.run)
       return;
+    const reading = doctor.value;
+    if (reading.kind === "failed") return this.fail(session, reading.reason);
+    try {
+      this.report(
+        this.deps.sessionState,
+        session,
+        this.judged(run3, reading, run3.arrival)
+      );
+      run3.reading = reading;
+    } catch (e) {
+      this.fail(session, e instanceof Error ? e.message : String(e));
     }
-    if (doctor.kind !== "ok" || doctor.value.run !== run3.ask.run) return;
-    run3.reading = doctor.value;
-    const facts = this.composed(run3, doctor.value);
-    this.report(this.deps.sessionState, session, {
-      ...facts,
-      clicked: this.filed(run3, facts)
-    });
   }
-  // [LAW:single-enforcer] The session's run's facts as they stand: its
-  // reading, its load, and the stores as they hold now. Null while no
-  // reading is in.
-  facts(session) {
+  // [LAW:single-enforcer] The session's run's facts as they stand for a click
+  // that arrived as `arrival`: its reading, its load, the stores as they hold
+  // now, and what the click proves of the URL handler. Null while no reading
+  // is in.
+  facts(session, arrival) {
     const run3 = this.runs.get(session);
     const reading = run3?.reading ?? null;
-    return run3 === void 0 || reading === null ? null : this.composed(run3, reading);
+    return run3 === void 0 || reading === null ? null : this.judged(run3, reading, arrival);
   }
   // [LAW:single-enforcer] One write of the whole report, through setBatch —
   // the row cap flips, the reason and fixable land, in one reactive
@@ -89135,30 +89149,35 @@ var DoctorRuns = class {
   retire(session) {
     this.runs.delete(session);
   }
-  composed(run3, { machine, install: install2 }) {
-    return doctorFacts(
+  fail(session, reason) {
+    this.runs.delete(session);
+    this.deps.failed(session, `doctor: ${reason}`);
+  }
+  judged(run3, { machine, install: install2 }, arrival) {
+    const facts = doctorFacts(
       machine,
       install2,
       run3.load,
       run3.target,
       readStores(this.deps.stores),
-      clickArrived(run3.arrival)
+      clickArrived(arrival)
     );
+    return { ...facts, clicked: this.filed(arrival, facts) };
   }
-  // [LAW:one-source-of-truth] A run asked by a link is a link the session's
-  // terminal drew and the user clicked, so it settles for good that this
-  // terminal draws links: filed (src/doctor/clicked-terminals.ts) where
+  // [LAW:one-source-of-truth] A click that arrived by a link is a link the
+  // session's terminal drew and the user clicked, so it settles for good that
+  // this terminal draws links: filed (src/doctor/clicked-terminals.ts) where
   // `cc-candybar doctor` — which cannot click — reads it. Nothing is filed
   // from a tmux status-line click (tmux ran it, no link), where nothing names
   // the terminal, or over a list that does not read (the store answers that
   // failure, which the run reports as its own).
-  // [LAW:no-silent-failure] The filing rides along with the run it came with,
-  // so a write that fails is logged — and the event's `clicked=no` shows
-  // nothing was filed — while the run reports over the list as it was read.
-  filed(run3, facts) {
+  // [LAW:no-silent-failure] The filing rides along with the click it came
+  // with, so a write that fails is logged — and the event's `clicked=no`
+  // shows nothing was filed — while the run reports over the list as read.
+  filed(arrival, facts) {
     const { terminal, clicked } = facts;
     const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-    if (sighting === null || run3.arrival.via !== "link") return clicked;
+    if (sighting === null || arrival.via !== "link") return clicked;
     try {
       return this.deps.stores.clicked.update(
         (list2) => withClicked(list2, sighting)
@@ -90916,14 +90935,13 @@ function mainRenderer(parts, pushed) {
       const effects = [];
       const ended = await turn(input.event, input.at, record2, effects).finally(() => {
         const views = parts.renderCache.subscriptions().sources;
-        const doctor = parts.doctorRuns.subscriptions();
+        const merged = new Map(
+          Object.entries(views)
+        );
+        for (const [session, run3] of parts.doctorRuns.subscriptions())
+          merged.set(session, [...merged.get(session) ?? [], run3]);
         const sources = Object.fromEntries(
-          Object.entries(views).map(
-            ([session, list2]) => {
-              const run3 = doctor.get(session);
-              return [session, run3 === void 0 ? list2 : [...list2, run3]];
-            }
-          )
+          merged
         );
         subscriptions = {
           sources,
@@ -92809,6 +92827,7 @@ async function readDoctorRun(deps, { session, hints, ask: ask2 }) {
     });
     return ok({
       run: ask2.run,
+      kind: "read",
       machine,
       // The clients that drew the session's bars, and the daemon the run
       // reached — this process.
