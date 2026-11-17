@@ -1,3 +1,9 @@
+## [1.226.0](https://github.com/promptctl/cc-candybar/compare/v1.225.1...v1.226.0) (2026-11-17)
+
+### Features
+
+* **doctor:** the host reads a doctor run, and a fix lands only on the settings it diagnosed (8ts) ([#779](https://github.com/promptctl/cc-candybar/issues/779)) ([5db003d](https://github.com/promptctl/cc-candybar/commit/5db003d3ba2a42ea4935f43b1639a40e148f13b4))
+
 ## [1.225.1](https://github.com/promptctl/cc-candybar/compare/v1.225.0...v1.225.1) (2026-11-17)
 
 ### Bug Fixes
