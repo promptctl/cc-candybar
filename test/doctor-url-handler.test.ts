@@ -25,17 +25,9 @@ import {
 import { clickArrived } from "../src/doctor/sightings";
 import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
-import {
-  VERBS,
-  parseRenderOrigin,
-  type VerbContext,
-} from "../src/renderer/verbs";
+import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { parseClick } from "../src/daemon/click-reading";
 import { linkSignerOver } from "../src/click/link-signer";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../src/daemon/foundations/session-keys";
 import { SessionState } from "../src/renderer/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
@@ -45,13 +37,16 @@ import {
   testVerbContext,
   verbContextWith,
   withDoctor,
+  bookedContext,
+  hearRender,
+  heardRequest,
+  clickVerb,
 } from "./helpers/click";
 import { DoctorHost } from "./helpers/doctor-gather";
 import { clickParts } from "./helpers/click-parts";
 import { replyTo } from "../src/daemon/reply";
 import { RuntimeStats } from "../src/daemon/stats";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
-import { parseClientHints } from "../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../src/time";
 import {
   emptyStores,
@@ -435,18 +430,14 @@ describe("the daemon's side of the round trip", () => {
         bundle: HEALTHY_BUNDLE,
         clock: systemTimekeeper,
       },
-      (session) => ({
-        hints: parseClientHints(
-          JSON.parse(sessionState.get(session, SESSION_CLIENT_HINTS_KEY)!),
-        ),
-        origin: parseRenderOrigin(
-          sessionState.get(session, SESSION_RENDER_ORIGIN_KEY)!,
-        ),
-      }),
+      (session) => {
+        const { live, durable } = bookedContext(sessionState, session)!;
+        return { hints: live!.hints, origin: durable.origin };
+      },
     );
     // A click, then the end of its turn at the host.
     const click = async (verb: string, value: string): Promise<void> => {
-      await VERBS.get(verb)!(value, ctx);
+      await clickVerb(verb, value, ctx);
       await host.settle(ctx.doctorRuns);
     };
     return { sessionState, logs, click };
@@ -536,13 +527,11 @@ describe("the daemon's side of the round trip", () => {
   // In the bar, the doctor's own click is the link that came back.
   async function doctorRow(arrival: ClickArrival) {
     const d = daemon(arrival);
-    recordRender(d.sessionState, S1);
     // The session's own Claude Code directory (test/setup.ts's empty one):
     // with none, the doctor reads ~/.claude, the host's real settings.
-    d.sessionState.set(
-      S1,
-      SESSION_CLIENT_HINTS_KEY,
-      JSON.stringify({
+    hearRender(
+      d.sessionState,
+      heardRequest(S1, "/tmp/proj", {
         tmux: null,
         claudeConfigDir: process.env.CLAUDE_CONFIG_DIR,
         terminalEnv: { TERM_PROGRAM: "ghostty" },

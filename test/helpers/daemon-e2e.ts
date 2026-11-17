@@ -472,7 +472,7 @@ export function urlWriting(
 // does not care how the daemon dies, and SIGKILL cannot hang. It is the WRONG
 // signal for a test that restarts the daemon and expects durable state to come
 // back: SIGKILL bypasses server.ts's `shutdown()` funnel, and with it the
-// session state close that lands writes still inside FileSessionStorage's
+// session state close that lands writes still inside the session file's
 // 500ms debounce. Pass "SIGTERM" to exercise the graceful path a real restart
 // takes (a signal, the RSS backstop, or the parent watchdog — all three go
 // through that one funnel).

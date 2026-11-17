@@ -149,9 +149,11 @@ const OWNED_IMPORTS = {
       "The process has its one clock (src/host.ts): take the one you are given.",
   },
   // The real adapters a daemon is handed.
+  // A profile's stores on disk are among them (src/daemon/file-storage.ts),
+  // which a test's daemon builds as the process does.
   fileStores: {
     group: ["**/doctor/edge", "**/doctor/edge.js"],
-    owners: ["src/daemon/production-adapters.ts"],
+    owners: ["src/daemon/production-adapters.ts", "src/daemon/file-storage.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
   productionMachineEdge: {

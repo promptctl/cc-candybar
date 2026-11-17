@@ -37,7 +37,6 @@ import {
   type ReaderRenderRequest,
   type Response,
 } from "../../../src/daemon/foundations/protocol";
-import type { SessionStorage } from "../../../src/renderer-interface/session-state";
 import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { clickBody, hookData } from "../../helpers/daemon-e2e";
@@ -110,10 +109,10 @@ describe("the daemon is a value", () => {
       clock?: Timekeeper;
       checkout?: string;
       digest?: string;
-      session?: SessionStorage;
+      profile?: () => never;
     } = {},
   ): Daemon => {
-    const { session } = inputs;
+    const { profile } = inputs;
     const { daemon, daemonLog } = buildDaemon({
       host: hostNow(),
       paths: daemonPaths(hostNow()),
@@ -122,7 +121,7 @@ describe("the daemon is a value", () => {
         inputs.digest,
       ),
       ...(inputs.clock && { clock: inputs.clock }),
-      ...(session && { storage: () => ({ session }) }),
+      ...(profile && { profile }),
     });
     open = daemon;
     openLogs.push(daemonLog);
@@ -275,16 +274,12 @@ describe("the daemon is a value", () => {
 
   test("a build that throws stands in the way of no next build", async () => {
     writeConfig(PADDED);
-    const unreadable: SessionStorage = {
-      load: () => {
-        throw new Error("the session file cannot be read");
-      },
-      save: () => {},
-      flush: () => {},
+    const unreadable = (): never => {
+      throw new Error("the profile cannot be opened");
     };
     const settled = [...live.keys()];
-    expect(() => construct({ session: unreadable })).toThrow(
-      "the session file cannot be read",
+    expect(() => construct({ profile: unreadable })).toThrow(
+      "the profile cannot be opened",
     );
     expect([...live.keys()].filter((id) => !settled.includes(id))).toEqual([]);
 

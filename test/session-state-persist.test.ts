@@ -9,7 +9,16 @@ import fs, {
 import { join } from "path";
 import { tmpdir } from "os";
 import { SessionState } from "../src/renderer/session-state";
-import { FileSessionStorage } from "../src/daemon/session-state-file";
+import {
+  SESSION_STATE_FILE,
+  SessionFile,
+} from "../src/daemon/session-state-file";
+import type { SessionStorage } from "../src/renderer-interface/session-state";
+import {
+  EPHEMERAL_HISTORY_STORAGE,
+  HeldStores,
+} from "../src/daemon/held-stores";
+import { emptyStores } from "./helpers/doctor-facts";
 import { throughout, until } from "./helpers/until";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -21,7 +30,7 @@ const B = sessionIdOf("b");
 const C = sessionIdOf("c");
 const __PROTO__ = sessionIdOf("__proto__");
 
-describe("SessionState disk persistence", () => {
+describe("the session state's file", () => {
   let dir: string;
   let file: string;
 
@@ -34,35 +43,47 @@ describe("SessionState disk persistence", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  // Reader instance: load from disk, then flush so the constructor's
-  // write-back fires synchronously rather than leaving a debounced timer that
-  // could touch the filesystem after the temp dir is cleaned up.
-  const restore = () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    ss.flush();
-    return ss;
+  // A daemon over the file: the host's held stores, loaded as it serves, and
+  // a renderer built from them, each of its writes taken as a turn's are.
+  const daemonOver = (session: SessionStorage, maxSessions?: number) => {
+    const stores = new HeldStores(
+      { session, history: EPHEMERAL_HISTORY_STORAGE, doctor: emptyStores() },
+      () => {},
+    );
+    stores.load();
+    const state = new SessionState(stores.current().sessions, maxSessions);
+    const turn = (write: (state: SessionState) => void): void => {
+      write(state);
+      stores.take(state.drain());
+    };
+    return { state, turn, stores };
   };
+  const storage = (log?: (level: string, line: string) => void) =>
+    new SessionFile(SESSION_STATE_FILE, file, systemTimekeeper, 0, log);
+  const onDisk = () => JSON.parse(readFileSync(file, "utf8"));
 
-  it("the ephemeral default reads no file, and a file storage loads it at construction", () => {
-    writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
-    expect(new SessionState().get(S1, "theme")).toBeNull();
-    expect(
-      new SessionState(new FileSessionStorage(file, systemTimekeeper, 0)).get(S1, "theme"),
-    ).toBe("nord");
-  });
+  // A daemon started after one closed reads what it closed with: flushed so
+  // no debounced write outlives the temp dir.
+  const restarted = (maxSessions?: number) => {
+    const daemon = daemonOver(storage(), maxSessions);
+    daemon.stores.close();
+    return daemon.state;
+  };
 
   // [LAW:no-ambient-temporal-coupling] What lands after a daemon closed stays
   // in memory: a late write can't land over the file a next daemon took up.
   it("a write after close reaches memory and not the file", () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    ss.set(S1, "theme", "nord");
-    ss.close();
+    const session = storage();
+    const { state, turn, stores } = daemonOver(session);
+    turn((s) => s.set(S1, "theme", "nord"));
+    stores.close();
     const closedWith = readFileSync(file, "utf8");
     expect(JSON.parse(closedWith)).toEqual({ s1: { theme: "nord" } });
 
-    ss.set(S1, "theme", "dracula");
-    expect(ss.get(S1, "theme")).toBe("dracula");
-    ss.flush();
+    turn((s) => s.set(S1, "theme", "dracula"));
+    expect(state.get(S1, "theme")).toBe("dracula");
+    expect(stores.current().sessions[S1]).toEqual({ theme: "dracula" });
+    session.flush();
     expect(readFileSync(file, "utf8")).toBe(closedWith);
   });
 
@@ -70,11 +91,9 @@ describe("SessionState disk persistence", () => {
   // says what it wrote and how long it held the thread.
   it("each flush logs the bytes and sessions it wrote and how long it took", () => {
     const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
-    );
-    ss.set(S1, "theme", "dracula");
-    ss.flush();
+    const session = storage((_level, line) => logged.push(line));
+    session.save({ [S1]: { theme: "dracula" } });
+    session.flush();
     const bytes = Buffer.byteLength(readFileSync(file, "utf8"));
     expect(logged.at(-1)).toMatch(
       new RegExp(
@@ -92,13 +111,12 @@ describe("SessionState disk persistence", () => {
       JSON.stringify({ "a/b": { theme: "nord" }, [S1]: { theme: "dracula" } }),
     );
     const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
-    );
-    expect(ss.get(S1, "theme")).toBe("dracula");
-    expect(ss.size()).toBe(1);
+    const loaded = storage((_level, line) => logged.push(line)).load();
+    expect([...loaded]).toEqual([[S1, { theme: "dracula" }]]);
     expect(logged).toContainEqual(
-      expect.stringMatching(/^session-state load: dropped session key "a\/b": session id contains a path separator/),
+      expect.stringMatching(
+        /^session-state load: dropped session key "a\/b": session id contains a path separator/,
+      ),
     );
   });
 
@@ -112,10 +130,9 @@ describe("SessionState disk persistence", () => {
   // called, and the file still lands whole, owner-only.
   it("a debounced save lands on disk by itself and says so", async () => {
     const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
-    );
-    ss.set(S1, "theme", "nord");
+    storage((_level, line) => logged.push(line)).save({
+      [S1]: { theme: "nord" },
+    });
     await settled(() =>
       logged.some((l) => l.startsWith("session-state saved")),
     );
@@ -132,9 +149,7 @@ describe("SessionState disk persistence", () => {
   // a failure.
   it("a synchronous flush while the debounced rename is in flight keeps the newer state", async () => {
     const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
-    );
+    const session = storage((_level, line) => logged.push(line));
     const rename = fs.promises.rename;
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => {
@@ -147,10 +162,10 @@ describe("SessionState disk persistence", () => {
         return rename(from, to);
       });
     try {
-      ss.set(S1, "theme", "old");
+      session.save({ [S1]: { theme: "old" } });
       await settled(() => spy.mock.calls.length === 1);
-      ss.set(S1, "theme", "new");
-      ss.flush();
+      session.save({ [S1]: { theme: "new" } });
+      session.flush();
       release();
       // The held rename runs out: it finds no temp file, and the write ends.
       await settled(() => logged.some((l) => l.includes("superseded")));
@@ -174,8 +189,12 @@ describe("SessionState disk persistence", () => {
     // A real debounce: the newer state the failed flush leaves pending is
     // rescheduled once the raced write lands, and must not land before the
     // file is read back.
-    const ss = new SessionState(
-      new FileSessionStorage(file, systemTimekeeper, 500, (_level, line) => logged.push(line)),
+    const session = new SessionFile(
+      SESSION_STATE_FILE,
+      file,
+      systemTimekeeper,
+      500,
+      (_level, line) => logged.push(line),
     );
     const rename = fs.promises.rename;
     let release: () => void = () => {};
@@ -188,16 +207,14 @@ describe("SessionState disk persistence", () => {
         await held;
         return rename(from, to);
       });
-    const writeSpy = jest
-      .spyOn(fs, "writeFileSync")
-      .mockImplementation(() => {
-        throw Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" });
-      });
+    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
+      throw Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" });
+    });
     try {
-      ss.set(S1, "theme", "old");
+      session.save({ [S1]: { theme: "old" } });
       await settled(() => renameSpy.mock.calls.length === 1);
-      ss.set(S1, "theme", "new");
-      ss.flush();
+      session.save({ [S1]: { theme: "new" } });
+      session.flush();
       release();
       await settled(() => logged.some((l) => l.includes("saved")));
     } finally {
@@ -211,7 +228,7 @@ describe("SessionState disk persistence", () => {
     expect(logged.filter((l) => l.includes("superseded"))).toEqual([]);
     expect(logged.filter((l) => l.includes("saved"))).toHaveLength(1);
     // The newer state is still pending: the next flush lands it.
-    ss.flush();
+    session.flush();
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "new" },
     });
@@ -224,20 +241,18 @@ describe("SessionState disk persistence", () => {
   // the write removes its own temp file and says it was superseded.
   it("a synchronous flush before the debounced rename supersedes it", async () => {
     const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
-    );
+    const session = storage((_level, line) => logged.push(line));
     const mkdir = fs.promises.mkdir;
     const spy = jest
       .spyOn(fs.promises, "mkdir")
       .mockImplementation(async (dir, opts) => {
         // The write's first await: the flush lands before it resumes.
-        ss.set(S1, "theme", "new");
-        ss.flush();
+        session.save({ [S1]: { theme: "new" } });
+        session.flush();
         return mkdir(dir, opts);
       });
     try {
-      ss.set(S1, "theme", "old");
+      session.save({ [S1]: { theme: "old" } });
       await settled(() => logged.some((l) => l.includes("superseded")));
     } finally {
       spy.mockRestore();
@@ -257,20 +272,18 @@ describe("SessionState disk persistence", () => {
   // `saved` after the flush's own line, and the flush's state stands.
   it("a synchronous flush right after the debounced rename lands supersedes it", async () => {
     const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(file, systemTimekeeper, 0, (_level, line) => logged.push(line)),
-    );
+    const session = storage((_level, line) => logged.push(line));
     const rename = fs.promises.rename;
     const spy = jest
       .spyOn(fs.promises, "rename")
       .mockImplementation(async (from, to) => {
         await rename(from, to);
         // On disk, but the write has not resumed: the flush lands in between.
-        ss.set(S1, "theme", "new");
-        ss.flush();
+        session.save({ [S1]: { theme: "new" } });
+        session.flush();
       });
     try {
-      ss.set(S1, "theme", "old");
+      session.save({ [S1]: { theme: "old" } });
       await settled(() => logged.some((l) => l.includes("superseded")));
     } finally {
       spy.mockRestore();
@@ -292,15 +305,13 @@ describe("SessionState disk persistence", () => {
     const blocked = join(dir, "not-a-folder");
     writeFileSync(blocked, "");
     const logged: string[] = [];
-    const ss = new SessionState(
-      new FileSessionStorage(
-        join(blocked, "session-state.json"),
-        systemTimekeeper,
-        0,
-        (_level, line) => logged.push(line),
-      ),
-    );
-    ss.set(S1, "theme", "nord");
+    new SessionFile(
+      SESSION_STATE_FILE,
+      join(blocked, "session-state.json"),
+      systemTimekeeper,
+      0,
+      (_level, line) => logged.push(line),
+    ).save({ [S1]: { theme: "nord" } });
     await settled(() => logged.some((l) => l.includes("save failed")));
     await throughout(
       () => logged.filter((l) => l.includes("save failed")).length === 1,
@@ -310,48 +321,55 @@ describe("SessionState disk persistence", () => {
   });
 
   it("survives a daemon restart: a fresh instance reads identical values", () => {
-    const first = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    first.set(S1, "theme", "dracula");
-    first.set(S1, "displayStyle", "capsule");
-    first.set(S2, "endcaps", "plain");
-    first.flush();
+    const first = daemonOver(storage());
+    first.turn((s) => s.set(S1, "theme", "dracula"));
+    first.turn((s) => s.set(S1, "displayStyle", "capsule"));
+    first.turn((s) => s.set(S2, "endcaps", "plain"));
+    first.stores.close();
 
-    const reborn = restore();
+    const reborn = restarted();
     expect(reborn.get(S1, "theme")).toBe("dracula");
     expect(reborn.get(S1, "displayStyle")).toBe("capsule");
     expect(reborn.get(S2, "endcaps")).toBe("plain");
   });
 
   it("clear() persists removal across a restart", () => {
-    const first = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    first.set(S1, "endcaps", "plain");
-    first.flush();
-    first.clear(S1, "endcaps");
-    first.flush();
+    const first = daemonOver(storage());
+    first.turn((s) => s.set(S1, "endcaps", "plain"));
+    first.turn((s) => s.clear(S1, "endcaps"));
+    first.stores.close();
 
-    const reborn = restore();
-    expect(reborn.get(S1, "endcaps")).toBeNull();
+    expect(restarted().get(S1, "endcaps")).toBeNull();
+    expect(onDisk()).toEqual({});
   });
 
-  it("prune() drops inactive sessions and persists the bounded set", () => {
-    const first = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    first.set(S1, "theme", "nord");
-    first.set(S2, "theme", "dracula");
-    first.flush();
-    first.prune(new Set([S1]));
-    first.flush();
+  // [LAW:types-are-the-program] Both copies are ordered by write, so the
+  // file keeps the recency the renderer's bound evicts by.
+  it("a restart keeps the order the sessions were last written in", () => {
+    const first = daemonOver(storage());
+    first.turn((s) => s.set(A_2, "t", "1"));
+    first.turn((s) => s.set(B, "t", "2"));
+    first.turn((s) => s.set(A_2, "t", "3"));
+    first.stores.close();
+    expect(Object.keys(onDisk())).toEqual(["b", "a"]);
 
-    const reborn = restore();
-    expect(reborn.get(S1, "theme")).toBe("nord");
-    expect(reborn.get(S2, "theme")).toBeNull();
+    const reborn = restarted(2);
+    reborn.set(C, "t", "4");
+    expect(reborn.get(B, "t")).toBeNull();
+    expect(reborn.get(A_2, "t")).toBe("3");
   });
 
   it("debounces: no write before the window elapses, then one atomic file", async () => {
     jest.useFakeTimers();
     try {
-      const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 500));
-      ss.set(S1, "theme", "nord");
-      ss.set(S1, "style", "muted");
+      const session = new SessionFile(
+        SESSION_STATE_FILE,
+        file,
+        systemTimekeeper,
+        500,
+      );
+      session.save({ [S1]: { theme: "nord" } });
+      session.save({ [S1]: { theme: "nord", style: "muted" } });
       jest.advanceTimersByTime(499);
       expect(existsSync(file)).toBe(false);
 
@@ -361,7 +379,7 @@ describe("SessionState disk persistence", () => {
       await settled(() => existsSync(file));
       expect(existsSync(`${file}.writing`)).toBe(false);
 
-      const reborn = restore();
+      const reborn = restarted();
       expect(reborn.get(S1, "theme")).toBe("nord");
       expect(reborn.get(S1, "style")).toBe("muted");
     } finally {
@@ -371,18 +389,18 @@ describe("SessionState disk persistence", () => {
 
   it("corrupt file hydrates to empty state, not a throw", () => {
     writeFileSync(file, "{ not valid json");
-    const ss = restore();
+    const ss = restarted();
     expect(ss.get(S1, "theme")).toBeNull();
   });
 
   it("wrong-shape file hydrates to empty state", () => {
     writeFileSync(file, JSON.stringify({ s1: { theme: 42 } }));
-    const ss = restore();
+    const ss = restarted();
     expect(ss.get(S1, "theme")).toBeNull();
   });
 
   it("missing file hydrates to empty state", () => {
-    const ss = restore();
+    const ss = restarted();
     expect(ss.get(S1, "theme")).toBeNull();
   });
 
@@ -396,14 +414,16 @@ describe("SessionState disk persistence", () => {
     expect(ss.get(C, "theme")).toBe("3");
   });
 
-  it("get-promotion protects an actively-read session from eviction", () => {
+  // A read moves nothing, so the host's copy, which hears only writes, is
+  // ordered as this one is.
+  it("a read does not protect a session from eviction", () => {
     const ss = new SessionState(undefined, 2);
     ss.set(A_2, "theme", "1");
     ss.set(B, "theme", "2");
-    ss.get(A_2, "theme"); // promote "a" to most-recent
-    ss.set(C, "theme", "3"); // now "b" is oldest, not "a"
-    expect(ss.get(A_2, "theme")).toBe("1");
-    expect(ss.get(B, "theme")).toBeNull();
+    ss.get(A_2, "theme");
+    ss.set(C, "theme", "3");
+    expect(ss.get(A_2, "theme")).toBeNull();
+    expect(ss.get(B, "theme")).toBe("2");
   });
 
   it("over-cap file is trimmed on hydrate and the trim is persisted to disk", () => {
@@ -411,23 +431,23 @@ describe("SessionState disk persistence", () => {
       file,
       JSON.stringify({ a: { t: "1" }, b: { t: "2" }, c: { t: "3" } }),
     );
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0), 2);
-    ss.flush(); // force the constructor-scheduled write-back
+    const { state, turn, stores } = daemonOver(storage(), 2);
     // Oldest (first-in-file) dropped; the two most-recent survive — and the
-    // bound is enforced on disk without any post-restart mutation.
-    expect(ss.get(A_2, "t")).toBeNull();
-    const onDisk = JSON.parse(readFileSync(file, "utf8"));
-    expect(Object.keys(onDisk).sort()).toEqual(["b", "c"]);
+    // host hears the trim with the first turn, whatever it wrote.
+    expect(state.get(A_2, "t")).toBeNull();
+    turn(() => {});
+    stores.close();
+    expect(Object.keys(onDisk())).toEqual(["b", "c"]);
   });
 
   it("clear() of the last key removes the session entirely (no empty husk)", () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    ss.set(S1, "endcaps", "plain");
-    ss.clear(S1, "endcaps");
-    ss.flush();
-    const onDisk = JSON.parse(readFileSync(file, "utf8"));
-    expect(onDisk.s1).toBeUndefined();
-    expect(Object.keys(onDisk)).toHaveLength(0);
+    const { turn, stores } = daemonOver(storage());
+    turn((s) => {
+      s.set(S1, "endcaps", "plain");
+      s.clear(S1, "endcaps");
+    });
+    stores.close();
+    expect(onDisk()).toEqual({});
   });
 
   it("clear() promotes a surviving session so it isn't evicted early", () => {
@@ -446,32 +466,37 @@ describe("SessionState disk persistence", () => {
     const blocker = join(dir, "blocker");
     writeFileSync(blocker, "");
     const badPath = join(blocker, "session-state.json");
-    const ss = new SessionState(new FileSessionStorage(badPath, systemTimekeeper, 0));
-    ss.set(S1, "theme", "nord");
-    ss.flush(); // write fails; snapshot must NOT be dropped
+    const session = new SessionFile(
+      SESSION_STATE_FILE,
+      badPath,
+      systemTimekeeper,
+      0,
+    );
+    session.save({ [S1]: { theme: "nord" } });
+    session.flush(); // write fails; snapshot must NOT be dropped
     expect(existsSync(badPath)).toBe(false);
     // Make the path writable, then flush again — the retained snapshot lands.
     rmSync(blocker);
-    ss.flush();
+    session.flush();
     const onDisk = JSON.parse(readFileSync(badPath, "utf8"));
     expect(onDisk.s1.theme).toBe("nord");
   });
 
   it("writes the state file with owner-only (no group/other) permissions", () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    ss.set(S1, "theme", "nord");
-    ss.flush();
+    const session = storage();
+    session.save({ [S1]: { theme: "nord" } });
+    session.flush();
     expect(statSync(file).mode & 0o077).toBe(0);
   });
 
   it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", () => {
-    const ss = new SessionState(new FileSessionStorage(file, systemTimekeeper, 0));
-    ss.set(__PROTO__, "theme", "evil");
-    ss.flush();
+    const first = daemonOver(storage());
+    first.turn((s) => s.set(__PROTO__, "theme", "evil"));
+    first.stores.close();
     // Object.prototype untouched — no pollution.
     expect(({} as Record<string, unknown>)["theme"]).toBeUndefined();
     // The malicious key survives as ordinary stored data.
-    const reborn = restore();
+    const reborn = restarted();
     expect(reborn.get(__PROTO__, "theme")).toBe("evil");
   });
 });

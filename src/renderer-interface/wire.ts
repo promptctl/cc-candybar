@@ -14,6 +14,7 @@ import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { Host } from "../host-facts.js";
 import type { Asked } from "../utils/outcome.js";
 import type { AdapterToHost } from "./adapter.js";
+import type { StoredState } from "./stored-state.js";
 import type { Crosses } from "./crosses.js";
 import {
   rendererOf,
@@ -28,9 +29,11 @@ import {
 
 // What a renderer process builds itself from: the host's view of its machine
 // (its environment, home and temporary directory, from which the renderer
-// derives the paths it owns as the host does), and the one memory limit its
-// cache's budget is a share of.
+// finds the user's config and plugins as the host does), the one memory limit
+// its cache's budget is a share of, and its profile's stored state as the host
+// holds it as the renderer spawns.
 export interface RendererBoot {
+  readonly stored: StoredState;
   // [LAW:one-source-of-truth] The digest of the source the host was built
   // from, which a renderer built from other source refuses: the renderer runs
   // from the entry on disk, which an install can rewrite under a running
@@ -73,12 +76,8 @@ export type HostLine =
   // [LAW:single-enforcer] The supervisor's one check that the renderer's loop turns:
   // answered outside any turn, with what the process holds of memory.
   | { readonly kind: "ping"; readonly n: number }
-  // A breach's heap snapshot, written under the breach's identity.
-  | {
-      readonly kind: "heap-snapshot";
-      readonly n: number;
-      readonly file: string;
-    };
+  // A breach's heap snapshot, streamed back for the host to write.
+  | { readonly kind: "heap-snapshot"; readonly n: number };
 
 export type RendererLine =
   // The boot answered: the renderer is built, or why it is not.
@@ -98,10 +97,14 @@ export type RendererLine =
       readonly args: readonly unknown[];
     }
   | { readonly kind: "ping"; readonly n: number; readonly usage: MemorySizes }
+  // [LAW:effects-at-boundaries] A heap snapshot's next piece of text, which
+  // the host writes: the renderer process opens no file.
+  | { readonly kind: "heap-chunk"; readonly n: number; readonly chunk: string }
+  // The snapshot's end: every chunk sent, or why the rest was not.
   | {
       readonly kind: "heap-snapshot";
       readonly n: number;
-      readonly written:
+      readonly taken:
         | { readonly kind: "ok" }
         | { readonly kind: "failed"; readonly failure: Failure };
     };
@@ -192,7 +195,9 @@ export function lineSplitter(heard: (line: string) => void): {
 export interface RendererOverLines {
   readonly renderer: TimedRenderer;
   readonly ping: () => Promise<MemorySizes>;
-  readonly heapSnapshot: (file: string) => Promise<void>;
+  // Settles once the snapshot has ended, each chunk handed to `write` as it
+  // came.
+  readonly heapSnapshot: (write: (chunk: string) => void) => Promise<void>;
   readonly heard: (line: RendererLine) => void;
   readonly ended: (why: Error) => void;
 }
@@ -215,6 +220,8 @@ export function rendererOverLines(deps: {
       readonly fail: (why: Error) => void;
     }
   >();
+  // Where each snapshot being streamed writes its chunks, until it settles.
+  const chunks = new Map<number, (chunk: string) => void>();
   let next = 0;
   let gone: Error | null = null;
   const owe = <T>(
@@ -275,6 +282,15 @@ export function rendererOverLines(deps: {
       return;
     }
     switch (line.kind) {
+      case "heap-chunk": {
+        const write = chunks.get(line.n);
+        if (write === undefined) {
+          deps.fault(`renderer sent a heap chunk ${line.n}, owed none`);
+          return;
+        }
+        write(line.chunk);
+        return;
+      }
       case "notice":
         try {
           reached(line.reach, line.args);
@@ -322,14 +338,18 @@ export function rendererOverLines(deps: {
           return true;
         },
       ),
-    heapSnapshot: (file) =>
+    heapSnapshot: (write) =>
       owe<void>(
         "a heap snapshot",
-        (n) => ({ kind: "heap-snapshot", n, file }),
+        (n) => {
+          chunks.set(n, write);
+          return { kind: "heap-snapshot", n };
+        },
         (heard, resolve, reject) => {
           if (heard.kind !== "heap-snapshot") return false;
-          if (heard.written.kind === "ok") resolve();
-          else reject(new CrossedFailure(heard.written.failure));
+          chunks.delete(heard.n);
+          if (heard.taken.kind === "ok") resolve();
+          else reject(new CrossedFailure(heard.taken.failure));
           return true;
         },
       ),
@@ -338,6 +358,7 @@ export function rendererOverLines(deps: {
       gone ??= why;
       const waiting = [...owed.values()];
       owed.clear();
+      chunks.clear();
       for (const each of waiting) each.fail(why);
     },
   };
@@ -370,7 +391,8 @@ export function serveRenderer(deps: {
   readonly renderer: TimedRenderer;
   readonly send: (line: RendererLine) => void;
   readonly memory: () => MemorySizes;
-  readonly heapSnapshot: (file: string) => void;
+  // The process's heap as text, each piece handed to `chunk` in order.
+  readonly heapSnapshot: (chunk: (text: string) => void) => Promise<void>;
 }): (line: HostLine) => void {
   const { renderer, send } = deps;
   return (line) => {
@@ -392,17 +414,18 @@ export function serveRenderer(deps: {
         send({ kind: "ping", n: line.n, usage: deps.memory() });
         return;
       case "heap-snapshot": {
-        let written: Extract<
-          RendererLine,
-          { kind: "heap-snapshot" }
-        >["written"];
-        try {
-          deps.heapSnapshot(line.file);
-          written = { kind: "ok" };
-        } catch (thrown) {
-          written = { kind: "failed", failure: failureOf(thrown) };
-        }
-        send({ kind: "heap-snapshot", n: line.n, written });
+        const { n } = line;
+        void deps
+          .heapSnapshot((chunk) => send({ kind: "heap-chunk", n, chunk }))
+          .then(
+            () => send({ kind: "heap-snapshot", n, taken: { kind: "ok" } }),
+            (thrown: unknown) =>
+              send({
+                kind: "heap-snapshot",
+                n,
+                taken: { kind: "failed", failure: failureOf(thrown) },
+              }),
+          );
         return;
       }
       case "boot":

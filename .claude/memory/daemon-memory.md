@@ -10,7 +10,7 @@ The env override for the limit keeps "RSS" in its name. It's a published contrac
 
 ## A breach leaves a post-mortem of each kind
 
-On a breach the daemon writes the platform's own memory attribution of each process first, then the renderer's V8 heap snapshot, then its own, under one shared identity, and exits. The attribution is needed because a heap snapshot describes only V8's half. The breaches that trip the limit are the ones where RSS and the heap disagree: V8's own mappings, malloc, page tables and file-backed code, part of which no eviction can reach. Rotation keeps the newest few breaches, with every file of each.
+On a breach the daemon writes the platform's own memory attribution of each process first, then the renderer's V8 heap snapshot, then its own, under one shared identity, and exits. The attribution is needed because a heap snapshot describes only V8's half. The breaches that trip the limit are the ones where RSS and the heap disagree: V8's own mappings, malloc, page tables and file-backed code, part of which no eviction can reach. Rotation keeps the newest few breaches, with every file of each. The renderer's snapshot streams over its lines and the host writes it, because the renderer process opens no file; the host opens the file before it asks, so a file it cannot make costs the renderer nothing.
 
 ## The render cache has a byte budget
 

@@ -1,40 +1,44 @@
 import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
-import type {
-  LoadedSessions,
-  SessionSnapshot,
-  SessionStorage,
-} from "../renderer-interface/session-state";
+import type { SessionStorage } from "../renderer-interface/session-state";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
-// [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*
-// recovery, not a hidden fallback to different data: an empty store re-rolls
-// random picks exactly as a first-ever boot would. Anything that isn't the
-// expected sessionId→key→value shape is rejected here so the store never
-// hydrates from a half-written or hand-edited file.
-function isSnapshot(value: unknown): value is SessionSnapshot {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  for (const kv of Object.values(value)) {
-    if (kv === null || typeof kv !== "object" || Array.isArray(kv))
-      return false;
-    for (const leaf of Object.values(kv)) {
-      if (typeof leaf !== "string") return false;
-    }
-  }
-  return true;
+// [LAW:one-type-per-behavior] What one per-session file holds: the name its
+// log lines say, each session's value as the file keeps it, and as a load
+// parses it back, null for one of the wrong shape.
+export interface SessionFileKind<V> {
+  readonly name: string;
+  readonly record: (value: V) => unknown;
+  readonly parse: (value: unknown) => V | null;
 }
 
-// [LAW:single-enforcer] The debounce + atomic write lives here, not in
-// SessionState. The store calls save() on every mutation; this coalesces the
-// bursty 22-session × 1 Hz write load into at most one disk write per window.
-export class FileSessionStorage implements SessionStorage {
+// The session picks: each session's key → value strings.
+export const SESSION_STATE_FILE: SessionFileKind<
+  Readonly<Record<string, string>>
+> = {
+  name: "session-state",
+  record: (kv) => kv,
+  parse: (kv) =>
+    kv !== null &&
+    typeof kv === "object" &&
+    !Array.isArray(kv) &&
+    Object.values(kv).every((leaf) => typeof leaf === "string")
+      ? (kv as Readonly<Record<string, string>>)
+      : null,
+};
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+// [LAW:single-enforcer] The debounce + atomic write of every per-session
+// file. Its owner calls save() on every change; this coalesces the bursty
+// 22-session × 1 Hz write load into at most one disk write per window.
+export class SessionFile<V> {
   // What clears the debounce timer while one is armed.
   private clearTimer: (() => void) | null = null;
-  private pending: SessionSnapshot | null = null;
+  private pending: Readonly<Record<SessionId, V>> | null = null;
   // Whether a debounced write is on its way to the disk.
   private writing = false;
   // Counts synchronous flushes that landed: a debounced write begun before
@@ -45,6 +49,7 @@ export class FileSessionStorage implements SessionStorage {
   private readonly writingPath: string;
 
   constructor(
+    private readonly kind: SessionFileKind<V>,
     private readonly filePath: string,
     // [LAW:effects-at-boundaries] The machine's clock: the debounce and the
     // timings the write logs are real time, as the disk is.
@@ -57,8 +62,11 @@ export class FileSessionStorage implements SessionStorage {
     this.writingPath = `${filePath}.writing`;
   }
 
-  load(): LoadedSessions {
-    const loaded = new Map<SessionId, Readonly<Record<string, string>>>();
+  // [LAW:no-silent-failure] Corrupt/missing file → empty state is the
+  // *defined* recovery, not a hidden fallback to different data: an empty
+  // store re-rolls random picks exactly as a first-ever boot would.
+  load(): ReadonlyMap<SessionId, V> {
+    const loaded = new Map<SessionId, V>();
     let raw: string;
     try {
       raw = fs.readFileSync(this.filePath, "utf8");
@@ -70,35 +78,50 @@ export class FileSessionStorage implements SessionStorage {
       if (code !== "ENOENT") {
         this.logger(
           "warn",
-          `session-state read failed (${code}); starting empty`,
+          `${this.kind.name} read failed (${code}); starting empty`,
         );
       }
       return loaded;
     }
     try {
       const parsed: unknown = JSON.parse(raw);
-      if (isSnapshot(parsed)) {
-        // [LAW:no-silent-failure] A key the session id checkpoint refuses is
-        // reported and dropped.
-        return sessionKeyed(parsed, (key, problem) =>
+      if (isRecord(parsed)) {
+        // [LAW:no-silent-failure] A key the session id checkpoint refuses, or
+        // a value of the wrong shape, is reported and dropped, and the
+        // sessions beside it load whole: the store never hydrates from a
+        // half-written or hand-edited entry.
+        const keyed = sessionKeyed(parsed, (key, problem) =>
           this.logger(
             "warn",
-            `session-state load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
+            `${this.kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
           ),
         );
+        for (const [id, value] of keyed) {
+          const held = this.kind.parse(value);
+          if (held !== null) loaded.set(id, held);
+          else
+            this.logger(
+              "warn",
+              `${this.kind.name} load: dropped session ${JSON.stringify(id)}: its value has the wrong shape`,
+            );
+        }
+        return loaded;
       }
       this.logger(
         "warn",
-        `session-state load: unexpected shape, starting empty`,
+        `${this.kind.name} load: unexpected shape, starting empty`,
       );
       return loaded;
     } catch {
-      this.logger("warn", `session-state load: corrupt JSON, starting empty`);
+      this.logger(
+        "warn",
+        `${this.kind.name} load: corrupt JSON, starting empty`,
+      );
       return loaded;
     }
   }
 
-  save(snapshot: SessionSnapshot): void {
+  save(snapshot: Readonly<Record<SessionId, V>>): void {
     this.pending = snapshot;
     this.schedule();
   }
@@ -117,6 +140,17 @@ export class FileSessionStorage implements SessionStorage {
     );
   }
 
+  private body(snapshot: Readonly<Record<SessionId, V>>): string {
+    return JSON.stringify(
+      Object.fromEntries(
+        Object.entries(snapshot).map(([id, value]) => [
+          id,
+          this.kind.record(value as V),
+        ]),
+      ),
+    );
+  }
+
   // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
   // off the daemon's one thread: the bytes are written and synced through the
   // thread pool, and so is the rename that publishes them. A rename is a
@@ -128,7 +162,7 @@ export class FileSessionStorage implements SessionStorage {
     if (snapshot === null) return;
     const generation = this.generation;
     const started = this.clock.monotonic();
-    const body = JSON.stringify(snapshot);
+    const body = this.body(snapshot);
     const tmp = this.writingPath;
     this.writing = true;
     // The thread is held until the first await.
@@ -169,14 +203,17 @@ export class FileSessionStorage implements SessionStorage {
         if (!landed) await fs.promises.rm(tmp, { force: true });
         this.logger(
           "info",
-          `session-state write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
+          `${this.kind.name} write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
         );
         return;
       }
       this.saved(body, snapshot, started, heldMs);
       if (this.pending === snapshot) this.pending = null;
     } catch (e) {
-      this.logger("warn", `session-state save failed: ${(e as Error).message}`);
+      this.logger(
+        "warn",
+        `${this.kind.name} save failed: ${(e as Error).message}`,
+      );
     } finally {
       this.writing = false;
       // A save that arrived while this one was written is written next. A
@@ -197,9 +234,9 @@ export class FileSessionStorage implements SessionStorage {
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
-      const body = JSON.stringify(snapshot);
+      const body = this.body(snapshot);
       // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
-      // pid/spawn.lock. Session state carries conversation identifiers, so it
+      // pid/spawn.lock. A session file carries conversation identifiers, so it
       // gets the same perms — chmod defeats umask and re-perms a reused tmp.
       fs.writeFileSync(tmp, body, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
@@ -222,7 +259,10 @@ export class FileSessionStorage implements SessionStorage {
       // silently dropping the last known state.
       this.pending = null;
     } catch (e) {
-      this.logger("warn", `session-state save failed: ${(e as Error).message}`);
+      this.logger(
+        "warn",
+        `${this.kind.name} save failed: ${(e as Error).message}`,
+      );
     }
   }
 
@@ -230,13 +270,22 @@ export class FileSessionStorage implements SessionStorage {
   // how much of that it held the daemon's one thread.
   private saved(
     body: string,
-    snapshot: SessionSnapshot,
+    snapshot: Readonly<Record<SessionId, V>>,
     started: Monotonic,
     heldMs: number,
   ): void {
     this.logger(
       "info",
-      `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
+      `${this.kind.name} saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
     );
   }
 }
+
+// The session picks' file, as a profile keeps it.
+export const sessionStateFile = (
+  filePath: string,
+  clock: Pick<Timekeeper, "after" | "monotonic">,
+  debounceMs?: number,
+  logger?: DaemonLogger,
+): SessionStorage =>
+  new SessionFile(SESSION_STATE_FILE, filePath, clock, debounceMs, logger);

@@ -4,11 +4,14 @@
 // verbs are here; the doors at a daemon are test/daemon-boots/worker/session-id-at-the-daemon.test.ts.
 
 import { randomUUID } from "node:crypto";
-import { parseSessionId, sessionIdOf } from "../src/daemon/foundations/session-id";
+import {
+  parseSessionId,
+  sessionIdOf,
+} from "../src/daemon/foundations/session-id";
 import { SessionState } from "../src/renderer/session-state";
 import { BadVerbArgs, VERBS } from "../src/renderer/verbs";
 import { encodeSegments } from "../src/click/wire";
-import { recordRender, testVerbContext } from "./helpers/click";
+import { recordRender, testVerbContext, CLICK_VERBS } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { REFUSED } from "./helpers/session-id-refused";
 
@@ -34,13 +37,15 @@ describe("the session-id checkpoint", () => {
 });
 
 describe("a click's session id", () => {
-  const applyUpdate = VERBS.get("apply-update")!;
-  const setState = VERBS.get("set-state")!;
-  const stepState = VERBS.get("step-state")!;
+  const applyUpdate = CLICK_VERBS.get("apply-update")!;
+  const setState = CLICK_VERBS.get("set-state")!;
+  const stepState = CLICK_VERBS.get("step-state")!;
 
   test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState());
-    expect(() => applyUpdate(encodeURIComponent(raw), ctx)).toThrow(BadVerbArgs);
+    expect(() => applyUpdate(encodeURIComponent(raw), ctx)).toThrow(
+      BadVerbArgs,
+    );
     expect(() => applyUpdate(encodeURIComponent(raw), ctx)).toThrow(problem);
     expect(() => stepState(encodeSegments([raw, "k", "1"]), ctx)).toThrow(
       problem,

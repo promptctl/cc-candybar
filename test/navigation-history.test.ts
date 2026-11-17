@@ -12,8 +12,12 @@ import {
   VERB_BACK,
   VERB_UNDO,
 } from "../src/click/wire";
-import { recordRender, testVerbContext,
-  verbContextWith } from "./helpers/click";
+import {
+  recordRender,
+  testVerbContext,
+  verbContextWith,
+  CLICK_VERBS,
+} from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { UPDATE_DISMISSED_KEY } from "../src/daemon/foundations/update-keys";
@@ -43,14 +47,19 @@ function setup() {
   let config = configWithTabs("a", "b");
   recordRender(sessionState, S1);
   const ctx = verbContextWith(testVerbContext(sessionState), {
-    configFor: () => config
-});
+    configFor: () => config,
+  });
   // The update notice's dismissal is the daemon's own key, not a config's.
   const dispose = ctx.gates.state.register(UPDATE_DISMISSED_KEY, ["1.2.3"]);
   const set = async (...pairs: string[]): Promise<void> =>
-    await VERBS.get(VERB_SET_STATE)!(encodeSegments(["s1", ...pairs]), ctx);
-  const back = async (): Promise<void> => await VERBS.get(VERB_BACK)!(encodeSegments(["s1"]), ctx);
-  const undo = async (): Promise<void> => await VERBS.get(VERB_UNDO)!(encodeSegments(["s1"]), ctx);
+    await CLICK_VERBS.get(VERB_SET_STATE)!(
+      encodeSegments(["s1", ...pairs]),
+      ctx,
+    );
+  const back = async (): Promise<void> =>
+    await CLICK_VERBS.get(VERB_BACK)!(encodeSegments(["s1"]), ctx);
+  const undo = async (): Promise<void> =>
+    await CLICK_VERBS.get(VERB_UNDO)!(encodeSegments(["s1"]), ctx);
   return {
     sessionState,
     // What the bar's ◁ counts: measured against the gate of the config the

@@ -38,7 +38,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { systemTimekeeper } from "../src/time";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { WRITES_IN_PLACE, undoOf } from "./helpers/history-step";
+import { NO_LAYERS, undoOf } from "./helpers/history-step";
 
 const SID_S = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -320,14 +320,14 @@ describe("nothing fades in where the frame is drawn from another source", () => 
     const on = renderer(ROW);
     try {
       const history = new SettingsHistory(on.session, () => {});
-      const journal = history.begin(WRITES_IN_PLACE);
+      const journal = history.begin(NO_LAYERS);
       journal.sessionState.set(SID_S, "theme", "nord");
       journal.commit();
       const fx = new SessionEffects<RenderedLine>("s");
       on.render({ shown: false, when: at(0) }, fx, { transitions: true });
       on.render({ shown: false, when: at(1) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("compared");
-      undoOf(history, SID_S);
+      undoOf(history, SID_S, NO_LAYERS);
       on.render({ shown: false, when: at(2) }, fx, { transitions: true });
       expect(fx.lastFrame().basis).toBe("fresh");
     } finally {
@@ -501,11 +501,11 @@ describe("a session's state revision moves with every change to it, whoever writ
   test("the settings history's undo moves it, though it writes past the click's journal", () => {
     const state = new SessionState();
     const history = new SettingsHistory(state, () => {});
-    const journal = history.begin(WRITES_IN_PLACE);
+    const journal = history.begin(NO_LAYERS);
     journal.sessionState.set(SID_S, "theme", "nord");
     journal.commit();
     const before = state.revision(SID_S);
-    undoOf(history, SID_S);
+    undoOf(history, SID_S, NO_LAYERS);
     expect(state.revision(SID_S)).not.toBe(before);
   });
 });

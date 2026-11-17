@@ -34,7 +34,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { instantOf } from "../src/utils/instant";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { recordRender, testVerbContext } from "./helpers/click";
 import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
@@ -558,7 +558,7 @@ const walkMenu = async (
     const { verb, value } = linkClick(hit.url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
+    for (const e of effects) await CLICK_VERBS.get(e.verb)!(e.value, ctx);
     last = drawnBytes(view);
   }
 };

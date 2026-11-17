@@ -3,9 +3,19 @@ import path from "node:path";
 import { SessionState } from "../src/renderer/session-state";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
-import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
-import { actsOf, performActs, recordRender, testVerbContext,
-  verbContextWith } from "./helpers/click";
+import {
+  encodeSegments,
+  VERB_STEP_STATE,
+  VERB_APPLY_UPDATE,
+} from "../src/click/wire";
+import {
+  actsOf,
+  performActs,
+  recordRender,
+  testVerbContext,
+  verbContextWith,
+  CLICK_VERBS,
+} from "./helpers/click";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
@@ -56,15 +66,25 @@ describe("SessionState", () => {
     expect(state.get(ABC_123, "style")).toBe("surface");
   });
 
-  test("prune removes sessions not in the active set", () => {
+  // The host's copy hears each session that moved, as it now stands, in the
+  // order they last moved, and hears it once.
+  test("drain tells each session that moved, in the order it last moved", () => {
     const state = new SessionState();
     state.set(A_2, "theme", "ocean");
     state.set(B, "theme", "ember");
     state.set(C, "theme", "forest");
-    state.prune(new Set([A_2, C]));
-    expect(state.get(A_2, "theme")).toBe("ocean");
-    expect(state.get(B, "theme")).toBeNull();
-    expect(state.get(C, "theme")).toBe("forest");
+    state.clear(B, "theme");
+    state.set(A_2, "style", "surface");
+    expect(state.drain()).toEqual([
+      { store: "session-state", key: C, value: { theme: "forest" } },
+      { store: "session-state", key: B, value: null },
+      {
+        store: "session-state",
+        key: A_2,
+        value: { theme: "ocean", style: "surface" },
+      },
+    ]);
+    expect(state.drain()).toEqual([]);
   });
 });
 
@@ -80,7 +100,12 @@ describe("click protocol", () => {
     // [LAW:behavior-not-structure] Pins the safety guarantee at lookup,
     // so the regression reads as "verb table leaks Object.prototype"
     // rather than as a type-only diff a reviewer might wave through.
-    for (const poison of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    for (const poison of [
+      "__proto__",
+      "constructor",
+      "toString",
+      "hasOwnProperty",
+    ]) {
       expect(VERBS.get(poison)).toBeUndefined();
     }
   });
@@ -94,7 +119,7 @@ describe("click protocol", () => {
     // (set-state) codecs at their shared decode boundary.
     const ctx: VerbContext = testVerbContext(new SessionState());
     for (const verb of ["copy", "set-state"]) {
-      const handler = VERBS.get(verb)!;
+      const handler = CLICK_VERBS.get(verb)!;
       expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
     }
   });
@@ -105,27 +130,34 @@ describe("apply-update verb", () => {
   // handler's whole job is asking the host for the update watch's act.
   test("a session id asks the host for one apply-update act; a missing or unsafe one is BadVerbArgs and asks none", async () => {
     const ctx: VerbContext = testVerbContext(new SessionState());
-    const handler = VERBS.get(VERB_APPLY_UPDATE)!;
+    const handler = CLICK_VERBS.get(VERB_APPLY_UPDATE)!;
     await handler(encodeURIComponent("sess-1"), ctx);
     expect(actsOf(ctx)).toEqual([
       { kind: "apply-update", id: expect.any(Number), session: "sess-1" },
     ]);
     expect(() => handler("", ctx)).toThrow(BadVerbArgs);
-    expect(() => handler(encodeURIComponent("../etc"), ctx)).toThrow(BadVerbArgs);
+    expect(() => handler(encodeURIComponent("../etc"), ctx)).toThrow(
+      BadVerbArgs,
+    );
     expect(actsOf(ctx)).toHaveLength(1);
   });
 
   test("an act the update watch refuses settles refused, and its reason is held on the session's bar", async () => {
     const sessionState = new SessionState();
     const ctx: VerbContext = testVerbContext(sessionState);
-    await VERBS.get(VERB_APPLY_UPDATE)!(encodeURIComponent("sess-1"), ctx);
+    await CLICK_VERBS.get(VERB_APPLY_UPDATE)!(
+      encodeURIComponent("sess-1"),
+      ctx,
+    );
     expect(
       await performActs(ctx, {
         applyUpdate: async () => {
           throw new BadVerbArgs("already rebuilding…");
         },
       }),
-    ).toEqual([{ kind: "refused", reason: "apply-update: already rebuilding…" }]);
+    ).toEqual([
+      { kind: "refused", reason: "apply-update: already rebuilding…" },
+    ]);
     expect(lastClickError(sessionState, sessionIdOf("sess-1"))?.text).toBe(
       "apply-update: already rebuilding…",
     );
@@ -180,7 +212,7 @@ describe("step-state handler", () => {
     const sessionState = new SessionState();
     recordRender(sessionState, S1);
     const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-    const step = VERBS.get(VERB_STEP_STATE)!;
+    const step = CLICK_VERBS.get(VERB_STEP_STATE)!;
     const click = async (by: number): Promise<void> =>
       await step(encodeSegments(["s1", KEY, String(by)]), ctx);
     return { sessionState, ctx, click };
@@ -218,9 +250,10 @@ describe("step-state handler", () => {
 
   test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", async () => {
     const { ctx } = setup();
-    const step = VERBS.get(VERB_STEP_STATE)!;
-    expect(() => step(encodeSegments(["s1", KEY, "x"]), ctx),
-    ).toThrow(BadVerbArgs);
+    const step = CLICK_VERBS.get(VERB_STEP_STATE)!;
+    expect(() => step(encodeSegments(["s1", KEY, "x"]), ctx)).toThrow(
+      BadVerbArgs,
+    );
   });
 
   // Two configs declaring the same stepper differently are two gates: each
@@ -255,15 +288,18 @@ describe("step-state handler", () => {
       actions: { pick: { set: KEY, from: ["warm", "cool"] } },
     });
     const range = session(stepper("14"));
-    const set = VERBS.get("set-state")!;
+    const set = CLICK_VERBS.get("set-state")!;
     await set(encodeSegments(["s1", KEY, "cool"]), words.ctx);
     expect(words.sessionState.get(S1, KEY)).toBe("cool");
     await range.click(2);
     expect(range.sessionState.get(S1, KEY)).toBe("16");
     // Each refuses what only the other's config declares.
-    await expect(words.click(2)).rejects.toThrow(/not a bounded \(range\) state key/);
-    expect(() => set(encodeSegments(["s1", KEY, "cool"]), range.ctx),
-    ).toThrow(/must be an integer, got "cool"/);
+    await expect(words.click(2)).rejects.toThrow(
+      /not a bounded \(range\) state key/,
+    );
+    expect(() => set(encodeSegments(["s1", KEY, "cool"]), range.ctx)).toThrow(
+      /must be an integer, got "cool"/,
+    );
   });
 
   test("an unset key whose config shows a non-integer is refused, not stepped from min", async () => {
@@ -275,9 +311,10 @@ describe("step-state handler", () => {
   });
 
   test("a key the session's config declares no range for is rejected, not silently stepped", async () => {
-    const step = VERBS.get(VERB_STEP_STATE)!;
+    const step = CLICK_VERBS.get(VERB_STEP_STATE)!;
     const { ctx } = setup();
-    expect(() => step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
+    expect(() =>
+      step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
     ).toThrow(BadVerbArgs);
   });
 

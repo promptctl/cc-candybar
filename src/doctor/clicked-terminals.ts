@@ -10,6 +10,7 @@
 
 import type { Asked } from "./checks.js";
 import { stateFile, type StateFile } from "./state-file.js";
+import { DOCTOR_EMPTIES } from "../renderer-interface/stored-state.js";
 
 // [LAW:parse-dont-validate] The document as the terminals clicked from — each
 // its sighting (`sightingOf`, src/doctor/terminal.ts).
@@ -31,4 +32,9 @@ export const withClicked = (
 export const fileClickedTerminals = (
   dir: string,
 ): StateFile<readonly string[]> =>
-  stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
+  stateFile(
+    dir,
+    "doctor-clicked-terminals.json",
+    DOCTOR_EMPTIES.clicked,
+    parseClickedTerminals,
+  );

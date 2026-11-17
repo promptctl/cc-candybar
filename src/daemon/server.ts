@@ -37,6 +37,7 @@ import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import type { World } from "../host";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
+import { MAIN_RENDERER } from "./foundations/renderer-name.js";
 import { productionAdapters } from "./production-adapters.js";
 import { daemonGates } from "./foundations/update-keys.js";
 import { handleConnection } from "./connection.js";
@@ -205,6 +206,7 @@ async function boot(): Promise<void> {
   // The daemon is built now that we know we are the daemon process: it loads
   // prior session state and becomes the sole writer of the state file.
   const daemon = createDaemon({
+    rendererName: MAIN_RENDERER,
     ...productionAdapters(paths, daemonLog, world.clock),
     // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
     // launched through the process's launcher: the daemon's close aborts its

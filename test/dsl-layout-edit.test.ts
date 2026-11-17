@@ -63,7 +63,12 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/renderer/config-file-store";
-import { testVerbContext, verbContextWith, effectsOf } from "./helpers/click";
+import {
+  testVerbContext,
+  verbContextWith,
+  effectsOf,
+  CLICK_VERBS,
+} from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import {
   encodeSegments,
@@ -596,7 +601,7 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
+      const handler = CLICK_VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
       await handler(e.value, ctx);
     }
@@ -813,7 +818,7 @@ describe("apply-layout-op click → the config file", () => {
       config,
       durable.host,
     );
-    const applyLayoutOp = VERBS.get("apply-layout-op")!;
+    const applyLayoutOp = CLICK_VERBS.get("apply-layout-op")!;
     const before = durable.text();
     expect(() =>
       applyLayoutOp(
@@ -838,7 +843,7 @@ describe("apply-layout-op click → the config file", () => {
       config,
       durable.host,
     );
-    const applyLayoutOp = VERBS.get("apply-layout-op")!;
+    const applyLayoutOp = CLICK_VERBS.get("apply-layout-op")!;
     expect(() =>
       applyLayoutOp(
         `${encodeURIComponent("s1")}/user/${encodeURIComponent("presets.default.root")}/${encodeURIComponent(
@@ -1065,7 +1070,7 @@ async function fireVerb(
   ctx: VerbContext,
   ...args: string[]
 ): Promise<void> {
-  await VERBS.get(verb)!(args.map(encodeURIComponent).join("/"), ctx);
+  await CLICK_VERBS.get(verb)!(args.map(encodeURIComponent).join("/"), ctx);
 }
 
 // A session that has rendered from the fixture's file — the origin a durable

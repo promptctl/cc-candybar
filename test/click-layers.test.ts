@@ -12,7 +12,12 @@ import path from "node:path";
 import JSON5 from "json5";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
-import { onLanded, testVerbContext, verbContextWith } from "./helpers/click";
+import {
+  onLanded,
+  testVerbContext,
+  verbContextWith,
+  CLICK_VERBS,
+} from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { bareGates } from "./helpers/gates";
@@ -110,7 +115,7 @@ function session(): {
 }
 
 const pin = (ctx: VerbContext, role: string, palette: string): void =>
-  VERBS.get("set-config")!(
+  CLICK_VERBS.get("set-config")!(
     encodeSegments(["s1", role, "palette", palette]),
     ctx,
   );
@@ -144,7 +149,7 @@ test("a write naming the local layer creates the local file beside the project's
 test("undo writes back to the layer its step wrote", async () => {
   const { ctx } = session();
   pin(ctx, "project", "nord");
-  await VERBS.get("undo")!("s1", ctx);
+  await CLICK_VERBS.get("undo")!("s1", ctx);
   expect(fs.readFileSync(durable.projectPath, "utf8")).toBe(PROJECT);
   expect(durable.text()).toBe(USER);
 });

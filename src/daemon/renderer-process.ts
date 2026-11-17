@@ -9,6 +9,7 @@
 // [LAW:no-ambient-temporal-coupling] Its life is a state, `idle → starting →
 // live → down → starting …`, and every input asks the state where it goes.
 
+import { streamedToFile } from "./streamed-file.js";
 import type { Timekeeper } from "../time.js";
 import type { Launcher, Channel } from "../proc/launcher.js";
 import { whyFailed } from "../proc/launcher.js";
@@ -21,6 +22,7 @@ import {
   type AdapterOutput,
   type EffectId,
   type EventInput,
+  type Renderer,
   type Timed,
   type TimedRenderer,
   timed,
@@ -39,14 +41,15 @@ import {
   type RendererLine,
   type RendererOverLines,
 } from "../renderer-interface/wire.js";
-import type { LoadedMainRenderer } from "../renderer/main.js";
 import { RendererDown, failureOf } from "./foundations/verb-error.js";
 
 // What the host holds of its renderer, whichever link it runs over.
 export interface RendererLink {
   readonly renderer: TimedRenderer;
-  // Starts the renderer's process: nothing in process, where it started as
-  // it was built.
+  // The daemon serves: in process, the renderer is built now, from the stored
+  // state the host holds; a process is built at each spawn.
+  serve(): void;
+  // Starts the renderer's process: nothing in process.
   arm(): void;
   // The daemon's close has begun: the live renderer takes the close's steps,
   // and no renderer starts again.
@@ -70,27 +73,26 @@ export interface RendererProcess {
 }
 
 // Where a daemon's renderer runs, in two steps of the daemon's build: the
-// port is handed the renderer's own load and its boot as the daemon's build
+// port is handed how to build the renderer and its boot as the daemon's build
 // begins, and its `start` the host's reaches once the host's parts exist.
 export type RendererPort = (prepared: {
-  readonly load: () => LoadedMainRenderer;
-  // Read for each spawn: a boot carries the link key as it reads then.
+  // The renderer in this process, built over the host's reaches from the
+  // stored state the host holds as it is called.
+  readonly build: (reaches: AdapterToHost) => Renderer;
+  // Read for each spawn: a boot carries the link key and the stored state
+  // as they are then.
   readonly boot: () => RendererBoot;
   // The node that runs the host, with its flags.
   readonly node: readonly string[];
 }) => { start(own: LinkOwner): RendererLink };
 
 // [LAW:one-type-per-behavior] The renderer in this process: what a test's
-// daemon and the page run. It loads as the daemon's build begins.
-export const inProcessPort: RendererPort = ({ load }) => {
-  const loaded = load();
-  return {
-    start: (own) => inProcessRenderer(loaded, own.reaches, own.clock),
-  };
-};
+// daemon and the page run.
+export const inProcessPort: RendererPort = ({ build }) => ({
+  start: (own) => inProcessRenderer(build, own.reaches, own.clock),
+});
 
-// The renderer in a process of its own, which loads there, so the host never
-// opens the files the renderer is the one writer of.
+// The renderer in a process of its own, built there from its boot.
 export function processPort(
   run: Pick<ProcessOwner, "launcher" | "entry" | "cwd" | "heapCapMb">,
 ): RendererPort {
@@ -100,13 +102,17 @@ export function processPort(
 }
 
 function inProcessRenderer(
-  loaded: LoadedMainRenderer,
+  build: (reaches: AdapterToHost) => Renderer,
   reaches: AdapterToHost,
   clock: Pick<Timekeeper, "monotonic">,
 ): RendererLink {
-  // [LAW:single-enforcer] Each turn timed around its answer, on the host's
-  // clock, which the renderer's process is.
-  const timedRenderer = timed(loaded.start(reaches), () => clock.monotonic());
+  // [LAW:no-ambient-temporal-coupling] None until the daemon serves: an input
+  // before it fails as no renderer's.
+  let built: TimedRenderer | null = null;
+  const live = (): TimedRenderer => {
+    if (built === null) throw new RendererDown("renderer main has not started");
+    return built;
+  };
   // [LAW:no-ambient-temporal-coupling] An input reaches the renderer once
   // the stack that sent it has unwound, as it does over a process's lines.
   // The host hands some in from inside its own MobX action, and one store
@@ -116,15 +122,20 @@ function inProcessRenderer(
   const renderer: TimedRenderer = rendererOf({
     event: async (input) => {
       await crossed();
-      return timedRenderer.answer(input);
+      return live().answer(input);
     },
     adapter: async (input) => {
       await crossed();
-      return timedRenderer.answer(input);
+      return live().answer(input);
     },
   });
   return {
     renderer,
+    // [LAW:single-enforcer] Each turn timed around its answer, on the host's
+    // clock, which the renderer's process is.
+    serve: () => {
+      built ??= timed(build(reaches), () => clock.monotonic());
+    },
     arm: () => {},
     // Nothing restarts in process.
     beginClose: () => {},
@@ -628,6 +639,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   return {
     renderer: rendererOf({ event, adapter }),
+    serve: () => {},
     arm: () => {
       if (phase.kind !== "idle") return;
       spawn();
@@ -652,7 +664,9 @@ export function processRenderer(own: ProcessOwner): RendererLink {
             usage: link.usage,
             heapSnapshot: (file) =>
               phase.kind === "live" && phase.link === link
-                ? link.lines.heapSnapshot(file)
+                ? streamedToFile(file, (write) =>
+                    link.lines.heapSnapshot(write),
+                  )
                 : Promise.reject(
                     new Error(
                       `renderer main[${link.generation}] is not live, so its heap was not written`,

@@ -135,9 +135,10 @@ export interface ReaderRenderRequest extends RenderRequest {
 //   • `tmux` has THREE states, and they are never collapsed: absent — the
 //     client did not report (too old, same as `ssh`); `null` — the client
 //     reported "not in tmux" (total, like `ssh: false`); an object — the tmux
-//     facts the doctor's tmux-truecolor check reasons over (src/doctor). The
-//     daemon records the parsed hints per session (SESSION_CLIENT_HINTS_KEY)
-//     so a click, which carries no hints of its own, can read them.
+//     facts the doctor's tmux-truecolor check reasons over (src/doctor). A
+//     click, which carries no hints of its own, reads its session's newest
+//     request's, and none are kept past the daemon's life: what a client
+//     reports now is true only while it is running.
 //   • `configEnv` absent — the client's shell carries no `CC_CANDYBAR_CONFIG`
 //     (or the client is too old to report one; both read the same way: no
 //     override from the client, the precedence chain applies). Present, it is
@@ -184,10 +185,7 @@ const CLIENT_HINT_FIELDS = Object.keys({
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
 // become trusted values. Per-field sanitizers stay separate (each fact has its
 // own validity rule) but every hint crosses HERE, so a new hint cannot reach
-// the render path un-sanitized. The parameter is the hint
-// field-set over `unknown` rather than `RenderRequest`, so the daemon can push a
-// RECORDED hint (JSON it wrote itself, read back from SessionState) through the
-// same checkpoint a live frame crosses — one stamp, two provenances.
+// the render path un-sanitized.
 export function parseClientHints(
   req: Partial<Record<keyof ClientHints, unknown>>,
 ): ClientHints {

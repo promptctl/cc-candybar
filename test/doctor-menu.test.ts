@@ -11,7 +11,6 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { RenderSightings } from "../src/daemon/render-sightings";
 import { DoctorHost } from "./helpers/doctor-gather";
-import { parseClientHints } from "../src/daemon/foundations/protocol";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { systemTimekeeper } from "../src/time";
 import type { ServingDaemon } from "../src/daemon/foundations/memory-limit";
@@ -55,6 +54,9 @@ import {
   landsSettingsOf,
   verbContextWith,
   withDoctor,
+  bookedContext,
+  hearRender,
+  heardRequest,
 } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import {
@@ -62,11 +64,7 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
-import { VERBS, BadVerbArgs, parseRenderOrigin } from "../src/renderer/verbs";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../src/daemon/foundations/session-keys";
+import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/ports";
@@ -154,7 +152,14 @@ function doctorBar(
     terminalEnv: terminal.env,
     termCols: 148,
   };
-  sessionState.set(S1, SESSION_CLIENT_HINTS_KEY, JSON.stringify(hints));
+  hearRender(
+    sessionState,
+    heardRequest(
+      S1,
+      bookedContext(sessionState, S1)!.durable.origin.cwd,
+      hints,
+    ),
+  );
   const clients = new RenderSightings();
   clients.see(
     S1,
@@ -204,12 +209,10 @@ function doctorBar(
       bundle: HEALTHY_BUNDLE,
       clock: systemTimekeeper,
     },
-    (session) => ({
-      hints: parseClientHints(hints),
-      origin: parseRenderOrigin(
-        sessionState.get(session, SESSION_RENDER_ORIGIN_KEY)!,
-      ),
-    }),
+    (session) => {
+      const { live, durable } = bookedContext(sessionState, session)!;
+      return { hints: live!.hints, origin: durable.origin };
+    },
   );
   landsSettingsOf(ctx, (session) => host.writable(session));
   // A click, then the end of its turn at the host: what the turn's
@@ -521,7 +524,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // bar, and the row is read again over the settings as they now are.
   test("a setting changed between the diagnosis and the fix refuses the fix, and the row is read again", async () => {
     const rt = doctorBar(HINT);
-    fs.writeFileSync(rt.settingsPath, `{\n  "env": { "FORCE_COLOR": "3" }\n}\n`);
+    fs.writeFileSync(
+      rt.settingsPath,
+      `{\n  "env": { "FORCE_COLOR": "3" }\n}\n`,
+    );
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("✗ tmux truecolor");

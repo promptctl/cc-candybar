@@ -58,11 +58,10 @@ export type AdapterPush =
   | { readonly kind: "stats" }
   // The debug reply's projection of the most recently drawn view.
   | { readonly kind: "debug"; readonly what: DebugWhat }
-  // The daemon's teardown, in its three renderer steps: no click begins
-  // after the first, the views close, and the session state flushes, last.
+  // The daemon's teardown, in its two renderer steps: no click begins after
+  // the first, and the views close.
   | { readonly kind: "close-journal" }
-  | { readonly kind: "close-views" }
-  | { readonly kind: "close-session-state" };
+  | { readonly kind: "close-views" };
 
 // The replies that carry what their push read.
 type Reading =

@@ -43,7 +43,7 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
-import { undoOf, WRITES_IN_PLACE } from "./helpers/history-step";
+import { undoOf, NO_LAYERS } from "./helpers/history-step";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { onLanded } from "./helpers/click";
 
@@ -599,9 +599,10 @@ describe("settings history: a step lands whole, and records only what landed", (
       to: string,
     ): void => {
       const journal = history.begin({
+        ...NO_LAYERS,
         read: () => null,
         land: () => {},
-        prove: () => {},
+        roleOf: (f) => (f === "/a" ? "user" : "project"),
       });
       journal.file(sid, file, big(from), big(to));
       journal.commit();
@@ -614,47 +615,5 @@ describe("settings history: a step lands whole, and records only what landed", (
     expect(history.depth(NEW)).toEqual({ undo: 2, redo: 0, sinceEdit: 0 });
     step(NEW, "/b", "e", "f"); // a lone session over it loses its oldest step
     expect(history.depth(NEW)).toEqual({ undo: 2, redo: 0, sinceEdit: 0 });
-  });
-});
-
-describe("settings history: the step and its record land together", () => {
-  // A store whose save refuses while `refusing` is set.
-  function refusingHistory() {
-    const sessionState = new SessionState();
-    const gate = { refusing: false };
-    const history = new SettingsHistory(sessionState, () => {}, {
-      load: () => new Map(),
-      save: () => {
-        if (gate.refusing) throw new Error("history save refused");
-      },
-    });
-    return { sessionState, gate, history };
-  }
-
-  test("an undo whose history save fails puts its writes back", () => {
-    const { sessionState, gate, history } = refusingHistory();
-    const journal = history.begin(WRITES_IN_PLACE);
-    journal.sessionState.set(S1, "theme", "nord");
-    journal.commit();
-
-    gate.refusing = true;
-    expect(() => undoOf(history, S1)).toThrow(/history save refused/);
-    expect(sessionState.get(S1, "theme")).toBe("nord");
-    expect(history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
-
-    gate.refusing = false;
-    undoOf(history, S1);
-    expect(sessionState.get(S1, "theme")).toBeNull();
-  });
-
-  test("a commit whose save fails reports it once and never records the step later", () => {
-    const { gate, history } = refusingHistory();
-    const journal = history.begin(WRITES_IN_PLACE);
-    journal.sessionState.set(S1, "theme", "nord");
-    gate.refusing = true;
-    expect(() => journal.commit()).toThrow(/history save refused/);
-    gate.refusing = false;
-    journal.commit();
-    expect(history.depth(S1)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
   });
 });

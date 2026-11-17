@@ -27,11 +27,6 @@ import {
   type SessionHold,
   type SessionView,
 } from "./render-cache";
-import { encodeRenderOrigin } from "../daemon/foundations/render-origin";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../daemon/foundations/session-keys";
 import { roleOf } from "../daemon/foundations/sighting-roles";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
@@ -263,27 +258,27 @@ export function viewLanes(
 }
 
 // The lanes `sessionId`'s settings switch on over the config `origin`
-// resolves to, as the render cache holds it, in the pane its latest request
+// resolves to, as the render cache holds it, in the pane its live request
 // reported — the same request a click's setups follow (src/renderer/
-// lane-acts.ts). A session this daemon has no request from has no pane fact
-// yet, so its switches are its settings alone: what the click moves is owed
-// to its first request, which settles it against the pane that request
+// lane-acts.ts). A session not heard since the daemon started has no pane
+// fact yet, so its switches are its settings alone: what the click moves is
+// owed to its next request, which settles it against the pane that request
 // reports, so a session outside tmux is owed nothing it can run.
 export function lanesAt(
   parts: RendererParts,
   origin: RenderOrigin,
   sessionId: SessionId,
-  latest: CheckedRenderRequest | null,
+  live: CheckedRenderRequest | null,
 ): LaneSwitches {
   const { renderCache } = parts;
   using hold = renderCache.hold(origin);
-  // [LAW:dataflow-not-control-flow] exception: a click with no request on
-  // record (none since a restart, or its last one evicted) has no hint, and is measured as if in
-  // tmux so a tmux session's click owes its setup; the owed setup is settled
-  // against the session's own hint when its next event arrives.
+  // [LAW:dataflow-not-control-flow] exception: a click with no live request
+  // has no hint, and is measured as if in tmux so a tmux session's click owes
+  // its setup; the owed setup is settled against the session's own hint when
+  // its next request arrives.
   return laneSwitches(
     sessionGlobals(parts, sessionId, hold.state),
-    latest === null || inTmux(latest.hints.tmux),
+    live === null || inTmux(live.hints.tmux),
   );
 }
 
@@ -363,7 +358,7 @@ export function configureSession(
 }
 
 // What a `context` does whether or not its origin's config is held: its
-// facts noted, what it says recorded, and its world state taken, so the
+// facts noted, and it and its world state taken, so the
 // session's documents are taken in the order the host hands them in, and the
 // origin it renders from is the session's.
 export function takeContext(
@@ -375,8 +370,8 @@ export function takeContext(
   contextFacts(req, facts);
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
-    recordRequest(parts, req);
     parts.worldStates.take(worldState);
+    parts.worldStates.heard(req);
   });
 }
 
@@ -1020,37 +1015,6 @@ interface DrawnBar {
   readonly viewerOpen: boolean;
   readonly diagnostics: DiagnosticList;
   readonly geometry: DiagnosticGeometry;
-}
-
-// [LAW:effects-at-boundaries] What a render request said, recorded where its
-// context arrives, its session's `context` turn — never by a frame, which only
-// draws, and which would wake its own feed by writing the session's state.
-// Compared before writing: every set() persists and fires the session's MobX
-// atom, so an unconditional per-request write would invalidate every
-// state-driven computed each render.
-function recordRequest(parts: RendererParts, req: CheckedRenderRequest): void {
-  const { sessionState } = parts;
-  const sessionId = req.hookData.session_id;
-  // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
-  // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
-  // session's last request from here, re-parsed through the same checkpoint.
-  // The client itself is not recorded: which client drew a session's bar is
-  // RenderSightings' fact (src/daemon/render-sightings.ts), held in memory,
-  // and two clients drawing one session would otherwise rewrite this
-  // persisted record on every request.
-  const { client: _client, ...recorded } = req.hints;
-  const hintRecord = JSON.stringify(recorded);
-  if (sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
-    sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
-  }
-  // [LAW:one-source-of-truth] The config inputs this request named, so a
-  // durable click on this session resolves the same chain (verbs/index.ts
-  // sessionOrigin) and writes the file the next reload reads — never a path
-  // re-derived from the daemon's own cwd.
-  const origin = encodeRenderOrigin(req.requested);
-  if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
-    sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
-  }
 }
 
 // A render request's answer: the bar drawn for its client.

@@ -39,6 +39,7 @@ import {
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
+import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
@@ -61,8 +62,7 @@ import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 
-// The only renderer there is yet: the main one, in process.
-export type RendererName = "main";
+import type { RendererName } from "./foundations/renderer-name.js";
 
 // A turn as the host took it: how it ended, how long it waited in the
 // mailbox, how long the renderer's turn took and what the hop to it cost, null
@@ -167,6 +167,9 @@ export function rendererHost(
     // Where the frames an output's feeds drew go: the host's feeds, which
     // send each subscriber what changed for it.
     readonly frames: (frames: readonly PushedFrame[]) => void;
+    // [LAW:single-enforcer] Where every output's stored writes go: the host's
+    // copy of the renderer's stores, before any later input.
+    readonly stored: (writes: readonly StoreWrite[]) => void;
     // [LAW:single-enforcer] [LAW:no-ambient-temporal-coupling] Every turn
     // holds the session its event names until it settles, so no sweep retires
     // a session under a turn on it.
@@ -246,7 +249,7 @@ export function rendererHost(
     try {
       release = session === null ? release : collector.holding(session);
       const sentAt = clock.monotonic();
-      const { subscriptions, frames, turnMs, ...output } =
+      const { subscriptions, frames, stored, turnMs, ...output } =
         await renderer.answer(input);
       // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
       // turn, so what the process boundary costs is read from the event.
@@ -286,7 +289,7 @@ export function rendererHost(
               collector.writableSettings,
               world.configs,
             );
-      const named = took(subscriptions, frames);
+      const named = took(subscriptions, frames, stored);
       // [LAW:no-ambient-temporal-coupling] Every origin the output newly
       // names, and every one the landing moved, gets its `config` turn here,
       // ahead of the landing's `effect-done` turns.
@@ -379,10 +382,12 @@ export function rendererHost(
   const took = (
     subscriptions: Subscriptions,
     frames: readonly PushedFrame[],
+    stored: readonly StoreWrite[],
   ): readonly RenderOrigin[] => {
     wake.declare(subscriptions.wake);
     let named: readonly RenderOrigin[] = [];
     for (const [what, take] of [
+      ["stored writes", () => collector.stored(stored)],
       ["subscriptions", () => collector.subscribed(subscriptions)],
       ["frames", () => collector.frames(frames)],
       [
@@ -602,14 +607,14 @@ export function rendererHost(
     const output = await inMailbox(async (_queuedMs, holds) => {
       holds(`push:${push.kind}`);
       try {
-        const { subscriptions, ...answered } = await renderer.answer({
+        const { subscriptions, stored, ...answered } = await renderer.answer({
           kind: "adapter",
           push,
           ...readingsAt(clock),
         });
         // A push answers in no slot of a turn: each origin it newly names
         // gets its `config` turn behind it.
-        for (const origin of took(subscriptions, []))
+        for (const origin of took(subscriptions, [], stored))
           unawaited(
             "config",
             deliver(configMade(origin), [["why", "config-subscribed"]]),
