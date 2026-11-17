@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "d42539d504b3234e85ad99939c61f18a7fd7712d",
-      "timestamp": "2026-11-17T11:48:47.775Z",
+      "sha": "ba43c3ab383835c4accd3c0dd502526e7277592c",
+      "timestamp": "2026-11-17T11:55:58.844Z",
       "commits": [
         {
-          "sha": "d42539d504b3234e85ad99939c61f18a7fd7712d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T04:47:55-07:00",
-          "message": "refactor(renderer): a draw returns the memory it made, and the turn that drew it keeps it (0ol) (#785)\n\n* refactor(renderer): a draw returns the memory it made, and the turn that drew it keeps it (0ol)\n\ndrawDsl writes nothing: the frame record, the session's motion, the\nwarnings and the per-segment cells come back on DrawnFrame, and\ndrawRender returns them with the menu it showed as one DrawMemory.\nkeepDraw, called by the turn right after the draw, stores each piece with\nits one owner: the record on the view per surface (request or feed), the\nmotion per session, so both surfaces compare against their own last frame\nand animate under one clock. A delivery is a value the main renderer\nholds until its effect-done, not a closure over the draw.\n\n* fix(renderer): a frame keeps its memory once nothing of its turn can throw, and a closed feed's record goes with it (0ol)\n\n* refactor(renderer): passages counted under the render cache's stats, and tests read a draw's segments as its value (0ol)\n\n* test(session-state): a write's landing waits as long as a CI runner's disk sync takes"
+          "sha": "ba43c3ab383835c4accd3c0dd502526e7277592c",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-17T11:55:00Z",
+          "message": "chore(release): set `package.json` to 1.228.0\n\n## [1.228.0](https://github.com/promptctl/cc-candybar/compare/v1.227.0...v1.228.0) (2026-11-17)\n\n### Features\n\n* **renderer:** time is handed in as two readings, and the renderer owns its schedules (883) ([#783](https://github.com/promptctl/cc-candybar/issues/783)) ([6813576](https://github.com/promptctl/cc-candybar/commit/681357616352fb4f7476a7b1035b61a244971844))\n"
         }
       ]
     }
