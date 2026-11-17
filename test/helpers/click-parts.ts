@@ -4,16 +4,15 @@
 // the test hands in its own. A test that builds its daemon parts by hand spreads
 // these in.
 
-import { holdable, NO_PUSHES } from "./renderers";
+import { holdable, NO_PUSHES, takenBy, timedOf } from "./renderers";
 import { minter } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
 import { rendererHost, type HostWorld } from "../../src/daemon/renderer-host";
 import type { ActsOnTheirWay } from "../../src/renderer/acts";
-import { mainRenderer } from "../../src/renderer/main";
+import { mainRenderer, rendererClocks } from "../../src/renderer/main";
 import { systemTimekeeper } from "../../src/time";
-import { instantOf } from "../../src/utils/instant";
 import {
   verbsOver,
   type DaemonVerbContext,
@@ -47,11 +46,9 @@ export function clickParts(
   // subscriptions: this rig opens none.
   const parts = {
     verbs: verbsOver(verbCtx),
-    renderCache: { subscriptions: () => ({ sources: {} }) },
+    renderCache: { subscriptions: () => ({ sources: {} }), walking: () => false },
     // No view is open, so no lane is read.
     laneActs: { noted: () => {}, clicked: () => {} },
-    // What the renderer times each turn by.
-    clock: systemTimekeeper,
     mint: minter(),
     // The acts the test's verb context asks, settled by this rig's host.
     acts: verbCtx.acts as ActsOnTheirWay,
@@ -61,7 +58,7 @@ export function clickParts(
   // The teardown's journal step, answered as the main renderer answers it, in
   // its place in the mailbox: no other push is a click's.
   const held = holdable(
-    mainRenderer(parts, (push) => {
+    mainRenderer(parts, rendererClocks(parts), (push) => {
       if (push.kind !== "close-journal") return NO_PUSHES();
       verbCtx.configWrites.close();
       return { kind: "close-journal" };
@@ -70,13 +67,9 @@ export function clickParts(
   const renderer = rendererHost(
     "main",
     systemTimekeeper,
-    held.renderer,
+    timedOf(held.renderer),
     () => {},
-    {
-      subscribed: () => {},
-      holding: collector.holding,
-      writableSettings: () => [],
-    },
+    takenBy({ holding: collector.holding, writableSettings: () => [] }),
     world,
   );
   return {
@@ -86,10 +79,10 @@ export function clickParts(
     park: () => {
       const open = held.hold();
       const holding = renderer.deliver(
-        () => ({
+        (at) => ({
           kind: "event",
-          at: instantOf(new Date()),
-          event: { kind: "start", sessions: [] },
+          at,
+          event: { kind: "start", viewers: {}, sessions: [] },
         }),
         [],
       );

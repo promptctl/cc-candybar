@@ -1105,9 +1105,18 @@ describe("RenderCache", () => {
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
       });
-      await reloads.after(entry, () =>
-        writeFileSync(repoConfigsPath(stateDir(host)), declined),
-      );
+      // The watch marks every entry due; the renderer's `due` turns walk
+      // them, as its wake hands them in.
+      const dues = setInterval(() => {
+        while (cache.walking()) cache.walkOne();
+      }, 10);
+      try {
+        await reloads.after(entry, () =>
+          writeFileSync(repoConfigsPath(stateDir(host)), declined),
+        );
+      } finally {
+        clearInterval(dues);
+      }
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
       expect(causes).toContain("answers-watch");

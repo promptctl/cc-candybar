@@ -102,6 +102,9 @@ export function runRenderer(world: World): void {
     served = serveRenderer({
       renderer,
       send,
+      // [LAW:effects-at-boundaries] The process times each turn, around the
+      // renderer, which reads no clock.
+      monotonic: world.clock.monotonic,
       memory: () => {
         const { rss, heapTotal } = process.memoryUsage();
         return { rss, heapTotal };
@@ -140,8 +143,6 @@ function booted(
   const { clock } = world;
   const adapters = rendererAdapters(paths, clock);
   return loadMainRenderer({
-    clock,
-    now: () => instantAt(clock),
     storage: {
       ...adapters.storage(reaches.log),
       doctor: adapters.doctorStores,

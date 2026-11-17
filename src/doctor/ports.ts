@@ -26,7 +26,9 @@ export interface InstallEdge {
   readonly realpath: (p: string) => Asked<string>;
   readonly checkoutOf: (bundle: string) => string | null;
   readonly digest: (dir: string) => Asked<string>;
-  readonly nativeShipped: boolean;
+  // Read when asked, never as the module loads: a renderer that imports the
+  // edge reads nothing of the machine it was not asked to.
+  readonly nativeShipped: () => boolean;
 }
 
 // The documents the doctor keeps under the daemon's state directory

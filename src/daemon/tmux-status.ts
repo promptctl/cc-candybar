@@ -444,6 +444,9 @@ export interface TmuxStatusDeps {
   readonly handler: string;
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
+  // [LAW:single-enforcer] Which panes a status line shows may have moved:
+  // whether a held subscriber draws now (`drawing`) is read again.
+  readonly changed: () => void;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
 
@@ -607,7 +610,7 @@ export class TmuxStatusLines {
   answered(socket: string, view: StatusLines): void {
     if (this.closed) return;
     const server = this.serverOf(socket);
-    server.view = view;
+    this.viewOf(server, view);
     for (const held of [...this.held.values()]) {
       if (held.socket !== socket) continue;
       if (!view.sessionOf.has(held.pane)) this.release(held, "pane gone");
@@ -618,6 +621,20 @@ export class TmuxStatusLines {
       }
     }
     this.reconcile(socket);
+  }
+
+  // [LAW:single-enforcer] The one place what a server's status lines show
+  // changes, its view or a session laid out: each is what `draws` reads, so
+  // each is announced.
+  private viewOf(server: Server, view: StatusLines): void {
+    server.view = view;
+    this.deps.changed();
+  }
+
+  private laidOut(server: Server, session: string, layout: Layout | null) {
+    if (layout === null) server.layouts.delete(session);
+    else server.layouts.set(session, layout);
+    this.deps.changed();
   }
 
   // Whether `held`'s bar is in a status line now: a session this daemon laid
@@ -826,7 +843,7 @@ export class TmuxStatusLines {
           continue;
         const found = leftBehind(prior, wrote, this.deps.owner);
         if (found.kind === "ours")
-          server.layouts.set(session, {
+          this.laidOut(server, session, {
             prior: found.prior,
             rows: [],
             status: found.status,
@@ -891,7 +908,7 @@ export class TmuxStatusLines {
       rows: [],
       status: plan.kind === "ours" ? plan.status : plan.prior.base,
     };
-    server.layouts.set(session, layout);
+    this.laidOut(server, session, layout);
     if (plan.kind === "lay-out") await this.write(socket, plan.commands);
     this.deps.log(
       "info",
@@ -945,7 +962,7 @@ export class TmuxStatusLines {
   ): Promise<void> {
     const layout = server.layouts.get(session);
     if (layout === undefined) return;
-    server.layouts.delete(session);
+    this.laidOut(server, session, null);
     const answers = await this.ask(socket, RESTORE_QUERIES(session));
     if (answers === null) return;
     const plan = restorePlan(session, layout.prior, answers);

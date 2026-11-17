@@ -298,7 +298,7 @@ describe("installFacts: the fold from what the daemon saw", () => {
         : { kind: "ok", value: p.replace("/link/bin/../", `${ROOT}/`) },
     checkoutOf: (b) => (b.startsWith(ROOT) ? ROOT : null),
     digest: (dir) => ({ kind: "ok", value: `digest of ${dir}` }),
-    nativeShipped: true,
+    nativeShipped: () => true,
   };
 
   test("both bundles resolve through every link, and a checkout carries its Rust digest", () => {

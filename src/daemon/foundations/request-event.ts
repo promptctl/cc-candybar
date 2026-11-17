@@ -71,16 +71,17 @@ function detailOf(outcome: RequestOutcome): RequestFacts {
 // request writes this line once, whatever its outcome, so the requests that
 // fail are described by the same fields as the ones that succeed, and every
 // request kind is read the same way: its name, then each fact as a logfmt
-// field.
+// field. `tookMs` is null for a feed's frame, drawn inside a renderer turn,
+// which reads no clock: the host times that turn.
 export function requestEvent(
   kind: RequestKind,
   facts: RequestFacts,
   outcome: RequestOutcome,
-  tookMs: number,
+  tookMs: number | null,
 ): { readonly level: LogLevel; readonly line: string } {
   const fields: RequestFacts = [
     ...facts,
-    ["took", `${tookMs}ms`],
+    ...(tookMs === null ? [] : ([["took", `${tookMs}ms`]] as const)),
     ["outcome", outcome.kind],
     ...detailOf(outcome),
   ];

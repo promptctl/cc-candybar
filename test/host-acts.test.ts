@@ -23,7 +23,7 @@ import type {
 } from "../src/renderer-interface/interface";
 import { instantOf } from "../src/utils/instant";
 import type { Monotonic } from "../src/time";
-import { eventRenderer } from "./helpers/renderers";
+import { eventRenderer, takenBy, timedOf } from "./helpers/renderers";
 
 const S = sessionIdOf("s");
 const AT = instantOf(new Date(0));
@@ -42,9 +42,9 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 const output = (effects: readonly Effect[]): RendererOutput => ({
   kind: "answered",
   effects,
-  subscriptions: { sources: {}, tmuxStatus: [] },
+  subscriptions: { sources: {}, lanes: {}, wake: null },
   record: [],
-  turnMs: 0,
+  frames: [],
 });
 
 let ids = 0;
@@ -98,33 +98,22 @@ function hostOver(
   const host = rendererHost(
     "main",
     CLOCK,
-    eventRenderer(async (input) => {
-      if (input.event.kind === "effect-done") {
-        did.push(`done ${input.event.of} ${input.event.outcome.kind}`);
-        return done(input);
-      }
-      return output(effects);
-    }),
+    timedOf(
+      eventRenderer(async (input) => {
+        if (input.event.kind === "effect-done") {
+          did.push(`done ${input.event.of} ${input.event.outcome.kind}`);
+          return done(input);
+        }
+        return output(effects);
+      }),
+    ),
     () => {},
-    {
-      subscribed: () => {},
-      holding: () => () => {},
-      writableSettings: () => [],
-    },
+    takenBy({ holding: () => () => {}, writableSettings: () => [] }),
     world,
   );
+  // A turn no request asked for, as a due is.
   const turn = () =>
-    host.answer(() => ({
-      kind: "event",
-      at: AT,
-      event: {
-        kind: "menu-idle",
-        session: S,
-        idle: { firedAt: AT, idleS: 30, timeoutS: 30 },
-        latest: null,
-        stillIdle: true,
-      },
-    }));
+    host.answer(() => ({ kind: "event", at: AT, event: { kind: "due" } }));
   return { turn, did, unheard };
 }
 

@@ -8,9 +8,12 @@ import type {
   EventInput,
   Renderer,
   RendererOutput,
+  Subscriptions,
+  TimedRenderer,
 } from "../../src/renderer-interface/interface";
-import { rendererOf } from "../../src/renderer-interface/interface";
-import type { HostWorld } from "../../src/daemon/renderer-host";
+import { rendererOf, timed } from "../../src/renderer-interface/interface";
+import type { HostWorld, rendererHost } from "../../src/daemon/renderer-host";
+import type { Collector } from "../../src/daemon/collector";
 
 // A renderer whose events `answered` answers, and which no push reaches.
 export function eventRenderer(
@@ -94,5 +97,28 @@ export function holdable(renderer: Renderer): {
       held = new Promise<void>((resolve) => (open = resolve));
       return open;
     },
+  };
+}
+
+// `renderer`, its turns timed as a link times them
+// (src/daemon/renderer-process.ts), on `monotonic`: by default a clock that
+// stands still, so every turn takes 0ms and no test reads the real one.
+export const timedOf = (
+  renderer: Renderer,
+  monotonic: () => number = () => 0,
+): TimedRenderer => timed(renderer, monotonic);
+
+// What a rig's host takes from each turn: the subscriptions to `subscribed`,
+// and nothing of the wake or the frames, which a rig that wants them reads.
+export function takenBy(
+  collector: Pick<Collector, "holding" | "writableSettings"> & {
+    readonly subscribed?: (subscriptions: Subscriptions) => void;
+  },
+): Parameters<typeof rendererHost>[4] {
+  return {
+    declared: ({ subscriptions }) => collector.subscribed?.(subscriptions),
+    framed: () => {},
+    holding: (session) => collector.holding(session),
+    writableSettings: (session) => collector.writableSettings(session),
   };
 }

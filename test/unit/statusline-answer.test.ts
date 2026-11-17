@@ -9,9 +9,12 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
-import { UNFOLLOWED } from "../helpers/daemon-facts";
-import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
-import { eventRenderer, hearingEvents, NO_ACTS } from "../helpers/renderers";
+import {
+  eventRenderer,
+  hearingEvents,
+  NO_ACTS,
+  takenBy,
+} from "../helpers/renderers";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
@@ -22,6 +25,7 @@ import {
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
 import {
+  timed,
   type Effect,
   Present,
   type EffectId,
@@ -50,12 +54,15 @@ const REQ = {
 } as unknown as CheckedRenderRequest;
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
-const NO_SUBSCRIPTIONS: Subscriptions = { sources: {}, tmuxStatus: [] };
+const NO_SUBSCRIPTIONS: Subscriptions = { sources: {}, lanes: {}, wake: null };
 // The request's deadline is a timer the case fires itself (`deadlines`).
 const deadlines = new Set<() => void>();
+// The wall, which a case moves to see the instant a turn is made at.
+let wallMs = 1_700_000_000_000;
+beforeEach(() => void (wallMs = 1_700_000_000_000));
 const CLOCK = {
   monotonic: () => 0 as Monotonic,
-  now: () => 1_700_000_000_000,
+  now: () => wallMs,
   after: (_ms: number, fire: () => void) => {
     deadlines.add(fire);
     return () => void deadlines.delete(fire);
@@ -81,7 +88,7 @@ const output = (
   effects,
   subscriptions: NO_SUBSCRIPTIONS,
   record,
-  turnMs: 0,
+  frames: [],
 });
 
 // A turn that threw `message`, having reached `record`.
@@ -95,7 +102,7 @@ const threwWith = (
   effects: [],
   subscriptions,
   record,
-  turnMs: 0,
+  frames: [],
 });
 
 // A renderer whose request turn answers `request`, whose config
@@ -133,13 +140,19 @@ function scripted(
 }
 
 // What a case's request meets in the host: its session's wait, how long it
-// may take, the idle clock it reads, and the daemon's close.
+// may take, and the daemon's close.
 interface Meets {
   readonly settled?: (session: unknown, signal: AbortSignal) => Promise<void>;
   readonly waitEndsAt?: number;
-  readonly idleSince?: () => ReturnType<typeof at> | undefined;
   readonly closing?: AbortSignal;
 }
+
+// A renderer's turns as a link times them, each taking `ms` of a monotonic
+// clock its own.
+const timedAt = (renderer: Renderer, ms = 2) => {
+  let now = 0;
+  return timed(renderer, () => (now += ms));
+};
 
 async function answer(
   renderer: Renderer,
@@ -161,13 +174,13 @@ async function answer(
     rendererHost(
       "main",
       CLOCK,
-      renderer,
+      timedAt(renderer),
       (_level, line) => logged.push(line),
-      {
+      takenBy({
         subscribed: (subscriptions) => void subscribed.push(subscriptions),
         writableSettings: () => [],
         holding,
-      },
+      }),
       NO_ACTS,
     ),
     {
@@ -179,14 +192,11 @@ async function answer(
       // A warm session: nothing it reads is still unread.
       settled: meets.settled ?? (async () => {}),
     },
-    { since: meets.idleSince ?? (() => undefined) },
-    UNFOLLOWED,
     CLOCK,
     meets.closing ?? NOT_CLOSING,
     (_level, line) => logged.push(line),
     REQ,
     REQUEST,
-    AT,
     meets.waitEndsAt ?? 0,
     facts,
   );
@@ -200,10 +210,12 @@ const drained = async (): Promise<void> => {
 };
 
 test("the request's present answers it, in the request's encoding, and its settle is its effect-done", async () => {
-  const { renderer, heard } = scripted(output([present(1)], [["drew", "2ms"]]));
+  const { renderer, heard } = scripted(output([present(1)]));
   const { answered, facts } = await answer(renderer);
   expect(answered.resp).toEqual({ ok: true, frame: FRAME });
   expect(facts.get("renderer")).toBe("main");
+  // How long each turn took, as the link timed it around the renderer.
+  expect(facts.get("configured")).toBe("2ms");
   expect(facts.get("drew")).toBe("2ms");
   expect(facts.get("effects")).toBe("present:statusline");
   expect(facts.has("encoded")).toBe(true);
@@ -311,7 +323,7 @@ test("a render turn that throws a bad argument is still the daemon's failure, as
     failure: failureOf(new BadVerbArgs("no such row")),
     effects: [],
     subscriptions: NO_SUBSCRIPTIONS,
-    turnMs: 0,
+    frames: [],
     record: [],
   });
   const { answered } = await answer(renderer);
@@ -344,7 +356,8 @@ test("a renderer that rejects is the turn's failure, said on its line, and the s
 test("a turn that throws still hands the host what its open views read", async () => {
   const left: Subscriptions = {
     sources: { [SESSION]: [] },
-    tmuxStatus: [],
+    lanes: {},
+    wake: null,
   };
   const subscribed: Subscriptions[] = [];
   const { renderer } = scripted(threwWith([], "the draw broke", left));
@@ -372,9 +385,10 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
 test("the session's config reaches the renderer first, with the world state read at the request's keys, and its subscriptions reach the host before the request does", async () => {
   const opened: Subscriptions = {
     sources: { [SESSION]: [] },
-    tmuxStatus: [],
+    lanes: {},
+    wake: null,
   };
-  const drawn: Subscriptions = { sources: {}, tmuxStatus: [] };
+  const drawn: Subscriptions = { sources: {}, lanes: {}, wake: null };
   const subscribed: Subscriptions[] = [];
   const { renderer, configs, requests } = scripted(
     { ...output([present(1)]), subscriptions: drawn },
@@ -392,14 +406,7 @@ test("the session's config reaches the renderer first, with the world state read
     { kind: "config", context: REQ, worldState: WORLD },
   ]);
   expect(requests).toEqual([
-    {
-      kind: "request",
-      id: REQUEST,
-      context: REQ,
-      idleSince: null,
-      following: [],
-      feeds: UNFOLLOWED_FEEDS,
-    },
+    { kind: "request", id: REQUEST, context: REQ },
   ]);
   expect(subscribed).toEqual([opened, drawn]);
 });
@@ -506,16 +513,14 @@ describe("the request's wait, between its config and its request", () => {
     const host = rendererHost(
       "main",
       CLOCK,
-      eventRenderer(async ({ event }) => {
-        order.push(event.kind);
-        return event.kind === "request" ? output([present(1)]) : output([]);
-      }),
+      timedAt(
+        eventRenderer(async ({ event }) => {
+          order.push(event.kind);
+          return event.kind === "request" ? output([present(1)]) : output([]);
+        }),
+      ),
       () => {},
-      {
-        subscribed: () => {},
-        writableSettings: () => [],
-        holding: () => () => {},
-      },
+      takenBy({ writableSettings: () => [], holding: () => () => {} }),
       NO_ACTS,
     );
     const answering = answerStatusline(
@@ -525,14 +530,11 @@ describe("the request's wait, between its config and its request", () => {
         holding: () => () => {},
         settled: wait.settled,
       },
-      { since: () => undefined },
-      UNFOLLOWED,
       CLOCK,
       NOT_CLOSING,
       () => {},
       REQ,
       REQUEST,
-      AT,
       5000,
       [],
     );
@@ -550,20 +552,28 @@ describe("the request's wait, between its config and its request", () => {
     expect(order).toEqual(["config", "retire", "request"]);
   });
 
-  test("a click that landed during the wait is drawn by the request's idle reading", async () => {
+  // [LAW:no-ambient-temporal-coupling] Each turn runs at the instant its
+  // slot comes, so the bar is drawn for the moment it is drawn, after the
+  // wait, never for the request's arrival.
+  test("each of the request's turns is made at the instant its slot comes", async () => {
     const wait = held();
-    // The idle clock as the host keeps it: a click restarts its period.
-    let since: ReturnType<typeof at> | undefined = at(new Date(1_000));
-    const { renderer, requests } = scripted(output([present(1)]));
-    const answering = answer(renderer, [], [], undefined, {
-      settled: wait.settled,
-      waitEndsAt: 5000,
-      idleSince: () => since,
-    });
+    const turnsAt: number[] = [];
+    const answering = answer(
+      hearingEvents(scripted(output([present(1)])).renderer, (input) => {
+        if (input.event.kind !== "effect-done") turnsAt.push(input.at);
+      }),
+      [],
+      [],
+      undefined,
+      { settled: wait.settled, waitEndsAt: 5000 },
+    );
     await drained();
-    since = at(new Date(2_000));
+    wallMs += 1_500;
     wait.end();
     await answering;
-    expect(requests).toMatchObject([{ idleSince: at(new Date(2_000)) }]);
+    expect(turnsAt).toEqual([
+      at(new Date(1_700_000_000_000)),
+      at(new Date(1_700_000_001_500)),
+    ]);
   });
 });

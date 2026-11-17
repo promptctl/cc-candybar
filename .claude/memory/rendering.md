@@ -6,7 +6,7 @@ The daemon draws every bar. The check command and the tests call the same functi
 
 ## One instant per render
 
-The daemon samples each render's instant once and binds it to the template engine's single clock for the synchronous walk. Every time read in that render, from template functions to time variables, sees the same instant. A clock read outside a draw throws, and so does a clock read made while a MobX derivation is tracking.
+The host reads each turn's instant once, as the turn's slot in the mailbox comes, never at the input's arrival, so an input that waited behind others is drawn for the moment it is drawn. The renderer reads no clock: the turn's instant is bound to the template engine's single clock for the synchronous walk, and every time read in that turn, from template functions to time variables, sees the same instant. A time read outside a turn throws, and so does a clock read made while a MobX derivation is tracking. The render event's instant is the one the draw was handed, never the config turn's ahead of it.
 
 Anything that reads the instant is a projection: it is evaluated on every read and never cached. The temptation is to make one a computed "to save the per-frame evaluation." A cached answer to "what time is it" is wrong by the next frame, and projections exist to make that bug unrepresentable.
 

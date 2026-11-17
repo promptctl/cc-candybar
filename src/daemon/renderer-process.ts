@@ -17,11 +17,13 @@ import { instantAt } from "../utils/instant.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 import {
   rendererOf,
+  timed,
+  type Timed,
+  type TimedRenderer,
   type AdapterInput,
   type AdapterOutput,
   type EffectId,
   type EventInput,
-  type Renderer,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
 import type {
@@ -43,7 +45,9 @@ import { RendererDown, failureOf } from "./foundations/verb-error.js";
 
 // What the host holds of its renderer, whichever link it runs over.
 export interface RendererLink {
-  readonly renderer: Renderer;
+  // [LAW:effects-at-boundaries] Every turn timed by the link, around the
+  // renderer, which reads no clock.
+  readonly renderer: TimedRenderer;
   // Starts the renderer's process: nothing in process, where it started as
   // it was built.
   arm(): void;
@@ -83,7 +87,7 @@ export type RendererPort = (prepared: {
 // daemon and the page run. It loads as the daemon's build begins.
 export const inProcessPort: RendererPort = ({ load }) => {
   const loaded = load();
-  return { start: (own) => inProcessRenderer(loaded, own.reaches) };
+  return { start: (own) => inProcessRenderer(loaded, own) };
 };
 
 // The renderer in a process of its own, which loads there, so the host never
@@ -98,11 +102,12 @@ export function processPort(
 
 function inProcessRenderer(
   loaded: LoadedMainRenderer,
-  reaches: AdapterToHost,
+  { reaches, clock }: Pick<LinkOwner, "reaches" | "clock">,
 ): RendererLink {
-  const renderer = loaded.start(reaches);
   return {
-    renderer,
+    // [LAW:no-ambient-temporal-coupling] Each input starts on its own stack,
+    // as a line read off a process does.
+    renderer: timed(loaded.start(reaches), clock.monotonic),
     arm: () => {},
     // Nothing restarts in process.
     beginClose: () => {},
@@ -595,7 +600,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // The ids an input names are the renderer's own again; the ids its output
   // names are the host's.
-  const event = (input: EventInput): Promise<RendererOutput> =>
+  const event = (input: EventInput): Promise<Timed<RendererOutput>> =>
     sent(async (link) => {
       const { event: e } = input;
       let toSend: EventInput = input;
@@ -621,7 +626,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         }),
       };
     });
-  const adapter = (input: AdapterInput): Promise<AdapterOutput> =>
+  const adapter = (input: AdapterInput): Promise<Timed<AdapterOutput>> =>
     sent(async (link) => {
       const { push } = input;
       if (push.kind !== "watch") return link.lines.renderer.answer(input);
@@ -637,7 +642,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     });
 
   return {
-    renderer: rendererOf({ event, adapter }),
+    renderer: rendererOf<Timed<RendererOutput>, Timed<AdapterOutput>>({
+      event,
+      adapter,
+    }),
     arm: () => {
       if (phase.kind !== "idle") return;
       spawn();

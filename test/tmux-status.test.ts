@@ -177,6 +177,8 @@ function harness(ids: readonly string[] = ["$1"]) {
   const unsubscribed: string[] = [];
   const newest = new Map<string, SessionId>();
   const logs: string[] = [];
+  // Each announcement that what the status lines show may have moved.
+  const changes = { count: 0 };
   const owner = new TmuxStatusLines({
     edge: tmux,
     subscribe: (sessionId, sub) => {
@@ -186,6 +188,7 @@ function harness(ids: readonly string[] = ["$1"]) {
     sessionInPane: (_socket, pane) => newest.get(pane) ?? null,
     handler: "cc-candybar url-handle",
     owner: OWNER,
+    changed: () => void changes.count++,
     log: (_level, msg) => logs.push(msg),
   });
   const hold = (sessionId: SessionId, pane: string): void => {
@@ -204,7 +207,7 @@ function harness(ids: readonly string[] = ["$1"]) {
     subs.get(sessionId)!.frame(bar, "");
     await owner.settled();
   };
-  return { tmux, owner, subs, unsubscribed, newest, logs, hold, answer, frame };
+  return { tmux, owner, subs, unsubscribed, newest, logs, changes, hold, answer, frame };
 }
 
 const session = (h: ReturnType<typeof harness>, id = "$1") => h.tmux.sessions.get(id)!;
@@ -224,6 +227,24 @@ describe("TmuxStatusLines", () => {
     expect(JSON.parse(s.get(PRIOR_OPTION)!)).toMatchObject({ base: 1, status: null, formats: null });
     expect(h.tmux.binding).toContain("tmux-status-click");
     expect(h.tmux.binding).toContain("switch-client -t =");
+  });
+
+  // The host's viewers read whether a held subscriber draws: every change to
+  // what that reads is announced, so the renderer hears a status line that
+  // starts or stops showing a pane.
+  test("whether a held pane draws is announced each time the status line's view or layout moves", async () => {
+    const h = harness();
+    h.hold(S1, "%1");
+    const draws = () => h.subs.get("s1")!.drawing();
+    expect(draws()).toBe(false);
+    const before = h.changes.count;
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    expect(draws()).toBe(true);
+    expect(h.changes.count).toBeGreaterThan(before);
+    const shown = h.changes.count;
+    await h.answer({ "%1": "$1", "%2": "$1" }, { $1: "%2" });
+    expect(draws()).toBe(false);
+    expect(h.changes.count).toBeGreaterThan(shown);
   });
 
   // candybar-plugins-vf6g.qzx: a session outside tmux whose renderer is tmux

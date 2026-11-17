@@ -173,7 +173,6 @@ import {
   parseSessionId,
   type SessionId,
 } from "../../daemon/foundations/session-id";
-import type { IdleSpan } from "../../renderer-interface/interface";
 
 // What the daemon hands everything that writes a session's state: a click's
 // verb, and the idle timer that closes its menus (`closeIdleMenus`).
@@ -1855,21 +1854,16 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 // mode releases its savepoint, and ◁ back can reopen what it closed — and the
 // closing view, which folds everything open inside what closes. It writes
 // `closed` to each menu open at the top, the write its ✕ makes. No URL names
-// it: it is not in VERBS. Whether it goes ahead is the host's idle clock's
-// to say, as its turn came (`stillIdle`): a click since the firing keeps
-// what it opened.
+// it: it is not in VERBS. It runs in a `due` turn, ordered by the renderer's
+// mailbox against every click, so a click that landed first began a new idle
+// period and the close is no longer due.
 export function closeIdleMenus(
   sid: SessionId,
   latest: CheckedRenderRequest | null,
-  idle: IdleSpan,
-  stillIdle: boolean,
+  idle: { readonly idleS: number; readonly timeoutS: number },
   ctx: DaemonContext,
   effects: Effect[],
 ): void {
-  if (!stillIdle) {
-    ctx.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
-    return;
-  }
   journaled("menu-idle", sid, latest, ctx, effects, (c) => {
     const roots = openRoots(nestOf(c, sid), (key) =>
       c.navigating.get(sid, key),

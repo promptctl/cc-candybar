@@ -17,7 +17,7 @@ import { elapsedMs, type Timekeeper } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { checkoutLocation } from "../utils/git-root.js";
-import { instantAt, type Instant } from "../utils/instant.js";
+import type { Instant } from "../utils/instant.js";
 import {
   failedWith,
   RENDER_ANSWERS,
@@ -33,8 +33,6 @@ import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { HostTurn, RendererHost } from "./renderer-host.js";
-import type { MenuIdle } from "./menu-idle.js";
-import type { FrameFeeds } from "./frame-feed.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -95,17 +93,12 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 export async function answerStatusline(
   host: RendererHost,
   collector: Pick<Collector, "requested" | "holding" | "settled">,
-  // The session's idle clock and its feeds, which the request's draw reads
-  // as its turn comes.
-  menuIdle: Pick<MenuIdle, "since">,
-  feeds: Pick<FrameFeeds<CheckedRenderRequest>, "following" | "feedsOf">,
-  clock: Pick<Timekeeper, "monotonic" | "now" | "after">,
+  clock: Pick<Timekeeper, "monotonic" | "after">,
   // The daemon's close, which ends the request's wait.
   closing: AbortSignal,
   log: DaemonLogger,
   arrived: CheckedRenderRequest,
   id: RequestId,
-  at: Instant,
   // The monotonic moment the request's wait ends, the host's own reading.
   waitEndsAt: number,
   facts: RequestFacts,
@@ -116,9 +109,9 @@ export async function answerStatusline(
   // the host's one path to the renderer.
   const done = (effect: Effect, reason: string | null): void =>
     void host.deliver(
-      () => ({
+      (at) => ({
         kind: "event",
-        at: instantAt(clock),
+        at,
         event: {
           kind: "effect-done",
           session: effect.session,
@@ -132,8 +125,10 @@ export async function answerStatusline(
   // [LAW:single-enforcer] Each of the request's turns is made as its slot
   // comes, and none once the daemon's close has begun: the teardown is
   // closing the views it would open or draw into.
-  const unlessClosing = (make: () => EventInput) => (): EventInput | Failure =>
-    closing.aborted ? failureOf(new DaemonClosing("render")) : make();
+  const unlessClosing =
+    (make: (at: Instant) => EventInput) =>
+    (at: Instant): EventInput | Failure =>
+      closing.aborted ? failureOf(new DaemonClosing("render")) : make(at);
   const worldState = collector.requested(req);
   // [LAW:no-ambient-temporal-coupling] The request holds its session from its
   // config to its answer, wait included, so no sweep retires it between.
@@ -149,7 +144,7 @@ export async function answerStatusline(
     // mailbox: another input's turn that lands meanwhile, one that evicts
     // the session's view included, moves what the wait covers.
     configured = await host.answer(
-      unlessClosing(() => ({
+      unlessClosing((at) => ({
         kind: "event",
         at,
         event: { kind: "config", context: req, worldState },
@@ -191,29 +186,28 @@ export async function answerStatusline(
     // [LAW:nothing-unseen] How the wait went, on the render event: an answer
     // drawn with values pending says so by name.
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-    // [LAW:no-ambient-temporal-coupling] Made as its turn comes, so what it
-    // reads of the host follows every input ahead of it: a click that landed
-    // during the wait is drawn by this request's idle reading.
+    // [LAW:no-ambient-temporal-coupling] Made as its turn comes, at the
+    // instant it comes, so the bar is drawn for the moment it is drawn, after
+    // every input ahead of it: a click that landed during the wait is drawn.
     delivered = await host.answer(
-      unlessClosing(() => ({
+      unlessClosing((at) => ({
         kind: "event",
         at,
-        event: {
-          kind: "request",
-          id,
-          context: req,
-          idleSince: menuIdle.since(session, at) ?? null,
-          following: [...feeds.following(session)],
-          feeds: feeds.feedsOf(session, at),
-        },
+        event: { kind: "request", id, context: req },
       })),
     );
   } finally {
     release();
   }
   recorded(facts, delivered);
-  // [LAW:nothing-unseen] Both turns' waits in the mailbox and hops, beside
-  // `took`: what reaching the renderer cost this request.
+  // [LAW:nothing-unseen] How long each turn took in the renderer: the config
+  // turn, where a load is paid, and the request turn, what the draw's reserve
+  // is held to (DRAW_RESERVE_MS), with `encoded=` for its bytes. Then both
+  // turns' waits in the mailbox and hops, beside `took`: what reaching the
+  // renderer cost this request.
+  const ms = (turn: HostTurn): string =>
+    turn.turnMs === null ? "-" : `${turn.turnMs}ms`;
+  noteFacts(facts, { configured: ms(configured), drew: ms(delivered) });
   noteFacts(facts, {
     mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
     hop:

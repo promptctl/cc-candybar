@@ -63,7 +63,7 @@ export const productionInstallEdge: InstallEdge = {
   realpath: (p) => asked(() => fs.realpathSync(p)),
   checkoutOf: sourceCheckoutOf,
   digest: (crateDir) => asked(() => crateDigest(crateDir)),
-  nativeShipped: shipsNative(process.platform, process.arch),
+  nativeShipped: () => shipsNative(process.platform, process.arch),
 };
 
 // [LAW:one-source-of-truth] One fold from (the daemon's bundle, the clients
@@ -98,7 +98,7 @@ export function installFacts(
                 rustSource: edge.digest(path.join(root, "rust-client")),
               },
       },
-      nativeShipped: edge.nativeShipped,
+      nativeShipped: edge.nativeShipped(),
       clients: clients.map(
         (client): ClientFact =>
           client === null

@@ -425,11 +425,17 @@ function assertType(
 // its own nodes, so no session's write lands in another session's values, and
 // a directory value is one node however many sessions read it.
 
+// What a store reads of time: `now` stamps when each box and document last
+// changed, and `after` holds a source's torn-write settle. In a renderer it
+// is the turn's time (src/renderer/turn-time.ts), so a stamp is the instant
+// of the input that wrote it, and a settle is work its wake declares.
+export type StoreClock = Pick<Timekeeper, "now" | "after">;
+
 export class VariableStore {
-  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
-  // changed; a child store reads the same one as its parent.
+  // [LAW:one-source-of-truth] A child store reads the same clock as its
+  // parent.
   constructor(
-    readonly clock: Timekeeper,
+    readonly clock: StoreClock,
     private readonly parent: VariableStore | null = null,
   ) {}
 

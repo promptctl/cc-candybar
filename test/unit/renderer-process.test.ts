@@ -31,6 +31,7 @@ import type {
   AdapterOutput,
   EffectId,
   RendererOutput,
+  Timed,
 } from "../../src/renderer-interface/interface";
 import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant } from "../../src/utils/instant";
@@ -152,12 +153,18 @@ const settled = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
 
+// A push, and its answer as a renderer process's line carries it: timed.
 const pin: AdapterInput = {
   kind: "adapter",
-  push: { kind: "pin", session: SESSION },
+  push: { kind: "reload-every", since: 0 },
   at: 0 as Instant,
 };
-const PINNED: AdapterOutput = { kind: "replied", reply: { kind: "pin" } };
+const PINNED: Timed<AdapterOutput> = {
+  kind: "replied",
+  reply: { kind: "reload-every" },
+  subscriptions: { sources: {}, lanes: {}, wake: null },
+  turnMs: 0,
+};
 
 describe("a renderer process's start", () => {
   test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the host's digest", () => {
@@ -212,10 +219,7 @@ describe("a renderer process's start", () => {
   });
 
   test("the complete start heads what waits for the boot, so an input during the boot follows it as a change", async () => {
-    const unpin: AdapterInput = {
-      ...pin,
-      push: { kind: "unpin", session: SESSION },
-    };
+    const unpin: AdapterInput = { ...pin, push: { kind: "close-views" } };
     const r = rig(async () => {
       await r.link.renderer.answer(pin);
     });
@@ -527,11 +531,12 @@ describe("ids a renderer mints", () => {
       event: { kind: "retire", session: SESSION },
     } as never);
     await settled();
-    const answeredWith: RendererOutput = {
+    const answeredWith: Timed<RendererOutput> = {
       kind: "answered",
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, tmuxStatus: [] },
+      subscriptions: { sources: {}, lanes: {}, wake: null },
+      frames: [],
       turnMs: 0,
     };
     child.say({ kind: "output", n: inputs(child)[0]!.n, output: answeredWith });
@@ -578,7 +583,8 @@ describe("ids a renderer mints", () => {
         kind: "answered",
         record: [],
         effects: [{ kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" }],
-        subscriptions: { sources: {}, tmuxStatus: [] },
+        subscriptions: { sources: {}, lanes: {}, wake: null },
+        frames: [],
         turnMs: 0,
       },
     });

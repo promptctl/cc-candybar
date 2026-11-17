@@ -1,6 +1,5 @@
 // One render of a session, a request's or a frame's, and what it records.
 
-import { elapsedMs, type Timekeeper } from "../time.js";
 import { inTmux } from "../tmux-hint.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
@@ -64,10 +63,9 @@ import {
   type LaneFeeds,
   type LaneSwitches,
 } from "../config/lanes.js";
-import {
-  type AdapterToHost,
-  type FeedFrame,
-} from "../renderer-interface/adapter.js";
+import { type AdapterToHost } from "../renderer-interface/adapter.js";
+import type { FeedFrame } from "./feeds.js";
+import type { DrawnMenus } from "./menu-idle.js";
 import type { LaneActs } from "./lane-acts.js";
 import type { Effect } from "../renderer-interface/interface.js";
 import {
@@ -112,7 +110,6 @@ import {
 // calls. `worldStates` holds the world states the host handed in, which its
 // views read.
 export interface RendererState {
-  readonly clock: Pick<Timekeeper, "monotonic" | "after">;
   readonly sessionState: SessionState;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly worldStates: WorldStates;
@@ -136,39 +133,33 @@ export type RendererParts = RendererState & AdapterToHost;
 // crossed the checkpoint when it arrived, so a frame draws by it without
 // asking again. Null while the session has no view: a frame opens none.
 // [LAW:nothing-unseen] A frame that throws carries the render event a throwing
-// request writes, for the feed to log when that failure is first pushed; the
+// request writes, for the feed to log when that failure is first drawn; the
 // feed summarizes the frames that render.
 // [LAW:effects-at-boundaries] Synchronous by type: a frame reads every value
 // as its owner stored it (the view's payload), so it performs no I/O and
 // refreshes no source — the collector's triggers made those refreshes,
-// and an event, never a frame, opened the view it draws.
+// and an event, never a frame, opened the view it draws. What it drew of the
+// session's menus is a value its turn applies; a frame that threw drew none.
 export function renderFrame(
   parts: RendererParts,
   sessionId: SessionId,
-  fps: number,
   at: Instant,
+  fps: number,
   // What the feed knows of its own lanes as it asks for the frame: which
   // follow the session and draw it now, and what each was sent of late; and
-  // the session's idle period, as the host's clock read it.
+  // when the session's menus' idle period began.
   feed: {
     readonly following: ReadonlySet<Lane>;
     readonly feeds: LaneFeeds;
     readonly idleSince: Instant | null;
   },
-): FeedFrame | null {
-  const { clock } = parts;
-  const started = clock.monotonic();
+): { readonly frame: FeedFrame; readonly menus: DrawnMenus | null } | null {
   const facts: RequestFacts = [];
   try {
     using setup = setUpFrame(parts, sessionId, at, facts);
     if (setup === null) return null;
-    const { drawn, evaluated, cellBreaks, delivered, lanes } = drawRender(
-      parts,
-      setup,
-      { by: "feed", fps },
-      feed.feeds,
-      feed.idleSince,
-    );
+    const { drawn, evaluated, cellBreaks, delivered, lanes, menus } =
+      drawRender(parts, setup, { by: "feed", fps }, feed.feeds, feed.idleSince);
     // [LAW:single-enforcer] Signed as they leave the renderer, the bar and
     // what the statusline shows alike, each link once.
     const signed = signingFrames(parts.linkSigner);
@@ -185,36 +176,38 @@ export function renderFrame(
     // the same links, and one whose lanes are all off ends its feed, whose
     // unpin retires what the feed drew.
     delivered();
+    // [LAW:single-enforcer] Serialized once, here, for every subscriber; the
+    // statusline is mostly the bar itself, and one frame encodes once.
+    const resp = JSON.stringify(answer);
     return {
-      bar,
-      resp: answer,
-      // Mostly the bar itself, and one frame encodes once.
-      statusline:
-        statusline === drawn.body
-          ? answer
-          : RENDER_ANSWERS.ansi(signed(statusline)),
-      evaluated,
-      cellBreaks,
-      lanes,
-      failure: null,
+      frame: {
+        bar,
+        answers: {
+          resp,
+          statusline:
+            statusline === drawn.body
+              ? resp
+              : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline))),
+        },
+        evaluated,
+        cellBreaks,
+        failure: null,
+      },
+      menus,
     };
   } catch (error) {
     const outcome = renderFailure(failureOf(error));
-    const { level, line } = requestEvent(
-      "render",
-      facts,
-      outcome,
-      elapsedMs(clock, started),
-    );
-    const failed = failedWith(outcome.message);
+    const { level, line } = requestEvent("render", facts, outcome, null);
+    const failed = JSON.stringify(failedWith(outcome.message));
     return {
-      bar: renderFailedFrame(failed.error),
-      resp: failed,
-      statusline: failed,
-      evaluated: 0,
-      cellBreaks: 0,
-      lanes: viewLanes(parts, sessionId),
-      failure: { level, line: `frame ${line}` },
+      frame: {
+        bar: renderFailedFrame(failedWith(outcome.message).error),
+        answers: { resp: failed, statusline: failed },
+        evaluated: 0,
+        cellBreaks: 0,
+        failure: { level, line: `frame ${line}` },
+      },
+      menus: null,
     };
   }
 }
@@ -301,15 +294,8 @@ interface RenderSetup extends Disposable {
 }
 
 // What a render notes of the context it draws by.
-function contextFacts(
-  req: CheckedRenderRequest,
-  at: Instant,
-  facts: RequestFacts,
-): void {
-  noteFacts(facts, {
-    sid: req.hookData.session_id,
-    at: at.toFixed(3),
-  });
+function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
+  noteFacts(facts, { sid: req.hookData.session_id });
   const { hints } = req;
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
@@ -357,10 +343,9 @@ export function configureSession(
   parts: RendererParts,
   req: CheckedRenderRequest,
   worldState: WorldState,
-  at: Instant,
   facts: RequestFacts,
 ): void {
-  contextFacts(req, at, facts);
+  contextFacts(req, facts);
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
     recordRequest(parts, req);
@@ -444,7 +429,7 @@ function setUpFrame(
   const req = hold.view.facts();
   let hintsError: string | null;
   try {
-    contextFacts(req, at, facts);
+    contextFacts(req, facts);
     hintsError = hintsErrorOf(req);
   } catch (e) {
     hold[Symbol.dispose]();
@@ -463,6 +448,10 @@ function setUpDraw(
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup {
+  // [LAW:one-source-of-truth] The instant the bar is drawn for, noted by the
+  // draw itself: the render event names the instant the bar's `now` reads,
+  // never the config turn's ahead of it.
+  noteFacts(facts, { at: at.toFixed(3) });
   try {
     const { entry, state, view } = hold;
     // [LAW:dataflow-not-control-flow] One composition every render: the
@@ -497,8 +486,7 @@ export function drawRender(
   // What each lane following the session was sent of late, as the bar's rate
   // cell shows it.
   feeds: LaneFeeds,
-  // When the idle period of the menus the session's last frame drew began,
-  // as the host's idle clock read it for this draw.
+  // When the idle period of the menus the session's last draw drew began.
   idleSince: Instant | null,
 ): {
   drawn: DrawnBar;
@@ -512,6 +500,9 @@ export function drawRender(
   delivered: () => void;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
+  // What this draw drew of the session's menus, which its turn applies to
+  // the session's idle period (src/renderer/menu-idle.ts).
+  menus: DrawnMenus;
 } {
   const {
     sessionState,
@@ -519,7 +510,6 @@ export function drawRender(
     linkSigner,
     renderWarnings,
     effectSessions,
-    menuIdle,
   } = parts;
   const { req, at, facts, sessionId, entry, state, view, hintsError } = setup;
   // [LAW:no-ambient-temporal-coupling] The picks this draw settles in its own
@@ -741,13 +731,11 @@ export function drawRender(
   const copies = new Map(diagnostics.map((m, i) => [keys[i]!, m.copy]));
   const delivered = (): void =>
     renderCache.delivered(sessionId, drawing.by, copies);
-  // What this frame drew is what the session's close timer follows.
-  menuIdle.observe(
-    sessionId,
-    at,
-    frame.rows.some((row) => row.kind === "menu"),
-    effective.menuTimeout,
-  );
+  // What this frame drew is what the session's idle close follows.
+  const menus: DrawnMenus = {
+    shown: frame.rows.some((row) => row.kind === "menu"),
+    timeoutS: effective.menuTimeout,
+  };
   // [LAW:one-source-of-truth] The idle period this walk drew with.
   noteFacts(facts, {
     menuIdle:
@@ -890,6 +878,7 @@ export function drawRender(
     eventsShown,
     delivered,
     lanes,
+    menus,
   };
 }
 
@@ -992,15 +981,17 @@ export interface RequestAnswer {
   // What to record once that frame reached its client: the copies its copy
   // clicks copy, and the click error and the launcher's pipe event it showed.
   readonly delivered: () => void;
+  // What the draw drew of the session's menus, which its turn applies.
+  readonly menus: DrawnMenus;
 }
 
 export function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
   at: Instant,
-  // What the host's feeds knew of the session as the request's turn came:
-  // which lanes follow it and draw it now, and what each was sent of late;
-  // and when its menus' idle period began, as the host's clock read it.
+  // What the session's feed knows as the request's turn comes: which lanes
+  // follow it and draw it now, and what each was sent of late; and when its
+  // menus' idle period began.
   feed: {
     readonly following: ReadonlySet<Lane>;
     readonly feeds: LaneFeeds;
@@ -1011,8 +1002,6 @@ export function answerRequest(
   // join.
   effects: Effect[],
 ): RequestAnswer {
-  const { clock } = parts;
-  const drawFrom = clock.monotonic();
   using setup = setUpRender(parts, req, at, facts);
   // [LAW:effects-at-boundaries] What the request's arrival starts beyond its
   // own answer: the setups its session's clicks owe, by the lanes its
@@ -1023,13 +1012,8 @@ export function answerRequest(
     effects,
   );
   const sessionId = req.hookData.session_id;
-  const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
-    parts,
-    setup,
-    ANSWERING,
-    feed.feeds,
-    feed.idleSince,
-  );
+  const { drawn, clickShown, eventsShown, delivered, lanes, menus } =
+    drawRender(parts, setup, ANSWERING, feed.feeds, feed.idleSince);
   const elsewhere = handedOffTo(lanes, feed.following);
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
@@ -1040,12 +1024,10 @@ export function answerRequest(
       ? statuslineOf(sessionId, setup.state.writable, drawn, elsewhere)
       : drawn.body,
   );
-  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
-  // how long the turn took to make the frame: with the host's `encoded=` for
-  // its bytes, what the draw's reserve is held to (DRAW_RESERVE_MS).
+  // [LAW:nothing-unseen] Which lanes the statusline handed the bar to; how
+  // long the turn took is the host's `drew=`, measured around it.
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
-    drew: `${elapsedMs(clock, drawFrom)}ms`,
   });
   return {
     frame,
@@ -1056,6 +1038,7 @@ export function answerRequest(
       clickShown,
       eventsShown,
     ),
+    menus,
   };
 }
 
