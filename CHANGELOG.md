@@ -1,3 +1,9 @@
+## [1.227.0](https://github.com/promptctl/cc-candybar/compare/v1.226.0...v1.227.0) (2026-11-17)
+
+### Features
+
+* **daemon:** a request waits in the host for its world state, and the renderer takes one input at a time (5gb) ([#780](https://github.com/promptctl/cc-candybar/issues/780)) ([1e9fe72](https://github.com/promptctl/cc-candybar/commit/1e9fe724095c68019a41f92da6da13148a3735dd))
+
 ## [1.226.0](https://github.com/promptctl/cc-candybar/compare/v1.225.1...v1.226.0) (2026-11-17)
 
 ### Features
