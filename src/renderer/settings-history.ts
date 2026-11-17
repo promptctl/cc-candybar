@@ -154,7 +154,7 @@ export class SettingsHistory {
 
   // A start's histories, oldest first, in place of whatever was held.
   restore(loaded: ReadonlyMap<SessionId, SessionHistory>): void {
-    this.state = new Map(loaded);
+    this.state = this.bounded(new Map(loaded));
   }
 
   // [LAW:one-source-of-truth] Each history is immutable, so the value is its
@@ -430,6 +430,14 @@ export class SettingsHistory {
     ) {
       next.set(sessionId, history);
     }
+    this.state = this.bounded(next);
+  }
+
+  // [LAW:single-enforcer] The bounds, held however the history grew: a
+  // change, or a store written by a build with larger ones.
+  private bounded(
+    next: Map<SessionId, SessionHistory>,
+  ): Map<SessionId, SessionHistory> {
     while (next.size > MAX_SESSIONS || weight(next) > MAX_BYTES) {
       const [oldest, h] = next.entries().next().value!;
       if (next.size > 1) next.delete(oldest);
@@ -445,7 +453,7 @@ export class SettingsHistory {
         next.delete(oldest);
       }
     }
-    this.state = next;
+    return next;
   }
 }
 

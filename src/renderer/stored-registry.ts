@@ -4,6 +4,7 @@
 // each entry that moved since the host last heard of it. No owner writes,
 // saves or flushes anything itself.
 
+import { runEach } from "../utils/run-each";
 import type { JsonValue } from "../var-system/types";
 import type { Effect } from "../renderer-interface/interface";
 import type {
@@ -34,23 +35,27 @@ export class StoredRegistry {
   // holds is what was handed in. An entry the owner did not keep as it was
   // handed in (dropped past a bound, refused, or rewritten as it was read)
   // is owed to the host, so its copy is never one the renderer has not got.
+  // [LAW:no-silent-failure] Each owner restores whatever another threw, so
+  // no store is left holding nothing over what the host holds.
   restore(stored: StoredState): void {
-    for (const owner of this.owners) {
-      const handed = stored[owner.store];
-      owner.restore(handed);
-      const entries = handed.kind === "read" ? handed.entries : {};
-      const versions = owner.versions();
-      const told = new Map<string, unknown>();
-      for (const [key, value] of Object.entries(entries)) {
-        const kept =
-          versions.has(key) &&
-          JSON.stringify(owner.value(key)) === JSON.stringify(value);
-        // [LAW:dataflow-not-control-flow] A token nothing holds, so the
-        // next drain writes this entry, or its absence.
-        told.set(key, kept ? versions.get(key) : RESTORED_APART);
-      }
-      this.told.set(owner.store, told);
-    }
+    runEach(
+      this.owners.map((owner) => () => {
+        const handed = stored[owner.store];
+        owner.restore(handed);
+        const entries = handed.kind === "read" ? handed.entries : {};
+        const versions = owner.versions();
+        const told = new Map<string, unknown>();
+        for (const [key, value] of Object.entries(entries)) {
+          const kept =
+            versions.has(key) &&
+            JSON.stringify(owner.value(key)) === JSON.stringify(value);
+          // [LAW:dataflow-not-control-flow] A token nothing holds, so the
+          // next drain writes this entry, or its absence.
+          told.set(key, kept ? versions.get(key) : RESTORED_APART);
+        }
+        this.told.set(owner.store, told);
+      }),
+    );
   }
 
   // [LAW:no-ambient-temporal-coupling] The turn's end: a write for each entry

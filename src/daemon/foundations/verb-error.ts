@@ -107,15 +107,3 @@ export function decodeWire<T>(decode: () => T): T {
     throw err;
   }
 }
-
-// [LAW:no-silent-failure] Every failure of steps that each ran however the
-// last ended: one is thrown as it is, so its kind is still read off its
-// class, and several as one error naming each, so none replaces another.
-export function throwAll(failures: readonly unknown[]): void {
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1) {
-    throw new Error(
-      failures.map((e) => String((e as Error).message ?? e)).join("; "),
-    );
-  }
-}

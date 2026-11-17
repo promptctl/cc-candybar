@@ -20,7 +20,16 @@ import {
 import { daemonFields } from "../src/doctor/report";
 import { parsePostMortemsRead } from "../src/doctor/post-mortems-read";
 import { storedDocument } from "../src/renderer/stored-owners";
-import { DOCUMENT_KEY } from "../src/renderer-interface/stored";
+import {
+  DOCUMENT_KEY,
+  STORE_NAMES,
+  type StoredState,
+} from "../src/renderer-interface/stored";
+import {
+  StoredRegistry,
+  type StoredOwner,
+} from "../src/renderer/stored-registry";
+import type { Effect } from "../src/renderer-interface/interface";
 import { RuntimeStats } from "../src/daemon/stats";
 import { postMortemsOf } from "../src/daemon/limits";
 import { type ServingDaemon } from "../src/daemon/foundations/memory-limit";
@@ -656,7 +665,6 @@ describe("the post-mortems-read record", () => {
 
   test("every value the store can file reads back as the host hands it in, none filed included", () => {
     const store = postMortemsStore();
-    store.restore({ kind: "read", entries: {} });
     store.update(() => ({ through: null }));
     const next = postMortemsStore();
     next.restore({
@@ -666,14 +674,33 @@ describe("the post-mortems-read record", () => {
     expect(next.read()).toEqual({ kind: "ok", value: { through: null } });
   });
 
-  test("a store no start has handed in files nothing over what the host holds", () => {
+  test("a start whose earlier store threw as it restored still hands this one in, so a filing builds on what the host holds", () => {
     const store = postMortemsStore();
-    expect(store.update(() => ({ through: NEWER }))).toEqual({
-      kind: "failed",
-      reason:
-        "doctor-post-mortems-read was not handed in by the renderer's start",
-    });
-    expect(store.versions().size).toBe(0);
+    const threw: StoredOwner = {
+      store: "session",
+      restore: () => {
+        throw new Error("a store that does not restore");
+      },
+      versions: () => new Map(),
+      value: () => null,
+    };
+    const registry = new StoredRegistry([threw, store]);
+    const stored = Object.fromEntries(
+      STORE_NAMES.map((name) => [name, { kind: "read", entries: {} }]),
+    ) as StoredState;
+    expect(() =>
+      registry.restore({
+        ...stored,
+        "doctor-post-mortems-read": {
+          kind: "read",
+          entries: { [DOCUMENT_KEY]: { through: NEWER } },
+        },
+      }),
+    ).toThrow("a store that does not restore");
+    expect(store.read()).toEqual({ kind: "ok", value: { through: NEWER } });
+    const effects: Effect[] = [];
+    registry.drain(effects);
+    expect(effects).toEqual([]);
   });
 
   test("the fix files only forward: a newer breach another run filed stays filed", () => {

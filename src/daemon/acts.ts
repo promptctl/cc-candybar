@@ -40,6 +40,9 @@ export interface ActDeps {
   readonly lanes: { readonly edge: LaneEdge; readonly host: LaneHost };
   // Whether the daemon's close has begun: no act starts after it.
   readonly closing: () => boolean;
+  // The pane the newest request of `session` since this daemon started
+  // reported, or null when none has.
+  readonly paneHeard: (session: SessionId) => TmuxHint | null;
   readonly log: DaemonLogger;
 }
 
@@ -78,6 +81,28 @@ function nameOf(act: HostAct): string {
 }
 
 const paneKey = (pane: TmuxHint): string => `${pane.socket}\0${pane.pane}`;
+
+// The pane an act types into or splits under, with the session it acts for,
+// or null for one that acts in none.
+function paneOf(
+  act: HostAct,
+): { readonly session: SessionId; readonly pane: TmuxHint } | null {
+  switch (act.kind) {
+    case "type-slash":
+    case "restart-claude":
+      return act;
+    case "surface":
+      if (act.surface === "pane") return act;
+      return act.pane.kind === "pane"
+        ? { session: act.session, pane: act.pane.hint }
+        : null;
+    case "copy":
+    case "open":
+    case "apply-update":
+    case "run":
+      return null;
+  }
+}
 
 // [LAW:types-are-the-program] How an act ended: its outcome, and what its
 // line says of it — what it did, or why it did not.
@@ -213,6 +238,19 @@ export class Acts {
   }
 
   private async performed(act: HostAct): Promise<Done> {
+    // [LAW:single-enforcer] A pane is acted in only as a request since this
+    // daemon started reported it for the act's session. A context read back
+    // from before names a pane id tmux may since have given another program
+    // (a bar clicked in scrollback a terminal restored after a reboot).
+    const inPane = paneOf(act);
+    if (inPane !== null) {
+      const heard = this.deps.paneHeard(inPane.session);
+      if (heard === null || paneKey(heard) !== paneKey(inPane.pane))
+        return not({
+          kind: "refused",
+          reason: `pane ${inPane.pane.pane} is not one this session's requests since the daemon started have reported — click again once its bar has redrawn`,
+        });
+    }
     try {
       // [LAW:types-are-the-program] exception: the table is keyed by kind,
       // which the compiler cannot carry from the act to its performer.

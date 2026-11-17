@@ -161,8 +161,8 @@ import {
   BadVerbArgs,
   decodeWire,
   failureOf,
-  throwAll,
 } from "../../daemon/foundations/verb-error";
+import { throwAll } from "../../utils/run-each";
 import type { ActsOnTheirWay } from "../acts";
 import {
   parseSessionId,

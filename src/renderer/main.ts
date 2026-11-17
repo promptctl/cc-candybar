@@ -85,11 +85,7 @@ import {
   serializeSegmentCells,
 } from "./debug.js";
 import { earliestOf } from "../utils/instant.js";
-import {
-  failureOf,
-  throwAll,
-  type Failure,
-} from "../daemon/foundations/verb-error.js";
+import { failureOf, type Failure } from "../daemon/foundations/verb-error.js";
 import {
   rendererOf,
   type Effect,
@@ -398,20 +394,12 @@ export function mainRenderer(
         // [LAW:single-enforcer] Every event turn ends with what it stored,
         // however it ended; a drain that throws joins the turn's failure
         // rather than replacing it.
-        const ended = ending(() => {
-          const failures: unknown[] = [];
-          try {
-            turn(input.event, record, effects, frames);
-          } catch (thrown) {
-            failures.push(thrown);
-          }
-          try {
-            parts.stored.drain(effects);
-          } catch (thrown) {
-            failures.push(thrown);
-          }
-          throwAll(failures);
-        });
+        const ended = ending(() =>
+          runEach([
+            () => turn(input.event, record, effects, frames),
+            () => parts.stored.drain(effects),
+          ]),
+        );
         return {
           ...(ended.kind === "answered"
             ? { kind: "answered" as const }

@@ -489,6 +489,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       },
     },
     closing: () => closing.signal.aborted,
+    paneHeard: (session) => sessionRequests.latest(session)?.hints.tmux ?? null,
     log,
   });
   // [LAW:single-enforcer] The one writer of the tmux status line lane's tmux

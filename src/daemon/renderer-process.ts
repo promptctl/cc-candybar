@@ -452,7 +452,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     refused = 0;
     for (const send of queued) send();
     // [LAW:no-ambient-temporal-coupling] What an ended renderer held goes once
-    // this one has started and taken its start, and stays if it ends first.
+    // this one has started and taken its start, and stays if it ends first,
+    // or serves past a start that failed: such a one may not yet hold what
+    // the ended one did, and a folder closed and opened again leaks a watch.
+    // At most one ended renderer's holds wait, so the cost is one fixed set.
     void start.then((took) => {
       if (!took || current() !== link) return;
       link.tookOver = true;

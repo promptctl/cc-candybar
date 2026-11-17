@@ -437,6 +437,7 @@ export function testActs(
       }),
     },
     closing: () => false,
+    paneHeard: () => null,
     log,
     ...deps,
   });
@@ -473,7 +474,11 @@ export async function performActs(
   ctx: VerbContext,
   deps: Partial<ActDeps> = {},
 ): Promise<EffectOutcome[]> {
-  const acts = testActs(ctx.log, deps);
+  // The host has heard the pane the click's own request reported.
+  const acts = testActs(ctx.log, {
+    paneHeard: () => ctx.latest?.hints.tmux ?? null,
+    ...deps,
+  });
   const asked = actsOf(ctx);
   const rest = ctx.effects.filter((e) => !asked.includes(e as Act));
   ctx.effects.splice(0, ctx.effects.length, ...rest);

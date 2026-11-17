@@ -35,6 +35,7 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { SettingsHistory } from "../src/renderer/settings-history";
+import type { SessionHistory } from "../src/renderer/history-steps";
 import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -611,6 +612,26 @@ describe("settings history: a step lands whole, and records only what landed", (
     );
     refused.commit();
     expect(history.depth(S1)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+  });
+
+  test("a history handed in over the bounds is held within them", () => {
+    const history = new SettingsHistory(new SessionState(), () => {});
+    const big = "x".repeat(3 * 1024 * 1024);
+    const one = (file: string): SessionHistory => ({
+      past: [[{ kind: "layer", role: "user", file, before: null, after: big }]],
+      future: [],
+    });
+    // 9 MB over three sessions, past the 8 MB bound.
+    history.restore(
+      new Map([
+        [OLD, one("a")],
+        [S1, one("b")],
+        [NEW, one("c")],
+      ]),
+    );
+    expect(history.depth(OLD).undo).toBe(0);
+    expect(history.depth(S1).undo).toBe(1);
+    expect(history.depth(NEW).undo).toBe(1);
   });
 
   test("history is bounded by bytes: the session that changed least recently goes first", () => {
