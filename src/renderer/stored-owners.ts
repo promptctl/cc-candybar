@@ -223,7 +223,12 @@ export function storedDocument<T extends JsonValue>(
   empty: T,
   parse: (doc: unknown) => Asked<T>,
 ): StoredDocument<T> {
-  let held: Asked<T> = { kind: "ok", value: empty };
+  // [LAW:no-silent-failure] Until a start hands it in, the document is one
+  // that did not read: a filing then would replace what the host holds.
+  let held: Asked<T> = {
+    kind: "failed",
+    reason: `${store} was not handed in by the renderer's start`,
+  };
   // The document as it was handed in: what is kept, untouched, while it does
   // not read. Undefined while the store holds none.
   let handed: JsonValue | undefined;

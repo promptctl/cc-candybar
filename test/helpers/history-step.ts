@@ -40,11 +40,7 @@ export const WRITES_IN_PLACE: ConfigFiles = {
     userLayer = file;
     return "user";
   },
-  pathOf: (role) => {
-    if (role !== "user" || userLayer === null)
-      throw new Error(`no ${role} layer in a history with no click`);
-    return userLayer;
-  },
+  pathOf: (role) => (role === "user" ? userLayer : null),
 };
 
 // A config writer's store with no click around it: it reads the disk, and

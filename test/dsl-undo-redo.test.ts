@@ -589,6 +589,30 @@ describe("settings history: a step lands whole, and records only what landed", (
     expect(runtime.sessionState.get(S1, "theme")).toBe("nord");
   });
 
+  test("an undo whose layer left the session's chain is refused once, and its step forgotten", () => {
+    const history = new SettingsHistory(new SessionState(), () => {});
+    const files = (path: string | null) => ({
+      read: () => "{}",
+      land: () => {},
+      prove: () => {},
+      roleOf: () => "project" as const,
+      pathOf: () => path,
+    });
+    const journal = history.begin(files("/repo/.claude/candybar.json5"));
+    journal.file(S1, "/repo/.claude/candybar.json5", "{}", "{ a: 1 }");
+    journal.commit();
+    expect(history.depth(S1).undo).toBe(1);
+
+    // The repository's approval went: the chain holds no project layer. A
+    // refused click still commits what it forgot, as the verb path does.
+    const refused = history.begin(files(null));
+    expect(() => refused.undo(S1)).toThrow(
+      /undo: the project layer \(this session renders from none now\) changed since that edit/,
+    );
+    refused.commit();
+    expect(history.depth(S1)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+  });
+
   test("history is bounded by bytes: the session that changed least recently goes first", () => {
     const history = new SettingsHistory(new SessionState(), () => {});
     const big = (c: string): string => c.repeat(2 * 1024 * 1024);

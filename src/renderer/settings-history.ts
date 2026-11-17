@@ -663,13 +663,17 @@ function stepOf(
         };
   const file = click.files.pathOf(change.role);
   // [LAW:single-enforcer] A step lands only in the file it was written to:
-  // its role naming another file now (the session moved to another project)
-  // is a target that moved, refused as a setting that moved is.
-  if (digestOf(file) !== change.file)
+  // its role naming another file now (the session moved to another project),
+  // or none (the layer left the session's chain), is a target that moved,
+  // refused as a setting that moved is, so the step leaves the stacks.
+  if (file === null || digestOf(file) !== change.file)
     return {
       kind: "moved",
       target: identity(change),
-      what: `the ${change.role} layer, now ${file}, not the file this step wrote`,
+      what:
+        file === null
+          ? `the ${change.role} layer (this session renders from none now)`
+          : `the ${change.role} layer, now ${file}, not the file this step wrote`,
     };
   const applied = applyChanges(
     click.files.read(file),

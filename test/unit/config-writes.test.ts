@@ -93,15 +93,13 @@ describe("a click's config writes", () => {
     expect(w.heldOrigin()).toEqual(ORIGIN);
   });
 
-  test("a role the click's chain holds no layer for is no layer a step writes", () => {
+  test("a role the click's chain holds no layer for names no file", () => {
     const w = new ConfigWrites(() => 1 as EffectId);
     w.begin("click", ORIGIN, () => ({
       origin: ORIGIN,
       chain: [layer("user", "/a.json5")],
     }));
-    expect(() => w.pathOf("project")).toThrow(
-      "the project layer is not one this session renders from — its step is not taken",
-    );
+    expect(w.pathOf("project")).toBeNull();
   });
 
   test("a click that reads no layer asks for no snapshot", () => {

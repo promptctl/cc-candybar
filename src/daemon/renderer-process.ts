@@ -695,6 +695,9 @@ function hostIdOf<T>(name: RendererName, held: ReadonlyMap<T, T>, id: T): T {
 // and it writes off the loop, so a snapshot of hundreds of megabytes holds no
 // bar while it lands. The renderer's failure is said over the stream's own,
 // which it caused.
+// [LAW:no-ambient-temporal-coupling] The renderer is asked only once the
+// file is open: a snapshot is the renderer's heap again, which a file that
+// will not open would cost it for nothing, at its limit.
 export async function writtenFrom(
   file: string,
   said: (chunk: (text: string) => void) => Promise<void>,
@@ -703,6 +706,11 @@ export async function writtenFrom(
   const landed = new Promise<Error | null>((resolve) =>
     finished(out, (error) => resolve(error ?? null)),
   );
+  const opened = await Promise.race([
+    new Promise<null>((resolve) => out.once("ready", () => resolve(null))),
+    landed,
+  ]);
+  if (opened !== null) throw opened;
   const [told] = await Promise.allSettled([
     said((text) => void out.write(text)),
   ]);

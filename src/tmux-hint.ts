@@ -5,7 +5,7 @@
 // Code spawns it with Claude Code's exact environment, while the daemon is
 // detached and one-per-user, its env answering for whichever shell spawned it.
 // So the client reports and the host holds them with the session's context
-// (src/daemon/session-contexts.ts) — the doctor reasons over the facts of the
+// (src/daemon/session-requests.ts) — the doctor reasons over the facts of the
 // session's last render, never over the daemon's own env.
 //
 // [LAW:one-source-of-truth] This vocabulary is mirrored by the Rust client

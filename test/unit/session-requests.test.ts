@@ -143,6 +143,18 @@ test("a session noted before the load keeps what it was noted with", () => {
   expect(next.requests.of(S1)?.requested.cwd).toBe("/nowhere/new");
 });
 
+test("a session noted before the load is newer than every context the file holds, so the bound drops the file's first", () => {
+  const first = book();
+  for (let i = 1; i <= 256; i++) first.requests.note(requestOf(`old${i}`), i);
+  first.requests.close();
+  const next = book(first.on);
+  next.requests.note(requestOf("s1"), 1);
+  next.requests.load();
+  expect(next.requests.of(S1)).not.toBeNull();
+  expect(next.requests.of(sessionIdOf("old1"))).toBeNull();
+  expect(next.requests.of(sessionIdOf("old256"))).not.toBeNull();
+});
+
 test("a session id that names the object prototype is kept like any other", () => {
   const first = book();
   first.requests.note(requestOf("__proto__"), 1);

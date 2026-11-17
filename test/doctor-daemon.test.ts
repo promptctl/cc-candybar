@@ -656,6 +656,7 @@ describe("the post-mortems-read record", () => {
 
   test("every value the store can file reads back as the host hands it in, none filed included", () => {
     const store = postMortemsStore();
+    store.restore({ kind: "read", entries: {} });
     store.update(() => ({ through: null }));
     const next = postMortemsStore();
     next.restore({
@@ -663,6 +664,16 @@ describe("the post-mortems-read record", () => {
       entries: { [DOCUMENT_KEY]: store.value(DOCUMENT_KEY)! },
     });
     expect(next.read()).toEqual({ kind: "ok", value: { through: null } });
+  });
+
+  test("a store no start has handed in files nothing over what the host holds", () => {
+    const store = postMortemsStore();
+    expect(store.update(() => ({ through: NEWER }))).toEqual({
+      kind: "failed",
+      reason:
+        "doctor-post-mortems-read was not handed in by the renderer's start",
+    });
+    expect(store.versions().size).toBe(0);
   });
 
   test("the fix files only forward: a newer breach another run filed stays filed", () => {

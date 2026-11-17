@@ -147,16 +147,11 @@ export class ConfigWrites {
     return this.layerAt(file).role;
   }
 
-  // [LAW:no-silent-failure] The file the open click's chain holds for
-  // `role`: a role it holds no layer for is no layer a step of this session
-  // writes.
-  pathOf(role: LayerRole): string {
-    const layer = this.held().chain.find((l) => l.role === role);
-    if (layer === undefined)
-      throw new BadVerbArgs(
-        `the ${role} layer is not one this session renders from — its step is not taken`,
-      );
-    return layer.path;
+  // The file the open click's chain holds for `role`, or null when it holds
+  // none: a repository no longer approved, or an explicit config file in
+  // place of the chain.
+  pathOf(role: LayerRole): string | null {
+    return this.held().chain.find((l) => l.role === role)?.path ?? null;
   }
 
   // A write of the open click, from the file as the click read it (`read`):

@@ -35,10 +35,14 @@ test("a snapshot the renderer failed part way leaves no file, and fails with the
   expect(fs.existsSync(file)).toBe(false);
 });
 
-test("a snapshot the disk refuses fails with the disk's reason, the chunks after it are dropped, and nothing is thrown past it", async () => {
+test("a snapshot whose file will not open fails with the disk's reason, and the renderer is never asked for it", async () => {
   const file = path.join(dir, "missing", "refused.heapsnapshot");
-  await expect(writtenFrom(file, said(['{"a":', "1}"]))).rejects.toThrow(
-    /ENOENT/,
-  );
+  let asked = false;
+  await expect(
+    writtenFrom(file, async () => {
+      asked = true;
+    }),
+  ).rejects.toThrow(/ENOENT/);
+  expect(asked).toBe(false);
   expect(fs.existsSync(file)).toBe(false);
 });

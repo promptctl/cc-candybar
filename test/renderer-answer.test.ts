@@ -969,6 +969,30 @@ describe("a click", () => {
     expect(seen).toBe(latest);
   });
 
+  test("on a session the renderer was never handed leaves its origin unnamed once it is over", async () => {
+    const t = renderer({
+      ...NO_VERBS,
+      handler: (verb) => (verb === "act" ? () => {} : undefined),
+      closeIdle: () => {},
+    });
+    const latest = contextOf(checked());
+    // The click waits for its origin's config, then runs on it.
+    const parked = answered(await handIn(t.r, click("act", latest)));
+    expect(parked.subscriptions.configs).toEqual([latest.requested]);
+    answered(await configsNamed(t, parked));
+    // No `context` made the session live, so no retire will come to let its
+    // origin go: no turn after the click names it.
+    const later = answered(
+      await t.r.answer({
+        kind: "event",
+        at: AT,
+        tick: 1 as Tick,
+        event: { kind: "due" },
+      }),
+    );
+    expect(later.subscriptions.configs).toEqual([]);
+  });
+
   test("of a verb the renderer does not have is its bad request", async () => {
     const t = renderer();
     const { failure } = threw(await handIn(t.r, click("nope")));

@@ -12,6 +12,10 @@ The env override for the limit keeps "RSS" in its name. It's a published contrac
 
 On a breach the daemon writes the platform's own memory attribution of each process first, then the renderer's V8 heap snapshot, then its own, under one shared identity, and exits. The attribution is needed because a heap snapshot describes only V8's half. The breaches that trip the limit are the ones where RSS and the heap disagree: V8's own mappings, malloc, page tables and file-backed code, part of which no eviction can reach. Rotation keeps the newest few breaches, with every file of each.
 
+## The host holds a copy of every store
+
+The host keeps each store the renderer returns whole in its own heap, so every start can hand it back without reading a file. A bound in the renderer (the settings history's byte bound above all) is therefore a bound on the host's heap too, outside the render cache's budget: raising one raises both.
+
 ## The render cache has a byte budget
 
 The render cache's share of the memory budget is what is left under the line the doctor calls near the limit once the rest of the daemon is reserved, and never less than a quarter. A fixed fraction fails one way or the other: at a lowered limit it leaves the cache too little to hold the sessions being served, and at the default it either starves the cache or, full, crosses that line. The cache evicts the least-recently-used entries while its accounted bytes exceed the share, never the one being served nor one an open feed draws: a frame opens nothing, so an evicted feed's entry would stop the feed. Past the share with only those left, the cache warns rather than evicts. At the default limit the share holds several times the live working set. Past capacity, sessions rendering in turn miss on every render, and no miss is cheap enough to survive that, so a thrashing cache needs capacity, not cheaper misses. The costs per entry, per compile and per view are measured, and a test fails if real heap use exceeds any of them. Re-measure when you change what an entry, a compile or a view holds.

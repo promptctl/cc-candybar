@@ -277,12 +277,14 @@ export function mainRenderer(
       case "click": {
         // [LAW:one-source-of-truth] The click acts at its session's newest
         // context: the host's, or, when the host holds none, the one this
-        // renderer was last handed.
+        // renderer was last handed. A click's own context joins no live
+        // session's: only a `context` makes a session live, and only its
+        // retire ends one, which a session clicked but never requested has
+        // none of.
         const session = event.session?.ok === true ? event.session.id : null;
         const latest =
           event.latest ??
           (session === null ? null : (contexts.get(session) ?? null));
-        if (latest !== null) contexts.set(latest.session, latest);
         const click = { ...event, latest };
         // A click waits for the config of the origin its session's context
         // names, which no live context may (one idle past its retire).

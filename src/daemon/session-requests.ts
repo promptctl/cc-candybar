@@ -61,12 +61,18 @@ export class SessionRequests {
   // [LAW:no-ambient-temporal-coupling] Read once this daemon has won the
   // socket: a daemon still in its close writes the file until it exits, so a
   // read made before then could hold contexts its flush then replaces. A
-  // session noted already keeps what it was noted with.
+  // session noted already keeps what it was noted with, and stays newer than
+  // every context the file holds, so the bound drops the file's first.
   load(): void {
     if (this.file === null) return;
+    const noted = [...this.held];
+    this.held.clear();
     for (const context of this.read(this.file))
-      if (!this.held.has(context.session))
-        this.held.set(context.session, { context, request: null });
+      this.held.set(context.session, { context, request: null });
+    for (const [session, held] of noted) {
+      this.held.delete(session);
+      this.held.set(session, held);
+    }
     this.evictOldest();
   }
 
