@@ -4,15 +4,22 @@
     {
       "version": "pr-778",
       "ref": "refs/pull/778/merge",
-      "sha": "f643731b74d9528dd867d75c087f6fc48dfd86a0",
-      "timestamp": "2026-11-17T00:01:28.200Z",
+      "sha": "bee88a1c1d26e35b73eebd0dc4892e5c8780a8ed",
+      "timestamp": "2026-11-17T00:05:01.518Z",
       "commits": [
         {
-          "sha": "f643731b74d9528dd867d75c087f6fc48dfd86a0",
+          "sha": "bee88a1c1d26e35b73eebd0dc4892e5c8780a8ed",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T00:00:39Z",
-          "message": "Merge 831737db7a15bcb9e45591aaae048031c508ec43 into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
+          "timestamp": "2026-11-17T00:04:04Z",
+          "message": "Merge 0d0bfc43e4e45a0b1a10e360ca8e5ea127542068 into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
+        },
+        {
+          "sha": "0d0bfc43e4e45a0b1a10e360ca8e5ea127542068",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T17:03:47-07:00",
+          "message": "fix(daemon): a renderer that ends in the close before the close ended it is a warning (candybar-host-renderer-x96a.w8l)\n"
         },
         {
           "sha": "831737db7a15bcb9e45591aaae048031c508ec43",
