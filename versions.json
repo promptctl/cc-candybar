@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-791",
+      "ref": "refs/pull/791/merge",
+      "sha": "9f0c983efca6715958677cfd3b5c9c33ad6888b0",
+      "timestamp": "2026-11-17T23:29:47.104Z",
+      "commits": [
+        {
+          "sha": "9f0c983efca6715958677cfd3b5c9c33ad6888b0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T16:28:37-07:00",
+          "message": "Merge 043346661ba0ccb8ff88c5f4072839b0187dcc0a into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "043346661ba0ccb8ff88c5f4072839b0187dcc0a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T16:28:11-07:00",
+          "message": "feat(daemon): the host holds a renderer's stored state under its profile, and the renderer is built from it (uh4)\n\nThe host keeps every store a renderer reads (session picks and drafts,\nsettings history, the doctor's documents) in memory under the profile the\nrenderer's name derives, writes each file behind it, and flushes them at its\nclose. A renderer is constructed from what the host holds then, and changes\nit only by the store writes each turn returns, so restarting the renderer\nprocess keeps every pick, draft and undo step. A renderer under a second\nname reads and writes only its own profile's files.\n\nThe host keeps a book of each session's durable context (its config origin\nand Claude Code's directory) from its newest request, in its own state\ndirectory. A click carries its session's context: live when the session has\nbeen heard since the daemon started, else read back from the book with no\nlive part. What a client reports now (its tmux pane, terminal and env) is\nnever kept, so after a restart a slash click is refused and a lane setup\nowed until the session's next request. The renderer no longer records an\norigin or hints in session state.\n\nUndo steps name a layer by its role and a digest of its file, never a path.\nA breach's renderer heap snapshot streams over the renderer's lines and the\nhost writes it, so the renderer process opens no file.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-790",
       "ref": "refs/pull/790/merge",
       "sha": "a0c4502f6060c14ce12b2bbe9a6bbe775c944476",
@@ -20,42 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-17T15:22:50-07:00",
           "message": "fix(test): the request-limits config stops being a fifo before its hold ends (6sc)\n\nOn macOS the config watch heard the test's write to the fifo and re-read the path after the writer closed, blocking the daemon's loop for good. A plain file is renamed over the fifo while the render's read still holds the loop, so the render reads on through its open descriptor and every later open of the path gets a plain file.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-789",
-      "ref": "refs/pull/789/merge",
-      "sha": "c7950e2406eda195327395b20ea5ff02bed7b140",
-      "timestamp": "2026-11-17T22:20:03.424Z",
-      "commits": [
-        {
-          "sha": "c7950e2406eda195327395b20ea5ff02bed7b140",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T22:19:12Z",
-          "message": "Merge e7c4324dd1d2ac6e7d82f5bbbc877f128741ce82 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
-        },
-        {
-          "sha": "e7c4324dd1d2ac6e7d82f5bbbc877f128741ce82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T15:18:59-07:00",
-          "message": "fix(daemon): a pane is acted in only as this daemon's requests reported it, every store restores whatever another threw, and a restored history is bounded (uh4)\n\nFrom the medium review:\n- The host acts in a pane only when a request since it started reported\n  that pane for the session: a context read back from before names a pane\n  id tmux may since have given another program.\n- A store whose restore throws no longer leaves the stores after it\n  unrestored; a document no start handed in is again the empty one, which\n  the page's unarmed daemon serves with.\n- A history handed in over the bounds is held within them.\n- One run-each-throw-all, safe for a thrown non-Error.\n"
-        },
-        {
-          "sha": "e895aae55d142491ee82ca92bed8e05747a15d0a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T14:57:58-07:00",
-          "message": "fix(daemon): an undo step whose layer left the chain is forgotten, a click leaves no session live, and a document no start handed in files nothing (uh4)\n\nFrom the high review of the stored-state change:\n- A step's role with no layer in the click's chain is a target that moved,\n  so the step leaves the stacks instead of refusing every undo after it.\n- A click's context no longer joins the renderer's live sessions: only a\n  context event makes one live and only a retire ends it, so a session\n  clicked but never requested pinned its origin's config forever.\n- A doctor document starts as one that did not read, so a filing before\n  any start hands it in cannot replace what the host holds.\n- Contexts read back at load are older than every session noted before it.\n- A heap snapshot asks the renderer only once its file is open.\n- Memory and pointer fixes.\n"
-        },
-        {
-          "sha": "3a01f0f9d2382847bc7492515a9300b03cea4174",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T14:37:19-07:00",
-          "message": "feat(daemon): a renderer's stored state is handed in at its start and changes only by store effects, under its name's profile (uh4)\n\nThe renderer opens no file. Each turn returns its store writes, which the\nhost holds in memory and writes behind under the profile the renderer's\nname derives; a start hands every store back. Durable state is read when\nthe daemon arms, after it has won the socket. The link key rides the\nrenderer's boot, which refuses a key that did not read, so a start that\nfails leaves its renderer serving. The host keeps one book of each\nsession's newest request, which the frame feeds, the start, and a click\nafter a restart all read. An undo step names its layer by role and a\ndigest of its file, never the path, and is refused when the role now\nresolves to another file.\n"
         }
       ]
     },
