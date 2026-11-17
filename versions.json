@@ -4,15 +4,22 @@
     {
       "version": "pr-791",
       "ref": "refs/pull/791/merge",
-      "sha": "9f0c983efca6715958677cfd3b5c9c33ad6888b0",
-      "timestamp": "2026-11-17T23:29:47.104Z",
+      "sha": "fa9557d3b10b511596bceae03056f671678b131b",
+      "timestamp": "2026-11-17T23:46:47.706Z",
       "commits": [
         {
-          "sha": "9f0c983efca6715958677cfd3b5c9c33ad6888b0",
+          "sha": "fa9557d3b10b511596bceae03056f671678b131b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T16:28:37-07:00",
-          "message": "Merge 043346661ba0ccb8ff88c5f4072839b0187dcc0a into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+          "timestamp": "2026-11-17T23:45:48Z",
+          "message": "Merge 2b718db435db0c1db04e518d3aa0611085899a3c into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "2b718db435db0c1db04e518d3aa0611085899a3c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T16:45:37-07:00",
+          "message": "fix(daemon): a store write its file refuses is said on every bar, and a breach's renderer heap is written chunk by chunk (uh4)\n\nA held store's failed save or filing now throws out of the host's taking,\nwhich puts it on every bar, after every write in the turn is held. The\nrenderer's heap snapshot lands on the disk one chunk per line, so a slow\ndisk leaves the rest in the pipe rather than in the host's heap. The\nrequest checkpoint refuses a relative project directory, which the\nsession book could not read back; the book compares fields instead of\nserializing twice per request. A renderer link's lines carry its own name.\n"
         },
         {
           "sha": "043346661ba0ccb8ff88c5f4072839b0187dcc0a",

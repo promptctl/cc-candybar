@@ -117,7 +117,7 @@ var require_events = __commonJS({
       EventEmitter3.init.call(this);
     }
     module2.exports = EventEmitter3;
-    module2.exports.once = once3;
+    module2.exports.once = once2;
     EventEmitter3.EventEmitter = EventEmitter3;
     EventEmitter3.prototype._events = void 0;
     EventEmitter3.prototype._eventsCount = 0;
@@ -262,7 +262,7 @@ var require_events = __commonJS({
       state.wrapFn = wrapped;
       return wrapped;
     }
-    EventEmitter3.prototype.once = function once4(type3, listener) {
+    EventEmitter3.prototype.once = function once3(type3, listener) {
       checkListener(listener);
       this.on(type3, _onceWrap(this, type3, listener));
       return this;
@@ -411,7 +411,7 @@ var require_events = __commonJS({
       }
       return ret;
     }
-    function once3(emitter2, name) {
+    function once2(emitter2, name) {
       return new Promise(function(resolve, reject2) {
         function errorListener(err) {
           emitter2.removeListener(name, resolver);
@@ -5485,8 +5485,8 @@ var require_lib = __commonJS({
       const more = guard2 ? altsSource(alts, extglob, nodot, tail, false) : body;
       if (more === body)
         return "(?:" + body + ")" + (type3 === 42 ? "*" : "+");
-      const once3 = "(?:" + body + ")(?:" + more + ")*";
-      return type3 === 42 ? "(?:" + once3 + ")?" : once3;
+      const once2 = "(?:" + body + ")(?:" + more + ")*";
+      return type3 === 42 ? "(?:" + once2 + ")?" : once2;
     };
     var compile = (pattern2, extglob, nodot, tail, segStart) => {
       const length = pattern2.length;
@@ -10112,7 +10112,7 @@ var require_end_of_stream = __commonJS({
     var process2 = (init_process(), __toCommonJS(process_exports));
     var { AbortError, codes } = require_errors3();
     var { ERR_INVALID_ARG_TYPE, ERR_STREAM_PREMATURE_CLOSE } = codes;
-    var { kEmptyObject, once: once3 } = require_util4();
+    var { kEmptyObject, once: once2 } = require_util4();
     var { validateAbortSignal, validateFunction, validateObject, validateBoolean } = require_validators3();
     var { Promise: Promise2, PromisePrototypeThen, SymbolDispose } = require_primordials2();
     var {
@@ -10149,7 +10149,7 @@ var require_end_of_stream = __commonJS({
       }
       validateFunction(callback, "callback");
       validateAbortSignal(options.signal, "options.signal");
-      callback = once3(callback);
+      callback = once2(callback);
       if (isReadableStream(stream) || isWritableStream(stream)) {
         return eosWeb(stream, options, callback);
       }
@@ -10288,7 +10288,7 @@ var require_end_of_stream = __commonJS({
           addAbortListener = addAbortListener || require_util4().addAbortListener;
           const disposable = addAbortListener(options.signal, abort);
           const originalCallback = callback;
-          callback = once3((...args) => {
+          callback = once2((...args) => {
             disposable[SymbolDispose]();
             originalCallback.apply(stream, args);
           });
@@ -10315,7 +10315,7 @@ var require_end_of_stream = __commonJS({
           addAbortListener = addAbortListener || require_util4().addAbortListener;
           const disposable = addAbortListener(options.signal, abort);
           const originalCallback = callback;
-          callback = once3((...args) => {
+          callback = once2((...args) => {
             disposable[SymbolDispose]();
             originalCallback.apply(stream, args);
           });
@@ -13532,7 +13532,7 @@ var require_pipeline = __commonJS({
     var process2 = (init_process(), __toCommonJS(process_exports));
     var { ArrayIsArray, Promise: Promise2, SymbolAsyncIterator, SymbolDispose } = require_primordials2();
     var eos = require_end_of_stream();
-    var { once: once3 } = require_util4();
+    var { once: once2 } = require_util4();
     var destroyImpl = require_destroy();
     var Duplex = require_duplex();
     var {
@@ -13684,7 +13684,7 @@ var require_pipeline = __commonJS({
       }
     }
     function pipeline(...streams) {
-      return pipelineImpl(streams, once3(popCallback(streams)));
+      return pipelineImpl(streams, once2(popCallback(streams)));
     }
     function pipelineImpl(streams, callback, opts) {
       if (streams.length === 1 && ArrayIsArray(streams[0])) {
@@ -30021,6 +30021,7 @@ var SESSION_BOOK_FILE = {
     };
   }
 };
+var sameDurable = (a, b) => a.origin.projectDir === b.origin.projectDir && a.origin.cwd === b.origin.cwd && a.origin.target.path === b.origin.target.path && a.origin.target.source === b.origin.target.source && a.claudeConfigDir === b.claudeConfigDir;
 var EPHEMERAL_SESSION_BOOK = {
   load: () => /* @__PURE__ */ new Map(),
   save: () => {
@@ -30054,8 +30055,7 @@ var SessionBook = class {
     const session = req.hookData.session_id;
     const durable = durableOf(req);
     const held = this.book.get(session);
-    if (held !== void 0 && JSON.stringify(SESSION_BOOK_FILE.record(held)) === JSON.stringify(SESSION_BOOK_FILE.record(durable)))
-      return;
+    if (held !== void 0 && sameDurable(held, durable)) return;
     this.book.delete(session);
     this.book.set(session, durable);
     this.bound();
@@ -49410,6 +49410,12 @@ function checkRenderRequest(req, stats, log, home) {
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
   }
+  const projectDir = req.hookData?.workspace?.project_dir;
+  if (typeof projectDir === "string" && !(0, import_node_path13.isAbsolute)(projectDir)) {
+    wireProblems.push(
+      `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`
+    );
+  }
   if (!Array.isArray(req.args) || !req.args.every((a) => typeof a === "string")) {
     wireProblems.push(
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`
@@ -64889,7 +64895,7 @@ var CacheManager = class {
     await this.ensureCacheDirectories(root);
     const cachePath = import_node_path25.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
-    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
+    for (let attempt5 = 0; attempt5 < MAX_RETRIES; attempt5++) {
       const isCurrentlyLocked = this.isLocked(root, lockName);
       if (isCurrentlyLocked) {
         debug(`Cache for ${cacheType} is locked, waiting...`);
@@ -64914,7 +64920,7 @@ var CacheManager = class {
           debug(`No shared ${cacheType} usage cache found`);
           return null;
         }
-        const attemptNumber = attempt4 + 1;
+        const attemptNumber = attempt5 + 1;
         debug(
           `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
         );
@@ -66362,7 +66368,7 @@ var SessionUsageStore = class {
   // `by` is what asked for it (src/daemon/cache/transcript-lanes.ts).
   refresh(sessionId2, transcriptPath, by) {
     let refresh = null;
-    const once3 = () => {
+    const once2 = () => {
       if (refresh !== null) return refresh;
       const stamp2 = statStamp(transcriptPath);
       refresh = {
@@ -66377,11 +66383,11 @@ var SessionUsageStore = class {
       // fields the payload drops one by one, so the hook's cost still lands
       // over a session with no record.
       usage: async () => {
-        const record2 = await once3().record;
+        const record2 = await once2().record;
         if (record2.kind === "failed") return record2;
         return ok(record2.kind === "ok" ? record2.value.usage : EMPTY_USAGE);
       },
-      speed: (nowMs) => this.observed(sessionId2, once3, nowMs)
+      speed: (nowMs) => this.observed(sessionId2, once2, nowMs)
     };
   }
   // The `session` projection as the session's last refresh left it, for a
@@ -90157,31 +90163,31 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle2(chain2, resolveWarnings, attempt4) {
+function settle2(chain2, resolveWarnings, attempt5) {
   const common = {
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain2.layers.map((l) => l.path),
     home: chain2.home
   };
   const warning = (own2) => joinWarnings([...chain2.snapshot.notices, ...resolveWarnings, ...own2]);
-  switch (attempt4.kind) {
+  switch (attempt5.kind) {
     case "built":
     case "kept":
       return {
         ...common,
-        kind: attempt4.kind,
-        warning: warning(attempt4.state.buildWarnings),
-        state: attempt4.state,
+        kind: attempt5.kind,
+        warning: warning(attempt5.state.buildWarnings),
+        state: attempt5.state,
         error: null
       };
     case "failed":
       return {
         ...common,
         kind: "failed",
-        warning: warning(attempt4.warnings),
+        warning: warning(attempt5.warnings),
         state: null,
-        error: thrown(attempt4.cause),
-        cause: attempt4.cause
+        error: thrown(attempt5.cause),
+        cause: attempt5.cause
       };
   }
 }
@@ -90190,8 +90196,8 @@ function loadChain(cwd2, chain2, deps, served = null) {
   if (resolved.kind === "failed") {
     return settle2(chain2, [], resolved);
   }
-  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle2(chain2, resolved.warnings, attempt4);
+  const attempt5 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
+  return settle2(chain2, resolved.warnings, attempt5);
 }
 function loadOrigin(cwd2, snapshot, deps, served = null) {
   return loadChain(cwd2, chainOf(snapshot, deps.locations), deps, served);
@@ -91655,12 +91661,10 @@ var EPHEMERAL_HISTORY_STORAGE = {
   }
 };
 var HeldStores = class {
-  constructor(storage, log) {
+  constructor(storage) {
     this.storage = storage;
-    this.log = log;
   }
   storage;
-  log;
   // [LAW:types-are-the-program] Insertion order is each store's recency
   // order, as the renderer's own: a write moves its entry to the end.
   sessions = /* @__PURE__ */ new Map();
@@ -91688,10 +91692,13 @@ var HeldStores = class {
     return this.doctor;
   }
   // A turn's stored writes, in the order it made them.
-  // [LAW:no-silent-failure] A write its file refused is said: the renderer
-  // holds it, and so does this copy, which the next write, and the close's
-  // flush, write again.
+  // [LAW:no-silent-failure] Every write is held, and what its file refused
+  // throws once all are, so the host's taking says it on every bar. The
+  // renderer holds the refused write too, and the store's next write saves
+  // the copy held here whole.
   take(writes) {
+    const refused2 = [];
+    const documents = [];
     let sessions = false;
     let history = false;
     for (const write of writes)
@@ -91707,12 +91714,35 @@ var HeldStores = class {
         case "marks":
         case "clicked":
         case "postMortemsRead":
-          this.hold(write);
+          if (this.doctor[write.store].kind !== "ok") {
+            refused2.push(
+              `the renderer filed ${write.store}, which did not read; nothing was written`
+            );
+            break;
+          }
+          this.doctor = {
+            ...this.doctor,
+            [write.store]: { kind: "ok", value: write.value }
+          };
+          documents.push(write);
           break;
       }
-    if (this.closed) return;
-    if (sessions) this.storage.session.save(Object.fromEntries(this.sessions));
-    if (history) this.saveHistory();
+    if (!this.closed) {
+      if (sessions)
+        this.storage.session.save(Object.fromEntries(this.sessions));
+      if (history)
+        attempt4(
+          refused2,
+          () => this.storage.history.save(Object.fromEntries(this.history))
+        );
+      for (const write of documents)
+        attempt4(refused2, () => {
+          const filed = fileDocument(this.storage.doctor, write);
+          if (filed.kind === "failed")
+            throw new Error(`${write.store} not filed: ${filed.reason}`);
+        });
+    }
+    if (refused2.length > 0) throw new Error(`stored: ${refused2.join("; ")}`);
   }
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
   // lands, and what is written after it (a render that was awaiting, a run
@@ -91722,42 +91752,14 @@ var HeldStores = class {
     this.storage.session.flush();
     this.closed = true;
   }
-  saveHistory() {
-    try {
-      this.storage.history.save(Object.fromEntries(this.history));
-    } catch (thrown2) {
-      this.log(
-        "error",
-        thrown2 instanceof Error ? thrown2.message : String(thrown2)
-      );
-    }
-  }
-  hold(write) {
-    if (this.doctor[write.store].kind !== "ok") {
-      this.log(
-        "error",
-        `stored: the renderer filed ${write.store}, which did not read; nothing was written`
-      );
-      return;
-    }
-    this.doctor = {
-      ...this.doctor,
-      [write.store]: { kind: "ok", value: write.value }
-    };
-    if (this.closed) return;
-    let filed;
-    try {
-      filed = fileDocument(this.storage.doctor, write);
-    } catch (thrown2) {
-      filed = {
-        kind: "failed",
-        reason: thrown2 instanceof Error ? thrown2.message : String(thrown2)
-      };
-    }
-    if (filed.kind === "failed")
-      this.log("error", `stored: ${write.store} not filed: ${filed.reason}`);
-  }
 };
+function attempt4(refused2, write) {
+  try {
+    write();
+  } catch (thrown2) {
+    refused2.push(thrown2 instanceof Error ? thrown2.message : String(thrown2));
+  }
+}
 function moved(store, key, value) {
   store.delete(key);
   if (value !== null) store.set(key, value);
@@ -93952,9 +93954,10 @@ function createDaemon(inputs) {
   });
   const probe2 = inputs.probe(launcher);
   const linkSigner2 = linkSignerOver(inputs.linkKey);
-  const stores = new HeldStores(inputs.profile(inputs.rendererName, log), log);
+  const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
   const sessionBook = new SessionBook(inputs.sessionBook(log));
   const preparedRenderer = inputs.renderer({
+    name: inputs.rendererName,
     build: (reaches2) => mainRendererOf(
       {
         stored: stores.current(),
@@ -95488,16 +95491,16 @@ init_globals();
 
 // src/daemon/streamed-file.ts
 init_globals();
-var import_node_events = __toESM(require_events(), 1);
 
 // src/daemon/renderer-process.ts
-var inProcessPort = ({ build: build2 }) => ({
-  start: (own2) => inProcessRenderer(build2, own2.reaches, own2.clock)
+var inProcessPort = ({ name, build: build2 }) => ({
+  start: (own2) => inProcessRenderer(name, build2, own2.reaches, own2.clock)
 });
-function inProcessRenderer(build2, reaches, clock) {
+function inProcessRenderer(name, build2, reaches, clock) {
   let built = null;
   const live = () => {
-    if (built === null) throw new RendererDown("renderer main has not started");
+    if (built === null)
+      throw new RendererDown(`renderer ${name} has not started`);
     return built;
   };
   const crossed = async () => {
