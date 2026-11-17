@@ -71275,7 +71275,7 @@ var ManagedStorage = class {
   // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
   // folder still there, is a standing fault: every source read from the
   // generation reads it, and the generation ends; its owner opens the next
-  // when file events resume or catch up (`noticed`). No retry here: the OS
+  // when file events catch up (`noticed`). No retry here: the OS
   // refusing a watch (limits, permissions) refuses an immediate retry the
   // same way.
   faulted(watched, cause, reason) {
@@ -71324,7 +71324,7 @@ var ManagedStorage = class {
     const { health } = watched;
     switch (health.kind) {
       case "faulted":
-        return `cannot refresh: ${folder} ${health.reason}; reload the config or restart the daemon`;
+        return `cannot refresh: ${folder} ${health.reason}; retried when the config next loads or file events catch up`;
       // While file events are stalled a folder's sources read the stall,
       // never a file read once from the path and then left unrefreshed.
       // While delivery is unmeasured its files read as usual: the bar's row
@@ -75173,7 +75173,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const configInSlot = async (origin, why2) => {
     const made = configMade(origin)();
-    if (made.kind !== "event") return { settled: Promise.resolve([]) };
+    if (made.kind !== "event")
+      return {
+        settled: Promise.resolve([{ kind: "failed", reason: made.message }])
+      };
     const input = stamped(made);
     const { turn, settled: settled3 } = await inSlot(input, 0);
     record2(input.event, [["why", why2]], turn);
@@ -82854,10 +82857,9 @@ function noticeLines(resolution) {
       return [
         `Config file not found: ${resolution.path} \u2014 rendering the bundled default until it appears`
       ];
+    // The file's layer fails the load, which names it.
     case "unreadable":
-      return [
-        `Config file could not be read: ${resolution.path} \u2014 ${resolution.error} \u2014 rendering the bundled default until it can be`
-      ];
+      return [];
   }
 }
 
@@ -82961,7 +82963,11 @@ function mergeChain(snapshot, home, dflt, trace, allowedPalettes) {
   const base = plugins2.config;
   const layers = [];
   for (const { path: path46, content, listed } of snapshot.chain) {
-    if (content.kind !== "text") continue;
+    if (content.kind === "absent") continue;
+    if (content.kind === "unreadable")
+      throw new ConfigError(path46, [
+        { path: "", message: `could not be read: ${content.error}` }
+      ]);
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path46,
@@ -90216,6 +90222,7 @@ var RenderCache = class {
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     const entry = {
+      origin,
       projectDir,
       cwd: cwd2,
       configFile: origin.target.path,
@@ -90419,6 +90426,12 @@ var RenderCache = class {
   // the runs its `shell` and `file` sources name. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
+  // [LAW:one-source-of-truth] The origins the entries load from. An origin's
+  // config is held as long as an entry at it lives, not as long as a session:
+  // a session retires when idle while its entry stays to draw it again.
+  origins() {
+    return [...this.entries.values()].map((e) => e.origin);
+  }
   subscriptions() {
     return {
       sources: Object.fromEntries(
@@ -90928,24 +90941,28 @@ var ConfigWrites = class {
     const settings = this.settings;
     this.answers = [];
     this.settings = [];
-    const written3 = [...this.open].flatMap(([path46, { before, after }]) => {
-      const list2 = diffChanges(before, after);
-      return list2.length === 0 ? [] : [
-        {
-          path: path46,
-          origin: this.held().origin,
-          role: this.layerAt(path46).role,
-          list: list2
-        }
-      ];
-    });
-    this.layers = null;
-    this.layersOf = noLayers;
+    let written3;
+    try {
+      written3 = [...this.open].flatMap(([path46, { before, after }]) => {
+        const list2 = diffChanges(before, after);
+        return list2.length === 0 ? [] : [
+          {
+            path: path46,
+            origin: this.held().origin,
+            role: this.layerAt(path46).role,
+            list: list2
+          }
+        ];
+      });
+    } finally {
+      this.layers = null;
+      this.layersOf = noLayers;
+      this.open.clear();
+    }
     const files = [
       ...written3.map(({ path: path46 }) => path46),
       ...settings.map(({ file }) => file)
     ];
-    this.open.clear();
     if (files.length === 0 && answers.length === 0) return consequence(effects);
     if (session === null)
       throw new Error(
@@ -91142,6 +91159,8 @@ function mainRenderer(parts, pushed) {
       const origin = recordedOriginOf(parts.sessionState, session);
       if (origin !== null) configs.set(originKey(origin), origin);
     }
+    for (const origin of parts.renderCache.origins())
+      configs.set(originKey(origin), origin);
     for (const { origin } of parked) configs.set(originKey(origin), origin);
     return {
       sources: Object.fromEntries(merged),
@@ -93271,6 +93290,8 @@ function sessionPlugins(locs, installed, repo2, cwd2) {
     plugins: [...byNs.values()],
     strays,
     notices,
+    // [LAW:single-enforcer] The one place a session's working directory
+    // becomes the checkout its plugins' data paths resolve against.
     checkout: checkoutOf(cwd2)
   };
 }
@@ -93335,7 +93356,6 @@ function discover(query, shared) {
   const notices = [
     detectConfigCollisions(locs, query.projectDir),
     configResolutionNotice(resolution),
-    ...places.map((at) => at.notice),
     repoUnreadNotice(repos),
     ...session.notices
   ].filter((n) => n !== null);
@@ -93352,8 +93372,7 @@ function contentAt(locs, query, resolution, place) {
   const at = (path46, content) => ({
     role: place.role,
     path: path46,
-    content,
-    notice: null
+    content
   });
   switch (resolution.kind) {
     case "missing":
@@ -93362,13 +93381,7 @@ function contentAt(locs, query, resolution, place) {
       return at(place.path, { kind: "unreadable", error: resolution.error });
     case "chain": {
       const found2 = resolution.layers.find((l) => l.role === place.role);
-      if (found2 !== void 0) {
-        const content = readLayer(found2.path);
-        return {
-          ...at(found2.path, content),
-          notice: content.kind === "unreadable" ? `Config file could not be read: ${found2.path} \u2014 ${content.error} \u2014 rendering without it until it can be` : null
-        };
-      }
+      if (found2 !== void 0) return at(found2.path, readLayer(found2.path));
       const roles = new Map(
         configCandidates(locs, query).map((c) => [c.file, c.role])
       );
@@ -95500,20 +95513,13 @@ var endedAt = null;
 var nowSec = () => Date.now() / 1e3;
 var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
-var onClock = ({
-  headAt,
-  ...rest2
-}) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
+var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
 var WORLD = processWorld();
 var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var pageDaemon = createDaemon({
-  ...productionAdapters(
-    paths,
-    new DaemonLog(paths.log, WORLD.clock),
-    WORLD.clock
-  ),
+  ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
   gates: daemonGates(),
   paths,
   host: HOST,
@@ -95536,13 +95542,7 @@ var pageDaemon = createDaemon({
   }
 });
 function lines(entry, at) {
-  const base = {
-    timestamp: new Date(clockAt(at) * 1e3).toISOString(),
-    sessionId,
-    cwd: REPO,
-    isSidechain: false,
-    uuid: id("u")
-  };
+  const base = { timestamp: new Date(clockAt(at) * 1e3).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
   const usage = (output) => ({
     input_tokens: 4,
     output_tokens: output,
@@ -95553,77 +95553,33 @@ function lines(entry, at) {
     ...base,
     type: "assistant",
     requestId: id("req"),
-    message: {
-      id: id("msg"),
-      model: "claude-opus-4-8",
-      role: "assistant",
-      type: "message",
-      content,
-      usage: usage(output)
-    }
+    message: { id: id("msg"), model: "claude-opus-4-8", role: "assistant", type: "message", content, usage: usage(output) }
   });
   switch (entry.kind) {
     case "user":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: { role: "user", content: entry.text }
-        }
-      ];
+      return [{ ...base, type: "user", message: { role: "user", content: entry.text } }];
     case "command":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: {
-            role: "user",
-            content: `<command-name>${entry.name}</command-name>
+      return [{ ...base, type: "user", message: {
+        role: "user",
+        content: `<command-name>${entry.name}</command-name>
 <command-message>${entry.name.slice(1)}</command-message>
 <command-args></command-args>`
-          }
-        }
-      ];
+      } }];
     case "tools":
-      return [
-        assistant(
-          entry.calls.map((c) => ({
-            type: "tool_use",
-            id: c.id,
-            name: c.name,
-            input: c.input ?? {}
-          })),
-          entry.output ?? 100
-        )
-      ];
+      return [assistant(entry.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: c.input ?? {} })), entry.output ?? 100)];
     case "results":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: {
-            role: "user",
-            content: entry.ids.map((tool_use_id) => ({
-              type: "tool_result",
-              tool_use_id,
-              content: "ok"
-            }))
-          }
-        }
-      ];
+      return [{ ...base, type: "user", message: {
+        role: "user",
+        content: entry.ids.map((tool_use_id) => ({ type: "tool_result", tool_use_id, content: "ok" }))
+      } }];
     case "reply":
-      return [
-        assistant([{ type: "text", text: entry.text }], entry.output ?? 200)
-      ];
+      return [assistant([{ type: "text", text: entry.text }], entry.output ?? 200)];
   }
 }
 function happen(step4) {
   moment = { ...moment, ...step4.hook };
   if (step4.repo) updateRepo(onClock(step4.repo));
-  appendTranscript(
-    transcript,
-    (step4.transcript ?? []).flatMap((e) => lines(e, step4.at))
-  );
+  appendTranscript(transcript, (step4.transcript ?? []).flatMap((e) => lines(e, step4.at)));
 }
 function startAt(seconds) {
   endedAt = null;
@@ -95632,8 +95588,7 @@ function startAt(seconds) {
   applied2 = 0;
   t = seconds;
   updateRepo(onClock(INITIAL_REPO));
-  while (applied2 < STEPS.length && STEPS[applied2].at <= t)
-    happen(STEPS[applied2++]);
+  while (applied2 < STEPS.length && STEPS[applied2].at <= t) happen(STEPS[applied2++]);
 }
 function hookData() {
   const now2 = Math.floor(nowSec());
@@ -95659,32 +95614,16 @@ function hookData() {
       context_window_size: CONTEXT_WINDOW,
       used_percentage: used,
       remaining_percentage: 100 - used,
-      current_usage: {
-        input_tokens: 2e3,
-        output_tokens: 400,
-        cache_creation_input_tokens: 4e3,
-        cache_read_input_tokens: moment.context - 6e3
-      }
+      current_usage: { input_tokens: 2e3, output_tokens: 400, cache_creation_input_tokens: 4e3, cache_read_input_tokens: moment.context - 6e3 }
     },
     rate_limits: {
-      five_hour: {
-        used_percentage: moment.fiveHour,
-        resets_at: now2 + 2 * 3600 + 17 * 60
-      },
-      seven_day: {
-        used_percentage: moment.sevenDay,
-        resets_at: now2 + 4 * 86400
-      }
+      five_hour: { used_percentage: moment.fiveHour, resets_at: now2 + 2 * 3600 + 17 * 60 },
+      seven_day: { used_percentage: moment.sevenDay, resets_at: now2 + 4 * 86400 }
     }
   };
 }
 async function daemon2(request2) {
-  const { resp, settled: settled3 } = await pageDaemon.reply(
-    request2,
-    () => false,
-    pageDaemon.stats.accept(),
-    () => false
-  );
+  const { resp, settled: settled3 } = await pageDaemon.reply(request2, () => false, pageDaemon.stats.accept(), () => false);
   settled3(true);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return resp;
@@ -95702,20 +95641,12 @@ async function frame(size) {
     ssh: false,
     claudeConfigDir: CLAUDE_DIR
   });
-  if (!("frame" in resp))
-    throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
+  if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
   return parseFrame(resp.frame);
 }
 async function render2(size) {
   const drawn = await frame(size);
-  return {
-    ansi: composeBar(drawn),
-    links: linksOf(drawn).map((l) => ({
-      ...l,
-      does: describeLink(l, sessionId)
-    })),
-    refused: null
-  };
+  return { ansi: composeBar(drawn), links: linksOf(drawn).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
 function copy2(text4) {
   let writing;
@@ -95747,11 +95678,7 @@ async function click2(url, size) {
 }
 var listeners = [];
 var notify = () => {
-  const state = {
-    index: Math.max(0, applied2 - 1),
-    playing,
-    progress: Math.min(1, t / DURATION)
-  };
+  const state = { index: Math.max(0, applied2 - 1), playing, progress: Math.min(1, t / DURATION) };
   for (const l of listeners) l(state);
 };
 var lastNotified = 0;
@@ -95766,8 +95693,7 @@ function advance(elapsed) {
   }
   t = Math.min(DURATION, t + elapsed * speed);
   const before = applied2;
-  while (applied2 < STEPS.length && STEPS[applied2].at <= t)
-    happen(STEPS[applied2++]);
+  while (applied2 < STEPS.length && STEPS[applied2].at <= t) happen(STEPS[applied2++]);
   return applied2 !== before;
 }
 setInterval(() => {
@@ -95787,7 +95713,7 @@ var transport = {
   render: render2,
   click: click2,
   // A new session over the bundled config: what the visitor's clicks wrote is
-  // undone, and the daemon discovers the config again now, as no watch hears the reset.
+  // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size) => {
     forgetWrites();
     pageDaemon.rediscover();
@@ -95797,11 +95723,7 @@ var transport = {
     return render2(size);
   },
   scenario: {
-    steps: STEPS.map((s) => ({
-      turn: s.turn,
-      caption: s.caption,
-      at: s.at / DURATION
-    })),
+    steps: STEPS.map((s) => ({ turn: s.turn, caption: s.caption, at: s.at / DURATION })),
     subscribe: (l) => {
       listeners.push(l);
       notify();

@@ -4,15 +4,22 @@
     {
       "version": "pr-787",
       "ref": "refs/pull/787/merge",
-      "sha": "729ef608e09e3b4d651db713304c544a1834ad3f",
-      "timestamp": "2026-11-17T16:59:50.290Z",
+      "sha": "c807e807e832102112d15f8cf0dffb8476a54f70",
+      "timestamp": "2026-11-17T17:28:20.305Z",
       "commits": [
         {
-          "sha": "729ef608e09e3b4d651db713304c544a1834ad3f",
+          "sha": "c807e807e832102112d15f8cf0dffb8476a54f70",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T16:58:34Z",
-          "message": "Merge 6b60f7e0460dfa5cf69f9c746a59502d2ac4ab8a into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
+          "timestamp": "2026-11-17T17:27:17Z",
+          "message": "Merge 0443ce793aa1728f60c01e7c1a2a546f2f542a99 into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
+        },
+        {
+          "sha": "0443ce793aa1728f60c01e7c1a2a546f2f542a99",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T10:27:05-07:00",
+          "message": "fix(config): a config is held while an entry loads from it, and an unreadable layer fails its load (adf)\n\nAn origin's config stays named for as long as a render-cache entry loads\nfrom it, not only while a session lives, so an idle session's click runs\nat once. A layer discovery could not read fails the load naming the file,\nand the bar keeps its last good state rather than a chain nobody wrote.\nA config turn whose origin was let go before its slot settles as failed.\nA click's seal clears its state even when reading its layers throws.\n"
         },
         {
           "sha": "6b60f7e0460dfa5cf69f9c746a59502d2ac4ab8a",
