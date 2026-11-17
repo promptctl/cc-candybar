@@ -4,15 +4,22 @@
     {
       "version": "pr-785",
       "ref": "refs/pull/785/merge",
-      "sha": "ee63de04500969bcd3d1a5704b60e3b59fa40fee",
-      "timestamp": "2026-11-17T11:35:32.104Z",
+      "sha": "f2865a3dd47c5959d28a7eeeff1651cad1893dd6",
+      "timestamp": "2026-11-17T11:42:40.220Z",
       "commits": [
         {
-          "sha": "ee63de04500969bcd3d1a5704b60e3b59fa40fee",
+          "sha": "f2865a3dd47c5959d28a7eeeff1651cad1893dd6",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T11:34:21Z",
-          "message": "Merge 1b9d4d88f1dd97e37cb75b685c1d2b108b744425 into 681357616352fb4f7476a7b1035b61a244971844\n"
+          "timestamp": "2026-11-17T11:41:45Z",
+          "message": "Merge 12c5feab2f130b990b3d77eb2b7a216fbbebf6e0 into 681357616352fb4f7476a7b1035b61a244971844\n"
+        },
+        {
+          "sha": "12c5feab2f130b990b3d77eb2b7a216fbbebf6e0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T04:41:35-07:00",
+          "message": "test(session-state): a write's landing waits as long as a CI runner's disk sync takes\n"
         },
         {
           "sha": "1b9d4d88f1dd97e37cb75b685c1d2b108b744425",
