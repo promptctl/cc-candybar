@@ -88882,6 +88882,11 @@ function click(verb) {
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
     const steps2 = stepsOf(verb, value);
+    if (sid !== null && latestOf(ctx.latest, sid) === null)
+      ctx.log(
+        "warn",
+        `lane: ${verb} on session ${sid} came with no context the host holds; no lane follows it`
+      );
     journaled(verb, sid, ctx.latest, ctx, ctx.effects, (c) => {
       try {
         foldEffects(steps2, sid, c);
@@ -91394,9 +91399,6 @@ function factsOf(parts, session) {
   }
 }
 function startMainRenderer(inputs, host) {
-  return startOver(inputs, host);
-}
-function startOver(inputs, host) {
   const { gates } = inputs;
   const time = new TurnTime();
   const now2 = () => time.at;
@@ -93748,10 +93750,7 @@ function createDaemon(inputs) {
     host,
     rendererName
   } = inputs;
-  const profile = inputs.profile(
-    profileOf(rendererName, host),
-    rendererName === MAIN_RENDERER
-  );
+  const profile = inputs.profile(rendererName, host);
   const locs = locationsFor(host, profile);
   const instant = () => instantAt(clock);
   const closing = new AbortController();
@@ -94059,7 +94058,7 @@ function createDaemon(inputs) {
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async (cause) => {
-      const { kind } = await parts.renderer.start(() => {
+      const turn = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
         const key = inputs.linkKey();
@@ -94083,7 +94082,9 @@ function createDaemon(inputs) {
           }
         };
       }, [["why", "renderer-start"]]);
-      if (kind !== "answered") frameFeeds.handedIn(null);
+      if (turn.kind === "answered") return;
+      frameFeeds.handedIn(null);
+      throw new CrossedFailure(turn.failure);
     },
     ended: (event) => {
       rendererEnded = event;
@@ -95336,11 +95337,16 @@ var SessionContexts = class {
     this.held.delete(context.session);
     this.held.set(context.session, context);
     if (before !== void 0 && sameContext(before, context)) return;
+    this.evictOldest();
+    this.file?.save();
+  }
+  // [LAW:single-enforcer] The bound, kept however the book grew: a note, or
+  // a file written by a build with a larger one.
+  evictOldest() {
     for (const oldest of this.held.keys()) {
       if (this.held.size <= MAX_SESSIONS6) break;
       this.held.delete(oldest);
     }
-    this.file?.save();
   }
   of(session) {
     return this.held.get(session) ?? null;
@@ -95397,6 +95403,7 @@ var SessionContexts = class {
         );
       else this.held.set(session, context);
     }
+    this.evictOldest();
   }
 };
 function sameContext(a, b) {
@@ -95440,7 +95447,7 @@ function productionAdapters(paths2, daemonLog, machine) {
   return {
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
-    profile: canonicalProfile,
+    profile: (name, host) => canonicalProfile(profileOf(name, host), name === MAIN_RENDERER),
     profileStore: (dir, failed3, log) => profileStore(dir, machine, failed3, log),
     sessionContexts: (failed3, log) => new SessionContexts(paths2.sessionContexts, machine, failed3, log),
     linkKey: linkKeyFromFile(linkKeyFile(paths2.state)),

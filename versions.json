@@ -4,15 +4,22 @@
     {
       "version": "pr-788",
       "ref": "refs/pull/788/merge",
-      "sha": "c3ed2f8756803cde5a4c22c4703e0e4c978f7046",
-      "timestamp": "2026-11-17T20:34:07.093Z",
+      "sha": "f230dbd4c2d01b0898e0ffc5412bd02698933448",
+      "timestamp": "2026-11-17T20:50:04.345Z",
       "commits": [
         {
-          "sha": "c3ed2f8756803cde5a4c22c4703e0e4c978f7046",
+          "sha": "f230dbd4c2d01b0898e0ffc5412bd02698933448",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T20:33:11Z",
-          "message": "Merge 1b432b69231dc78868df4c2ca75158c6777022c0 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+          "timestamp": "2026-11-17T20:49:08Z",
+          "message": "Merge c746fe85ff3989a9f9eae5a52a5fbe8d8f2df947 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "c746fe85ff3989a9f9eae5a52a5fbe8d8f2df947",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T13:48:56-07:00",
+          "message": "fix(daemon): the daemon's own start rejects when its turn failed, so the supervisor restarts it (uh4)\n\nMedium review of the uh4 change:\n- The host's start awaited a turn that settles as `threw`, never a\n  rejection, so a start that failed (a key the host could not read) went\n  live without its start. It now rejects with the turn's failure, and the\n  supervisor ends and restarts the renderer; a daemon-level test drives\n  the real start.\n- A start that failed no longer counts as taken over, so a gone renderer's\n  holds stand until one does take its start. Its end is its one log line.\n- A session's click that came with no context says that no lane follows\n  it, and the lane module's header says what happens.\n- The session-contexts book keeps its bound when a file holds more.\n- The profile adapter takes the renderer's name; the renderer's start has\n  no pass-through layer.\n"
         },
         {
           "sha": "1b432b69231dc78868df4c2ca75158c6777022c0",
