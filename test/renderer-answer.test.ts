@@ -460,7 +460,49 @@ describe("a feed's frame", () => {
     expect(view.frames.get("request")).toBe(answeredRecord);
     expect(view.frames.get("feed")).toBeDefined();
     expect(view.frames.get("feed")).not.toBe(answeredRecord);
-    expect(parts.effectSessions.getStats().sessions).toBe(1);
+    expect(parts.effectSessions.getStats(0).sessions).toBe(1);
+  });
+
+  // A frame that fails as it leaves the renderer reached no lane, so the
+  // next frame compares against the last one that did.
+  test("that fails after its draw keeps none of what the draw made", async () => {
+    const { r, parts, rig } = renderer();
+    answered(await request({ r, rig }));
+    const view = viewOf(rig)!;
+    const motion = parts.effectSessions.of(SESSION).lastFrame();
+    const failing: RendererParts = {
+      ...parts,
+      linkSigner: {
+        ...parts.linkSigner,
+        signLink: () => {
+          throw new Error("the signer is gone");
+        },
+      },
+    };
+    const frame = renderFrame(
+      failing,
+      SESSION,
+      MOVING_FPS,
+      READ,
+      new Set(),
+      UNFOLLOWED_FEEDS,
+    );
+    expect(frame?.failure).not.toBeNull();
+    expect(view.frames.get("feed")).toBeUndefined();
+    expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
+  });
+
+  // A feed that opens again draws its first frame, fading nothing in from
+  // what the closed one last showed.
+  test("whose feed closed leaves no record of it, and the request's stands", async () => {
+    const { r, parts, rig } = renderer();
+    answered(await request({ r, rig }));
+    const view = viewOf(rig)!;
+    renderFrame(parts, SESSION, MOVING_FPS, READ, new Set(), UNFOLLOWED_FEEDS);
+    expect(view.frames.get("feed")).toBeDefined();
+    parts.renderCache.stopDrawing(SESSION, "feed");
+    expect(view.frames.get("feed")).toBeUndefined();
+    expect(view.frames.get("request")).toBeDefined();
   });
 
   // A wake while a frame is out is owed a frame after it, so a draw that woke

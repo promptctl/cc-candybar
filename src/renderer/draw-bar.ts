@@ -175,7 +175,6 @@ export function renderFrame(
       { by: "feed", fps },
       feeds,
     );
-    keepDraw(parts, setup, kept);
     // [LAW:single-enforcer] Signed as they leave the renderer, the bar and
     // what the statusline shows alike, each link once.
     const signed = signingFrames(parts.linkSigner);
@@ -187,6 +186,15 @@ export function renderFrame(
       drawn,
       handedOffTo(lanes, following),
     );
+    const resp = JSON.stringify(answer);
+    // Mostly the bar itself, and one frame encodes once.
+    const statuslineResp =
+      statusline === drawn.body
+        ? resp
+        : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)));
+    // Kept once nothing of the turn is left to throw: a frame that fails
+    // part-way leaves the last frame's memory standing.
+    keepDraw(parts, setup, kept);
     // [LAW:one-source-of-truth] What the frame's copy clicks copy, recorded
     // as it is handed to the feed: a frame whose bytes match the last shows
     // the same links, and a feed's close retires what the feed drew.
@@ -197,17 +205,9 @@ export function renderFrame(
       clickShown: null,
       eventsShown: [],
     });
-    const resp = JSON.stringify(answer);
     return {
       bar,
-      answers: {
-        resp,
-        // Mostly the bar itself, and one frame encodes once.
-        statusline:
-          statusline === drawn.body
-            ? resp
-            : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline))),
-      },
+      answers: { resp, statusline: statuslineResp },
       evaluated,
       cellBreaks,
       failure: null,
@@ -729,9 +729,10 @@ export function drawRender(
     renderOpts,
     undefined,
     // [LAW:one-source-of-truth] The draw's own settings, the session's
-    // effect memory and the record of the surface's last frame of the view. The theme, style and effect are not among them: the
-    // view's slots settle those names (src/dsl/parts.ts), the same ones its
-    // payload's `.effective` fields read.
+    // effect memory and the record of the surface's last frame of the view.
+    // The theme, style and effect are not among them: the view's slots settle
+    // those names (src/dsl/parts.ts), the same ones its payload's `.effective`
+    // fields read.
     {
       ...effective,
       effects,
@@ -927,8 +928,8 @@ export interface DrawMemory {
 // [LAW:single-enforcer] The state machine's one store of a draw's memory,
 // called by the turn that drew it once the draw returned: each piece to its
 // one owner — the record on the view the draw read it from, the motion with
-// the session — so a draw that throws keeps nothing and the last frame's
-// memory stands.
+// the session — once the turn has nothing left to throw, so a frame that
+// fails keeps nothing and the last frame's memory stands.
 function keepDraw(
   parts: RendererParts,
   setup: RenderSetup,
@@ -1073,7 +1074,6 @@ export function answerRequest(
     ANSWERING,
     feeds.feedsOf(sessionId, time.tick),
   );
-  keepDraw(parts, setup, kept);
   const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
@@ -1084,6 +1084,8 @@ export function answerRequest(
       ? statuslineOf(sessionId, setup.state.writable, drawn, elsewhere)
       : drawn.body,
   );
+  // Kept once nothing of the turn is left to throw.
+  keepDraw(parts, setup, kept);
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to. How
   // long the turn took is the host's `drew=`, timed around the turn.
   noteFacts(facts, {

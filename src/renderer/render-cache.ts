@@ -1155,7 +1155,7 @@ export interface SessionView<
   readonly source: S;
   // [LAW:one-source-of-truth] The record of the last frame each surface kept
   // of the view (`DrawnFrame.memory`), handed to that surface's next draw:
-  // held here so it goes, and is counted, with the view.
+  // held here so it goes with the view.
   readonly frames: Map<Drawing["by"], FrameRecord<RenderedLine>>;
   lastRenderCellsBySegment: ReadonlyMap<string, readonly RichText[]>;
   // The view is no session's bar from now on (a successor took it, or it
@@ -2153,8 +2153,20 @@ export class RenderCache<
 
   // The renderer no longer draws the session's bar (its feed closed): what
   // its last frame listed is on no surface now, so a click naming it is
-  // refused rather than copying a list gone stale.
+  // refused rather than copying a list gone stale, and the surface's next
+  // frame, if it opens again, is a first frame that fades nothing in.
   stopDrawing(sessionId: SessionId, by: Drawing["by"]): void {
     this.copies.get(sessionId)?.delete(by);
+    this.views.get(sessionId)?.frames.delete(by);
+  }
+
+  // [LAW:nothing-unseen] The passages every view's surfaces hold in flight:
+  // each one a rich-js effect, counted beside the sessions' row effects.
+  heldPassages(): number {
+    let held = 0;
+    for (const view of this.views.values())
+      for (const record of view.frames.values())
+        held += record.passages?.size ?? 0;
+    return held;
   }
 }

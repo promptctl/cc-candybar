@@ -581,7 +581,7 @@ function startOver(
           kind: "stats",
           stats: {
             renderCache: renderCache.stats,
-            effectCache: effectSessions.getStats(),
+            effectCache: effectSessions.getStats(renderCache.heldPassages()),
             sessionState: {
               sessions: sessionState.size(),
               observers: sessionState.observers(),

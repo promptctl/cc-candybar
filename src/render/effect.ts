@@ -806,8 +806,10 @@ export class EffectSessions<Line> {
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
   // effect made for a row keeps rich-js's settled shares, so their count is the
   // size that grows.
-  getStats(): { sessions: number; effects: number } {
-    let effects = 0;
+  // The passages in flight live with the surfaces that drew them, and come
+  // in as `passages`.
+  getStats(passages: number): { sessions: number; effects: number } {
+    let effects = passages;
     for (const session of this.sessions.values()) effects += session.heldCount;
     return { sessions: this.sessions.size, effects };
   }
