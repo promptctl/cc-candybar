@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { JsonValue } from "./var-system/types.js";
 
 // [LAW:one-source-of-truth] The variable that moves Claude Code's
 // configuration directory. Mirrored by the Rust client
@@ -93,15 +94,21 @@ export interface SettingsChainAt {
 export interface SettingsSource {
   readonly scope: SettingsScope;
   readonly path: string;
-  readonly settings: Readonly<Record<string, unknown>>;
+  readonly settings: JsonObject;
   // The file's `env`, read as Claude Code merges it: an object, `{}` when
   // the file sets none.
-  readonly env: Readonly<Record<string, unknown>>;
+  readonly env: JsonObject;
+}
+
+// [LAW:types-are-the-program] A settings document as JSON parsed it: JSON
+// values all the way down, so a reading of it crosses a process as it is.
+export interface JsonObject {
+  readonly [key: string]: JsonValue;
 }
 
 // A JSON object — the shape the document and each of its sections (`env`,
 // `statusLine`) must have for a key to be read or spliced inside it.
 export const isJsonObject = (
-  value: unknown,
-): value is Readonly<Record<string, unknown>> =>
+  value: JsonValue | undefined,
+): value is JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);

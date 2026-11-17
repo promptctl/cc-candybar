@@ -36,7 +36,6 @@ function host(
     arrival: _a,
     turnWaited: _t,
     placeWaited: _p,
-    gatherTook: _g,
     clientGone: _c,
     latest: _l,
     ...verbCtx

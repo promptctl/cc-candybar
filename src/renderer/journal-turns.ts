@@ -6,11 +6,10 @@
 // turn is taken only around a journal (`click` and `closeIdleMenus`,
 // src/renderer/verbs/index.ts), which never nests, so a turn never waits on itself.
 //
-// A click's read-only launches come before its turn (`click`), so a slow doctor
-// gather holds up no other session. What keeps one session's clicks in arrival
-// order is then the queue a click joins on arrival and keeps its place in
-// through gather and turn. A click holds that place while it asks for the
-// turn, and no turn ever asks for a place, so the two cannot deadlock.
+// What keeps one session's clicks in arrival order is the queue a click joins
+// on arrival and keeps its place in until its turn ends (`click`). A click
+// holds that place while it asks for the turn, and no turn ever asks for a
+// place, so the two cannot deadlock.
 //
 // `close` ends the turns for good: what is queued is refused as its turn
 // arrives, and what is in flight goes no further than its next `landed` and
@@ -42,25 +41,21 @@ export interface TurnAsker {
   readonly gone: () => Promise<boolean>;
 }
 
-// The same, for a click that may gather first: `placed` hears how long it
-// waited behind its session's earlier clicks, `gathered` how long it took.
+// The same, for a click: `placed` hears how long it waited behind its
+// session's earlier clicks.
 export interface ClickAsker extends TurnAsker {
   readonly placed: (ms: number) => void;
-  readonly gathered: (ms: number) => void;
 }
 
 const DAEMON_WIDE = "journals";
-const GATHERS = "gathers";
 
 export class JournalTurns {
   private readonly queue = new KeyedSerialQueue<typeof DAEMON_WIDE>();
   private readonly sessions = new KeyedSerialQueue<string>();
-  private readonly gathers = new KeyedSerialQueue<typeof GATHERS>();
   private open = true;
   private holder: { readonly verb: string; readonly since: Monotonic } | null =
     null;
   private queued = 0;
-  private gathersInFlight = 0;
 
   constructor(
     private readonly deps: {
@@ -109,49 +104,19 @@ export class JournalTurns {
   }
 
   // A click from arrival to landing: in `session`'s order (a click naming none
-  // goes straight on), `gather` outside any turn, `body` in one.
-  // [LAW:single-enforcer] `gone` is read for a click's waits and never for its
-  // own gather: a client that left at the head of its queue, or after the
-  // gather while the turn was awaited, refuses the click; one that left during
-  // the gather does not, since a gather outlasts a client's budget through no
-  // fault of a re-click. With no gather `left` is false, as it was just read.
-  click<G, T>(
+  // goes straight on), `body` in its turn.
+  click<T>(
     verb: string,
     session: string | null,
-    { placed, waited, gone, gathered }: ClickAsker,
-    gather: () => Promise<G>,
-    body: (gathering: G, turn: JournalTurn) => Promise<T>,
+    { placed, waited, gone }: ClickAsker,
+    body: (turn: JournalTurn) => Promise<T>,
   ): Promise<T> {
     const arrived = this.deps.monotonic();
-    const inPlace = async (): Promise<T> => {
+    const inPlace = (): Promise<T> => {
       placed(elapsedMs(this.deps, arrived));
-      this.refuseClosed(verb);
-      if (await gone()) throw new ClickAbandoned(verb);
-      this.refuseClosed(verb);
-      const started = this.deps.monotonic();
-      const gathering = await gather();
-      gathered(elapsedMs(this.deps, started));
-      const left = await gone();
-      return this.take(
-        verb,
-        { waited, gone: async () => !left && (await gone()) },
-        (turn) => body(gathering, turn),
-      );
+      return this.take(verb, { waited, gone }, body);
     };
     return session === null ? inPlace() : this.sessions.run(session, inPlace);
-  }
-
-  // A click's gather, one at a time daemon-wide and in no turn, as the turn once
-  // kept them: its probes share rate windows across sessions, so a slow gather
-  // refuses none behind it. Two within a window still meet the limiter's
-  // refusal, the doctor's 'click again'.
-  async gathering<G>(gather: () => Promise<G>): Promise<G> {
-    this.gathersInFlight++;
-    try {
-      return await this.gathers.run(GATHERS, gather);
-    } finally {
-      this.gathersInFlight--;
-    }
   }
 
   getStats(): JournalTurnStats {
@@ -160,7 +125,6 @@ export class JournalTurns {
       holder: holder?.verb ?? null,
       heldMs: holder === null ? 0 : elapsedMs(this.deps, holder.since),
       queued,
-      gathers: this.gathersInFlight,
     };
   }
 

@@ -134,6 +134,7 @@ async function answer(
   const answered = await answerStatusline(
     rendererHost("main", CLOCK, renderer, (_level, line) => logged.push(line), {
       subscribed: (subscriptions) => void subscribed.push(subscriptions),
+      writableSettings: () => [],
       // Mirrors the collector: only a session a request has named is held.
       holding: (session) => {
         if (!named.has(session)) return () => {};

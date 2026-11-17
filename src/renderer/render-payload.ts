@@ -714,6 +714,8 @@ export function renderWidth(hints: ClientHints): number {
 // a run whose key or dependency moved is named before the host subscribes
 // it, and until then the world state has no entry for it, while a run the
 // view stopped naming stays there until the host drops it, read by nothing.
+// A doctor run is not waited on: its read probes the terminal, fonts and the
+// forge, so its report lands in a later world state, as the PR does.
 export function awaitsReading(
   { builtins, sources, runs }: WorldState,
   named: Iterable<Run>,

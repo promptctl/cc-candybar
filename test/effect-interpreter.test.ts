@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { diffChanges } from "../src/config/config-changes.js";
+import { diffChanges, type Change } from "../src/config/config-changes.js";
 import {
   performChanges,
   type ApproveRepo,
@@ -50,6 +50,12 @@ const change = (
   changes: diffChanges(before, after),
 });
 
+// A turn of layer changes, under a doctor that read no settings file.
+const perform = (
+  changes: readonly ConfigChange[],
+  book: Parameters<typeof performChanges>[1],
+) => performChanges(changes, book, () => []);
+
 const read = (file: string): string => fs.readFileSync(file, "utf8");
 
 describe("performChanges", () => {
@@ -57,7 +63,7 @@ describe("performChanges", () => {
     const removed = change(user, USER, null);
     // Read from the file as it stood: the removal ahead of it moved it.
     const edited = change(user, USER, USER.replace("padding: 1", "padding: 3"));
-    expect(performChanges([removed, edited], null)).toMatchObject({
+    expect(perform([removed, edited], null)).toMatchObject({
       kind: "refused",
     });
     expect(read(user)).toBe(USER);
@@ -66,7 +72,7 @@ describe("performChanges", () => {
   test("splices a setting into the file as it stands, keeping every other byte", () => {
     const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     fs.writeFileSync(user, USER.replace("// mine", "// mine, edited"));
-    expect(performChanges([set], null)).toEqual({ kind: "ok" });
+    expect(perform([set], null)).toEqual({ kind: "ok" });
     expect(read(user)).toBe(
       USER.replace("// mine", "// mine, edited").replace(
         "padding: 1",
@@ -79,7 +85,7 @@ describe("performChanges", () => {
     const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     const moved = USER.replace("padding: 1", "padding: 5");
     fs.writeFileSync(user, moved);
-    expect(performChanges([set], null)).toEqual({
+    expect(perform([set], null)).toEqual({
       kind: "refused",
       reason: `globals.padding in ${user} changed since it was read (it was 1, it is 5) — nothing was written`,
     });
@@ -90,7 +96,7 @@ describe("performChanges", () => {
     const inUser = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     const inProject = change(project, PROJECT, PROJECT.replace(`" "`, `"|"`));
     fs.writeFileSync(project, PROJECT.replace(`" "`, `"/"`));
-    expect(performChanges([inUser, inProject], null).kind).toBe("refused");
+    expect(perform([inUser, inProject], null).kind).toBe("refused");
     expect(read(user)).toBe(USER);
   });
 
@@ -101,7 +107,7 @@ describe("performChanges", () => {
     fs.writeFileSync(unwritable, PROJECT);
     fs.chmodSync(path.dirname(unwritable), 0o500);
     try {
-      const outcome = performChanges(
+      const outcome = perform(
         [inUser, change(unwritable, PROJECT, PROJECT.replace(`" "`, `"|"`))],
         null,
       );
@@ -120,17 +126,17 @@ describe("performChanges", () => {
   test("a file removed through a link removes its target and keeps the link", () => {
     const link = path.join(dir, "linked.json5");
     fs.symlinkSync("dotfiles.json5", link);
-    expect(performChanges([change(link, null, USER)], null)).toEqual({ kind: "ok" });
-    expect(performChanges([change(link, USER, null)], null)).toEqual({ kind: "ok" });
+    expect(perform([change(link, null, USER)], null)).toEqual({ kind: "ok" });
+    expect(perform([change(link, USER, null)], null)).toEqual({ kind: "ok" });
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(dir, "dotfiles.json5"))).toBe(false);
   });
 
   test("creates a file a change creates, and removes one it removes", () => {
     const fresh = path.join(dir, "fresh.json5");
-    expect(performChanges([change(fresh, null, USER)], null)).toEqual({ kind: "ok" });
+    expect(perform([change(fresh, null, USER)], null)).toEqual({ kind: "ok" });
     expect(read(fresh)).toBe(USER);
-    expect(performChanges([change(fresh, USER, null)], null)).toEqual({ kind: "ok" });
+    expect(perform([change(fresh, USER, null)], null)).toEqual({ kind: "ok" });
     expect(fs.existsSync(fresh)).toBe(false);
   });
 });
@@ -151,13 +157,16 @@ describe("performChanges with the trust book", () => {
   test("an answer lands with the turn's changes, and its line is said once it has", () => {
     const state = path.join(dir, "state");
     const said: string[] = [];
-    const outcome = performChanges(
+    const outcome = perform(
       [change(user, USER, USER.replace("dusk", "dawn"))],
       { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
     );
     expect(outcome).toEqual({ kind: "ok" });
     expect(read(user)).toContain("dawn");
-    expect(repoConfigs(state).read()).toEqual({ kind: "ok", value: { [dir]: "approved" } });
+    expect(repoConfigs(state).read()).toEqual({
+      kind: "ok",
+      value: { [dir]: "approved" },
+    });
     expect(said).toEqual([expect.stringMatching(/^repo-config: .* approved /)]);
   });
 
@@ -170,7 +179,7 @@ describe("performChanges with the trust book", () => {
     fs.chmodSync(folder, 0o500);
     try {
       const said: string[] = [];
-      const outcome = performChanges(
+      const outcome = perform(
         [change(user, USER, USER.replace("dusk", "dawn"))],
         { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
       );
@@ -188,7 +197,7 @@ describe("performChanges with the trust book", () => {
   test("a change that moved since it was read writes no answer", () => {
     const state = path.join(dir, "state");
     fs.writeFileSync(user, USER.replace("dusk", "noon"));
-    const outcome = performChanges(
+    const outcome = perform(
       [change(user, USER, USER.replace("dusk", "dawn"))],
       { stateDir: state, answers: [answer(dir)], said: () => {} },
     );
@@ -213,14 +222,14 @@ describe("a created local layer is kept out of git", () => {
     const exclude = path.join(root, ".git", "info", "exclude");
     fs.writeFileSync(exclude, "# mine\n*.log");
     const local = path.join(root, ".cc-candybar.local.json5");
-    expect(performChanges([change(local, null, LOCAL)], null)).toEqual({
+    expect(perform([change(local, null, LOCAL)], null)).toEqual({
       kind: "ok",
     });
     expect(read(local)).toBe(LOCAL);
     expect(read(exclude)).toBe("# mine\n*.log\n/.cc-candybar.local.json5\n");
     // Written again, it is already named: the exclude is left as it is.
     fs.rmSync(local);
-    performChanges([change(local, null, LOCAL)], null);
+    perform([change(local, null, LOCAL)], null);
     expect(read(exclude)).toBe("# mine\n*.log\n/.cc-candybar.local.json5\n");
   });
 
@@ -229,7 +238,7 @@ describe("a created local layer is kept out of git", () => {
     const exclude = path.join(root, ".git", "info", "exclude");
     fs.writeFileSync(exclude, "*.log\r\n/.cc-candybar.local.json5\r\n");
     const local = path.join(root, ".cc-candybar.local.json5");
-    performChanges([change(local, null, LOCAL)], null);
+    perform([change(local, null, LOCAL)], null);
     expect(read(exclude)).toBe("*.log\r\n/.cc-candybar.local.json5\r\n");
   });
 
@@ -238,9 +247,12 @@ describe("a created local layer is kept out of git", () => {
     execFileSync("git", ["init", "-q", root]);
     const local = path.join(root, "app[v2]", ".cc-candybar.local.json5");
     fs.mkdirSync(path.dirname(local));
-    performChanges([change(local, null, LOCAL)], null);
+    perform([change(local, null, LOCAL)], null);
     expect(
-      execFileSync("git", ["check-ignore", local], { cwd: root, encoding: "utf8" }).trim(),
+      execFileSync("git", ["check-ignore", local], {
+        cwd: root,
+        encoding: "utf8",
+      }).trim(),
     ).toBe(local);
   });
 
@@ -253,7 +265,7 @@ describe("a created local layer is kept out of git", () => {
     fs.mkdirSync(tree);
     fs.writeFileSync(path.join(tree, ".git"), `gitdir: ${meta}\n`);
     const local = path.join(tree, ".cc-candybar.local.json5");
-    expect(performChanges([change(local, null, LOCAL)], null)).toEqual({
+    expect(perform([change(local, null, LOCAL)], null)).toEqual({
       kind: "ok",
     });
     expect(read(path.join(main, ".git", "info", "exclude"))).toBe(
@@ -268,7 +280,7 @@ describe("a created local layer is kept out of git", () => {
     const local = path.join(root, ".cc-candybar.local.json5");
     fs.writeFileSync(local, LOCAL);
     const shared = path.join(root, ".cc-candybar.json5");
-    performChanges(
+    perform(
       [
         change(local, LOCAL, LOCAL.replace("2", "3")),
         change(shared, null, LOCAL),
@@ -283,9 +295,65 @@ describe("a created local layer is kept out of git", () => {
     fs.mkdirSync(tree);
     fs.writeFileSync(path.join(tree, ".git"), "not a gitdir line\n");
     const local = path.join(tree, ".cc-candybar.local.json5");
-    expect(performChanges([change(local, null, LOCAL)], null)).toMatchObject({
+    expect(perform([change(local, null, LOCAL)], null)).toMatchObject({
       kind: "failed",
     });
     expect(fs.existsSync(local)).toBe(false);
+  });
+});
+
+describe("performChanges into Claude Code's settings", () => {
+  const SETTINGS = `{
+  "model": "opus",
+  "env": { "FORCE_COLOR": "3" }
+}
+`;
+  let settings: string;
+  beforeEach(() => {
+    settings = path.join(dir, "settings.json");
+    fs.writeFileSync(settings, SETTINGS);
+  });
+  const into = (file: string, ...changes: Change[]): ConfigChange => ({
+    kind: "change",
+    id: ++ids as EffectId,
+    session: "s" as SessionId,
+    target: { kind: "claude-settings", file },
+    changes,
+  });
+  const setColor = (was: string): Change => ({
+    op: "replace",
+    at: ["env", "FORCE_COLOR"],
+    text: `"1"`,
+    read: { kind: "value", text: was },
+  });
+
+  test("a setting as the doctor read it is written in strict JSON", () => {
+    expect(
+      performChanges([into(settings, setColor(`"3"`))], null, () => [settings]),
+    ).toEqual({ kind: "ok" });
+    expect(JSON.parse(read(settings))).toEqual({
+      model: "opus",
+      env: { FORCE_COLOR: "1" },
+    });
+  });
+
+  test("a setting moved since the doctor read it is refused, and nothing is written", () => {
+    const outcome = performChanges(
+      [into(settings, setColor(`"2"`))],
+      null,
+      () => [settings],
+    );
+    expect(outcome.kind).toBe("refused");
+    expect(read(settings)).toBe(SETTINGS);
+  });
+
+  test("a file the session's doctor did not read is refused", () => {
+    expect(
+      performChanges([into(settings, setColor(`"3"`))], null, () => []),
+    ).toEqual({
+      kind: "refused",
+      reason: `${settings} is not a settings file the session's doctor read — nothing was written`,
+    });
+    expect(read(settings)).toBe(SETTINGS);
   });
 });

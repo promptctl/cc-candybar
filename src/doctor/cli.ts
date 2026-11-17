@@ -49,11 +49,11 @@ import {
   type TranscriptSightings,
   type WidthSightings,
 } from "./daemon-answer.js";
-import { installFacts, productionEdge } from "./edge.js";
-import { gatherFacts } from "./gather.js";
+import { installFacts, productionMachineEdge } from "./edge.js";
+import { doctorAsk, doctorFacts } from "./gather.js";
+import { readDoctor } from "./read.js";
 import {
   type ConfigLoad,
-  type DoctorEdge,
   type DoctorMachineEdge,
   type InstallEdge,
 } from "./ports.js";
@@ -217,8 +217,11 @@ export function widthOf(
 // [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
 // exit code) out. `doctorCommandPlan` hands it to the one delivery; a test reads it.
 export async function doctorPlan(
-  // The machine as the gather reads it, and as the install check does.
-  edge: DoctorEdge & DoctorMachineEdge,
+  // The machine as the read reads it, and as the install check does, and
+  // what loading the config at an origin finds now.
+  edge: DoctorMachineEdge & {
+    readonly loadConfig: (origin: RenderOrigin) => ConfigLoad;
+  },
   handler: HandlerProbeEdge,
   daemon: () => Promise<DaemonAnswer>,
   env: Readonly<Record<string, string | undefined>>,
@@ -244,45 +247,50 @@ export async function doctorPlan(
     // [LAW:single-enforcer] Whose bars this run judges, decided once: the
     // session it runs in, else every session that drew one recently.
     const scope = scopeOf(env.CLAUDE_CODE_SESSION_ID);
-    const gathered = await gatherFacts(
+    // The config the daemon would load for a session started here: this
+    // directory, in the session's own project when the run is in one, under
+    // the file named on the command line (a statusline command's own
+    // `--config`), else the override the statusline client would report.
+    const origin: RenderOrigin = {
+      projectDir: ownProject(
+        scope,
+        answer.frames.kind === "ok" ? answer.frames.value : [],
+        cwd,
+      ),
+      cwd,
+      target: cliConfigTarget(configFile, { env, home: edge.home }, cwd),
+    };
+    const load = edge.loadConfig(origin);
+    const machine = await readDoctor(
       edge,
       hints,
-      // The config the daemon would load for a session started here: this
-      // directory, in the session's own project when the run is in one,
-      // under the file named on the command line (a statusline command's own
-      // `--config`), else the override the statusline client would report.
-      {
-        projectDir: ownProject(
-          scope,
-          answer.frames.kind === "ok" ? answer.frames.value : [],
-          cwd,
-        ),
-        cwd,
-        target: cliConfigTarget(configFile, { env, home: edge.home }, cwd),
-      },
       // No session: the bar a session started here opens on.
-      () => null,
-      answer.serving,
-      rateLimitsOf(
-        scope,
-        answer.rateLimits,
-        claudeConfigDir(hints.claudeConfigDir, edge.home),
-      ),
-      transcriptsOf(scope, answer.transcripts),
-      scope,
-      framesOf(scope, answer.frames),
-      widthOf(scope, answer.widths, hints.termCols ?? null),
+      doctorAsk(0, load, () => null, scope),
+      { cwd, projectDir: origin.projectDir },
+      {
+        serving: answer.serving,
+        rateLimits: rateLimitsOf(
+          scope,
+          answer.rateLimits,
+          claudeConfigDir(hints.claudeConfigDir, edge.home),
+        ),
+        transcripts: transcriptsOf(scope, answer.transcripts),
+        bars: framesOf(scope, answer.frames),
+        width: widthOf(scope, answer.widths, hints.termCols ?? null),
+      },
+    );
+    facts = doctorFacts(
+      machine,
+      installOf(edge.install, scope, answer.clients),
+      load,
+      origin.target,
       // [LAW:one-source-of-truth] The stores as the daemon that files them
       // read them, never under this shell's own XDG_STATE_HOME.
       answer.stores,
+      // Last: the probe opens a link and waits, which a run that cannot
+      // report has no reason to do.
+      await probeUrlHandler(handler),
     );
-    // Last: the probe opens a link and waits, which a run that cannot report
-    // has no reason to do.
-    facts = {
-      ...gathered,
-      urlHandler: await probeUrlHandler(handler),
-      install: installOf(edge.install, scope, answer.clients),
-    };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return { stdout: "", stderr: `doctor: ${message}\n`, code: EXIT_USAGE };
@@ -360,11 +368,10 @@ export async function doctorCommandPlan(
   return parsed.kind === "usage"
     ? { stdout: "", stderr: parsed.message, code: EXIT_USAGE }
     : await doctorPlan(
-        productionEdge(
-          world.launcher,
-          (origin) => loadConfigOnce(world, origin),
-          world.host,
-        ),
+        {
+          ...productionMachineEdge(world.launcher, world.host),
+          loadConfig: (origin) => loadConfigOnce(world, origin),
+        },
         productionHandlerProbeEdge(world.launcher, world),
         () => askDaemon(world),
         world.host.env,

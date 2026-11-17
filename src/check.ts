@@ -325,6 +325,8 @@ function checkReadings(
       // The runs reach the view through its holder (check-runs.ts), not the
       // payload.
       runs: new Map(),
+      // `check` runs no doctor.
+      doctor: ABSENT,
     },
     // [LAW:one-source-of-truth] One day's sums, which the draw projects to its
     // own day (`todayOf`) as the daemon's draw does.

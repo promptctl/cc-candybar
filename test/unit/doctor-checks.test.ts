@@ -16,7 +16,8 @@ import {
 } from "../../src/doctor/checks";
 import { detectTmuxHint } from "../../src/tmux-hint";
 import { frameFields, truecolorEnvFields } from "../../src/doctor/report";
-import type { SettingsSource } from "../../src/claude-settings";
+import type { JsonObject, SettingsSource } from "../../src/claude-settings";
+import type { JsonValue } from "../../src/var-system/types";
 import type { FrameSighting } from "../../src/daemon/foundations/sightings";
 import type { SightingScope } from "../../src/doctor/sightings";
 import { HEALTHY_FACTS, drew, onOrigin } from "../helpers/doctor-facts";
@@ -66,22 +67,22 @@ const SESSION: SightingScope = {
 const source = (
   scope: SettingsSource["scope"],
   path: string,
-  settings: Record<string, unknown>,
+  settings: JsonObject,
 ): SettingsSource => ({
   scope,
   path,
   settings,
-  env: (settings.env ?? {}) as Record<string, unknown>,
+  env: (settings.env ?? {}) as JsonObject,
 });
 
 // The user settings file alone, holding `settings`.
-const userFile = (settings: Record<string, unknown>): SettingsSource[] => [
+const userFile = (settings: JsonObject): SettingsSource[] => [
   source("user", SETTINGS_PATH, settings),
 ];
 
 const facts = (
   tmux: TmuxFacts,
-  env: Record<string, unknown> = {},
+  env: JsonObject = {},
   config: ConfigFacts = LOADED,
   bars: readonly FrameSighting[] = STILL,
   sources: Asked<readonly SettingsSource[]> = {
@@ -156,7 +157,9 @@ describe("tmuxTruecolor probe", () => {
           value: sources,
         }),
       );
-    const told = (value: unknown) => ({ env: { [TMUX_TRUECOLOR_VAR]: value } });
+    const told = (value: JsonValue) => ({
+      env: { [TMUX_TRUECOLOR_VAR]: value },
+    });
 
     test("set in a managed drop-in → restart, naming the drop-in, NO fix", () => {
       expect(
@@ -473,7 +476,7 @@ describe("effectRefresh probe", () => {
   const ok = (value: readonly SettingsSource[]) =>
     ({ kind: "ok", value }) as const;
   // The user file's statusLine, with `refreshInterval` when one is given.
-  const interval = (...refreshInterval: [] | [unknown]) =>
+  const interval = (...refreshInterval: [] | [JsonValue]) =>
     ok(
       userFile({
         statusLine: {
@@ -596,7 +599,7 @@ describe("effectRefresh probe", () => {
   // The interval is the file's raw value: one with a space in it stays one
   // logfmt field.
   test("frameFields' chains quotes a raw interval that would split the field", () => {
-    const fields = (refreshInterval: unknown) => {
+    const fields = (refreshInterval: JsonValue) => {
       const { frames, claudeSettings } = onOrigin(
         STILL,
         ok(userFile({ statusLine: { command: "x", refreshInterval } })),
@@ -664,7 +667,7 @@ describe("effectRefresh probe", () => {
   // doctor never writes — the reason says where the line goes instead.
   test("a managed statusLine wins over the user file, and gets NO fix", () => {
     const managed = "/managed/managed-settings.d/10-dotfiles.json";
-    const chain = (managedLine: Record<string, unknown>) =>
+    const chain = (managedLine: JsonObject) =>
       ok([
         source("managed", managed, { statusLine: managedLine }),
         source("user", SETTINGS_PATH, {

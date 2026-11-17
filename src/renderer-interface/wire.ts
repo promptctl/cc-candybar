@@ -26,8 +26,8 @@ import {
 
 // What a renderer process builds itself from: the host's view of its machine
 // (its environment, home and temporary directory, from which the renderer
-// derives the paths it owns as the host does), the bundle the doctor judges
-// clients against, and the one memory limit its cache's budget is a share of.
+// derives the paths it owns as the host does), and the one memory limit its
+// cache's budget is a share of.
 export interface RendererBoot {
   // [LAW:one-source-of-truth] The digest of the source the host was built
   // from, which a renderer built from other source refuses: the renderer runs
@@ -40,7 +40,6 @@ export interface RendererBoot {
   readonly host: Omit<Host, "env"> & {
     readonly env: Readonly<Record<string, string>>;
   };
-  readonly bundle: string;
   readonly memoryLimitBytes: number;
   // The host's link key in base64, read as this renderer spawned, which it
   // signs every link with; or why it could not be read, which the renderer
@@ -144,15 +143,6 @@ type ReachKinds<T> = {
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   wake: "notice",
   log: "notice",
-  doctor: {
-    probeTmux: "call",
-    remoteLogin: "call",
-    fontInUse: "call",
-    daemons: "call",
-    forge: "call",
-    transcript: "call",
-    install: "call",
-  },
   menuIdle: {
     clicked: "notice",
     clickArrived: "notice",
@@ -161,8 +151,6 @@ export const REACH_KINDS: ReachKinds<AdapterToHost> = {
     confirmClose: "call",
   },
   clicks: { gone: "call" },
-  serving: "call",
-  renderSightings: { ofSession: "call" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" },

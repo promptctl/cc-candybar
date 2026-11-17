@@ -153,7 +153,6 @@ function booted(
     env: host.env,
     home: host.home,
     gates: daemonGates(),
-    bundle: boot.bundle,
     memoryLimitBytes: boot.memoryLimitBytes,
   }).start(reaches);
 }

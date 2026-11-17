@@ -7,6 +7,7 @@
 // `sessionSource`.
 
 import { holdClickError } from "../src/daemon/foundations/click-error";
+import { NO_DOCTOR } from "./helpers/payload-owners";
 import { linkUrls } from "./helpers/frame";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
@@ -223,6 +224,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       launcher: processLauncher,
       clock: systemTimekeeper,
     }),
+    doctor: NO_DOCTOR,
   });
   const sessionState = new SessionState();
   const served = collected({ owners: providers, log }, cleanups);

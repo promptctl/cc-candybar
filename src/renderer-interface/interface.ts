@@ -14,6 +14,7 @@ import type {
 } from "../daemon/foundations/session-id";
 import type { Failure } from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "../doctor/sightings";
+import type { DoctorAsk } from "../doctor/gather";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
@@ -241,13 +242,19 @@ export interface Present {
 // not at all, and each is settled with that one outcome.
 // [LAW:single-enforcer] exception: a layer is named by its path, not by its
 // role in a session's chain, until config discovery hands in snapshots.
+// A `claude-settings` file is one the session's doctor reading handed in
+// (`writableSettingsFiles`, src/doctor/gather.ts): the host refuses any other.
 export interface ConfigChange {
   readonly kind: "change";
   readonly id: EffectId;
   readonly session: SessionId;
-  readonly target: { readonly kind: "layer"; readonly path: string };
+  readonly target: ChangeTarget;
   readonly changes: readonly Change[];
 }
+
+export type ChangeTarget =
+  | { readonly kind: "layer"; readonly path: string }
+  | { readonly kind: "claude-settings"; readonly file: string };
 
 // A source a run makes stale: its full name, for the run's line, and the
 // storage folder its file is in.
@@ -368,14 +375,16 @@ export type TurnRecord = readonly Field[];
 
 // [LAW:types-are-the-program] A source the renderer's state needs read for
 // one session: a plugin source, at its storage folder, named by the variable
-// that reads it; or a `shell` or `file` run, named by its digest.
+// that reads it; a `shell` or `file` run, named by its digest; or the
+// doctor's run, by what it asks of the machine.
 export type Subscription =
   | {
       readonly kind: "plugin";
       readonly source: SourceId;
       readonly folder: string;
     }
-  | { readonly kind: "run"; readonly run: Run };
+  | { readonly kind: "run"; readonly run: Run }
+  | { readonly kind: "doctor"; readonly ask: DoctorAsk };
 
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read, and whose bar it draws in its tmux status line.

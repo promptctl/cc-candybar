@@ -26,7 +26,11 @@ import type { DaemonLogger } from "../utils/logger";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import { CrossedFailure, failureOf } from "./foundations/verb-error.js";
-import { performChanges, type ApproveRepo } from "./effect-interpreter.js";
+import {
+  performChanges,
+  type ApproveRepo,
+  type WritableSettings,
+} from "./effect-interpreter.js";
 import { outlives, type HostAct } from "./acts.js";
 
 // The only renderer there is yet: the main one, in process.
@@ -89,6 +93,9 @@ export function rendererHost(
     // holds the session its event names until it settles, so no sweep retires
     // a session under a turn on it, however long the turn waits.
     readonly holding: (session: SessionId) => () => void;
+    // The settings files each session's doctor reading handed in, which a
+    // `claude-settings` change may write.
+    readonly writableSettings: WritableSettings;
   },
   world: HostWorld,
 ): RendererHost {
@@ -124,11 +131,15 @@ export function rendererHost(
         ? { kind: "closing", reason: "the daemon is closing" }
         : changes.length + answers.length === 0
           ? { kind: "ok" }
-          : performChanges(changes, {
-              stateDir: world.stateDir,
-              answers,
-              said: (line) => log("info", line),
-            });
+          : performChanges(
+              changes,
+              {
+                stateDir: world.stateDir,
+                answers,
+                said: (line) => log("info", line),
+              },
+              collector.writableSettings,
+            );
       // An act no landing let go: the close is its own cause, and any other
       // is its changes', whose own outcome says why.
       const unperformed: EffectOutcome =

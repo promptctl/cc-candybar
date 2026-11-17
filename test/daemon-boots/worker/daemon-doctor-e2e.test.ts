@@ -69,6 +69,7 @@ import {
 } from "../../../src/claude-settings";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import { answerRepo } from "../../helpers/repo-approval";
+import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
 
@@ -83,6 +84,18 @@ const flat = (rendered: Frame): string => {
   const text = textOf(rendered);
   expect(text.split("\n").filter((row) => cellLen(row) > WIDTH)).toEqual([]);
   return squeezed(text);
+};
+// The report lands in a world state after the click's own, once the host's
+// read of the machine is in, so a row is drawn once it has landed.
+const reported = async (
+  draw: () => Promise<Frame>,
+  row: string,
+): Promise<void> => {
+  let drawn = "";
+  await until(
+    async () => (drawn = flat(await draw())).includes(squeezed(row)),
+    () => `the report row ${JSON.stringify(row)}; last drawn: ${drawn}`,
+  );
 };
 
 test("the doctor's config row reports the session's own config load", async () => {
@@ -119,10 +132,10 @@ test("the doctor's config row reports the session's own config load", async () =
     await click(daemon, run!);
 
     // The project layer's unused helper, read over the user's file.
-    expect(flat(await render(daemon, SID, projectDir))).toContain(
-      squeezed(
-        `✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`,
-      ),
+    const draw = () => render(daemon, SID, projectDir);
+    await reported(
+      draw,
+      `✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`,
     );
 
     // Fixing it turns the row over on the very next run: the click reloads
@@ -130,9 +143,7 @@ test("the doctor's config row reports the session's own config load", async () =
     // the fs watcher catches up.
     writeFileSync(projectConfig, `{}`);
     await click(daemon, run!);
-    expect(flat(await render(daemon, SID, projectDir))).toContain(
-      squeezed("✓ config"),
-    );
+    await reported(draw, "✓ config");
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -158,7 +169,8 @@ test("the doctor's config row says what named the session's file", async () => {
       sid: string,
       hints: ClientHints,
       args: string[],
-    ): Promise<string> => {
+      expected: string,
+    ): Promise<void> => {
       const draw = () => render(daemon, sid, projectDir, hints, args);
       await click(
         daemon,
@@ -172,18 +184,27 @@ test("the doctor's config row says what named the session's file", async () => {
         effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
       );
       await click(daemon, run!);
-      return flat(await draw());
+      await reported(draw, expected);
     };
     const flag = ["cc-candybar", "--config", named];
 
-    expect(await row("source-argument", { configEnv: named }, flag)).toContain(
-      squeezed(`✓ config — ${named} (command argument)`),
+    await row(
+      "source-argument",
+      { configEnv: named },
+      flag,
+      `✓ config — ${named} (command argument)`,
     );
-    expect(await row("source-env", { configEnv: named }, [])).toContain(
-      squeezed(`✓ config — ${named} ($CC_CANDYBAR_CONFIG)`),
+    await row(
+      "source-env",
+      { configEnv: named },
+      [],
+      `✓ config — ${named} ($CC_CANDYBAR_CONFIG)`,
     );
-    expect(await row("source-search", {}, [])).toContain(
-      squeezed("✓ config — bundled default (no config file loaded)"),
+    await row(
+      "source-search",
+      {},
+      [],
+      "✓ config — bundled default (no config file loaded)",
     );
   } finally {
     await daemon.stop();
@@ -506,15 +527,14 @@ test("the session data row reads the transcript the session's render named", asy
     );
     expect(run).toBeDefined();
     await click(daemon, run!);
-    expect(flat(await renderT())).toContain(
-      squeezed(
-        `✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`,
-      ),
+    await reported(
+      renderT,
+      `✗ session data — 1 of the 2 lines in the transcript ${transcript} are not JSON objects`,
     );
 
     writeFileSync(transcript, `{"type":"user"}\n`);
     await click(daemon, run!);
-    expect(flat(await renderT())).toContain(squeezed("✓ session data"));
+    await reported(renderT, "✓ session data");
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -565,10 +585,9 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     );
     expect(run).toBeDefined();
     await click(daemon, run!);
-    expect(flat(await draw())).toContain(
-      squeezed(
-        "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
-      ),
+    await reported(
+      draw,
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
     );
 
     writeFileSync(projectConfig, barOf("still"));
@@ -578,10 +597,9 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // Still, but drawn under the open menu the doctor is clicked from, which
     // counts down to the flash before it closes on its own: the frame says
     // when that starts (candybar-animation-wbxz.014), so the bar moves.
-    expect(flat(await draw())).toContain(
-      squeezed(
-        "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
-      ),
+    await reported(
+      draw,
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
     );
 
     // The same bar with its menu closed is still, and passes.
@@ -596,7 +614,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
     );
     await click(daemon, urlWriting(await draw(), `${SETTINGS_NS}tab`, "tools"));
-    expect(flat(await draw())).toContain(squeezed("✓ effect refresh"));
+    await reported(draw, "✓ effect refresh");
 
     const events = await renderLines(env, SID, drawn);
     const motion = events.map((l) => l.match(/ motion=(\S+) /)?.[1]);

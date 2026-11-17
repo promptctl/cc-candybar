@@ -3,19 +3,14 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
-import { installFacts } from "../../src/doctor/edge";
 import { bareGates } from "./gates";
 import { HOST } from "./host";
 import type { Host } from "../../src/host";
-import { HEALTHY_BUNDLE } from "./doctor-facts";
 import { TEST_SIGNER } from "./link-signer";
 import { JournalTurns } from "../../src/renderer/journal-turns";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
-import {
-  HEALTHY_INSTALL_EDGE,
-  HEALTHY_SERVING,
-  noManagedSettings,
-} from "./doctor-facts";
+import { DoctorRuns } from "../../src/renderer/doctor";
+import type { ConfigLoad, DoctorStores } from "../../src/doctor/ports";
 import { clickOf } from "../../src/click/read";
 import { changeDone, VERBS } from "../../src/renderer/verbs";
 import {
@@ -26,6 +21,7 @@ import { readConfigText } from "../../src/renderer/config-file-store";
 import {
   performChanges,
   type ApproveRepo,
+  type WritableSettings,
 } from "../../src/daemon/effect-interpreter";
 import type {
   Act,
@@ -46,7 +42,6 @@ import type { SessionStateRW } from "../../src/renderer-interface/session-state"
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { RenderSightings } from "../../src/daemon/render-sightings";
 import { instantOf } from "../../src/utils/instant";
 import {
   laneSwitches,
@@ -78,13 +73,6 @@ export function recordRender(
   );
 }
 
-// A host's sightings as the renderer reaches them: each read answered.
-export const asyncSightings = (
-  sightings: Pick<RenderSightings, "ofSession">,
-): VerbContext["clients"] => ({
-  ofSession: async (sessionId, now) => sightings.ofSession(sessionId, now),
-});
-
 // [LAW:single-enforcer] The host, for a test that drives the verb table with
 // none: each click's changes land as its turn hands them on, through the
 // host's own interpreter, and their outcome comes back through the verbs' own
@@ -93,6 +81,9 @@ export const asyncSightings = (
 // hands its clicks' changes to that host instead.
 class LandingAtOnce extends ConfigWrites {
   private context: VerbContext | null = null;
+  // The settings files a doctor's reading named; none until a test's doctor
+  // host hands its readings in (`landsSettingsOf`).
+  writable: WritableSettings = () => [];
 
   constructor(
     mint: () => EffectId,
@@ -126,10 +117,20 @@ class LandingAtOnce extends ConfigWrites {
         ),
         said: () => {},
       },
+      this.writable,
     );
     for (const { id } of landing)
       changeDone(this.context!, id, outcome, effects);
   }
+}
+
+// A test's landings write the settings files `writable` names, as the host's
+// write the ones its doctor readings name.
+export function landsSettingsOf(
+  ctx: Pick<VerbContext, "configWrites">,
+  writable: WritableSettings,
+): void {
+  (ctx.configWrites as LandingAtOnce).writable = writable;
 }
 
 // The acts a click asked of the host, in the order it asked them.
@@ -145,6 +146,54 @@ export function verbContextWith(
   over: Partial<VerbContext>,
 ): VerbContext {
   return (base.configWrites as LandingAtOnce).of({ ...base, ...over });
+}
+
+// A store a test with no doctor never reaches.
+const unstored = (what: string) => ({
+  read: () => {
+    throw new Error(`doctor: no ${what} in this test`);
+  },
+  update: () => {
+    throw new Error(`doctor: no ${what} in this test`);
+  },
+  plan: () => {
+    throw new Error(`doctor: no ${what} in this test`);
+  },
+});
+const NO_DOCTOR_STORES: DoctorStores = {
+  marks: unstored("mark book"),
+  clicked: unstored("clicked terminals"),
+  postMortemsRead: unstored("post-mortem record"),
+};
+
+// The renderer's doctor runs over `stores`; a failed reading holds the click
+// error on the session's bar, as the renderer's does.
+const doctorRunsOf = (
+  sessionState: SessionStateRW,
+  stores: DoctorStores,
+  log: VerbContext["log"],
+): DoctorRuns =>
+  new DoctorRuns({
+    sessionState,
+    stores,
+    log,
+    failed: (session, reason) =>
+      holdClickError(sessionState, session, reason, instantOf(new Date())),
+  });
+
+// `ctx` with a doctor: its runs judge `load` against `stores`.
+export function withDoctor(
+  ctx: VerbContext,
+  {
+    stores,
+    load,
+  }: { readonly stores: DoctorStores; readonly load: ConfigLoad },
+): VerbContext {
+  return verbContextWith(ctx, {
+    doctorStores: stores,
+    doctorRuns: doctorRunsOf(ctx.sessionState, stores, ctx.log),
+    doctorLoad: () => load,
+  });
 }
 
 // [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
@@ -183,78 +232,18 @@ export function testVerbContext(
     }),
     clickLanded: () => {},
     placeWaited: () => {},
-    gatherTook: () => {},
     turnWaited: () => {},
     log: () => {},
     now: () => instantOf(new Date()),
-    // Same posture for the doctor's edge: a test that drives a doctor click
-    // hands in its own fake edge; reaching this one is a test bug.
-    doctor: {
-      ...noManagedSettings(),
-      probeTmux: async () => {
-        throw new Error("doctor: no tmux edge in this test");
-      },
-      remoteLogin: async () => {
-        throw new Error("doctor: no process edge in this test");
-      },
-      fontInUse: async () => {
-        throw new Error("doctor: no font edge in this test");
-      },
-      loadConfig: () => {
-        throw new Error("doctor: no config edge in this test");
-      },
-      daemons: async () => {
-        throw new Error("doctor: no process table in this test");
-      },
-      forge: async () => {
-        throw new Error("doctor: no forge edge in this test");
-      },
-      transcript: async () => {
-        throw new Error("doctor: no transcript edge in this test");
-      },
-    },
-    installFacts: async (bundle, clients) =>
-      installFacts(HEALTHY_INSTALL_EDGE, bundle, clients),
-    doctorStores: {
-      marks: {
-        read: () => {
-          throw new Error("doctor: no mark book in this test");
-        },
-        update: () => {
-          throw new Error("doctor: no mark book in this test");
-        },
-        plan: () => {
-          throw new Error("doctor: no mark book in this test");
-        },
-      },
-      clicked: {
-        read: () => {
-          throw new Error("doctor: no clicked terminals in this test");
-        },
-        update: () => {
-          throw new Error("doctor: no clicked terminals in this test");
-        },
-        plan: () => {
-          throw new Error("doctor: no clicked terminals in this test");
-        },
-      },
-      postMortemsRead: {
-        read: () => {
-          throw new Error("doctor: no post-mortem record in this test");
-        },
-        update: () => {
-          throw new Error("doctor: no post-mortem record in this test");
-        },
-        plan: () => {
-          throw new Error("doctor: no post-mortem record in this test");
-        },
-      },
+    // A test that drives a doctor click hands in its own (`withDoctor`);
+    // reaching these is a test bug.
+    doctorStores: NO_DOCTOR_STORES,
+    doctorRuns: doctorRunsOf(sessionState, NO_DOCTOR_STORES, () => {}),
+    doctorLoad: () => {
+      throw new Error("doctor: no config load in this test");
     },
     // A click from the handler this build would stage.
     arrival: { via: "link", delivery: { kind: "forwarder", urlV: 2 } },
-    clients: asyncSightings(new RenderSightings()),
-    bundle: HEALTHY_BUNDLE,
-    serving: async () => HEALTHY_SERVING,
     // The config the session renders with: a test whose click reads it (a
     // save, a step from an unset key, any session write once the session has
     // rendered — the write closes what it closes in that config) hands it in;
@@ -316,7 +305,10 @@ export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
 
 // The host's act performer over `deps`; a part the test does not hand in
 // fails by name.
-export function testActs(log: VerbContext["log"], deps: Partial<ActDeps> = {}): Acts {
+export function testActs(
+  log: VerbContext["log"],
+  deps: Partial<ActDeps> = {},
+): Acts {
   const missing = (part: string) => async (): Promise<never> => {
     throw new Error(`${part}: no host part in this test`);
   };
@@ -326,8 +318,12 @@ export function testActs(log: VerbContext["log"], deps: Partial<ActDeps> = {}): 
     run: missing("run"),
     applyUpdate: missing("apply-update"),
     lanes: {
-      edge: new Proxy({} as LaneEdge, { get: (_, k) => missing(`lane ${String(k)}`) }),
-      host: new Proxy({} as LaneHost, { get: (_, k) => missing(`lane ${String(k)}`) }),
+      edge: new Proxy({} as LaneEdge, {
+        get: (_, k) => missing(`lane ${String(k)}`),
+      }),
+      host: new Proxy({} as LaneHost, {
+        get: (_, k) => missing(`lane ${String(k)}`),
+      }),
     },
     closing: () => false,
     log,

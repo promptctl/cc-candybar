@@ -2,13 +2,18 @@
 // route, driven through the real loader, the real spine (registerDslConfig +
 // drawDsl), and the real verb handlers — with a fake DoctorEdge whose tmux
 // probe answers `RGB`, and a settings.json in a temp Claude Code directory the
-// recorded `claudeConfigDir` hint names. The recorded client hints are seeded the way draw-bar.ts records them, so the click reads
-// the facts of the session's "last render" exactly as production does.
+// session's `claudeConfigDir` hint names. A click asks the host for its run's
+// reading; the rig's host reads it with the daemon's own read once the click's
+// turn ends, and hands it back as the session's world state carries it.
 
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { RenderSightings } from "../src/daemon/render-sightings";
+import { DoctorHost } from "./helpers/doctor-gather";
+import { parseClientHints } from "../src/daemon/foundations/protocol";
+import { lastClickError } from "../src/daemon/foundations/click-error";
+import { systemTimekeeper } from "../src/time";
 import type { ServingDaemon } from "../src/daemon/foundations/memory-limit";
 import {
   emptyStores,
@@ -17,6 +22,7 @@ import {
   noManagedSettings,
   HEALTHY_SERVING,
   HEALTHY_INSTALL_EDGE,
+  HEALTHY_BUNDLE,
   healthyClient,
   renderSaid,
 } from "./helpers/doctor-facts";
@@ -43,21 +49,30 @@ import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
 } from "../src/config/disclosure";
-import { asyncSightings, clickUrl, effectsOf } from "./helpers/click";
+import {
+  clickUrl,
+  effectsOf,
+  landsSettingsOf,
+  verbContextWith,
+  withDoctor,
+} from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import {
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
-import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
-import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
+import { VERBS, BadVerbArgs, parseRenderOrigin } from "../src/renderer/verbs";
+import {
+  SESSION_CLIENT_HINTS_KEY,
+  SESSION_RENDER_ORIGIN_KEY,
+} from "../src/daemon/foundations/session-keys";
 import type { VerbContext } from "../src/renderer/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/ports";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
-import { instantOf } from "../src/utils/instant";
+import { instantOf, type Instant } from "../src/utils/instant";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -130,17 +145,16 @@ function doctorBar(
     base: DEFAULT_DSL_CONFIG,
   });
   const { config, sessionState } = rig;
-  // What draw-bar.ts records on a render: the stamped hints, as JSON.
-  sessionState.set(
-    S1,
-    SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({
-      tmux,
-      claudeConfigDir: dir,
-      terminalEnv: terminal.env,
-      termCols: 148,
-    }),
-  );
+  // The hints the session's client sends, as the host hands them to the
+  // doctor's read; recorded too, as draw-bar.ts records them, for the click's
+  // own reads.
+  const hints = {
+    tmux,
+    claudeConfigDir: dir,
+    terminalEnv: terminal.env,
+    termCols: 148,
+  };
+  sessionState.set(S1, SESSION_CLIENT_HINTS_KEY, JSON.stringify(hints));
   const clients = new RenderSightings();
   clients.see(
     S1,
@@ -173,19 +187,40 @@ function doctorBar(
       throw new Error("remoteLogin must not run in this case");
     },
     fontInUse: terminal.fontInUse,
-    loadConfig: () => ({ ...load, config }),
   };
   const logs: string[] = [];
-  const ctx: VerbContext = {
-    ...rig.ctx,
-    doctor,
-    doctorStores: { ...emptyStores(), clicked },
-    clients: asyncSightings(clients),
-    serving: async () => serving,
-    log: (level, message) =>
-      logs.push(level === "warn" ? `warn: ${message}` : message),
+  const ctx: VerbContext = withDoctor(
+    verbContextWith(rig.ctx, {
+      log: (level, message) =>
+        logs.push(level === "warn" ? `warn: ${message}` : message),
+    }),
+    { stores: { ...emptyStores(), clicked }, load: { ...load, config } },
+  );
+  const host = new DoctorHost(
+    {
+      edge: { ...doctor, install: HEALTHY_INSTALL_EDGE },
+      sightings: (session, now) => clients.ofSession(session, now),
+      serving: () => serving,
+      bundle: HEALTHY_BUNDLE,
+      clock: systemTimekeeper,
+    },
+    (session) => ({
+      hints: parseClientHints(hints),
+      origin: parseRenderOrigin(
+        sessionState.get(session, SESSION_RENDER_ORIGIN_KEY)!,
+      ),
+    }),
+  );
+  landsSettingsOf(ctx, (session) => host.writable(session));
+  // A click, then the end of its turn at the host: what the turn's
+  // subscriptions ask of the doctor is read and handed back.
+  const click = async (url: string): Promise<void> => {
+    try {
+      await clickUrl(url, ctx);
+    } finally {
+      await host.settle(ctx.doctorRuns);
+    }
   };
-  const click = (url: string): Promise<void> => clickUrl(url, ctx);
   const clickWriting = async (key: string, value: string): Promise<void> => {
     const url = linkUrls(renderRaw()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
@@ -422,8 +457,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     );
 
     await rt.clickVerb(VERB_DOCTOR_FIX);
-    // one probe for the run click, one for the fix click — the post-fix
-    // report re-reads only the settings env the fix changed
+    // one probe for the run click, one for the run the fix starts, which
+    // reads the row again after the change landed
     expect(rt.probes()).toBe(2);
     expect(JSON.parse(fs.readFileSync(rt.settingsPath, "utf8"))).toEqual({
       env: { FORCE_COLOR: "3", [TMUX_TRUECOLOR_VAR]: "1" },
@@ -440,6 +475,24 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // [LAW:no-silent-failure] A session the daemon never rendered has no client
   // facts; the doctor refuses loudly rather than diagnose a guessed "not in
   // tmux".
+  // A run that replaces a report takes its rows off the bar: no verdict or
+  // [fix] stands for a run no longer the session's while the next is read.
+  test("a doctor-run click takes the last report's rows off the bar until its own reading lands", async () => {
+    const rt = doctorBar(HINT);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
+    const run = rt.urlOfVerb(VERB_DOCTOR_RUN)!;
+    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeDefined();
+    await clickUrl(run, rt.ctx);
+    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
+    // A second click while the run is on its way asks no other.
+    const asked = rt.ctx.doctorRuns.subscriptions().get(S1);
+    await clickUrl(run, rt.ctx);
+    expect(rt.ctx.doctorRuns.subscriptions().get(S1)).toEqual(asked);
+    await rt.click(run);
+    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeDefined();
+  });
+
   test("a doctor-run click for a session that never rendered is refused", async () => {
     const rt = doctorBar(HINT);
     const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
@@ -460,6 +513,31 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const before = fs.readFileSync(rt.settingsPath, "utf8");
     await expect(rt.click(fixUrl)).rejects.toThrow(BadVerbArgs);
     expect(fs.readFileSync(rt.settingsPath, "utf8")).toBe(before);
+  });
+
+  // [LAW:single-enforcer] docs/design/host-and-renderer.md §7, A-3: a fix
+  // applies only to the settings it diagnosed. A setting moved between the
+  // diagnosis and the fix refuses the fix, writes nothing, says why on the
+  // bar, and the row is read again over the settings as they now are.
+  test("a setting changed between the diagnosis and the fix refuses the fix, and the row is read again", async () => {
+    const rt = doctorBar(HINT);
+    fs.writeFileSync(rt.settingsPath, `{\n  "env": { "FORCE_COLOR": "3" }\n}\n`);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
+    expect(rt.render()).toContain("✗ tmux truecolor");
+    const fixUrl = rt.urlOfVerb(VERB_DOCTOR_FIX)!;
+    // The user sets the variable themselves, to 0, after the doctor read it
+    // unset.
+    const moved = `{\n  "env": { "FORCE_COLOR": "3", "${TMUX_TRUECOLOR_VAR}": "0" }\n}\n`;
+    fs.writeFileSync(rt.settingsPath, moved);
+    await rt.click(fixUrl);
+    expect(fs.readFileSync(rt.settingsPath, "utf8")).toBe(moved);
+    expect(lastClickError(rt.sessionState, S1)?.text).toContain(
+      `env.${TMUX_TRUECOLOR_VAR} in ${rt.settingsPath} changed since it was read`,
+    );
+    expect(rt.probes()).toBe(2);
+    // The run the fix started read the variable as the user set it.
+    expect(rt.logs.at(-1)).toMatch(/ truecolorEnv="user:\\"0\\"" /);
   });
 
   // brandon-effects-2gka.21e, brandon-doctor-v62x.tgp: the session's bar drew
@@ -569,8 +647,8 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       await rt.clickVerb(VERB_DOCTOR_RUN);
       fontCalls.length = 0;
       await rt.click(markUrl(rt, "drawn")!);
-      // One gathering per click: the rate-limited font spawn runs once.
-      expect(fontCalls).toHaveLength(1);
+      // A mark judges the run's reading: the font is not read again.
+      expect(fontCalls).toEqual([]);
       const out = rt.render();
       expect(out).toContain("✓ Nerd Font");
       expect(out).not.toContain("[✓ shapes]");
@@ -580,6 +658,23 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs.at(-1)).toMatch(
         /nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 processes=host:4100:160 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/,
       );
+    });
+
+    // A reading names the terminal that drew the bar when it was read, and a
+    // mark is filed under that terminal for good: a report read long enough
+    // ago that the session may have moved is read again before it is marked.
+    test("a mark on a report read two minutes ago is refused, and the report is read again", async () => {
+      const rt = doctorBar(null, CLEAN_LOAD, ITERM_MENLO);
+      await rt.openTools();
+      await rt.clickVerb(VERB_DOCTOR_RUN);
+      const url = markUrl(rt, "drawn")!;
+      fontCalls.length = 0;
+      const later = instantOf(new Date(Date.now() + 121_000));
+      (rt.ctx as { now: () => Instant }).now = () => later;
+      await expect(rt.click(url)).rejects.toThrow(/being read/);
+      expect(fontCalls).toHaveLength(1);
+      expect(rt.render()).toContain(`${BUNDLED_GLYPHS} [✓ shapes] [✗ boxes]`);
+      expect(rt.logs.some((l) => l.startsWith("doctor-mark:"))).toBe(false);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", async () => {
@@ -616,7 +711,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       try {
         const file = path.join(dir, "doctor-marks.json");
         fs.writeFileSync(file, "junk");
-        // The book read when the click gathered its facts, and the file broke
+        // The book read when the run's report was written, and the file broke
         // before the filing: the real store's refusal is the click's.
         const marks: DoctorStores["marks"] = {
           read: () => ({ kind: "ok", value: {} }),
@@ -637,19 +732,19 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       }
     });
 
-    test("a probe the rate limit refused refuses the click, and the report stands", async () => {
+    test("a probe the rate limit refused fails the run with the reason on the bar, and writes no report", async () => {
       const limited: TerminalFixture = {
         ...ITERM_MENLO,
         fontInUse: async () => busy("the font"),
       };
       const rt = doctorBar(null, CLEAN_LOAD, limited);
       await rt.openTools();
-      await expect(VERBS.get(VERB_DOCTOR_RUN)!("s1", rt.ctx)).rejects.toThrow(
-        new BadVerbArgs(
-          "doctor-run: the doctor looked at the font less than a second ago — click again",
-        ),
+      await rt.clickVerb(VERB_DOCTOR_RUN);
+      expect(lastClickError(rt.sessionState, S1)?.text).toBe(
+        "doctor: the doctor looked at the font less than a second ago — click again",
       );
       expect(rt.render()).not.toContain("Nerd Font");
+      expect(rt.logs.filter((l) => l.startsWith("doctor:"))).toEqual([]);
     });
 
     test("only a check that takes a mark is given the actions that make one", async () => {

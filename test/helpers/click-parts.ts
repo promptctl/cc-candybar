@@ -56,6 +56,8 @@ export function clickParts(
     mint: minter(),
     // The acts the test's verb context asks, settled by this rig's host.
     acts: verbCtx.acts as ActsOnTheirWay,
+    // The doctor runs the test's clicks start, whose asks the turn names.
+    doctorRuns: verbCtx.doctorRuns,
   } as unknown as MainRendererParts;
   return {
     renderer: rendererHost(
@@ -63,7 +65,11 @@ export function clickParts(
       systemTimekeeper,
       mainRenderer(parts, NO_PUSHES),
       () => {},
-      { subscribed: () => {}, holding: collector.holding },
+      {
+        subscribed: () => {},
+        holding: collector.holding,
+        writableSettings: () => [],
+      },
       world,
     ),
     clicks,

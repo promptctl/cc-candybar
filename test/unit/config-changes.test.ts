@@ -6,6 +6,7 @@ import {
   applyChanges,
   diffChanges,
 } from "../../src/config/config-changes";
+import { JSON_DIALECT } from "../../src/config/json5-edit";
 
 const BEFORE = `{
   // the user's own
@@ -137,5 +138,17 @@ describe("applyChanges", () => {
       at: [],
       read: "object",
     });
+  });
+
+  // A reader takes a file of whitespace for an empty object, so a member it
+  // found missing there is inserted, in the file's own dialect.
+  test.each(["", "  \n"])("inserts a member into a file holding only %j", (blank) => {
+    expect(
+      applyChanges(
+        blank,
+        [{ op: "insert", at: ["env"], text: `{ "A": "1" }`, precedes: null }],
+        JSON_DIALECT,
+      ),
+    ).toEqual({ kind: "applied", text: `{\n  "env": { "A": "1" }\n}\n` });
   });
 });

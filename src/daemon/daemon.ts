@@ -70,7 +70,7 @@ import {
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { located } from "./statusline-answer.js";
-import { installFacts } from "../doctor/edge.js";
+import { DoctorSource } from "./cache/doctor.js";
 import { ClicksInFlight } from "./clicks-in-flight.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
@@ -351,7 +351,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         env: host.env,
         home: host.home,
         gates,
-        bundle: bundle.path,
         memoryLimitBytes,
       }),
     // The key crosses in base64, so the boot crosses as a line.
@@ -360,7 +359,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       return {
         digest: bundle.digest,
         host: { ...host, env: bootEnv(host.env) },
-        bundle: bundle.path,
         memoryLimitBytes,
         linkKey:
           key.kind === "ok"
@@ -410,6 +408,23 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watchers: watcherRegistry,
     fileEvents,
   });
+  // [LAW:single-enforcer] The daemon's one reader of the doctor's facts: the
+  // collector holds the run a session's renderer subscribes to.
+  const doctorSource = new DoctorSource({
+    // The doctor's edge sets no signal of its own, so each read's launches
+    // carry the read's.
+    edge: (signal) =>
+      inputs.doctorEdge(
+        { ...launcher, launch: (opts) => launcher.launch({ ...opts, signal }) },
+        host,
+      ),
+    sightings: (sessionId, now) => renderSightings.ofSession(sessionId, now),
+    serving: () => limits.serving(),
+    bundle: bundle.path,
+    clock,
+    logger: log,
+    ledger: refreshLedger,
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
@@ -419,6 +434,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     logger: log,
     ledger: refreshLedger,
     sourceRuns,
+    doctor: doctorSource,
   });
   const { managedStorage } = payloadProviders;
   // [LAW:single-enforcer] Each session's idle clock and the timer that closes
@@ -681,7 +697,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:single-enforcer] Each watch the renderer holds, by the id it minted,
   // from its `watch` to its `unwatch`.
   const rendererWatches = new Map<WatchId, WatcherHandle>();
-  const doctorEdge = inputs.doctorEdge(launcher, host);
   // [LAW:one-way-deps] The host's parts the main renderer reaches: the
   // compiler checks each against its entry in `AdapterToHost` here, so no
   // renderer file names a host type.
@@ -690,11 +705,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // the host's part in its crossing shape: a notice, or an awaited call.
     wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
     log,
-    doctor: {
-      ...doctorEdge,
-      install: async (daemonBundle, clients) =>
-        installFacts(doctorEdge.install, daemonBundle, clients),
-    },
     menuIdle: {
       clicked: (sessionId, at) => menuIdle.clicked(sessionId, at),
       clickArrived: (sessionId) => menuIdle.clickArrived(sessionId),
@@ -705,11 +715,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         menuIdle.confirmClose(sessionId, firedAt),
     },
     clicks: { gone: async (click) => clicks.gone(click) },
-    serving: async () => limits.serving(),
-    renderSightings: {
-      ofSession: async (sessionId, now) =>
-        renderSightings.ofSession(sessionId, now),
-    },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -815,6 +820,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           declaredStatusLines.declare(subscriptions.tmuxStatus);
         },
         holding: (session) => collector.holding(session),
+        writableSettings: (session) => collector.writableSettings(session),
       },
       {
         perform: (act) => acts.perform(act),
@@ -838,7 +844,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     exit,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in is gathering, or holds or waits for a journal's turn,
+    // the way in. A click that got in holds or waits for a journal's turn,
     // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
@@ -903,6 +909,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
+        ["doctorSource close", () => doctorSource.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.

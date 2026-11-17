@@ -25,6 +25,9 @@ function hostOver(output: AdapterOutput) {
       subscribed: () => {
         throw new Error("a push names no subscriptions");
       },
+      writableSettings: () => {
+        throw new Error("a push lands no change");
+      },
       holding: () => {
         throw new Error("a push holds no session");
       },

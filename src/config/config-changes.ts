@@ -20,6 +20,7 @@ import {
   setValue,
   textOf,
   Json5EditError,
+  type Dialect,
   type Node,
   type ObjectNode,
 } from "./json5-edit.js";
@@ -72,16 +73,19 @@ export type Applied =
 
 const ABSENT: Read = { kind: "absent" };
 
+// [LAW:types-are-the-program] An absent file holds none. One holding only
+// whitespace is empty: an object with no members, as every reader of a config
+// or a settings file reads it, with no text a span could point into. Text the
+// span editor refuses is unparsed: a change can only replace it whole.
 type Parsed =
   | { readonly kind: "none" }
+  | { readonly kind: "empty" }
   | { readonly kind: "unparsed" }
   | { readonly kind: "document"; readonly root: Node };
 
-// A file's text as a document. An absent file and one holding only
-// whitespace hold none, and text the span editor refuses is unparsed: a
-// change can only replace it whole.
 function parse(text: string | null): Parsed {
-  if (text === null || /^\s*$/.test(text)) return { kind: "none" };
+  if (text === null) return { kind: "none" };
+  if (/^\s*$/.test(text)) return { kind: "empty" };
   try {
     return { kind: "document", root: parseDocument(text) };
   } catch (e) {
@@ -95,9 +99,15 @@ function parse(text: string | null): Parsed {
 // bytes are what was found.
 function readAt(text: string | null, parsed: Parsed, at: Address): Read {
   if (text === null) return ABSENT;
-  if (at.length === 0 || parsed.kind !== "document")
-    return { kind: "file", text };
-  return readOf(text, nodeAt(parsed.root, at));
+  if (at.length === 0) return { kind: "file", text };
+  switch (parsed.kind) {
+    case "empty":
+      return ABSENT;
+    case "document":
+      return readOf(text, nodeAt(parsed.root, at));
+    default:
+      return { kind: "file", text };
+  }
 }
 
 function readOf(text: string, node: Node | undefined): Read {
@@ -264,11 +274,14 @@ function diffMembers(
 /**
  * `changes` applied to `text` in order, each checked against the document as
  * it then stands. A setting that moved, or an ancestor a change needs that is
- * no longer an object, refuses the whole list.
+ * no longer an object, refuses the whole list. `dialect` is the document's:
+ * a cc-candybar config is JSON5, and Claude Code parses its settings as
+ * strict JSON, so a splice there quotes its keys and leaves no trailing comma.
  */
 export function applyChanges(
   text: string | null,
   changes: readonly Change[],
+  dialect: Dialect = JSON5_DIALECT,
 ): Applied {
   let current = text;
   for (const change of changes) {
@@ -285,7 +298,7 @@ export function applyChanges(
     const found = readAt(current, parsed, change.at);
     if (!sameRead(found, read))
       return { kind: "moved", at: change.at, read, found };
-    current = applied(current, change);
+    current = applied(current, change, dialect);
   }
   return { kind: "applied", text: current };
 }
@@ -294,6 +307,9 @@ export function applyChanges(
 // when every one is. The document is the first ancestor of every setting.
 function movedAncestor(parsed: Parsed, at: Address): Address | null {
   if (at.length === 0) return null;
+  // An empty document is an object holding nothing, so only its own members
+  // have every ancestor.
+  if (parsed.kind === "empty") return at.length === 1 ? null : at.slice(0, 1);
   if (parsed.kind !== "document") return [];
   for (let depth = 0; depth < at.length; depth++) {
     const up = at.slice(0, depth);
@@ -302,7 +318,11 @@ function movedAncestor(parsed: Parsed, at: Address): Address | null {
   return null;
 }
 
-function applied(text: string | null, change: Change): string | null {
+function applied(
+  text: string | null,
+  change: Change,
+  dialect: Dialect,
+): string | null {
   if (change.at.length === 0)
     return change.op === "remove" ? null : change.text;
   // Every ancestor is an object and the read matched, so a remove finds its
@@ -310,13 +330,13 @@ function applied(text: string | null, change: Change): string | null {
   // diff removes an ancestor by its own change.
   switch (change.op) {
     case "replace":
-      return setValue(text!, change.at, change.text, JSON5_DIALECT);
+      return setValue(text!, change.at, change.text, dialect);
     case "insert":
       return insertValue(
         text!,
         change.at,
         change.text,
-        JSON5_DIALECT,
+        dialect,
         change.precedes,
       );
     case "remove":

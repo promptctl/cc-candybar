@@ -39,6 +39,7 @@ import { type ViewFacts } from "../src/renderer-interface/request-context";
 import type { Fact } from "../src/facts/fact";
 import type { Update, WorldState } from "../src/facts/world-state";
 import type { Subscriptions } from "../src/renderer-interface/interface";
+import type { DoctorAsk } from "../src/doctor/gather";
 import { type GitRead, type PullRequest } from "../src/segments/git";
 import { GitService } from "../src/daemon/cache/git-service";
 import { Holds } from "../src/utils/holds";
@@ -112,6 +113,7 @@ function handLanded() {
       declare: (holds: Holds, folder: string) =>
         entry(holds, `source:${folder}`),
     },
+    doctor: { declare: (holds: Holds) => entry(holds, "doctor") },
     log: () => {},
   } as unknown as RenderPayloadDeps;
   const land = (key: string, value: Current<unknown>) =>
@@ -399,6 +401,70 @@ describe("the renderer's subscriptions", () => {
     });
     collector.subscribed({ sources: {} });
     expect(held.has("source:/plugin")).toBe(false);
+  });
+
+  // A renderer stops asking for a doctor reading once it took it, and a fix
+  // it makes from that reading comes after.
+  test("the settings files a doctor reading names stay writable after the run is released, until another reading names others", () => {
+    const { owners, held, land } = handLanded();
+    const { collector } = collectorOver(owners);
+    const at = (dir: string) => ({
+      managedDir: "/managed",
+      projectDir: dir,
+      userFile: `${dir}/user.json`,
+    });
+    const reading = (dir: string) =>
+      ok({
+        run: 1,
+        kind: "read",
+        machine: {
+          claudeSettings: { origin: { at: at(dir) }, elsewhere: [] },
+        },
+      });
+    const asking: Pick<Subscriptions, "sources"> = {
+      sources: {
+        [SID]: [{ kind: "doctor", ask: { run: 1 } as unknown as DoctorAsk }],
+      },
+    };
+    collector.requested(requestAt("/a"));
+    collector.subscribed(asking);
+    land("doctor", reading("/p"));
+    collector.subscribed({ sources: {} });
+    expect(held.has("doctor")).toBe(false);
+    expect(collector.writableSettings(SID)).toEqual([
+      "/p/user.json",
+      "/p/.claude/settings.local.json",
+    ]);
+    collector.subscribed(asking);
+    land("doctor", reading("/q"));
+    expect(collector.writableSettings(SID)).toEqual([
+      "/q/user.json",
+      "/q/.claude/settings.local.json",
+    ]);
+  });
+
+  // However a run's lane fails, the failure names that run, so a renderer that
+  // asked a later run never takes it for its own.
+  test("a doctor lane that fails answers a failed reading of the run it was declared for", () => {
+    const { owners, land } = handLanded();
+    const { collector, handedIn } = collectorOver(owners);
+    collector.requested(requestAt("/a"));
+    collector.subscribed({
+      sources: {
+        [SID]: [{ kind: "doctor", ask: { run: 7 } as unknown as DoctorAsk }],
+      },
+    });
+    land("doctor", failed("the source closed", "read"));
+    expect(handedIn.at(-1)).toMatchObject({
+      kind: "world-state",
+      worldState: {
+        doctor: {
+          kind: "ok",
+          value: { run: 7, kind: "failed", reason: "the source closed" },
+        },
+      },
+    });
+    expect(collector.writableSettings(SID)).toEqual([]);
   });
 
   test("a run the host refuses is logged once as it joins the set, and stands as its fault; requests judge nothing again", () => {
@@ -705,7 +771,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, facts, { plugins: new Map(), runs: new Map() }),
+    declareLanes(owners, holds, facts, { plugins: new Map(), runs: new Map(), doctor: null }),
   );
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^git: .*resolver bug/),
@@ -758,6 +824,7 @@ test("a run whose declaration throws answers its failure, and every other run an
         [broken.digest, judgeRun(broken)],
         [fine.digest, judgeRun(fine)],
       ]),
+      doctor: null,
     }),
   );
   expect(declared.result.faults).toEqual([

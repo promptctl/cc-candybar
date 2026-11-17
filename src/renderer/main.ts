@@ -34,7 +34,6 @@ import type {
 } from "../renderer-interface/history-storage.js";
 import type { DoctorStores } from "../doctor/ports.js";
 import type { LinkSigner } from "../click/link-signer.js";
-import { claudeManagedSettingsDirIn } from "../claude-settings.js";
 import type { Locations } from "../config/loader/discovery.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import type { RenderOrigin } from "../config-hint.js";
@@ -59,6 +58,7 @@ import { RenderWarningRecords } from "./render-warnings.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { LaneActs } from "./lane-acts.js";
 import { WorldStates } from "./world-states.js";
+import { DoctorRuns } from "./doctor.js";
 import { UpdateGate } from "./update-gate.js";
 import { Watches } from "./watches.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
@@ -81,6 +81,7 @@ import {
   type EffectId,
   type Event,
   type Renderer,
+  type Subscription,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { JournalTurns } from "./journal-turns.js";
@@ -150,6 +151,9 @@ export function mainRenderer(
         parts.worldStates.take(event.worldState);
         return;
       case "retire":
+        // The run first: a teardown that throws leaves no run asking for a
+        // session the host has discarded.
+        parts.doctorRuns.retire(event.session);
         retireSession(parts, event.session);
         return;
       case "effect-done": {
@@ -210,7 +214,18 @@ export function mainRenderer(
       // `effect-done`; the subscriptions last returned then stand.
       const ended = await turn(input.event, input.at, record, effects)
         .finally(() => {
-          const { sources } = parts.renderCache.subscriptions();
+          const views = parts.renderCache.subscriptions().sources;
+          // A session's doctor run is read whether or not a view of it is
+          // open: a view evicted or failed to open is no reason a run asked
+          // for goes unread.
+          const merged = new Map(
+            Object.entries(views) as Array<[SessionId, Subscription[]]>,
+          );
+          for (const [session, run] of parts.doctorRuns.subscriptions())
+            merged.set(session, [...(merged.get(session) ?? []), run]);
+          const sources = Object.fromEntries(
+            merged,
+          ) as Subscriptions["sources"];
           subscriptions = {
             sources,
             // [LAW:one-source-of-truth] Read off the same open views: a
@@ -262,8 +277,6 @@ export interface MainRendererInputs {
   readonly home: string;
   // What this daemon's clicks may write: the gates its root built.
   readonly gates: Gates;
-  // The bundle this daemon runs, which the doctor judges the clients against.
-  readonly bundle: string;
   // The memory limit the render cache's budget is a share of.
   readonly memoryLimitBytes: number;
 }
@@ -334,10 +347,19 @@ function startOver(
   // [LAW:one-source-of-truth] The dismiss gate follows the update fact the
   // host's documents carry: the gates are this renderer's own.
   const updateGate = new UpdateGate(gates);
+  // [LAW:single-enforcer] Each session's doctor run, whose report is
+  // written once the host's reading of it arrives in a world state.
+  const doctorRuns = new DoctorRuns({
+    sessionState,
+    stores: inputs.storage.doctor,
+    log,
+    failed: actFailed,
+  });
   // The world states the host hands the renderer, which its views read.
-  const worldStates = new WorldStates((document) =>
-    updateGate.took(document.daemon.update.newer),
-  );
+  const worldStates = new WorldStates((document) => {
+    updateGate.took(document.daemon.update.newer);
+    doctorRuns.took(document);
+  });
   // [LAW:single-enforcer] Every watch this renderer holds, each held by the
   // host's registry under an id minted here.
   const watches = new Watches(host.watches);
@@ -406,8 +428,6 @@ function startOver(
     renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
       kind: "write",
     });
-  // The doctor's reads of the machine, apart from the install check's.
-  const { install: installFacts, ...machineReads } = host.doctor;
   const verbCtx: DaemonVerbContext = {
     gates,
     sessionState,
@@ -419,33 +439,23 @@ function startOver(
     log,
     acts,
     now,
-    doctor: {
-      ...machineReads,
-      // The load the session's bar is drawn from: its cache entry's load
-      // outcome, and what the config that entry renders left unused.
-      // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
-      // doctor click is a verdict on the files as they are now, not on
-      // whether the fs watcher has caught up with an edit made a moment ago.
-      loadConfig: (origin) => {
-        const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
-        renderCache.reload(...at, { kind: "doctor" });
-        const entry = renderCache.getOrCreate(...at);
-        return {
-          layers: entry.configLayers,
-          error: entry.lastError,
-          warning: entry.lastWarning,
-          unused: entry.state.unused,
-          config: entry.state.config,
-        };
-      },
-      home: inputs.home,
-      managedSettingsDir: claudeManagedSettingsDirIn(inputs.env),
+    doctorRuns,
+    // The load the session's bar is drawn from: its cache entry's load
+    // outcome, and what the config that entry renders left unused, reloaded
+    // first (`startRun`).
+    doctorLoad: (origin) => {
+      const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
+      renderCache.reload(...at, { kind: "doctor" });
+      const entry = renderCache.getOrCreate(...at);
+      return {
+        layers: entry.configLayers,
+        error: entry.lastError,
+        warning: entry.lastWarning,
+        unused: entry.state.unused,
+        config: entry.state.config,
+      };
     },
-    installFacts,
     doctorStores: inputs.storage.doctor,
-    clients: host.renderSightings,
-    bundle: inputs.bundle,
-    serving: host.serving,
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -564,7 +574,13 @@ function startOver(
     }
   };
   return mainRenderer(
-    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint, acts },
+    {
+      ...parts,
+      verbs: verbsOver(verbCtx, host.clicks),
+      mint,
+      acts,
+      doctorRuns,
+    },
     pushed,
   );
 }

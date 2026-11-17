@@ -597,6 +597,9 @@ export function insertValue(
   precedes: string | null,
 ): string {
   const parentPath = path.slice(0, -1);
+  // An empty document is an empty object, which a member of its own becomes.
+  if (/^\s*$/.test(text) && parentPath.length === 0)
+    return setValue(text, path, valueText, dialect);
   const leaf = path[path.length - 1];
   const parent = nodeAt(parseDocument(text), parentPath);
   if (leaf === undefined || parent?.kind !== "object")

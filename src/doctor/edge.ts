@@ -56,12 +56,7 @@ import { shipsNative } from "../install/platforms.js";
 import { fileMarkBook } from "./mark-book.js";
 import { fileClickedTerminals } from "./clicked-terminals.js";
 import { filePostMortemsRead } from "./post-mortems-read.js";
-import type {
-  InstallEdge,
-  DoctorStores,
-  DoctorEdge,
-  DoctorMachineEdge,
-} from "./ports";
+import type { InstallEdge, DoctorStores, DoctorMachineEdge } from "./ports";
 import { asked } from "./gather.js";
 
 export const productionInstallEdge: InstallEdge = {
@@ -320,19 +315,6 @@ export function productionMachineEdge(
     forge: (cwd) => forgeLogin(launcher, cwd),
     transcript: async (file) => readTranscriptWindow(file),
     install: productionInstallEdge,
-  };
-}
-
-// The edge `cc-candybar doctor` gathers over: the machine's reads, over the
-// config load it is handed.
-export function productionEdge(
-  launcher: Launcher,
-  loadConfig: DoctorEdge["loadConfig"],
-  host: Host,
-): DoctorEdge & DoctorMachineEdge {
-  return {
-    ...productionMachineEdge(launcher, host),
-    loadConfig,
     home: host.home,
     managedSettingsDir: claudeManagedSettingsDirIn(host.env),
   };

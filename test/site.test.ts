@@ -72,7 +72,10 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
     const painted = await transport.render(size);
     const tools = await transport.click(painted.links.find((l) => l.text.includes("tools")).url, size);
     const doctored = await transport.click(tools.links.find((l) => l.text.includes("🩺")).url, size);
-    const doctor = await transport.frame(size);
+    // The report lands once the host's read of the machine is in: a later redraw shows it.
+    let doctor = await transport.frame(size);
+    for (const end = Date.now() + 5_000; !JSON.stringify(doctor).includes("daemon") && Date.now() < end; )
+      doctor = await new Promise((r) => setTimeout(r, 50)).then(() => transport.frame(size));
     console.log(JSON.stringify({ frames: { cold, first, opened, working, doctor }, refused: clicked.refused, copied: copied.refused, doctorRefused: doctored.refused }));
     process.exit(0);
   `;

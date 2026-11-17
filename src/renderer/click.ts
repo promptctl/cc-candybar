@@ -35,7 +35,6 @@ export async function clickTurn(
     await handler(value, {
       arrival,
       placeWaited: (ms) => noteFacts(record, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(record, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(record, { turnWait: `${ms}ms` }),
       click: id,
       latest,

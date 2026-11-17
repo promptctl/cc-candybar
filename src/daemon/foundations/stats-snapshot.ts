@@ -302,9 +302,6 @@ export interface JournalTurnStats {
   readonly holder: string | null;
   readonly heldMs: number;
   readonly queued: number;
-  // Gathers running or queued, which hold no turn: one that never settles
-  // reads here and nowhere else.
-  readonly gathers: number;
 }
 
 export interface ProbeArrival {

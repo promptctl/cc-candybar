@@ -12,7 +12,7 @@ import {
   type Verdict,
 } from "../src/doctor/checks";
 import { daemonProcesses, ownsEntry } from "../src/doctor/edge";
-import { applyFix } from "../src/doctor/gather";
+import { applyFix } from "./helpers/doctor-gather";
 import {
   parseDoctorStores,
   parseServingDaemon,

@@ -14,7 +14,6 @@ import {
   healthyDataEdge,
   noManagedSettings,
   HEALTHY_SERVING,
-  HEALTHY_INSTALL_EDGE,
   HEALTHY_FACTS,
   CARRIED,
   NAMED,
@@ -35,8 +34,11 @@ import {
   statusLineOf,
   envVarOf,
 } from "../src/doctor/checks";
-import { applyFix, gatherFacts } from "../src/doctor/gather";
-import { type DoctorEdge } from "../src/doctor/ports";
+import {
+  applyFix,
+  gatherFacts,
+  type GatherEdge,
+} from "./helpers/doctor-gather";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { DslConfig } from "../src/config/dsl-types";
@@ -50,7 +52,7 @@ const fixIn = (conf: string): Fix => ({
 });
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
 const loadsConfig =
-  (config: DslConfig): DoctorEdge["loadConfig"] =>
+  (config: DslConfig): GatherEdge["loadConfig"] =>
   () => ({
     layers: [],
     error: null,
@@ -58,7 +60,7 @@ const loadsConfig =
     unused: [],
     config,
   });
-const NO_TMUX: DoctorEdge = {
+const NO_TMUX: GatherEdge = {
   ...healthyDaemonEdge(),
   ...healthyDataEdge(),
   ...noManagedSettings(),
@@ -99,7 +101,7 @@ function writeSettings(text: string, name = "claude"): string {
 const factsIn = async (
   conf: string,
   tmux: ClientHints["tmux"],
-  edge: DoctorEdge = NO_TMUX,
+  edge: GatherEdge = NO_TMUX,
   sessionPick: (key: string) => string | null = NO_SESSION,
   // The bars of a session in the project, under `conf` — so they read the
   // settings chain the run reads itself.
@@ -286,7 +288,7 @@ describe("gatherFacts: a settings chain per location", () => {
   // The facts of a run in the project under `conf`, whose bars are `sighted`.
   const withBars = async (
     conf: string,
-    ...sighted: (readonly [string, readonly FrameSighting[]])[]
+    ...sighted: Array<readonly [string, readonly FrameSighting[]]>
   ) => ({
     ...(await gatherFacts(
       NO_TMUX,
@@ -354,9 +356,9 @@ describe("gatherFacts: a settings chain per location", () => {
 });
 
 describe("gatherFacts", () => {
-  const sourcesOf = async (conf: string, edge: DoctorEdge = NO_TMUX) =>
+  const sourcesOf = async (conf: string, edge: GatherEdge = NO_TMUX) =>
     (await factsIn(conf, null, edge)).claudeSettings.origin.sources;
-  const lineOf = async (conf: string, edge: DoctorEdge = NO_TMUX) =>
+  const lineOf = async (conf: string, edge: GatherEdge = NO_TMUX) =>
     statusLineOf(await sourcesOf(conf, edge));
 
   test("reads the env block and the statusLine entry of settings.json", async () => {
@@ -467,7 +469,7 @@ describe("gatherFacts", () => {
 
   describe("the settings chain", () => {
     const managedDir = (): string => path.join(dir, "managed");
-    const MANAGED: () => DoctorEdge = () => ({
+    const MANAGED: () => GatherEdge = () => ({
       ...NO_TMUX,
       managedSettingsDir: managedDir(),
     });
@@ -741,7 +743,7 @@ describe("gatherFacts", () => {
     });
     expect((await factsIn(absent, null)).tmux).toEqual({ kind: "outside" });
     const asked: unknown[] = [];
-    const edge: DoctorEdge = {
+    const edge: GatherEdge = {
       ...healthyDaemonEdge(),
       ...healthyDataEdge(),
       ...noManagedSettings(),
