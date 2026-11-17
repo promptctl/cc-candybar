@@ -165,9 +165,18 @@ function undoBar(
   let current: DslConfig = rig.config;
   const ctx: VerbContext = {
     ...rig.ctx,
-    configFor: () => current,
-    reloadConfig: () => {
-      current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+    // The config as the host's next config turn hands it in: what the file
+    // holds now, or, while a hand edit leaves it broken, the last config that
+    // loaded, as the bar keeps its state.
+    configFor: () => {
+      const text = durable.text();
+      if (text === null) return current;
+      try {
+        current = parseAndValidate("<test>", text, ALLOWED);
+      } catch (e) {
+        if (!(e instanceof ConfigError)) throw e;
+      }
+      return current;
     },
   };
   // The whole URL through the verb table, exactly as the daemon's handleClick

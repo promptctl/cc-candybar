@@ -32,6 +32,8 @@
 //      file nor the bundled default declares cannot be pinned at all — the
 //      store refuses loudly rather than authoring a hollow declaration.
 
+import { explicitLayer } from "./helpers/disk-render-cache";
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import { buildRig } from "./helpers/rig";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs } from "./helpers/host";
@@ -434,15 +436,7 @@ describe("config-file-store: segment-palette placement", () => {
     expect(() =>
       writeValues(
         store(),
-        {
-          path: durable.configPath,
-          role: "user",
-          below: [],
-          above: [],
-          repo: null,
-          cwd: null,
-          locs: locations(durable.host),
-        },
+        explicitLayer(durable.configPath, locations(durable.host)),
         [["segments.ghost.palette", "nord"]],
       ),
     ).toThrow(
@@ -475,17 +469,16 @@ function makeCache(): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
-  const cache = new RenderCache(
+  const cache = new DiskRenderCache(
+    { locations: locations(durable.host), stateDir: stateDir(durable.host), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(durable.host),
-      locations: locations(durable.host),
+      home: durable.host.home,
       env: durable.host.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
-      watchers,
       source: SOURCES_NOTHING,
     },
     {
@@ -534,15 +527,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       await reloads.after(entry, () =>
         writeValues(
           store(),
-          {
-            path: durable.configPath,
-            role: "user",
-          below: [],
-          above: [],
-            repo: null,
-            cwd: null,
-            locs: locations(durable.host),
-          },
+          explicitLayer(durable.configPath, locations(durable.host)),
           [["segments.sidebar.palette", "nord"]],
         ),
       );
@@ -574,15 +559,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      {
-        path: durable.configPath,
-        role: "user",
-          below: [],
-          above: [],
-        repo: null,
-        cwd: null,
-        locs: locations(durable.host),
-      },
+      explicitLayer(durable.configPath, locations(durable.host)),
       [["segments.sidebar.palette", "gruvbox"]],
     );
 
@@ -621,15 +598,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      {
-        path: durable.configPath,
-        role: "user",
-          below: [],
-          above: [],
-        repo: null,
-        cwd: null,
-        locs: locations(durable.host),
-      },
+      explicitLayer(durable.configPath, locations(durable.host)),
       [["segments.directory.palette", "nord"]],
     );
 

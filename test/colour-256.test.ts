@@ -21,7 +21,8 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { listThemePalettes } from "@promptctl/rich-js";
 import { drawnChars, same, seams } from "./helpers/seams";
-import { NO_REPO, prepareConfig, renderEffective } from "../src/check";
+import { prepareConfig, renderEffective } from "../src/check";
+import { textSnapshot } from "./helpers/text-snapshot";
 import { listResolvablePaletteNames, type ColorCompatibility } from "../src/themes/policy";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -42,7 +43,7 @@ async function closedBars(): Promise<{
   dispose: () => void;
 }> {
   const at = instantOf(new Date());
-  const prepared = await prepareConfig(WORLD, [], NO_REPO, process.cwd(), [], at);
+  const prepared = await prepareConfig(WORLD, textSnapshot([], process.cwd()), process.cwd(), [], at);
   return {
     render: async (theme, colorCompatibility) =>
       drawnChars(

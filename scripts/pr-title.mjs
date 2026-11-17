@@ -24,25 +24,40 @@ import { analyzeCommits } from "@semantic-release/commit-analyzer";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ANALYZER = "@semantic-release/commit-analyzer";
 
-const releaseConfig = JSON.parse(readFileSync(resolve(ROOT, ".releaserc.json"), "utf8"));
-const entry = releaseConfig.plugins.find((p) => Array.isArray(p) && p[0] === ANALYZER);
-if (!entry) throw new Error(`pr-title: .releaserc.json configures no ${ANALYZER} entry with options`);
+const releaseConfig = JSON.parse(
+  readFileSync(resolve(ROOT, ".releaserc.json"), "utf8"),
+);
+const entry = releaseConfig.plugins.find(
+  (p) => Array.isArray(p) && p[0] === ANALYZER,
+);
+if (!entry)
+  throw new Error(
+    `pr-title: .releaserc.json configures no ${ANALYZER} entry with options`,
+  );
 const config = entry[1];
 
 // [LAW:one-source-of-truth] The preset module is the one commit-analyzer parses
 // with: named and resolved the way it names and resolves it, from its own install.
-const fromAnalyzer = createRequire(fileURLToPath(import.meta.resolve(ANALYZER)));
-const presetPath = fromAnalyzer.resolve(`conventional-changelog-${config.preset.toLowerCase()}`);
+const fromAnalyzer = createRequire(
+  fileURLToPath(import.meta.resolve(ANALYZER)),
+);
+const presetPath = fromAnalyzer.resolve(
+  `conventional-changelog-${config.preset.toLowerCase()}`,
+);
 const preset = await import(pathToFileURL(presetPath).href);
 const presetTypes = config.presetConfig?.types ?? preset.DEFAULT_COMMIT_TYPES;
 if (!presetTypes) {
-  throw new Error(`pr-title: preset "${config.preset}" exports no DEFAULT_COMMIT_TYPES and the config sets no presetConfig.types`);
+  throw new Error(
+    `pr-title: preset "${config.preset}" exports no DEFAULT_COMMIT_TYPES and the config sets no presetConfig.types`,
+  );
 }
 const deliberateConfig = {
   ...config,
   releaseRules: [
     ...(config.releaseRules ?? []),
-    ...presetTypes.filter((t) => t.hidden).map((t) => ({ type: t.type, release: "patch" })),
+    ...presetTypes
+      .filter((t) => t.hidden)
+      .map((t) => ({ type: t.type, release: "patch" })),
   ],
 };
 
@@ -70,7 +85,8 @@ if (verdict.release) {
   // The types offered are the ones this same check passes, never the preset's
   // whole list: `feature` and `revert` are in it and release nothing.
   const passing = [];
-  for (const { type } of presetTypes) if ((await judge(`${type}: x`)).ok) passing.push(type);
+  for (const { type } of presetTypes)
+    if ((await judge(`${type}: x`)).ok) passing.push(type);
   console.error(
     `pr-title: REFUSED ${JSON.stringify(title)}: commit-analyzer finds no release and no known type in it. ` +
       `A title is <type>(<scope>)?!?: <subject>, types: ${passing.join(", ")}`,

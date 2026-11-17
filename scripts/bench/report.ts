@@ -9,7 +9,13 @@
 import type { Distribution } from "./stats.js";
 import { distributionOf } from "./stats.js";
 import type { Environment } from "./environment.js";
-import { GROUPS, type Benchmark, type Facts, type Group, type Outcome } from "./types.js";
+import {
+  GROUPS,
+  type Benchmark,
+  type Facts,
+  type Group,
+  type Outcome,
+} from "./types.js";
 
 export interface Row {
   // `<benchmark id>/<series>`: one benchmark can time several quantities.
@@ -57,10 +63,7 @@ export interface Movement {
   readonly p90: number;
 }
 
-export function movementOf(
-  now: Distribution,
-  before: Distribution,
-): Movement {
+export function movementOf(now: Distribution, before: Distribution): Movement {
   return {
     p50: now.p50 / before.p50,
     p90: now.p90 / before.p90,
@@ -120,20 +123,35 @@ export function compare(
 }
 
 // What makes two runs unlike before any number is read.
-export function unlike(a: Environment, b: Environment, scales: [number, number]): string[] {
+export function unlike(
+  a: Environment,
+  b: Environment,
+  scales: [number, number],
+): string[] {
   const differences: Array<[string, unknown, unknown]> = [
     ["cpu", a.host.cpuModel, b.host.cpuModel],
     ["cores", a.host.cpus, b.host.cpus],
     ["arch", a.host.arch, b.host.arch],
     ["memory GiB", a.host.memoryGiB, b.host.memoryGiB],
-    ["native client built from this source", a.native?.builtFromThisSource ?? "no native client", b.native?.builtFromThisSource ?? "no native client"],
-    ["os", `${a.host.platform} ${a.host.release}`, `${b.host.platform} ${b.host.release}`],
+    [
+      "native client built from this source",
+      a.native?.builtFromThisSource ?? "no native client",
+      b.native?.builtFromThisSource ?? "no native client",
+    ],
+    [
+      "os",
+      `${a.host.platform} ${a.host.release}`,
+      `${b.host.platform} ${b.host.release}`,
+    ],
     ["node", a.node, b.node],
     ["scale", scales[0], scales[1]],
   ];
   return differences
     .filter(([, x, y]) => x !== y)
-    .map(([what, x, y]) => `${what}: ${String(x)} now, ${String(y)} in the baseline`);
+    .map(
+      ([what, x, y]) =>
+        `${what}: ${String(x)} now, ${String(y)} in the baseline`,
+    );
 }
 
 export function formatReport(report: Report, baseline: Report | null): string {
@@ -154,7 +172,10 @@ export function formatReport(report: Report, baseline: Report | null): string {
     "",
   );
   if (compared !== null && baseline !== null) {
-    for (const why of unlike(env, baseline.environment, [report.scale, baseline.scale])) {
+    for (const why of unlike(env, baseline.environment, [
+      report.scale,
+      baseline.scale,
+    ])) {
       out.push(`baseline differs — ${why}`);
     }
     if (compared.gone.length > 0) {
@@ -231,12 +252,16 @@ export function parseReport(text: string, source: string): Report {
     typeof environment.commit !== "object" ||
     environment.commit === null
   ) {
-    throw new Error(`${source} has an environment without a host, node or commit`);
+    throw new Error(
+      `${source} has an environment without a host, node or commit`,
+    );
   }
   for (const row of report.rows) {
     const d = (row as Partial<typeof row>).distribution;
     if (typeof row.id !== "string" || typeof d !== "object" || d === null) {
-      throw new Error(`${source} has a row with no id or no distribution: ${JSON.stringify(row).slice(0, 120)}`);
+      throw new Error(
+        `${source} has a row with no id or no distribution: ${JSON.stringify(row).slice(0, 120)}`,
+      );
     }
     // Throws on a row with no usable distribution.
     distributionOf([d.n, d.min, d.p50, d.p90, d.p99, d.max]);

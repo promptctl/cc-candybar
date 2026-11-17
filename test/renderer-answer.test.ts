@@ -9,6 +9,7 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import { requestSnapshot } from "./helpers/disk-render-cache";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 import type { DoctorAsk } from "../src/doctor/gather";
@@ -175,6 +176,7 @@ const configure = async (
       kind: "config",
       context,
       worldState: rig.served.collector.requested(context),
+      config: requestSnapshot(context),
     },
   });
   rig.served.collector.subscribed(output.subscriptions);
@@ -271,6 +273,7 @@ describe("a statusline request", () => {
         sessions: [mine, theirs].map((context) => ({
           context,
           worldState: rig.served.collector.requested(context),
+          config: requestSnapshot(context),
         })),
       },
     });
@@ -666,6 +669,7 @@ describe("the session's config, ahead of its request", () => {
     const answered = await answerStatusline(
       host,
       t.rig.served.collector,
+      requestSnapshot,
       systemTimekeeper,
       new AbortController().signal,
       () => {},
@@ -748,6 +752,7 @@ describe("two requests of one session at different keys", () => {
       answerStatusline(
         host,
         t.rig.served.collector,
+        requestSnapshot,
         systemTimekeeper,
         new AbortController().signal,
         () => {},
@@ -799,6 +804,8 @@ describe("a click", () => {
     session: { ok: true, id: SESSION },
     arrival: { via: "link", delivery: { kind: "cli" } },
     latest,
+    // The rig's session has its config from its request.
+    config: null,
   });
 
   test("answers with what the open views read once its handler has run", async () => {

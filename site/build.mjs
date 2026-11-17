@@ -22,8 +22,25 @@ for (const [mods, file] of [
   [["crypto"], "crypto.ts"],
   [["process"], "process.ts"],
   [["child_process"], "child_process.ts"],
-  [["net", "https", "http", "readline", "module", "stream/consumers", "v8", "worker_threads", "tty"], "unavailable.ts"],
-]) for (const m of mods) { alias[m] = shim(file); alias[`node:${m}`] = shim(file); }
+  [
+    [
+      "net",
+      "https",
+      "http",
+      "readline",
+      "module",
+      "stream/consumers",
+      "v8",
+      "worker_threads",
+      "tty",
+    ],
+    "unavailable.ts",
+  ],
+])
+  for (const m of mods) {
+    alias[m] = shim(file);
+    alias[`node:${m}`] = shim(file);
+  }
 alias.path = alias["node:path"] = "path-browserify";
 alias.events = alias["node:events"] = "events";
 alias.stream = alias["node:stream"] = "readable-stream";
@@ -35,13 +52,21 @@ alias.timers = alias["node:timers"] = shim("timers.ts");
 // `--port` picks the port (0 for any free one). Any other flag is refused.
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { serve: { type: "boolean", default: false }, port: { type: "string" } },
+  options: {
+    serve: { type: "boolean", default: false },
+    port: { type: "string" },
+  },
 });
 const serving = values.serve;
-if (positionals.length > 1) throw new Error(`one output directory at most, not ${positionals.length}: ${positionals.join(" ")}`);
-if (values.port !== undefined && !serving) throw new Error("--port is the dev server's: use it with --serve");
+if (positionals.length > 1)
+  throw new Error(
+    `one output directory at most, not ${positionals.length}: ${positionals.join(" ")}`,
+  );
+if (values.port !== undefined && !serving)
+  throw new Error("--port is the dev server's: use it with --serve");
 const portText = values.port ?? "8931";
-if (!/^\d{1,5}$/.test(portText) || Number(portText) > 65535) throw new Error(`--port must be a port number, not "${portText}"`);
+if (!/^\d{1,5}$/.test(portText) || Number(portText) > 65535)
+  throw new Error(`--port must be a port number, not "${portText}"`);
 const port = Number(portText);
 // The output directory: site/dist, or the one named as the first positional argument (the test builds into its own).
 const dist = path.resolve(positionals[0] ?? path.join(here, "dist"));
@@ -65,12 +90,22 @@ const ctx = await context({
   platform: "browser",
   target: "es2022",
   outdir: dist,
-  banner: { js: serving ? `new EventSource("/esbuild").addEventListener("change", () => location.reload());` : "" },
+  banner: {
+    js: serving
+      ? `new EventSource("/esbuild").addEventListener("change", () => location.reload());`
+      : "",
+  },
   alias,
   inject: [shim("globals.ts")],
-  define: { global: "globalThis", __SOURCE_DIGEST__: "undefined",
+  define: {
+    global: "globalThis",
+    __SOURCE_DIGEST__: "undefined",
     __LANDSCAPE__: JSON.stringify(landscape),
-    __PACKAGE_VERSION__: JSON.stringify(JSON.parse(readFileSync(path.join(here, "..", "package.json"), "utf8")).version) },
+    __PACKAGE_VERSION__: JSON.stringify(
+      JSON.parse(readFileSync(path.join(here, "..", "package.json"), "utf8"))
+        .version,
+    ),
+  },
   logLevel: "warning",
   metafile: true,
   sourcemap: true,
@@ -78,10 +113,17 @@ const ctx = await context({
 if (serving) {
   await ctx.watch();
   const served = await ctx.serve({ servedir: dist, host: "127.0.0.1", port });
-  console.log(`serving ${served.hosts.map((host) => `http://${host}:${served.port}/`).join(" ")}`);
+  console.log(
+    `serving ${served.hosts.map((host) => `http://${host}:${served.port}/`).join(" ")}`,
+  );
   await new Promise(() => {});
 }
 const result = await ctx.rebuild();
 await ctx.dispose();
-const bytes = Object.values(result.metafile.outputs).reduce((n, o) => n + o.bytes, 0);
-console.log(`built ${path.relative(process.cwd(), dist)} (${(bytes / 1e6).toFixed(1)} MB with maps)`);
+const bytes = Object.values(result.metafile.outputs).reduce(
+  (n, o) => n + o.bytes,
+  0,
+);
+console.log(
+  `built ${path.relative(process.cwd(), dist)} (${(bytes / 1e6).toFixed(1)} MB with maps)`,
+);

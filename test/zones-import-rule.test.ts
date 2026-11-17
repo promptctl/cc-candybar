@@ -137,6 +137,38 @@ const ALLOWED = {
   },
 };
 
+// [LAW:effects-at-boundaries] The renderer opens no file, so fs is the host's.
+const FS = `import fs from "node:fs";\nexport const f = fs;\n`;
+// A module still holding its reads, until its ticket hands them in.
+const HELD = "src/utils/cache.ts";
+
+const FS_REFUSED = {
+  rendererFs: { file: IN_RENDERER, code: FS },
+  rendererFsPromises: {
+    file: IN_RENDERER,
+    code: `import { readFile } from "fs/promises";\nexport { readFile };\n`,
+  },
+  startFs: { file: IN_START, code: FS },
+  sharedFs: { file: IN_SHARED, code: FS },
+  foundationsFs: { file: IN_FOUNDATIONS, code: FS },
+  rendererFsRequire: {
+    file: IN_RENDERER,
+    code: `export const fs = require("node:fs");\n`,
+  },
+  // An exception whose module reads nothing any more is deleted.
+  heldStale: { file: HELD, code: `export const x = 1;\n` },
+};
+
+const FS_ALLOWED = {
+  restFs: { file: IN_REST, code: FS },
+  heldFs: { file: HELD, code: FS },
+  // A type names no read.
+  rendererFsType: {
+    file: IN_RENDERER,
+    code: `import type { Stats } from "node:fs";\nexport type S = Stats;\n`,
+  },
+};
+
 describe("the zones import rule", () => {
   let found: Record<"root" | "src" | "link", Record<string, string[]>>;
 
@@ -151,7 +183,12 @@ describe("the zones import rule", () => {
             SCRIPT,
             root,
             cwd,
-            JSON.stringify({ ...REFUSED, ...ALLOWED }),
+            JSON.stringify({
+              ...REFUSED,
+              ...ALLOWED,
+              ...FS_REFUSED,
+              ...FS_ALLOWED,
+            }),
           ],
           { cwd, encoding: "utf8" },
         ),
@@ -187,7 +224,16 @@ describe("the zones import rule", () => {
     },
   );
 
-  test.each(each(ALLOWED))(
+  test.each(each(FS_REFUSED))(
+    "fs where the renderer runs (%s) fails lint from %s",
+    (name, at) => {
+      expect(found[at][name]).toEqual([
+        expect.stringContaining("[LAW:effects-at-boundaries]"),
+      ]);
+    },
+  );
+
+  test.each(each({ ...ALLOWED, ...FS_ALLOWED }))(
     "an import the zones allow (%s) passes from %s",
     (name, at) => {
       expect(found[at][name]).toEqual([]);

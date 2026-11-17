@@ -41,9 +41,19 @@ const proc = Object.assign(emitter, {
     },
     { bigint: () => BigInt(Math.floor(performance.now() * 1e6)) },
   ),
-  memoryUsage: Object.assign(() => ({ rss: 64e6, heapTotal: 32e6, heapUsed: 24e6, external: 0, arrayBuffers: 0 }), { rss: () => 64e6 }),
+  memoryUsage: Object.assign(
+    () => ({
+      rss: 64e6,
+      heapTotal: 32e6,
+      heapUsed: 24e6,
+      external: 0,
+      arrayBuffers: 0,
+    }),
+    { rss: () => 64e6 },
+  ),
   cpuUsage: () => ({ user: 0, system: 0 }),
-  nextTick: (fn: (...a: unknown[]) => void, ...args: unknown[]) => queueMicrotask(() => fn(...args)),
+  nextTick: (fn: (...a: unknown[]) => void, ...args: unknown[]) =>
+    queueMicrotask(() => fn(...args)),
   emitWarning: (w: unknown) => console.warn(w),
   kill: (pid: number, signal?: string | number) => {
     if (signal === 0 && pid === 4242) return true;
@@ -53,9 +63,26 @@ const proc = Object.assign(emitter, {
   exit: (code?: number) => {
     throw new Error(`process.exit(${code ?? 0}) in the page`);
   },
-  stdout: { write: (s: string) => (console.log(s), true), isTTY: false, columns: 120 },
+  stdout: {
+    write: (s: string) => (console.log(s), true),
+    isTTY: false,
+    columns: 120,
+  },
   stderr: { write: (s: string) => (console.error(s), true), isTTY: false },
 });
 export default proc;
-export const { env, argv, platform, pid, cwd, hrtime, nextTick, memoryUsage, kill, exit, stdout, stderr } = proc;
+export const {
+  env,
+  argv,
+  platform,
+  pid,
+  cwd,
+  hrtime,
+  nextTick,
+  memoryUsage,
+  kill,
+  exit,
+  stdout,
+  stderr,
+} = proc;
 export const on = proc.on.bind(proc);

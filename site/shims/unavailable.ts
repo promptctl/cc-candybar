@@ -13,5 +13,21 @@ export const createRequire = refuse("module.createRequire");
 export const json = refuse("stream/consumers.json");
 export const text = refuse("stream/consumers.text");
 export const writeHeapSnapshot = refuse("v8.writeHeapSnapshot");
-export const getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-export default { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text, writeHeapSnapshot, getHeapStatistics };
+export const getHeapStatistics = () => ({
+  used_heap_size: 0,
+  total_heap_size: 0,
+  heap_size_limit: 0,
+});
+export default {
+  connect,
+  createServer,
+  createConnection,
+  get,
+  request,
+  createInterface,
+  createRequire,
+  json,
+  text,
+  writeHeapSnapshot,
+  getHeapStatistics,
+};

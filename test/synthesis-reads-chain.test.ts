@@ -8,7 +8,8 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { homeLayer, loadConfigChain } from "../src/config/dsl-loader";
+import { loadConfigChain } from "../src/config/dsl-loader";
+import { textSnapshot } from "./helpers/text-snapshot";
 import { placementIds } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
 import { rootNode } from "../src/config/root";
@@ -31,11 +32,16 @@ describe("unresolvedReads over the loader's own chain", () => {
     }
     const warnings: string[] = [];
     const loaded = loadConfigChain(
-      locs(),
-      layers.map((name) => homeLayer(join(tmp, name))),
+      {
+        snapshot: textSnapshot(
+          layers.map((name) => [join(tmp, name), files[name]!]),
+          tmp,
+          locs().home,
+        ),
+        home: locs().home,
+      },
       DEFAULT_DSL_CONFIG,
       { warned: (ws) => warnings.push(...ws) },
-      { repo: null, cwd: null },
     );
     return { ...loaded, warnings };
   };

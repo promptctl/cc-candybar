@@ -48,7 +48,7 @@ import { chmodSync } from "node:fs";
 import { dirname } from "node:path";
 import { linkClick } from "./helpers/click";
 import { testVerbContext,
-  verbContextWith, effectsOf, recordRender } from "./helpers/click";
+  verbContextWith, effectsOf, recordRender, landsConfigOf } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf, type Instant } from "../src/utils/instant";
@@ -140,7 +140,8 @@ function rig(
   const ctx: VerbContext = verbContextWith(testVerbContext(sessionState, durable?.historyFor(sessionState), undefined, durable?.host), {
     log: (_level, msg) => logs.push(msg),
     configFor: () => entry.config,
-    reloadConfig: () => {
+});
+  landsConfigOf(ctx, () => {
       reloads.push({
         text: durable!.text()!,
         picks: Object.fromEntries(
@@ -150,8 +151,7 @@ function rig(
       const next = load(durable!.text()!);
       entry.registry.dispose();
       entry = next;
-    }
-});
+  });
   return {
     get config() {
       return entry.config;

@@ -3,11 +3,8 @@
 // what a click's changes do on their way to the host drives a click instead
 // (test/helpers/click.ts).
 
-import { rmSync, writeFileSync } from "node:fs";
-import {
-  readConfigText,
-  type EditStore,
-} from "../../src/renderer/config-file-store";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import type { EditStore } from "../../src/renderer/config-file-store";
 import type {
   ConfigFiles,
   Journal,
@@ -15,6 +12,16 @@ import type {
 } from "../../src/renderer/settings-history";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { Step } from "../../src/renderer-interface/history-storage";
+
+// A file's text on disk, or null when there is none.
+export function readConfigText(file: string): string | null {
+  try {
+    return readFileSync(file, "utf-8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
+  }
+}
 
 // A history's files with no click around it: read from and written to the
 // disk at once, with no home to prove a step's text against.

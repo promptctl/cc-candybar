@@ -19,6 +19,7 @@ import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
 import type { Launcher } from "../proc/launcher";
+import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
@@ -59,4 +60,7 @@ export interface DaemonParts {
   // [LAW:single-enforcer] The host's one reader of every session's world
   // (src/daemon/collector.ts).
   readonly collector: Collector;
+  // [LAW:single-enforcer] The one owner of every session's config snapshot
+  // (src/daemon/config-discovery/config-discovery.ts).
+  readonly configDiscovery: ConfigDiscovery;
 }

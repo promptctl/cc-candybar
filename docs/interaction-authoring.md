@@ -624,8 +624,8 @@ resolved config value — the same seam `{{ .theme.effective }}` rides for
 `palette` — so each trigger's label is always the value that actually
 rendered, never a restated guess. A colour-depth or padding change takes effect
 on the very next render, live, with no daemon restart: `persist` edits the
-config file, and the daemon reloads it through the same watcher a hand edit
-trips.
+config file, and the daemon loads what it wrote before the click is done, as
+it loads a hand edit once its watch hears it.
 
 For `autoWrap` and `padding` you can offer the session-scoped version of the
 same control by swapping `persist:` for `set:`. Nothing else changes — same

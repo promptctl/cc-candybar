@@ -44,9 +44,15 @@ export const lit = overCode((code, regex) => {
   const m = code.match(regex);
   if (!m) return null;
   const decoded = m[1]
-    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) =>
+      String.fromCodePoint(parseInt(h, 16)),
+    )
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h) =>
+      String.fromCodePoint(parseInt(h, 16)),
+    )
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) =>
+      String.fromCodePoint(parseInt(h, 16)),
+    );
   return JSON.stringify(decoded);
 });
 
@@ -68,7 +74,9 @@ export const sgrOfHex = overCode((code, regex, layer) => {
 export const memberSet = overCode((code, blockRegex, memberRegex) => {
   const block = code.match(blockRegex);
   if (!block) return null;
-  const members = [...block[0].matchAll(memberRegex)].map((m) => m.slice(1).join("="));
+  const members = [...block[0].matchAll(memberRegex)].map((m) =>
+    m.slice(1).join("="),
+  );
   if (members.length === 0) return null;
   return [...new Set(members)].sort().join(", ");
 });
@@ -129,7 +137,10 @@ export function within(set, other) {
 // for, or an inverted pair (a typo that covers nothing), makes it unreadable
 // (null) rather than a set short of what it spells.
 const RANGE_NUM = String.raw`(0x[0-9a-fA-F_]+|\d[\d_]*)`;
-const RANGE_PAIR = new RegExp(String.raw`[[(]\s*${RANGE_NUM}\s*,\s*${RANGE_NUM}\s*[\])]`, "g");
+const RANGE_PAIR = new RegExp(
+  String.raw`[[(]\s*${RANGE_NUM}\s*,\s*${RANGE_NUM}\s*[\])]`,
+  "g",
+);
 export function rangeSpans(tableBody) {
   const body = tableBody.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
   if (body.replace(RANGE_PAIR, "").replace(/[\s,]/g, "") !== "") return null;

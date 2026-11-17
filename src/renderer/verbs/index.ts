@@ -18,18 +18,17 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import {
-  type Locations,
-  writeLayer,
-  writeLayers,
-  type WriteLayer,
-} from "../../config/loader/discovery";
+import type { ChainSource } from "../../config/dsl-loader";
+import type { Layer } from "../../config/config-snapshot";
 import {
   LAYER_ROLES,
   layerRoleOf,
   type LayerRole,
 } from "../../config/layer-role";
-import type { SessionStateRW } from "../../renderer-interface/session-state";
+import type {
+  SessionStateReader,
+  SessionStateRW,
+} from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
 import { stateKeySeed, configKeySeed } from "./key-seeds";
@@ -56,6 +55,8 @@ import {
   deletePreset as deletePresetFromFile,
   deleteValues,
   proveLoads,
+  pathOf,
+  type WriteLayer,
   readValue,
   writePreset,
   writeDrafts,
@@ -140,7 +141,7 @@ import type {
   EffectId,
   EffectOutcome,
 } from "../../renderer-interface/interface";
-import { repoAnswerFields, repoConfigs } from "../../config/repo-configs";
+import { repoAnswerFields } from "../repo-question.js";
 import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   CheckedRenderRequest,
@@ -188,13 +189,10 @@ export interface DaemonContext {
   // turn's effects, which the host performs once its changes have landed
   // (src/renderer/acts.ts).
   readonly acts: Pick<ActsOnTheirWay, "ask">;
-  // The state directory whose answers book a click reads and records in.
-  readonly stateDir: string;
-  // Where the user's config and installed plugins live: a click's write
-  // resolves its home under them.
-  readonly locations: Locations;
+  // The user's home: where a `run` with no directory of its own starts.
+  readonly home: string;
   // [LAW:single-enforcer] Each session's doctor run (src/renderer/doctor.ts),
-  // and the config load a run judges: the session's cache entry's, reloaded.
+  // and the config load a run judges: the session's cache entry's.
   readonly doctorRuns: DoctorRuns;
   readonly doctorLoad: (origin: RenderOrigin) => ConfigLoad;
   // The doctor's stores, which this daemon files (src/doctor/ports.ts).
@@ -214,10 +212,13 @@ export interface DaemonContext {
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
   readonly configFor: (origin: RenderOrigin) => DslConfig;
-  // Reload that config from disk now, so the next render reads what a click
-  // just wrote rather than waiting on the file watcher: in the turn a click's
-  // changes land (`changeLanded`).
-  readonly reloadConfig: (origin: RenderOrigin) => void;
+  // [LAW:one-source-of-truth] What that config was loaded from: the snapshot
+  // the host's discovery handed in for the origin, which every write is
+  // proved against, and the home its plugins' data paths expand under.
+  readonly sourceFor: (origin: RenderOrigin) => ChainSource;
+  // The chain a session's newest config turn handed in, which its click
+  // reads its layers from; null while none has arrived.
+  readonly chainOf: (sessionId: SessionId) => readonly Layer[] | null;
   // [LAW:single-enforcer] Where every click's config writes go: changes its
   // turn returns, and its consequence held until they land
   // (src/renderer/config-writes.ts).
@@ -648,17 +649,25 @@ function recordedOrigin(
   ctx: DaemonContext,
   sid: SessionId,
 ): RenderOrigin | null {
-  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  return recordedOriginOf(ctx.sessionState, sid);
+}
+
+// [LAW:single-enforcer] The one read of a session's recorded origin: a
+// click's verb reads it, and the renderer says it to the host as it starts.
+export function recordedOriginOf(
+  sessionState: SessionStateReader,
+  sid: SessionId,
+): RenderOrigin | null {
+  const raw = sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
 }
 
 // [LAW:single-enforcer] How a click's config changes landed, in the turn of
-// their last `effect-done`. [LAW:no-ambient-temporal-coupling] Landed, a
-// change to the file its session renders from reloads it, and then the click's
-// consequence applies, in the same turn, so no frame draws the reloaded file
-// without what the click did beside it, nor that without the file. A change to
-// another file rebuilds nothing here (a reload restarts every source) and
-// reaches the sessions that render it through the fs watcher.
+// their last `effect-done`. [LAW:no-ambient-temporal-coupling] Landed, the
+// host has already handed in the config turns of every session whose snapshot
+// the changes moved, in the click's own place in the mailbox, and the click's
+// consequence applies in this turn, so no frame draws the reloaded file
+// without what the click did beside it, nor that without the file.
 // [LAW:no-silent-failure] Not landed, the click's consequence is dropped: its
 // drafts, picks and history stay as they were, and the reason shows on its
 // session's ⚠. No click answers this turn, so whatever fails in it shows on
@@ -677,7 +686,7 @@ export function changeDone(
 
 function changeLanded(
   ctx: DaemonContext,
-  { session, files, answered, consequence, outcome }: Landed,
+  { session, consequence, outcome }: Landed,
   effects: Effect[],
 ): void {
   const failed: string[] = [];
@@ -688,21 +697,8 @@ function changeLanded(
       failed.push(failureOf(e).message);
     }
   };
-  if (outcome.kind === "ok") {
-    // A session with no recorded render has no cache entry to draw stale. An
-    // answer to the trust book can change which config it renders, so its
-    // session reloads before its lanes are measured.
-    step(() => {
-      const origin = recordedOrigin(ctx, session);
-      if (
-        origin !== null &&
-        (answered ||
-          originLayers(ctx, origin).some((l) => files.includes(l.path)))
-      )
-        ctx.reloadConfig(origin);
-    });
-    step(() => consequence(effects));
-  } else if (outcome.kind === "closing") return;
+  if (outcome.kind === "ok") step(() => consequence(effects));
+  else if (outcome.kind === "closing") return;
   else failed.push(outcome.reason);
   if (failed.length === 0) return;
   const reason = failed.join("\n");
@@ -725,7 +721,7 @@ function proveLoadsAsLayer(
   const layer =
     origin === null
       ? undefined
-      : originLayers(ctx, origin).find((l) => l.path === file);
+      : originLayers(ctx, origin).find((l) => pathOf(l) === file);
   if (layer === undefined)
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from — its step is not taken`,
@@ -770,44 +766,34 @@ function nestOf(ctx: DaemonContext, sid: SessionId): DisclosureNest {
 }
 
 // [LAW:single-enforcer] The layer a config write names in the session's
-// chain, resolved as the render resolves it under the same answers: a click's
-// chain leaves out what the bar's leaves out. A layer the chain has no place
-// for is refused, never written somewhere else.
+// chain, as the snapshot its bar was loaded from holds it: a click's chain
+// leaves out what the bar's leaves out. A layer the chain has no place for is
+// refused, never written somewhere else.
 function originLayer(
-  ctx: Pick<ClickContext, "stateDir" | "locations">,
+  ctx: Pick<ClickContext, "sourceFor">,
   origin: RenderOrigin,
   role: LayerRole,
 ): WriteLayer {
-  const write = writeLayer(
-    ctx.locations,
-    repoConfigs(ctx.stateDir).read(),
-    {
-      projectDir: origin.projectDir,
-      configFile: origin.target.path,
-      cwd: origin.cwd,
-    },
-    role,
-  );
-  if (write.kind === "refused")
-    throw new BadVerbArgs(`the ${role} layer is not writable: ${write.why}`);
-  return write;
+  const source = ctx.sourceFor(origin);
+  if (!source.snapshot.chain.some((l) => l.role === role))
+    throw new BadVerbArgs(
+      `the ${role} layer is not writable: ${
+        origin.target.path !== undefined
+          ? `${origin.target.path} is the session's one config layer (it was named explicitly), so there is no ${role} layer to write`
+          : `the ${role} layer is the project's, and this session has no approved project`
+      }`,
+    );
+  return { role, source };
 }
 
-// Every config layer this session's chain can write: what a landing in any
-// of them reloads, and what a history step may have written.
+// Every config layer this session's chain can write: what a history step may
+// have written.
 function originLayers(
-  ctx: Pick<ClickContext, "stateDir" | "locations">,
+  ctx: Pick<ClickContext, "sourceFor">,
   origin: RenderOrigin,
 ): readonly WriteLayer[] {
-  const writes = writeLayers(ctx.locations, repoConfigs(ctx.stateDir).read(), {
-    projectDir: origin.projectDir,
-    configFile: origin.target.path,
-    cwd: origin.cwd,
-  });
-  return LAYER_ROLES.flatMap((role) => {
-    const write = writes[role];
-    return write.kind === "layer" ? [write] : [];
-  });
+  const source = ctx.sourceFor(origin);
+  return source.snapshot.chain.map(({ role }) => ({ role, source }));
 }
 
 // [LAW:parse-dont-validate] A config write's wire: the session, the layer of
@@ -868,7 +854,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
   ctx.log(
     "info",
-    `set-config: ${landing.key}=${result.value} → ${into.path} (session=${sid})`,
+    `set-config: ${landing.key}=${result.value} → ${pathOf(into)} (session=${sid})`,
   );
 };
 
@@ -910,7 +896,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     key,
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(store.read(into.path), landing.key);
+  const stored = readValue(store.read(pathOf(into)), landing.key);
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
@@ -926,7 +912,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
   ctx.log(
     "info",
-    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${into.path} (session=${sid})`,
+    `step-config: ${landing.key} ${current}→${result.value} (by ${by}) → ${pathOf(into)} (session=${sid})`,
   );
 };
 
@@ -977,7 +963,7 @@ const save: VerbHandler = (value, ctx) => {
     `save: ${[
       ...pairs.map(([k, v]) => `${k}=${v}`),
       ...placements.map(placementLog),
-    ].join(" ")} → ${into.path} (session=${sid})`,
+    ].join(" ")} → ${pathOf(into)} (session=${sid})`,
   );
 };
 
@@ -1039,7 +1025,7 @@ const savePreset: VerbHandler = (value, ctx) => {
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
   ctx.log(
     "info",
-    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${into.path} (session=${sid})`,
+    `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} → ${pathOf(into)} (session=${sid})`,
   );
 };
 
@@ -1084,7 +1070,7 @@ const saveThemeDefault: VerbHandler = (value, ctx) => {
   for (const key of released) ctx.sessionState.clear(sid, key);
   ctx.log(
     "info",
-    `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${into.path} (session=${sid})`,
+    `save-theme-default: ${save.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save.look[f]}`).join(" ")} → ${pathOf(into)} (session=${sid})`,
   );
 };
 
@@ -1107,7 +1093,7 @@ const deletePreset: VerbHandler = (value, ctx) => {
   deletePresetFromFile(editStore(ctx, sid), into, name);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
-  ctx.log("info", `delete-preset: ${name} ← ${into.path} (session=${sid})`);
+  ctx.log("info", `delete-preset: ${name} ← ${pathOf(into)} (session=${sid})`);
 };
 
 // [LAW:one-source-of-truth] `reset`: return each key to its bundled default
@@ -1140,7 +1126,7 @@ const resetConfig: VerbHandler = (value, ctx) => {
   for (const k of sessionKeys) ctx.sessionState.clear(sid, k);
   ctx.log(
     "info",
-    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${into.path} (session=${sid})`,
+    `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} ← ${pathOf(into)} (session=${sid})`,
   );
 };
 
@@ -1239,7 +1225,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   // the one fact of the edit the op token does not already carry.
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${pathOf(into)} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
   );
 };
 
@@ -1556,7 +1542,7 @@ function runOf(
       ...drawn.env,
     },
     // The bundled config's runs go in the user's home.
-    cwd: decl.cwd ?? ctx.locations.home,
+    cwd: decl.cwd ?? ctx.home,
     // The loader proved every name a declared source of this config, whose
     // state holds its folder.
     refreshes: decl.refreshes.map((name) => ({
@@ -1751,7 +1737,7 @@ function journaled<C extends DaemonContext>(
   effects: Effect[],
   handler: (ctx: Journaled<C>) => void,
 ): void {
-  ctx.configWrites.begin(verb);
+  ctx.configWrites.begin(verb, sid === null ? null : ctx.chainOf(sid));
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),

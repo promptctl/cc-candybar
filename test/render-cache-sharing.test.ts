@@ -1,3 +1,4 @@
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
@@ -80,17 +81,16 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
-  const cache = new RenderCache(
+  const cache = new DiskRenderCache(
+    { locations: locs(), stateDir: stateDir(HOST), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
-      locations: locs(),
+      home: locs().home,
       env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
-      watchers,
       source: SOURCES_NOTHING,
       log: (_level, line) => lines.push(line),
     },
@@ -245,7 +245,7 @@ describe("entries share a compile exactly when their configs compile alike", () 
       lines.filter((l) => l.startsWith("render-cache compile built ")).length;
     expect(built()).toBe(1);
     fs.writeFileSync(cfg, carouselConfig("other", "beta"));
-    for (const d of dirs) cache.reload(d, d, cfg, { kind: "write" });
+    for (const d of dirs) cache.reload();
     expect(built()).toBe(2);
     const states = dirs.map((d) => cache.getOrCreate(d, d, cfg).state);
     expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
@@ -349,7 +349,7 @@ describe("the cache is bounded by bytes", () => {
     cache.getOrCreate(b, b, cfgB);
     expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
     fs.writeFileSync(cfgB, carouselConfig("other", "beta"));
-    cache.reload(b, b, cfgB, { kind: "write" });
+    cache.reload();
     // `b` moved onto a compile of its own; `a`, least recently used, left.
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
     expect(cache.stats.accountedBytes).toBeLessThanOrEqual(
@@ -601,19 +601,16 @@ describe("a steady stream of renders", () => {
   // a rebuild on every render, disposed as soon as it is replaced, holds the
   // counts flat and still shows here as a line.
   test("builds and retires nothing: the counts hold and nothing is logged", async () => {
-    const { cache, lines, watchers } = makeCache(64 * COMPILE_BYTES);
-    // A catch-up reloads one entry a turn, so `due` is the rest of a reload a
-    // render left behind.
+    const { cache, lines } = makeCache(64 * COMPILE_BYTES);
     const counts = () => {
-      const { size, compiles, views, due } = cache.stats;
-      return { size, compiles, views, due, watches: watchers.size() };
+      const { size, compiles, views } = cache.stats;
+      return { size, compiles, views };
     };
     await round(cache);
     const first = counts();
     expect(first).toMatchObject({
       size: DIRS.length,
       views: DIRS.length * SESSIONS_PER_DIR,
-      due: 0,
     });
     const logged = lines.length;
     await round(cache);

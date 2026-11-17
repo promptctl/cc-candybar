@@ -24,6 +24,7 @@ import {
   viewerLink,
 } from "../../helpers/diagnostics-viewer";
 import { effectsOf } from "../../helpers/click";
+import { until } from "../../helpers/until";
 import { renderLines } from "../../helpers/daemon-log";
 import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
 import { DOOR_CLOSE_GLYPH, DOOR_GLYPH } from "../../../src/config/disclosure";
@@ -81,6 +82,30 @@ describe("a config that cannot be drawn as written", () => {
     expect(indicatorOf(await render(daemon, sid, projectDir, {}, a))).toBe(
       "⚠ 1",
     );
+  });
+
+  // The host's watch hears a file edited by hand and hands the renderer its
+  // new snapshot, so the next bar draws it with no click between.
+  test("a hand edit fixing the config redraws the bar from the file, with no click", async () => {
+    const sid = "broken-hand-edit";
+    const a = args("hand-edit", `{ root: { h: ["mine"] `);
+    expect(indicatorOf(await render(daemon, sid, projectDir, {}, a))).toBe(
+      "⚠ 1",
+    );
+    writeFileSync(
+      a[2]!,
+      `{ segments: { mine: { template: "MENDED" } }, root: { h: ["mine"] } }`,
+    );
+    await until(
+      async () =>
+        textOf(await render(daemon, sid, projectDir, {}, a)).includes(
+          "MENDED",
+        ),
+      "the bar drawn from the mended file",
+    );
+    expect(
+      indicatorOf(await render(daemon, sid, projectDir, {}, a)),
+    ).toBeNull();
   });
 
   // The viewer holds the message it was opened on, not a position: a message

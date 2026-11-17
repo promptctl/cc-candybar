@@ -113,6 +113,8 @@ export function applyFix(
             machine: facts,
             install: facts.install,
           }),
+        // A settings fix names a file, never a layer.
+        { path: () => null, repoDir: () => null },
       );
       if (landed.kind !== "ok")
         return { kind: "failed", reason: landed.reason };

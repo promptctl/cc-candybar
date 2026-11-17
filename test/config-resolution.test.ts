@@ -1,4 +1,4 @@
-// [LAW:single-enforcer] Tests for dsl-loader's path resolution and
+// [LAW:single-enforcer] Tests for config discovery's path resolution and
 // collision detection — the single enumerator (dslConfigCandidatePaths)
 // feeds the resolver, the watcher, and the collision detector. Behavior
 // under test:
@@ -6,7 +6,7 @@
 //   - .json5 wins over .json at the same location (documented > legacy)
 //   - every location's file is a layer: XDG < cwd < project
 //   - detectConfigCollisions surfaces same-location duplicates
-//   - writeLayer names a role's file and the chain's layers either side of it
+//   - discovery hands a session each layer it may write, written or not
 
 import {
   chmodSync,
@@ -17,19 +17,24 @@ import {
   mkdirSync,
 } from "node:fs";
 import { locations } from "../src/daemon/paths";
-import { type Locations } from "../src/config/loader/discovery";
+import {
+  discover,
+  repoProject,
+  resolveDslConfig,
+  configResolutionNotice,
+  dslConfigCandidatePaths,
+  detectConfigCollisions,
+  type ConfigQuery,
+  type Locations,
+} from "../src/daemon/config-discovery/discovery";
+import {
+  recordAnswer,
+  repoConfigs,
+} from "../src/daemon/config-discovery/repo-configs";
 import { hostOf } from "./helpers/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  resolveDslConfig,
-  configResolutionNotice,
-  writeLayer,
-  writableRoles,
-  dslConfigCandidatePaths,
-  detectConfigCollisions,
-} from "../src/config/dsl-loader";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 
 // The answers with each of `dirs` approved: these cases are about how layers
@@ -68,6 +73,28 @@ function mkdir(): { dir: string; cleanup: () => void } {
 function isolated(xdgHome: string, extra: NodeJS.ProcessEnv = {}): Locations {
   const { XDG_CONFIG_HOME: _x, CC_CANDYBAR_CONFIG: _c, ...rest } = process.env;
   return locations(hostOf({ ...rest, XDG_CONFIG_HOME: xdgHome, ...extra }));
+}
+
+// The chain discovery hands a session under `answers`: each layer it may
+// write, its file, and whether that file is written yet.
+function chainOf(
+  locs: Locations,
+  answers: RepoAnswers,
+  query: ConfigQuery & { readonly cwd: string },
+) {
+  const state = mkdtempSync(join(tmpdir(), "cc-candybar-state-"));
+  try {
+    if (answers.kind === "ok")
+      for (const [dir, answer] of Object.entries(answers.value)) {
+        const filed = recordAnswer(repoConfigs(state), dir, answer);
+        if (filed.kind === "failed") throw new Error(filed.reason);
+      }
+    return discover(query, { locations: locs, stateDir: state }).snapshot.chain.map(
+      ({ role, path, content }) => ({ role, path, written: content.kind !== "absent" }),
+    );
+  } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
 }
 
 const VALID_CFG = JSON.stringify({
@@ -166,6 +193,7 @@ describe("resolveDslConfig", () => {
       const resolved = resolveDslConfig(L, approving(), {});
       expect(resolved).toEqual({
         kind: "chain",
+        project: null,
         layers: [{ path: jsonPath, role: "user" }],
         home: jsonPath,
         unchecked: [],
@@ -190,6 +218,7 @@ describe("resolveDslConfig", () => {
       // Documented format outranks the legacy compatibility tail.
       expect(resolved).toEqual({
         kind: "chain",
+        project: null,
         layers: [{ path: json5Path, role: "user" }],
         home: json5Path,
         unchecked: [],
@@ -222,6 +251,7 @@ describe("resolveDslConfig", () => {
       const repo = proj;
       expect(resolved).toEqual({
         kind: "chain",
+        project: repoProject(proj),
         layers: [
           { path: xdgJson5, role: "user" },
           { path: projJson, role: "project" },
@@ -235,50 +265,22 @@ describe("resolveDslConfig", () => {
         },
       });
       const query = { projectDir: proj, cwd: dir };
-      expect(writeLayer(L, approving(proj), query, "user")).toEqual({
-        kind: "layer",
-        path: xdgJson5,
-        role: "user",
-        below: [],
-        above: [
-          { path: projJson, role: "project" },
-          { path: join(proj, ".cc-candybar.local.json5"), role: "local" },
-        ],
-        repo,
-        cwd: dir,
-        locs: L,
-      });
-      // The project's own file, under the user's; and the local file a first
-      // write there creates, beside it, over both.
-      expect(writeLayer(L, approving(proj), query, "project")).toEqual({
-        kind: "layer",
-        path: projJson,
-        role: "project",
-        below: [{ path: xdgJson5, role: "user" }],
-        above: [{ path: join(proj, ".cc-candybar.local.json5"), role: "local" }],
-        repo,
-        cwd: dir,
-        locs: L,
-      });
-      expect(writeLayer(L, approving(proj), query, "local")).toMatchObject({
-        kind: "layer",
-        path: join(proj, ".cc-candybar.local.json5"),
-        below: [
-          { path: xdgJson5, role: "user" },
-          { path: projJson, role: "project" },
-        ],
-        above: [],
-      });
-      expect(writableRoles(resolveDslConfig(L, approving(proj), query), query)).toEqual(
-        ["user", "project", "local"],
-      );
+      // The user's file at the bottom, the project's over it, and the local
+      // file a first write there creates, beside it, over both.
+      expect(chainOf(L, approving(proj), query)).toEqual([
+        { role: "user", path: xdgJson5, written: true },
+        { role: "project", path: projJson, written: true },
+        {
+          role: "local",
+          path: join(proj, ".cc-candybar.local.json5"),
+          written: false,
+        },
+      ]);
       // Unapproved, the project's layers are not the session's to write.
       const unanswered = { kind: "ok", value: {} } as const;
-      expect(writeLayer(L, unanswered, query, "project")).toEqual({
-        kind: "refused",
-        why: "the project layer is the project's, and this session has no approved project",
-      });
-      expect(writableRoles(resolveDslConfig(L, unanswered, query), query)).toEqual(["user"]);
+      expect(chainOf(L, unanswered, query)).toEqual([
+        { role: "user", path: xdgJson5, written: true },
+      ]);
     } finally {
       cleanup();
     }
@@ -293,6 +295,7 @@ describe("resolveDslConfig", () => {
       const home = join(dir, "cc-candybar", "config.json5");
       expect(resolved).toEqual({
         kind: "chain",
+        project: null,
         layers: [],
         home,
         unchecked: [],
@@ -300,16 +303,9 @@ describe("resolveDslConfig", () => {
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
-      expect(writeLayer(L, approving(), { cwd: dir }, "user")).toEqual({
-        kind: "layer",
-        path: home,
-        role: "user",
-        below: [],
-        above: [],
-        repo: null,
-        cwd: dir,
-        locs: L,
-      });
+      expect(chainOf(L, approving(), { cwd: dir })).toEqual([
+        { role: "user", path: home, written: false },
+      ]);
     } finally {
       cleanup();
     }
@@ -328,24 +324,17 @@ describe("resolveDslConfig", () => {
         configFile: named,
       })).toEqual({
         kind: "chain",
+        project: repoProject(dir),
         layers: [{ path: named, role: "user" }],
         home: named,
         unchecked: [],
         repos: NOTHING_GATED,
       });
       const query = { projectDir: dir, cwd: dir, configFile: named };
-      expect(writeLayer(L, approving(), query, "user")).toEqual({
-        kind: "layer",
-        path: named,
-        role: "user",
-        below: [],
-        above: [],
-        repo: null,
-        cwd: dir,
-        locs: L,
-      });
       // The named file is the chain's one layer: there is no other to write.
-      expect(writeLayer(L, approving(dir), query, "local").kind).toBe("refused");
+      expect(chainOf(L, approving(dir), query)).toEqual([
+        { role: "user", path: named, written: true },
+      ]);
     } finally {
       cleanup();
     }
@@ -368,6 +357,7 @@ describe("resolveDslConfig", () => {
       });
       expect(resolved).toEqual({
         kind: "missing",
+        project: repoProject(dir),
         path: named,
         home: named,
         repos: NOTHING_GATED,
@@ -375,20 +365,12 @@ describe("resolveDslConfig", () => {
       expect(configResolutionNotice(resolved)).toBe(
         `Config file not found: ${named} — rendering the bundled default until it appears`,
       );
-      // A durable write creates the file the bar is waiting for.
+      // A durable write creates the file the bar is waiting for, the chain's
+      // one layer: there is no other to write.
       const query = { projectDir: dir, cwd: dir, configFile: named };
-      expect(writeLayer(L, approving(), query, "user")).toEqual({
-        kind: "layer",
-        path: named,
-        role: "user",
-        below: [],
-        above: [],
-        repo: null,
-        cwd: dir,
-        locs: L,
-      });
-      // The named file is the chain's one layer: there is no other to write.
-      expect(writeLayer(L, approving(dir), query, "local").kind).toBe("refused");
+      expect(chainOf(L, approving(dir), query)).toEqual([
+        { role: "user", path: named, written: false },
+      ]);
     } finally {
       cleanup();
     }
@@ -416,6 +398,7 @@ describe("resolveDslConfig", () => {
       });
         expect(resolved).toEqual({
           kind: "unreadable",
+          project: repoProject(dir),
           path: named,
           home: named,
           error: expect.stringContaining("EACCES"),
@@ -462,6 +445,7 @@ describe("resolveDslConfig", () => {
         ].map((base) => join(locked, base));
         expect(resolved).toEqual({
           kind: "chain",
+          project: repoProject(locked),
           layers: [{ path: userFile, role: "user" }],
           home: userFile,
           unchecked: skipped.map((path) => ({

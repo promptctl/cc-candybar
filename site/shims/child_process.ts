@@ -11,26 +11,52 @@ export interface ProgramRun {
 }
 // A program that answers RESIDENT runs as long as the page does: no answer, no exit.
 export const RESIDENT = "resident";
-export type Program = (args: readonly string[], cwd: string | undefined) => ProgramRun | typeof RESIDENT;
+export type Program = (
+  args: readonly string[],
+  cwd: string | undefined,
+) => ProgramRun | typeof RESIDENT;
 export const programs = new Map<string, Program>();
 
-const enoent = (cmd: string) => Object.assign(new Error(`spawn ${cmd} ENOENT`), { code: "ENOENT", errno: -2, syscall: `spawn ${cmd}`, path: cmd });
+const enoent = (cmd: string) =>
+  Object.assign(new Error(`spawn ${cmd} ENOENT`), {
+    code: "ENOENT",
+    errno: -2,
+    syscall: `spawn ${cmd}`,
+    path: cmd,
+  });
 
 // A child's stdout/stderr: Buffer chunks, as Node's are, until setEncoding asks for text.
 class Stream extends EventEmitter {
   private encoding: BufferEncoding | null = null;
-  setEncoding(encoding: BufferEncoding) { this.encoding = encoding; return this; }
-  chunk(text: string) { this.emit("data", this.encoding === null ? Buffer.from(text) : text); }
-  pipe() { return this; }
+  setEncoding(encoding: BufferEncoding) {
+    this.encoding = encoding;
+    return this;
+  }
+  chunk(text: string) {
+    this.emit("data", this.encoding === null ? Buffer.from(text) : text);
+  }
+  pipe() {
+    return this;
+  }
   destroy() {}
   end() {}
-  write() { return true; }
-  resume() { return this; }
-  unref() { return this; }
+  write() {
+    return true;
+  }
+  resume() {
+    return this;
+  }
+  unref() {
+    return this;
+  }
 }
 
 let nextPid = 5000;
-export function spawn(cmd: string, args: readonly string[] = [], opts: { cwd?: string } = {}) {
+export function spawn(
+  cmd: string,
+  args: readonly string[] = [],
+  opts: { cwd?: string } = {},
+) {
   const program = programs.get(cmd.split("/").pop()!);
   const child = Object.assign(new EventEmitter(), {
     // As in Node, a program that cannot start has no pid (src/proc/launch.ts reads that).
@@ -63,18 +89,54 @@ export function spawn(cmd: string, args: readonly string[] = [], opts: { cwd?: s
   return child;
 }
 
-export function spawnSync(cmd: string, args: readonly string[] = [], opts: { cwd?: string } = {}) {
+export function spawnSync(
+  cmd: string,
+  args: readonly string[] = [],
+  opts: { cwd?: string } = {},
+) {
   const program = programs.get(cmd.split("/").pop()!);
-  if (program === undefined) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
+  if (program === undefined)
+    return {
+      pid: 0,
+      status: null,
+      signal: null,
+      stdout: "",
+      stderr: "",
+      output: [],
+      error: enoent(cmd),
+    };
   const run = program(args, opts.cwd);
-  if (run === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
-  return { pid: nextPid++, status: run.code, signal: null, stdout: run.stdout, stderr: run.stderr ?? "", output: [null, run.stdout, run.stderr ?? ""] };
+  if (run === RESIDENT)
+    throw new Error(
+      `${cmd} runs as long as the page does; a sync run of it would never return`,
+    );
+  return {
+    pid: nextPid++,
+    status: run.code,
+    signal: null,
+    stdout: run.stdout,
+    stderr: run.stderr ?? "",
+    output: [null, run.stdout, run.stderr ?? ""],
+  };
 }
 
-export const execFile = (cmd: string, args: readonly string[], opts: unknown, cb?: (e: Error | null, out: string, err: string) => void) => {
+export const execFile = (
+  cmd: string,
+  args: readonly string[],
+  opts: unknown,
+  cb?: (e: Error | null, out: string, err: string) => void,
+) => {
   const done = (typeof opts === "function" ? opts : cb) as typeof cb;
   const r = spawnSync(cmd, args);
-  setTimeout(() => done?.(r.error ?? (r.status ? new Error(`exit ${r.status}`) : null), String(r.stdout), String(r.stderr)), 0);
+  setTimeout(
+    () =>
+      done?.(
+        r.error ?? (r.status ? new Error(`exit ${r.status}`) : null),
+        String(r.stdout),
+        String(r.stderr),
+      ),
+    0,
+  );
 };
 export const execFileSync = (cmd: string, args: readonly string[]) => {
   const r = spawnSync(cmd, args);

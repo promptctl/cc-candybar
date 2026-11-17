@@ -36,13 +36,13 @@ import {
   type MainRendererParts,
 } from "./verbs/port.js";
 import type { SessionStorage } from "../renderer-interface/session-state.js";
+import { recordedOriginOf } from "./verbs/index.js";
 import type {
   HistoryStorage,
   LoadedHistory,
 } from "../renderer-interface/history-storage.js";
 import type { DoctorStores } from "../doctor/ports.js";
 import type { LinkSigner } from "../click/link-signer.js";
-import type { Locations } from "../config/loader/discovery.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -68,7 +68,6 @@ import { LaneActs } from "./lane-acts.js";
 import { WorldStates } from "./world-states.js";
 import { DoctorRuns } from "./doctor.js";
 import { UpdateGate } from "./update-gate.js";
-import { Watches } from "./watches.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import {
   configLoadedLine,
@@ -94,7 +93,6 @@ import {
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
-import { readConfigText } from "./config-file-store.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
@@ -138,14 +136,12 @@ export function mainRenderer(
         runEach([
           () => feeds.view(event.viewers, time.tick),
           ...event.sessions.map(
-            ({ context, worldState }) =>
-              () =>
-                configureSession(parts, context, worldState, record),
+            (session) => () => configureSession(parts, session, record),
           ),
         ]);
         return;
       case "config":
-        configureSession(parts, event.context, event.worldState, record);
+        configureSession(parts, event, record);
         return;
       case "request": {
         const { frame, delivery } = answerRequest(
@@ -336,10 +332,6 @@ export interface MainRendererInputs {
   };
   // [LAW:single-enforcer] The signer over the state directory's key.
   readonly linkSigner: LinkSigner;
-  // The state directory whose answers book a load reads and a click records in.
-  readonly stateDir: string;
-  // Where the user's config and installed plugins live.
-  readonly locations: Locations;
   // The environment an `env` source reads: the daemon's host.
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly home: string;
@@ -385,6 +377,12 @@ function startOver(
   const menuIdle = new MenuIdle();
   // [LAW:single-enforcer] The renderer's lines go to the host's one log.
   const { log } = host;
+  // [LAW:one-source-of-truth] The origins this state recorded, said to the
+  // host: a click on a bar the daemon before drew is discovered at its own.
+  for (const session of sessionState.ids()) {
+    const origin = recordedOriginOf(sessionState, session);
+    if (origin !== null) host.origins.recorded(session, origin);
+  }
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -393,7 +391,7 @@ function startOver(
   );
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
-  const configWrites = new ConfigWrites(mint, readConfigText);
+  const configWrites = new ConfigWrites(mint);
   // [LAW:single-enforcer] A failed act of a session's, on its bar the way its
   // click's own failure is.
   const actFailed = (session: SessionId, reason: string): void =>
@@ -427,17 +425,12 @@ function startOver(
     updateGate.took(document.daemon.update.newer);
     doctorRuns.took(document);
   });
-  // [LAW:single-enforcer] Every watch this renderer holds, each held by the
-  // host's registry under an id minted here.
-  const watches = new Watches(host.watches);
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock: time.clock,
-      stateDir: inputs.stateDir,
-      locations: inputs.locations,
+      home: inputs.home,
       env: inputs.env,
       sessionState,
-      watchers: watches,
       log,
       storage: host.storage,
       signer: linkSigner,
@@ -519,15 +512,14 @@ function startOver(
     menuIdle,
     feeds,
   };
-  const reloadConfig = (origin: RenderOrigin): void =>
-    renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
-      kind: "write",
-    });
+  // [LAW:one-source-of-truth] The entry a session's recorded origin renders
+  // from: the one its bar was drawn with.
+  const entryAt = (origin: RenderOrigin) =>
+    renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path);
   const verbCtx: DaemonVerbContext = {
     gates,
     sessionState,
-    stateDir: inputs.stateDir,
-    locations: inputs.locations,
+    home: inputs.home,
     configWrites,
     clickLanded: (sessionId) => menuIdle.clicked(sessionId, time.tick),
     log,
@@ -535,12 +527,10 @@ function startOver(
     now,
     doctorRuns,
     // The load the session's bar is drawn from: its cache entry's load
-    // outcome, and what the config that entry renders left unused, reloaded
-    // first (`startRun`).
+    // outcome, and what the config that entry renders left unused
+    // (`startRun`). The host's watch keeps the snapshot it loaded current.
     doctorLoad: (origin) => {
-      const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
-      renderCache.reload(...at, { kind: "doctor" });
-      const entry = renderCache.getOrCreate(...at);
+      const entry = entryAt(origin);
       return {
         layers: entry.configLayers,
         error: entry.lastError,
@@ -554,14 +544,14 @@ function startOver(
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin) =>
-      renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
-        .state.config,
-    reloadConfig,
+    configFor: (origin) => entryAt(origin).state.config,
+    sourceFor: (origin) => ({
+      snapshot: entryAt(origin).snapshot,
+      home: inputs.home,
+    }),
+    chainOf: (sessionId) => renderCache.snapshotOf(sessionId)?.chain ?? null,
     // The storage folders of the same entry `configFor` reads the config of.
-    sourcesFor: (origin) =>
-      renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
-        .state.sources,
+    sourcesFor: (origin) => entryAt(origin).state.sources,
     links: linkSigner,
     lanes: {
       of: (origin, sessionId, latest) =>
@@ -596,15 +586,6 @@ function startOver(
           kind: "debug",
           snapshot: debugOf(renderCache.latestView(), push.what),
         };
-      case "watch":
-        watches.pushed(push.id, push.heard, push.deaf);
-        return { kind: "watch" };
-      case "reload-every":
-        renderCache.reloadEvery({ kind: "events-resumed", since: push.since });
-        return { kind: "reload-every" };
-      case "reload-config":
-        reloadConfig(push.origin);
-        return { kind: "reload-config" };
       // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
       // runs whole, so none is in flight.
       case "close-journal":

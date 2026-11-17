@@ -4,6 +4,8 @@
 // durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
+import { loadFromDisk, snapshotOf } from "./helpers/disk-render-cache";
+import { textSnapshot } from "./helpers/text-snapshot";
 import { bareGates } from "./helpers/gates";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -15,23 +17,19 @@ import path from "node:path";
 import { checkConfig } from "../src/check";
 import {
   configResolutionNotice,
-  writeLayer,
   resolveDslConfig,
-} from "../src/config/dsl-loader";
+} from "../src/daemon/config-discovery/discovery";
+import { repoAnswerFields, repoQuestions } from "../src/renderer/repo-question";
+import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
-import {
-  configLoadedLine,
-  loadFromDisk,
+import { configLoadedLine,
   type LoadCause,
-  type ReloadedEntry,
-} from "../src/renderer/render-cache";
+  type ReloadedEntry } from "../src/renderer/render-cache";
 import {
   recordAnswer,
-  repoAnswerFields,
   repoConfigs,
   repoConfigsPath,
-  repoQuestions,
-} from "../src/config/repo-configs";
+} from "../src/daemon/config-discovery/repo-configs";
 import { SessionState } from "../src/renderer/session-state";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
@@ -133,18 +131,6 @@ describe("the gate over a project's config file", () => {
     expect(explicit.repos.awaiting).toEqual([]);
   });
 
-  test("the durable writer's chain leaves out what the bar's leaves out", () => {
-    write(".cc-candybar.json5", "{}");
-    expect(
-      writeLayer(
-        locations(host),
-        book({}),
-        { projectDir: project, cwd: project },
-        "user",
-      ),
-    ).toMatchObject({ above: [] });
-  });
-
   test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {
     write(".cc-candybar.json5", "{}");
     const resolved = resolveDslConfig(
@@ -177,14 +163,20 @@ describe("the gate over a project's plugins", () => {
       env: host.env,
     };
     const waiting = loadFromDisk(project, project, undefined, deps);
-    expect(waiting.repos.awaiting).toEqual([project]);
+    expect(snapshotOf(project, project, undefined).repo).toEqual({
+      dir: project,
+      standing: "awaiting",
+      unproven: null,
+    });
     expect(waiting.state!.plugins.loaded).toEqual([]);
     waiting.state!.registry.dispose();
 
     answerRepo(project);
     const approved = loadFromDisk(project, project, undefined, deps);
-    expect(approved.repos.awaiting).toEqual([]);
-    expect(approved.repos.plugins).toBe(project);
+    expect(snapshotOf(project, project, undefined).repo).toMatchObject({
+      dir: project,
+      standing: "approved",
+    });
     expect(approved.state!.plugins.loaded).toEqual([
       {
         path: path.join(project, ".cc-candybar/plugins/deploy/plugin.json5"),
@@ -260,19 +252,18 @@ describe("check", () => {
   });
 });
 
+// A snapshot with nothing in it but the session's repository question.
+const asking = (repo: ConfigSnapshot["repo"]): ConfigSnapshot => ({
+  ...textSnapshot([]),
+  repo,
+});
+
 const loadedEntry: ReloadedEntry = {
   projectDir: "/p",
   cwd: "/p",
   configFile: undefined,
   configLayers: [],
-  repos: {
-    plugins: null,
-    approved: [],
-    awaiting: [],
-    declined: [],
-    unproven: [],
-    unread: null,
-  },
+  snapshot: asking(null),
   lastError: null,
   lastWarning: null,
   state: undefined as never,
@@ -280,74 +271,32 @@ const loadedEntry: ReloadedEntry = {
 
 test.each<[LoadCause, string]>([
   [{ kind: "open" }, "open"],
-  [{ kind: "write" }, "write"],
-  [{ kind: "doctor" }, "doctor"],
-  [
-    {
-      kind: "config-watch",
-      heard: {
-        kind: "changed",
-        paths: ["/p/config.json5", "/u/a.json"],
-      },
-    },
-    "config-watch:/p/config.json5,/u/a.json",
-  ],
-  [
-    { kind: "answers-watch", heard: { kind: "unknown" } },
-    "answers-watch:unknown",
-  ],
-  [
-    { kind: "config-watch", heard: { kind: "failed", reason: "/d: EPERM" } },
-    '"config-watch:failed:/d: EPERM"',
-  ],
-  [
-    {
-      kind: "events-resumed",
-      since: Date.parse("2026-10-27T04:00:00.000Z"),
-    },
-    "events-resumed:2026-10-27T04:00:00.000Z",
-  ],
+  [{ kind: "config" }, "config"],
 ])("the config loaded event says why the load ran: %j", (cause, field) => {
   expect(configLoadedLine(loadedEntry, cause, "built")).toContain(
     ` cwd=/p cause=${field} state=built files=`,
   );
 });
 
-test("the config loaded event names the repositories left waiting and declined, and the unproven worktrees", () => {
+test("the config loaded event names the session's repository, its answer, and why its worktree link is unproven", () => {
   const entry: ReloadedEntry = {
+    ...loadedEntry,
     projectDir: project,
     cwd: project,
-    configFile: undefined,
-    configLayers: [],
-    repos: {
-      plugins: null,
-      approved: [],
-      awaiting: ["/a", "/b"],
-      declined: [],
-      unproven: [{ dir: "/c", reason: "/x is not there" }],
-      unread: null,
-    },
-    lastError: null,
-    lastWarning: null,
-    state: undefined as never,
+    snapshot: asking({
+      dir: "/a",
+      standing: "awaiting",
+      unproven: "/x is not there",
+    }),
   };
   const line = configLoadedLine(entry, { kind: "open" }, "built");
-  expect(line).toContain(
-    ` awaiting=/a,/b declined=- unproven=[{"dir":"/c","reason":"/x is not there"}] `,
-  );
+  expect(line).toContain(` repo=/a:awaiting unproven="/x is not there" `);
 });
 
 test("the question offers each answer as a link signed for its session, directory and answer", () => {
   const signer = linkSigner(Buffer.alloc(32, 7));
   const [channel, ...rest] = repoQuestions(
-    {
-      plugins: null,
-      approved: [],
-      awaiting: [project],
-      declined: [],
-      unproven: [],
-      unread: null,
-    },
+    { dir: project, standing: "awaiting", unproven: null },
     SID_1,
     signer,
   );

@@ -26,7 +26,9 @@ async function main(): Promise<void> {
     },
   });
   if (!/^\d+$/.test(values.port) || Number(values.port) > 65535) {
-    throw new Error(`--port must be a whole number from 0 to 65535, got "${values.port}"`);
+    throw new Error(
+      `--port must be a whole number from 0 to 65535, got "${values.port}"`,
+    );
   }
   const web = await serveBar({
     port: Number(values.port),
@@ -34,7 +36,10 @@ async function main(): Promise<void> {
     // The page reports its terminal's size with every request; this is only the first render's.
     width: 120,
     rows: 40,
-    config: values.config === undefined ? null : path.resolve(invokedIn, values.config),
+    config:
+      values.config === undefined
+        ? null
+        : path.resolve(invokedIn, values.config),
     cwd: path.resolve(invokedIn, values.cwd),
     ssh: values.ssh,
   });

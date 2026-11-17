@@ -13,7 +13,7 @@ import {
   ConfigError,
   templateReads,
   findKeyLine,
-  loadConfig,
+  loadConfigSource,
   parseDslConfig,
   mergeWithDefault,
   validateRenderable,
@@ -2461,7 +2461,7 @@ describe("findKeyLine", () => {
 // before any click — and the two cannot disagree, because the editor's scanner
 // is the one detector.
 
-describe("loadConfig — editability advisory", () => {
+describe("loadConfigSource — editability advisory", () => {
   let dir: string;
   beforeAll(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-loader-dup-"));
@@ -2485,8 +2485,9 @@ describe("loadConfig — editability advisory", () => {
 
   test("a duplicate key loads with the last value and earns one advisory naming the file, key and line", () => {
     const file = write("dup.json5", DUPLICATE);
-    const { config, warnings } = loadConfig(
+    const { config, warnings } = loadConfigSource(
       file,
+      DUPLICATE,
       DEFAULT_DSL_CONFIG,
       NO_PROJECT,
     );
@@ -2509,17 +2510,11 @@ describe("loadConfig — editability advisory", () => {
   test("a document the editor accepts earns no advisory", () => {
     const clean = `{ globals: { padding: 1 } }`;
     const file = write("clean.json5", clean);
-    expect(loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual(
+    expect(loadConfigSource(file, clean, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual(
       [],
     );
     expect(setValue(clean, ["globals", "padding"], "3", JSON5_DIALECT)).toBe(
       `{ globals: { padding: 3 } }`,
-    );
-  });
-
-  test("no file earns no advisory", () => {
-    expect(loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual(
-      [],
     );
   });
 });
@@ -2552,7 +2547,7 @@ describe("loadConfig — the advisory survives a structural failure", () => {
     );
     let caught: unknown;
     try {
-      loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
+      loadConfigSource(file, fs.readFileSync(file, "utf-8"), DEFAULT_DSL_CONFIG, NO_PROJECT);
     } catch (e) {
       caught = e;
     }
@@ -2568,7 +2563,7 @@ describe("loadConfig — the advisory survives a structural failure", () => {
     const file = write("syntax.json5", `{ globals: { padding: 1, padding: `);
     let caught: unknown;
     try {
-      loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
+      loadConfigSource(file, fs.readFileSync(file, "utf-8"), DEFAULT_DSL_CONFIG, NO_PROJECT);
     } catch (e) {
       caught = e;
     }

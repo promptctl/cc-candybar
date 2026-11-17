@@ -255,7 +255,7 @@ describe("the daemon is a value", () => {
       }),
     ).toThrow(closed);
     expect(() => daemon.arm()).toThrow(closed);
-    expect(() => daemon.reloadConfig({} as RenderOrigin)).toThrow(closed);
+    expect(() => daemon.rediscoverConfigs()).toThrow(closed);
   });
 
   // [LAW:no-shared-mutable-globals] What a daemon's loads accept is its own

@@ -6,18 +6,34 @@
 import fs from "node:fs";
 import path from "node:path";
 import { presence, type Unchecked } from "../../utils/presence.js";
-import { listFolders, REPO_PLUGIN_DIR } from "./plugin-folders.js";
-import { worktreeLink } from "../../utils/git-root.js";
 import {
+  installedPlugins,
+  listFolders,
+  REPO_PLUGIN_DIR,
+} from "./plugin-folders.js";
+import { checkoutOf, worktreeLink } from "../../utils/git-root.js";
+import {
+  answerDir,
   gateRepos,
-  type ApprovedRepo,
+  repoUnreadNotice,
   type RepoAnswers,
   type RepoDir,
   type RepoGate,
   type RepoProject,
-} from "./repo-gate.js";
-import type { PluginScope } from "./plugin-scope.js";
-import { LAYER_ROLES, type LayerRole } from "../layer-role.js";
+  type RepoStanding,
+} from "../../config/loader/repo-gate.js";
+import type { PluginScope } from "../../config/loader/plugin-scope.js";
+import type { LayerRole } from "../../config/layer-role.js";
+import { repoConfigs } from "./repo-configs.js";
+import { pluginRefsOf } from "../../config/dsl-loader.js";
+import { listedPath, STORAGE_FOLDER } from "../../config/loader/plugins.js";
+import type {
+  ConfigSnapshot,
+  Layer,
+  LayerContent,
+  PluginFile,
+  RepoQuestion,
+} from "../../config/config-snapshot.js";
 
 // [LAW:one-source-of-truth] The set of accepted extensions lives here once.
 // Both .json5 and .json are accepted: JSON ⊂ JSON5, so the same parser
@@ -106,13 +122,6 @@ const PROJECT_BASES: Readonly<Record<Exclude<LayerRole, "user">, string>> = {
   local: ".cc-candybar.local",
 };
 
-// Whether a file is a project's local layer, by the name it is found under.
-export function isLocalConfigFile(file: string): boolean {
-  return CONFIG_EXTENSIONS.some(
-    (ext) => path.basename(file) === `${PROJECT_BASES.local}.${ext}`,
-  );
-}
-
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
 // (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
@@ -174,7 +183,12 @@ export function homeLayer(path: string): ConfigLayer {
  * The path rides on `missing` so the message and the durable-write target
  * both name it without re-deriving it from the inputs.
  */
-export type ConfigResolution = { readonly repos: RepoGate } & (
+export type ConfigResolution = {
+  readonly repos: RepoGate;
+  // The session's project, as the gate judged it: null for none, or one that
+  // is not there.
+  readonly project: RepoProject | null;
+} & (
   | {
       readonly kind: "chain";
       readonly layers: readonly ConfigLayer[];
@@ -262,11 +276,8 @@ export function resolveDslConfig(
   const repoDirs = new Map(
     found.flatMap((f) => (f.repo === null ? [] : [[f.repo.dir, f.repo]])),
   );
-  const repos = gateRepos(
-    answers,
-    [...repoDirs.values()],
-    repoProject(projectDir),
-  );
+  const project = repoProject(projectDir);
+  const repos = gateRepos(answers, [...repoDirs.values()], project);
   const kept = found
     .filter((f) => f.repo === null || repos.approved.includes(f.repo.dir))
     .reverse();
@@ -278,17 +289,18 @@ export function resolveDslConfig(
       home: userHome(locs, layers),
       unchecked,
       repos,
+      project,
     };
   }
   // An explicit path is the sole candidate: its one probe is the verdict.
   const [own] = unchecked;
   const home = configFile;
   if (layers.length > 0) {
-    return { kind: "chain", layers, home, unchecked, repos };
+    return { kind: "chain", layers, home, unchecked, repos, project };
   }
   return own === undefined
-    ? { kind: "missing", path: configFile, home, repos }
-    : { kind: "unreadable", ...own, home, repos };
+    ? { kind: "missing", path: configFile, home, repos, project }
+    : { kind: "unreadable", ...own, home, repos, project };
 }
 
 // The user's own XDG file, at either extension: the one chain layer no
@@ -323,128 +335,6 @@ function userHome(locs: Locations, layers: readonly ConfigLayer[]): string {
   return (
     layers.find((l) => isUserFile(locs, l.path))?.path ??
     `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`
-  );
-}
-
-/**
- * The file a DURABLE write to one role of the session's chain lands in, and
- * the chain's layers below and above it.
- *
- * The file is the layer the chain holds for the role, or, where it holds
- * none, the file a first write there creates. A value a layer ABOVE it holds
- * wins over anything it says, so a write the chain hides is refused by the
- * writer, naming the layer that holds it (`config-file-store`'s commit) —
- * never a click that silently does nothing.
- *
- * [LAW:one-source-of-truth] A projection of the same resolution the render
- * runs, so the file a click writes is a layer the next reload reads — by
- * construction, not by two lists agreeing.
- */
-export interface WriteLayer {
-  readonly path: string;
-  readonly role: LayerRole;
-  // The other roles' files under and over `path`, lowest first: each where
-  // the chain holds it or a first write there creates it. Which of them is a
-  // layer is the click's to say, since a click may create or change one
-  // before it writes `path`.
-  readonly below: readonly ConfigLayer[];
-  readonly above: readonly ConfigLayer[];
-  // The approved project whose plugins the chain loads, and the working
-  // directory their checkout data paths resolve against.
-  readonly repo: ApprovedRepo | null;
-  readonly cwd: string | null;
-  // Where the installed plugins this chain loads over live.
-  readonly locs: Locations;
-}
-
-// [LAW:types-are-the-program] A role the session's chain has no place for:
-// a project's layers are an approved project's, and an explicit config file
-// is the chain's one layer.
-interface Refused {
-  readonly kind: "refused";
-  readonly why: string;
-}
-export type LayerWrite = ({ readonly kind: "layer" } & WriteLayer) | Refused;
-
-const rank = (role: LayerRole): number => LAYER_ROLES.indexOf(role);
-
-export function writeLayer(
-  locs: Locations,
-  answers: RepoAnswers,
-  query: ConfigQuery & { readonly cwd?: string },
-  role: LayerRole,
-): LayerWrite {
-  return writeLayers(locs, answers, query)[role];
-}
-
-// Every role's write, projected from ONE resolution of the session's chain.
-export function writeLayers(
-  locs: Locations,
-  answers: RepoAnswers,
-  query: ConfigQuery & { readonly cwd?: string },
-): Readonly<Record<LayerRole, LayerWrite>> {
-  const resolved = resolveDslConfig(locs, answers, query);
-  const layers = resolved.kind === "chain" ? resolved.layers : [];
-  const places = LAYER_ROLES.flatMap((role): ConfigLayer[] => {
-    const place = placeOf(resolved, layers, query, role);
-    return place.kind === "at" ? [{ path: place.path, role }] : [];
-  });
-  const writeOf = (role: LayerRole): LayerWrite => {
-    const place = placeOf(resolved, layers, query, role);
-    if (place.kind === "refused") return place;
-    return {
-      kind: "layer",
-      path: place.path,
-      role,
-      below: places.filter((l) => rank(l.role) < rank(role)),
-      above: places.filter((l) => rank(l.role) > rank(role)),
-      repo: resolved.repos.plugins,
-      cwd: query.cwd ?? null,
-      locs,
-    };
-  };
-  return Object.fromEntries(
-    LAYER_ROLES.map((role) => [role, writeOf(role)]),
-  ) as Record<LayerRole, LayerWrite>;
-}
-
-// [LAW:dataflow-not-control-flow] The file a role names in the session's
-// chain, or why it names none.
-function placeOf(
-  resolved: ConfigResolution,
-  layers: readonly ConfigLayer[],
-  { projectDir, configFile }: ConfigQuery,
-  role: LayerRole,
-): { readonly kind: "at"; readonly path: string } | Refused {
-  if (role === "user") return { kind: "at", path: resolved.home };
-  if (configFile !== undefined)
-    return refused(
-      `${configFile} is the session's one config layer (it was named explicitly), so there is no ${role} layer to write`,
-    );
-  if (projectDir === undefined || resolved.repos.plugins === null)
-    return refused(
-      `the ${role} layer is the project's, and this session has no approved project`,
-    );
-  return {
-    kind: "at",
-    path:
-      layers.find((l) => l.role === role)?.path ??
-      `${path.join(projectDir, PROJECT_BASES[role])}.${CONFIG_EXTENSIONS[0]}`,
-  };
-}
-
-const refused = (why: string): Refused => ({ kind: "refused", why });
-
-// [LAW:one-source-of-truth] The roles a session's chain can write: what its
-// save offers, read off the same placement a write resolves, so the bar never
-// offers a layer its click would refuse.
-export function writableRoles(
-  resolved: ConfigResolution,
-  query: ConfigQuery,
-): readonly LayerRole[] {
-  const layers = resolved.kind === "chain" ? resolved.layers : [];
-  return LAYER_ROLES.filter(
-    (role) => placeOf(resolved, layers, query, role).kind === "at",
   );
 }
 
@@ -541,4 +431,207 @@ export interface Locations {
   readonly dataHome: string;
   // Most-preferred first, as `XDG_DATA_DIRS` orders them.
   readonly dataDirs: readonly string[];
+}
+
+// What a session's config search starts from: its project, the directory it
+// works in (whose checkout a plugin's data path resolves against), and the
+// explicit file its render origin names.
+export interface DiscoveryQuery extends ConfigQuery {
+  readonly cwd: string;
+}
+
+// Where discovery reads: the user's locations, and the state directory whose
+// answers book says which repositories' configs run.
+export interface DiscoveryWorld {
+  readonly locations: Locations;
+  readonly stateDir: string;
+}
+
+// What one discovery found: the snapshot a renderer is handed, but for what
+// the watch over it cannot hear, which only the watch's holder knows; the
+// paths a change to any of it is heard at; and the gate it was judged by,
+// which `check` reports.
+export interface Discovered {
+  readonly snapshot: Omit<ConfigSnapshot, "watch">;
+  readonly targets: {
+    readonly named: readonly string[];
+    // Roots watched for every child: a folder created in one is a plugin
+    // installed.
+    readonly whole: readonly string[];
+  };
+  readonly gate: RepoGate;
+}
+
+/**
+ * [LAW:single-enforcer] The one writer of a ConfigSnapshot: everything a
+ * config load learns from the filesystem — which files form the chain, their
+ * texts, the definitions each lists, the plugin roots' folders, the
+ * repository's answer, the checkout — read here, in the host, so the loader
+ * opens nothing.
+ *
+ * [LAW:one-source-of-truth] The chain holds exactly the layers a session may
+ * write: the user's (the explicit file, when one is named, replacing the
+ * rest) and, once its repository is approved, the project's and its local
+ * one — each at the file the chain found, or the file a first write there
+ * creates.
+ */
+export function discover(
+  query: DiscoveryQuery,
+  { locations: locs, stateDir }: DiscoveryWorld,
+): Discovered {
+  const resolved = resolveDslConfig(locs, repoConfigs(stateDir).read(), query);
+  const gate = resolved.repos;
+  const found = resolved.kind === "chain" ? resolved.layers : [];
+  const approved = gate.plugins;
+  const places: ReadonlyArray<{
+    readonly role: LayerRole;
+    readonly at: string;
+  }> =
+    query.configFile === undefined && approved !== null
+      ? [
+          { role: "user", at: resolved.home },
+          { role: "project", at: firstWrite(approved, "project") },
+          { role: "local", at: firstWrite(approved, "local") },
+        ]
+      : [{ role: "user", at: resolved.home }];
+  const chain = places.map(({ role, at }): Layer => {
+    const file = found.find((l) => l.role === role)?.path;
+    return layerAt(role, file ?? at, file !== undefined, locs.home);
+  });
+  const installed = installedPlugins(locs, approved);
+  const plugins = installed.definitions.map((d) =>
+    readPluginFile(d.path, d.scope),
+  );
+  const notices = [
+    detectConfigCollisions(locs, query.projectDir),
+    configResolutionNotice(resolved),
+    repoUnreadNotice(gate),
+    ...installed.unchecked.map(
+      (u) => `Plugin folder could not be listed: ${u.path} — ${u.error}`,
+    ),
+  ].filter((n): n is string => n !== null);
+  // The project's plugin folder is heard whatever its answer: a plugin
+  // dropped there is a question to ask.
+  const roots = [
+    ...new Set([
+      ...installed.roots,
+      ...(query.projectDir === undefined
+        ? []
+        : [path.join(query.projectDir, REPO_PLUGIN_DIR)]),
+    ]),
+  ];
+  const files = [...plugins, ...chain.flatMap((l) => Object.values(l.listed))];
+  return {
+    snapshot: {
+      chain,
+      repo: repoQuestion(resolved.project, gate),
+      plugins,
+      strays: installed.strays,
+      checkout: checkoutOf(query.cwd),
+      notices,
+    },
+    targets: {
+      named: [
+        ...dslConfigCandidatePaths(locs, query),
+        ...roots,
+        ...files.map((f) => f.path),
+        // A plugin's storage folder: its removal or replacement is heard, so
+        // the storage owner makes it again.
+        ...files.flatMap((f) =>
+          f.definition.kind === "text"
+            ? [path.join(f.definition.dir, STORAGE_FOLDER)]
+            : [],
+        ),
+      ],
+      whole: roots,
+    },
+    gate,
+  };
+}
+
+// The file a first write to a repository's layer creates: CONFIG_EXTENSIONS'
+// head, the documented format.
+function firstWrite(project: string, role: Exclude<LayerRole, "user">): string {
+  return `${path.join(project, PROJECT_BASES[role])}.${CONFIG_EXTENSIONS[0]}`;
+}
+
+function layerAt(
+  role: LayerRole,
+  file: string,
+  present: boolean,
+  home: string,
+): Layer {
+  const content: LayerContent = present ? readLayer(file) : { kind: "absent" };
+  return {
+    role,
+    path: file,
+    content,
+    listed:
+      content.kind === "text"
+        ? Object.fromEntries(
+            pluginRefsOf(content.text).map((ref) => [
+              ref,
+              readPluginFile(listedPath(ref, file, home), scopeOf(role)),
+            ]),
+          )
+        : {},
+  };
+}
+
+// [LAW:types-are-the-program] A layer stat found and a read then failed is
+// `unreadable`: the load fails naming it, never reads it as absent.
+function readLayer(file: string): LayerContent {
+  try {
+    return { kind: "text", text: fs.readFileSync(file, "utf-8") };
+  } catch (e) {
+    return { kind: "unreadable", error: (e as Error).message };
+  }
+}
+
+// One definition as the loader takes it: its text and its folder's real
+// path, or why either could not be read — the reason its drop gives.
+export function readPluginFile(file: string, scope: PluginScope): PluginFile {
+  try {
+    const text = fs.readFileSync(file, "utf-8");
+    return {
+      scope,
+      path: file,
+      definition: {
+        kind: "text",
+        text,
+        dir: fs.realpathSync(path.dirname(file)),
+      },
+    };
+  } catch (e) {
+    return {
+      scope,
+      path: file,
+      definition: { kind: "unreadable", error: (e as Error).message },
+    };
+  }
+}
+
+// [LAW:one-source-of-truth] The session's one repository and its answer: its
+// project and local layers share its directory, so the gate's lists hold at
+// most this one. Null when its directories hold nothing to ask about.
+function repoQuestion(
+  project: RepoProject | null,
+  gate: RepoGate,
+): RepoQuestion | null {
+  const standing = standingOf(gate);
+  return project === null || standing === null
+    ? null
+    : {
+        dir: answerDir(project),
+        standing,
+        unproven: project.link.kind === "unproven" ? project.link.reason : null,
+      };
+}
+
+function standingOf(gate: RepoGate): RepoStanding | null {
+  if (gate.unread !== null) return "unread";
+  if (gate.plugins !== null) return "approved";
+  if (gate.awaiting.length > 0) return "awaiting";
+  if (gate.declined.length > 0) return "declined";
+  return null;
 }

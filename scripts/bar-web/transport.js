@@ -4,9 +4,15 @@
 async function post(route, body) {
   let res;
   try {
-    res = await fetch(route, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    res = await fetch(route, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
   } catch (e) {
-    throw new Error(`the bar server did not answer: ${e.message}. Is pnpm bar:web still running?`);
+    throw new Error(
+      `the bar server did not answer: ${e.message}. Is pnpm bar:web still running?`,
+    );
   }
   const answer = await res.json();
   if (!res.ok) throw new Error(answer.error);

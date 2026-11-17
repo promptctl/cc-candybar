@@ -13,8 +13,8 @@ type ClickEvent = Extract<Event, { kind: "click" }>;
 // classifies as the turn's failure and the host turns into the click's reply
 // by its kind.
 export function clickTurn(
-  { verbs }: Pick<MainRendererParts, "verbs">,
-  { verb, value, arrival, latest }: ClickEvent,
+  { verbs, renderCache }: Pick<MainRendererParts, "verbs" | "renderCache">,
+  { verb, value, arrival, latest, config }: ClickEvent,
   // Where the click's config changes go, kept by the turn even when the
   // handler throws.
   effects: Effect[],
@@ -22,5 +22,18 @@ export function clickTurn(
   const handler = verbs.handler(verb);
   if (handler === undefined)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
+  // [LAW:dataflow-not-control-flow] The config the host discovered at the
+  // click is the session's before its verb reads it; the entry reloads only
+  // when it moved.
+  if (config !== null) {
+    const { projectDir, cwd, target } = config.origin;
+    renderCache.configure(
+      config.session,
+      projectDir,
+      cwd,
+      target.path,
+      config.snapshot,
+    );
+  }
   handler(value, { arrival, latest, effects });
 }

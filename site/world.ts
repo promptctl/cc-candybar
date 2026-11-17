@@ -45,7 +45,8 @@ export function seedWorld(state: RepoState): void {
     [`${GIT}/config`]: `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${REMOTE}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n`,
     [`${GIT}/index`]: "",
     [`${GIT}/refs/heads/${state.branch}`]: `${state.head}\n`,
-    [`${GIT}/logs/refs/stash`]: "0000 1111 demo <demo@example.com> 1759000000 +0000\tWIP on main: try a bigger TTL\n",
+    [`${GIT}/logs/refs/stash`]:
+      "0000 1111 demo <demo@example.com> 1759000000 +0000\tWIP on main: try a bigger TTL\n",
     [`${CLAUDE_DIR}/settings.json`]: SETTINGS,
     [`${HOME}/.config/cc-candybar/.keep`]: "",
     [`${HOME}/.local/state/.keep`]: "",
@@ -85,16 +86,24 @@ programs.set("git", (args) => {
       `# branch.head ${repo.branch}`,
       `# branch.upstream origin/${repo.branch}`,
       `# branch.ab +${repo.ahead} -${repo.behind}`,
-      ...repo.modified.map((f) => `1 .M N... 100644 100644 100644 ${"a".repeat(40)} ${"b".repeat(40)} ${f}`),
+      ...repo.modified.map(
+        (f) =>
+          `1 .M N... 100644 100644 100644 ${"a".repeat(40)} ${"b".repeat(40)} ${f}`,
+      ),
       ...repo.untracked.map((f) => `? ${f}`),
     ];
     return ok(rows.join("\n") + "\n");
   }
   if (line.startsWith("log -1 --format=%ct")) return ok(`${repo.headTime}\n`);
   if (line.startsWith("describe --tags --abbrev=0")) return ok("v0.4.2\n");
-  if (line.startsWith("config --local --get-regexp")) return ok(`remote.origin.url ${REMOTE}\n`);
+  if (line.startsWith("config --local --get-regexp"))
+    return ok(`remote.origin.url ${REMOTE}\n`);
   console.warn(`simulated git: no answer for \`git ${line}\``);
-  return { code: 128, stdout: "", stderr: `fatal: the demo's git does not answer \`${line}\`\n` };
+  return {
+    code: 128,
+    stdout: "",
+    stderr: `fatal: the demo's git does not answer \`${line}\`\n`,
+  };
 });
 
 /**
@@ -124,7 +133,13 @@ export function newTranscript(sessionId: string): string {
   return file;
 }
 
-export function appendTranscript(file: string, entries: readonly object[]): void {
+export function appendTranscript(
+  file: string,
+  entries: readonly object[],
+): void {
   if (entries.length === 0) return;
-  vol.appendFileSync(file, entries.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  vol.appendFileSync(
+    file,
+    entries.map((e) => JSON.stringify(e)).join("\n") + "\n",
+  );
 }

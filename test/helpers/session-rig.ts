@@ -4,6 +4,7 @@
 // [LAW:one-source-of-truth] The golden over the payload's composition and the
 // tests of the turn a view draws from open their views through this one rig.
 
+import { DiskRenderCache } from "./disk-render-cache";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -161,14 +162,13 @@ export function sessionRig(
     clock: systemTimekeeper,
     logger: () => {},
   });
-  const cache = new RenderCache<SessionSource>(
+  const cache = new DiskRenderCache<SessionSource>(
+    { locations: locs(), stateDir: stateDir({ env: {}, home: dir, tmp: dir }), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
-      locations: locs(),
+      home: locs().home,
       env: {},
       sessionState,
-      watchers,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

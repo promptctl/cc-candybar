@@ -13,7 +13,7 @@ import v8 from "node:v8";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { World } from "./host.js";
-import { daemonPaths, locations } from "./daemon/paths.js";
+import { daemonPaths } from "./daemon/paths.js";
 import { rendererAdapters } from "./daemon/production-adapters.js";
 import { linkSigner } from "./click/link-signer.js";
 import { daemonGates } from "./daemon/foundations/update-keys.js";
@@ -151,8 +151,6 @@ function booted(
       doctor: adapters.doctorStores,
     },
     linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
-    stateDir: paths.state,
-    locations: locations(host),
     env: host.env,
     home: host.home,
     gates: daemonGates(),

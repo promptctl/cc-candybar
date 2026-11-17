@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Host } from "../host.js";
-import type { Locations } from "../config/loader/discovery";
+import type { Locations } from "./config-discovery/discovery.js";
 
 // XDG Base Directory split:
 //   - daemon runtime (pid, log, heap snapshots, spawn.lock) → $XDG_STATE_HOME/cc-candybar

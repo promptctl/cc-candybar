@@ -12,7 +12,9 @@ import { transcriptReads } from "../src/utils/transcript-fs.ts";
 
 const [file, n = "1"] = process.argv.slice(2);
 if (file === undefined) {
-  console.error("usage: tsx --expose-gc scripts/fold-cost.mts <transcript.jsonl> [concurrency]");
+  console.error(
+    "usage: tsx --expose-gc scripts/fold-cost.mts <transcript.jsonl> [concurrency]",
+  );
   process.exit(2);
 }
 const concurrency = Number(n);
@@ -31,7 +33,12 @@ const sampler = setInterval(() => {
 
 const folds = await Promise.all(
   Array.from({ length: concurrency }, () =>
-    foldAppended(file, undefined, 0, (count, entries) => count + entries.length),
+    foldAppended(
+      file,
+      undefined,
+      0,
+      (count, entries) => count + entries.length,
+    ),
   ),
 );
 clearInterval(sampler);
@@ -39,7 +46,9 @@ const after = process.memoryUsage();
 
 const first = folds[0]!;
 if (first.kind !== "ok") {
-  console.error(`fold ${first.kind}${first.kind === "failed" ? `: ${first.reason}` : ""}`);
+  console.error(
+    `fold ${first.kind}${first.kind === "failed" ? `: ${first.reason}` : ""}`,
+  );
   process.exit(1);
 }
 const { folded } = first.value;

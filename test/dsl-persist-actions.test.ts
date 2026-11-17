@@ -20,6 +20,7 @@
 //   5. reset-config is gated by key membership and deletes the key's path
 //      from the file, so the next reload falls back to the bundled default.
 
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import type { ColorCompatibility } from "../src/themes/policy";
 import { drawPayload } from "./helpers/draw-payload";
 import { locations } from "../src/daemon/paths";
@@ -822,17 +823,16 @@ function makeCache(): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
-  const cache = new RenderCache(
+  const cache = new DiskRenderCache(
+    { locations: locations(durable.host), stateDir: stateDir(durable.host), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(durable.host),
-      locations: locations(durable.host),
+      home: durable.host.home,
       env: durable.host.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
-      watchers,
       source: SOURCES_NOTHING,
     },
     {

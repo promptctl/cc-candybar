@@ -1,3 +1,4 @@
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs } from "./helpers/host";
@@ -64,7 +65,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/renderer/config-file-store";
 import { testVerbContext,
-  verbContextWith, effectsOf } from "./helpers/click";
+  verbContextWith, effectsOf, landsConfigOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import {
   encodeSegments,
@@ -576,17 +577,17 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
     // The daemon's own lookup and reload: a click is gated by the config as
     // the last click left it, and an insertion mints its id against it.
     configFor: () => current,
-    // A file that no longer loads keeps the last config that did, as the
-    // render cache's reload does.
-    reloadConfig: () => {
-      try {
-        current = parseAndValidate("<test>", durable.text()!, ALLOWED);
-      } catch (err) {
-        if (!(err instanceof ConfigError)) throw err;
-      }
-    },
     log: (_level, message) => log.push(message)
 });
+  // A file that no longer loads keeps the last config that did, as the
+  // render cache's reload does.
+  landsConfigOf(ctx, () => {
+    try {
+      current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+    } catch (err) {
+      if (!(err instanceof ConfigError)) throw err;
+    }
+  });
   const click = async (url: string): Promise<void> => {
     const { verb, value } = linkClick(url);
     const effects =
@@ -1007,17 +1008,16 @@ function makeCache(reloads?: ReloadSignal): {
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
-  const cache = new RenderCache(
+  const cache = new DiskRenderCache(
+    { locations: locations(durable.host), stateDir: stateDir(durable.host), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(durable.host),
-      locations: locations(durable.host),
+      home: durable.host.home,
       env: durable.host.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
-      watchers,
       source: SOURCES_NOTHING,
     },
     {
@@ -1085,16 +1085,11 @@ function originCtx(
       undefined,
       durable.host,
     ), {
-    // The daemon's own wiring (daemon.ts): the config a session renders with
-    // is its cache entry's, and a click that must not act on the old config
-    // reloads that entry from the file it just wrote.
+    // The daemon's own wiring (main.ts): the config a session renders with
+    // is its cache entry's, as the host's discovery last handed it in.
     configFor: (origin) =>
       cache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state
         .config,
-    reloadConfig: (origin) =>
-      cache.reload(origin.projectDir, origin.cwd, origin.target.path, {
-        kind: "write",
-      })
 });
 }
 
@@ -1202,18 +1197,10 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     relation: "after",
   });
 
-  // [LAW:one-source-of-truth] The click's write reaches the LIVE cache through
-  // the SAME watcher a hand edit to the file fires — there is no second
-  // "overrides changed" channel. The first application is the click itself;
-  // a retry (fs.watch has no ready signal — see reload-signal.ts) re-touches
-  // the file with the bytes the click left, so every application ends in the
-  // same on-disk state and emits an event.
-  // [LAW:verifiable-goals] A save reloads its config explicitly, and the
-  // config's watch then hears the same write. The watch's reload resolves
-  // the bytes the save loaded and keeps the state, so each session view
-  // drawing from the entry reopens exactly once. The retries rewrite the
-  // bytes the click left, so each is a kept reload too, and the count below
-  // covers them.
+  // [LAW:no-ambient-temporal-coupling] A save's landing hands the session its
+  // new snapshot before the click's effect-done, so the entry reloads once.
+  // The config's watch then hears the same write, and discovery finds nothing
+  // moved, so nothing reloads again.
   test("a save reopens each session view drawing from its entry exactly once", async () => {
     durable.write(userConfigBody);
     const loads: string[] = [];
@@ -1223,17 +1210,16 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       logger: () => {},
     });
     const sessionState = new SessionState();
-    const cache = new RenderCache(
+    const cache = new DiskRenderCache(
+      { locations: locations(durable.host), stateDir: stateDir(durable.host), watchers },
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(durable.host),
-        locations: locations(durable.host),
+        home: durable.host.home,
         env: durable.host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState,
-        watchers,
         source: SOURCES_NOTHING,
         log: (_level, line) => lines.push(line),
       },
@@ -1252,28 +1238,24 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           .holdSession(dir, dir, undefined, viewFacts(dir, sid))
           [Symbol.dispose]();
       const ctx = originCtx(cache, sessionState);
-      let clicked = false;
-      await untilHeard(
-        async () => {
-          if (clicked) {
-            writeFileSync(durable.configPath, durable.text()!);
-            return;
-          }
-          clicked = true;
-          await fireVerb(
-            "apply-layout-op",
-            ctx,
-            "s1",
-            "user",
-            "presets.default.root",
-            REMOVE_DIRECTORY,
-          );
-        },
-        () => loads.includes("config-watch:kept"),
-        "the watch's reload of the saved bytes",
+      landsConfigOf(ctx, () => cache.landed([durable.configPath]));
+      await fireVerb(
+        "apply-layout-op",
+        ctx,
+        "s1",
+        "user",
+        "presets.default.root",
+        REMOVE_DIRECTORY,
       );
-      expect(loads.slice(0, 2)).toEqual(["open:built", "write:built"]);
-      expect(loads.slice(2).filter((l) => !l.endsWith(":kept"))).toEqual([]);
+      expect(loads).toEqual(["open:built", "config:built"]);
+      // A retry (fs.watch has no ready signal — see reload-signal.ts)
+      // rewrites the bytes the click left, so each is heard as the same file.
+      await untilHeard(
+        () => writeFileSync(durable.configPath, durable.text()!),
+        () => lines.some((l) => l.startsWith("config discovery heard=config:")),
+        "the watch hearing the saved bytes",
+      );
+      expect(loads).toEqual(["open:built", "config:built"]);
       const reopened = lines
         .filter((l) => / by=reload /.test(l))
         .map((l) => /sid="(\w+)"/.exec(l)?.[1]);

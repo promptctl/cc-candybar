@@ -29,7 +29,8 @@ function fail(msg) {
 }
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
-const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+const writeJson = (path, value) =>
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 
 // [LAW:one-source-of-truth] The version is the one semantic-release committed in
 // the tagged package.json; the tag must name it, or this is not that release.
@@ -37,7 +38,8 @@ const rootPkgPath = resolve(ROOT, "package.json");
 const rootPkg = readJson(rootPkgPath);
 const version = rootPkg.version;
 const tag = process.argv[2];
-if (tag !== `v${version}`) fail(`tag ${tag} does not name package.json's version ${version}`);
+if (tag !== `v${version}`)
+  fail(`tag ${tag} does not name package.json's version ${version}`);
 
 // [LAW:no-silent-failure] A registry we could not ASK is not a registry that
 // says no: on `unchecked` we publish and let `npm publish` arbitrate, because
@@ -50,16 +52,22 @@ function publish(name, dir) {
     return;
   }
   if (state.kind === "unchecked") {
-    console.log(`  could not ask the registry about ${name}@${version} (${state.reason}); publishing and letting npm arbitrate`);
+    console.log(
+      `  could not ask the registry about ${name}@${version} (${state.reason}); publishing and letting npm arbitrate`,
+    );
   }
   console.log(`  publishing ${name}@${version}`);
-  execFileSync("npm", ["publish", "--access", "public"], { cwd: dir, stdio: "inherit" });
+  execFileSync("npm", ["publish", "--access", "public"], {
+    cwd: dir,
+    stdio: "inherit",
+  });
 }
 
 // 1. The platform packages, each around the binary CI staged into it.
 for (const p of PLATFORMS) {
   const binPath = resolve(platformDir(p), "bin", "cc-candybar");
-  if (!existsSync(binPath)) fail(`missing binary at ${binPath} — CI must stage it before publishing`);
+  if (!existsSync(binPath))
+    fail(`missing binary at ${binPath} — CI must stage it before publishing`);
 }
 for (const p of PLATFORMS) {
   const pkgPath = resolve(platformDir(p), "package.json");
@@ -70,20 +78,28 @@ for (const p of PLATFORMS) {
 // 2. The main package names the platform packages as optional dependencies, so
 // it is published only once the registry serves all four: published sooner, an
 // install in the gap silently falls back to the node shim.
-const visibility = awaitRegistryVisibility(PLATFORMS.map(platformPackage), version, {
-  budgetMs: 10 * 60 * 1000,
-  pollMs: 10 * 1000,
-  log: (m) => console.log(`publish.mjs: ${m}`),
-});
+const visibility = awaitRegistryVisibility(
+  PLATFORMS.map(platformPackage),
+  version,
+  {
+    budgetMs: 10 * 60 * 1000,
+    pollMs: 10 * 1000,
+    log: (m) => console.log(`publish.mjs: ${m}`),
+  },
+);
 if (visibility.kind === "timedOut") {
   fail(
     `the registry did not serve ${visibility.pending.length} platform package(s) at ${version} within 10 minutes: ` +
-      visibility.pending.map(({ name, state }) => `${name} (${state.kind}: ${state.reason})`).join(", ") +
+      visibility.pending
+        .map(({ name, state }) => `${name} (${state.kind}: ${state.reason})`)
+        .join(", ") +
       `. Rerunning the publish job is safe: it skips versions the registry already serves.`,
   );
 }
 writeJson(rootPkgPath, {
   ...rootPkg,
-  optionalDependencies: Object.fromEntries(PLATFORMS.map((p) => [platformPackage(p), version])),
+  optionalDependencies: Object.fromEntries(
+    PLATFORMS.map((p) => [platformPackage(p), version]),
+  ),
 });
 publish(rootPkg.name, ROOT);

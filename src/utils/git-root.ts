@@ -10,6 +10,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
+import type { Checkout } from "../config/config-snapshot.js";
+import type { WorktreeLink } from "../config/loader/repo-gate.js";
+import type { CheckoutLocation } from "./claude.js";
 
 export function holdsGit(dir: string): boolean {
   return fs.existsSync(path.join(dir, ".git"));
@@ -26,14 +29,6 @@ export function gitRootOf(start: string): string | undefined {
     if (parent === dir) return undefined;
     dir = parent;
   }
-}
-
-// The checkout a working directory is in: its git root, or — a directory in
-// no checkout — the directory itself, with which of the two it was kept, so a
-// load can say why a data path landed where it did.
-export interface Checkout {
-  readonly root: string;
-  readonly git: boolean;
 }
 
 export function checkoutOf(cwd: string): Checkout {
@@ -107,15 +102,6 @@ export function commonDirOf(gitDir: string): Outcome<string> {
     : ok(path.resolve(gitDir, common));
 }
 
-// Whether a directory sits in a linked worktree, and if so its counterpart in
-// the repository's main worktree, spelled as `git worktree list` spells the
-// main worktree: the common dir with a trailing `.git` stripped (a bare
-// repository's common dir is its own spelling).
-export type WorktreeLink =
-  | { readonly kind: "linked"; readonly main: string }
-  | { readonly kind: "unlinked" }
-  | { readonly kind: "unproven"; readonly reason: string };
-
 const UNLINKED: WorktreeLink = { kind: "unlinked" };
 const unproven = (reason: string): WorktreeLink => ({
   kind: "unproven",
@@ -176,18 +162,6 @@ export function worktreeLink(dir: string): WorktreeLink {
       ? path.dirname(realCommon.value)
       : realCommon.value;
   return { kind: "linked", main: path.join(main, path.relative(root, dir)) };
-}
-
-// Where a directory sits in its repository, for display. `main` is the main
-// checkout's root ("" in no repository), `worktree` the linked worktree's name
-// ("" otherwise), `subpath` the directory below the checkout root ("/src", or
-// ""). [LAW:no-silent-failure] exception: an unproven link reads as a checkout
-// of its own, since its root is real and the git cell reports the broken repo.
-export interface CheckoutLocation {
-  readonly main: string;
-  readonly worktree: string;
-  readonly subpath: string;
-  readonly noRepo: boolean;
 }
 
 export function checkoutLocation(dir: string): CheckoutLocation {

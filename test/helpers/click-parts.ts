@@ -4,6 +4,7 @@
 // the test hands in its own. A test that builds its daemon parts by hand spreads
 // these in.
 
+import { DISK, diskConfigs, sessionSnapshot } from "./disk-render-cache";
 import { holdable, hostHeld, NO_PUSHES } from "./renderers";
 import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
@@ -34,11 +35,14 @@ export function clickParts(
       kind: "failed",
       reason: `${act.kind}: no host part in this rig`,
     }),
-    stateDir: verbCtx.stateDir,
+    stateDir: DISK.stateDir,
+    configs: diskConfigs(sessionSnapshot(verbCtx.sessionState)),
     closing: () => false,
     unheard: () => {},
   },
 ): Pick<DaemonParts, "renderer" | "linkSigner"> & {
+  configDiscovery: Pick<DaemonParts["configDiscovery"], "current">;
+} & {
   collector: Pick<Collector, "holding" | "clicked">;
   // Another turn, held in the renderer's mailbox until `open`: every input
   // sent after it waits there, in flight.
@@ -100,6 +104,8 @@ export function clickParts(
   return {
     renderer,
     collector,
+    // The verbs read the test's own config, so a click carries none.
+    configDiscovery: { current: () => null },
     linkSigner: TEST_SIGNER,
     menuIdle,
     park: () => {

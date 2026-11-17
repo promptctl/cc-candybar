@@ -26,7 +26,8 @@ function parseStep(step: string): [string, number] {
 
 // A count of columns or rows: a whole number ≥ 1, or the run stops naming it.
 function cells(flag: string, raw: string): number {
-  if (!/^[1-9]\d*$/.test(raw)) throw new Error(`--${flag} must be a whole number ≥ 1, got "${raw}"`);
+  if (!/^[1-9]\d*$/.test(raw))
+    throw new Error(`--${flag} must be a whole number ≥ 1, got "${raw}"`);
   return Number(raw);
 }
 
@@ -48,7 +49,10 @@ async function main(): Promise<void> {
   const bar = await startBar({
     width: cells("width", values.width),
     rows: cells("rows", values.rows),
-    config: values.config === undefined ? null : path.resolve(invokedIn, values.config),
+    config:
+      values.config === undefined
+        ? null
+        : path.resolve(invokedIn, values.config),
     cwd: path.resolve(invokedIn, values.cwd),
     ssh: values.ssh,
   });
@@ -58,7 +62,8 @@ async function main(): Promise<void> {
     for (const step of positionals) {
       const clicked = await bar.click(...parseStep(step));
       out = clicked.rendered;
-      const refused = clicked.refused === null ? "" : `  (refused: ${clicked.refused})`;
+      const refused =
+        clicked.refused === null ? "" : `  (refused: ${clicked.refused})`;
       console.log(`--- ${step}${refused}\n${printable(out)}`);
     }
     if (values.links) {

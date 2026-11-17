@@ -16,8 +16,8 @@
 //
 // [LAW:single-enforcer] No parallel validation path: the verdict is reached
 // through the exact functions the daemon runs (RenderCache.reloadInto →
-// buildState, then the per-request render in draw-bar.ts) — resolveDslConfig →
-// detectConfigCollisions → loadConfig → validateRenderable → registerDslConfig →
+// buildState, then the per-request render in draw-bar.ts) — discover →
+// loadConfigChain → validateRenderable → registerDslConfig →
 // deriveActionValidators → drawDsl. "check passes" and "the daemon renders"
 // cannot diverge, because they are one code path as far as the Frame, and
 // encoding a Frame refuses nothing: it is the print's, so a verdict with no
@@ -28,23 +28,20 @@
 
 import { previewSigner } from "./click/link-signer.js";
 import { locations, stateDir } from "./daemon/paths.js";
-import { repoConfigs } from "./config/repo-configs.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
-import type { ConfigResolution } from "./config/loader/discovery.js";
+import {
+  discover,
+  type ConfigLayer,
+} from "./daemon/config-discovery/discovery.js";
+import type { ConfigSnapshot } from "./config/config-snapshot.js";
 import fs from "node:fs";
 import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";
 import {
   loadConfigChain,
-  resolveDslConfig,
-  configResolutionNotice,
-  detectConfigCollisions,
   ConfigError,
   refuseDrops,
   type DroppedPlugin,
-  type SessionDirs,
-  type ConfigLayer,
-  homeLayer,
 } from "./config/dsl-loader.js";
 import { chainName, cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
@@ -416,17 +413,20 @@ export function checkPayload(
 //
 // `layers` are the files checked, lowest first; none means the bundled
 // default was checked (no config file loaded — the daemon renders the same
-// default in that state).
+// default in that state). `snapshot` is what the daemon's discovery found,
+// the one input the load took.
 export type CheckOutcome =
   | {
       readonly kind: "clean";
       readonly layers: readonly ConfigLayer[];
+      readonly snapshot: ConfigSnapshot;
       readonly warnings: readonly string[];
       readonly rendered: Frame;
     }
   | {
       readonly kind: "fatal";
       readonly layers: readonly ConfigLayer[];
+      readonly snapshot: ConfigSnapshot;
       readonly message: string;
       readonly warnings: readonly string[];
     }
@@ -435,22 +435,6 @@ export type CheckOutcome =
       readonly path: string;
       readonly message: string;
     };
-
-// The no-target search: the daemon's own resolver over (cwd, cwd), so the
-// file this checks IS the file the daemon would load from this directory.
-// It names no explicit file, so `missing`/`unreadable` are unreachable and
-// the projection is the chain's layers — which may carry locations the
-// search could not check, and that advisory is the SAME
-// notice RenderCache renders ([LAW:one-source-of-truth]): `check` reports
-// what the bar would, never a re-derivation of it.
-function searchedLayers(
-  resolution: ConfigResolution,
-  warnings: string[],
-): readonly ConfigLayer[] {
-  const notice = configResolutionNotice(resolution);
-  if (notice !== null) warnings.push(notice);
-  return resolution.kind === "chain" ? resolution.layers : [];
-}
 
 // Run the daemon's load-and-render pipeline against one config target.
 //
@@ -492,21 +476,6 @@ export async function checkConfig(
   // (`check .`) fails read() with a path-less EISDIR the catch could not
   // attribute, so the not-a-file usage error is decided here.
   const configPath = explicitConfigPath(cwd, target, world.host.home) ?? null;
-  // [LAW:single-enforcer] The daemon's gate, under the same answers: a
-  // repository the bar would not run, `check` names and runs nothing of.
-  const locs = locations(world.host);
-  const resolution = resolveDslConfig(
-    locs,
-    repoConfigs(stateDir(world.host)).read(),
-    { projectDir: cwd, configFile: configPath ?? undefined },
-  );
-  warnings.push(...repoGateLines(resolution.repos));
-  // An explicit file that is absent or unreadable is still the chain: its
-  // read is what names the failure.
-  const layers =
-    configPath === null
-      ? searchedLayers(resolution, warnings)
-      : [homeLayer(configPath)];
   if (configPath !== null) {
     // throwIfNoEntry suppresses only ENOENT (left for the content read to
     // classify); EACCES/EPERM on the probe itself is equally "could not read
@@ -530,42 +499,49 @@ export async function checkConfig(
     }
   }
 
-  // [LAW:dataflow-not-control-flow] Collision detection runs independent of
-  // load success: even if the .json5 fails to parse, the author still wants
-  // to know a shadowed .json sibling exists.
-  const collision = detectConfigCollisions(locs, cwd);
-  if (collision !== null) warnings.push(collision);
+  // [LAW:single-enforcer] The daemon's own discovery, under the same
+  // answers: the files this checks are the files the bar would load from
+  // this directory, and a repository the bar would not run, `check` names
+  // and runs nothing of.
+  const { snapshot: found, gate } = discover(
+    { projectDir: cwd, cwd, configFile: configPath ?? undefined },
+    { locations: locations(world.host), stateDir: stateDir(world.host) },
+  );
+  const snapshot: ConfigSnapshot = { ...found, watch: null };
+  // [LAW:one-source-of-truth] What discovery found wrong is the notice the
+  // bar shows; the gate's lines say it once more for an unread answers book.
+  warnings.push(...new Set([...repoGateLines(gate), ...snapshot.notices]));
+  // [LAW:no-silent-failure] A named file that could not be read is the
+  // `unreadable` outcome, never a fall-through to the bundled default the
+  // bar draws until it appears.
+  const unread =
+    configPath === null
+      ? undefined
+      : snapshot.chain.find(({ content }) => content.kind !== "text");
+  if (configPath !== null && unread !== undefined)
+    return {
+      kind: "unreadable",
+      path: configPath,
+      message:
+        unread.content.kind === "unreadable"
+          ? unread.content.error
+          : "no such file",
+    };
+  const layers = snapshot.chain.flatMap(({ path, role, content }) =>
+    content.kind === "absent" ? [] : [{ path, role }],
+  );
 
   try {
     const rendered = await loadRegisterRender(
       world,
       gates,
-      layers,
-      { repo: resolution.repos.plugins },
+      snapshot,
       cwd,
       warnings,
       settleMs,
     );
-    return { kind: "clean", layers, warnings, rendered };
+    return { kind: "clean", layers, snapshot, warnings, rendered };
   } catch (e) {
-    // A filesystem error on the config file itself (ENOENT/EACCES from
-    // loadConfig's read — errno errors carry the failing `.path`, which is the
-    // discriminator against deeper fs failures) is the `unreadable` outcome:
-    // the named file could not be read at all, distinct from a file that read
-    // but is invalid. [LAW:no-silent-failure] — never a fall-through to the
-    // bundled default. Duck-typed, not `instanceof Error`: fs errors can cross
-    // a realm boundary (jest/graceful-fs), where instanceof lies.
-    const errno = e as Partial<NodeJS.ErrnoException> | null;
-    if (
-      typeof errno === "object" &&
-      errno !== null &&
-      typeof errno.code === "string" &&
-      typeof errno.path === "string" &&
-      layers.some((l) => l.path === errno.path) &&
-      typeof errno.message === "string"
-    ) {
-      return { kind: "unreadable", path: errno.path, message: errno.message };
-    }
     // Same classification RenderCache.reloadInto applies: ConfigError and
     // register/render throws (template parse, MissingFieldError, action arity)
     // are all author-facing diagnostics — the daemon would surface each as
@@ -577,7 +553,7 @@ export async function checkConfig(
         : e instanceof Error
           ? e.message
           : String(e);
-    return { kind: "fatal", layers, message, warnings };
+    return { kind: "fatal", layers, snapshot, message, warnings };
   }
 }
 
@@ -608,16 +584,9 @@ export interface PreparedConfig {
   [Symbol.dispose](): void;
 }
 
-// The repository a chain loads with: its approved project.
-export type RepoSession = Omit<SessionDirs, "cwd">;
-
-// No approved project.
-export const NO_REPO: RepoSession = { repo: null };
-
 export async function prepareConfig(
   world: World,
-  chain: readonly ConfigLayer[],
-  repo: RepoSession,
+  snapshot: ConfigSnapshot,
   cwd: string,
   warnings: string[],
   // The instant the view's first payload is stamped at: the one its renders
@@ -627,13 +596,13 @@ export async function prepareConfig(
 ): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
-  const layers = chain.map((l) => l.path);
+  const layers = snapshot.chain.flatMap(({ path, content }) =>
+    content.kind === "absent" ? [] : [path],
+  );
   const loaded = loadConfigChain(
-    locations(world.host),
-    chain,
+    { snapshot, home: world.host.home },
     DEFAULT_DSL_CONFIG,
     { warned: (w) => warnings.push(...w) },
-    { ...repo, cwd },
   );
   // [LAW:no-silent-failure] The bar draws past a placement of an undeclared
   // segment; a check refuses it, as the file's author has to fix it.
@@ -808,8 +777,7 @@ export async function renderEffective(
 async function loadRegisterRender(
   world: World,
   gates: Gates,
-  chain: readonly ConfigLayer[],
-  repo: RepoSession,
+  snapshot: ConfigSnapshot,
   cwd: string,
   warnings: string[],
   settleMs: number,
@@ -819,8 +787,7 @@ async function loadRegisterRender(
   const at = instantOf(new Date(world.clock.now()));
   const prepared = await prepareConfig(
     world,
-    chain,
-    repo,
+    snapshot,
     cwd,
     warnings,
     at,

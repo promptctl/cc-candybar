@@ -298,12 +298,12 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   });
 
   // A click that writes no config file reloads no entry, however many
-  // directories render that config. Judged by what each load says caused it,
-  // on the event every load path emits. The directories are this test's own,
-  // so every load of their entries is here: each opens once, and after that
-  // only its config watch, hearing the config rewritten after the click,
-  // loads it again. A load the click caused would say another cause; a write
-  // of its own to the config would leave the file changed before the rewrite.
+  // directories render that config. Judged by the loads each entry logs, on
+  // the event every load path emits. The directories are this test's own, so
+  // every load of their entries is here: each opens once, and after that
+  // only the config turn its watch's rewrite brings loads it again. A load the
+  // click caused would be a second; a write of its own to the config would
+  // leave the file changed before the rewrite.
   test("a lane switch's click reloads no entry; the config's own rewrite reloads each one", async () => {
     const sid = "lane-no-reload";
     const root = realpathSync(
@@ -346,7 +346,6 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
           )
           // A logfmt value: bare, or a JSON string.
           .map((l) => / cause=("(?:[^"\\]|\\.)*"|\S+) /.exec(l)![1]!);
-      const rewrite = valueOf(`config-watch:${cfg}`);
       // The positive control: each entry draws the rewritten config, so its
       // watch delivered the rewrite, and an event the click caused would
       // have been delivered before it.
@@ -370,7 +369,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       for (const d of dirs) {
         const [opened, ...reloads] = causes(d);
         expect(opened).toBe("open");
-        expect(new Set(reloads)).toEqual(new Set([rewrite]));
+        expect(reloads).toEqual(["config"]);
       }
     } finally {
       rmSync(root, { recursive: true, force: true });

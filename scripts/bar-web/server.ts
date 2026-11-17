@@ -48,7 +48,10 @@ export interface BarWeb {
 const ASSETS: Readonly<Record<string, { file: string; type: string }>> = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
   "/rich-powerline.woff2": { file: "rich-powerline.woff2", type: "font/woff2" },
-  "/transport.js": { file: "transport.js", type: "text/javascript; charset=utf-8" },
+  "/transport.js": {
+    file: "transport.js",
+    type: "text/javascript; charset=utf-8",
+  },
 };
 
 const view = (frame: Frame, refused: string | null): View => ({
@@ -60,8 +63,16 @@ const view = (frame: Frame, refused: string | null): View => ({
 // A size the page reports: whole numbers ≥ 1, or the request is refused.
 function sizeOf(body: Record<string, unknown>): TerminalSize {
   const { width, rows } = body;
-  if (!Number.isInteger(width) || !Number.isInteger(rows) || (width as number) < 1 || (rows as number) < 1) {
-    throw new HttpError(400, `width and rows must be whole numbers ≥ 1, got ${JSON.stringify({ width, rows })}`);
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(rows) ||
+    (width as number) < 1 ||
+    (rows as number) < 1
+  ) {
+    throw new HttpError(
+      400,
+      `width and rows must be whole numbers ≥ 1, got ${JSON.stringify({ width, rows })}`,
+    );
   }
   return { width: width as number, rows: rows as number };
 }
@@ -75,9 +86,14 @@ class HttpError extends Error {
   }
 }
 
-async function readJson(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+async function readJson(
+  req: http.IncomingMessage,
+): Promise<Record<string, unknown>> {
   if (!/^application\/json\b/.test(req.headers["content-type"] ?? "")) {
-    throw new HttpError(415, `the body must be sent as application/json, got ${req.headers["content-type"] ?? "no content-type"}`);
+    throw new HttpError(
+      415,
+      `the body must be sent as application/json, got ${req.headers["content-type"] ?? "no content-type"}`,
+    );
   }
   let text = "";
   for await (const chunk of req) text += chunk;
@@ -85,7 +101,10 @@ async function readJson(req: http.IncomingMessage): Promise<Record<string, unkno
   try {
     parsed = JSON.parse(text === "" ? "{}" : text);
   } catch (e) {
-    throw new HttpError(400, `the body is not JSON: ${e instanceof Error ? e.message : String(e)}`);
+    throw new HttpError(
+      400,
+      `the body is not JSON: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new HttpError(400, "the body must be a JSON object");
@@ -113,17 +132,22 @@ export async function serveBar(
     return next;
   };
 
-  const routes: Readonly<Record<string, (body: Record<string, unknown>) => Promise<View>>> = {
+  const routes: Readonly<
+    Record<string, (body: Record<string, unknown>) => Promise<View>>
+  > = {
     "/render": async (body) => {
       bar.resize(sizeOf(body));
       return view(await bar.render(), null);
     },
     "/click": async (body) => {
       bar.resize(sizeOf(body));
-      if (typeof body.url !== "string") throw new HttpError(400, "url must be a string");
-      const clicked: Clicked = await bar.follow(body.url).catch((e: unknown) => {
-        throw e instanceof NotDrawnError ? new HttpError(409, e.message) : e;
-      });
+      if (typeof body.url !== "string")
+        throw new HttpError(400, "url must be a string");
+      const clicked: Clicked = await bar
+        .follow(body.url)
+        .catch((e: unknown) => {
+          throw e instanceof NotDrawnError ? new HttpError(409, e.message) : e;
+        });
       return view(clicked.rendered, clicked.refused);
     },
     // A new session on a fresh daemon and an untouched copy of the config. The
@@ -139,18 +163,33 @@ export async function serveBar(
 
   let host = "";
   const server = http.createServer((req, res) => {
-    const send = (status: number, type: string, payload: string | Buffer): void => {
-      res.writeHead(status, { "content-type": type, "cache-control": "no-store" });
+    const send = (
+      status: number,
+      type: string,
+      payload: string | Buffer,
+    ): void => {
+      res.writeHead(status, {
+        "content-type": type,
+        "cache-control": "no-store",
+      });
       res.end(payload);
     };
-    const fail = (status: number, error: string): void => send(status, "application/json", JSON.stringify({ error }));
+    const fail = (status: number, error: string): void =>
+      send(status, "application/json", JSON.stringify({ error }));
     if (req.headers.host !== host) {
-      fail(421, `this server answers only as ${host}, not ${req.headers.host ?? "no host"}`);
+      fail(
+        421,
+        `this server answers only as ${host}, not ${req.headers.host ?? "no host"}`,
+      );
       return;
     }
     const asset = req.method === "GET" ? ASSETS[req.url ?? ""] : undefined;
     if (asset !== undefined) {
-      send(200, asset.type, fs.readFileSync(path.join(opts.assets, asset.file)));
+      send(
+        200,
+        asset.type,
+        fs.readFileSync(path.join(opts.assets, asset.file)),
+      );
       return;
     }
     const route = req.method === "POST" ? routes[req.url ?? ""] : undefined;
@@ -160,7 +199,11 @@ export async function serveBar(
     }
     serial(async () => route(await readJson(req))).then(
       (v) => send(200, "application/json", JSON.stringify(v)),
-      (e: unknown) => fail(e instanceof HttpError ? e.status : 500, e instanceof Error ? e.message : String(e)),
+      (e: unknown) =>
+        fail(
+          e instanceof HttpError ? e.status : 500,
+          e instanceof Error ? e.message : String(e),
+        ),
     );
   });
 

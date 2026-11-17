@@ -30,10 +30,11 @@ import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import {
   inheritedConfig,
   loadConfigChain,
-  type ConfigLayer,
-  type WriteLayer,
+  type ChainSource,
   type LoadedChain,
 } from "../config/dsl-loader.js";
+import type { Layer } from "../config/config-snapshot.js";
+import type { LayerRole } from "../config/layer-role.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
   DslConfig,
@@ -114,8 +115,6 @@ export function persistValueText(key: string, raw: string): string {
 }
 
 // ─── The file ────────────────────────────────────────────────────────────────
-
-export { readConfigText } from "../utils/atomic-write.js";
 
 function docOf(text: string): Node | null {
   return /^\s*$/.test(text) ? null : parseDocument(text);
@@ -437,28 +436,64 @@ export interface EditStore {
 // layer. A click writes several files (a `do` across layers, an undo step), and
 // each write is proved against the chain the click leaves, never the disk's.
 interface Seen extends WriteLayer {
+  readonly written: Layer;
   readonly below: readonly HeldLayer[];
   readonly above: readonly HeldLayer[];
 }
-type HeldLayer = ConfigLayer & { readonly text: string };
+type HeldLayer = Layer & { readonly text: string };
+
+// [LAW:one-source-of-truth] The layer a click writes, by its role in the
+// chain its session's config turn handed in: every write is proved against
+// that chain, and the change names the role, never the file.
+export interface WriteLayer {
+  readonly role: LayerRole;
+  readonly source: ChainSource;
+}
+
+// The file a write lands in, for its messages.
+export const pathOf = ({ role, source }: WriteLayer): string =>
+  layerOf(source, role).path;
+
+function layerOf({ snapshot }: ChainSource, role: LayerRole): Layer {
+  const layer = snapshot.chain.find((l) => l.role === role);
+  // [LAW:no-silent-failure] A write names a role its session's chain holds
+  // (the verbs refuse any other), so a miss is a renderer bug.
+  if (layer === undefined)
+    throw new Error(`the session's config has no ${role} layer`);
+  return layer;
+}
 
 function seenBy(
   layer: WriteLayer,
   read: (file: string) => string | null,
 ): Seen {
-  const held = (layers: readonly ConfigLayer[]): HeldLayer[] =>
+  const { chain } = layer.source.snapshot;
+  const at = chain.indexOf(layerOf(layer.source, layer.role));
+  const held = (layers: readonly Layer[]): HeldLayer[] =>
     layers.flatMap((l) => {
       const text = read(l.path);
-      return text === null ? [] : [{ ...l, text }];
+      return text === null ? [] : [withText(l, text)];
     });
-  return { ...layer, below: held(layer.below), above: held(layer.above) };
+  return {
+    ...layer,
+    written: chain[at]!,
+    below: held(chain.slice(0, at)),
+    above: held(chain.slice(at + 1)),
+  };
 }
 
-// The loader's read over a chain of held layers: every path it asks for is
-// one of theirs.
-function textsOf(layers: readonly HeldLayer[]): (path: string) => string {
-  const texts = new Map(layers.map((l) => [l.path, l.text]));
-  return (path) => texts.get(path)!;
+const withText = (layer: Layer, text: string): HeldLayer => ({
+  ...layer,
+  content: { kind: "text", text },
+  text,
+});
+
+// The session's chain source with `chain` in place of its own.
+function over(into: Seen, chain: readonly Layer[]): ChainSource {
+  return {
+    ...into.source,
+    snapshot: { ...into.source.snapshot, chain },
+  };
 }
 
 // [LAW:one-source-of-truth] Every tracked write lands here, once, as the
@@ -488,7 +523,7 @@ function commit(
   const was: Was = () => (held ??= { chain: loadedOrNull(into, before) }).chain;
   refuseNewDrops(into, was, will);
   refuse(into, was, will);
-  store.record(into.path, before, after);
+  store.record(into.written.path, before, after);
   return will.config;
 }
 
@@ -502,7 +537,7 @@ function refuseHidden(into: Seen, was: Was, will: LoadedChain): void {
   const hidden = hiddenBy(into, was(), will);
   if (hidden.length > 0) {
     throw new BadVerbArgs(
-      `refused: ${into.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${into.path}, so this click would change nothing on the bar — write it to that layer instead`,
+      `refused: ${into.above.map((l) => l.path).join(", ")} sets ${hidden.join(", ")} over ${into.written.path}, so this click would change nothing on the bar — write it to that layer instead`,
     );
   }
 }
@@ -556,37 +591,27 @@ function loadedOrNull(into: Seen, text: string | null): LoadedChain | null {
 // click, naming why, as the written file's own failure to load does.
 function inheritedOf(into: Seen): DslConfig {
   try {
-    return inheritedConfig(
-      into.locs,
-      into.below,
-      DEFAULT_DSL_CONFIG,
-      { repo: into.repo, cwd: into.cwd },
-      textsOf(into.below),
-    );
+    return inheritedConfig(over(into, into.below), DEFAULT_DSL_CONFIG);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
-      `refused: a layer beneath ${into.path} does not load — ${e.message}`,
+      `refused: a layer beneath ${into.written.path} does not load — ${e.message}`,
     );
   }
 }
 
 // The chain the written layer's text — or its absence — loads to, between
-// the layers the click holds, exactly as resolveDslConfig orders it: an
-// existing file is a layer whatever it holds.
+// the layers the click holds, in the snapshot's order: an existing file is a
+// layer whatever it holds.
 function chainOver(into: Seen, text: string | null): LoadedChain {
-  const layers = [
-    ...into.below,
-    ...(text !== null ? [{ path: into.path, role: into.role, text }] : []),
-    ...into.above,
-  ];
   return loadConfigChain(
-    into.locs,
-    layers,
+    over(into, [
+      ...into.below,
+      ...(text !== null ? [withText(into.written, text)] : []),
+      ...into.above,
+    ]),
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
-    { repo: into.repo, cwd: into.cwd },
-    textsOf(layers),
   );
 }
 
@@ -594,7 +619,7 @@ function chainOver(into: Seen, text: string | null): LoadedChain {
 // the ones under it, and those are the same on both sides of a write, so a
 // difference between two of these is the written layer's alone.
 function writtenConfig(into: Seen, chain: LoadedChain): DslConfig {
-  const upTo = new Set([...into.below.map((l) => l.path), into.path]);
+  const upTo = new Set([...into.below.map((l) => l.path), into.written.path]);
   return (
     chain.layers.filter((l) => upTo.has(l.path)).at(-1)?.config ?? chain.base
   );
@@ -716,7 +741,7 @@ export function writeDrafts(
   placements: readonly PlacementValue[],
 ): void {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = store.read(into.written.path);
   const under = inheritedOf(into);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
@@ -733,7 +758,13 @@ export function writeDrafts(
     into,
     before,
     writtenOnly(into, () =>
-      withPlacements(valued, under, into.path, placements, (text) => text),
+      withPlacements(
+        valued,
+        under,
+        into.written.path,
+        placements,
+        (text) => text,
+      ),
     ),
     refuseHidden,
   );
@@ -834,7 +865,7 @@ export function deleteValues(
 ): void {
   const into = seenBy(layer, (file) => store.read(file));
   const targets = keys.map(requireTarget);
-  const before = store.read(into.path);
+  const before = store.read(into.written.path);
   if (before === null) return;
   const under = inheritedOf(into);
   const after = targets.reduce(
@@ -901,7 +932,7 @@ export function writePreset(
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = store.read(into.written.path);
   const doc = docOf(before ?? "");
   const under = inheritedOf(into);
   const name = freePresetName(doc, under, into);
@@ -939,7 +970,7 @@ export function writePreset(
     withPlacements(
       after,
       under,
-      into.path,
+      into.written.path,
       placements.map((p) => ({ ...p, preset: name })),
       ownRow,
     ),
@@ -963,7 +994,7 @@ export function writeThemeDefault(
   look: Readonly<Record<ThemeDefaultField, string>>,
 ): DslConfig {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = store.read(into.written.path);
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme],
@@ -990,15 +1021,15 @@ export function deletePreset(
   const under = inheritedOf(into);
   if (under.presets[name] !== undefined) {
     throw new BadVerbArgs(
-      `cannot delete preset "${name}": a layer beneath ${into.path} declares it — reset its settings instead`,
+      `cannot delete preset "${name}": a layer beneath ${into.written.path} declares it — reset its settings instead`,
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = store.read(into.path);
+  const before = store.read(into.written.path);
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
-      `cannot delete preset "${name}": ${into.path} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
+      `cannot delete preset "${name}": ${into.written.path} declares no ${own.join(".")} — the bar you clicked is stale; it reloads on the next render`,
     );
   }
   const selected = nodeAt(doc, ["globals", "preset"]);
@@ -1035,7 +1066,7 @@ export function applyLayoutOp(
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = store.read(into.path);
+  const before = store.read(into.written.path);
   const subject = op.op === "remove" ? op.target : op.anchor;
   const under = inheritedOf(into);
   const placement = writtenOnly(into, () =>
@@ -1053,7 +1084,7 @@ export function applyLayoutOp(
   });
   if (after === null) {
     throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${into.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
+      `${placement.path.join(".")} in ${into.written.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
   return { placed, config: commit(store, into, before, after, refuseHidden) };

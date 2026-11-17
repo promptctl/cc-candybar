@@ -5,6 +5,7 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { HOST, WORLD, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -62,7 +63,7 @@ import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoConfigsDir, repoConfigsPath } from "../src/config/repo-configs";
+import { repoConfigsDir, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
@@ -93,7 +94,7 @@ function makeCache(
   observers?: RenderCacheObservers,
   log?: DaemonLogger,
 ): {
-  cache: RenderCache;
+  cache: DiskRenderCache;
   cleanups: Array<() => void>;
   reloads: ReloadSignal;
   watchers: WatcherRegistry;
@@ -116,17 +117,16 @@ function makeCache(
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
-  const cache = new RenderCache(
+  const cache = new DiskRenderCache(
+    { locations: locations(host), stateDir: stateDir(host), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      home: host.home,
       env: host.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
-      watchers,
       log,
       source: SOURCES_NOTHING,
     },
@@ -651,7 +651,7 @@ describe("RenderCache", () => {
   // refused waits for the registry's period or a new slot on it, so the fault
   // the bar shows stands while the OS still refuses and clears within one
   // period of the OS watching it again.
-  test("a refused config directory stays deaf through a refused retry, is heard again on the period's judgment, and a reload leaves it as it is", () => {
+  test("a refused config directory stays deaf through a refused retry, is heard again on the period's judgment, and a reload leaves it as it is", async () => {
     const { dir, cleanup } = mkConfigDir();
     const at = realpathSync(dir);
     const watch = fs.watch.bind(fs);
@@ -666,14 +666,19 @@ describe("RenderCache", () => {
     const { cache, cleanups, watchers } = makeCache();
     try {
       const entry = cache.getOrCreate(dir, dir, undefined);
-      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      expect(entry.snapshot.watch).toContain(`cannot watch ${at}`);
       watchers.judge();
-      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      expect(entry.snapshot.watch).toContain(`cannot watch ${at}`);
       refuse = false;
-      cache.reload(dir, dir, undefined, { kind: "doctor" });
-      expect(entry.watch!.held.handle.deaf.map((d) => d.path)).toEqual([at]);
+      cache.reload();
+      expect(entry.snapshot.watch).toContain(`cannot watch ${at}`);
+      // The judgment hears the folder again, and what it heard reaches the
+      // entry as the host's next snapshot.
       watchers.judge();
-      expect(entry.watch!.held.handle.deaf).toEqual([]);
+      await until(
+        () => cache.getOrCreate(dir, dir, undefined).snapshot.watch === null,
+        "the config watch's fault cleared",
+      );
     } finally {
       for (const fn of cleanups) fn();
       spy.mockRestore();
@@ -1005,7 +1010,6 @@ describe("RenderCache", () => {
       },
     });
     // The cache's own watch, on the answers for repositories.
-    const own = watchers.size();
     try {
       expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
         "observer boom",
@@ -1013,13 +1017,10 @@ describe("RenderCache", () => {
       // The entry — and the live registry + watcher it owns — is in the
       // cache, so eviction/dispose can still reach it.
       expect(cache.size).toBe(1);
-      expect(watchers.size()).toBe(own + 1);
       // A second lookup finds it rather than building a duplicate: the
-      // observer (which would throw again) does not run, and no second
-      // watcher opens.
+      // observer (which would throw again) does not run.
       cache.getOrCreate(dir, dir, undefined);
       expect(cache.size).toBe(1);
-      expect(watchers.size()).toBe(own + 1);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1049,7 +1050,6 @@ describe("RenderCache", () => {
         throw new Error("observer boom");
       },
     });
-    const own = watchers.size();
     try {
       for (let i = 0; i < 5; i++) {
         expect(() => cache.getOrCreate(`/p${i}`, `/p${i}`, undefined)).toThrow(
@@ -1057,7 +1057,6 @@ describe("RenderCache", () => {
         );
       }
       expect(cache.size).toBe(4);
-      expect(watchers.size()).toBe(own + 4);
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1071,12 +1070,10 @@ describe("RenderCache", () => {
         inner = cache.getOrCreate(dir, dir, undefined);
       },
     });
-    const own = watchers.size();
     try {
       const outer = cache.getOrCreate(dir, dir, undefined);
       expect(inner).toBe(outer);
       expect(cache.size).toBe(1);
-      expect(watchers.size()).toBe(own + 1);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1095,12 +1092,10 @@ describe("RenderCache", () => {
       },
     });
     try {
-      const own = watchers.size();
       const file = join(dir, ".cc-candybar.json5");
       writeFileSync(file, `{ segments: { t: { template: "x" } } }`);
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.configLayers).toEqual([file]);
-      expect(watchers.size()).toBe(own + 1);
       // A rewrite of the book, so every retry the signal makes is an event.
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
@@ -1109,8 +1104,8 @@ describe("RenderCache", () => {
         writeFileSync(repoConfigsPath(stateDir(host)), declined),
       );
       expect(entry.configLayers).toEqual([]);
-      expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);
-      expect(causes).toContain("answers-watch");
+      expect(entry.snapshot.repo?.standing).toBe("declined");
+      expect(causes).toEqual(["open", "config"]);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1174,7 +1169,7 @@ describe("RenderCache", () => {
       );
 
       cfg.edit();
-      cache.reload("/p4", "/p4", cfg.file, { kind: "write" });
+      cache.reload();
       const reload = lines.filter((l) =>
         l.startsWith("config disposed reason=reload"),
       );
@@ -1266,7 +1261,7 @@ describe("RenderCache", () => {
     try {
       const hold = cache.hold("/p0", "/p0", cfg.file);
       cfg.edit();
-      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
+      cache.reload();
       // The entry serves the fresh state; the render keeps the one it
       // started on, undisposed, until it returns.
       expect(hold.entry.state).not.toBe(hold.state);
@@ -1282,7 +1277,7 @@ describe("RenderCache", () => {
       expect(cache.stats).toMatchObject({ size: 1, held: 0, retired: 0 });
       // The fresh state is served and torn down like any other.
       cfg.edit();
-      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
+      cache.reload();
       expect(disposals()).toHaveLength(2);
       expect(disposals()[1]).toMatch(/ held=0$/);
     } finally {
@@ -1305,7 +1300,7 @@ describe("RenderCache", () => {
       expect(holds[1]!.state).toBe(holds[0]!.state);
       expect(cache.stats).toMatchObject({ size: 1, held: 1, retired: 0 });
       cfg.edit();
-      cache.reload("/p0", "/p0", cfg.file, { kind: "write" });
+      cache.reload();
       holds[0]![Symbol.dispose]();
       expect(lines.filter((l) => l.startsWith("config disposed "))).toEqual([]);
       holds[1]![Symbol.dispose]();
@@ -1404,17 +1399,16 @@ describe("RenderCache close", () => {
       clock: systemTimekeeper,
       logger: () => {},
     });
-    const cache = new RenderCache(
+    const cache = new DiskRenderCache(
+      { locations: locations(host), stateDir: stateDir(host), watchers },
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        home: host.home,
         env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
-        watchers,
         source: SOURCES_NOTHING,
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
@@ -1431,13 +1425,10 @@ describe("RenderCache close", () => {
       cache.close();
       expect(cache.size).toBe(0);
       expect(jest.getTimerCount()).toBe(0);
-      // Every way a state is built refuses: an entry, or a reload of one.
+      // A closed cache builds no state: a new entry refuses.
       expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
         "render cache used after close",
       );
-      expect(() =>
-        cache.reload(dir, dir, undefined, { kind: "write" }),
-      ).toThrow("render cache used after close");
     } finally {
       cache.close();
       jest.useRealTimers();
@@ -1457,17 +1448,16 @@ describe("RenderCache frames and pins", () => {
       logger: () => {},
     });
     const logs: string[] = [];
-    const cache = new RenderCache(
+    const cache = new DiskRenderCache(
+      { locations: locations(host), stateDir: stateDir(host), watchers },
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        home: host.home,
         env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
-        watchers,
         log: (_level, line) => logs.push(line),
         source: SOURCES_NOTHING,
       },
@@ -1569,17 +1559,16 @@ describe("RenderCache frames and pins", () => {
     const logs: string[] = [];
     const { dir, cleanup } = mkConfigDir();
     let opens = 0;
-    const cache = new RenderCache(
+    const cache = new DiskRenderCache(
+      { locations: locations(host), stateDir: stateDir(host), watchers },
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        home: host.home,
         env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
-        watchers,
         log: (_level, line) => logs.push(line),
         // The second view built over the entry, the reload's successor, fails.
         source: (view) => {
@@ -1600,7 +1589,7 @@ describe("RenderCache frames and pins", () => {
       }
       const unpin = cache.pin(S1);
       editProjectConfig(dir);
-      cache.reload(dir, dir, undefined, { kind: "write" });
+      cache.reload();
       expect(logs).toContainEqual(
         expect.stringMatching(
           /^session view reopen failed sid="s1": Error: the successor broke/,
@@ -1640,17 +1629,16 @@ describe("RenderCache frames and pins", () => {
       logger: () => {},
     });
     const { dir, cleanup } = mkConfigDir();
-    const cache = new RenderCache(
+    const cache = new DiskRenderCache(
+      { locations: locations(host), stateDir: stateDir(host), watchers },
       {
         clock: systemTimekeeper,
-        stateDir: stateDir(host),
-        locations: locations(host),
+        home: host.home,
         env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
-        watchers,
         log: () => {},
         source: () => {
           throw new Error("the view broke");
@@ -1677,7 +1665,7 @@ describe("RenderCache frames and pins", () => {
     try {
       request("s1", dirs[0]!);
       editProjectConfig(dirs[0]!);
-      cache.reload(dirs[0]!, dirs[0]!, undefined, { kind: "write" });
+      cache.reload();
       expect(opened().map((l) => l.match(/ by=(\w+) /)?.[1])).toEqual([
         "request",
         "reload",

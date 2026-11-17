@@ -24,7 +24,7 @@ A render in flight holds the state it draws with. Eviction and reload swap the m
 
 In the stats, a retired count that climbs while the cache size holds steady means a render never returned.
 
-A reload whose resolved inputs are the ones the served state was built from keeps that state, because a rebuilt state reopens every session view and restarts its sources, and a save is always followed by its watch's reload of the same bytes. The key is typed over every input a build resolves from the config's files and folders, so an input added later fails to compile until it is keyed. A storage folder is keyed by path alone: its recovery needs no rebuild, because a session reads its folder by path and the generation is the storage owner's own. What else a build reads belongs to the daemon and is the same for every load, so it is not keyed: anything there that starts to vary per load has to join the key, or a reload keeps a state built from its old value. A test that reloads to drive a build has to change what the config loads first.
+A reload whose resolved inputs are the ones the served state was built from keeps that state, because a rebuilt state reopens every session view and restarts its sources, and an edit to a comment moves the snapshot without moving anything a build reads. The key is typed over every input a build resolves from the config's files and folders, so an input added later fails to compile until it is keyed. A storage folder is keyed by path alone: its recovery needs no rebuild, because a session reads its folder by path and the generation is the storage owner's own. What else a build reads belongs to the daemon and is the same for every load, so it is not keyed: anything there that starts to vary per load has to join the key, or a reload keeps a state built from its old value. A test that reloads to drive a build has to change what the config loads first.
 
 ## Dispose releases every MobX subscription
 
@@ -36,4 +36,4 @@ Each cache entry starts with the bundled default's state. A config that fails it
 
 ## Tests
 
-The collector's session sweep is an interval armed on its first session, and a render cache's entries keep their watchers. A cache or collector a test builds must be closed, or it and every compile it serves live as long as the Jest worker.
+The collector's session sweep is an interval armed on its first session, and the host's config discovery holds a watch per origin. A cache or collector a test builds must be closed, or it and every compile it serves live as long as the Jest worker.

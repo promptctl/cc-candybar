@@ -77,18 +77,11 @@ function hostOver(output: Ended) {
 test("an ask is handed the reply of its push's own kind, and its subscriptions are taken", async () => {
   const { host, taken } = hostOver({
     kind: "replied",
-    reply: { kind: "reload-config" },
+    reply: { kind: "close-session-state" },
   });
-  expect(
-    await host.ask({
-      kind: "reload-config",
-      origin: {
-        projectDir: "/p",
-        cwd: "/p",
-        target: { kind: "default" },
-      } as never,
-    }),
-  ).toEqual({ kind: "reload-config" });
+  expect(await host.ask({ kind: "close-session-state" })).toEqual({
+    kind: "close-session-state",
+  });
   expect(taken).toEqual([NONE]);
 });
 

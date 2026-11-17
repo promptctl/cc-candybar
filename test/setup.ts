@@ -55,7 +55,7 @@ process.env.CLAUDE_CONFIG_DIR = jestTmpDir("claude");
 process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR = jestTmpDir("managed");
 
 // [LAW:single-enforcer] No test load finds the host's installed cc-candybar
-// plugins (src/config/loader/plugin-folders.ts): both data locations name a
+// plugins (src/daemon/config-discovery/plugin-folders.ts): both data locations name a
 // directory that does not exist. A test installing a plugin points them at
 // its own.
 const noPlugins = jestTmpDir("data");
@@ -63,13 +63,13 @@ process.env.XDG_DATA_HOME = noPlugins;
 process.env.XDG_DATA_DIRS = noPlugins;
 
 // [LAW:single-enforcer] No test load finds the host's own config: the XDG
-// location is the lowest layer of every chain (src/config/loader/discovery.ts),
+// location is the lowest layer of every chain (src/daemon/config-discovery/discovery.ts),
 // so a host config would join every test's — and an invalid one fail it. A
 // test exercising that location points it at its own.
 process.env.XDG_CONFIG_HOME = jestTmpDir("config");
 
 // [LAW:single-enforcer] No test reads the host's answers for repository
-// configs, or its link key (src/config/repo-configs.ts, link-key.ts): both
+// configs, or its link key (src/daemon/config-discovery/repo-configs.ts, link-key.ts): both
 // live in the state directory, so a repository the host approved would load
 // in a test that means to see it wait. A test answering for a repository
 // writes into this one (test/helpers/repo-approval.ts).

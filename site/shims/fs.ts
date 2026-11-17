@@ -7,14 +7,53 @@ import proc from "./process";
 // test's own under Node, and either way not the owner a file is checked
 // against, so a file only its owner may open could be opened by no one.
 export const vol = Volume.fromNestedJSON({}, "/", {
-  process: { cwd: () => "/", platform: proc.platform, env: proc.env, getuid: proc.getuid, getgid: proc.getgid, emitWarning: proc.emitWarning },
+  process: {
+    cwd: () => "/",
+    platform: proc.platform,
+    env: proc.env,
+    getuid: proc.getuid,
+    getgid: proc.getgid,
+    emitWarning: proc.emitWarning,
+  },
 });
 const fs = createFsFromVolume(vol);
 export { fs };
 export default fs;
 export const {
-  existsSync, readFileSync, writeFileSync, statSync, lstatSync, readdirSync, mkdirSync, rmSync, unlinkSync,
-  renameSync, openSync, readSync, closeSync, fstatSync, writeSync, appendFileSync, realpathSync, readlinkSync,
-  mkdtempSync, copyFileSync, watch, watchFile, unwatchFile, constants, promises, accessSync, createReadStream,
-  createWriteStream, chmodSync, utimesSync, symlinkSync, linkSync, rmdirSync, ftruncateSync, fsyncSync, Stats,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  statSync,
+  lstatSync,
+  readdirSync,
+  mkdirSync,
+  rmSync,
+  unlinkSync,
+  renameSync,
+  openSync,
+  readSync,
+  closeSync,
+  fstatSync,
+  writeSync,
+  appendFileSync,
+  realpathSync,
+  readlinkSync,
+  mkdtempSync,
+  copyFileSync,
+  watch,
+  watchFile,
+  unwatchFile,
+  constants,
+  promises,
+  accessSync,
+  createReadStream,
+  createWriteStream,
+  chmodSync,
+  utimesSync,
+  symlinkSync,
+  linkSync,
+  rmdirSync,
+  ftruncateSync,
+  fsyncSync,
+  Stats,
 } = fs as unknown as Record<string, never>;

@@ -9,6 +9,7 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
+import { textSnapshot } from "../helpers/text-snapshot";
 import {
   eventRenderer,
   hearingEvents,
@@ -48,6 +49,9 @@ const REQ = {
   deadline: { kind: "unstated" },
   hookData: { session_id: SESSION },
 } as unknown as CheckedRenderRequest;
+// What the host's discovery hands the request's session.
+const SNAPSHOT = textSnapshot([]);
+const CONFIGS = () => SNAPSHOT;
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
 const NO_SUBSCRIPTIONS: Subscriptions = { sources: {}, lanes: {}, wake: null };
@@ -179,6 +183,7 @@ async function answer(
       // A warm session: nothing it reads is still unread.
       settled: meets.settled ?? (async () => {}),
     },
+    CONFIGS,
     CLOCK,
     meets.closing ?? NOT_CLOSING,
     (_level, line) => logged.push(line),
@@ -391,7 +396,7 @@ test("the session's config reaches the renderer first, with the world state read
     subscribed,
   );
   expect(configs).toEqual([
-    { kind: "config", context: REQ, worldState: WORLD },
+    { kind: "config", context: REQ, worldState: WORLD, config: SNAPSHOT },
   ]);
   expect(requests).toEqual([{ kind: "request", id: REQUEST, context: REQ }]);
   expect(subscribed).toEqual([opened, drawn]);
@@ -522,6 +527,7 @@ describe("the request's wait, between its config and its request", () => {
         holding: () => () => {},
         settled: wait.settled,
       },
+      CONFIGS,
       CLOCK,
       NOT_CLOSING,
       () => {},

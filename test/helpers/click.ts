@@ -16,7 +16,13 @@ import {
   ConfigWrites,
   type Consequence,
 } from "../../src/renderer/config-writes";
-import { readConfigText } from "../../src/renderer/config-file-store";
+import {
+  DISK,
+  diskConfigs,
+  originSnapshot,
+  sessionSnapshot,
+} from "./disk-render-cache";
+import type { DiscoveryWorld } from "../../src/daemon/config-discovery/discovery";
 import {
   performChanges,
   type ApproveRepo,
@@ -83,12 +89,16 @@ class LandingAtOnce extends ConfigWrites {
   // The settings files a doctor's reading named; none until a test's doctor
   // host hands its readings in (`landsSettingsOf`).
   writable: WritableSettings = () => [];
+  // The config turn a landing owes, which the host hands in before the
+  // click's `effect-done`s; none until a test with a config to reload hands
+  // its own in (`landsConfigOf`).
+  landed: () => void = () => {};
 
   constructor(
     mint: () => EffectId,
-    private readonly stateDir: string,
+    private readonly world: DiscoveryWorld,
   ) {
-    super(mint, readConfigText);
+    super(mint);
   }
 
   of(ctx: VerbContext): VerbContext {
@@ -110,14 +120,16 @@ class LandingAtOnce extends ConfigWrites {
     const outcome = performChanges(
       landing.filter((e): e is ConfigChange => e.kind === "change"),
       {
-        stateDir: this.stateDir,
+        stateDir: this.world.stateDir,
         answers: landing.filter(
           (e): e is ApproveRepo => e.kind === "approve-repo",
         ),
         said: () => {},
       },
       this.writable,
+      diskConfigs(sessionSnapshot(this.context!.sessionState, this.world)),
     );
+    if (outcome.kind === "ok") this.landed();
     for (const { id } of landing)
       changeDone(this.context!, id, outcome, effects);
   }
@@ -130,6 +142,15 @@ export function landsSettingsOf(
   writable: WritableSettings,
 ): void {
   (ctx.configWrites as LandingAtOnce).writable = writable;
+}
+
+// A test's landings hand in the config turn `landed` makes, as the host's
+// discovery does once the click's files land and before its `effect-done`s.
+export function landsConfigOf(
+  ctx: Pick<VerbContext, "configWrites">,
+  landed: () => void,
+): void {
+  (ctx.configWrites as LandingAtOnce).landed = landed;
 }
 
 // The acts a click asked of the host, in the order it asked them.
@@ -210,7 +231,11 @@ export function testVerbContext(
 ): VerbContext {
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
-  const configWrites = new LandingAtOnce(mint, stateDir(host));
+  const world: DiscoveryWorld =
+    host === HOST
+      ? DISK
+      : { locations: locations(host), stateDir: stateDir(host) };
+  const configWrites = new LandingAtOnce(mint, world);
   return configWrites.of({
     configWrites,
     acts: new ActsOnTheirWay(mint, (session, reason) =>
@@ -218,8 +243,7 @@ export function testVerbContext(
     ),
     effects: [],
     gates: bareGates(),
-    stateDir: stateDir(host),
-    locations: locations(host),
+    home: host.home,
     sessionState,
     history,
     navigation: new NavigationHistory(),
@@ -246,12 +270,13 @@ export function testVerbContext(
       }
       return config;
     },
-    // A reload rebuilds the render cache's entry from the file. This context
-    // holds no render cache, so there is nothing to rebuild: the file a click
-    // wrote is the whole outcome, and it is what these tests read. A rig with a
-    // cache hands in its own — test/settings-config-menu.test.ts records each
-    // reload to pin that a landing reloads before it releases.
-    reloadConfig: () => {},
+    // The session's config as the host's discovery hands it in: what its
+    // files hold now, since this context holds no render cache to keep one.
+    sourceFor: (origin) => ({
+      snapshot: originSnapshot(origin, world),
+      home: host.home,
+    }),
+    chainOf: (sid) => sessionSnapshot(sessionState, world)(sid)?.chain ?? null,
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.
     sourcesFor: () => {
@@ -326,7 +351,7 @@ export function testActs(
 // The world a rig's host turns act in: its acts performed over `deps`, and
 // an act's failure no bar holds handed to `unheard`.
 export function actingWorld(
-  ctx: Pick<VerbContext, "log" | "stateDir">,
+  ctx: Pick<VerbContext, "log" | "sessionState">,
   deps: Partial<ActDeps> = {},
   unheard: (text: string) => void = (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
@@ -335,7 +360,8 @@ export function actingWorld(
   const acts = testActs(ctx.log, deps);
   return {
     perform: (act) => acts.perform(act),
-    stateDir: ctx.stateDir,
+    stateDir: DISK.stateDir,
+    configs: diskConfigs(sessionSnapshot(ctx.sessionState)),
     closing: () => false,
     unheard,
   };

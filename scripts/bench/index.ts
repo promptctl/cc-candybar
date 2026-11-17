@@ -32,7 +32,8 @@ const { values } = parseArgs({
 });
 
 if (values.list) {
-  for (const b of BENCHMARKS) console.log(`${b.id}  (${b.samples})  ${b.about}`);
+  for (const b of BENCHMARKS)
+    console.log(`${b.id}  (${b.samples})  ${b.about}`);
   process.exit(0);
 }
 

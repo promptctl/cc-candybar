@@ -2,6 +2,7 @@
 // what the store does with its answer: a projection is derived again by every
 // read, at the draw in progress; anything else is cached.
 
+import { loadFromDisk } from "./helpers/disk-render-cache";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { HOST, locs } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
@@ -19,7 +20,7 @@ import { drawingAt } from "./helpers/test-engine";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadFromDisk, pluginLoadLine } from "../src/renderer/render-cache";
+import { pluginLoadLine } from "../src/renderer/render-cache";
 import { SessionState } from "../src/renderer/session-state";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
@@ -209,13 +210,11 @@ test("the config load line names the load's projections", () => {
     );
     const loaded = loadFromDisk(dir, dir, file, {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
-      locations: locs(),
       env: HOST.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
-    });
+    }, { locations: locs(), stateDir: stateDir(HOST) });
     expect(loaded.error).toBeNull();
     loaded.state!.registry.dispose();
     return pluginLoadLine(loaded.layers, loaded.state!);

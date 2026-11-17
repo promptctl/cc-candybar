@@ -6,6 +6,8 @@ export function landscapeDir(env = process.env) {
   const dir = env.LANDSCAPE_DIR;
   if (dir === undefined) return null;
   if (!/^[a-z0-9-]+(\/[a-z0-9-]+)*$/.test(dir))
-    throw new Error(`LANDSCAPE_DIR must be folders below the live bar, like "landscape"; got ${JSON.stringify(dir)}`);
+    throw new Error(
+      `LANDSCAPE_DIR must be folders below the live bar, like "landscape"; got ${JSON.stringify(dir)}`,
+    );
   return dir;
 }

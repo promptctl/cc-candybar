@@ -3,13 +3,14 @@
 // placement the file before it did not is refused and the file is untouched;
 // a drop the file already held does not lock the bar's controls.
 
+import { explicitLayer } from "./helpers/disk-render-cache";
 import fs from "node:fs";
 import { locs } from "./helpers/host";
 import os from "node:os";
 import path from "node:path";
 
 import { applyLayoutOp, writeValues } from "../src/renderer/config-file-store";
-import type { WriteLayer } from "../src/config/loader/discovery";
+import { pathOf, type WriteLayer } from "../src/renderer/config-file-store";
 import { EDITS_IN_PLACE } from "./helpers/history-step";
 
 const store = EDITS_IN_PLACE;
@@ -18,9 +19,7 @@ let dir: string;
 const homeWith = (text: string): WriteLayer => {
   const file = path.join(dir, "config.json5");
   fs.writeFileSync(file, text);
-  return { path: file, role: "user",
-          below: [],
-          above: [], repo: null, cwd: null, locs: locs() };
+  return explicitLayer(file, locs());
 };
 
 beforeEach(() => {
@@ -39,7 +38,7 @@ test("a click that would leave a new undeclared placement is refused, and the fi
       relation: "after",
     }),
   ).toThrow(/refused: this click would leave[\s\S]*"ghost" does not match/);
-  expect(fs.readFileSync(home.path, "utf8")).toBe(text);
+  expect(fs.readFileSync(pathOf(home), "utf8")).toBe(text);
 });
 
 test("a file that already drops a placement still takes a click", () => {
@@ -52,7 +51,7 @@ test("a file that already drops a placement still takes a click", () => {
     anchor: "a",
     relation: "after",
   });
-  expect(fs.readFileSync(home.path, "utf8")).toContain('"b"');
+  expect(fs.readFileSync(pathOf(home), "utf8")).toContain('"b"');
 });
 
 test("a click that repairs a file that would not load is not blamed for the file's own drop", () => {
@@ -60,5 +59,5 @@ test("a click that repairs a file that would not load is not blamed for the file
     `{ globals: { palette: "no-such-theme" }, segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`,
   );
   writeValues(store, home, [["palette", "nord"]]);
-  expect(fs.readFileSync(home.path, "utf8")).toContain("nord");
+  expect(fs.readFileSync(pathOf(home), "utf8")).toContain("nord");
 });

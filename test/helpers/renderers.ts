@@ -72,6 +72,11 @@ export const NO_ACTS: HostWorld = {
     reason: `${act.kind}: this rig performs no act`,
   }),
   stateDir: "/nonexistent/this-rig-has-no-state-dir",
+  configs: {
+    path: () => null,
+    repoDir: () => null,
+    landed: () => [],
+  },
   closing: () => false,
   unheard: (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);

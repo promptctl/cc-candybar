@@ -48,6 +48,7 @@ import type { ClickArrival } from "../doctor/sightings";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
+import { queryOf } from "./config-discovery/config-discovery.js";
 import { DEBUG_WHATS, isDebugWhat } from "./foundations/debug-types";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { instantAt, instantOf } from "../utils/instant.js";
@@ -412,6 +413,7 @@ export async function replyTo(
     const answered = await answerStatusline(
       parts.renderer,
       parts.collector,
+      (req) => parts.configDiscovery.at(req.hookData.session_id, queryOf(req)),
       clock,
       parts.closing,
       parts.log,
@@ -732,9 +734,11 @@ async function handleClick(
     noteFacts(facts, { sid: session.id });
     parts.collector.clicked(session.id);
   }
+  const sid = session?.ok ? session.id : null;
   // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
   // client took a TIMEOUT or left while it waited never lands, so clicking
-  // again cannot revert a toggle.
+  // again cannot revert a toggle. Its config is discovered then too, so the
+  // click acts on the files as they are when it runs.
   const delivered: HostTurn = await parts.renderer.answer(() =>
     click.gone()
       ? failureOf(new ClickAbandoned(verb))
@@ -746,7 +750,14 @@ async function handleClick(
             value,
             session,
             arrival,
-            latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
+            latest: sid === null ? null : parts.frameFeeds.latest(sid),
+            config:
+              sid === null
+                ? null
+                : parts.configDiscovery.current(
+                    sid,
+                    parts.frameFeeds.latest(sid)?.requested ?? null,
+                  ),
           },
         },
   );

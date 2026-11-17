@@ -4,6 +4,7 @@
 // `padding: 0`, which wins over top-level `globals` while it is active — the
 // case that decides where a save must write and what a pick compares against.
 
+import { explicitLayer } from "./helpers/disk-render-cache";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { locs } from "./helpers/host";
 import { mergeWithDefault } from "../src/config/dsl-loader";
@@ -168,9 +169,7 @@ describe("a save under a preset that pins the field lands where it renders", () 
     const before = drafts(source, p);
     writeValues(
       EDITS_IN_PLACE,
-      { path: file, role: "user",
-          below: [],
-          above: [], repo: null, cwd: null, locs: locs() },
+      explicitLayer(file, locs()),
       before.map(({ target, value }) => [target, value] as const),
     );
     const after = readFileSync(file, "utf8");

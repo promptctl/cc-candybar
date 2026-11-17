@@ -29,6 +29,9 @@ import type { TmuxHint } from "../tmux-hint";
 import type { SlashLine } from "../claude-input/slash-line";
 import type { SessionPane } from "../claude-input/typing";
 import type { RepoAnswer } from "../config/loader/repo-gate";
+import type { LayerRole } from "../config/layer-role";
+import type { ConfigSnapshot } from "../config/config-snapshot";
+import type { RenderOrigin } from "../config-hint";
 import type { Answered } from "../daemon/foundations/sighting-roles";
 
 // Which request a statusline frame answers: the host's count of the requests
@@ -106,11 +109,21 @@ export interface EventInput extends Readings {
   readonly event: Event;
 }
 
-// A session's config as its newest request names it, and the world state read
-// at that request's keys.
+// A session's config as its newest request names it: the request, the world
+// state read at its keys, and what the host's config discovery found for the
+// origin it names.
+// A click's session's config: the origin the host discovered it at, which
+// the session's newest request or last draw names, and what it found.
+export interface ClickConfig {
+  readonly session: SessionId;
+  readonly origin: RenderOrigin;
+  readonly snapshot: ConfigSnapshot;
+}
+
 export interface SessionConfig {
   readonly context: CheckedRenderRequest;
   readonly worldState: WorldState;
+  readonly config: ConfigSnapshot;
 }
 
 // [LAW:effects-at-boundaries] exception: a reach of the host's into the
@@ -151,10 +164,10 @@ export type Event =
     }
   | {
       // What the session's config is made of, as its newest request names
-      // it, delivered ahead of that request: its turn opens the session's
+      // it: delivered ahead of that request, whose turn opens the session's
       // view, so the output names what the view reads before the request
-      // waits on it. Until config discovery is the host's, it carries the
-      // request's context, from which the renderer finds the config itself.
+      // waits on it; and again whenever the host's discovery finds the
+      // snapshot moved.
       readonly kind: "config";
       readonly context: CheckedRenderRequest;
       // [LAW:one-source-of-truth] The world state read at this context's own
@@ -162,6 +175,7 @@ export type Event =
       // one value, so a renderer never holds a context beside a document read
       // at another request's keys.
       readonly worldState: WorldState;
+      readonly config: ConfigSnapshot;
     }
   | {
       // A request of a session whose `config` came before it, delivered once
@@ -208,6 +222,11 @@ export type Event =
       // the click names no session, or the host holds no request of it (none
       // since a restart, or its record evicted).
       readonly latest: CheckedRenderRequest | null;
+      // [LAW:no-ambient-temporal-coupling] The click's session's config,
+      // discovered by the host at the click, so the click acts on the files
+      // as they are whether or not a watch has heard them yet: null when the
+      // click names no session, or one that has never drawn.
+      readonly config: ClickConfig | null;
     }
   | {
       // Who watches each session's frames now, whole: a feed opens for a
@@ -284,8 +303,8 @@ export interface Present {
 // that take one file from what the renderer read to what it wrote, which the
 // host applies to the file as it stands. A turn's changes land together or
 // not at all, and each is settled with that one outcome.
-// [LAW:single-enforcer] exception: a layer is named by its path, not by its
-// role in a session's chain, until config discovery hands in snapshots.
+// [LAW:single-enforcer] A layer is named by its role in the session's chain:
+// the host resolves the file against the snapshot it handed in.
 // A `claude-settings` file is one the session's doctor reading handed in
 // (`writableSettingsFiles`, src/doctor/gather.ts): the host refuses any other.
 export interface ConfigChange {
@@ -297,7 +316,7 @@ export interface ConfigChange {
 }
 
 export type ChangeTarget =
-  | { readonly kind: "layer"; readonly path: string }
+  | { readonly kind: "layer"; readonly role: LayerRole }
   | { readonly kind: "claude-settings"; readonly file: string };
 
 // A source a run makes stale: its full name, for the run's line, and the

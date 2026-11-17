@@ -8,18 +8,19 @@
 // daemon's scheduling in the way. The tick is `wire`.
 
 import fs from "node:fs";
-import { locations } from "../../../src/daemon/paths.js";
+import { locations, stateDir } from "../../../src/daemon/paths.js";
+import { discover } from "../../../src/daemon/config-discovery/discovery.js";
+import type { ConfigSnapshot } from "../../../src/config/config-snapshot.js";
 import { processWorld } from "../../../src/host.js";
 import path from "node:path";
 
 import {
-  NO_REPO,
   prepareConfig,
   renderEffective,
   type PreparedConfig,
 } from "../../../src/check.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
-import { homeLayer, loadConfigChain } from "../../../src/config/dsl-loader.js";
+import { loadConfigChain } from "../../../src/config/dsl-loader.js";
 import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.js";
 import { presetNames } from "../../../src/config/presets.js";
 import { ansiOf } from "../../../src/render/frame.js";
@@ -44,6 +45,27 @@ const EXAMPLES = fs
   .filter((f) => f.endsWith(".json5"))
   .sort();
 
+// What the daemon's discovery finds for an example file named explicitly, or,
+// with none, a chain of nothing: the bundled default alone.
+function snapshotOf(file: string | undefined, cwd: string): ConfigSnapshot {
+  if (file === undefined)
+    return {
+      chain: [],
+      repo: null,
+      plugins: [],
+      strays: [],
+      checkout: { root: cwd, git: false },
+      notices: [],
+      watch: null,
+    };
+  const { host } = processWorld();
+  const { snapshot } = discover(
+    { projectDir: cwd, cwd, configFile: file },
+    { locations: locations(host), stateDir: stateDir(host) },
+  );
+  return { ...snapshot, watch: null };
+}
+
 // [LAW:no-silent-failure] A config that warns or drops a plugin draws a bar
 // other than the one measured; the benchmark stops rather than time it.
 async function prepared(
@@ -54,8 +76,7 @@ async function prepared(
   // An example file is explicit: no repository supplies it.
   const config = await prepareConfig(
     processWorld(),
-    layers.map(homeLayer),
-    NO_REPO,
+    snapshotOf(layers[0], cwd),
     cwd,
     warnings,
     instantOf(new Date()),
@@ -65,7 +86,9 @@ async function prepared(
     throw new Error(
       `${layers.join(", ") || "the bundled default"} did not prepare cleanly: ${[
         ...warnings,
-        ...config.droppedPlugins.map((d) => `plugin dropped: ${JSON.stringify(d)}`),
+        ...config.droppedPlugins.map(
+          (d) => `plugin dropped: ${JSON.stringify(d)}`,
+        ),
       ].join("; ")}`,
     );
   }
@@ -156,11 +179,12 @@ export const STAGES: readonly Benchmark[] = [
       try {
         const ms = await repeat(plan.samples, () => {
           loadConfigChain(
-            locations(processWorld().host),
-            [],
+            {
+              snapshot: snapshotOf(undefined, cwd),
+              home: processWorld().host.home,
+            },
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },
-            { repo: null, cwd },
           );
         });
         return measured([{ name: "load", samples: ms }]);
@@ -244,7 +268,11 @@ export const STAGES: readonly Benchmark[] = [
     drawBenchmark(
       `stages.draw.example.${file.replace(/\.json5$/, "")}`,
       `examples/${file} drawn ${DRAW_WIDTH} columns wide, each draw a second after the last`,
-      { preset: null, width: DRAW_WIDTH, layers: [path.join(EXAMPLES_DIR, file)] },
+      {
+        preset: null,
+        width: DRAW_WIDTH,
+        layers: [path.join(EXAMPLES_DIR, file)],
+      },
       40,
     ),
   ),

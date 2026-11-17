@@ -168,6 +168,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     return this.sessions.size;
   }
 
+  // The sessions the store holds, least recently used first.
+  ids(): readonly SessionId[] {
+    return [...this.sessions.keys()];
+  }
+
   // [LAW:one-source-of-truth] set is the degenerate single-pair form of
   // setBatch — one write path through the store. The previous shape (a
   // standalone set body) split the write semantics across two routes

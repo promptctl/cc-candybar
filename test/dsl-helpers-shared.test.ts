@@ -4,7 +4,7 @@ import { NO_PROJECT } from "./helpers/no-project";
 import v8 from "node:v8";
 import vm from "node:vm";
 import { validateConfig } from "./helpers/parse-and-validate";
-import { loadConfig } from "../src/config/dsl-loader";
+import { loadConfigSource } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -35,7 +35,7 @@ function heapUsed(): number {
 
 function registerStdlib() {
   const config = validateConfig(
-    loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT),
+    loadConfigSource("<default>", "{}", DEFAULT_DSL_CONFIG, NO_PROJECT),
     "<default>",
   );
   const store = new VariableStore(systemTimekeeper);

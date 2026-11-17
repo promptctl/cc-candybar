@@ -47,6 +47,7 @@ import {
 import {
   performChanges,
   type ApproveRepo,
+  type SessionLayers,
   type WritableSettings,
 } from "./effect-interpreter.js";
 import { outlives, type HostAct } from "./acts.js";
@@ -79,11 +80,20 @@ interface MadeEvent {
 export type Made = MadeEvent | Failure;
 
 // What the host's turns act in: the performer of acts, the trust book's
-// directory, whether the daemon's close has begun, and where an act's failure
-// goes that no session's bar can hold.
+// directory, the sessions' config as discovery holds it, whether the daemon's
+// close has begun, and where an act's failure goes that no session's bar can
+// hold.
 export interface HostWorld {
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
+  readonly configs: SessionLayers & {
+    // The config turns a landing of `files`, and of answers to the trust
+    // book, owes: one for each session whose snapshot it moved.
+    readonly landed: (
+      files: readonly string[],
+      answered: boolean,
+    ) => readonly Event[];
+  };
   readonly closing: () => boolean;
   readonly unheard: (text: string) => void;
 }
@@ -247,15 +257,35 @@ export function rendererHost(
                 said: (line) => log("info", line),
               },
               collector.writableSettings,
+              world.configs,
             );
       took(subscriptions, frames);
+      // [LAW:no-ambient-temporal-coupling] Every session whose snapshot the
+      // landing moved gets its config turn here, in the click's own place,
+      // before the changes' `effect-done`s: the click's consequence, and the
+      // click after it, read what the landing left.
+      const owed: Array<Promise<EffectOutcome>> = [];
+      if (landed.kind === "ok" && changes.length + answers.length > 0) {
+        const files = changes.flatMap(({ session, target }) => {
+          const file =
+            target.kind === "layer"
+              ? world.configs.path(session, target.role)
+              : null;
+          return file === null ? [] : [file];
+        });
+        for (const event of world.configs.landed(files, answers.length > 0)) {
+          const reconfigured = stamped({ kind: "event", event });
+          const { turn, settled } = await inSlot(reconfigured, 0);
+          record(reconfigured.event, [["why", "landed"]], turn);
+          owed.push(settled.then(() => ({ kind: "ok" }) as const));
+        }
+      }
       // An act no landing let go: the close is its own cause, and any other
       // is its changes', whose own outcome says why.
       const unperformed: EffectOutcome =
         landed.kind === "ok" || landed.kind === "closing"
           ? landed
           : { kind: "skipped", reason: `not performed: ${landed.reason}` };
-      const owed: Array<Promise<EffectOutcome>> = [];
       const acts: HostAct[] = [];
       for (const effect of output.effects) {
         if (effect.kind === "present") {

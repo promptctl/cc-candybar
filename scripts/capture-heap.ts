@@ -59,7 +59,9 @@ const TURNS = Number(values.turns);
 if (process.platform !== "darwin") {
   // The charge is read from `footprint`, which only macOS has; on Linux the
   // charge is RSS and nothing here reads it.
-  throw new Error(`capture-heap reads /usr/bin/footprint and runs on macOS only`);
+  throw new Error(
+    `capture-heap reads /usr/bin/footprint and runs on macOS only`,
+  );
 }
 if (
   !Number.isInteger(SESSIONS) ||
@@ -68,7 +70,9 @@ if (
   TURNS < 0
 ) {
   // Zero turns is a real measurement: sessions with no history.
-  throw new Error(`--sessions must be a positive integer and --turns a non-negative one`);
+  throw new Error(
+    `--sessions must be a positive integer and --turns a non-negative one`,
+  );
 }
 
 const COLUMNS = 160;
@@ -162,7 +166,8 @@ try {
     const found = fs
       .readdirSync(OUT)
       .find((f) => f.endsWith(".heapsnapshot") && f.includes(`.${pid}.`));
-    const size = found === undefined ? -1 : fs.statSync(path.join(OUT, found)).size;
+    const size =
+      found === undefined ? -1 : fs.statSync(path.join(OUT, found)).size;
     if (
       found !== undefined &&
       size > 0 &&
@@ -173,7 +178,9 @@ try {
     } else {
       lastSize = size;
       if (Date.now() > deadline) {
-        throw new Error(`no whole snapshot in ${OUT} after ${SNAPSHOT_WAIT_MS} ms`);
+        throw new Error(
+          `no whole snapshot in ${OUT} after ${SNAPSHOT_WAIT_MS} ms`,
+        );
       }
       await sleep(2000);
     }

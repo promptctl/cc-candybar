@@ -74,7 +74,7 @@ const change = (before: string, after: string): Effect => ({
   kind: "change",
   id: ++ids as EffectId,
   session: S,
-  target: { kind: "layer", path: file },
+  target: { kind: "layer", role: "user" },
   changes: diffChanges(before, after),
 });
 
@@ -96,6 +96,16 @@ function hostOver(
       return { kind: "ok" };
     },
     stateDir: path.join(dir, "state"),
+    // The session's one layer is the user's, at `file`. A landing's config
+    // turn is said in `did`, in the order the host asks for it.
+    configs: {
+      path: (session, role) => (session === S && role === "user" ? file : null),
+      repoDir: () => null,
+      landed: (files) => {
+        did.push(`landed ${files.map((f) => path.basename(f)).join(",")}`);
+        return [];
+      },
+    },
     closing: () => false,
     unheard: (text) => void unheard.push(text),
     ...over,
@@ -137,6 +147,7 @@ test("an act is performed once the turn's changes have landed and had their effe
   // The act saw the file the change wrote, and began only once the renderer
   // had answered the change's landing.
   expect(did).toEqual([
+    "landed config.json5",
     `done ${set.id} ok`,
     "answered effect-done",
     `perform copy ${act.id} (file says dawn)`,

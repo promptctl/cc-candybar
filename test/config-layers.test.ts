@@ -9,18 +9,21 @@ import type { Host, World } from "../src/host";
 import { locations } from "../src/daemon/paths";
 import os from "node:os";
 import path from "node:path";
-import { checkConfig, NO_REPO, prepareConfig, type CheckOutcome } from "../src/check";
-import { homeLayer, loadConfigChain, writeLayer } from "../src/config/dsl-loader";
+import { checkConfig, prepareConfig, type CheckOutcome } from "../src/check";
+import { loadConfigChain } from "../src/config/dsl-loader";
+import { snapshotOf } from "./helpers/disk-render-cache";
 import type { LayerRole } from "../src/config/layer-role";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   deleteValues,
   writePreset,
   writeValues,
+  pathOf,
+  type WriteLayer,
 } from "../src/renderer/config-file-store";
-import { resolveDslConfig } from "../src/config/loader/discovery";
+import { resolveDslConfig } from "../src/daemon/config-discovery/discovery";
 import { instantOf } from "../src/utils/instant";
-import { repoConfigs } from "../src/config/repo-configs";
+import { repoConfigs } from "../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { answerRepo } from "./helpers/repo-approval";
 import { applyLayoutOp } from "../src/renderer/config-file-store";
@@ -67,18 +70,19 @@ function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
 }
 
 
-// The layer of `role` a click in the project writes, under the answers the
-// bar reads.
-const projectLayer = (role: LayerRole = "user") => {
-  const write = writeLayer(
-    locations(host),
-    repoConfigs(stateDir(host)).read(),
-    { projectDir: project, cwd: project },
-    role,
-  );
-  if (write.kind !== "layer") throw new Error(write.why);
-  return write;
-};
+// What the host's discovery hands a session in the project, under the
+// answers the bar reads.
+const projectSnapshot = () =>
+  snapshotOf(project, project, undefined, {
+    locations: locations(host),
+    stateDir: stateDir(host),
+  });
+
+// The layer of `role` a click in the project writes.
+const projectLayer = (role: LayerRole = "user"): WriteLayer => ({
+  role,
+  source: { snapshot: projectSnapshot(), home: host.home },
+});
 
 test("a project file that places one segment renders over the user's whole config", async () => {
   // `mine` is declared only by the user's file: the project file loads only
@@ -94,7 +98,7 @@ test("a project file that places one segment renders over the user's whole confi
   ]);
   expect(textOf(outcome.rendered)).toContain("USERSEG");
   expect(textOf(outcome.rendered)).toContain("PROJSEG");
-  const prepared = await prepareConfig(world, outcome.layers, NO_REPO, project, [], instantOf(new Date()));
+  const prepared = await prepareConfig(world, outcome.snapshot, project, [], instantOf(new Date()));
   try {
     expect(prepared.config.globals.menuGlyph).toBe("U");
   } finally {
@@ -112,7 +116,12 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectLayer();
-  expect(home).toEqual({ kind: "layer", path: userFile, role: "user", below: [], above: [{ path: projectFile, role: "project" }, { path: path.join(project, ".cc-candybar.local.json5"), role: "local" }], repo: project, cwd: project, locs: locations(host) });
+  expect(home.source.snapshot.chain.map((l) => [l.role, l.path])).toEqual([
+    ["user", userFile],
+    ["project", projectFile],
+    ["local", path.join(project, ".cc-candybar.local.json5")],
+  ]);
+  expect(pathOf(home)).toBe(userFile);
   writeValues(EDITS_IN_PLACE, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -302,9 +311,8 @@ describe("a project layer inserting into the user's row", () => {
     warnings.filter((w) => missedTrees(w).includes(`preset "${preset}"`));
   const presetTree = async (preset: string) => {
     const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
-    const prepared = await prepareConfig(world, 
-      outcome.layers,
-      NO_REPO,
+    const prepared = await prepareConfig(world,
+      outcome.snapshot,
       project,
       [],
       instantOf(new Date()),
@@ -458,9 +466,8 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", before: "mine" }]`);
     const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
-    const prepared = await prepareConfig(world, 
-      outcome.layers,
-      NO_REPO,
+    const prepared = await prepareConfig(world,
+      outcome.snapshot,
       project,
       [],
       instantOf(new Date()),
@@ -509,11 +516,10 @@ describe("a project layer inserting into the user's row", () => {
   // The bar's own load of the chain: what it draws, and what it dropped.
   const barLoad = () => {
     const warnings: string[] = [];
-    const loaded = loadConfigChain(locations(host), 
-      [homeLayer(userFile), { path: projectFile, role: "project" }],
+    const loaded = loadConfigChain(
+      { snapshot: projectSnapshot(), home: host.home },
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: null, cwd: project },
     );
     const drawn = (preset: string) =>
       [...walkNodes(fragmentNode(loaded.config.presets[preset]!.root!))]

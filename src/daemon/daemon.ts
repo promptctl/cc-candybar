@@ -26,7 +26,6 @@ import { newUpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { stableAttachPreload } from "../install/index.js";
-import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { runTeardown, type TeardownStep } from "../utils/teardown";
 import { FileEventDelivery } from "./cache/file-events";
@@ -71,14 +70,16 @@ import {
 import { located } from "./statusline-answer.js";
 import { DoctorSource } from "./cache/doctor.js";
 import { compareStructural, observable, runInAction } from "mobx";
-import type { DaemonFacts } from "../facts/world-state.js";
+import type { DaemonFacts, WorldState } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
-import type { WatchId } from "../renderer-interface/adapter.js";
-import type {
-  Invalidation,
-  WatcherHandle,
-} from "./foundations/watch-targets.js";
-import { followingOf } from "../renderer-interface/interface.js";
+import {
+  ConfigDiscovery,
+  queryOf,
+} from "./config-discovery/config-discovery.js";
+import {
+  followingOf,
+  type SessionConfig,
+} from "../renderer-interface/interface.js";
 import type { SessionId } from "./foundations/session-id.js";
 
 // How this daemon's node runs the bundle it was loaded from.
@@ -215,10 +216,9 @@ export interface Daemon {
     clientLeft: () => boolean,
   ) => Promise<Reply>;
   readonly subscribe: FrameFeeds<CheckedRenderRequest>["subscribe"];
-  // Re-read the config a render origin resolves to, now: what a durable click
-  // does after it writes. The page in site/ calls it after it resets its
-  // simulated machine's config file.
-  readonly reloadConfig: (origin: RenderOrigin) => void;
+  // Discover every session's config again, now: the page in site/ calls it
+  // after it resets its simulated machine's config file, which no watch hears.
+  readonly rediscoverConfigs: () => void;
   // What a daemon that won the socket starts: only it counts its memory or
   // watches its bundle.
   arm(): void;
@@ -342,8 +342,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       loadMainRenderer({
         storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
         linkSigner,
-        stateDir: paths.state,
-        locations: locs,
         env: host.env,
         home: host.home,
         gates,
@@ -433,6 +431,49 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     doctor: doctorSource,
   });
   const { managedStorage } = payloadProviders;
+  // [LAW:single-enforcer] The host's one owner of every session's config
+  // snapshot. A watch's discovery that moves a session's snapshot hands its
+  // config turn in through the host's one path to the renderer, which the
+  // parts below hold; the first watch to fire does so after a request, so
+  // the parts exist by then.
+  const configDiscovery = new ConfigDiscovery({
+    world: { locations: locs, stateDir: paths.state },
+    watchers: watcherRegistry,
+    moved: (sessions) => {
+      const documents = collector.liveDocuments();
+      for (const session of sessions) {
+        const worldState = documents.get(session);
+        const config =
+          worldState === undefined
+            ? null
+            : sessionConfigOf(session, worldState);
+        if (config !== null)
+          void parts.renderer.deliver(
+            () => ({ kind: "event", event: { kind: "config", ...config } }),
+            [["why", "config-moved"]],
+          );
+      }
+    },
+    heard: () => managedStorage.revive(),
+    log,
+  });
+  // [LAW:single-enforcer] A session's config as the host hands it in: its
+  // newest request, the world state the collector reads at that request's
+  // keys, and the snapshot discovery holds for the origin it names. Null for
+  // a session whose request the host no longer holds.
+  const sessionConfigOf = (
+    session: SessionId,
+    worldState: WorldState,
+  ): SessionConfig | null => {
+    const req = frameFeeds.latest(session);
+    return req === null
+      ? null
+      : {
+          context: located(req),
+          worldState,
+          config: configDiscovery.at(session, queryOf(req)),
+        };
+  };
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
   // flight (src/daemon/runs.ts), closed with the daemon.
   const runs = new Runs({
@@ -568,7 +609,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         return;
       case "caught-up":
         restateFaults();
-        parts.renderer.tell({ kind: "reload-every", since: notice.since });
+        configDiscovery.again(
+          `file events resumed since=${new Date(notice.since).toISOString()}`,
+        );
         return;
       case "moved":
         restateFaults();
@@ -631,14 +674,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     }),
     clock,
     watched: (sessionId) => frameFeeds.isWatched(sessionId),
-    deliver: (event) =>
-      parts.renderer.deliver(() => ({ kind: "event", event }), []),
+    deliver: (event) => {
+      // An origin no live session names lets go of its watch.
+      if (event.kind === "retire") configDiscovery.retire(event.session);
+      return parts.renderer.deliver(() => ({ kind: "event", event }), []);
+    },
     log,
   });
 
-  // [LAW:single-enforcer] Each watch the renderer holds, by the id it minted,
-  // from its `watch` to its `unwatch`.
-  const rendererWatches = new Map<WatchId, WatcherHandle>();
   // [LAW:one-way-deps] The host's parts the main renderer reaches: the
   // compiler checks each against its entry in `AdapterToHost` here, so no
   // renderer file names a host type.
@@ -654,30 +697,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         actFailed = { ...actFailed, answered: true };
       restateFaults();
     },
-    watches: {
-      watch: (id, key, targets) => {
-        // Each window the registry hears goes back to the renderer with
-        // the watch's deafness as it stands then.
-        const told = (heard: Invalidation | null): void =>
-          parts.renderer.tell({ kind: "watch", id, heard, deaf: handle.deaf });
-        const handle = watcherRegistry.acquire(key, targets, told);
-        rendererWatches.set(id, handle);
-        // [LAW:no-ambient-temporal-coupling] The acquire's own push goes
-        // after the notice that asked for it, as it would from another
-        // process: a renderer's start acquires watches before the host holds
-        // the renderer it builds.
-        void clock.defer(() => {
-          if (rendererWatches.get(id) === handle) told(null);
-        });
-      },
-      unwatch: (id) => {
-        rendererWatches.get(id)?.release();
-        rendererWatches.delete(id);
-      },
-    },
     storage: {
       hold: (id, folders) => managedStorage.hold(id, folders),
       release: (id) => managedStorage.release(id),
+    },
+    origins: {
+      recorded: (session, origin) => configDiscovery.recorded(session, origin),
     },
   };
   const link = preparedRenderer.start({
@@ -703,10 +728,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
             viewers,
             sessions: [...collector.liveDocuments()].flatMap(
               ([sessionId, worldState]) => {
-                const req = frameFeeds.latest(sessionId);
-                return req === null
-                  ? []
-                  : [{ context: located(req), worldState }];
+                const config = sessionConfigOf(sessionId, worldState);
+                return config === null ? [] : [config];
               },
             ),
           },
@@ -747,6 +770,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     updateWatch,
     limits,
     collector,
+    configDiscovery,
     renderer: rendererHost(
       "main",
       clock,
@@ -775,6 +799,23 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       {
         perform: (act) => acts.perform(act),
         stateDir: paths.state,
+        configs: {
+          path: (session, role) => configDiscovery.layerPath(session, role),
+          repoDir: (session) => configDiscovery.repoDir(session),
+          landed: (files, answered) => {
+            const documents = collector.liveDocuments();
+            return configDiscovery
+              .landed(files, answered)
+              .flatMap((session) => {
+                const worldState = documents.get(session);
+                const config =
+                  worldState === undefined
+                    ? null
+                    : sessionConfigOf(session, worldState);
+                return config === null ? [] : [{ kind: "config", ...config }];
+              });
+          },
+        },
         closing: () => closing.signal.aborted,
         // [LAW:no-silent-failure] Joined to the last while it is owed, by the
         // one rule for events that follow each other.
@@ -810,9 +851,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       closing.signal.throwIfAborted();
       return frameFeeds.subscribe(sessionId, subscriber);
     },
-    reloadConfig: (origin) => {
+    rediscoverConfigs: () => {
       closing.signal.throwIfAborted();
-      parts.renderer.tell({ kind: "reload-config", origin });
+      configDiscovery.again("asked");
     },
     arm() {
       closing.signal.throwIfAborted();
@@ -865,6 +906,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["sourceRuns close", () => sourceRuns.close()],
         ["doctorSource close", () => doctorSource.close()],
         ["fileEvents close", () => fileEvents.close()],
+        ["configDiscovery close", () => configDiscovery.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.
         ["sessionState close", rendererStep("close-session-state")],

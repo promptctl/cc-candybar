@@ -15,13 +15,13 @@ import {
 } from "../config/config-changes.js";
 import { JSON5_DIALECT, JSON_DIALECT } from "../config/json5-edit.js";
 import type { SessionId } from "./foundations/session-id.js";
+import type { LayerRole } from "../config/layer-role.js";
 import type {
   Act,
   ConfigChange,
   EffectOutcome,
 } from "../renderer-interface/interface.js";
-import { answeredBook } from "../config/repo-configs.js";
-import { isLocalConfigFile } from "../config/loader/discovery.js";
+import { answeredBook } from "./config-discovery/repo-configs.js";
 import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
 import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import path from "node:path";
@@ -62,6 +62,18 @@ export interface TrustBook {
   readonly said: (line: string) => void;
 }
 
+// [LAW:single-enforcer] What a turn's changes are resolved against: each
+// session's snapshot as the host's discovery holds it, so a renderer names a
+// layer by its role, and a repository by the question its bar was asked.
+export interface SessionLayers {
+  // The file the session's layer of `role` lives at, or null when its chain
+  // has no such layer.
+  readonly path: (session: SessionId, role: LayerRole) => string | null;
+  // The directory the session's repository question is answered under, or
+  // null when it has none.
+  readonly repoDir: (session: SessionId) => string | null;
+}
+
 // The Claude Code settings files a session's doctor reading handed in, which
 // a `claude-settings` change may write (`writableSettingsFiles`); none while
 // it holds no reading.
@@ -73,16 +85,27 @@ export function performChanges(
   changes: readonly ConfigChange[],
   book: TrustBook | null,
   writable: WritableSettings,
+  layers: SessionLayers,
 ): EffectOutcome {
   const rewrites = new Map<string, Rewrite>();
+  // The files a change to a local layer lands in.
+  const local = new Set<string>();
   let answered: readonly string[] = [];
   try {
     for (const { session, target, changes: list } of changes) {
+      const named =
+        target.kind === "layer"
+          ? layers.path(session, target.role)
+          : target.file;
+      if (named === null)
+        return {
+          kind: "refused",
+          reason: `the session's config has no ${target.kind === "layer" ? target.role : ""} layer — nothing was written`,
+        };
       // Keyed by the file a write lands in, so two paths to one file are one
       // rewrite of it.
-      const file = resolvedTarget(
-        target.kind === "layer" ? target.path : target.file,
-      );
+      const file = resolvedTarget(named);
+      if (target.kind === "layer" && target.role === "local") local.add(file);
       // [LAW:single-enforcer] A renderer names a settings file only among
       // those the host's own reading handed it.
       if (
@@ -114,7 +137,7 @@ export function performChanges(
     // so git never shows it: its repository's shared exclude names it, in the
     // same write as the file, or neither is written.
     for (const { file, was, will } of [...rewrites.values()]) {
-      if (was !== null || will === null || !isLocalConfigFile(file)) continue;
+      if (was !== null || will === null || !local.has(file)) continue;
       const excluded = excludeRewrite(file, rewrites);
       if (excluded.kind === "failed")
         return {
@@ -124,6 +147,17 @@ export function performChanges(
       if (excluded.kind === "ok")
         rewrites.set(excluded.value.file, excluded.value);
     }
+    // [LAW:single-enforcer] An answer is recorded only for the repository its
+    // session's bar asked about: a signed link to another directory, or one
+    // drawn before the session moved, is refused.
+    const strayAnswer = book?.answers.find(
+      ({ session, dir }) => layers.repoDir(session) !== dir,
+    );
+    if (strayAnswer !== undefined)
+      return {
+        kind: "refused",
+        reason: `${strayAnswer.dir} is not the repository the session's config asks about — nothing was written`,
+      };
     if (book !== null && book.answers.length > 0) {
       const planned = answeredBook(book.stateDir, book.answers);
       if (planned.kind === "failed")

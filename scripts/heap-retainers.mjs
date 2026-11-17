@@ -54,7 +54,8 @@ function holds(s, rec) {
 function buildReverse(s, strong) {
   const firstEdge = new Int32Array(s.nodeCount + 1);
   for (let i = 0; i < s.nodeCount; i++) {
-    firstEdge[i + 1] = firstEdge[i] + s.nodes[i * s.nodeStride + s.edgeCountIdx];
+    firstEdge[i + 1] =
+      firstEdge[i] + s.nodes[i * s.nodeStride + s.edgeCountIdx];
   }
   const reverse = Array.from({ length: s.nodeCount }, () => []);
   for (let from = 0; from < s.nodeCount; from++) {
@@ -143,21 +144,34 @@ function main() {
   }
   const s = parseSnapshot(positional[0]);
   const re = new RegExp(positional[1]);
-  const { paths, totalTargets, traced } = retainerPaths(s, re, opts.limit, opts);
+  const { paths, totalTargets, traced } = retainerPaths(
+    s,
+    re,
+    opts.limit,
+    opts,
+  );
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify({ paths, totalTargets, traced }) + "\n");
+    process.stdout.write(
+      JSON.stringify({ paths, totalTargets, traced }) + "\n",
+    );
     return;
   }
 
-  process.stdout.write(`${totalTargets} node(s) match /${re.source}/; tracing ${traced}.\n\n`);
+  process.stdout.write(
+    `${totalTargets} node(s) match /${re.source}/; tracing ${traced}.\n\n`,
+  );
   paths.forEach((chain, i) => {
     process.stdout.write(`#${i + 1}\n`);
-    chain.forEach((line, depth) => process.stdout.write(`${"  ".repeat(depth)}${line}\n`));
+    chain.forEach((line, depth) =>
+      process.stdout.write(`${"  ".repeat(depth)}${line}\n`),
+    );
     process.stdout.write("\n");
   });
   if (totalTargets > traced) {
-    process.stdout.write(`(${totalTargets - traced} more matching nodes not traced; raise --limit)\n`);
+    process.stdout.write(
+      `(${totalTargets - traced} more matching nodes not traced; raise --limit)\n`,
+    );
   }
 }
 

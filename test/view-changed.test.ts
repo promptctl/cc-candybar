@@ -4,6 +4,7 @@
 // that differs from the one stored; a re-read that finds what is stored moves
 // nothing, so a still source under a fast period wakes no feed.
 
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import fs from "node:fs";
 import { HOST, locs } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
@@ -77,17 +78,16 @@ function setUp() {
   const changed: string[] = [];
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
-  const cache = new RenderCache(
+  const cache = new DiskRenderCache(
+    { locations: locs(), stateDir: stateDir(HOST), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
-      locations: locs(),
+      home: locs().home,
       env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
-      watchers,
       source: runs.source,
     },
     {
@@ -106,7 +106,7 @@ function setUp() {
     return held;
   };
   const reload = (): void =>
-    cache.reload(dir, dir, configFile, { kind: "write" });
+    cache.reload();
   return { status, changed, reloads, writeConfig, reload, open };
 }
 

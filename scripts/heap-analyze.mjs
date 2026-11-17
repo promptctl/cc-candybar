@@ -51,8 +51,11 @@ export function parseSnapshot(path) {
   // The header is every byte before `"nodes":`, a `{"snapshot":{…},` object
   // whose closing brace is the file's.
   const header = bytes.toString("utf8", 0, nodesAt).replace(/,\s*$/, "}");
-  const { meta, node_count: nodeCount, edge_count: edgeCount } =
-    JSON.parse(header).snapshot;
+  const {
+    meta,
+    node_count: nodeCount,
+    edge_count: edgeCount,
+  } = JSON.parse(header).snapshot;
   const nodeFields = meta.node_fields;
   const edgeFields = meta.edge_fields;
   const nodes = readInts(bytes, nodesAt, nodeCount * nodeFields.length, SIZES);
@@ -274,11 +277,16 @@ function main() {
   }
 
   if (positional.length === 2) {
-    const rows = diff(parseSnapshot(positional[0]), parseSnapshot(positional[1]))
+    const rows = diff(
+      parseSnapshot(positional[0]),
+      parseSnapshot(positional[1]),
+    )
       .filter((r) => !opts.match || opts.match.test(r.label))
       .filter((r) => r.deltaCount !== 0);
     if (opts.json) {
-      process.stdout.write(JSON.stringify({ diff: rows.slice(0, opts.top) }) + "\n");
+      process.stdout.write(
+        JSON.stringify({ diff: rows.slice(0, opts.top) }) + "\n",
+      );
       return;
     }
     process.stdout.write(`Δcount  before   after   class\n`);
@@ -295,7 +303,9 @@ function main() {
     .filter((r) => !opts.match || opts.match.test(r.label))
     .sort((a, b) => b.count - a.count);
   if (opts.json) {
-    process.stdout.write(JSON.stringify({ histogram: rows.slice(0, opts.top) }) + "\n");
+    process.stdout.write(
+      JSON.stringify({ histogram: rows.slice(0, opts.top) }) + "\n",
+    );
     return;
   }
   process.stdout.write(` count   self_size  class\n`);

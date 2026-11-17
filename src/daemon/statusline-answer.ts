@@ -32,6 +32,7 @@ import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { HostTurn, Made, RendererHost } from "./renderer-host.js";
+import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -95,6 +96,9 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 export async function answerStatusline(
   host: RendererHost,
   collector: Pick<Collector, "requested" | "holding" | "settled">,
+  // [LAW:single-enforcer] The host's config discovery: the snapshot of the
+  // origin the request names, which rides its config turn.
+  configOf: (req: CheckedRenderRequest) => ConfigSnapshot,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after">,
   // The daemon's close, which ends the request's wait.
   closing: AbortSignal,
@@ -145,7 +149,12 @@ export async function answerStatusline(
     // mailbox: another input's turn that lands meanwhile, one that evicts
     // the session's view included, moves what the wait covers.
     configured = await host.answer(
-      unlessClosing({ kind: "config", context: req, worldState }),
+      unlessClosing({
+        kind: "config",
+        context: req,
+        worldState,
+        config: configOf(req),
+      }),
     );
     // [LAW:nothing-unseen] The config turn's record leads: it opens with the
     // session, which the event's readers key on (`render sid=`), and says

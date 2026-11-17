@@ -197,10 +197,7 @@ const OWNED_IMPORTS = {
   },
   stateDir: {
     group: PATHS,
-    owners: [
-      "src/check.ts",
-      "src/doctor/cli.ts",
-    ],
+    owners: ["src/check.ts", "src/doctor/cli.ts"],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   ...Object.fromEntries(
@@ -348,6 +345,13 @@ const ZONE_ROWS = {
   "src/check.ts": "root",
   "src/check-runs.ts": "root",
   "src/doctor/cli.ts": "root",
+  // The host's reads of the filesystem, which the renderer reaches only as
+  // the facts its inputs carry.
+  "src/utils/git-root.ts": "rest",
+  "src/utils/presence.ts": "rest",
+  "src/utils/watch-target.ts": "rest",
+  "src/utils/folder-identity.ts": "rest",
+  "src/daemon/foundations/watch-targets.ts": "rest",
 };
 const ZONE_IMPORTS = {
   renderer: ["renderer", "start", "shared"],
@@ -364,6 +368,22 @@ const ZONE_MESSAGE = {
   shared: "Shared code loads in both processes and imports neither side.",
   rest: "The host reaches the renderer only through its start (src/renderer/main.ts).",
 };
+
+// [LAW:effects-at-boundaries] The renderer opens no file: what it draws from
+// the filesystem arrives as its inputs, so the renderer, its start and shared
+// code may not import fs. A module here still does, each until the ticket
+// named beside it hands its reads in; a module here that no longer imports fs
+// fails, so the list only shrinks.
+const FS_HELD = {
+  // Stored state, handed in at the renderer's start.
+  "src/doctor/state-file": "candybar-host-renderer-x96a.uh4",
+  "src/utils/atomic-write": "candybar-host-renderer-x96a.uh4",
+  "src/utils/cache": "candybar-host-renderer-x96a.uh4",
+  // The transcript reads a segment still makes.
+  "src/utils/claude": "candybar-host-renderer-x96a.2jt",
+  "src/utils/transcript-fs": "candybar-host-renderer-x96a.2jt",
+};
+const FS_SOURCE = /^(node:)?fs(\/promises)?$/;
 
 // A module's key is its repo-relative path without its extension, so
 // `../time.js`, `./time` and `src/time.ts` are one module, and a directory's
@@ -420,6 +440,9 @@ const importDirection = {
       };
     }
     const fromZone = zoneOf(from);
+    const fsBanned = fromZone !== "rest" && fromZone !== "root";
+    const held = Object.hasOwn(FS_HELD, from);
+    let importsFs = false;
     const check = (node, source) => {
       if (source === null) {
         context.report({
@@ -429,6 +452,15 @@ const importDirection = {
         return;
       }
       if (!source.startsWith(".")) {
+        if (fsBanned && FS_SOURCE.test(source) && !typeOnly(node)) {
+          importsFs = true;
+          if (!held) {
+            context.report({
+              node,
+              message: `${fromZone} ${from} imports ${source}. The renderer opens no file: what it reads arrives as its inputs. [LAW:effects-at-boundaries]`,
+            });
+          }
+        }
         return;
       }
       const to = moduleKey(path.resolve(dir, source));
@@ -463,6 +495,16 @@ const importDirection = {
     const fromSource = (node) =>
       node.source && check(node, sourceOf(node.source));
     return {
+      // [LAW:no-silent-failure] An exception its module no longer needs is
+      // said, so the list cannot outlive its reads.
+      "Program:exit": (node) => {
+        if (held && !importsFs) {
+          context.report({
+            node,
+            message: `${from} imports no fs, so its exception (${FS_HELD[from]}) is stale: delete it. [LAW:effects-at-boundaries]`,
+          });
+        }
+      },
       ImportDeclaration: fromSource,
       ExportNamedDeclaration: fromSource,
       ExportAllDeclaration: fromSource,

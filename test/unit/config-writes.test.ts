@@ -5,6 +5,8 @@
 import { ConfigWrites } from "../../src/renderer/config-writes";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import type { Effect, EffectId } from "../../src/renderer-interface/interface";
+import { BadVerbArgs } from "../../src/daemon/foundations/verb-error";
+import { textSnapshot } from "../helpers/text-snapshot";
 
 const SID = sessionIdOf("s1");
 const DISK: Record<string, string> = {
@@ -12,12 +14,16 @@ const DISK: Record<string, string> = {
   "/b.json5": "{ b: 1 }\n",
 };
 
+// The session's chain as the host's discovery handed it in: the user's file
+// below the project's.
+const CHAIN = textSnapshot(Object.entries(DISK)).chain;
+
+// A click begun over the session's chain.
 function writes() {
   let minted = 0;
-  return new ConfigWrites(
-    () => ++minted as EffectId,
-    (file) => DISK[file] ?? null,
-  );
+  const w = new ConfigWrites(() => ++minted as EffectId);
+  w.begin("click", CHAIN);
+  return w;
 }
 
 const ids = (effects: readonly Effect[]): EffectId[] =>
@@ -34,11 +40,16 @@ describe("a click's config writes", () => {
     expect(applied).toBe(true);
   });
 
-  test("a click reads its own writes, and the disk for the rest", () => {
+  test("a click reads its own writes, and its session's chain for the rest", () => {
     const w = writes();
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     expect(w.read("/a.json5")).toBe("{ a: 2 }\n");
     expect(w.read("/b.json5")).toBe(DISK["/b.json5"]);
+  });
+
+  test("a file that is no layer of the session's chain is not the click's to read", () => {
+    const w = writes();
+    expect(() => w.read("/elsewhere.json5")).toThrow(BadVerbArgs);
   });
 
   test("two writes to one file are one change, from the first read to the last write", () => {
@@ -52,7 +63,7 @@ describe("a click's config writes", () => {
         kind: "change",
         id: 1,
         session: SID,
-        target: { kind: "layer", path: "/a.json5" },
+        target: { kind: "layer", role: "user" },
         changes: [
           {
             op: "replace",
@@ -74,7 +85,7 @@ describe("a click's config writes", () => {
     w.seal(effects, SID, () => (applied = true));
     const [a, b] = ids(effects);
     expect(w.settled(a!, { kind: "ok" })).toBe("owed");
-    expect(() => w.begin("next")).toThrow(
+    expect(() => w.begin("next", CHAIN)).toThrow(
       "next began while a click's changes to /a.json5, /b.json5 were still landing",
     );
     const landed = w.settled(b!, { kind: "ok" });
@@ -87,7 +98,7 @@ describe("a click's config writes", () => {
     if (landed === undefined || landed === "owed") throw new Error("unlanded");
     landed.consequence([]);
     expect(applied).toBe(true);
-    expect(() => w.begin("next")).not.toThrow();
+    expect(() => w.begin("next", CHAIN)).not.toThrow();
   });
 
   test("a landing that missed reports why, though a later change landed", () => {

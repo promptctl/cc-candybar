@@ -39,23 +39,34 @@ const DEST = path.join(ROOT, "vendor", "cc-extra");
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const source = process.argv[2];
   if (source === undefined) {
-    process.stderr.write("usage: node scripts/vendor-cc-extra.mjs <cc-extra checkout>\n");
+    process.stderr.write(
+      "usage: node scripts/vendor-cc-extra.mjs <cc-extra checkout>\n",
+    );
     process.exit(2);
   }
   const commit = execFileSync("git", ["-C", source, "rev-parse", "HEAD"], {
     encoding: "utf8",
   }).trim();
-  const dirty = execFileSync("git", ["-C", source, "status", "--porcelain", "--", "src"], {
-    encoding: "utf8",
-  });
+  const dirty = execFileSync(
+    "git",
+    ["-C", source, "status", "--porcelain", "--", "src"],
+    {
+      encoding: "utf8",
+    },
+  );
   if (dirty !== "") {
-    process.stderr.write(`vendor-cc-extra: ${source}/src has uncommitted changes — commit them first, so PROVENANCE names what was copied\n`);
+    process.stderr.write(
+      `vendor-cc-extra: ${source}/src has uncommitted changes — commit them first, so PROVENANCE names what was copied\n`,
+    );
     process.exit(1);
   }
   fs.rmSync(DEST, { recursive: true, force: true });
   fs.mkdirSync(path.join(DEST, "src"), { recursive: true });
   for (const file of VENDORED) {
-    fs.copyFileSync(path.join(source, "src", file), path.join(DEST, "src", file));
+    fs.copyFileSync(
+      path.join(source, "src", file),
+      path.join(DEST, "src", file),
+    );
   }
   // cc-extra is CommonJS, and this package is ESM: the nearest package.json
   // decides how node reads these files, in the checkout and under dist/cc-extra.
@@ -67,5 +78,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     path.join(DEST, "PROVENANCE"),
     `cc-extra ${commit}\nCopied by scripts/vendor-cc-extra.mjs; do not edit these files here.\n`,
   );
-  process.stdout.write(`vendored ${VENDORED.length} files from cc-extra ${commit}\n`);
+  process.stdout.write(
+    `vendored ${VENDORED.length} files from cc-extra ${commit}\n`,
+  );
 }

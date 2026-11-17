@@ -2,6 +2,7 @@
 // changes splice into the files as they stand, keep every byte they do not
 // touch, and land together or not at all.
 
+import type { LayerRole } from "../src/config/layer-role";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -10,8 +11,9 @@ import { diffChanges, type Change } from "../src/config/config-changes.js";
 import {
   performChanges,
   type ApproveRepo,
+  type SessionLayers,
 } from "../src/daemon/effect-interpreter.js";
-import { repoConfigs, repoConfigsPath } from "../src/config/repo-configs.js";
+import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs.js";
 import type { SessionId } from "../src/daemon/foundations/session-id.js";
 import type {
   ConfigChange,
@@ -38,23 +40,47 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 let ids = 0;
+// Each change's session holds the one layer it writes, and each answer's the
+// one repository it answers: what the host's discovery found for them.
+const layers = new Map<SessionId, { role: LayerRole; file: string }>();
+const repos = new Map<SessionId, string>();
+const SESSIONS: SessionLayers = {
+  path: (session, role) => {
+    const layer = layers.get(session);
+    return layer?.role === role ? layer.file : null;
+  },
+  repoDir: (session) => repos.get(session) ?? null,
+};
+// The role a file's name gives it in its repository.
+const roleOf = (file: string): LayerRole =>
+  path.basename(file).startsWith(".cc-candybar.local.")
+    ? "local"
+    : path.basename(file).startsWith(".cc-candybar.")
+      ? "project"
+      : "user";
 const change = (
   file: string,
   before: string | null,
   after: string | null,
-): ConfigChange => ({
-  kind: "change",
-  id: ++ids as EffectId,
-  session: "s" as SessionId,
-  target: { kind: "layer", path: file },
-  changes: diffChanges(before, after),
-});
+): ConfigChange => {
+  const id = ++ids as EffectId;
+  const session = `change-${id}` as SessionId;
+  const role = roleOf(file);
+  layers.set(session, { role, file });
+  return {
+    kind: "change",
+    id,
+    session,
+    target: { kind: "layer", role },
+    changes: diffChanges(before, after),
+  };
+};
 
 // A turn of layer changes, under a doctor that read no settings file.
 const perform = (
   changes: readonly ConfigChange[],
   book: Parameters<typeof performChanges>[1],
-) => performChanges(changes, book, () => []);
+) => performChanges(changes, book, () => [], SESSIONS);
 
 const read = (file: string): string => fs.readFileSync(file, "utf8");
 
@@ -146,13 +172,12 @@ describe("performChanges", () => {
 // renders, so a book written beside a config change that failed would trust
 // a repository whose config the click never set.
 describe("performChanges with the trust book", () => {
-  const answer = (dir: string): ApproveRepo => ({
-    kind: "approve-repo",
-    id: ++ids as EffectId,
-    session: "s" as SessionId,
-    dir,
-    answer: "approved",
-  });
+  const answer = (dir: string, asked: string = dir): ApproveRepo => {
+    const id = ++ids as EffectId;
+    const session = `answer-${id}` as SessionId;
+    repos.set(session, asked);
+    return { kind: "approve-repo", id, session, dir, answer: "approved" };
+  };
 
   test("an answer lands with the turn's changes, and its line is said once it has", () => {
     const state = path.join(dir, "state");
@@ -192,6 +217,24 @@ describe("performChanges with the trust book", () => {
     } finally {
       fs.chmodSync(folder, 0o700);
     }
+  });
+
+  test("an answer for a repository its session's bar did not ask about is refused, and nothing is written", () => {
+    const state = path.join(dir, "state");
+    const outcome = perform(
+      [change(user, USER, USER.replace("dusk", "dawn"))],
+      {
+        stateDir: state,
+        answers: [answer(dir, path.join(dir, "elsewhere"))],
+        said: () => {},
+      },
+    );
+    expect(outcome).toEqual({
+      kind: "refused",
+      reason: `${dir} is not the repository the session's config asks about — nothing was written`,
+    });
+    expect(read(user)).toBe(USER);
+    expect(fs.existsSync(repoConfigsPath(state))).toBe(false);
   });
 
   test("a change that moved since it was read writes no answer", () => {
@@ -329,7 +372,7 @@ describe("performChanges into Claude Code's settings", () => {
 
   test("a setting as the doctor read it is written in strict JSON", () => {
     expect(
-      performChanges([into(settings, setColor(`"3"`))], null, () => [settings]),
+      performChanges([into(settings, setColor(`"3"`))], null, () => [settings], SESSIONS),
     ).toEqual({ kind: "ok" });
     expect(JSON.parse(read(settings))).toEqual({
       model: "opus",
@@ -342,6 +385,7 @@ describe("performChanges into Claude Code's settings", () => {
       [into(settings, setColor(`"2"`))],
       null,
       () => [settings],
+      SESSIONS,
     );
     expect(outcome.kind).toBe("refused");
     expect(read(settings)).toBe(SETTINGS);
@@ -349,7 +393,7 @@ describe("performChanges into Claude Code's settings", () => {
 
   test("a file the session's doctor did not read is refused", () => {
     expect(
-      performChanges([into(settings, setColor(`"3"`))], null, () => []),
+      performChanges([into(settings, setColor(`"3"`))], null, () => [], SESSIONS),
     ).toEqual({
       kind: "refused",
       reason: `${settings} is not a settings file the session's doctor read — nothing was written`,

@@ -19,7 +19,7 @@ import {
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
 import type { LayerRole } from "../config/layer-role";
-import { repoQuestions } from "../config/repo-configs";
+import { repoQuestions } from "./repo-question.js";
 import {
   type CacheEntry,
   type RenderCache,
@@ -27,7 +27,7 @@ import {
   type SessionHold,
   type SessionView,
 } from "./render-cache";
-import { watchFault } from "../daemon/foundations/watch-targets";
+
 import { encodeRenderOrigin } from "../daemon/foundations/render-origin";
 import {
   SESSION_CLIENT_HINTS_KEY,
@@ -45,7 +45,6 @@ import {
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { RichText } from "@promptctl/rich-js";
-import type { WorldState } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
 import {
@@ -74,7 +73,7 @@ import type { FeedDraw, Feeds } from "./feeds.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { TurnTime } from "./turn-time.js";
 import type { LaneActs } from "./lane-acts.js";
-import type { Effect } from "../renderer-interface/interface.js";
+import type { Effect, SessionConfig } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -345,8 +344,8 @@ const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
   refusedHintsError(refusedHints(req, req.hints));
 
 // [LAW:single-enforcer] A `config` turn: the facts of the context it carries
-// noted, what the context says recorded, its world state taken, and the
-// session's view opened at it and let go, so the turn's output names what the
+// noted, what the context says recorded, its world state and its snapshot
+// taken, and the session's view opened at it and let go, so the turn's output names what the
 // view reads before the request after it waits. The record goes first, so a
 // durable click on a session whose opening threw still resolves the chain
 // that opening was for, and the facts before it, so the request's event says
@@ -357,8 +356,7 @@ const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
 // context's.
 export function configureSession(
   parts: RendererParts,
-  req: CheckedRenderRequest,
-  worldState: WorldState,
+  { context: req, worldState, config }: SessionConfig,
   facts: RequestFacts,
 ): void {
   contextFacts(req, facts);
@@ -366,6 +364,14 @@ export function configureSession(
   runInAction(() => {
     recordRequest(parts, req);
     parts.worldStates.take(worldState);
+    const { projectDir, cwd, target } = req.requested;
+    parts.renderCache.configure(
+      req.hookData.session_id,
+      projectDir,
+      cwd,
+      target.path,
+      config,
+    );
     holdSessionAt(parts, req)[Symbol.dispose]();
   });
 }
@@ -578,9 +584,9 @@ export function drawRender(
       enabled: effective.updateNotice,
     },
   );
-  // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
-  // in every session drawn from the entry, until one of them answers.
-  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
+  // [LAW:single-enforcer] A repository awaiting the user's answer asks, in
+  // every session drawn from the entry, until one of them answers.
+  const questions = repoQuestions(entry.snapshot.repo, sessionId, linkSigner);
   // What a load or a request could not honour: each its own message, named by
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open
@@ -610,11 +616,10 @@ export function drawRender(
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, what this config's
   // watch cannot hear, and the warning this config's load carried.
-  // [LAW:no-silent-failure] A config whose link chain the watch cannot walk,
-  // or whose folder the OS will not watch, may miss an edit: the bar says so.
-  // A stall is no reason of this watch's: it has the bar's own row.
-  const configWatch =
-    entry.watch === null ? null : watchFault("config watch", entry.watch, null);
+  // [LAW:no-silent-failure] A config whose link chain the host's watch cannot
+  // walk, or whose folder the OS will not watch, may miss an edit: the bar
+  // says so. A stall is no reason of this watch's: it has the bar's own row.
+  const configWatch = entry.snapshot.watch;
   // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
   const { daemon } = document;

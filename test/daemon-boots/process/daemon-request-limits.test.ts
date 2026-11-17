@@ -4,7 +4,13 @@
 // test/daemon-render-event-e2e.test.ts's, in the worker.
 
 import { execFileSync } from "node:child_process";
-import { constants, mkdtempSync, rmSync } from "node:fs";
+import {
+  constants,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { open } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -89,7 +95,15 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
       throw e;
     });
     await sleep(REQUEST_TIMEOUT_MS * 2);
-    await pipe.writeFile(JSON.stringify({ segments: {}, root: { h: [] } }));
+    // The host's config watch hears the pipe written and discovers the config
+    // again, so the path holds a file of the same text by then: the read in
+    // flight keeps the pipe it opened, and a second read of a pipe with no
+    // writer would stop the daemon's loop for good.
+    const text = JSON.stringify({ segments: {}, root: { h: [] } });
+    const settled = `${config}.settled`;
+    writeFileSync(settled, text);
+    renameSync(settled, config);
+    await pipe.writeFile(text);
     await pipe.close();
     await expect(answered).resolves.toMatchObject({
       ok: false,

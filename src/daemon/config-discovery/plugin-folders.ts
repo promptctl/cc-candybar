@@ -8,13 +8,12 @@ import path from "node:path";
 import {
   DEFINITION_FILE,
   pluginDefinition,
-  type DroppedPlugin,
   type PluginDefinition,
-} from "./plugins.js";
-import type { PluginScope } from "./plugin-scope.js";
+} from "../../config/loader/plugins.js";
+import type { PluginScope } from "../../config/loader/plugin-scope.js";
 import type { Locations } from "./discovery.js";
 import type { Unchecked } from "../../utils/presence.js";
-import type { ApprovedRepo } from "./repo-gate.js";
+import type { ApprovedRepo } from "../../config/loader/repo-gate.js";
 
 /**
  * The plugin roots, lowest precedence first: each `$XDG_DATA_DIRS` entry
@@ -75,8 +74,14 @@ export interface InstalledPlugins {
   // Roots a listing could not see into (anything but absence).
   readonly unchecked: readonly Unchecked[];
   // Files sitting directly in a root: a plugin is a folder, so each is a drop
-  // naming where it belongs.
-  readonly strays: readonly DroppedPlugin[];
+  // naming where it belongs (`strayPlugin`).
+  readonly strays: readonly StrayFile[];
+}
+
+// A file sitting directly in a plugin root, and the scope of that root.
+interface StrayFile {
+  readonly path: string;
+  readonly scope: PluginScope;
 }
 
 // [LAW:types-are-the-program] A root that does not exist holds no plugins;
@@ -90,7 +95,7 @@ export function installedPlugins(
   // by namespace, so a repo's `lit` and an installed `lit` both survive.
   const byNs = new Map<string, PluginDefinition>();
   const unchecked: Unchecked[] = [];
-  const strays: DroppedPlugin[] = [];
+  const strays: StrayFile[] = [];
   for (const { dir: root, scope } of roots) {
     const listed = listFolders(root);
     if ("error" in listed) {
@@ -109,12 +114,7 @@ export function installedPlugins(
       byNs.set(key, definition);
     }
     for (const file of listed.files) {
-      strays.push({
-        path: path.join(root, file),
-        scope,
-        name: undefined,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${path.join(root, "<name>", DEFINITION_FILE)}`,
-      });
+      strays.push({ path: path.join(root, file), scope });
     }
   }
   return {

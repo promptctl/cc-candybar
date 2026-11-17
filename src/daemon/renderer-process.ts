@@ -29,7 +29,6 @@ import {
 import type {
   AdapterToHost,
   StorageHoldId,
-  WatchId,
 } from "../renderer-interface/adapter.js";
 import type { MemorySizes } from "./foundations/memory-limit.js";
 import {
@@ -256,7 +255,6 @@ type Begun = Extract<Phase, { kind: "closing" | "closed" }>;
 // own ids to the host's, released once the next renderer has answered its
 // start, or at close: the owner every id the host minted for it names.
 interface Held {
-  readonly watches: Map<WatchId, WatchId>;
   readonly holds: Map<StorageHoldId, StorageHoldId>;
 }
 
@@ -282,7 +280,6 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   let minted = 0;
   const mint = <T extends number>(): T => ++minted as T;
   const effects = new Map<EffectId, Minted<EffectId>>();
-  const watches = new Map<WatchId, Minted<WatchId>>();
 
   const current = (): Link | null =>
     phase.kind === "starting" ||
@@ -300,23 +297,9 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     );
 
   // The host's reaches as one renderer reaches them: the ids it mints for
-  // watches and storage holds become the host's, held by its link.
+  // storage holds become the host's, held by its link.
   const reachesFor = (held: Held): AdapterToHost => ({
     ...own.reaches,
-    watches: {
-      watch: (id, key, targets) => {
-        const host = mint<WatchId>();
-        watches.set(host, { by: held, id });
-        held.watches.set(id, host);
-        own.reaches.watches.watch(host, key, targets);
-      },
-      unwatch: (id) => {
-        const host = hostIdOf(held.watches, id);
-        watches.delete(host);
-        held.watches.delete(id);
-        own.reaches.watches.unwatch(host);
-      },
-    },
     storage: {
       // Every load of a state holds its folders again, under the same id.
       hold: (id, folders) => {
@@ -333,10 +316,6 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   });
 
   const release = ({ held }: Link): void => {
-    for (const host of held.watches.values()) {
-      watches.delete(host);
-      own.reaches.watches.unwatch(host);
-    }
     for (const host of held.holds.values()) own.reaches.storage.release(host);
     for (const [host, effect] of effects)
       if (effect.by === held) effects.delete(host);
@@ -373,7 +352,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       signal: kill.signal,
       heard: { stdout: stdout.push, stderr: stderr.push },
     });
-    const held: Held = { watches: new Map(), holds: new Map() };
+    const held: Held = { holds: new Map() };
     const link: Link = {
       generation: generationOf,
       channel,
@@ -645,19 +624,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       };
     });
   const adapter = (input: AdapterInput): Promise<Timed<AdapterOutput>> =>
-    sent(async (link) => {
-      const { push } = input;
-      if (push.kind !== "watch") return link.lines.renderer.answer(input);
-      const watch = watches.get(push.id);
-      if (watch === undefined || watch.by !== link.held)
-        throw new RendererDown(
-          `renderer main: watch ${push.id} was held by a renderer that has ended`,
-        );
-      return link.lines.renderer.answer({
-        ...input,
-        push: { ...push, id: watch.id },
-      });
-    });
+    sent((link) => link.lines.renderer.answer(input));
 
   return {
     renderer: rendererOf({ event, adapter }),

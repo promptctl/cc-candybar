@@ -6,6 +6,8 @@
 // cache over the payload providers, read by the host's collector, drawn from
 // `sessionSource`.
 
+import { loadFromDisk } from "./helpers/disk-render-cache";
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import { holdClickError } from "../src/daemon/foundations/click-error";
 import { NO_DOCTOR } from "./helpers/payload-owners";
 import { linkUrls } from "./helpers/frame";
@@ -20,11 +22,8 @@ import path from "node:path";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import {
-  loadFromDisk,
-  RenderCache,
-  type SessionView,
-} from "../src/renderer/render-cache";
+import { RenderCache,
+  type SessionView } from "../src/renderer/render-cache";
 import { renderOptionsOf } from "../src/renderer/render-payload";
 import { collected } from "./helpers/collected";
 import {
@@ -162,7 +161,7 @@ function programWrites(sid: string, doc: unknown): void {
 }
 
 interface Rig {
-  readonly cache: RenderCache<SessionSource>;
+  readonly cache: DiskRenderCache<SessionSource>;
   readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly sessionState: SessionState;
   readonly runs: Runs;
@@ -228,14 +227,13 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   });
   const sessionState = new SessionState();
   const served = collected({ owners: providers, log }, cleanups);
-  const cache = new RenderCache<SessionSource>(
+  const cache = new DiskRenderCache<SessionSource>(
+    { locations: locs(), stateDir: stateDir(HOST), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
-      locations: locs(),
+      home: locs().home,
       env: HOST.env,
       sessionState,
-      watchers,
       storage: providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -422,13 +420,11 @@ describe("a run's declaration", () => {
     const r = rig();
     const loaded = loadFromDisk(dir, dir, config(["mine"]), {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
-      locations: locs(),
       env: HOST.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
-    });
+    }, { locations: locs(), stateDir: stateDir(HOST) });
     try {
       expect(loaded.error).toBeNull();
       expect(loaded.state!.config.actions["plugins.p.go"]).toEqual({
@@ -451,13 +447,11 @@ describe("a run's declaration", () => {
     );
     const loaded = loadFromDisk(dir, dir, file, {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
-      locations: locs(),
       env: HOST.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
-    });
+    }, { locations: locs(), stateDir: stateDir(HOST) });
     try {
       expect(loaded.error).toBeNull();
       expect(loaded.state!.config.actions["mine"]).toEqual({

@@ -11,12 +11,15 @@ import { drawPayload } from "./helpers/draw-payload";
 import { fakeLauncher } from "./helpers/fake-launcher";
 import { hangs } from "../src/proc/spawner-fake";
 import { NO_PROJECT } from "./helpers/no-project";
+import { textSnapshot } from "./helpers/text-snapshot";
+import { HOST } from "./helpers/host";
 import { textOf } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { validateConfig } from "./helpers/parse-and-validate";
-import { loadConfig } from "../src/config/dsl-loader";
+import { loadConfigSource } from "../src/config/dsl-loader";
+import { readFileSync } from "node:fs";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -52,11 +55,14 @@ describe("shipped examples load and render through the real cascade", () => {
   test.each(exampleFiles)("%s validates and renders without errors", (file) => {
     const path = join(EXAMPLES_DIR, file);
 
-    // [LAW:single-enforcer] loadConfig is the production cascade: the file
+    // [LAW:single-enforcer] loadConfigSource is the production cascade: the file
     // merges ON TOP of the bundled default, with the default's own segment
     // names as the delta-able set.
+    // The plugins the example lists, read as the host's discovery reads them.
+    const text = readFileSync(path, "utf-8");
+    const { listed } = textSnapshot([[path, text]], "/", HOST.home).chain[0]!;
     const config = validateConfig(
-      loadConfig(path, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED),
+      loadConfigSource(path, text, DEFAULT_DSL_CONFIG, { ...NO_PROJECT, listed }, ALLOWED),
       path,
       ALLOWED,
     );

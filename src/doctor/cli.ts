@@ -63,7 +63,8 @@ import {
   type HandlerProbeEdge,
 } from "./handler-probe.js";
 import { cliConfigTarget, type RenderOrigin } from "../config-hint.js";
-import { fallbackState, loadFromDisk } from "../renderer/render-cache.js";
+import { fallbackState, loadSnapshot } from "../renderer/render-cache.js";
+import { discover } from "../daemon/config-discovery/discovery.js";
 import { SessionState } from "../renderer/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
@@ -93,31 +94,33 @@ function reportLine({ check, verdict }: CheckReport): string {
           : `    look: ${verdict.sighting.glyphs} — ${MARK_HINT}\n`);
 }
 
-// [LAW:single-enforcer] The CLI's config load is the daemon's own
-// `loadFromDisk`, run once: it has no cache entry to read, so it builds the
-// state, keeps the outcome, and releases the sources the state started. A
-// load that failed reads the bar a fresh daemon would draw under the error.
+// [LAW:single-enforcer] The CLI's config load is the daemon's own discovery
+// and load, run once: it has no cache entry to read, so it builds the state,
+// keeps the outcome, and releases the sources the state started. A load that
+// failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(
   { host, clock }: World,
   origin: RenderOrigin,
 ): ConfigLoad {
   const deps = {
     clock,
-    locations: locations(host),
+    home: host.home,
     env: host.env,
     sessionState: new SessionState(),
     signer: previewSigner(),
     gates: daemonGates(),
-    stateDir: stateDir(host),
   };
-  const loaded = loadFromDisk(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    deps,
+  const { snapshot: found } = discover(
+    {
+      projectDir: origin.projectDir,
+      cwd: origin.cwd,
+      configFile: origin.target.path,
+    },
+    { locations: locations(host), stateDir: stateDir(host) },
   );
-  const state =
-    loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, deps);
+  const snapshot = { ...found, watch: null };
+  const loaded = loadSnapshot(snapshot, origin.cwd, deps);
+  const state = loaded.state ?? fallbackState(origin.cwd, snapshot, deps);
   state.registry.dispose();
   return {
     layers: loaded.layers,

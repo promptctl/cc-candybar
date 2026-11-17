@@ -1,3 +1,4 @@
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
@@ -90,17 +91,16 @@ function makeCache(
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const cache = new RenderCache(
+  const cache = new DiskRenderCache(
+    { locations: locs(), stateDir: stateDir(HOST), watchers },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
-      locations: locs(),
+      home: locs().home,
       env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
-      watchers,
       source: SOURCES_NOTHING,
       log: (_level, line) => {
         opts.log?.(line);
@@ -254,7 +254,7 @@ test("a reload opens each of the entry's views anew on the new state, and retire
   const { cache, lines } = makeCache();
   const before = await render(cache, "s-a");
   configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.reload();
   // The successor is open before any render, so the next frame draws a view
   // (brandon-unfiled-3248.8ro6, 4a).
   expect(cache.stats.views).toBe(1);
@@ -301,7 +301,7 @@ test("a view held by a render in flight is disposed only when the render returns
   const { cache, lines } = makeCache();
   const held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
   configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.reload();
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
   // Retired, not disposed: the render still draws through it.
   expect(lines.some((l) => l.startsWith("session view closed"))).toBe(false);
@@ -417,7 +417,7 @@ test("a view that fails to open releases the state hold it was opened under", ()
   ).toThrow("log boom");
   // Retired by the reload and held by nothing, the state is reclaimed now.
   configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.reload();
   expect(cache.stats.retired).toBe(0);
 });
 
@@ -529,7 +529,7 @@ test("a frame on screen stays copyable across a reload's successor view, and goe
   await render(cache, "s-copy");
   cache.delivered(S_COPY, "request", new Map([["7", "the message"]]));
   configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.reload();
   expect(cache.drawnCopy(S_COPY, "request", "7")).toBe("the message");
   // The host retires the session: its view closes, and its frames.
   cache.retireSession(S_COPY);

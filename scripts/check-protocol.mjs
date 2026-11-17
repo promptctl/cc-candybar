@@ -173,7 +173,11 @@ const CHECKS = [
   {
     label: "frame-header byte order, as the URL handler writes it",
     ts: markers(TS_PROTOCOL, [/writeUInt32BE/], "u32 big-endian"),
-    swift: markers(SWIFT_HANDLER, [/UInt32\(body\.count\)\.bigEndian/], "u32 big-endian"),
+    swift: markers(
+      SWIFT_HANDLER,
+      [/UInt32\(body\.count\)\.bigEndian/],
+      "u32 big-endian",
+    ),
   },
   {
     label: "the URL handler's frame kind",
@@ -188,7 +192,11 @@ const CHECKS = [
   // The frame's field names, as the daemon reads them and the app writes them.
   {
     label: "the URL handler's frame fields",
-    ts: memberSet(TS_PROTOCOL, /export interface UrlFrame \{[\s\S]+?\n\}/, /^ {2}(\w+):/gm),
+    ts: memberSet(
+      TS_PROTOCOL,
+      /export interface UrlFrame \{[\s\S]+?\n\}/,
+      /^ {2}(\w+):/gm,
+    ),
     swift: memberSet(SWIFT_HANDLER, /withJSONObject: \[[^\]]+\]/, /"(\w+)":/g),
   },
   // The default socket path: under /tmp, by uid, as src/daemon/paths.ts
@@ -229,13 +237,24 @@ const CHECKS = [
   },
   {
     label: "SWITCHED_OFF_RETRY_MS, as the statusline push waits",
-    ts: num(TS_FRAME_FOLLOW, /export const SWITCHED_OFF_RETRY_MS = ([\d\s*_]+);/),
+    ts: num(
+      TS_FRAME_FOLLOW,
+      /export const SWITCHED_OFF_RETRY_MS = ([\d\s*_]+);/,
+    ),
     push: num(JS_PUSH, /^const SWITCHED_OFF_RETRY_MS = ([\d\s*_]+);/m),
   },
   {
     label: "animation lane names",
-    ts: memberSet(TS_LANES, /export const LANES = \{[\s\S]*?\} as const;/, /^ {2}([A-Za-z]+): \{/gm),
-    rust: memberSet(RS_FOLLOW, /const LANE_NAMES: \[&str; \d+\] = \[[^\]]+\]/, /"([A-Za-z]+)"/g),
+    ts: memberSet(
+      TS_LANES,
+      /export const LANES = \{[\s\S]*?\} as const;/,
+      /^ {2}([A-Za-z]+): \{/gm,
+    ),
+    rust: memberSet(
+      RS_FOLLOW,
+      /const LANE_NAMES: \[&str; \d+\] = \[[^\]]+\]/,
+      /"([A-Za-z]+)"/g,
+    ),
   },
   {
     label: "RECONNECT_FIRST_MS",
@@ -249,13 +268,20 @@ const CHECKS = [
   },
   {
     label: "SWITCHED_OFF_RETRY_MS",
-    ts: num(TS_FRAME_FOLLOW, /export const SWITCHED_OFF_RETRY_MS = ([\d\s*_]+);/),
+    ts: num(
+      TS_FRAME_FOLLOW,
+      /export const SWITCHED_OFF_RETRY_MS = ([\d\s*_]+);/,
+    ),
     rust: num(RS_FOLLOW, /const SWITCHED_OFF_RETRY_MS: u64 = ([\d\s*_]+);/),
   },
   {
     label: "native subcommands Node does not name",
     ts: nativeNamesNodeLacks,
-    rust: memberSet(RS_MAIN, /const NATIVE_SUBCOMMANDS: [^=]+= \[[^;]+;/, /\("([a-z][a-z-]*)",/g),
+    rust: memberSet(
+      RS_MAIN,
+      /const NATIVE_SUBCOMMANDS: [^=]+= \[[^;]+;/,
+      /\("([a-z][a-z-]*)",/g,
+    ),
   },
   {
     label: "PROTOCOL_VERSION",
@@ -300,7 +326,11 @@ const CHECKS = [
   {
     label: "error-code vocabulary",
     ts: errorCodes,
-    rust: memberSet(RS_MAIN, /match code \{[\s\S]+?\n {4}\}/, /"([A-Z_]+)" =>/g),
+    rust: memberSet(
+      RS_MAIN,
+      /match code \{[\s\S]+?\n {4}\}/,
+      /"([A-Z_]+)" =>/g,
+    ),
   },
   {
     label: "error codes the native follower decides by",
@@ -340,11 +370,7 @@ const CHECKS = [
       /export interface ClientHint \{[\s\S]+?\n\}/,
       /readonly (\w+):/g,
     ),
-    rust: memberSet(
-      RS_MAIN,
-      /fn client_hint\([\s\S]+?\n\}/,
-      /"(\w+)": /g,
-    ),
+    rust: memberSet(RS_MAIN, /fn client_hint\([\s\S]+?\n\}/, /"(\w+)": /g),
   },
   // What "this session is over SSH" MEANS. Both runtimes answer the same
   // question for the same session; disagreeing on the vocabulary would make the
@@ -464,12 +490,20 @@ const CHECKS = [
   },
   {
     label: "glyph FG",
-    ts: sgrOfHex(TS_STYLE, /const DIAGNOSTIC_ERROR_COLORS: DiagnosticColors = \{[^}]*\bfg: "(#[0-9a-f]{6})"/, 38),
+    ts: sgrOfHex(
+      TS_STYLE,
+      /const DIAGNOSTIC_ERROR_COLORS: DiagnosticColors = \{[^}]*\bfg: "(#[0-9a-f]{6})"/,
+      38,
+    ),
     rust: lit(RS_GLYPH, /const FG: &str = "((?:[^"\\]|\\.)*)";/),
   },
   {
     label: "glyph BG",
-    ts: sgrOfHex(TS_STYLE, /const DIAGNOSTIC_ERROR_COLORS: DiagnosticColors = \{[^}]*\bbg: "(#[0-9a-f]{6})"/, 48),
+    ts: sgrOfHex(
+      TS_STYLE,
+      /const DIAGNOSTIC_ERROR_COLORS: DiagnosticColors = \{[^}]*\bbg: "(#[0-9a-f]{6})"/,
+      48,
+    ),
     rust: lit(RS_GLYPH, /const BG: &str = "((?:[^"\\]|\\.)*)";/),
   },
   {
@@ -488,8 +522,14 @@ const CHECKS = [
   // anchors both whole (whitespace aside): a term added to either breaks it.
   {
     label: "diagnostic sanitizer code points",
-    ts: codeRanges(TS_DIAG_TEXT, /const NEUTRALIZED_RANGES = \[([\s\S]*?)\] as const;/),
-    rust: codeRanges(RS_GLYPH, /const NEUTRALIZED_RANGES: &\[\(u32, u32\)\] = &\[([\s\S]*?)\];/),
+    ts: codeRanges(
+      TS_DIAG_TEXT,
+      /const NEUTRALIZED_RANGES = \[([\s\S]*?)\] as const;/,
+    ),
+    rust: codeRanges(
+      RS_GLYPH,
+      /const NEUTRALIZED_RANGES: &\[\(u32, u32\)\] = &\[([\s\S]*?)\];/,
+    ),
   },
   {
     label: "diagnostic sanitizer predicate",
@@ -519,7 +559,11 @@ const CHECKS = [
   // from its own list, so the lists themselves are the mirrored fact.
   {
     label: "budget grammar: accepted vectors",
-    ts: memberSet(TS_LIMITS_TEST, /const ACCEPT[\s\S]*?\];/, /"([^"]*)", ?(\d+)/g),
+    ts: memberSet(
+      TS_LIMITS_TEST,
+      /const ACCEPT[\s\S]*?\];/,
+      /"([^"]*)", ?(\d+)/g,
+    ),
     rust: memberSet(RS_LAUNCH, /const ACCEPT[\s\S]*?\];/, /"([^"]*)", ?(\d+)/g),
   },
   {
@@ -535,7 +579,10 @@ const CHECKS = [
   {
     label: "spawn-cooldown filename",
     ts: lit(TS_PATHS, /const SPAWN_COOLDOWN_FILE = "((?:[^"\\]|\\.)*)";/),
-    rust: lit(RS_MAIN, /const SPAWN_COOLDOWN_FILE: &str = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(
+      RS_MAIN,
+      /const SPAWN_COOLDOWN_FILE: &str = "((?:[^"\\]|\\.)*)";/,
+    ),
   },
   {
     // The left boundary of the shared cooldown window [-STALE_LOCK_MS,
@@ -584,7 +631,11 @@ const CHECKS = [
 
 // --- runner ----------------------------------------------------------------
 
-const MIRRORS = { rust: "Rust", push: "statusline push", swift: "Swift URL handler" };
+const MIRRORS = {
+  rust: "Rust",
+  push: "statusline push",
+  swift: "Swift URL handler",
+};
 const failures = [];
 for (const row of CHECKS) {
   const key = Object.keys(MIRRORS).find((k) => k in row);
@@ -599,21 +650,28 @@ for (const row of CHECKS) {
   const tsValue = row.ts();
   const mirrorValue = mirror();
   if (tsValue === null || mirrorValue === null) {
-    const missing = [tsValue === null && "TS", mirrorValue === null && mirrorName]
+    const missing = [
+      tsValue === null && "TS",
+      mirrorValue === null && mirrorName,
+    ]
       .filter(Boolean)
       .join(" and ");
     failures.push(`${row.label}: anchor not found in ${missing} source`);
     continue;
   }
   if (tsValue !== mirrorValue) {
-    failures.push(`${row.label}: TS=${tsValue} vs ${mirrorName}=${mirrorValue}`);
+    failures.push(
+      `${row.label}: TS=${tsValue} vs ${mirrorName}=${mirrorValue}`,
+    );
   }
 }
 
 if (failures.length > 0) {
   console.error("check-protocol: wire-contract mirror drift detected:");
   for (const f of failures) console.error(`  - ${f}`);
-  console.error("Update both runtimes in lockstep when changing the wire contract.");
+  console.error(
+    "Update both runtimes in lockstep when changing the wire contract.",
+  );
   process.exit(1);
 }
 

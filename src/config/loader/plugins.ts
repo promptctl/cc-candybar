@@ -16,7 +16,6 @@
 // daemon offers as a message beside the settings door and `cc-candybar check`
 // fails on.
 
-import fs from "node:fs";
 import path from "node:path";
 import JSON5 from "json5";
 import {
@@ -37,8 +36,7 @@ import {
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { resolveUserPath } from "../../utils/user-path.js";
-import { type Checkout } from "../../utils/git-root.js";
-import type { ApprovedRepo } from "./repo-gate.js";
+import type { Checkout, PluginFile } from "../config-snapshot.js";
 import {
   isPlainObject,
   describeType,
@@ -106,9 +104,6 @@ export interface DropCause {
 
 // What a definition's paths resolve against beyond its own directory.
 export interface PluginContext {
-  // The session's project, once the user approved it: where the plugins it
-  // ships live. Null where none is known or approved.
-  readonly repo: ApprovedRepo | null;
   // The checkout the session works in, for a `data: { checkout }` path; null
   // where no session is known.
   readonly checkout: Checkout | null;
@@ -166,6 +161,18 @@ export function pluginDefinition(
     : { path: definition, scope, name: undefined };
 }
 
+// A loose file in a plugin root: a plugin is a folder, so it drops, naming
+// where it belongs.
+export function strayPlugin(
+  stray: Pick<PluginFile, "scope" | "path">,
+): DroppedPlugin {
+  return {
+    ...stray,
+    name: undefined,
+    reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${path.join(path.dirname(stray.path), "<name>", DEFINITION_FILE)}`,
+  };
+}
+
 // The variable a plugin's data file publishes, read as `.<ns>.data.*`.
 export function pluginDataVar(ns: string): string {
   return `${ns}.data`;
@@ -209,19 +216,27 @@ function reasonOf(err: unknown): string {
 }
 
 /**
- * The definition paths a config lists under `plugins:`, absolute: a relative
+ * The definition path a config's `plugins:` entry names, absolute: a relative
  * path resolves against the directory of `from`, the file listing it, and `~`
- * against the home directory.
+ * against the home directory. Discovery reads the file it names.
  */
+export function listedPath(ref: string, from: string, home: string): string {
+  return resolveUserPath(path.dirname(from), ref, home);
+}
+
+// [LAW:single-enforcer] The definitions a layer lists, as discovery read
+// them. Discovery and the loader read the list through one parse
+// (`pluginRefsOf`), so an entry discovery did not read is a defect.
 export function listedPlugins(
   refs: readonly string[],
-  from: string,
-  scope: PluginScope,
-  home: string,
-): readonly PluginDefinition[] {
-  return refs.map((ref) =>
-    pluginDefinition(resolveUserPath(path.dirname(from), ref, home), scope),
-  );
+  listed: Readonly<Record<string, PluginFile>>,
+): readonly PluginFile[] {
+  return refs.map((ref) => {
+    if (!Object.hasOwn(listed, ref)) {
+      throw new Error(`plugin entry ${JSON.stringify(ref)} was not discovered`);
+    }
+    return listed[ref]!;
+  });
 }
 
 /**
@@ -231,7 +246,7 @@ export function listedPlugins(
  * two copies never merge; within one list a namespace is taken once.
  */
 export function applyPlugins(
-  definitions: readonly PluginDefinition[],
+  files: readonly PluginFile[],
   ctx: PluginContext,
   base: PluginBase,
   // `replaces`: the layer held declarations under this plugin's namespace.
@@ -241,9 +256,10 @@ export function applyPlugins(
   // either merges its plugin or records why not, and the next step sees the
   // result.
   const taken = new Map<string, string>();
-  return definitions.reduce<PluginLayer>(
-    (layer, definition) => {
-      const file = definition.path;
+  return files.reduce<PluginLayer>(
+    (layer, found) => {
+      const file = found.path;
+      const definition = pluginDefinition(file, found.scope);
       const ns =
         definition.name === undefined ? undefined : pluginNs(definition);
       const drop = (reason: string, config: DslConfig): PluginLayer => {
@@ -285,10 +301,16 @@ export function applyPlugins(
       taken.set(ns, file);
       const under = withoutPlugin(layer.config, ns);
       const merged = attempt(() => {
-        const source = fs.readFileSync(file, "utf-8");
+        // A definition discovery could not read drops with the read's error,
+        // as any other reason it would not load.
+        if (found.definition.kind === "unreadable") {
+          throw new Error(found.definition.error);
+        }
+        const { text: source, dir } = found.definition;
         const config = mergeWithDefault(
           fragmentOf(
             file,
+            dir,
             definition,
             { source, json: JSON5.parse(source) as unknown },
             ctx,
@@ -605,6 +627,8 @@ function settingFor(
 // into a drop.
 function fragmentOf(
   file: string,
+  // The definition's folder, as its real path.
+  dir: string,
   id: PluginId,
   { source, json }: { readonly source: string; readonly json: unknown },
   { checkout, home }: PluginContext,
@@ -639,7 +663,7 @@ function fragmentOf(
       ? undefined
       : dataPathOf(json.data, file, checkout, home, issues);
   const sources =
-    json.sources === undefined ? {} : sourcesOf(json.sources, file, issues);
+    json.sources === undefined ? {} : sourcesOf(json.sources, dir, issues);
   if (issues.length > 0) return fail();
 
   const ctx: ValidateCtx = {
@@ -717,12 +741,7 @@ function fragmentOf(
     // real path its storage is resolved under.
     actions: prefixed(
       ns,
-      setKeysUnder(
-        ns,
-        validateActions(ctx, json.actions, {
-          dir: fs.realpathSync(path.dirname(file)),
-        }),
-      ),
+      setKeysUnder(ns, validateActions(ctx, json.actions, { dir })),
     ),
   };
   issues.push(...wrongScopeRefs(authored, id));
@@ -1023,7 +1042,7 @@ const BUILT_SOURCE = {
 // linked plugin folder replaced by an install is another folder.
 function sourcesOf(
   sources: unknown,
-  file: string,
+  dir: string,
   issues: ConfigIssue[],
 ): Record<string, SourceVarDecl> {
   if (!isPlainObject(sources)) {
@@ -1033,10 +1052,7 @@ function sourcesOf(
     });
     return {};
   }
-  const storage = path.join(
-    fs.realpathSync(path.dirname(file)),
-    STORAGE_FOLDER,
-  );
+  const storage = path.join(dir, STORAGE_FOLDER);
   const built = JSON.stringify(BUILT_SOURCE);
   const lowered: Record<string, SourceVarDecl> = {};
   for (const [name, source] of Object.entries(sources)) {

@@ -4,6 +4,9 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { requestSnapshot } from "./helpers/disk-render-cache";
+import { loadFromDisk } from "./helpers/disk-render-cache";
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { NO_DOCTOR } from "./helpers/payload-owners";
 import {
@@ -30,12 +33,9 @@ import {
   WatcherRegistry,
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
-import {
-  loadFromDisk,
-  pluginLoadLine,
+import { pluginLoadLine,
   RenderCache,
-  type SessionView,
-} from "../src/renderer/render-cache";
+  type SessionView } from "../src/renderer/render-cache";
 import type { Collector } from "../src/daemon/collector";
 import { collected } from "./helpers/collected";
 import {
@@ -62,10 +62,10 @@ import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import type { Run } from "../src/facts/source-identity";
 import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
-import { REPO_PLUGIN_DIR } from "../src/config/loader/plugin-folders";
+import { REPO_PLUGIN_DIR } from "../src/daemon/config-discovery/plugin-folders";
 import { textOf, ansiOf, parseFrame } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
-import { ReloadSignal } from "./helpers/reload-signal";
+import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
 import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
@@ -154,7 +154,7 @@ function programWrites(storage: string, sid: string, doc: unknown): void {
 }
 
 interface Rig {
-  readonly cache: RenderCache<SessionSource>;
+  readonly cache: DiskRenderCache<SessionSource>;
   readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly counters: WatcherCounters;
   readonly sessionState: SessionState;
@@ -236,14 +236,20 @@ function rig(): Rig {
     },
     cleanups,
   );
-  const cache = new RenderCache<SessionSource>(
+  const cache = new DiskRenderCache<SessionSource>(
+    {
+      locations: locations(host),
+      stateDir: stateDir(host),
+      watchers,
+      // The daemon's wiring: a config watch that hears its files keys every
+      // held storage folder again.
+      heard: () => providers.managedStorage.revive(),
+    },
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      home: host.home,
       env: host.env,
       sessionState,
-      watchers,
       storage: {
         hold: (id, folders) => {
           storageCalls.push(`hold ${id}`);
@@ -395,13 +401,11 @@ describe("a source's declaration", () => {
     const p = listing(`{ status: ${SOURCE} }`);
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
-    });
+    }, { locations: locations(host), stateDir: stateDir(host) });
     try {
       expect(loaded.error).toBeNull();
       expect(loaded.state!.config.variables[STATUS]).toEqual({
@@ -492,13 +496,11 @@ describe("a source's declaration", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
-    });
+    }, { locations: locations(host), stateDir: stateDir(host) });
     try {
       expect(
         loaded.state!.plugins.dropped.map((d) => [d.scope, d.name]),
@@ -526,13 +528,11 @@ describe("a source's declaration", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
-    });
+    }, { locations: locations(host), stateDir: stateDir(host) });
     try {
       expect(loaded.error).toBeNull();
       const { config, plugins } = loaded.state!;
@@ -652,13 +652,11 @@ describe("a source's declaration", () => {
     );
     const loaded = loadFromDisk(dir, dir, p, {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
       env: host.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
-    });
+    }, { locations: locations(host), stateDir: stateDir(host) });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
         " plugins loaded=2 sources=2 pluginVariables=1 dropped=0 ",
@@ -890,6 +888,7 @@ function statusline(r: Rig, configFile: string) {
     const answered = await answerStatusline(
       host,
       r.collector,
+      requestSnapshot,
       systemTimekeeper,
       new AbortController().signal,
       () => {},
@@ -1209,7 +1208,9 @@ describe("a storage folder's watch", () => {
     held[Symbol.dispose]();
     const entry = r.cache.getOrCreate(dir, dir, file);
     expect(r.storageCalls).toEqual(["hold 1"]);
-    r.cache.reload(dir, dir, file, { kind: "doctor" });
+    // A comment edit moves the snapshot and keeps the state.
+    const commented = `// the bar\n${fs.readFileSync(file, "utf8")}`;
+    await r.reloads.after(entry, () => fs.writeFileSync(file, commented));
     expect(r.storageCalls).toEqual(["hold 1", "hold 1"]);
     const edited = fs
       .readFileSync(file, "utf8")
@@ -1218,7 +1219,7 @@ describe("a storage folder's watch", () => {
     expect(r.storageCalls.slice(2, 4)).toEqual(["hold 2", "release 1"]);
   });
 
-  test("a refused watch's fault clears at the config's reload", async () => {
+  test("a refused watch's fault clears at the config's next reload", async () => {
     const file = config(["plugins.p.gated"]);
     const storage = storageOf();
     fs.mkdirSync(storage, { recursive: true });
@@ -1229,7 +1230,10 @@ describe("a storage folder's watch", () => {
     await answered(view);
     expect(r.providers.managedStorage.stats().faults.refused).toBe(1);
     jest.restoreAllMocks();
-    r.cache.reload(dir, dir, file, { kind: "doctor" });
+    // The watches opened under the fake hear nothing, so the edit reaches the
+    // entry by discovery run again, as file events resuming run it.
+    fs.writeFileSync(file, `// the bar\n${fs.readFileSync(file, "utf8")}`);
+    r.cache.reload();
     await writeUntilShown(
       () => programWrites(storage, "s1", { home: "/recovered" }),
       () => draw(view).text.includes("home=/recovered"),
@@ -1259,18 +1263,29 @@ describe("a storage folder's watch", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
-  test("removing the session folder, and nothing else, reloads the config, recreates the folder, and the next write shows", async () => {
+  test("removing the session folder, and nothing else, recreates the folder with the config unreloaded, and the next write shows", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
     const held = r.hold(file);
     await answered(held.view);
     held[Symbol.dispose]();
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const state = r.cache.getOrCreate(dir, dir, file).state;
     const storage = storageOf();
-    const lost = r.providers.managedStorage.stats().lost;
-    await r.reloads.afterRemoving(entry, storage, () => fs.mkdirSync(storage));
+    const generations = () =>
+      r.lines.filter((l) => l.includes(" plugin storage generation ")).length;
+    const before = generations();
+    // The config's watch hears the folder go, and the storage owner opens
+    // its next generation: the snapshot did not move, so the state stands.
+    await untilHeard(
+      () => {
+        if (!fs.existsSync(storage)) fs.mkdirSync(storage);
+        fs.rmSync(storage, { recursive: true, maxRetries: 3 });
+      },
+      () => generations() > before && fs.existsSync(storage),
+      "the storage owner making the removed folder again",
+    );
     expect(fs.statSync(storage).isDirectory()).toBe(true);
-    expect(r.providers.managedStorage.stats().lost).toBe(lost + 1);
+    expect(r.cache.getOrCreate(dir, dir, file).state).toBe(state);
     const view = viewOf(r, file);
     await answered(view);
     await writeUntilShown(

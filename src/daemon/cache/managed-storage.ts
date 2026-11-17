@@ -226,6 +226,13 @@ export class ManagedStorage {
     this.closeUnheld();
   }
 
+  // [LAW:single-enforcer] A config watch heard its files: every held folder is
+  // keyed again as a load's hold keys it, so a folder removed or replaced
+  // opens its next generation whether or not the config itself moved.
+  revive(): void {
+    for (const [id, folders] of [...this.holds]) this.hold(id, folders);
+  }
+
   // A render state reclaimed: the folders only it named close.
   release(id: StorageHoldId): void {
     this.holds.delete(id);

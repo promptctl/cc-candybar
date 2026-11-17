@@ -1,3 +1,4 @@
+import { valueOf } from "../../../src/utils/logfmt";
 import type { Frame } from "../../../src/render/frame";
 import { hostOf } from "../../helpers/host";
 // [LAW:verifiable-goals] A cloned repository's cc-candybar config runs only
@@ -23,7 +24,7 @@ import {
 } from "../../helpers/spawn-isolated-daemon";
 import { VERB_REPO_CONFIG } from "../../../src/click/wire";
 import { logPath } from "../../../src/daemon/paths";
-import { repoConfigs, repoConfigsPath } from "../../../src/config/repo-configs";
+import { repoConfigs, repoConfigsPath } from "../../../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../../../src/daemon/paths";
 import {
   indicatorOf,
@@ -137,7 +138,7 @@ describe("a repository's config waits for the user's one answer", () => {
     const rendered = question!.rendered;
     expect(fs.existsSync(marker)).toBe(false);
     // [LAW:nothing-unseen] The load says which repository it left waiting.
-    const loadedLine = ` awaiting=${project} declined=- `;
+    const loadedLine = ` repo=${valueOf(`${fs.realpathSync.native(project)}:awaiting`)} `;
     await until(
       () =>
         fs

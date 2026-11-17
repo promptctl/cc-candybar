@@ -1,3 +1,4 @@
+import { DiskRenderCache } from "./helpers/disk-render-cache";
 import fs from "node:fs";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -67,17 +68,16 @@ function rig(
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const cache = new RenderCache(
+  const cache = new DiskRenderCache(
+    { locations: locations(host), stateDir: stateDir(host), watchers },
     {
       clock: opts.clock ?? systemTimekeeper,
-      stateDir: stateDir(host),
-      locations: locations(host),
+      home: host.home,
       env: host.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
-      watchers,
       source: SOURCES_NOTHING,
       log: (_level, line) => lines.push(line),
     },
@@ -98,8 +98,13 @@ function rig(
   const file = path.join(dir, "config.json5");
   const write = (text: string): void => fs.writeFileSync(file, text);
   const entry = () => cache.getOrCreate(dir, dir, file);
+  // The load a discovery that found the files moved ran: one that found
+  // nothing changed reloads nothing, and says so.
   const reload = (): Settled => {
-    cache.reload(dir, dir, file, { kind: "write" });
+    const before = loads.length;
+    cache.reload();
+    if (loads.length === before)
+      throw new Error("discovery found nothing changed: nothing reloaded");
     return loads.at(-1)!;
   };
   const reopened = () => lines.filter((l) => / by=reload /.test(l)).length;
@@ -134,12 +139,14 @@ const CONFIG = `{
 }
 `;
 
-test("a reload of unchanged inputs keeps the state and reopens no view", () => {
+test("a discovery that finds nothing changed reloads nothing and reopens no view", () => {
   const r = rig();
   r.write(CONFIG);
   r.open("s1");
   const state = r.entry().state;
-  expect(r.reload()).toBe("kept");
+  const before = r.loads.length;
+  r.cache.reload();
+  expect(r.loads.length).toBe(before);
   expect(r.entry().state).toBe(state);
   expect(r.reopened()).toBe(0);
 });
@@ -162,6 +169,9 @@ test("a kept state still carries the warning its build earned", () => {
   const r = rig();
   r.write(`{ variables: { v: { kind: "template", template: "{{ if }}" } } }`);
   expect(r.entry().lastWarning).toContain(`Variable "v"`);
+  r.write(
+    `// still broken\n{ variables: { v: { kind: "template", template: "{{ if }}" } } }`,
+  );
   expect(r.reload()).toBe("kept");
   expect(r.entry().lastWarning).toContain(`Variable "v"`);
 });
@@ -228,10 +238,9 @@ test("an installed plugin nothing places, added with the config unchanged, build
 
 // File events resuming after a span re-read every entry: an edit made while
 // the OS delivered nothing was never heard by the entry's own watch.
-test("a catch-up reloads every entry under events-resumed: the one edited while its watch heard nothing builds the new config, the other keeps its view", () => {
+test("a catch-up discovers every origin again: the one edited while its watch heard nothing builds the new config, the other is not reloaded", () => {
   fakeWatches();
-  const clock = heldClock(new Date());
-  const r = rig({ clock });
+  const r = rig();
   const other = path.join(dir, "other");
   fs.mkdirSync(other);
   const otherFile = path.join(other, "config.json5");
@@ -244,154 +253,13 @@ test("a catch-up reloads every entry under events-resumed: the one edited while 
   const edited = r.entry().state;
   const kept = r.cache.getOrCreate(other, other, otherFile).state;
   r.write(CONFIG.replace(`"one"`, `"two"`));
-  const since = Date.parse("2026-10-27T04:00:00.000Z");
   const before = r.loads.length;
-  r.cache.reloadEvery({ kind: "events-resumed", since });
-  clock.advance(0);
-  expect(r.causes.slice(before)).toEqual([
-    { kind: "events-resumed", since },
-    { kind: "events-resumed", since },
-  ]);
-  expect(r.loads.slice(before).sort()).toEqual(["built", "kept"]);
+  r.cache.reload();
+  expect(r.loads.slice(before)).toEqual(["built"]);
+  expect(r.reloaded.slice(-1)).toEqual([dir]);
   expect(r.entry().state).not.toBe(edited);
   expect(JSON.stringify(r.entry().state.config)).toContain(`"two"`);
   expect(r.cache.getOrCreate(other, other, otherFile).state).toBe(kept);
   expect(r.reopened()).toBe(1);
 });
 
-// [LAW:no-ambient-temporal-coupling] A catch-up reloads one entry per turn of
-// the loop, so work waiting on the loop (a client's request) runs between
-// entries instead of behind all of them.
-describe("a catch-up walks the entries one per turn", () => {
-  const since = Date.parse("2026-10-27T04:00:00.000Z");
-  const resumed = { kind: "events-resumed", since } as const;
-  const walked = (r: ReturnType<typeof rig>, from: number) =>
-    r.reloaded.slice(from);
-
-  test("nothing reloads in the turn that asks, the most recently used entry reloads first, and work deferred behind it runs between the first entry and the second", () => {
-    fakeWatches();
-    const clock = heldClock(new Date());
-    const r = rig({ clock });
-    const a = r.project("a");
-    const b = r.project("b");
-    r.cache.getOrCreate(a, a, path.join(a, "config.json5"));
-    const from = r.reloaded.length;
-    r.cache.reloadEvery(resumed);
-    expect(walked(r, from)).toEqual([]);
-    expect(r.cache.stats.due).toBe(2);
-    let between: string[] | null = null;
-    clock.defer(() => (between = walked(r, from)));
-    clock.advance(0);
-    expect(between).toEqual([a]);
-    expect(walked(r, from)).toEqual([a, b]);
-    expect(r.cache.stats.due).toBe(0);
-  });
-
-  test("an entry drawn during the walk is the next one reloaded", () => {
-    fakeWatches();
-    const clock = heldClock(new Date());
-    const r = rig({ clock });
-    const a = r.project("a");
-    const b = r.project("b");
-    const c = r.project("c");
-    const from = r.reloaded.length;
-    r.cache.reloadEvery(resumed);
-    clock.defer(() => r.cache.getOrCreate(a, a, path.join(a, "config.json5")));
-    clock.advance(0);
-    expect(walked(r, from)).toEqual([c, a, b]);
-  });
-
-  test("an entry evicted before its turn is not reloaded, and leaves the count at once", () => {
-    fakeWatches();
-    const clock = heldClock(new Date());
-    const r = rig({ clock, maxEntries: 2 });
-    r.project("a");
-    const b = r.project("b");
-    r.cache.reloadEvery(resumed);
-    expect(r.cache.stats.due).toBe(2);
-    r.project("c");
-    expect(r.cache.stats.due).toBe(1);
-    const from = r.reloaded.length;
-    clock.advance(0);
-    expect(walked(r, from)).toEqual([b]);
-  });
-
-  test("a close before the walk ends reloads nothing more", () => {
-    fakeWatches();
-    const clock = heldClock(new Date());
-    const r = rig({ clock });
-    r.project("a");
-    r.project("b");
-    r.cache.reloadEvery(resumed);
-    r.cache.close();
-    const from = r.reloaded.length;
-    clock.advance(0);
-    expect(walked(r, from)).toEqual([]);
-    expect(clock.pending()).toBe(0);
-  });
-
-  test("a second catch-up before the walk ends reloads each entry once, for the later cause", () => {
-    fakeWatches();
-    const clock = heldClock(new Date());
-    const r = rig({ clock });
-    const a = r.project("a");
-    const b = r.project("b");
-    const from = r.reloaded.length;
-    r.cache.reloadEvery(resumed);
-    const answers = {
-      kind: "answers-watch",
-      heard: { kind: "unknown" },
-    } as const;
-    r.cache.reloadEvery(answers);
-    clock.advance(0);
-    expect(walked(r, from)).toEqual([b, a]);
-    expect(r.causes.slice(from)).toEqual([answers, answers]);
-  });
-
-  test("an entry reloaded by an explicit reload before its turn is not reloaded again by the walk", () => {
-    fakeWatches();
-    const clock = heldClock(new Date());
-    const r = rig({ clock });
-    r.write(CONFIG);
-    r.entry();
-    const b = r.project("b");
-    r.cache.reloadEvery(resumed);
-    const from = r.reloaded.length;
-    expect(r.reload()).toBe("kept");
-    expect(r.cache.stats.due).toBe(1);
-    clock.advance(0);
-    expect(walked(r, from)).toEqual([dir, b]);
-  });
-
-  test("a reload that throws is logged and ends only its own turn: the rest of the walk and a later catch-up still reload", () => {
-    fakeWatches();
-    const clock = heldClock(new Date());
-    let failing: string | null = null;
-    const r = rig({
-      clock,
-      onReload: (projectDir) => {
-        if (projectDir === failing) throw new Error("observer failed");
-      },
-    });
-    const a = r.project("a");
-    const b = r.project("b");
-    failing = b;
-    const from = r.reloaded.length;
-    r.cache.reloadEvery(resumed);
-    clock.advance(0);
-    expect(walked(r, from)).toEqual([b, a]);
-    expect(r.cache.stats.due).toBe(0);
-    const threw = r.lines.filter((l) =>
-      l.startsWith("every-entry reload threw "),
-    );
-    expect(threw).toHaveLength(1);
-    expect(threw[0]).toContain(`projectDir=${valueOf(b)} `);
-    expect(threw[0]).toContain(
-      `cause=${valueOf(`events-resumed:${new Date(resumed.since).toISOString()}`)}: Error: observer failed`,
-    );
-    failing = null;
-    r.cache.reloadEvery(resumed);
-    clock.advance(0);
-    expect(walked(r, from)).toEqual([b, a, b, a]);
-  });
-});

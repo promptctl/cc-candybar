@@ -57,8 +57,9 @@ export function inertHost(): AdapterToHost {
   return {
     log: () => {},
     eventAnswered: () => {},
-    watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
     storage: { hold: unhosted("storage"), release: unhosted("storage") },
+    // No click asks this rig's host for a config.
+    origins: { recorded: () => {} },
   };
 }
 

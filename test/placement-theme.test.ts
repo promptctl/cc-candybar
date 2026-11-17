@@ -103,9 +103,12 @@ function themeBar(src: string) {
   let current = config;
   const ctx: VerbContext = {
     ...rig.ctx,
-    configFor: () => current,
-    reloadConfig: () => {
-      current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
+    // The config as the host's next config turn hands it in: what the file
+    // holds now.
+    configFor: () => {
+      const text = durable.text();
+      if (text !== null) current = parseAndValidate("<reloaded>", text, ALLOWED);
+      return current;
     },
   };
   const click = (url: string): Promise<void> => clickUrl(url, ctx);

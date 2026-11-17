@@ -10,10 +10,11 @@
 // [LAW:effects-at-boundaries] Pure: the answers are read at each caller's
 // edge (src/config/repo-configs.ts) and handed in.
 
-import type { WorktreeLink } from "../../utils/git-root.js";
 import type { Asked } from "../../utils/outcome.js";
+import type { RepoAnswer, RepoStanding } from "../config-snapshot.js";
 
-export type RepoAnswer = "approved" | "declined";
+export type { RepoAnswer, RepoStanding } from "../config-snapshot.js";
+
 export const REPO_ANSWERS: readonly RepoAnswer[] = ["approved", "declined"];
 
 // The answers, keyed by each repository directory's real path (`answerDir`).
@@ -31,10 +32,14 @@ declare const approved: unique symbol;
 // loader a project it did not gate.
 export type ApprovedRepo = string & { readonly [approved]: true };
 
-// [LAW:types-are-the-program] `unread` is not `awaiting`: a book that could
-// not be read takes no answer either, so the bar asks nothing it could not
-// record, and the unread notice speaks for every repository.
-export type RepoStanding = RepoAnswer | "awaiting" | "unread";
+// Whether a directory sits in a linked worktree, and if so its counterpart in
+// the repository's main worktree, spelled as `git worktree list` spells the
+// main worktree: the common dir with a trailing `.git` stripped (a bare
+// repository's common dir is its own spelling).
+export type WorktreeLink =
+  | { readonly kind: "linked"; readonly main: string }
+  | { readonly kind: "unlinked" }
+  | { readonly kind: "unproven"; readonly reason: string };
 
 // A directory a session reaches: its real path, and whether it sits in a
 // linked worktree.

@@ -280,7 +280,6 @@ export class RuntimeStats {
         compiles: 0,
         views: 0,
         pinned: 0,
-        due: 0,
         retiredViews: 0,
         passages: 0,
         accountedBytes: 0,

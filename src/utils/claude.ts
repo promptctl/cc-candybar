@@ -1,4 +1,3 @@
-import type { CheckoutLocation } from "./git-root.js";
 import { existsSync } from "node:fs";
 // [LAW:single-enforcer] readdir and the forward read come from the gated
 // transcript-fs owner, not node:fs/promises — the in-flight-I/O bound lives at
@@ -17,6 +16,18 @@ import {
   turnText,
   type EntryActivity,
 } from "./transcript-activity";
+
+// Where a directory sits in its repository, for display. `main` is the main
+// checkout's root ("" in no repository), `worktree` the linked worktree's name
+// ("" otherwise), `subpath` the directory below the checkout root ("/src", or
+// ""). [LAW:no-silent-failure] exception: an unproven link reads as a checkout
+// of its own, since its root is real and the git cell reports the broken repo.
+export interface CheckoutLocation {
+  readonly main: string;
+  readonly worktree: string;
+  readonly subpath: string;
+  readonly noRepo: boolean;
+}
 
 export interface ClaudeHookData {
   // cc-candybar internal — not part of Anthropic's schema

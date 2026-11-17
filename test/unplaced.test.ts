@@ -7,12 +7,12 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { locs } from "./helpers/host";
 import {
   inheritableSegmentNames,
-  homeLayer,
   loadConfigChain,
   mergeWithDefault,
   parseDslConfig,
   validateRenderable,
 } from "../src/config/dsl-loader";
+import { textSnapshot } from "./helpers/text-snapshot";
 import { ConfigError } from "../src/config/loader/diagnostics";
 import { placementIds } from "../src/config/dsl-types";
 import { rootNode } from "../src/config/root";
@@ -154,12 +154,10 @@ describe("a chain whose merge fails", () => {
   };
   test("is blamed on the error that refused it, not on a lower file's undeclared placement", () => {
     const load = () =>
-      loadConfigChain(locs(), 
-        ["/lower.json5", "/upper.json5"].map(homeLayer),
+      loadConfigChain(
+        { snapshot: textSnapshot(Object.entries(FILES)), home: locs().home },
         DEFAULT_DSL_CONFIG,
         { warned: () => {} },
-        { repo: null, cwd: null },
-        (p) => FILES[p]!,
       );
     expect(load).toThrow(ConfigError);
     expect(load).toThrow(/upper\.json5[\s\S]*nope/);
@@ -169,12 +167,10 @@ describe("a chain whose merge fails", () => {
 
 describe("a lower layer's undeclared placement", () => {
   const chain = (files: Record<string, string>) =>
-    loadConfigChain(locs(), 
-      Object.keys(files).map(homeLayer),
+    loadConfigChain(
+      { snapshot: textSnapshot(Object.entries(files)), home: locs().home },
       DEFAULT_DSL_CONFIG,
       { warned: () => {} },
-      { repo: null, cwd: null },
-      (p) => files[p]!,
     );
   const LOWER = `{ segments: { a: { template: "a" } }, root: { h: ["a", "gti"] } }`;
 

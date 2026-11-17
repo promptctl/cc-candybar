@@ -125,8 +125,8 @@ type ReachKinds<T> = {
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   log: "notice",
   eventAnswered: "notice",
-  watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" },
+  origins: { recorded: "notice" },
 };
 
 type Reach = (...args: readonly unknown[]) => unknown;

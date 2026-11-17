@@ -8,7 +8,12 @@
 
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
-import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
+import {
+  describeLink,
+  effectsOf,
+  HOST_VERBS,
+  linksOf,
+} from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
@@ -17,17 +22,42 @@ import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
 import { EPHEMERAL_SESSION_STORAGE } from "../src/renderer/session-state";
 import { EPHEMERAL_HISTORY_STORAGE } from "../src/renderer/settings-history";
-import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/foundations/protocol";
+import {
+  PROTOCOL_VERSION,
+  type ClickRequest,
+  type ReaderRenderRequest,
+  type Response,
+} from "../src/daemon/foundations/protocol";
 import { REGISTRY_URL } from "../src/install/currency";
 import { composeBar, parseFrame, type Frame } from "../src/render/frame";
 import type { ClaudeHookData } from "../src/utils/claude";
-import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
-import { CLAUDE_DIR, REPO, appendTranscript, forgetWrites, newTranscript, seedWorld, updateRepo, type RepoState } from "./world";
+import {
+  DURATION,
+  INITIAL_MOMENT,
+  INITIAL_REPO,
+  STEPS,
+  type Entry,
+  type Moment,
+  type ScenarioRepo,
+  type Step,
+} from "./scenario";
+import {
+  CLAUDE_DIR,
+  REPO,
+  appendTranscript,
+  forgetWrites,
+  newTranscript,
+  seedWorld,
+  updateRepo,
+  type RepoState,
+} from "./world";
 
 // Where the deploy publishes the landscape explorer, relative to this page; null outside the deploy.
 declare const __LANDSCAPE__: string | null;
 // The page's clipboard (this file is checked against Node's types, which have no `navigator`).
-declare const navigator: { readonly clipboard: { writeText(text: string): Promise<void> } };
+declare const navigator: {
+  readonly clipboard: { writeText(text: string): Promise<void> };
+};
 
 interface Size {
   readonly width: number;
@@ -59,8 +89,13 @@ const nowSec = (): number => Date.now() / 1000;
 const clockAt = (at: number): number => nowSec() - (t - at);
 const id = (prefix: string): string => `${prefix}_${(serial++).toString(36)}`;
 
-const onClock = ({ headAt, ...rest }: Partial<ScenarioRepo>): Partial<RepoState> =>
-  headAt === undefined ? rest : { ...rest, headTime: Math.floor(clockAt(headAt)) };
+const onClock = ({
+  headAt,
+  ...rest
+}: Partial<ScenarioRepo>): Partial<RepoState> =>
+  headAt === undefined
+    ? rest
+    : { ...rest, headTime: Math.floor(clockAt(headAt)) };
 
 seedWorld(onClock(INITIAL_REPO) as RepoState);
 // The daemon the page runs has the limits a daemon has, so the doctor can ask
@@ -72,7 +107,11 @@ const WORLD = processWorld();
 const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
 const pageDaemon = createDaemon({
-  ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
+  ...productionAdapters(
+    paths,
+    new DaemonLog(paths.log, WORLD.clock),
+    WORLD.clock,
+  ),
   gates: daemonGates(),
   paths,
   host: HOST,
@@ -96,7 +135,13 @@ const pageDaemon = createDaemon({
 });
 
 function lines(entry: Entry, at: number): object[] {
-  const base = { timestamp: new Date(clockAt(at) * 1000).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
+  const base = {
+    timestamp: new Date(clockAt(at) * 1000).toISOString(),
+    sessionId,
+    cwd: REPO,
+    isSidechain: false,
+    uuid: id("u"),
+  };
   const usage = (output: number) => ({
     input_tokens: 4,
     output_tokens: output,
@@ -107,28 +152,76 @@ function lines(entry: Entry, at: number): object[] {
     ...base,
     type: "assistant",
     requestId: id("req"),
-    message: { id: id("msg"), model: "claude-opus-4-8", role: "assistant", type: "message", content, usage: usage(output) },
+    message: {
+      id: id("msg"),
+      model: "claude-opus-4-8",
+      role: "assistant",
+      type: "message",
+      content,
+      usage: usage(output),
+    },
   });
   switch (entry.kind) {
     case "user":
-      return [{ ...base, type: "user", message: { role: "user", content: entry.text } }];
+      return [
+        {
+          ...base,
+          type: "user",
+          message: { role: "user", content: entry.text },
+        },
+      ];
     case "command":
-      return [{ ...base, type: "user", message: { role: "user",
-        content: `<command-name>${entry.name}</command-name>\n<command-message>${entry.name.slice(1)}</command-message>\n<command-args></command-args>` } }];
+      return [
+        {
+          ...base,
+          type: "user",
+          message: {
+            role: "user",
+            content: `<command-name>${entry.name}</command-name>\n<command-message>${entry.name.slice(1)}</command-message>\n<command-args></command-args>`,
+          },
+        },
+      ];
     case "tools":
-      return [assistant(entry.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: c.input ?? {} })), entry.output ?? 100)];
+      return [
+        assistant(
+          entry.calls.map((c) => ({
+            type: "tool_use",
+            id: c.id,
+            name: c.name,
+            input: c.input ?? {},
+          })),
+          entry.output ?? 100,
+        ),
+      ];
     case "results":
-      return [{ ...base, type: "user", message: { role: "user",
-        content: entry.ids.map((tool_use_id) => ({ type: "tool_result", tool_use_id, content: "ok" })) } }];
+      return [
+        {
+          ...base,
+          type: "user",
+          message: {
+            role: "user",
+            content: entry.ids.map((tool_use_id) => ({
+              type: "tool_result",
+              tool_use_id,
+              content: "ok",
+            })),
+          },
+        },
+      ];
     case "reply":
-      return [assistant([{ type: "text", text: entry.text }], entry.output ?? 200)];
+      return [
+        assistant([{ type: "text", text: entry.text }], entry.output ?? 200),
+      ];
   }
 }
 
 function happen(step: Step): void {
   moment = { ...moment, ...step.hook };
   if (step.repo) updateRepo(onClock(step.repo));
-  appendTranscript(transcript, (step.transcript ?? []).flatMap((e) => lines(e, step.at)));
+  appendTranscript(
+    transcript,
+    (step.transcript ?? []).flatMap((e) => lines(e, step.at)),
+  );
 }
 
 /** Put the session at `seconds` into the scenario: everything before it has happened. */
@@ -139,7 +232,8 @@ function startAt(seconds: number): void {
   applied = 0;
   t = seconds;
   updateRepo(onClock(INITIAL_REPO));
-  while (applied < STEPS.length && STEPS[applied]!.at <= t) happen(STEPS[applied++]!);
+  while (applied < STEPS.length && STEPS[applied]!.at <= t)
+    happen(STEPS[applied++]!);
 }
 
 function hookData(): ClaudeHookData {
@@ -166,19 +260,37 @@ function hookData(): ClaudeHookData {
       context_window_size: CONTEXT_WINDOW,
       used_percentage: used,
       remaining_percentage: 100 - used,
-      current_usage: { input_tokens: 2000, output_tokens: 400, cache_creation_input_tokens: 4000, cache_read_input_tokens: moment.context - 6000 },
+      current_usage: {
+        input_tokens: 2000,
+        output_tokens: 400,
+        cache_creation_input_tokens: 4000,
+        cache_read_input_tokens: moment.context - 6000,
+      },
     },
     rate_limits: {
-      five_hour: { used_percentage: moment.fiveHour, resets_at: now + 2 * 3600 + 17 * 60 },
-      seven_day: { used_percentage: moment.sevenDay, resets_at: now + 4 * 86400 },
+      five_hour: {
+        used_percentage: moment.fiveHour,
+        resets_at: now + 2 * 3600 + 17 * 60,
+      },
+      seven_day: {
+        used_percentage: moment.sevenDay,
+        resets_at: now + 4 * 86400,
+      },
     },
   };
 }
 
-async function daemon(request: ReaderRenderRequest | ClickRequest): Promise<Extract<Response, { ok: true }>> {
+async function daemon(
+  request: ReaderRenderRequest | ClickRequest,
+): Promise<Extract<Response, { ok: true }>> {
   // In the page there is no socket, so no reply timer to have fired, and the
   // answer in hand is the one the page draws.
-  const { resp, settled } = await pageDaemon.reply(request, () => false, pageDaemon.stats.accept(), () => false);
+  const { resp, settled } = await pageDaemon.reply(
+    request,
+    () => false,
+    pageDaemon.stats.accept(),
+    () => false,
+  );
   settled(true);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return resp;
@@ -198,13 +310,21 @@ async function frame(size: Size): Promise<Frame> {
     ssh: false,
     claudeConfigDir: CLAUDE_DIR,
   });
-  if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
+  if (!("frame" in resp))
+    throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
   return parseFrame(resp.frame);
 }
 
 async function render(size: Size) {
   const drawn = await frame(size);
-  return { ansi: composeBar(drawn), links: linksOf(drawn).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null as string | null };
+  return {
+    ansi: composeBar(drawn),
+    links: linksOf(drawn).map((l) => ({
+      ...l,
+      does: describeLink(l, sessionId),
+    })),
+    refused: null as string | null,
+  };
 }
 
 // The page's clipboard. The write starts before anything is awaited: a browser
@@ -219,7 +339,8 @@ function copy(text: string): Promise<string | null> {
   }
   return writing.then(
     () => null,
-    (e: unknown) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text}`,
+    (e: unknown) =>
+      `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text}`,
   );
 }
 
@@ -246,10 +367,18 @@ async function click(url: string, size: Size) {
 }
 
 // ── The player ──
-type Listener = (state: { index: number; playing: boolean; progress: number }) => void;
+type Listener = (state: {
+  index: number;
+  playing: boolean;
+  progress: number;
+}) => void;
 const listeners: Listener[] = [];
 const notify = (): void => {
-  const state = { index: Math.max(0, applied - 1), playing, progress: Math.min(1, t / DURATION) };
+  const state = {
+    index: Math.max(0, applied - 1),
+    playing,
+    progress: Math.min(1, t / DURATION),
+  };
   for (const l of listeners) l(state);
 };
 
@@ -269,7 +398,8 @@ function advance(elapsed: number): boolean {
   }
   t = Math.min(DURATION, t + elapsed * speed);
   const before = applied;
-  while (applied < STEPS.length && STEPS[applied]!.at <= t) happen(STEPS[applied++]!);
+  while (applied < STEPS.length && STEPS[applied]!.at <= t)
+    happen(STEPS[applied++]!);
   return applied !== before;
 }
 
@@ -297,17 +427,21 @@ export const transport = {
   render,
   click,
   // A new session over the bundled config: what the visitor's clicks wrote is
-  // undone, and the daemon re-reads the config now, as a save's click does after it writes.
+  // undone, and the daemon discovers the config again now, as no watch hears the reset.
   restart: async (size: Size) => {
     forgetWrites();
-    pageDaemon.reloadConfig({ projectDir: REPO, cwd: REPO, target: { source: "search" } });
+    pageDaemon.rediscoverConfigs();
     sessionId = crypto.randomUUID();
     startAt(t);
     notify();
     return render(size);
   },
   scenario: {
-    steps: STEPS.map((s) => ({ turn: s.turn, caption: s.caption, at: s.at / DURATION })),
+    steps: STEPS.map((s) => ({
+      turn: s.turn,
+      caption: s.caption,
+      at: s.at / DURATION,
+    })),
     subscribe: (l: Listener) => {
       listeners.push(l);
       notify();

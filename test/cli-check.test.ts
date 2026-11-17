@@ -13,6 +13,7 @@
 // shallow `lint` could never see (template parse errors, missing payload
 // fields).
 
+import { textSnapshot } from "./helpers/text-snapshot";
 import fs from "node:fs";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -890,6 +891,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps clean → exit 0 with the verdict on stdout", async () => {
     const plan = checkPlan({
       kind: "clean",
+      snapshot: textSnapshot([]),
       layers: [{ path: "/tmp/x.json5", role: "user" }],
       warnings: [],
       rendered: barOf([{ text: "line" }]),
@@ -902,6 +904,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps clean-with-warnings → exit 0 with warnings visible on stderr", async () => {
     const plan = checkPlan({
       kind: "clean",
+      snapshot: textSnapshot([]),
       layers: [],
       warnings: ["something advisory"],
       rendered: barOf([{ text: "line" }]),
@@ -914,6 +917,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("maps fatal → exit 1 with the diagnostic on stderr", async () => {
     const plan = checkPlan({
       kind: "fatal",
+      snapshot: textSnapshot([]),
       layers: [{ path: "/tmp/x.json5", role: "user" }],
       message: "broken here",
       warnings: [],
@@ -940,6 +944,7 @@ describe("checkPlan — the text/exit-code contract", () => {
   it("the verdict alone carries no bar; --render appends the rendered one beneath it", () => {
     const clean: CheckOutcome = {
       kind: "clean",
+      snapshot: textSnapshot([]),
       layers: [{ path: "/tmp/x.json5", role: "user" }],
       warnings: [],
       rendered: barOf([{ text: " ~/c/x " }], [{ text: " Opus 4.8 " }]),
@@ -962,6 +967,7 @@ describe("checkPlan — the text/exit-code contract", () => {
       checkPlan(
         {
           kind: "fatal",
+          snapshot: textSnapshot([]),
           layers: [{ path: "/tmp/x.json5", role: "user" }],
           message: "broken",
           warnings: [],
