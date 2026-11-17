@@ -457,13 +457,16 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] An end once the close has begun
     // starts nothing: a fresh renderer holds nothing to flush, and the close's
     // remaining steps would wait on its boot.
+    // [LAW:nothing-unseen] Said all the same, and as a warning unless the
+    // close had ended it and it exited: one the close had not yet ended went
+    // before its close steps ran, and one that did not exit went mid-flush.
+    const level =
+      phase.kind === "closing" || how !== "exited" ? "warn" : "info";
     if (phase.kind === "closing")
       phase = { kind: "closed", ended: link.channel.ended };
     if (phase.kind === "closed") {
-      // [LAW:nothing-unseen] Said all the same: one that did not exit may have
-      // ended before its close steps ran.
       log(
-        how === "exited" ? "info" : "warn",
+        level,
         `renderer main[${link.generation}] ${how} in the daemon's close`,
       );
       return;

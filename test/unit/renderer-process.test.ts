@@ -68,6 +68,7 @@ function rig(start: () => Promise<void> = async () => {}) {
   const clock: HeldClock = heldClock(new Date("2026-11-15T00:00:00Z"));
   const children: Child[] = [];
   const logs: string[] = [];
+  const levels: string[] = [];
   const ends: HeldEvent[] = [];
   const watched: Array<["watch" | "unwatch", WatchId]> = [];
   const held: Array<["hold" | "release", StorageHoldId]> = [];
@@ -114,7 +115,10 @@ function rig(start: () => Promise<void> = async () => {}) {
         release: (id) => held.push(["release", id]),
       },
     },
-    log: (_level, msg) => logs.push(msg),
+    log: (level, msg) => {
+      logs.push(msg);
+      levels.push(level);
+    },
     clock,
     start,
     ended: (event) => ends.push(event),
@@ -139,7 +143,7 @@ function rig(start: () => Promise<void> = async () => {}) {
   // The inputs the host sent the child, in order.
   const inputs = (child: Child) =>
     child.written.flatMap((l) => (l.kind === "input" ? [l] : []));
-  return { clock, children, logs, ends, watched, held, link, inputs, key };
+  return { clock, children, logs, levels, ends, watched, held, link, inputs, key };
 }
 
 // Every promise chain the supervisor started settles: it awaits nothing but
@@ -663,6 +667,29 @@ describe("a renderer process's close", () => {
       new RendererDown("renderer main is closed"),
     );
     await link.close();
+  });
+
+  test("an end in the close is a warning unless the close had ended it and it exited", async () => {
+    const early = rig();
+    early.link.arm();
+    early.children[0]!.say({ kind: "started", pid: 9001 });
+    await settled();
+    early.link.beginClose();
+    early.children[0]!.exit(EXITED);
+    await settled();
+    expect(early.levels.at(-1)).toBe("warn");
+    expect(early.logs.at(-1)).toBe("renderer main[1] exited in the daemon's close");
+    await early.link.close();
+
+    const asked = rig();
+    asked.link.arm();
+    asked.children[0]!.say({ kind: "started", pid: 9001 });
+    await settled();
+    const closed = asked.link.close();
+    asked.children[0]!.exit(EXITED);
+    await closed;
+    expect(asked.levels.at(-1)).toBe("info");
+    expect(asked.logs.at(-1)).toBe("renderer main[1] exited in the daemon's close");
   });
 
   test("a boot under way as the close begins ends then, signalled after the grace, and what waited for it fails as closed", async () => {
