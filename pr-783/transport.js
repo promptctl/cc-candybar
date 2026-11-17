@@ -28816,6 +28816,8 @@ init_globals();
 var instantOf = (date2) => date2.getTime() / 1e3;
 var dateOf = (at) => new Date(at * 1e3);
 var instantAt = (clock) => instantOf(new Date(clock.now()));
+var tickAt = (clock) => clock.monotonic() / 1e3;
+var readingsAt = (clock) => ({ at: instantAt(clock), tick: tickAt(clock) });
 
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
@@ -45410,8 +45412,8 @@ var Timeline = {
   stagger(animations, delay) {
     finiteSeconds("Timeline.stagger delay", delay);
     const span = finiteSeconds("Timeline.stagger delay times the last index", Math.max(0, animations.length - 1) * delay);
-    const earliest = Math.min(0, span);
-    const cascade = Animation.all(animations.map((animation, i2) => Timeline.run(Timeline.play(i2 * delay - earliest), animation)));
+    const earliest2 = Math.min(0, span);
+    const cascade = Animation.all(animations.map((animation, i2) => Timeline.run(Timeline.play(i2 * delay - earliest2), animation)));
     return Animation.of({ ...cascade, reduced: () => Animation.all(animations.map((animation) => animation.reduced())) });
   }
 };
@@ -48840,9 +48842,11 @@ function detailOf(outcome) {
   }
 }
 function requestEvent(kind, facts, outcome, tookMs) {
+  return drawEvent(kind, [...facts, ["took", `${tookMs}ms`]], outcome);
+}
+function drawEvent(kind, facts, outcome) {
   const fields2 = [
     ...facts,
-    ...tookMs === null ? [] : [["took", `${tookMs}ms`]],
     ["outcome", outcome.kind],
     ...detailOf(outcome)
   ];
@@ -48873,6 +48877,7 @@ function located(req) {
     }
   };
 }
+var msOf = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
@@ -48880,9 +48885,8 @@ async function answerStatusline(host, collector, clock, closing, log, arrived2, 
   const req = located(arrived2);
   const session = req.hookData.session_id;
   const done = (effect, reason) => void host.deliver(
-    (at) => ({
+    () => ({
       kind: "event",
-      at,
       event: {
         kind: "effect-done",
         session: effect.session,
@@ -48892,18 +48896,14 @@ async function answerStatusline(host, collector, clock, closing, log, arrived2, 
     }),
     [["effect", String(effect.id)]]
   );
-  const unlessClosing = (make) => (at) => closing.aborted ? failureOf(new DaemonClosing("render")) : make(at);
+  const unlessClosing = (event) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : { kind: "event", event };
   const worldState = collector.requested(req);
   const release4 = collector.holding(session);
   let configured;
   let delivered;
   try {
     configured = await host.answer(
-      unlessClosing((at) => ({
-        kind: "event",
-        at,
-        event: { kind: "config", context: req, worldState }
-      }))
+      unlessClosing({ kind: "config", context: req, worldState })
     );
     recorded(facts, configured);
     if (configured.kind === "threw") {
@@ -48930,19 +48930,15 @@ async function answerStatusline(host, collector, clock, closing, log, arrived2, 
     );
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
     delivered = await host.answer(
-      unlessClosing((at) => ({
-        kind: "event",
-        at,
-        event: { kind: "request", id: id2, context: req }
-      }))
+      unlessClosing({ kind: "request", id: id2, context: req })
     );
   } finally {
     release4();
   }
   recorded(facts, delivered);
-  const ms = (turn) => turn.turnMs === null ? "-" : `${turn.turnMs}ms`;
-  noteFacts(facts, { configured: ms(configured), drew: ms(delivered) });
   noteFacts(facts, {
+    configured: msOf(configured.turnMs),
+    drew: msOf(delivered.turnMs),
     mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
     hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
   });
@@ -59229,7 +59225,7 @@ var GLOBAL_FIELDS = {
   // here; a per-session, per-version dismissal lives in SessionState instead.
   updateNotice: boolSetting(true, control("update notice", "config")),
   // Seconds without a click before every open menu flashes and closes
-  // (src/config/menu-timeout.ts, src/daemon/menu-idle.ts).
+  // (src/config/menu-timeout.ts, src/renderer/menu-idle.ts).
   menuTimeout: intSetting(
     MENU_TIMEOUT_RANGE,
     MENU_TIMEOUT_DEFAULT,
@@ -60048,7 +60044,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
   }
   if (req.kind === "stats") {
     const mailbox = parts.renderer.stats();
-    const { stats: drawn } = await renderer.ask({ kind: "stats" });
+    const {
+      stats: { framesDrawn, ...drawn }
+    } = await renderer.ask({ kind: "stats" });
     return stay({
       ok: true,
       stats: stats.snapshot({
@@ -60062,7 +60060,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         ...drawn,
         collector: parts.collector.stats(),
         mailbox,
-        frameFeeds: frameFeeds.getStats(),
+        // The frames drawn are the renderer's count, the rest the host's.
+        frameFeeds: { ...frameFeeds.getStats(), drawn: framesDrawn },
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
@@ -60349,9 +60348,8 @@ async function handleClick(parts, verb, value, arrival, facts, click3) {
     parts.collector.clicked(session.id);
   }
   const delivered = await parts.renderer.answer(
-    (at) => click3.gone() ? failureOf(new ClickAbandoned(verb)) : {
+    () => click3.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
-      at,
       event: {
         kind: "click",
         verb,
@@ -60518,7 +60516,7 @@ function readRecord(actDir) {
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
-  async function factsOf(act2) {
+  async function factsOf2(act2) {
     const actDir = import_node_path14.default.join(dir, String(act2));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
@@ -60550,7 +60548,7 @@ function makeActReader(dir, read2, jobs, clock) {
             `${import_node_path14.default.join(dir, String(act2))}: an act with no record`
           );
         }
-        const facts = await factsOf(act2);
+        const facts = await factsOf2(act2);
         if (facts !== null) return facts;
         vanished = act2;
       }
@@ -66370,8 +66368,8 @@ function assertType(name, declared, value, context) {
   }
 }
 var VariableStore = class {
-  // [LAW:one-source-of-truth] A child store reads the same clock as its
-  // parent.
+  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
+  // changed; a child store reads the same one as its parent.
   constructor(clock, parent = null) {
     this.clock = clock;
     this.parent = parent;
@@ -71543,7 +71541,7 @@ async function runTeardown(steps2, log) {
 // src/daemon/stats.ts
 init_globals();
 
-// src/daemon/durations.ts
+// src/daemon/foundations/durations.ts
 init_globals();
 var import_hdr_histogram_js = __toESM(require_hdrhistogram_umd(), 1);
 var durationHistogram = () => (0, import_hdr_histogram_js.build)({ bitBucketSize: "packed" });
@@ -71551,7 +71549,8 @@ var recordMs = (h, ms) => {
   h.recordValue(Math.round(ms * 1e3));
 };
 var msUpOf = (us) => Math.ceil(us / 10) / 100;
-var msOf = (us) => Math.round(us / 10) / 100;
+var msOf2 = (us) => Math.round(us / 10) / 100;
+var encodedOf = (h) => (0, import_hdr_histogram_js.encodeIntoCompressedBase64)(h);
 var durationsOf = (h) => {
   const max3 = h.maxValue;
   const at = (p2) => msUpOf(Math.min(h.getValueAtPercentile(p2), max3));
@@ -71562,8 +71561,8 @@ var durationsOf = (h) => {
     p99Ms: at(99),
     p999Ms: at(99.9),
     maxMs: msUpOf(max3),
-    meanMs: msOf(h.mean),
-    stddevMs: msOf(h.stdDeviation)
+    meanMs: msOf2(h.mean),
+    stddevMs: msOf2(h.stdDeviation)
   };
 };
 
@@ -72549,52 +72548,46 @@ var FrameFeeds = class {
   }
   deps;
   requests = /* @__PURE__ */ new Map();
-  watches = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] The lanes each session with an open view
-  // switches on, as the renderer last declared them: the one gate.
+  watched = /* @__PURE__ */ new Map();
+  // The lanes each session with a view switches on, as the renderer's last
+  // output said: a subscriber is gated by its lane.
   lanes = {};
-  // [LAW:no-ambient-temporal-coupling] The stop of what runs while any
-  // session is watched: held exactly from the first watch to the last.
+  // [LAW:no-ambient-temporal-coupling] The stop of what runs while anyone
+  // watches: held exactly from the first session watched to the last.
   stopWatching = null;
-  // The daemon's close: no subscriber is taken after it.
-  closed = false;
+  delivery = "current";
+  // The viewers as the renderer was last handed them, serialized; null when
+  // what it holds is unknown (a delivery failed).
+  handed = JSON.stringify({});
   joins = 0;
-  framed = 0;
   pushed = 0;
   refused = 0;
   lookups = 0;
   found = 0;
   // A valid render request the daemon accepted `order`-th, among requests of
-  // every kind. The latest request a session sent is where the feeds find
-  // the session: whether its pane is shown, and which session a lookup
-  // matches. Its frames draw by the request its view is declared with. One
-  // that arrived before it — a slow render finishing late — is not the
+  // every kind. The latest request a session sent is where the host finds the
+  // session: whether its pane is shown, and which session a lookup matches.
+  // One that arrived before it — a slow render finishing late — is not the
   // session's latest.
   note(sessionId2, req, order2) {
     const held = this.requests.get(sessionId2);
     if (held !== void 0 && held.order > order2) return;
+    const before = this.watched.has(sessionId2) ? this.shown(sessionId2) : null;
     this.requests.delete(sessionId2);
-    const noted = { req, order: order2 };
-    this.requests.set(sessionId2, noted);
+    this.requests.set(sessionId2, { req, order: order2 });
     for (const oldest of this.requests.keys()) {
       if (this.requests.size <= MAX_REQUESTS) break;
-      if (!this.watches.has(oldest)) this.requests.delete(oldest);
+      if (!this.watched.has(oldest)) this.requests.delete(oldest);
     }
-    if (this.watches.has(sessionId2) && this.shown(held) !== this.shown(noted))
-      this.deps.changed();
-  }
-  // Whether the session's bar is on a screen, by its latest request: one
-  // with none yet is taken as shown, so a frame is never held back on a guess.
-  shown(noted) {
-    return noted === void 0 || this.deps.shown(noted.req);
+    if (before !== null && before !== this.shown(sessionId2)) this.announce();
   }
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
   // lane the session's settings switch off is refused here, and one whose
-  // lane is switched off while it streams is ended as the renderer declares
-  // it (`declared`). A session with no view yet is admitted, and the lanes
-  // its view declares decide. The returned unsubscribe is its leaving.
+  // lane is switched off while it streams is ended as the renderer's output
+  // says so (`switched`). A session with no view yet is admitted, and the
+  // switches its view opens with decide.
   subscribe(sessionId2, sub2) {
-    if (this.closed) {
+    if (this.delivery === "closed") {
       this.deps.log(
         "info",
         `feed sid=${JSON.stringify(sessionId2)} dropped lane=${sub2.lane} daemon-closed`
@@ -72602,85 +72595,104 @@ var FrameFeeds = class {
       return () => {
       };
     }
-    const lanes = this.lanes[sessionId2];
-    if (lanes !== void 0 && !lanes[sub2.lane]) {
+    if (this.lanes[sessionId2]?.[sub2.lane] === false) {
       this.refuse(sessionId2, sub2);
       return () => {
       };
     }
-    const watch2 = this.watches.get(sessionId2) ?? this.open(sessionId2);
-    watch2.subscribers.set(sub2, null);
-    watch2.joined = ++this.joins;
-    this.send(watch2, sub2);
-    this.deps.changed();
+    let watched = this.watched.get(sessionId2);
+    if (watched === void 0) {
+      watched = { followers: /* @__PURE__ */ new Map(), last: null, pushed: 0 };
+      this.watched.set(sessionId2, watched);
+      this.stopWatching ??= this.deps.watching();
+    }
+    watched.followers.set(sub2, { sent: null, joined: ++this.joins });
+    this.send(watched, sub2);
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${watch2.subscribers.size} view=${lanes === void 0 ? "N" : "Y"}`
+      `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${watched.followers.size} view=${sessionId2 in this.lanes ? "Y" : "N"}`
     );
-    return () => {
-      const held = this.watches.get(sessionId2);
-      if (held !== void 0) this.unsubscribe(held, sub2);
-    };
+    this.announce();
+    return () => this.unsubscribe(sessionId2, sub2);
   }
-  // [LAW:single-enforcer] What the renderer's turn declared of each session's
-  // lanes: a subscriber whose lane is now off is refused, and leaves.
-  declared(lanes) {
-    this.lanes = lanes;
-    for (const watch2 of [...this.watches.values()]) {
-      const switches = lanes[watch2.sessionId];
-      if (switches === void 0) continue;
-      for (const sub2 of [...watch2.subscribers.keys()]) {
-        if (switches[sub2.lane]) continue;
-        this.unsubscribe(watch2, sub2);
-        this.refuse(watch2.sessionId, sub2);
-      }
-    }
+  // [LAW:one-source-of-truth] Whether anyone watches the session: what keeps
+  // its world state read.
+  isWatched(sessionId2) {
+    return this.watched.has(sessionId2);
   }
-  // A frame the renderer drew: each subscriber of its session is sent it,
-  // unless its lane's answer is what that subscriber was last sent.
-  frame(frame2) {
-    this.framed++;
-    const watch2 = this.watches.get(frame2.session);
-    if (watch2 === void 0) return;
-    watch2.last = { bar: parseFrame(frame2.bar), answers: frame2.answers };
-    watch2.pushed++;
-    this.pushed++;
-    for (const sub2 of [...watch2.subscribers.keys()]) this.send(watch2, sub2);
+  // The latest request of every session someone watches.
+  watchedRequests() {
+    return [...this.watched.keys()].flatMap((sessionId2) => {
+      const noted = this.requests.get(sessionId2);
+      return noted === void 0 ? [] : [noted.req];
+    });
   }
-  // [LAW:one-source-of-truth] Who watches each session, derived whole from
-  // the subscribers, whether each draws now, and the pane's visibility.
+  // [LAW:one-source-of-truth] Who watches each session now, whole, as the
+  // renderer's feeds are handed it: each lane's subscribers and whether any
+  // draws the bar now, and whether the session's pane is on a screen.
   viewers() {
     const viewers = {};
-    for (const watch2 of this.watches.values()) {
-      const subs = [...watch2.subscribers.keys()];
-      const noted = this.requests.get(watch2.sessionId);
-      viewers[watch2.sessionId] = {
-        lanes: perLane((lane) => {
-          const ofLane = subs.filter((sub2) => sub2.lane === lane);
-          return {
-            subscribers: ofLane.length,
-            drawing: ofLane.some((sub2) => sub2.drawing())
-          };
-        }),
-        shown: this.shown(noted),
-        joined: watch2.joined
-      };
+    for (const [sessionId2, { followers }] of this.watched) {
+      const lanes = {};
+      let joined = 0;
+      for (const [sub2, follower] of followers) {
+        const seen2 = lanes[sub2.lane];
+        lanes[sub2.lane] = {
+          subscribers: (seen2?.subscribers ?? 0) + 1,
+          drawing: (seen2?.drawing ?? false) || sub2.drawing()
+        };
+        joined = Math.max(joined, follower.joined);
+      }
+      viewers[sessionId2] = { lanes, shown: this.shown(sessionId2), joined };
     }
     return viewers;
   }
-  // The lanes whose subscribers follow the session's frames and draw them
-  // now: the host's own reading of the viewers.
-  following(sessionId2) {
-    const subs = [...this.watches.get(sessionId2)?.subscribers.keys() ?? []];
-    return new Set(
-      LANE_NAMES.filter(
-        (lane) => subs.some((sub2) => sub2.lane === lane && sub2.drawing())
-      )
-    );
+  // [LAW:single-enforcer] Who watches may have changed, or how: the renderer
+  // is handed the viewers whole, once for every announcement made before its
+  // slot comes, and not at all when they read as it was last handed them (a
+  // poll that found every pane as it was). A delivery that failed is made
+  // good by the next announcement.
+  announce() {
+    if (this.delivery !== "current") return;
+    if (JSON.stringify(this.viewers()) === this.handed) return;
+    this.delivery = "owed";
+    let made = false;
+    void this.deps.deliver(() => {
+      made = true;
+      if (this.delivery === "owed") this.delivery = "current";
+      const viewers = this.viewers();
+      this.handed = JSON.stringify(viewers);
+      return viewers;
+    }).then(({ kind }) => {
+      if (kind !== "answered") this.handed = null;
+      if (!made && this.delivery === "owed") this.delivery = "current";
+    });
   }
-  // [LAW:one-source-of-truth] Whether someone watches the session.
-  watched(sessionId2) {
-    return this.watches.has(sessionId2);
+  // The renderer was handed the viewers some other way: a start's.
+  handedIn(viewers) {
+    this.handed = JSON.stringify(viewers);
+  }
+  // [LAW:one-source-of-truth] The lanes each session's view switches on, as
+  // a renderer's output declared them: every subscriber whose lane is now
+  // off is ended, told why.
+  switched(lanes) {
+    this.lanes = lanes;
+    for (const [sessionId2, { followers }] of [...this.watched])
+      for (const sub2 of [...followers.keys()]) {
+        if (lanes[sessionId2]?.[sub2.lane] !== false) continue;
+        this.unsubscribe(sessionId2, sub2);
+        this.refuse(sessionId2, sub2);
+      }
+  }
+  // The frames a renderer's turn drew: each kept as its session's last, and
+  // sent to each of its subscribers whose lane's answer it changed.
+  took(frames) {
+    for (const { session, bar, answers } of frames) {
+      const watched = this.watched.get(session);
+      if (watched === void 0) continue;
+      watched.last = { bar: parseFrame(bar), answers };
+      for (const sub2 of watched.followers.keys()) this.send(watched, sub2);
+    }
   }
   // The session of the newest request `match` accepts, among the latest
   // request of each session the daemon holds, or null when none does.
@@ -72698,74 +72710,57 @@ var FrameFeeds = class {
   latest(sessionId2) {
     return this.requests.get(sessionId2)?.req ?? null;
   }
-  // The latest request of every session someone is watching, by session.
-  watchedRequests() {
-    return [...this.watches.keys()].flatMap((sessionId2) => {
-      const noted = this.requests.get(sessionId2);
-      return noted === void 0 ? [] : [{ sessionId: sessionId2, req: noted.req }];
-    });
-  }
+  // The frames the renderer drew are its own count (`RendererStats`).
   getStats() {
     let subscribers = 0;
-    for (const watch2 of this.watches.values())
-      subscribers += watch2.subscribers.size;
+    for (const { followers } of this.watched.values())
+      subscribers += followers.size;
     return {
-      feeds: this.watches.size,
+      feeds: this.watched.size,
       subscribers,
-      drawn: this.framed,
       pushed: this.pushed,
       refused: this.refused,
       lookups: this.lookups,
       found: this.found
     };
   }
-  // The daemon's close: every watch ends as its last subscriber's leaving
-  // ends it.
+  // The daemon's close: every subscriber leaves, and the renderer is handed
+  // nothing more.
   close() {
-    this.closed = true;
-    for (const watch2 of [...this.watches.values()])
-      for (const sub2 of [...watch2.subscribers.keys()])
-        this.unsubscribe(watch2, sub2);
+    this.delivery = "closed";
+    for (const [sessionId2, { followers }] of [...this.watched])
+      for (const sub2 of [...followers.keys()]) this.unsubscribe(sessionId2, sub2);
   }
-  open(sessionId2) {
-    const watch2 = {
-      sessionId: sessionId2,
-      subscribers: /* @__PURE__ */ new Map(),
-      last: null,
-      joined: 0,
-      since: this.deps.clock.monotonic(),
-      pushed: 0,
-      sent: 0,
-      refreshesAtOpen: this.deps.refreshes()
-    };
-    this.watches.set(sessionId2, watch2);
-    this.stopWatching ??= this.deps.watching();
-    return watch2;
-  }
-  // [LAW:no-ambient-temporal-coupling] The change is announced once it is
-  // whole: an idle mailbox makes the viewers turn inside the announcement, so
-  // one made before the empty watch went would hand the renderer a session
-  // nobody watches, and its feed would draw for no one.
-  unsubscribe(watch2, sub2) {
-    if (!watch2.subscribers.delete(sub2)) return;
-    if (watch2.subscribers.size === 0) {
-      this.watches.delete(watch2.sessionId);
-      if (this.watches.size === 0) {
+  unsubscribe(sessionId2, sub2) {
+    const watched = this.watched.get(sessionId2);
+    if (watched === void 0 || !watched.followers.delete(sub2)) return;
+    if (watched.followers.size === 0) {
+      this.watched.delete(sessionId2);
+      this.deps.log(
+        "info",
+        `feed sid=${JSON.stringify(sessionId2)} unwatched pushed=${watched.pushed}`
+      );
+      if (this.watched.size === 0) {
         this.stopWatching?.();
         this.stopWatching = null;
       }
-      this.summarize(watch2);
     }
-    this.deps.changed();
+    this.announce();
+  }
+  shown(sessionId2) {
+    const noted = this.requests.get(sessionId2);
+    return noted === void 0 || this.deps.shown(noted.req);
   }
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  send(watch2, sub2) {
-    if (watch2.last === null) return;
-    const json2 = answerOf(watch2.last.answers, sub2.lane);
-    if (watch2.subscribers.get(sub2) === json2) return;
-    watch2.subscribers.set(sub2, json2);
-    watch2.sent++;
-    sub2.frame(watch2.last.bar, json2);
+  send(watched, sub2) {
+    const follower = watched.followers.get(sub2);
+    if (watched.last === null || follower === void 0) return;
+    const json2 = answerOf(watched.last.answers, sub2.lane);
+    if (follower.sent === json2) return;
+    follower.sent = json2;
+    this.pushed++;
+    watched.pushed++;
+    sub2.frame(watched.last.bar, json2);
   }
   // A subscription its lane's toggle refuses, told why.
   refuse(sessionId2, sub2) {
@@ -72781,153 +72776,7 @@ var FrameFeeds = class {
       daemonV: PROTOCOL_VERSION
     });
   }
-  // [LAW:nothing-unseen] What a session's watch was pushed and sent, said as
-  // it ends; the renderer's feed says what it drew.
-  //
-  // `daemonRefreshed=` is every refresh the daemon made while the session was
-  // watched, whichever session's: a frame refreshes nothing, so it bounds what
-  // the pushed frames could have read fresh, and is never their own.
-  summarize(watch2) {
-    const refreshes = this.deps.refreshes();
-    const seconds = (this.deps.clock.monotonic() - watch2.since) / 1e3;
-    const refreshed = REFRESH_TRIGGERS.map(
-      (by) => `${by}:${refreshes[by] - watch2.refreshesAtOpen[by]}`
-    ).join(",");
-    this.deps.log(
-      "info",
-      `feed sid=${JSON.stringify(watch2.sessionId)} unwatched for=${Math.round(seconds)}s pushed=${watch2.pushed} sent=${watch2.sent} daemonRefreshed=${refreshed}`
-    );
-  }
 };
-
-// src/daemon/renderer-wake.ts
-init_globals();
-var DUE_AFTER_THROW_MS = 1e3;
-var SUMMARY_EVERY_MS = 6e4;
-var noCosts = () => ({
-  dues: 0,
-  lateMs: 0,
-  lateMaxMs: 0,
-  turnMs: 0,
-  turnMaxMs: 0
-});
-var RendererWake = class {
-  constructor(deps) {
-    this.deps = deps;
-    this.summarizedAt = deps.clock.monotonic();
-  }
-  deps;
-  state = { kind: "idle" };
-  // The instant the renderer last declared: a due no renderer answered
-  // declared nothing, and this stands.
-  wake = null;
-  // [LAW:no-silent-failure] Until when a due that threw holds the next one
-  // off, whichever turn declares it: a throw that repeats is a beat of
-  // failures, said once, not a spin. A due that answers clears it.
-  heldUntil = null;
-  // Whether a due's throw has been said since a due last answered: a due
-  // that keeps throwing is said once.
-  throwSaid = false;
-  costs = noCosts();
-  summarizedAt;
-  // [LAW:single-enforcer] Every output's wake lands here, in the order the
-  // turns answered: the latest declaration is the one timer.
-  // [LAW:single-enforcer] A due's own declaration says how it ended, so the
-  // hold-off and its line are decided here, in the due's slot.
-  declare({ subscriptions: { wake }, due }) {
-    if (due !== null) this.ended(due.at, due.failure);
-    this.wake = wake;
-    this.rearm();
-  }
-  // The daemon's close: no due after it. First in the teardown, so nothing
-  // the close does to the renderer wakes it again.
-  close() {
-    if (this.state.kind === "armed") this.state.cancel();
-    this.state = { kind: "closed" };
-    this.summarize();
-  }
-  // [LAW:dataflow-not-control-flow] The one timer, to the latest declaration
-  // held off by a throw. The instant already armed stands as it is.
-  rearm() {
-    if (this.state.kind === "closed" || this.state.kind === "queued") return;
-    const at = this.wake === null ? null : Math.max(this.wake, this.heldUntil ?? this.wake);
-    if (this.state.kind === "armed") {
-      if (this.state.at === at) return;
-      this.state.cancel();
-    }
-    this.state = { kind: "idle" };
-    if (at === null) return;
-    const ms = Math.max(0, Math.ceil(at * 1e3) - this.deps.clock.now());
-    this.arm(at, this.deps.clock.monotonic() + ms);
-  }
-  arm(at, moment2) {
-    const ms = Math.max(0, moment2 - this.deps.clock.monotonic());
-    const cancel = this.deps.clock.after(ms, () => this.fired(at, moment2));
-    this.state = { kind: "armed", at, moment: moment2, cancel };
-  }
-  // [LAW:no-ambient-temporal-coupling] A timer may fire before its moment on
-  // the monotonic clock: the rest is waited, so no due is handed in early.
-  // The wall has no say here, so one stepped back delays no due.
-  fired(at, moment2) {
-    if (this.deps.clock.monotonic() < moment2) {
-      this.arm(at, moment2);
-      return;
-    }
-    this.state = { kind: "queued" };
-    void this.handIn(at);
-  }
-  async handIn(at) {
-    let lateMs = 0;
-    let handedAt = at;
-    const turn = await this.deps.due((slotAt2) => {
-      if (this.state.kind === "closed")
-        return failureOf(new DaemonClosing("due"));
-      this.state = { kind: "idle" };
-      handedAt = slotAt2;
-      lateMs = Math.max(0, (slotAt2 - at) * 1e3);
-      return { kind: "event", at: slotAt2, event: { kind: "due" } };
-    });
-    if (turn.kind === "threw" && turn.turnMs === null && turn.failure.kind !== "down" && turn.failure.kind !== "closing") {
-      this.ended(handedAt, turn.failure);
-      this.rearm();
-    }
-    this.costs.dues++;
-    this.costs.lateMs += lateMs;
-    this.costs.lateMaxMs = Math.max(this.costs.lateMaxMs, lateMs);
-    this.costs.turnMs += turn.turnMs ?? 0;
-    this.costs.turnMaxMs = Math.max(this.costs.turnMaxMs, turn.turnMs ?? 0);
-    if (this.deps.clock.monotonic() - this.summarizedAt >= SUMMARY_EVERY_MS)
-      this.summarize();
-  }
-  // How the due handed in at `at` ended: one that failed holds the next off
-  // and is said, once for a run of failures; one that answered clears both.
-  ended(at, failure) {
-    this.heldUntil = failure === null ? null : heldOff(at);
-    if (failure === null) this.throwSaid = false;
-    else if (!this.throwSaid) {
-      this.throwSaid = true;
-      this.deps.log(
-        "error",
-        `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${failure.detail}`
-      );
-    }
-  }
-  // [LAW:nothing-unseen] Due turns write no line each: the wake says what
-  // they cost once a minute, and at its close.
-  summarize() {
-    const { dues, lateMs, lateMaxMs, turnMs, turnMaxMs } = this.costs;
-    if (dues > 0) {
-      const mean = (ms) => (ms / dues).toFixed(1);
-      this.deps.log(
-        "info",
-        `wake dues=${dues} late=${mean(lateMs)}ms/max${Math.round(lateMaxMs)}ms turn=${mean(turnMs)}ms/max${Math.round(turnMaxMs)}ms`
-      );
-    }
-    this.costs = noCosts();
-    this.summarizedAt = this.deps.clock.monotonic();
-  }
-};
-var heldOff = (due) => due + DUE_AFTER_THROW_MS / 1e3;
 
 // src/daemon/pane-visibility.ts
 init_globals();
@@ -72965,10 +72814,6 @@ function statusLinesOf(listPanes, listClients) {
       shownBy.set(session, pane);
   }
   return { sessionOf: sessionOf2, shownBy };
-}
-function sameStatusLines(a, b) {
-  const same2 = (x, y) => x.size === y.size && [...x].every(([key, value]) => y.get(key) === value);
-  return same2(a.sessionOf, b.sessionOf) && same2(a.shownBy, b.shownBy);
 }
 var PaneVisibility = class {
   constructor(deps) {
@@ -73479,7 +73324,7 @@ var TmuxStatusLines = class {
   answered(socket, view) {
     if (this.closed) return;
     const server = this.serverOf(socket);
-    this.viewOf(server, view);
+    server.view = view;
     for (const held of [...this.held.values()]) {
       if (held.socket !== socket) continue;
       if (!view.sessionOf.has(held.pane)) this.release(held, "pane gone");
@@ -73490,19 +73335,6 @@ var TmuxStatusLines = class {
       }
     }
     this.reconcile(socket);
-  }
-  // [LAW:single-enforcer] The one place what a server's status lines show
-  // changes, its view or a session laid out: each is what `draws` reads, so
-  // each change is announced. A poll that answers the same view moves nothing.
-  viewOf(server, view) {
-    const moved = server.view === null || !sameStatusLines(server.view, view);
-    server.view = view;
-    if (moved) this.deps.changed();
-  }
-  laidOut(server, session, layout) {
-    if (layout === null) server.layouts.delete(session);
-    else server.layouts.set(session, layout);
-    this.deps.changed();
   }
   // Whether `held`'s bar is in a status line now: a session this daemon laid
   // out, whose status line shows `held`'s pane. Another held pane in the same
@@ -73686,7 +73518,7 @@ var TmuxStatusLines = class {
           continue;
         const found2 = leftBehind(prior, wrote, this.deps.owner);
         if (found2.kind === "ours")
-          this.laidOut(server, session, {
+          server.layouts.set(session, {
             prior: found2.prior,
             rows: [],
             status: found2.status
@@ -73736,7 +73568,7 @@ var TmuxStatusLines = class {
       rows: [],
       status: plan.kind === "ours" ? plan.status : plan.prior.base
     };
-    this.laidOut(server, session, layout);
+    server.layouts.set(session, layout);
     if (plan.kind === "lay-out") await this.write(socket, plan.commands);
     this.deps.log(
       "info",
@@ -73775,7 +73607,7 @@ var TmuxStatusLines = class {
   async restore(socket, server, session) {
     const layout = server.layouts.get(session);
     if (layout === void 0) return;
-    this.laidOut(server, session, null);
+    server.layouts.delete(session);
     const answers = await this.ask(socket, RESTORE_QUERIES(session));
     if (answers === null) return;
     const plan = restorePlan(session, layout.prior, answers);
@@ -75287,9 +75119,77 @@ function putBack(written3, cause) {
 }
 var message = (e) => e instanceof Error ? e.message : String(e);
 
+// src/daemon/renderer-wake.ts
+init_globals();
+var FAILED_DUE_HOLD_S = 1;
+var RendererWake = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  state = { kind: "idle" };
+  // The tick the renderer last declared, whatever state the wake was in.
+  declared = null;
+  // The tick no wake is armed before, after a `due` failed; null while the
+  // dues answer.
+  heldUntil = null;
+  // [LAW:one-source-of-truth] The renderer's wake, whole, as an output
+  // declared it: re-declaring the armed tick keeps its timer.
+  declare(tick) {
+    this.declared = tick;
+    if (this.state.kind === "idle" || this.state.kind === "armed") this.arm();
+  }
+  // The wake's end: no timer stays armed, and no `due` is made after it.
+  close() {
+    if (this.state.kind === "armed") this.state.cancel();
+    this.state = { kind: "closed" };
+  }
+  closed() {
+    return this.state.kind === "closed";
+  }
+  arm() {
+    const tick = this.declared === null || this.heldUntil === null ? this.declared : Math.max(this.declared, this.heldUntil);
+    if (this.state.kind === "armed") {
+      if (this.state.tick === tick) return;
+      this.state.cancel();
+    }
+    this.state = tick === null ? { kind: "idle" } : { kind: "armed", tick, cancel: this.timer(tick) };
+  }
+  timer(tick) {
+    const { clock } = this.deps;
+    const ms = Math.max(0, (tick - tickAt(clock)) * 1e3);
+    return clock.after(ms, () => {
+      if (this.state.kind !== "armed" || this.state.tick !== tick) return;
+      if (tickAt(clock) < tick) {
+        this.state = { kind: "armed", tick, cancel: this.timer(tick) };
+        return;
+      }
+      this.state = { kind: "queued" };
+      void this.deps.due().then((ended) => this.answered(tick, ended));
+    });
+  }
+  answered(tick, ended) {
+    if (this.state.kind === "closed") return;
+    this.state = { kind: "idle" };
+    if (ended.kind === "answered") {
+      this.heldUntil = null;
+      this.arm();
+      return;
+    }
+    if (ended.failure.kind === "down") return;
+    if (this.heldUntil === null)
+      this.deps.said(
+        `the renderer's due turn failed, so what it holds for later waits ${FAILED_DUE_HOLD_S}s between tries: ${ended.failure.detail}`
+      );
+    this.heldUntil = tick + FAILED_DUE_HOLD_S;
+    this.arm();
+  }
+};
+
 // src/daemon/renderer-host.ts
 function rendererHost(name, clock, renderer, log, collector, world) {
   const mailbox = new KeyedSerialQueue();
+  const stamped = stampedOf(clock);
   let holder = null;
   let queued = 0;
   const inMailbox = (slot, at = "last") => {
@@ -75352,21 +75252,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         },
         collector.writableSettings
       );
-      if (!world.closing())
-        try {
-          collector.declared({
-            subscriptions,
-            due: input.event.kind === "due" ? {
-              at: input.at,
-              failure: output.kind === "threw" ? output.failure : null
-            } : null
-          });
-          collector.framed(frames);
-        } catch (thrown2) {
-          const said2 = `renderer ${name} ${input.event.kind} turn's output was not taken: ${failureOf(thrown2).detail}`;
-          log("error", said2);
-          world.unheard(said2);
-        }
+      took(subscriptions, frames);
       const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
       const owed = [];
       const acts = [];
@@ -75400,9 +75286,23 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       return unanswered(failureOf(thrown2), queuedMs);
     }
   };
-  const doneOf = (effect, outcome, at) => ({
+  const took = (subscriptions, frames) => {
+    wake.declare(subscriptions.wake);
+    for (const [what, take] of [
+      ["subscriptions", () => collector.subscribed(subscriptions)],
+      ["frames", () => collector.frames(frames)]
+    ]) {
+      try {
+        take();
+      } catch (thrown2) {
+        const text4 = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown2).detail}`;
+        log("error", text4);
+        world.unheard(text4);
+      }
+    }
+  };
+  const doneOf = (effect, outcome) => ({
     kind: "event",
-    at,
     event: {
       kind: "effect-done",
       session: effect.session,
@@ -75414,7 +75314,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
     if (failed3 !== null && effect.session === null) world.unheard(failed3);
     const delivered = await deliver(
-      (at) => doneOf(effect, outcome, at),
+      () => doneOf(effect, outcome),
       [["effect", String(effect.id)]]
     );
     if (failed3 !== null && effect.session !== null && delivered.kind === "threw" && delivered.failure.kind === "down")
@@ -75422,7 +75322,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return outcome;
   };
   const settleInSlot = async (effect, outcome) => {
-    const input = doneOf(effect, outcome, instantAt(clock));
+    const input = stamped(doneOf(effect, outcome));
     const { turn, settled: settled3 } = await inSlot(input, 0);
     record2(input.event, [["effect", String(effect.id)]], turn);
     return { settled: settled3.then(() => outcome) };
@@ -75433,7 +75333,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       ["renderer", name],
       ["input", event?.kind ?? "-"],
       ...session === null ? [] : [["sid", session]],
-      ...about
+      ...about,
+      ...delivered.turnMs === null ? [] : [["took", `${delivered.turnMs}ms`]]
     ];
     switch (delivered.kind) {
       case "answered":
@@ -75456,14 +75357,17 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const { event, slotted } = await inMailbox(async (queuedMs, holds2) => {
       let made;
       try {
-        made = make(instantAt(clock));
+        made = make();
       } catch (thrown2) {
         made = failureOf(thrown2);
       }
       if (made.kind !== "event")
         return { event: null, slotted: unanswered(made, queuedMs) };
       holds2(made.event.kind);
-      return { event: made.event, slotted: await inSlot(made, queuedMs) };
+      return {
+        event: made.event,
+        slotted: await inSlot(stamped(made), queuedMs)
+      };
     }, at);
     return {
       event,
@@ -75477,62 +75381,79 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return turn;
   };
   const deliver = recorded2("last");
-  const ask2 = async (push) => (await pushed(push)).reply;
-  const pushed = async (push) => {
+  const ask2 = async (push) => {
     const output = await inMailbox(async (_queuedMs, holds2) => {
       holds2(`push:${push.kind}`);
       try {
         const { subscriptions, ...answered } = await renderer.answer({
           kind: "adapter",
           push,
-          at: instantAt(clock)
+          ...readingsAt(clock)
         });
-        if (!world.closing())
-          collector.declared({
-            subscriptions,
-            due: null
-          });
+        took(subscriptions, []);
         return answered;
       } catch (thrown2) {
-        return { kind: "threw", failure: failureOf(thrown2) };
+        return {
+          kind: "threw",
+          failure: failureOf(thrown2),
+          turnMs: null
+        };
       }
     });
-    if (output.kind === "threw")
+    if (output.kind === "threw") {
+      const took2 = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
       throw new CrossedFailure({
         ...output.failure,
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`
+        detail: `renderer ${name} push ${push.kind} threw${took2}: ${output.failure.detail}`
       });
+    }
     if (output.reply.kind !== push.kind)
       throw new Error(
         `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`
       );
-    return {
-      reply: output.reply,
-      turnMs: output.turnMs
-    };
+    return output.reply;
   };
-  const tell = (push) => void pushed(push).then(
-    ({ turnMs }) => log(
-      "info",
-      eventLine("turn", [
-        ["renderer", name],
-        ["input", `push:${push.kind}`],
-        ["ms", String(turnMs)]
-      ])
-    ),
-    (thrown2) => {
-      const failure = failureOf(thrown2);
-      if (failure.kind !== "down") log("error", failure.detail);
-    }
-  );
+  const tell = (push) => void ask2(push).catch((thrown2) => {
+    const failure = failureOf(thrown2);
+    if (failure.kind !== "down") log("error", failure.detail);
+  });
   const stats = () => ({
     holder: holder?.input ?? null,
     heldMs: holder === null ? 0 : elapsedMs(clock, holder.since),
     queued
   });
-  return { name, answer: answer2, deliver, start: recorded2("first"), ask: ask2, tell, stats };
+  const wake = new RendererWake({
+    clock,
+    due: () => deliver(
+      () => wake.closed() ? {
+        kind: "closing",
+        message: "the daemon is closing",
+        detail: "a due made after the renderer's wake closed"
+      } : { kind: "event", event: { kind: "due" } },
+      []
+    ),
+    said: (text4) => {
+      log("error", text4);
+      world.unheard(text4);
+    }
+  });
+  return {
+    name,
+    answer: answer2,
+    deliver,
+    start: recorded2("first"),
+    ask: ask2,
+    tell,
+    stats,
+    closeWake: () => wake.close()
+  };
 }
+var stampedOf = (clock) => (made) => ({
+  kind: "event",
+  event: made.event,
+  ...readingsAt(clock)
+});
 function sessionOf(event) {
   switch (event.kind) {
     // A start is every session's: it holds none of them alone.
@@ -75548,7 +75469,7 @@ function sessionOf(event) {
     case "retire":
     case "effect-done":
       return event.session;
-    // Every session's, or none's: the renderer's own.
+    // Every watched session's, or the renderer's own.
     case "viewers":
     case "due":
       return null;
@@ -85428,14 +85349,19 @@ function laneHandoff(sessionId2, writable, lanes) {
 }
 
 // src/renderer/draw-bar.ts
-function renderFrame(parts, sessionId2, at, fps, feed2) {
+function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
   const facts = [];
   try {
     var _stack = [];
     try {
-      const setup = __using(_stack, setUpFrame(parts, sessionId2, at, facts));
+      const setup = __using(_stack, setUpFrame(parts, sessionId2, readings, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, cellBreaks, delivered, lanes, menus } = drawRender(parts, setup, { by: "feed", fps }, feed2.feeds, feed2.idleSince);
+      const { drawn, evaluated: evaluated2, cellBreaks, delivered, lanes } = drawRender(
+        parts,
+        setup,
+        { by: "feed", fps },
+        feeds
+      );
       const signed = signingFrames(parts.linkSigner);
       const bar = signed(drawn.body);
       const answer2 = RENDER_ANSWERS.ansi(bar);
@@ -85443,22 +85369,20 @@ function renderFrame(parts, sessionId2, at, fps, feed2) {
         sessionId2,
         setup.state.writable,
         drawn,
-        handedOffTo(lanes, feed2.following)
+        handedOffTo(lanes, following)
       );
       delivered();
       const resp = JSON.stringify(answer2);
       return {
-        frame: {
-          bar,
-          answers: {
-            resp,
-            statusline: statusline === drawn.body ? resp : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)))
-          },
-          evaluated: evaluated2,
-          cellBreaks,
-          failure: null
+        bar,
+        answers: {
+          resp,
+          // Mostly the bar itself, and one frame encodes once.
+          statusline: statusline === drawn.body ? resp : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)))
         },
-        menus
+        evaluated: evaluated2,
+        cellBreaks,
+        failure: null
       };
     } catch (_) {
       var _error = _, _hasError = true;
@@ -85467,17 +85391,14 @@ function renderFrame(parts, sessionId2, at, fps, feed2) {
     }
   } catch (error) {
     const outcome = renderFailure(failureOf(error));
-    const { level, line } = requestEvent("render", facts, outcome, null);
+    const { level, line } = drawEvent("render", facts, outcome);
     const failed3 = JSON.stringify(failedWith(outcome.message));
     return {
-      frame: {
-        bar: renderFailedFrame(failedWith(outcome.message).error),
-        answers: { resp: failed3, statusline: failed3 },
-        evaluated: 0,
-        cellBreaks: 0,
-        failure: { level, line: `frame ${line}` }
-      },
-      menus: null
+      bar: renderFailedFrame(failedWith(outcome.message).error),
+      answers: { resp: failed3, statusline: failed3 },
+      evaluated: 0,
+      cellBreaks: 0,
+      failure: { level, line: `frame ${line}` }
     };
   }
 }
@@ -85559,12 +85480,12 @@ function holdSessionAt(parts, req) {
   const { projectDir, cwd: cwd2, target } = req.requested;
   return parts.renderCache.holdSession(projectDir, cwd2, target.path, req);
 }
-function setUpRender(parts, req, at, facts) {
+function setUpRender(parts, req, readings, facts) {
   const hintsError = hintsErrorOf(req);
   const hold2 = holdSessionAt(parts, req);
-  return setUpDraw(parts, hold2, req, hintsError, at, facts);
+  return setUpDraw(parts, hold2, req, hintsError, readings, facts);
 }
-function setUpFrame(parts, sessionId2, at, facts) {
+function setUpFrame(parts, sessionId2, readings, facts) {
   const { renderCache } = parts;
   const hold2 = renderCache.holdView(sessionId2);
   if (hold2 === null) {
@@ -85581,15 +85502,15 @@ function setUpFrame(parts, sessionId2, at, facts) {
     hold2[Symbol.dispose]();
     throw e;
   }
-  return setUpDraw(parts, hold2, req, hintsError, at, facts);
+  return setUpDraw(parts, hold2, req, hintsError, readings, facts);
 }
-function setUpDraw(parts, hold2, req, hintsError, at, facts) {
-  noteFacts(facts, { at: at.toFixed(3) });
+function setUpDraw(parts, hold2, req, hintsError, readings, facts) {
   try {
     const { entry, state, view } = hold2;
+    noteFacts(facts, { at: readings.at.toFixed(3) });
     return {
       req,
-      at,
+      readings,
       facts,
       sessionId: req.hookData.session_id,
       entry,
@@ -85603,15 +85524,18 @@ function setUpDraw(parts, hold2, req, hintsError, at, facts) {
     throw e;
   }
 }
-function drawRender(parts, setup, drawing2, feeds, idleSince) {
+function drawRender(parts, setup, drawing2, feeds) {
   const {
     sessionState,
     renderCache,
     linkSigner: linkSigner2,
     renderWarnings,
-    effectSessions
+    effectSessions,
+    menuIdle
   } = parts;
-  const { req, at, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
+  const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
+  const { at } = readings;
+  const idleSince = menuIdle.since(sessionId2, readings);
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure = view.source.failure();
@@ -85757,10 +85681,12 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
   const keys2 = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i2) => [keys2[i2], m.copy]));
   const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);
-  const menus = {
-    shown: frame2.rows.some((row2) => row2.kind === "menu"),
-    timeoutS: effective.menuTimeout
-  };
+  menuIdle.drew(
+    sessionId2,
+    readings.tick,
+    frame2.rows.some((row2) => row2.kind === "menu"),
+    effective.menuTimeout
+  );
   noteFacts(facts, {
     menuIdle: idleSince === null ? "-" : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`
   });
@@ -85869,8 +85795,7 @@ function drawRender(parts, setup, drawing2, feeds, idleSince) {
     clickShown,
     eventsShown,
     delivered,
-    lanes,
-    menus
+    lanes
   };
 }
 function daemonEventAt(kind, event, at, render3) {
@@ -85889,18 +85814,29 @@ function recordRequest(parts, req) {
     sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
   }
 }
-function answerRequest(parts, req, at, feed2, facts, effects) {
+function answerRequest(parts, req, facts, effects) {
   var _stack = [];
   try {
-    const setup = __using(_stack, setUpRender(parts, req, at, facts));
+    const { time, feeds } = parts;
+    const setup = __using(_stack, setUpRender(
+      parts,
+      req,
+      { at: time.at, tick: time.tick },
+      facts
+    ));
     parts.laneActs.noted(
       req,
       laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
       effects
     );
     const sessionId2 = req.hookData.session_id;
-    const { drawn, clickShown, eventsShown, delivered, lanes, menus } = drawRender(parts, setup, ANSWERING, feed2.feeds, feed2.idleSince);
-    const elsewhere = handedOffTo(lanes, feed2.following);
+    const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
+      parts,
+      setup,
+      ANSWERING,
+      feeds.feedsOf(sessionId2, time.tick)
+    );
+    const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
     const frame2 = signingFrames(parts.linkSigner)(
       toStatusline ? statuslineOf(sessionId2, setup.state.writable, drawn, elsewhere) : drawn.body
@@ -85916,8 +85852,7 @@ function answerRequest(parts, req, at, feed2, facts, effects) {
         delivered,
         clickShown,
         eventsShown
-      ),
-      menus
+      )
     };
   } catch (_) {
     var _error = _, _hasError = true;
@@ -85946,88 +85881,232 @@ function statuslineOf(sessionId2, writable, drawn, elsewhere) {
   );
 }
 
+// src/renderer/turn-time.ts
+init_globals();
+var TurnTime = class {
+  readings = null;
+  // In the order they were held, so two due at one tick run in that order.
+  held = /* @__PURE__ */ new Set();
+  // [LAW:single-enforcer] The one way a turn's readings are set: for the
+  // turn's length, whatever it ends in.
+  during(readings, turn) {
+    this.readings = readings;
+    try {
+      return turn();
+    } finally {
+      this.readings = null;
+    }
+  }
+  // [LAW:no-silent-failure] Read outside a turn, there is no time to read:
+  // the reader runs off the renderer's turns, which is its bug.
+  current() {
+    if (this.readings === null)
+      throw new Error("the renderer's time was read outside a turn");
+    return this.readings;
+  }
+  get at() {
+    return this.current().at;
+  }
+  get tick() {
+    return this.current().tick;
+  }
+  // Holds `run` for the due turn `ms` after this one's tick; what it returns
+  // lets go of it.
+  after(ms, run3) {
+    const deferral = { until: this.tick + ms / 1e3, run: run3 };
+    this.held.add(deferral);
+    return () => void this.held.delete(deferral);
+  }
+  // The earliest tick held work is due at, or null when none is held.
+  next() {
+    let next = null;
+    for (const { until: until2 } of this.held)
+      if (next === null || until2 < next) next = until2;
+    return next;
+  }
+  // The work due by this turn's tick, earliest first. Each is taken from what
+  // is still held as it runs, so one let go by work before it never runs, and
+  // one that throws is not held again. Work held while these run waits for
+  // the next due turn, so a chain of work spreads over turns, and inputs
+  // between them are taken.
+  runDue() {
+    const { tick } = this;
+    const due = [...this.held].filter(({ until: until2 }) => until2 <= tick).sort((a, b) => a.until - b.until);
+    for (const deferral of due) {
+      if (!this.held.delete(deferral)) continue;
+      deferral.run();
+    }
+  }
+  // [LAW:one-source-of-truth] The store's face: the turn's wall instant, in
+  // epoch milliseconds, and its held work.
+  clock = {
+    now: () => this.at * 1e3,
+    after: (ms, run3) => this.after(ms, run3)
+  };
+};
+
+// src/renderer/menu-idle.ts
+init_globals();
+var MenuIdle = class {
+  sessions = /* @__PURE__ */ new Map();
+  // What the session's draw at `tick` showed: whether a menu row, and the
+  // timeout its settings resolve to. A menu shown where the last draw showed
+  // none begins its idle period here, so one nobody clicked open (a group
+  // open by default, a reload) is not closed by a click from long ago.
+  drew(sessionId2, tick, shown, timeoutS) {
+    const idle = this.sessions.get(sessionId2);
+    if (idle === void 0) {
+      this.sessions.set(sessionId2, { since: tick, timeoutS, shown });
+      return;
+    }
+    if (shown && !idle.shown) idle.since = tick;
+    idle.shown = shown;
+    idle.timeoutS = timeoutS;
+  }
+  // A click of the session landed: a new idle period begins. A session that
+  // has not drawn has no menu to count down.
+  clicked(sessionId2, tick) {
+    const idle = this.sessions.get(sessionId2);
+    if (idle !== void 0) idle.since = tick;
+  }
+  // When the idle period of the menus the session's last draw showed began,
+  // on the wall the draw is made on, or null while it showed none: a menu
+  // that appears now has only begun.
+  // [LAW:one-source-of-truth] Derived from the period's tick, so the flash
+  // the draw shows ends where the close lands however the wall has stepped.
+  since(sessionId2, { at, tick }) {
+    const idle = this.sessions.get(sessionId2);
+    return idle?.shown === true ? at - (tick - idle.since) : null;
+  }
+  retire(sessionId2) {
+    this.sessions.delete(sessionId2);
+  }
+  // The earliest tick a session's menus close at, or null when none shows a
+  // menu.
+  next() {
+    let next = null;
+    for (const idle of this.sessions.values()) {
+      if (!idle.shown) continue;
+      const at = closesAt(idle.since, idle.timeoutS);
+      if (next === null || at < next) next = at;
+    }
+    return next;
+  }
+  // The sessions whose idle period has run out by `tick`, each taken as
+  // closed: what its last draw showed no longer stands, and a new period
+  // begins, so a close that fails is tried again a timeout later, never at
+  // once, and a session that stops drawing is never closed again.
+  due(tick) {
+    const due = [];
+    for (const [session, idle] of this.sessions) {
+      if (!idle.shown || closesAt(idle.since, idle.timeoutS) > tick) continue;
+      due.push({
+        session,
+        idle: { idleS: tick - idle.since, timeoutS: idle.timeoutS }
+      });
+      idle.since = tick;
+      idle.shown = false;
+    }
+    return due;
+  }
+  // The sessions whose period is kept, and those with a menu counting down.
+  stats() {
+    let armed = 0;
+    for (const idle of this.sessions.values()) if (idle.shown) armed++;
+    return { sessions: this.sessions.size, armed };
+  }
+};
+
 // src/renderer/feeds.ts
 init_globals();
+
+// src/renderer-interface/interface.ts
+init_globals();
+function rendererOf(arms) {
+  function answer2(input) {
+    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
+  }
+  return { answer: answer2 };
+}
+function timed(renderer, monotonic) {
+  const time = async (answer2) => {
+    const from = monotonic();
+    const output = await answer2();
+    return { ...output, turnMs: Math.round(monotonic() - from) };
+  };
+  return rendererOf({
+    event: (input) => time(() => renderer.answer(input)),
+    adapter: (input) => time(() => renderer.answer(input))
+  });
+}
+function followingOf(viewers) {
+  const following = /* @__PURE__ */ new Set();
+  for (const [lane, seen2] of Object.entries(viewers?.lanes ?? {}))
+    if (seen2.drawing) following.add(lane);
+  return following;
+}
+
+// src/renderer/feeds.ts
 var FEED_PERIODS = {
   moving: 1e3 / MOVING_FPS,
   still: 1e3
 };
+var WAKE_CAUSES = [
+  "data",
+  "state",
+  "reload",
+  "visibility",
+  "viewers"
+];
 var RATE_WINDOW_S = 1;
+var TIMER_RESOLUTION_S = 2e-3;
 var SUMMARY_EVERY_S = 60;
-var WAKE_CAUSES = ["data", "state", "reload", "visibility"];
 var paceOf = (period) => Math.round(1e3 / period);
-function noteSent(rate, at) {
-  const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S);
-  rate.splice(0, rate.length, ...kept, at);
-}
-var sameViewers = (a, b) => a.shown === b.shown && a.joined === b.joined && LANE_NAMES.every(
-  (lane) => a.lanes[lane].subscribers === b.lanes[lane].subscribers && a.lanes[lane].drawing === b.lanes[lane].drawing
-);
 var Feeds = class {
   constructor(deps) {
     this.deps = deps;
   }
   deps;
   feeds = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] The host's viewers, whole: a feed opens for a
-  // session newly watched, its first frame due at once, in the turn after
-  // this one; one no longer watched closes; one whose viewers moved draws
-  // its next frame as soon as its spacing allows, since who follows it is
-  // drawn into it. Viewers equal to a feed's own move nothing.
-  view(viewers, at) {
+  drawnTotal = 0;
+  // [LAW:one-source-of-truth] Who watches each session now, whole: a feed
+  // opens for a session named and closes for one no longer named, and a feed
+  // whose viewers moved is brought forward, since who follows it is drawn
+  // into its frame. A feed's first frame falls due at once, in a later turn
+  // than this one.
+  view(viewers, tick) {
     for (const feed2 of [...this.feeds.values()])
-      if (!Object.hasOwn(viewers, feed2.sessionId)) this.end(feed2, at);
-    for (const [sessionId2, next] of Object.entries(viewers)) {
+      if (!Object.hasOwn(viewers, feed2.sessionId)) this.close(feed2, tick);
+    for (const [sessionId2, seen2] of Object.entries(viewers)) {
       const feed2 = this.feeds.get(sessionId2);
       if (feed2 === void 0) {
-        this.open(sessionId2, next, at);
+        this.open(sessionId2, seen2, tick);
         continue;
       }
-      if (sameViewers(feed2.viewers, next)) continue;
-      const shownMoved = feed2.viewers.shown !== next.shown;
-      feed2.viewers = next;
-      this.syncRates(feed2);
-      if (shownMoved) feed2.woke.visibility++;
-      this.hasten(feed2, at);
+      const before = feed2.viewers;
+      feed2.viewers = seen2;
+      this.keepRates(feed2);
+      if (before.shown !== seen2.shown) this.wake(sessionId2, "visibility", tick);
+      else if (JSON.stringify(before) !== JSON.stringify(seen2))
+        this.wake(sessionId2, "viewers", tick);
     }
   }
   // Something the session's bar shows changed, for `cause`: its next frame,
-  // if a feed draws it, is drawn as soon as the feed's spacing allows.
-  owe(sessionId2, cause, at) {
+  // if anyone watches it, falls due as soon as the feed's spacing allows.
+  wake(sessionId2, cause, tick) {
     const feed2 = this.feeds.get(sessionId2);
     if (feed2 === void 0) return;
     feed2.woke[cause]++;
-    if (!this.hasten(feed2, at)) feed2.coalesced++;
+    const soonest = Math.max(tick, feed2.last + this.spacingOf(feed2));
+    if (feed2.next !== null && feed2.next <= soonest) {
+      feed2.coalesced++;
+      return;
+    }
+    feed2.next = soonest;
+    feed2.change = null;
   }
-  // [LAW:one-source-of-truth] The lanes whose subscribers follow the session
-  // and draw it now, as the host's viewers say.
-  following(sessionId2) {
-    const viewers = this.feeds.get(sessionId2)?.viewers;
-    return new Set(
-      viewers === void 0 ? [] : LANE_NAMES.filter((lane) => viewers.lanes[lane].drawing)
-    );
-  }
-  // [LAW:nothing-unseen] What each lane of the session's frames is doing at
-  // `at`: its subscribers, the frames that changed what it shows in the last
-  // second, and whether the session's pane is on a screen.
-  // [LAW:one-source-of-truth] Counted against the instant of the draw asking,
-  // so a frame's count is a function of the frames before it and its own
-  // instant, and changes nothing the feed wakes on.
-  feedsOf(sessionId2, at) {
-    const feed2 = this.feeds.get(sessionId2);
-    if (feed2 === void 0) return UNFOLLOWED_FEEDS;
-    const since = at - RATE_WINDOW_S;
-    const { shown } = feed2.viewers;
-    return perLane((lane) => {
-      const rate = feed2.rates.get(lane);
-      if (rate === void 0) return UNFOLLOWED;
-      let fps = 0;
-      for (const sent of rate) if (sent > since) fps++;
-      return { subscribers: feed2.viewers.lanes[lane].subscribers, fps, shown };
-    });
-  }
-  // The earliest instant a feed's next frame falls due, or null while none
-  // is due.
+  // The earliest tick a feed's next frame falls due, or null when none waits
+  // on a tick.
   next() {
     let next = null;
     for (const feed2 of this.feeds.values())
@@ -86035,112 +86114,60 @@ var Feeds = class {
         next = feed2.next;
     return next;
   }
-  // Draws every feed due by `at`, in the order the feeds opened, and returns
-  // each frame drawn.
-  due(at) {
-    const drawn = [];
+  // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each
+  // drawn and its next set, in the order the feeds opened.
+  drawDue(readings) {
+    const { tick } = readings;
+    const frames = [];
     for (const feed2 of this.feeds.values()) {
-      if (feed2.next === null || feed2.next > at) continue;
-      const frame2 = this.draw(feed2, at);
-      if (frame2 !== null) drawn.push({ sessionId: feed2.sessionId, frame: frame2 });
+      if (feed2.next === null || feed2.next > tick) continue;
+      recordMs(feed2.lateness, (tick - feed2.next) * 1e3);
+      const frame2 = this.drawOne(feed2, readings);
+      if (frame2 !== null) frames.push(frame2);
+      if (tick - feed2.summarizedAt >= SUMMARY_EVERY_S)
+        this.summarize(feed2, "running", tick);
     }
-    return drawn;
+    return frames;
   }
-  // [LAW:no-ambient-temporal-coupling] The wall stepped back `seconds`
-  // (src/renderer/turn-time.ts): every instant a feed holds moves back with
-  // it, so its next frame keeps its spacing and nothing carries from an
-  // instant read before the step.
-  steppedBack(seconds) {
-    const back2 = (at) => at - seconds;
-    for (const feed2 of this.feeds.values()) {
-      feed2.next = feed2.next === null ? null : back2(feed2.next);
-      feed2.last = feed2.last === null ? null : back2(feed2.last);
-      for (const rate of feed2.rates.values())
-        rate.splice(0, rate.length, ...rate.map(back2));
-      feed2.since = back2(feed2.since);
-      feed2.summarizedAt = back2(feed2.summarizedAt);
-    }
+  // The lanes that follow the session and draw it now.
+  following(sessionId2) {
+    return followingOf(this.feeds.get(sessionId2)?.viewers);
   }
-  // The renderer's close: every feed ends, its pin released.
-  close(at) {
-    for (const feed2 of [...this.feeds.values()]) this.end(feed2, at);
+  // [LAW:nothing-unseen] What each lane of the session's frames is doing at
+  // `tick`: its subscribers, the frames that went out to it in the last
+  // second, and whether the session's pane is on a screen. Like every value
+  // relative to now it is the draw's, and it changes nothing a feed wakes on.
+  feedsOf(sessionId2, tick) {
+    const feed2 = this.feeds.get(sessionId2);
+    if (feed2 === void 0) return perLane(() => UNFOLLOWED);
+    const since = tick - RATE_WINDOW_S;
+    const { shown, lanes } = feed2.viewers;
+    return perLane((lane) => {
+      const rate = feed2.rates.get(lane);
+      if (rate === void 0) return UNFOLLOWED;
+      let fps = 0;
+      for (const sent of rate) if (sent > since && sent <= tick) fps++;
+      return { subscribers: lanes[lane]?.subscribers ?? 0, fps, shown };
+    });
   }
-  draw(feed2, at) {
-    const frame2 = this.deps.draw(
-      feed2.sessionId,
-      at,
-      paceOf(this.spacingOf(feed2)),
-      this.following(feed2.sessionId),
-      this.feedsOf(feed2.sessionId, at)
-    );
-    if (frame2 === null) {
-      feed2.noView++;
-      feed2.next = null;
-      return null;
-    }
-    feed2.last = at;
-    feed2.drawn++;
-    feed2.evaluated += frame2.evaluated;
-    feed2.cellBreaks += frame2.cellBreaks;
-    if (frame2.failure !== null) feed2.failed++;
-    const before = feed2.answers;
-    const moved = before === null || before.resp !== frame2.answers.resp || before.statusline !== frame2.answers.statusline;
-    if (frame2.failure !== null && moved)
-      this.deps.log(frame2.failure.level, frame2.failure.line);
-    for (const [lane, rate] of feed2.rates)
-      if (before === null || answerOf(before, lane) !== answerOf(frame2.answers, lane))
-        noteSent(rate, at);
-    feed2.answers = frame2.answers;
-    this.schedule(feed2, frame2.bar, at);
-    if (at - feed2.summarizedAt >= SUMMARY_EVERY_S)
-      this.summarize(feed2, "running", at);
-    return frame2;
+  drawn() {
+    return this.drawnTotal;
   }
-  // [LAW:no-ambient-temporal-coupling] The next frame is due when the bar
-  // next changes, measured from the instant this one was drawn for — no
-  // sooner than the moving period and no later than the still period — so a
-  // 1 s beat is drawn once a second, for the moment it turns, and a
-  // continuous effect at the moving rate.
-  // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's next
-  // change is Infinity, and an unseen bar's period is the still period.
-  schedule(feed2, bar, at) {
-    const { moving, still } = this.deps.periods;
-    const until2 = (bar.nextChange - at) * 1e3;
-    const shownPeriod = Math.min(Math.max(until2, moving), still);
-    const { shown } = feed2.viewers;
-    if (shownPeriod < still && shown) feed2.moving++;
-    if (shownPeriod < still && !shown) feed2.unseen++;
-    const period = shown ? shownPeriod : still;
-    feed2.next = at + period / 1e3;
+  // The renderer's close: every feed ends, and says so.
+  closeAll(tick) {
+    for (const feed2 of [...this.feeds.values()]) this.close(feed2, tick);
   }
-  // [LAW:single-enforcer] The one bound on how close a feed's frames are: the
-  // moving period while its bar is on a screen, the still period while it is
-  // not. No cause of a wake sets the rate, so an unseen feed draws at most
-  // once a still period however often it is woken.
-  spacingOf(feed2) {
-    return feed2.viewers.shown ? this.deps.periods.moving : this.deps.periods.still;
-  }
-  // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
-  // to the earliest its spacing allows after its last frame, never later
-  // than it already falls due. Answers whether it moved anything: a wake that
-  // did not was coalesced into a frame already due.
-  hasten(feed2, at) {
-    const spaced = feed2.last === null ? at : Math.max(at, feed2.last + this.spacingOf(feed2) / 1e3);
-    if (feed2.next !== null && feed2.next <= spaced) return false;
-    feed2.next = spaced;
-    return true;
-  }
-  open(sessionId2, viewers, at) {
+  open(sessionId2, viewers, tick) {
     const feed2 = {
       sessionId: sessionId2,
       viewers,
-      release: this.deps.pin(sessionId2),
-      next: at,
-      last: null,
+      next: tick,
+      change: null,
+      last: -Infinity,
       answers: null,
       rates: /* @__PURE__ */ new Map(),
-      since: at,
-      summarizedAt: at,
+      opened: tick,
+      summarizedAt: tick,
       drawn: 0,
       noView: 0,
       moving: 0,
@@ -86148,181 +86175,121 @@ var Feeds = class {
       failed: 0,
       evaluated: 0,
       cellBreaks: 0,
-      woke: { data: 0, state: 0, reload: 0, visibility: 0 },
-      coalesced: 0
+      woke: { data: 0, state: 0, reload: 0, visibility: 0, viewers: 0 },
+      coalesced: 0,
+      lateness: durationHistogram(),
+      unpin: this.deps.pin(sessionId2)
     };
-    this.syncRates(feed2);
     this.feeds.set(sessionId2, feed2);
+    this.keepRates(feed2);
+    this.deps.log(
+      "info",
+      `feed sid=${JSON.stringify(sessionId2)} opened lanes=${lanesOf(viewers)}`
+    );
   }
-  end(feed2, at) {
+  close(feed2, tick) {
     this.feeds.delete(feed2.sessionId);
-    feed2.release();
-    this.summarize(feed2, "closed", at);
+    feed2.unpin();
+    this.summarize(feed2, "closed", tick);
   }
   // A lane's rate is kept from its first subscriber joining to its last
   // leaving.
-  syncRates(feed2) {
-    for (const lane of LANE_NAMES) {
-      const followed = feed2.viewers.lanes[lane].subscribers > 0;
-      if (followed && !feed2.rates.has(lane)) feed2.rates.set(lane, []);
-      if (!followed) feed2.rates.delete(lane);
+  keepRates(feed2) {
+    const { lanes } = feed2.viewers;
+    for (const lane of feed2.rates.keys())
+      if (lanes[lane] === void 0) feed2.rates.delete(lane);
+    for (const lane of Object.keys(lanes))
+      if (!feed2.rates.has(lane)) feed2.rates.set(lane, []);
+  }
+  // [LAW:single-enforcer] The one bound on how close a feed's frames are, in
+  // seconds: the moving period while its bar is on a screen, the still period
+  // while it is not. No cause of a wake sets the rate, so an unseen feed draws
+  // at most once a still period however often it is woken.
+  spacingOf(feed2) {
+    const { moving, still } = this.deps.periods;
+    return (feed2.viewers.shown ? moving : still) / 1e3;
+  }
+  drawOne(feed2, readings) {
+    const { at, tick } = readings;
+    const drawAt = feed2.change !== null && feed2.change >= at && feed2.change - at <= TIMER_RESOLUTION_S ? feed2.change : at;
+    const drawn = this.deps.draw(
+      feed2.sessionId,
+      paceOf(this.spacingOf(feed2) * 1e3),
+      { at: drawAt, tick },
+      this.following(feed2.sessionId),
+      this.feedsOf(feed2.sessionId, tick)
+    );
+    if (drawn === null) {
+      feed2.noView++;
+      feed2.next = null;
+      feed2.change = null;
+      return null;
     }
+    feed2.last = tick;
+    feed2.drawn++;
+    this.drawnTotal++;
+    feed2.evaluated += drawn.evaluated;
+    feed2.cellBreaks += drawn.cellBreaks;
+    const before = feed2.answers;
+    const changed = (lane) => before === null || (lane === null ? before.resp !== drawn.answers.resp || before.statusline !== drawn.answers.statusline : answerOf(before, lane) !== answerOf(drawn.answers, lane));
+    if (drawn.failure !== null) {
+      feed2.failed++;
+      if (changed(null)) this.deps.log(drawn.failure.level, drawn.failure.line);
+    }
+    for (const [lane, rate] of feed2.rates)
+      if (changed(lane)) noteSent(rate, tick);
+    feed2.answers = drawn.answers;
+    this.schedule(feed2, drawn.bar, drawAt, tick);
+    return {
+      session: feed2.sessionId,
+      bar: drawn.bar,
+      answers: drawn.answers
+    };
+  }
+  // [LAW:no-ambient-temporal-coupling] The next frame falls due when the bar
+  // next changes, measured from the instant this one was drawn for — no
+  // sooner than the feed's spacing allows and no later than the still period
+  // — so a 1 s beat is drawn once a second, for the moment it turns, and a
+  // continuous effect at the moving rate. The span is a distance on the wall,
+  // and the next frame's tick is this one's plus it, so a wall stepped
+  // between two frames moves no schedule.
+  // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's next
+  // change is Infinity, and an unseen bar's spacing is the still period.
+  schedule(feed2, bar, drawAt, tick) {
+    const { moving, still } = this.deps.periods;
+    const until2 = (bar.nextChange - drawAt) * 1e3;
+    const shownPeriod = Math.min(Math.max(until2, moving), still);
+    const { shown } = feed2.viewers;
+    if (shownPeriod < still && shown) feed2.moving++;
+    if (shownPeriod < still && !shown) feed2.unseen++;
+    const period = shown ? shownPeriod : still;
+    feed2.next = tick + period / 1e3;
+    feed2.change = Number.isFinite(bar.nextChange) ? bar.nextChange : null;
   }
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they
   // write no render event each: a feed says what it drew in a summary, when
-  // it closes and once a minute while it runs.
-  summarize(feed2, state, at) {
-    const seconds = at - feed2.since;
-    const achieved = seconds <= 0 ? "-" : `${(feed2.drawn / seconds).toFixed(1)}fps`;
-    const lanes = LANE_NAMES.filter((lane) => feed2.viewers.lanes[lane].subscribers > 0).map((lane) => `${lane}:${feed2.viewers.lanes[lane].subscribers}`).join(",") || "-";
+  // it closes and once a minute while it runs. Who it was sent to is the
+  // host's line.
+  summarize(feed2, state, tick) {
+    const seconds = tick - feed2.opened;
+    const achieved = seconds === 0 ? "-" : `${(feed2.drawn / seconds).toFixed(1)}fps`;
+    const histogram = state === "running" ? "" : ` latenessHistogram=${encodedOf(feed2.lateness)}`;
     this.deps.log(
       "info",
-      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} lanes=${lanes} for=${Math.round(seconds)}s drawn=${feed2.drawn} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} ceiling=${paceOf(this.spacingOf(feed2))}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced}`
+      `feed sid=${JSON.stringify(feed2.sessionId)} ${state} lanes=${lanesOf(feed2.viewers)} for=${Math.round(seconds)}s drawn=${feed2.drawn} noView=${feed2.noView} moving=${feed2.moving} unseen=${feed2.unseen} failed=${feed2.failed} ceiling=${paceOf(this.spacingOf(feed2) * 1e3)}fps achieved=${achieved} evaluated=${feed2.evaluated} cellBreaks=${feed2.cellBreaks} woke=${WAKE_CAUSES.map((cause) => `${cause}:${feed2.woke[cause]}`).join(",")} coalesced=${feed2.coalesced} lateness=${distributionOf(feed2.lateness)}${histogram}`
     );
-    feed2.summarizedAt = at;
+    feed2.summarizedAt = tick;
   }
 };
-
-// src/renderer/menu-idle.ts
-init_globals();
-var MenuIdle = class {
-  sessions = /* @__PURE__ */ new Map();
-  // When the idle period of the menus the session's last draw drew began,
-  // or null while it drew none: a menu that appears now has only begun.
-  idleSince(sessionId2) {
-    const idle = this.sessions.get(sessionId2);
-    return idle?.shown === true ? idle.since : null;
-  }
-  // What a draw at `at` drew. A menu drawn where the last draw drew none
-  // begins its idle period here, so one nobody clicked open (a group open by
-  // default, a reload) is not closed by a click from long ago.
-  drew(sessionId2, at, menus) {
-    const idle = this.record(sessionId2, at);
-    if (menus.shown && !idle.shown) idle.since = at;
-    idle.shown = menus.shown;
-    idle.timeoutS = menus.timeoutS;
-  }
-  // A click of the session landed at `at`: a new idle period begins. A
-  // session never drawn has no period to begin again: its records come only
-  // from draws, which its retirement ends, and its first draw begins one.
-  clicked(sessionId2, at) {
-    const idle = this.sessions.get(sessionId2);
-    if (idle !== void 0) idle.since = at;
-  }
-  // The earliest close due, or null while no session draws a menu.
-  next() {
-    let next = null;
-    for (const { since, shown, timeoutS } of this.sessions.values()) {
-      const due = closesAt(since, timeoutS);
-      if (shown && (next === null || due < next)) next = due;
-    }
-    return next;
-  }
-  // The sessions whose close is due by `at`, each with how long it was idle.
-  due(at) {
-    return [...this.sessions].flatMap(
-      ([sessionId2, idle]) => idle.shown && closesAt(idle.since, idle.timeoutS) <= at ? [{ sessionId: sessionId2, idleS: at - idle.since, timeoutS: idle.timeoutS }] : []
-    );
-  }
-  // The session's close ran at `at`, or threw: what its last draw drew no
-  // longer stands, so the next close waits for a draw that draws a menu
-  // again and falls a timeout after it, never at once.
-  shut(sessionId2, at) {
-    const idle = this.sessions.get(sessionId2);
-    idle.since = at;
-    idle.shown = false;
-  }
-  // The wall stepped back `seconds` (src/renderer/turn-time.ts): each idle
-  // period began that much earlier on the wall now read.
-  steppedBack(seconds) {
-    for (const idle of this.sessions.values())
-      idle.since = idle.since - seconds;
-  }
-  retire(sessionId2) {
-    this.sessions.delete(sessionId2);
-  }
-  stats() {
-    let armed = 0;
-    for (const idle of this.sessions.values()) if (idle.shown) armed++;
-    return { sessions: this.sessions.size, armed };
-  }
-  record(sessionId2, at) {
-    let idle = this.sessions.get(sessionId2);
-    if (idle === void 0) {
-      idle = { since: at, shown: false, timeoutS: 0 };
-      this.sessions.set(sessionId2, idle);
-    }
-    return idle;
-  }
-};
-
-// src/renderer/turn-time.ts
-init_globals();
-var TurnTime = class {
-  current = null;
-  // The instant of the last turn begun: what a step back is measured from.
-  last = null;
-  held = /* @__PURE__ */ new Set();
-  // [LAW:no-ambient-temporal-coupling] Set for exactly one input's turn, so a
-  // read outside any turn fails loudly rather than reading a stale instant.
-  // Answers how far, in seconds, the wall stepped back since the last turn,
-  // or 0: every instant held in the renderer was read on the wall before the
-  // step, and moves back with it, its deferrals here among them. A wall that
-  // went forward is time passing, as a machine asleep sees it, and moves
-  // nothing.
-  begin(at) {
-    const stepped2 = this.last === null ? 0 : Math.max(0, this.last - at);
-    this.current = at;
-    this.last = at;
-    for (const deferral of this.held)
-      deferral.until = deferral.until - stepped2;
-    return stepped2;
-  }
-  end() {
-    this.current = null;
-  }
-  at() {
-    if (this.current === null)
-      throw new Error("the renderer read the time outside any turn");
-    return this.current;
-  }
-  // The turn's instant in epoch milliseconds, as a wall reading is.
-  now() {
-    return this.at() * 1e3;
-  }
-  // Holds `run` until `ms` after the turn's instant; what it returns lets go
-  // of it unrun.
-  after(ms, run3) {
-    const deferral = {
-      until: this.at() + ms / 1e3,
-      run: run3
-    };
-    this.held.add(deferral);
-    return () => void this.held.delete(deferral);
-  }
-  // The earliest instant a held deferral falls due, or null while none is
-  // held.
-  next() {
-    let next = null;
-    for (const { until: until2 } of this.held)
-      if (next === null || until2 < next) next = until2;
-    return next;
-  }
-  // [LAW:no-ambient-temporal-coupling] Every deferral due by `at`, earliest
-  // first, each taken from what is still held as it runs: one an earlier one
-  // let go of never runs, and one that throws fails the turn and leaves those
-  // behind it held, due again.
-  runDue(at) {
-    for (; ; ) {
-      let first2 = null;
-      for (const deferral of this.held)
-        if (deferral.until <= at && (first2 === null || deferral.until < first2.until))
-          first2 = deferral;
-      if (first2 === null) return;
-      this.held.delete(first2);
-      first2.run();
-    }
-  }
+function noteSent(rate, tick) {
+  const kept = rate.filter((sent) => sent > tick - RATE_WINDOW_S);
+  rate.splice(0, rate.length, ...kept, tick);
+}
+var lanesOf = (viewers) => Object.entries(viewers.lanes).map(([lane, seen2]) => `${lane}:${seen2.subscribers}`).join(",") || "-";
+var distributionOf = (h) => {
+  const d = durationsOf(h);
+  const ms = (v) => v.toFixed(2);
+  return d.count === 0 ? "-" : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
 };
 
 // src/renderer/click.ts
@@ -90208,6 +90175,9 @@ var RenderCache = class {
   // that asked. Keyed by the entry itself, so an entry evicted and opened
   // again is a new one, whose own first load read the disk after the span.
   due = /* @__PURE__ */ new Map();
+  // What cancels the one turn armed to reload the next due entry, while one
+  // is.
+  walk = null;
   // Every state the map serves or served, until reclaimed.
   holds = /* @__PURE__ */ new Map();
   // The last storage hold id minted.
@@ -90513,6 +90483,8 @@ var RenderCache = class {
   close() {
     if (this.closed) return;
     this.lifetime.abort(new Error("the render cache closed"));
+    this.walk?.();
+    this.walk = null;
     this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
@@ -90706,31 +90678,36 @@ var RenderCache = class {
   // any entry's files may have gone unheard. Each entry's load names the
   // cause it ran for; whatever started the batch logs it at its source.
   //
-  // [LAW:no-ambient-temporal-coupling] One entry per turn. A reload that
-  // keeps its state still resolves, validates and keys the whole chain, so a
-  // walk over every entry in one turn holds the renderer for seconds, and
-  // every client waiting behind it hangs up. The renderer's wake is due at
-  // once while an entry is due (`walking`), and each due turn takes one
-  // (`walkOne`), so a request queued behind the walk is answered between two
-  // of its entries. [LAW:one-source-of-truth] A later batch re-walks every
-  // entry for its own cause: one re-read of the disk as it is now answers
-  // both.
+  // [LAW:no-ambient-temporal-coupling] One entry per turn of the loop. A
+  // reload that keeps its state still resolves, validates and keys the whole
+  // chain, so a walk over every entry in one turn holds the loop for seconds,
+  // and every client waiting behind it hangs up. [LAW:one-source-of-truth] A
+  // later batch re-walks every entry for its own cause: one re-read of the
+  // disk as it is now answers both.
   reloadEvery(cause) {
     for (const entry of this.entries.values()) this.due.set(entry, cause);
+    this.armWalk();
   }
-  // Whether an entry waits to be walked.
-  walking() {
-    return this.due.size > 0;
+  // [LAW:single-enforcer] The one place a walk turn is armed: none while one
+  // is armed, so a batch started from inside a turn leaves one walker, and
+  // one whenever an entry is due.
+  armWalk() {
+    if (this.walk !== null || this.due.size === 0) return;
+    this.walk = this.deps.clock.after(0, () => this.walkOne());
   }
   // The turn takes the most recently used due entry, read off the map as it
   // is now, so a bar someone draws during the walk is re-read on the next
   // turn, not where it stood when the batch began. Nothing is due when every
-  // entry left since the last turn: dropped, or re-read by its own reload.
-  // A reload that throws is logged and ends only its own entry, so one
-  // broken entry never stalls the walk over the rest. [LAW:no-silent-failure]
-  // exception: the throw reaches the log and not the bar's ⚠, as on the watch
-  // path; one fix at the reload itself answers both.
+  // entry left since the turn was armed: dropped, or re-read by its own
+  // reload.
+  // The turn runs outside any watcher's callback, so it is its own error
+  // boundary, as the watcher registry is for a reload a watch drives: a
+  // reload that throws is logged and ends only its own turn, where uncaught
+  // it would end the daemon. [LAW:no-silent-failure] exception: the throw
+  // reaches the log and not the bar's ⚠, as on the watch path; one fix at the
+  // reload itself answers both.
   walkOne() {
+    this.walk = null;
     let next = null;
     for (const entry2 of this.entries.values()) {
       const cause2 = this.due.get(entry2);
@@ -90745,6 +90722,8 @@ var RenderCache = class {
         "error",
         `every-entry reload threw projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} configFile=${valueOf(entry.configFile ?? "-")} cause=${valueOf(causeField(cause))}: ${inspect(e)}`
       );
+    } finally {
+      this.armWalk();
     }
   }
   // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
@@ -90991,27 +90970,6 @@ function serializeSegmentCells(cells, colorCompatibility) {
   return out;
 }
 
-// src/renderer-interface/interface.ts
-init_globals();
-function rendererOf(arms) {
-  function answer2(input) {
-    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
-  }
-  return { answer: answer2 };
-}
-function timed(renderer, monotonic) {
-  const time = async (answer2) => {
-    await null;
-    const from = monotonic();
-    const output = await answer2();
-    return { ...output, turnMs: Math.round(monotonic() - from) };
-  };
-  return rendererOf({
-    event: (input) => time(() => renderer.answer(input)),
-    adapter: (input) => time(() => renderer.answer(input))
-  });
-}
-
 // src/renderer/config-writes.ts
 init_globals();
 var ConfigWrites = class {
@@ -91141,44 +91099,14 @@ var ConfigWrites = class {
 };
 
 // src/renderer/main.ts
-function rendererClocks(parts, turnTime = new TurnTime()) {
-  const { renderCache, sessionState } = parts;
-  const menuIdle = new MenuIdle();
-  const feeds = new Feeds({
-    draw: (sessionId2, at, fps, following, laneFeeds) => {
-      const drawn = renderFrame(parts, sessionId2, at, fps, {
-        following,
-        feeds: laneFeeds,
-        idleSince: menuIdle.idleSince(sessionId2)
-      });
-      if (drawn === null) return null;
-      if (drawn.menus !== null) menuIdle.drew(sessionId2, at, drawn.menus);
-      return drawn.frame;
-    },
-    pin: (sessionId2) => {
-      const unhold = renderCache.pin(sessionId2);
-      const unwatch = reaction(
-        () => sessionState.revision(sessionId2),
-        () => feeds.owe(sessionId2, "state", turnTime.at())
-      );
-      return () => {
-        unwatch();
-        renderCache.stopDrawing(sessionId2, "feed");
-        unhold();
-      };
-    },
-    periods: FEED_PERIODS,
-    log: parts.log
-  });
-  return { turnTime, feeds, menuIdle };
-}
-function mainRenderer(parts, { turnTime, feeds, menuIdle }, pushed) {
+function mainRenderer(parts, pushed) {
+  const { time, feeds, menuIdle } = parts;
   const deliveries = /* @__PURE__ */ new Map();
   let subscriptions = { sources: {}, lanes: {}, wake: null };
-  const turn = (event, at, record2, effects, frames) => {
+  const turn = (event, record2, effects, frames) => {
     switch (event.kind) {
       case "start":
-        feeds.view(event.viewers, at);
+        feeds.view(event.viewers, time.tick);
         for (const { context, worldState } of event.sessions)
           configureSession(parts, context, worldState, record2);
         return;
@@ -91186,26 +91114,18 @@ function mainRenderer(parts, { turnTime, feeds, menuIdle }, pushed) {
         configureSession(parts, event.context, event.worldState, record2);
         return;
       case "request": {
-        const session = event.context.hookData.session_id;
-        const { frame: frame2, delivered, menus } = answerRequest(
+        const { frame: frame2, delivered } = answerRequest(
           parts,
           event.context,
-          at,
-          {
-            following: feeds.following(session),
-            feeds: feeds.feedsOf(session, at),
-            idleSince: menuIdle.idleSince(session)
-          },
           record2,
           effects
         );
-        menuIdle.drew(session, at, menus);
         const id2 = parts.mint();
         deliveries.set(id2, delivered);
         effects.push({
           kind: "present",
           id: id2,
-          session,
+          session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
           frame: frame2
@@ -91236,115 +91156,103 @@ function mainRenderer(parts, { turnTime, feeds, menuIdle }, pushed) {
         clickTurn(parts, event, effects);
         return;
       case "viewers":
-        feeds.view(event.viewers, at);
+        feeds.view(event.viewers, time.tick);
         return;
       case "due":
-        due(at, effects, frames);
+        time.runDue();
+        closeIdleMenus2(parts, effects);
+        frames.push(...feeds.drawDue({ at: time.at, tick: time.tick }));
         return;
     }
   };
-  const due = (at, effects, frames) => {
-    if (parts.renderCache.walking()) parts.renderCache.walkOne();
-    turnTime.runDue(at);
-    for (const idle of menuIdle.due(at)) {
-      try {
-        var _stack = [];
-        try {
-          const hold2 = __using(_stack, parts.renderCache.holdView(idle.sessionId));
-          parts.verbs.closeIdle(
-            idle.sessionId,
-            hold2?.view.facts() ?? null,
-            idle,
-            effects
-          );
-        } catch (_) {
-          var _error = _, _hasError = true;
-        } finally {
-          __callDispose(_stack, _error, _hasError);
-        }
-      } catch (thrown2) {
-        parts.log(
-          "error",
-          `menu-idle: close threw (session=${idle.sessionId}): ${failureOf(thrown2).message}`
-        );
-      } finally {
-        menuIdle.shut(idle.sessionId, at);
-      }
-    }
-    for (const { sessionId: sessionId2, frame: frame2 } of feeds.due(at))
-      frames.push({
-        session: sessionId2,
-        bar: frame2.bar,
-        answers: frame2.answers
-      });
-  };
-  const subscribed = (at) => {
+  const subscribed = () => {
     const views = parts.renderCache.subscriptions().sources;
     const merged = new Map(
       Object.entries(views)
     );
     for (const [session, run3] of parts.doctorRuns.subscriptions())
       merged.set(session, [...merged.get(session) ?? [], run3]);
-    const sources = Object.fromEntries(merged);
     const lanes = {};
     for (const session of Object.keys(views)) {
       const switches = viewLanes(parts, session);
       if (switches !== null) lanes[session] = switches;
     }
-    return { sources, lanes, wake: wakeAt(at) };
+    return {
+      sources: Object.fromEntries(merged),
+      lanes,
+      wake: earliest([time, menuIdle, feeds])
+    };
   };
-  const wakeAt = (at) => [
-    parts.renderCache.walking() ? at : null,
-    turnTime.next(),
-    menuIdle.next(),
-    feeds.next()
-  ].reduce(
-    (earliest, next) => next !== null && (earliest === null || next < earliest) ? next : earliest,
-    null
-  );
-  const atTurn = (at, run3) => {
-    const stepped2 = turnTime.begin(at);
-    if (stepped2 > 0) {
-      menuIdle.steppedBack(stepped2);
-      feeds.steppedBack(stepped2);
-    }
+  const ending = (run3) => {
     try {
-      return run3();
-    } finally {
-      turnTime.end();
+      let value;
+      try {
+        value = run3();
+      } finally {
+        subscriptions = subscribed();
+      }
+      return { kind: "answered", value };
+    } catch (thrown2) {
+      return { kind: "threw", failure: failureOf(thrown2) };
     }
   };
   return rendererOf({
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
-    adapter: async (input) => atTurn(input.at, () => {
-      let replied2;
-      try {
-        replied2 = { kind: "replied", reply: pushed(input.push, input.at) };
-      } catch (thrown2) {
-        replied2 = { kind: "threw", failure: failureOf(thrown2) };
-      }
-      subscriptions = subscribed(input.at);
-      return { ...replied2, subscriptions };
+    adapter: async (input) => time.during(input, () => {
+      const ended = ending(() => pushed(input.push));
+      return {
+        ...ended.kind === "answered" ? { kind: "replied", reply: ended.value } : ended,
+        subscriptions
+      };
     }),
-    event: async (input) => atTurn(input.at, () => {
+    event: async (input) => time.during(input, () => {
       const record2 = [];
       const effects = [];
       const frames = [];
-      let ended;
-      try {
-        try {
-          turn(input.event, input.at, record2, effects, frames);
-        } finally {
-          subscriptions = subscribed(input.at);
-        }
-        ended = { kind: "answered" };
-      } catch (thrown2) {
-        ended = { kind: "threw", failure: failureOf(thrown2) };
-      }
-      return { ...ended, effects, record: record2, subscriptions, frames };
+      const ended = ending(() => turn(input.event, record2, effects, frames));
+      return {
+        ...ended.kind === "answered" ? { kind: "answered" } : ended,
+        effects,
+        record: record2,
+        subscriptions,
+        frames
+      };
     })
   });
+}
+function earliest(owners) {
+  let wake = null;
+  for (const owner of owners) {
+    const next = owner.next();
+    if (next !== null && (wake === null || next < wake)) wake = next;
+  }
+  return wake;
+}
+function closeIdleMenus2(parts, effects) {
+  for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
+    try {
+      const latest = factsOf(parts, session);
+      parts.verbs.closeIdle(session, latest, idle, effects);
+    } catch (thrown2) {
+      const failure = failureOf(thrown2);
+      parts.log(
+        failure.kind === "closing" ? "info" : "error",
+        `menu-idle: close failed (session=${session}): ${failure.detail}`
+      );
+    }
+  }
+}
+function factsOf(parts, session) {
+  var _stack = [];
+  try {
+    const hold2 = __using(_stack, parts.renderCache.holdView(session));
+    return hold2?.view.facts() ?? null;
+  } catch (_) {
+    var _error = _, _hasError = true;
+  } finally {
+    __callDispose(_stack, _error, _hasError);
+  }
 }
 function loadMainRenderer(inputs) {
   const sessionState = new SessionState(inputs.storage.session);
@@ -91355,8 +91263,9 @@ function loadMainRenderer(inputs) {
 }
 function startOver(inputs, sessionState, history, host) {
   const { gates, linkSigner: linkSigner2 } = inputs;
-  const turnTime = new TurnTime();
-  const now2 = () => turnTime.at();
+  const time = new TurnTime();
+  const now2 = () => time.at;
+  const menuIdle = new MenuIdle();
   const { log } = host;
   const settingsHistory = new SettingsHistory(
     sessionState,
@@ -91391,7 +91300,7 @@ function startOver(inputs, sessionState, history, host) {
   const watches = new Watches(host.watches);
   const renderCache = new RenderCache(
     {
-      clock: turnTime,
+      clock: time.clock,
       stateDir: inputs.stateDir,
       locations: inputs.locations,
       env: inputs.env,
@@ -91427,27 +91336,47 @@ function startOver(inputs, sessionState, history, host) {
         onReload: (entry, sessions, cause, settled3) => {
           log("info", configLoadedLine(entry, cause, settled3));
           for (const sessionId2 of sessions)
-            clocks.feeds.owe(sessionId2, "reload", now2());
+            feeds.wake(sessionId2, "reload", time.tick);
         },
         // [LAW:single-enforcer] What a session's view draws from moved: its
         // feed's next frame is brought forward, whatever moved it: a request's
         // facts, a refresh landing after its deadline, a source publishing, a
         // pick. The dump link, which no view holds, wakes the same way.
-        onViewChanged: (sessionId2) => clocks.feeds.owe(sessionId2, "data", now2())
+        onViewChanged: (sessionId2) => feeds.wake(sessionId2, "data", time.tick)
       }
     }
   );
+  const pin = (sessionId2) => {
+    const unhold = renderCache.pin(sessionId2);
+    const unwatch = reaction(
+      () => sessionState.revision(sessionId2),
+      () => feeds.wake(sessionId2, "state", time.tick)
+    );
+    return () => {
+      unwatch();
+      renderCache.stopDrawing(sessionId2, "feed");
+      unhold();
+    };
+  };
+  const feeds = new Feeds({
+    draw: (sessionId2, fps, readings, following, laneFeeds) => renderFrame(parts, sessionId2, fps, readings, following, laneFeeds),
+    pin,
+    log,
+    periods: FEED_PERIODS
+  });
   const parts = {
     ...host,
+    time,
     linkSigner: linkSigner2,
     sessionState,
     renderCache,
     worldStates,
     renderWarnings,
     effectSessions,
-    laneActs
+    laneActs,
+    menuIdle,
+    feeds
   };
-  const clocks = rendererClocks(parts, turnTime);
   const reloadConfig = (origin) => renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
     kind: "write"
   });
@@ -91457,7 +91386,7 @@ function startOver(inputs, sessionState, history, host) {
     stateDir: inputs.stateDir,
     locations: inputs.locations,
     configWrites,
-    clickLanded: (sessionId2) => clocks.menuIdle.clicked(sessionId2, now2()),
+    clickLanded: (sessionId2) => menuIdle.clicked(sessionId2, time.tick),
     log,
     acts,
     now: now2,
@@ -91493,7 +91422,7 @@ function startOver(inputs, sessionState, history, host) {
     },
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
-  const pushed = (push, at) => {
+  const pushed = (push) => {
     switch (push.kind) {
       case "stats":
         return {
@@ -91501,12 +91430,13 @@ function startOver(inputs, sessionState, history, host) {
           stats: {
             renderCache: renderCache.stats,
             effectCache: effectSessions.getStats(),
-            menuIdle: clocks.menuIdle.stats(),
             sessionState: {
               sessions: sessionState.size(),
               observers: sessionState.observers(),
               revision: sessionState.latestRevision()
-            }
+            },
+            menuIdle: menuIdle.stats(),
+            framesDrawn: feeds.drawn()
           }
         };
       case "debug":
@@ -91528,9 +91458,8 @@ function startOver(inputs, sessionState, history, host) {
       case "close-journal":
         configWrites.close();
         return { kind: "close-journal" };
-      // The feeds first: each releases the view it pins.
       case "close-views":
-        clocks.feeds.close(at);
+        feeds.closeAll(time.tick);
         renderCache.close();
         return { kind: "close-views" };
       case "close-session-state":
@@ -91541,12 +91470,13 @@ function startOver(inputs, sessionState, history, host) {
   return mainRenderer(
     {
       ...parts,
+      menuIdle,
+      feeds,
       verbs: verbsOver(verbCtx),
       mint,
       acts,
       doctorRuns
     },
-    clocks,
     pushed
   );
 }
@@ -92870,6 +92800,7 @@ var productionInstallEdge = {
   realpath: (p2) => asked(() => fs_default.realpathSync(p2)),
   checkoutOf: sourceCheckoutOf,
   digest: (crateDir) => asked(() => crateDigest(crateDir)),
+  // Asked when a check runs, so importing the edge reads nothing of the host.
   nativeShipped: () => shipsNative(process.platform, process.arch)
 };
 function installFacts(edge, daemonBundle, clients) {
@@ -93317,7 +93248,9 @@ function createDaemon(inputs) {
     lanes: {
       edge: inputs.laneEdge(
         launcher,
-        (sessionId2) => frameFeeds.following(sessionId2),
+        // [LAW:one-source-of-truth] The lanes following a session as the
+        // renderer is handed them.
+        (sessionId2) => followingOf(frameFeeds.viewers()[sessionId2]),
         closing.signal,
         probe2
       ),
@@ -93347,7 +93280,6 @@ function createDaemon(inputs) {
       "url-handle"
     ].join(" "),
     owner: paths2.socket,
-    changed: () => viewersChanged(),
     log
   });
   const declaredStatusLines = new DeclaredStatusLines(
@@ -93357,35 +93289,10 @@ function createDaemon(inputs) {
   const frameFeeds = new FrameFeeds({
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
-    changed: () => viewersChanged(),
-    refreshes: () => refreshLedger.totals(),
-    clock,
-    log
-  });
-  let viewers = "current";
-  function viewersChanged() {
-    if (viewers !== "current") return;
-    viewers = "owed";
-    void parts.renderer.answer((at) => {
-      if (viewers === "closed")
-        return failureOf(new DaemonClosing("viewers"));
-      viewers = "current";
-      return {
-        kind: "event",
-        at,
-        event: { kind: "viewers", viewers: frameFeeds.viewers() }
-      };
-    }).then((turn) => {
-      if (turn.kind === "threw" && turn.failure.kind !== "closing" && turn.failure.kind !== "down")
-        log(
-          LEVEL[turn.failure.kind],
-          `viewers turn threw: ${turn.failure.detail}`
-        );
-    });
-  }
-  const rendererWake = new RendererWake({
-    clock,
-    due: (make) => parts.renderer.answer(make),
+    deliver: (make) => parts.renderer.deliver(
+      () => ({ kind: "event", event: { kind: "viewers", viewers: make() } }),
+      []
+    ),
     log
   });
   const paneVisibility = new PaneVisibility({
@@ -93402,12 +93309,13 @@ function createDaemon(inputs) {
       LIST_CLIENTS_FORMAT
     ]),
     // The servers of the sessions someone is watching.
-    sockets: () => new Set(
-      frameFeeds.watchedRequests().flatMap(({ req }) => tmuxServersOf(req))
-    ),
-    onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
-    // Whether a session's pane is shown is part of its viewers.
-    onChange: () => viewersChanged(),
+    sockets: () => new Set(frameFeeds.watchedRequests().flatMap(tmuxServersOf)),
+    // A status line's view moves which held pane draws its session.
+    onAnswer: (socket, status) => {
+      tmuxStatusLines.answered(socket, status);
+      frameFeeds.announce();
+    },
+    onChange: () => frameFeeds.announce(),
     intervalMs: 1e3,
     log
   });
@@ -93469,8 +93377,8 @@ function createDaemon(inputs) {
       ...daemonFaults.get()
     }),
     clock,
-    watched: (sessionId2) => frameFeeds.watched(sessionId2),
-    deliver: (event) => parts.renderer.deliver((at) => ({ kind: "event", event, at }), []),
+    watched: (sessionId2) => frameFeeds.isWatched(sessionId2),
+    deliver: (event) => parts.renderer.deliver(() => ({ kind: "event", event }), []),
     log
   });
   const rendererWatches = /* @__PURE__ */ new Map();
@@ -93512,19 +93420,20 @@ function createDaemon(inputs) {
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
     // gets its config with its latest stamp, all in the one `start` turn, so
-    // its output names every session it serves, with who watches each, read
-    // as the start's slot comes. Through the host's one path to the renderer,
-    // the turn recorded there.
+    // its output names every session it serves; and who watches each, so its
+    // feeds open. All through the host's one path to the renderer, each turn
+    // recorded there.
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async () => {
-      await parts.renderer.start(
-        (at) => ({
+      await parts.renderer.start(() => {
+        const viewers = frameFeeds.viewers();
+        frameFeeds.handedIn(viewers);
+        return {
           kind: "event",
-          at,
           event: {
             kind: "start",
-            viewers: frameFeeds.viewers(),
+            viewers,
             sessions: [...collector.liveDocuments()].flatMap(
               ([sessionId2, worldState]) => {
                 const req = frameFeeds.latest(sessionId2);
@@ -93532,9 +93441,8 @@ function createDaemon(inputs) {
               }
             )
           }
-        }),
-        [["why", "renderer-start"]]
-      );
+        };
+      }, [["why", "renderer-start"]]);
     },
     ended: (event) => {
       rendererEnded = event;
@@ -93573,20 +93481,16 @@ function createDaemon(inputs) {
       link.renderer,
       log,
       {
-        declared: (declared) => {
-          rendererWake.declare(declared);
-          const { subscriptions } = declared;
+        subscribed: (subscriptions) => {
           collector.subscribed(subscriptions);
-          frameFeeds.declared(subscriptions.lanes);
+          frameFeeds.switched(subscriptions.lanes);
           declaredStatusLines.declare(
-            Object.keys(subscriptions.lanes).filter(
-              (session) => subscriptions.lanes[session].tmuxStatus
+            Object.entries(subscriptions.lanes).flatMap(
+              ([session, lanes]) => lanes.tmuxStatus ? [session] : []
             )
           );
         },
-        framed: (frames) => {
-          for (const frame2 of frames) frameFeeds.frame(frame2);
-        },
+        frames: (frames) => frameFeeds.took(frames),
         holding: (session) => collector.holding(session),
         writableSettings: (session) => collector.writableSettings(session)
       },
@@ -93642,13 +93546,12 @@ function createDaemon(inputs) {
     async close() {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind });
       const teardown = [
-        // [LAW:no-ambient-temporal-coupling] First of all: no due and no
-        // viewers turn is handed in from here, so nothing the close does
-        // wakes the renderer again.
-        ["renderer wake close", () => rendererWake.close()],
-        ["renderer viewers close", () => void (viewers = "closed")],
-        // [LAW:no-ambient-temporal-coupling] Then: from here a renderer that
+        // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
         // ends is not started again, so no step below waits on a fresh boot.
+        // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
+        // from here, so no turn the renderer holds for later runs into the
+        // close's.
+        ["renderer wake close", () => parts.renderer.closeWake()],
         ["renderer close begins", () => link.beginClose()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
@@ -94749,13 +94652,26 @@ function create(file) {
 init_globals();
 var inProcessPort = ({ load }) => {
   const loaded = load();
-  return { start: (own2) => inProcessRenderer(loaded, own2) };
-};
-function inProcessRenderer(loaded, { reaches, clock }) {
   return {
-    // [LAW:no-ambient-temporal-coupling] Each input starts on its own stack,
-    // as a line read off a process does.
-    renderer: timed(loaded.start(reaches), clock.monotonic),
+    start: (own2) => inProcessRenderer(loaded, own2.reaches, own2.clock)
+  };
+};
+function inProcessRenderer(loaded, reaches, clock) {
+  const timedRenderer = timed(loaded.start(reaches), () => clock.monotonic());
+  const crossed = async () => {
+  };
+  const renderer = rendererOf({
+    event: async (input) => {
+      await crossed();
+      return timedRenderer.answer(input);
+    },
+    adapter: async (input) => {
+      await crossed();
+      return timedRenderer.answer(input);
+    }
+  });
+  return {
+    renderer,
     arm: () => {
     },
     // Nothing restarts in process.

@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-782",
-      "ref": "refs/pull/782/merge",
-      "sha": "c5635e83f6700d74954a2fe2a2347cb014807c9f",
-      "timestamp": "2026-11-17T08:21:05.794Z",
+      "version": "pr-783",
+      "ref": "refs/pull/783/merge",
+      "sha": "d6d0195f2625e156ae93538ce9dcb61a51f6de0b",
+      "timestamp": "2026-11-17T09:19:17.897Z",
       "commits": [
         {
-          "sha": "c5635e83f6700d74954a2fe2a2347cb014807c9f",
+          "sha": "d6d0195f2625e156ae93538ce9dcb61a51f6de0b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T08:20:03Z",
-          "message": "Merge d20136180f8b5a5df4e001227295bd916fd63c80 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T02:18:13-07:00",
+          "message": "Merge 33934029de08fafe0e0ff1905ab91c8fa7920cd8 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
         },
         {
-          "sha": "d20136180f8b5a5df4e001227295bd916fd63c80",
+          "sha": "33934029de08fafe0e0ff1905ab91c8fa7920cd8",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T01:19:52-07:00",
-          "message": "fix(renderer): a wall stepped back moves every held instant back with it, and the wake is declared first and decided in its slot (883)\n\n- The renderer sees a step back as a turn's instant earlier than the last,\n  and its held deferrals, menu idle periods and feed instants all move back\n  by it; feeds lose their own step-back branches. A wall gone forward moves\n  nothing: it is what a machine that slept looks like.\n- The wake takes each declaration before any other taker, so a throw there\n  cannot leave the renderer's one timer unarmed.\n- A due's declaration carries its failure: the hold-off and its line are\n  decided in the due's slot, and the wake's own path handles only a due no\n  renderer answered.\n- A watched session's request from a pane shown otherwise announces its\n  viewers, and every join is stamped on them, so a subscriber that takes\n  another's place is owed a frame.\n- A stale comment on how a tmux subscription is admitted is corrected.\n"
-        },
-        {
-          "sha": "36ff0c538f4c7b84d9ba2d08b51382dfd6f9d6f4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T01:02:58-07:00",
-          "message": "fix(renderer): the wake times its dues on the monotonic clock, and a host fault after a turn's landing no longer swallows its effect-done (883)\n\n- A due's wait is armed from the wall once, then timed on the monotonic\n  clock to the whole millisecond at or after its instant, and handed in at\n  its slot's instant like every input: a wall stepped back delays no due,\n  and no input runs at an instant earlier than a turn ahead of it.\n- A due that threw holds off every declaration after it until a due\n  answers, and a due no renderer answered re-arms the last declaration.\n- The instant already armed keeps its timer.\n- A feed woken after the wall stepped back draws at once, as `due` does.\n- A click makes no menu-idle record: only draws do, and retirement ends them.\n- Taking a turn's declarations and frames after its changes landed cannot\n  fail the turn: a throw there is the host's fault, on every bar.\n- A push nobody awaits writes its turn line with what it cost.\n- tmux's poll announces only a view that changed.\n- Viewers turns close with the wake, first in the teardown.\n- The crossing reaches keep their effects-at-boundaries exception marker;\n  a stale comment and memory lines are brought in line.\n"
-        },
-        {
-          "sha": "aa681eb314cd45cd7a1f3c7f027bda3b77e3d90d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T00:43:45-07:00",
-          "message": "feat(renderer): time is handed in: the renderer owns animation, the menu idle close and pushed frames, and the draw writes nothing (883)\n\nThe renderer reads no clock. Each turn carries its instant, and every output\ndeclares the earliest instant the renderer wants a turn at; the host keeps one\ntimer to that declaration and hands in a `due` through the mailbox, ordered\nagainst every other input. Feeds' cadence, the menu idle close and the\ncatch-up reload walk all run as due turns. The host keeps who watches and\nwhat each subscriber was sent, and announces a change to its viewers only once\nthe change is whole.\n"
+          "timestamp": "2026-11-17T02:17:55-07:00",
+          "message": "feat(renderer): time is handed in as two readings, and the renderer owns its schedules (883)\n\nEvery input carries the wall instant a frame shows and a monotonic tick that\neverything scheduled is measured on, so a stepped wall moves no schedule.\nThe renderer reads no clock and sets no timer: each output declares the one\ntick it next wants a turn at, and the host keeps one timer per renderer and\nhands in a `due`. Feeds, the menu idle close and held work are the\nrenderer's owners of ticks; the host keeps who watches and what each\nsubscriber was sent, and hands the viewers in whole.\n\nThe in-process link hands an input over once the sender's stack unwinds, as\na process's lines do, so a turn never runs inside the host's MobX action.\n"
         }
       ]
     },
