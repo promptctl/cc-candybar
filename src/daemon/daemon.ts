@@ -791,6 +791,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       log,
       {
         declared: (declared) => {
+          // [LAW:no-ambient-temporal-coupling] The wake first: it is the
+          // renderer's one timer, so no other taker's throw leaves it unarmed.
+          rendererWake.declare(declared);
           const { subscriptions } = declared;
           collector.subscribed(subscriptions);
           frameFeeds.declared(subscriptions.lanes);
@@ -801,7 +804,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
               (session) => subscriptions.lanes[session]!.tmuxStatus,
             ),
           );
-          rendererWake.declare(declared);
         },
         framed: (frames) => {
           for (const frame of frames) frameFeeds.frame(frame);

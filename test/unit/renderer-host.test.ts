@@ -246,9 +246,9 @@ test("each turn's declarations reach the host with the turn that declared them, 
   expect(declared).toEqual([
     {
       subscriptions: { ...NONE, wake },
-      turn: { due: 5, threw: true },
+      due: { at: 5, failure: expect.objectContaining({ kind: "threw" }) },
     },
-    { subscriptions: NONE, turn: { due: null, threw: false } },
+    { subscriptions: NONE, due: null },
   ]);
   expect(framed).toEqual([frame]);
 });

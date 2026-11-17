@@ -70,14 +70,14 @@ type TakenTurn = TurnOutcome & {
 };
 
 // What a renderer's output declares, as the host takes it from a turn: what
-// it needs read, and when it next wants a turn, with the turn that declared
-// it: a `due` at its instant, and whether it threw.
+// it needs read, and when it next wants a turn; and, when a `due` declared
+// it, the due's instant and how it failed, or null when it answered.
 export interface Declared {
   readonly subscriptions: Subscriptions;
-  readonly turn: {
-    readonly due: Instant | null;
-    readonly threw: boolean;
-  };
+  readonly due: {
+    readonly at: Instant;
+    readonly failure: Failure | null;
+  } | null;
 }
 
 // What the host's turns act in: the performer of acts, the trust book's
@@ -263,10 +263,13 @@ export function rendererHost(
         try {
           collector.declared({
             subscriptions,
-            turn: {
-              due: input.event.kind === "due" ? input.at : null,
-              threw: output.kind === "threw",
-            },
+            due:
+              input.event.kind === "due"
+                ? {
+                    at: input.at,
+                    failure: output.kind === "threw" ? output.failure : null,
+                  }
+                : null,
           });
           collector.framed(frames);
         } catch (thrown) {
@@ -476,7 +479,7 @@ export function rendererHost(
         if (!world.closing())
           collector.declared({
             subscriptions,
-            turn: { due: null, threw: answered.kind === "threw" },
+            due: null,
           });
         return answered;
       } catch (thrown) {

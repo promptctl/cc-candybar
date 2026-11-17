@@ -121,6 +121,15 @@ describe("MenuIdle: the close falls due a timeout after the idle period began", 
     idle.clicked(sessionIdOf("other"), at(1020));
     expect(idle.next()).toBe(1030);
     expect(closes(idle, 1030).map((c) => c.sessionId)).toEqual([S]);
+    // A click of a session never drawn keeps nothing.
+    expect(idle.stats().sessions).toBe(1);
+  });
+
+  test("a wall stepped back moves each idle period back with it, so its close falls due a timeout of idling after all", () => {
+    const idle = new MenuIdle();
+    idle.drew(S, at(1000), MENU);
+    idle.steppedBack(600);
+    expect(idle.next()).toBe(430);
   });
 
   test("a changed timeout is honoured", () => {

@@ -19,7 +19,9 @@ const during = <T>(time: TurnTime, s: number, body: () => T): T => {
 
 test("the time is the turn's instant, and reading it outside any turn throws", () => {
   const time = new TurnTime();
-  expect(() => time.at()).toThrow("the renderer read the time outside any turn");
+  expect(() => time.at()).toThrow(
+    "the renderer read the time outside any turn",
+  );
   during(time, 5, () => {
     expect(time.at()).toBe(at(5));
     expect(time.now()).toBe(at(5) * 1000);
@@ -81,4 +83,22 @@ test("a deferral that throws fails the due, and leaves those behind it held, due
   expect(time.next()).toBe(at(0.2));
   time.runDue(at(1));
   expect(ran).toEqual(["behind"]);
+});
+
+test("a wall stepped back since the last turn is answered, and every deferral held moves back with it; one gone forward moves nothing", () => {
+  const time = new TurnTime();
+  const ran: string[] = [];
+  const letGo = during(time, 100, () => {
+    time.after(2000, () => ran.push("settle"));
+    return time.after(5000, () => ran.push("let go"));
+  });
+  expect(time.begin(at(40))).toBe(60);
+  time.end();
+  expect(time.next()).toBe(at(42));
+  // Let go of after the step, as it was held before it.
+  letGo();
+  time.runDue(at(50));
+  expect(ran).toEqual(["settle"]);
+  expect(time.begin(at(500))).toBe(0);
+  time.end();
 });

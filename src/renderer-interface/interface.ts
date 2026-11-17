@@ -235,6 +235,10 @@ export interface SessionViewers {
     Record<Lane, { readonly subscribers: number; readonly drawing: boolean }>
   >;
   readonly shown: boolean;
+  // Where the latest of its subscribers came among every subscriber the host
+  // has taken: one that joins is owed a frame even when the counts read as
+  // they did, as when one leaves and another takes its place.
+  readonly joined: number;
 }
 
 // Every session someone watches, whole: a session absent has no viewer.

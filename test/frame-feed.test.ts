@@ -53,11 +53,7 @@ function harness() {
 }
 
 // A frame of S showing `text`, whose statusline lane shows `statusline`.
-const pushed = (
-  text: string,
-  statusline = text,
-  session = S,
-): PushedFrame => ({
+const pushed = (text: string, statusline = text, session = S): PushedFrame => ({
   session,
   bar: { ...barOf([{ text }]), nextChange: null },
   answers: {
@@ -168,6 +164,7 @@ describe("who watches, as the renderer reads it", () => {
           drawing: lane === "band",
         })),
         shown: false,
+        joined: 2,
       },
     });
     drawing = true;
@@ -178,6 +175,27 @@ describe("who watches, as the renderer reads it", () => {
     const { feeds } = harness();
     feeds.subscribe(S, subscriber().sub);
     expect(feeds.viewers()[S]!.shown).toBe(true);
+  });
+
+  test("a watched session's request from a pane shown otherwise than its last is a change of its viewers; one shown the same is not", () => {
+    const { feeds, state } = harness();
+    feeds.subscribe(S, subscriber().sub);
+    const before = state.announced.length;
+    state.hidden.add("%2");
+    feeds.note(S, "%1", 1);
+    expect(state.announced.length).toBe(before);
+    feeds.note(S, "%2", 2);
+    expect(state.announced.length).toBe(before + 1);
+    expect(feeds.viewers()[S]!.shown).toBe(false);
+  });
+
+  test("a subscriber that takes the place of one that left is a new join, so the viewers it leaves differ", () => {
+    const { feeds } = harness();
+    const leave = feeds.subscribe(S, subscriber().sub);
+    const first = feeds.viewers()[S]!.joined;
+    leave();
+    feeds.subscribe(S, subscriber().sub);
+    expect(feeds.viewers()[S]!.joined).toBeGreaterThan(first);
   });
 
   test("what runs while any session is watched runs from the first watch to the last leaving", () => {

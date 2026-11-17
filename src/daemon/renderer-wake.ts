@@ -10,7 +10,11 @@
 import type { Instant } from "../utils/instant.js";
 import type { Monotonic, Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import { DaemonClosing, failureOf } from "./foundations/verb-error.js";
+import {
+  DaemonClosing,
+  failureOf,
+  type Failure,
+} from "./foundations/verb-error.js";
 import type { Declared, HostTurn, MakeOrFail } from "./renderer-host.js";
 
 // How soon a due after one that threw may come: a renderer whose due keeps
@@ -81,9 +85,10 @@ export class RendererWake {
 
   // [LAW:single-enforcer] Every output's wake lands here, in the order the
   // turns answered: the latest declaration is the one timer.
-  declare({ subscriptions: { wake }, turn }: Declared): void {
-    if (turn.due !== null)
-      this.heldUntil = turn.threw ? heldOff(turn.due) : null;
+  // [LAW:single-enforcer] A due's own declaration says how it ended, so the
+  // hold-off and its line are decided here, in the due's slot.
+  declare({ subscriptions: { wake }, due }: Declared): void {
+    if (due !== null) this.ended(due.at, due.failure);
     this.wake = wake;
     this.rearm();
   }
@@ -151,21 +156,17 @@ export class RendererWake {
       // so no input runs at an instant earlier than a turn ahead of it.
       return { kind: "event", at: slotAt, event: { kind: "due" } };
     });
-    if (turn.kind === "answered") this.throwSaid = false;
-    // [LAW:single-enforcer] No renderer was live to take it, and the
-    // supervisor says that and starts one, whose start declares; or the
-    // close refused it, which is no throw.
-    else if (turn.failure.kind !== "down" && turn.failure.kind !== "closing") {
-      if (!this.throwSaid) {
-        this.throwSaid = true;
-        this.deps.log(
-          "error",
-          `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${turn.failure.detail}`,
-        );
-      }
-      // One no renderer answered declared nothing: the last declaration
-      // stands, held off.
-      this.heldUntil = heldOff(handedAt);
+    // A due no renderer answered declared nothing: it ended here, and the
+    // last declaration stands, held off. None live to take it is the
+    // supervisor's to say, and the start it makes declares; one the close
+    // refused is no failure.
+    if (
+      turn.kind === "threw" &&
+      turn.turnMs === null &&
+      turn.failure.kind !== "down" &&
+      turn.failure.kind !== "closing"
+    ) {
+      this.ended(handedAt, turn.failure);
       this.rearm();
     }
     this.costs.dues++;
@@ -175,6 +176,20 @@ export class RendererWake {
     this.costs.turnMaxMs = Math.max(this.costs.turnMaxMs, turn.turnMs ?? 0);
     if (this.deps.clock.monotonic() - this.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize();
+  }
+
+  // How the due handed in at `at` ended: one that failed holds the next off
+  // and is said, once for a run of failures; one that answered clears both.
+  private ended(at: Instant, failure: Failure | null): void {
+    this.heldUntil = failure === null ? null : heldOff(at);
+    if (failure === null) this.throwSaid = false;
+    else if (!this.throwSaid) {
+      this.throwSaid = true;
+      this.deps.log(
+        "error",
+        `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${failure.detail}`,
+      );
+    }
   }
 
   // [LAW:nothing-unseen] Due turns write no line each: the wake says what

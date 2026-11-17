@@ -4,14 +4,22 @@
 // next instant they want. No clock and no timer: every case below chooses its
 // instants.
 
-import { Feeds, FEED_PERIODS, noteSent, type FeedFrame } from "../../src/renderer/feeds";
+import {
+  Feeds,
+  FEED_PERIODS,
+  noteSent,
+  type FeedFrame,
+} from "../../src/renderer/feeds";
 import { perLane, type Lane, type LaneFeeds } from "../../src/config/lanes";
 import type { Instant } from "../../src/utils/instant";
 import type {
   SessionViewers,
   Viewers,
 } from "../../src/renderer-interface/interface";
-import { sessionIdOf, type SessionId } from "../../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../../src/daemon/foundations/session-id";
 import { barOf } from "../helpers/drawn-frame";
 
 const S = sessionIdOf("s");
@@ -28,12 +36,14 @@ const msOf = (instant: Instant | null): number | null =>
 const watching = (
   lanes: Partial<Record<Lane, number>> = { band: 1 },
   shown = true,
+  joined = 1,
 ): SessionViewers => ({
   lanes: perLane((lane) => ({
     subscribers: lanes[lane] ?? 0,
     drawing: (lanes[lane] ?? 0) > 0,
   })),
   shown,
+  joined,
 });
 
 // A bar showing `text`, next changing at `nextChange`.
@@ -44,7 +54,10 @@ const frameOf = (
   statusline = text,
 ): FeedFrame => ({
   bar: { ...barOf([{ text }]), nextChange },
-  answers: { resp: JSON.stringify(text), statusline: JSON.stringify(statusline) },
+  answers: {
+    resp: JSON.stringify(text),
+    statusline: JSON.stringify(statusline),
+  },
   evaluated: 3,
   cellBreaks: 2,
   failure,
@@ -91,10 +104,7 @@ function rig(
         });
       if (opts.beatMs !== undefined) {
         const beat = Math.floor(msOf(when)! / opts.beatMs);
-        return frameOf(
-          `beat${beat}`,
-          at((beat + 1) * opts.beatMs),
-        );
+        return frameOf(`beat${beat}`, at((beat + 1) * opts.beatMs));
       }
       const text = `${session}#${state.motion === "still" ? 0 : ++state.n}`;
       return frameOf(
@@ -115,11 +125,15 @@ function rig(
   // at each instant the feeds declare, handed in as declared.
   const run = (fromMs: number, toMs: number): void => {
     const end = at(toMs);
-    for (let next: Instant | null = at(fromMs); next !== null && next <= end; ) {
+    for (
+      let next: Instant | null = at(fromMs);
+      next !== null && next <= end;
+    ) {
       const drawn = feeds.due(next);
       // [LAW:no-silent-failure] A due that draws nothing at the instant
       // declared would spin a host's wake.
-      if (drawn.length === 0) throw new Error(`a due at ${msOf(next)}ms drew nothing`);
+      if (drawn.length === 0)
+        throw new Error(`a due at ${msOf(next)}ms drew nothing`);
       next = feeds.next();
     }
   };
@@ -199,7 +213,9 @@ test("a change brings the next frame forward to the earliest the spacing allows,
   r.feeds.owe(S, "state", at(6));
   r.feeds.due(at(20));
   r.view({}, 30);
-  expect(r.logged.at(-1)).toMatch(/woke=data:1,state:1,reload:0,visibility:0 coalesced=1$/);
+  expect(r.logged.at(-1)).toMatch(
+    /woke=data:1,state:1,reload:0,visibility:0 coalesced=1$/,
+  );
 });
 
 test("an unseen feed brought forward is spaced a still period from its last frame", () => {
@@ -267,13 +283,25 @@ test("feeds due at one instant are each drawn, in the order they opened", () => 
   expect(r.feeds.due(at(0)).map((d) => d.sessionId)).toEqual([S, T]);
 });
 
-test("a wall clock stepped back is drawn at once, and the next frame spaced from it", () => {
+test("a wall clock stepped back moves every instant a feed holds back with it, so its next frame keeps its spacing", () => {
   const r = rig({ motion: "still" });
   r.view({ [S]: watching() }, 1000);
   r.feeds.due(at(1000));
-  r.feeds.due(at(500));
-  expect(drawnAt(r)).toEqual([1000, 500]);
-  expect(msOf(r.feeds.next())).toBe(900);
+  const spaced = msOf(r.feeds.next()) - 1000;
+  r.feeds.steppedBack(0.5);
+  expect(msOf(r.feeds.next())).toBe(500 + spaced);
+  expect(r.feeds.due(at(499 + spaced))).toEqual([]);
+  r.feeds.due(at(500 + spaced));
+  expect(drawnAt(r)).toEqual([1000, 500 + spaced]);
+});
+
+test("a subscriber that joins where one left is owed a frame, though the counts read as they did", () => {
+  const r = rig({ motion: "still" });
+  r.view({ [S]: watching() }, 0);
+  r.feeds.due(at(0));
+  expect(msOf(r.feeds.next())).toBeGreaterThan(100);
+  r.view({ [S]: watching({ band: 1 }, true, 2) }, 100);
+  expect(msOf(r.feeds.next())).toBe(100);
 });
 
 test("a frame that keeps failing the same way is said once, and counted every time", () => {
@@ -359,12 +387,12 @@ describe("a feed's summary", () => {
   });
 });
 
-test("a lane's log holds the sends of the window ending at this one, a wall clock stepped back included", () => {
+test("a lane's log holds the sends of the window ending at this one", () => {
   const rate: Instant[] = [];
   for (const s of [0, 0.5, 1.2, 1.4]) noteSent(rate, (T0 + s) as Instant);
-  expect(rate.map((i) => Math.round((i - T0) * 10) / 10)).toEqual([0.5, 1.2, 1.4]);
-  noteSent(rate, (T0 + 0.1) as Instant);
-  expect(rate.map((i) => Math.round((i - T0) * 10) / 10)).toEqual([0.1]);
+  expect(rate.map((i) => Math.round((i - T0) * 10) / 10)).toEqual([
+    0.5, 1.2, 1.4,
+  ]);
 });
 
 test("the feeds draw a continuous effect at the rate its curves were signed off at, and any bar at least once a second", () => {

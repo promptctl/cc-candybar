@@ -336,7 +336,13 @@ export function mainRenderer(
   // [LAW:no-ambient-temporal-coupling] Every input runs at its own instant,
   // and only inside its turn: a read of the time outside one throws.
   const atTurn = <T>(at: Instant, run: () => T): T => {
-    turnTime.begin(at);
+    // [LAW:single-enforcer] The one place a wall stepped back is seen: every
+    // owner of a held instant moves back with it, before the turn reads any.
+    const stepped = turnTime.begin(at);
+    if (stepped > 0) {
+      menuIdle.steppedBack(stepped);
+      feeds.steppedBack(stepped);
+    }
     try {
       return run();
     } finally {

@@ -111,7 +111,7 @@ interface Feed {
   // The instants of each followed lane's frames of the last RATE_WINDOW_S
   // that changed what that lane shows, oldest first.
   readonly rates: Map<Lane, Instant[]>;
-  readonly since: Instant;
+  since: Instant;
   summarizedAt: Instant;
   drawn: number;
   // Frames due that found no view to draw, and waited.
@@ -136,16 +136,15 @@ interface Feed {
 const paceOf = (period: number): number => Math.round(1000 / period);
 
 // Note a frame going out to a lane at `at`, keeping only the frames of the
-// window ending there, so a lane holds at most one window's worth — and a wall
-// clock stepped back, which leaves earlier frames stamped after `at`, cannot
-// grow it.
+// window ending there, so a lane holds at most one window's worth.
 export function noteSent(rate: Instant[], at: Instant): void {
-  const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S && sent <= at);
+  const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S);
   rate.splice(0, rate.length, ...kept, at);
 }
 
 const sameViewers = (a: SessionViewers, b: SessionViewers): boolean =>
   a.shown === b.shown &&
+  a.joined === b.joined &&
   LANE_NAMES.every(
     (lane) =>
       a.lanes[lane].subscribers === b.lanes[lane].subscribers &&
@@ -217,7 +216,7 @@ export class Feeds {
       const rate = feed.rates.get(lane);
       if (rate === undefined) return UNFOLLOWED;
       let fps = 0;
-      for (const sent of rate) if (sent > since && sent <= at) fps++;
+      for (const sent of rate) if (sent > since) fps++;
       return { subscribers: feed.viewers.lanes[lane].subscribers, fps, shown };
     });
   }
@@ -233,21 +232,34 @@ export class Feeds {
   }
 
   // Draws every feed due by `at`, in the order the feeds opened, and returns
-  // each frame drawn. [LAW:no-ambient-temporal-coupling] A feed whose last
-  // frame is later than `at` saw the wall clock step back: it is drawn now,
-  // so nothing carries from one frame's instant to the next.
+  // each frame drawn.
   due(at: Instant): ReadonlyArray<{
     readonly sessionId: SessionId;
     readonly frame: FeedFrame;
   }> {
     const drawn: Array<{ sessionId: SessionId; frame: FeedFrame }> = [];
     for (const feed of this.feeds.values()) {
-      if (feed.next === null) continue;
-      if (feed.next > at && (feed.last === null || feed.last <= at)) continue;
+      if (feed.next === null || feed.next > at) continue;
       const frame = this.draw(feed, at);
       if (frame !== null) drawn.push({ sessionId: feed.sessionId, frame });
     }
     return drawn;
+  }
+
+  // [LAW:no-ambient-temporal-coupling] The wall stepped back `seconds`
+  // (src/renderer/turn-time.ts): every instant a feed holds moves back with
+  // it, so its next frame keeps its spacing and nothing carries from an
+  // instant read before the step.
+  steppedBack(seconds: number): void {
+    const back = (at: Instant): Instant => (at - seconds) as Instant;
+    for (const feed of this.feeds.values()) {
+      feed.next = feed.next === null ? null : back(feed.next);
+      feed.last = feed.last === null ? null : back(feed.last);
+      for (const rate of feed.rates.values())
+        rate.splice(0, rate.length, ...rate.map(back));
+      feed.since = back(feed.since);
+      feed.summarizedAt = back(feed.summarizedAt);
+    }
   }
 
   // The renderer's close: every feed ends, its pin released.
@@ -330,11 +342,10 @@ export class Feeds {
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
   // to the earliest its spacing allows after its last frame, never later
   // than it already falls due. Answers whether it moved anything: a wake that
-  // did not was coalesced into a frame already due. A last frame later than
-  // `at` saw the wall step back, and spaces nothing, as in `due`.
+  // did not was coalesced into a frame already due.
   private hasten(feed: Feed, at: Instant): boolean {
     const spaced =
-      feed.last === null || feed.last > at
+      feed.last === null
         ? at
         : Math.max(at, feed.last + this.spacingOf(feed) / 1000);
     if (feed.next !== null && feed.next <= spaced) return false;

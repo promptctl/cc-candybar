@@ -8,7 +8,11 @@ import {
   DUE_AFTER_THROW_MS,
   RendererWake,
 } from "../../src/daemon/renderer-wake";
-import type { HostTurn, MakeOrFail } from "../../src/daemon/renderer-host";
+import type {
+  Declared,
+  HostTurn,
+  MakeOrFail,
+} from "../../src/daemon/renderer-host";
 import {
   DaemonClosing,
   failureOf,
@@ -33,10 +37,9 @@ const turn = (over: Partial<HostTurn> = {}): HostTurn =>
     hopMs: 0,
     ...over,
   }) as HostTurn;
-const THREW = turn({
-  kind: "threw",
-  failure: failureOf(new Error("the walk broke")),
-} as Partial<HostTurn>);
+const BROKE = failureOf(new Error("the walk broke"));
+// A due the renderer answered by throwing: its own declaration says so.
+const THREW = turn({ kind: "threw", failure: BROKE } as Partial<HostTurn>);
 
 // A wake over a held clock whose wall reads `behindMs` behind it, and a
 // mailbox that makes each due as its slot comes, `slotLateMs` after the timer
@@ -76,13 +79,10 @@ function rig() {
     },
     log: (level, line) => logged.push(`${level} ${line}`),
   });
-  const declare = (
-    wakeAt: Instant | null,
-    due: { due: Instant | null; threw: boolean } = { due: null, threw: false },
-  ) =>
+  const declare = (wakeAt: Instant | null, due: Declared["due"] = null) =>
     wake.declare({
       subscriptions: { sources: {}, lanes: {}, wake: wakeAt },
-      turn: due,
+      due,
     });
   const dueAt = () =>
     made.map((m) => ("kind" in m && m.kind === "event" ? m.at : m));
@@ -179,12 +179,12 @@ test("a due that threw holds the next one off, and a throw that repeats is said 
   r.declare(at(100));
   await r.step(100);
   // The due's own turn declares the same instant again.
-  r.declare(at(100), { due: at(100), threw: true });
+  r.declare(at(100), { at: at(100), failure: BROKE });
   await r.step(DUE_AFTER_THROW_MS - 1);
   expect(r.made).toHaveLength(1);
   await r.step(1);
   expect(r.made).toHaveLength(2);
-  r.declare(at(1100), { due: at(1100), threw: true });
+  r.declare(at(1100), { at: at(1100), failure: BROKE });
   await r.step(DUE_AFTER_THROW_MS);
   expect(r.made).toHaveLength(3);
   expect(
@@ -194,9 +194,10 @@ test("a due that threw holds the next one off, and a throw that repeats is said 
   r.state.answer = turn();
   r.declare(at(3100));
   await r.step(1000);
-  r.declare(at(3200), { due: at(3100), threw: false });
+  r.declare(at(3200), { at: at(3100), failure: null });
   r.state.answer = THREW;
   await r.step(100);
+  r.declare(at(3200), { at: at(3200), failure: BROKE });
   expect(
     r.logged.filter((l) => l.startsWith("error wake: due threw")),
   ).toHaveLength(2);
@@ -207,7 +208,7 @@ test("a due that threw holds off every declaration after it, not only its own, u
   r.state.answer = THREW;
   r.declare(at(100));
   await r.step(100);
-  r.declare(at(100), { due: at(100), threw: true });
+  r.declare(at(100), { at: at(100), failure: BROKE });
   // Another turn (an effect-done, a request) declares the past instant.
   r.declare(at(100));
   await r.step(DUE_AFTER_THROW_MS - 1);
@@ -215,7 +216,7 @@ test("a due that threw holds off every declaration after it, not only its own, u
   await r.step(1);
   expect(r.made).toHaveLength(2);
   r.state.answer = turn();
-  r.declare(at(1150), { due: at(1100), threw: false });
+  r.declare(at(1150), { at: at(1100), failure: null });
   r.declare(at(1150));
   await r.step(50);
   expect(r.dueAt()).toEqual([at(100), at(1100), at(1150)]);

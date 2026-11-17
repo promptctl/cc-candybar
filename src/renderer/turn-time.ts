@@ -7,18 +7,30 @@
 import type { Instant } from "../utils/instant.js";
 
 interface Deferral {
-  readonly until: Instant;
+  until: Instant;
   readonly run: () => void;
 }
 
 export class TurnTime {
   private current: Instant | null = null;
+  // The instant of the last turn begun: what a step back is measured from.
+  private last: Instant | null = null;
   private readonly held = new Set<Deferral>();
 
   // [LAW:no-ambient-temporal-coupling] Set for exactly one input's turn, so a
   // read outside any turn fails loudly rather than reading a stale instant.
-  begin(at: Instant): void {
+  // Answers how far, in seconds, the wall stepped back since the last turn,
+  // or 0: every instant held in the renderer was read on the wall before the
+  // step, and moves back with it, its deferrals here among them. A wall that
+  // went forward is time passing, as a machine asleep sees it, and moves
+  // nothing.
+  begin(at: Instant): number {
+    const stepped = this.last === null ? 0 : Math.max(0, this.last - at);
     this.current = at;
+    this.last = at;
+    for (const deferral of this.held)
+      deferral.until = (deferral.until - stepped) as Instant;
+    return stepped;
   }
 
   end(): void {

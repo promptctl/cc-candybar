@@ -10,7 +10,10 @@
 // parts its side still reaches; no daemon is built.
 
 import { daemonFactsOf } from "./helpers/daemon-facts";
-import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 import type { DoctorAsk } from "../src/doctor/gather";
 import fs from "node:fs";
 import os from "node:os";
@@ -237,7 +240,8 @@ const threw = (output: RendererOutput) => {
 const presentOf = (effects: readonly Effect[]): Present => {
   expect(effects).toHaveLength(1);
   const [present] = effects;
-  if (present?.kind !== "present") throw new Error("the turn presented nothing");
+  if (present?.kind !== "present")
+    throw new Error("the turn presented nothing");
   return present;
 };
 
@@ -432,6 +436,7 @@ describe("a feed driven by its dues", () => {
         drawing: lane === "band",
       })),
       shown,
+      joined: 1,
     },
   });
   // Each due at the instant the last turn declared, `n` of them: the gap
@@ -444,8 +449,7 @@ describe("a feed driven by its dues", () => {
       const out = answered(
         await r.answer({ kind: "event", at: wake, event: { kind: "due" } }),
       );
-      for (const frame of out.frames)
-        texts.push(textOf(parseFrame(frame.bar)));
+      for (const frame of out.frames) texts.push(textOf(parseFrame(frame.bar)));
       const next = out.subscriptions.wake!;
       gaps.push(Math.round((next - wake) * 1000));
       wake = next;
@@ -924,7 +928,9 @@ describe("the idle close", () => {
     expect(shut.subscriptions.wake).toBeNull();
     expect(t.logged).toContainEqual(
       expect.stringMatching(
-        new RegExp(`^error menu-idle: close threw \\(session=${SESSION}\\): the close broke`),
+        new RegExp(
+          `^error menu-idle: close threw \\(session=${SESSION}\\): the close broke`,
+        ),
       ),
     );
   });

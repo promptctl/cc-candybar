@@ -100,6 +100,8 @@ interface Watch {
   // starts with nothing sent.
   readonly subscribers: Map<Subscriber, string | null>;
   last: { readonly bar: Frame; readonly answers: Answers } | null;
+  // Where its latest subscriber came among every join (`SessionViewers`).
+  joined: number;
   readonly since: number;
   pushed: number;
   sent: number;
@@ -122,6 +124,7 @@ export class FrameFeeds<Req> {
   private stopWatching: (() => void) | null = null;
   // The daemon's close: no subscriber is taken after it.
   private closed = false;
+  private joins = 0;
   private framed = 0;
   private pushed = 0;
   private refused = 0;
@@ -140,11 +143,23 @@ export class FrameFeeds<Req> {
     const held = this.requests.get(sessionId);
     if (held !== undefined && held.order > order) return;
     this.requests.delete(sessionId);
-    this.requests.set(sessionId, { req, order });
+    const noted = { req, order };
+    this.requests.set(sessionId, noted);
     for (const oldest of this.requests.keys()) {
       if (this.requests.size <= MAX_REQUESTS) break;
       if (!this.watches.has(oldest)) this.requests.delete(oldest);
     }
+    // [LAW:single-enforcer] The request is where a watched session's pane
+    // is read from, so a request from a pane shown otherwise is a change of
+    // its viewers, announced here.
+    if (this.watches.has(sessionId) && this.shown(held) !== this.shown(noted))
+      this.deps.changed();
+  }
+
+  // Whether the session's bar is on a screen, by its latest request: one
+  // with none yet is taken as shown, so a frame is never held back on a guess.
+  private shown(noted: Noted<Req> | undefined): boolean {
+    return noted === undefined || this.deps.shown(noted.req);
   }
 
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
@@ -168,6 +183,7 @@ export class FrameFeeds<Req> {
     }
     const watch = this.watches.get(sessionId) ?? this.open(sessionId);
     watch.subscribers.set(sub, null);
+    watch.joined = ++this.joins;
     // [LAW:no-ambient-temporal-coupling] Handed the frame as it stands; the
     // renderer is told who follows the session, which its next frame draws.
     this.send(watch, sub);
@@ -226,7 +242,8 @@ export class FrameFeeds<Req> {
             drawing: ofLane.some((sub) => sub.drawing()),
           };
         }),
-        shown: noted === undefined || this.deps.shown(noted.req),
+        shown: this.shown(noted),
+        joined: watch.joined,
       };
     }
     return viewers;
@@ -306,6 +323,7 @@ export class FrameFeeds<Req> {
       sessionId,
       subscribers: new Map(),
       last: null,
+      joined: 0,
       since: this.deps.clock.monotonic(),
       pushed: 0,
       sent: 0,

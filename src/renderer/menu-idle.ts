@@ -85,6 +85,13 @@ export class MenuIdle {
     idle.shown = false;
   }
 
+  // The wall stepped back `seconds` (src/renderer/turn-time.ts): each idle
+  // period began that much earlier on the wall now read.
+  steppedBack(seconds: number): void {
+    for (const idle of this.sessions.values())
+      idle.since = (idle.since - seconds) as Instant;
+  }
+
   retire(sessionId: SessionId): void {
     this.sessions.delete(sessionId);
   }
