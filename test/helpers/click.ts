@@ -16,12 +16,15 @@ import {
   ConfigWrites,
   type Consequence,
 } from "../../src/renderer/config-writes";
-import { readConfigText } from "../../src/renderer/config-file-store";
 import {
   performChanges,
   type ApproveRepo,
+  type LayerPlaces,
   type WritableSettings,
 } from "../../src/daemon/effect-interpreter";
+import { discover, readShared } from "../../src/config/loader/discover";
+import type { ConfigSnapshot } from "../../src/config/config-snapshot";
+import type { RenderOrigin } from "../../src/config-hint";
 import type {
   Act,
   ConfigChange,
@@ -73,6 +76,31 @@ export function recordRender(
   );
 }
 
+// [LAW:locality-or-seam] The host's config discovery for a rig with no render
+// cache and no watch: each origin discovered as the disk stands when it is
+// asked, which is what a host holds once its watches have all been heard. A
+// test of a click over a snapshot the disk has moved past drives a render
+// cache instead (test/helpers/config-host.ts).
+export function discoveryNow(host: Host): LayerPlaces & {
+  readonly snapshotOf: (origin: RenderOrigin) => ConfigSnapshot;
+} {
+  const snapshotOf = (origin: RenderOrigin): ConfigSnapshot =>
+    discover(
+      {
+        projectDir: origin.projectDir,
+        configFile: origin.target.path,
+        cwd: origin.cwd,
+      },
+      readShared({ locations: locations(host), stateDir: stateDir(host) }),
+    ).snapshot;
+  return {
+    snapshotOf,
+    path: (origin, role) =>
+      snapshotOf(origin).chain.find((l) => l.role === role)?.path ?? null,
+    repoDir: (origin) => snapshotOf(origin).repo?.dir ?? null,
+  };
+}
+
 // [LAW:single-enforcer] The host, for a test that drives the verb table with
 // none: each click's changes land as its turn hands them on, through the
 // host's own interpreter, and their outcome comes back through the verbs' own
@@ -92,8 +120,9 @@ class LandingAtOnce extends ConfigWrites {
   constructor(
     mint: () => EffectId,
     private readonly stateDir: string,
+    private readonly places: LayerPlaces,
   ) {
-    super(mint, readConfigText);
+    super(mint);
   }
 
   of(ctx: VerbContext): VerbContext {
@@ -122,6 +151,7 @@ class LandingAtOnce extends ConfigWrites {
         said: () => {},
       },
       this.writable,
+      this.places,
     );
     if (outcome.kind === "ok") this.landed();
     for (const { id } of landing)
@@ -226,15 +256,16 @@ export function testVerbContext(
 ): VerbContext {
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
-  const configWrites = new LandingAtOnce(mint, stateDir(host));
+  const discovered = discoveryNow(host);
+  const configWrites = new LandingAtOnce(mint, stateDir(host), discovered);
   return configWrites.of({
     configWrites,
+    snapshotFor: discovered.snapshotOf,
     acts: new ActsOnTheirWay(mint, (session, reason) =>
       holdClickError(sessionState, session, reason, instantOf(new Date())),
     ),
     effects: [],
     gates: bareGates(),
-    stateDir: stateDir(host),
     locations: locations(host),
     sessionState,
     history,
@@ -336,7 +367,7 @@ export function testActs(
 // The world a rig's host turns act in: its acts performed over `deps`, and
 // an act's failure no bar holds handed to `unheard`.
 export function actingWorld(
-  ctx: Pick<VerbContext, "log" | "stateDir">,
+  ctx: Pick<VerbContext, "log">,
   deps: Partial<ActDeps> = {},
   unheard: (text: string) => void = (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
@@ -345,8 +376,8 @@ export function actingWorld(
   const acts = testActs(ctx.log, deps);
   return {
     perform: (act) => acts.perform(act),
-    stateDir: ctx.stateDir,
-    configs: NO_CONFIGS,
+    stateDir: stateDir(HOST),
+    configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
     unheard,
   };

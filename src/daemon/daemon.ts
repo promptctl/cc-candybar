@@ -337,7 +337,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       loadMainRenderer({
         storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
         linkSigner,
-        stateDir: paths.state,
         locations: locs,
         env: host.env,
         home: host.home,

@@ -58,18 +58,18 @@ export function loadChain(
   trace: ChainTrace,
   {
     locs = testLocs(),
-    cwd = null,
+    cwd,
     texts,
   }: {
     readonly locs?: Locations;
-    readonly cwd?: string | null;
+    readonly cwd?: string;
     readonly texts?: (path: string) => string;
   } = {},
 ): LoadedChain {
   const content = (path: string): Layer["content"] =>
     texts === undefined ? readLayer(path) : { kind: "text", text: texts(path) };
   const snapshot = snapshotOf(
-    sessionPlugins(locs, installedRoots(locs), null, cwd),
+    sessionPlugins(locs, installedRoots(locs), null, cwd ?? locs.home),
     chain.map((l) => layerOf(l.role, l.path, content(l.path), locs.home)),
   );
   return loadSnapshot(snapshot, locs.home, dflt, trace);

@@ -75,7 +75,11 @@ const change = (before: string, after: string): Effect => ({
   kind: "change",
   id: ++ids as EffectId,
   session: S,
-  target: { kind: "layer", path: file },
+  target: {
+    kind: "layer",
+    origin: { projectDir: dir, cwd: dir, target: { source: "search" } },
+    role: "user",
+  },
   changes: diffChanges(before, after),
 });
 
@@ -97,7 +101,8 @@ function hostOver(
       return { kind: "ok" };
     },
     stateDir: path.join(dir, "state"),
-    configs: NO_CONFIGS,
+    // The origin's one layer is the test's file.
+    configs: { ...NO_CONFIGS, path: () => file, repoDir: () => null },
     closing: () => false,
     unheard: (text) => void unheard.push(text),
     ...over,

@@ -8,6 +8,7 @@
 import { readSettingsChain } from "../../src/claude-settings-read";
 import type { RenderOrigin } from "../../src/config-hint";
 import { performChanges } from "../../src/daemon/effect-interpreter";
+import { NO_CONFIGS } from "./renderers";
 import type { ClientHints } from "../../src/daemon/foundations/protocol";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { StoresRead } from "../../src/daemon/foundations/stats-snapshot";
@@ -33,7 +34,10 @@ import type {
 } from "../../src/doctor/ports";
 import { readDoctor, type Sighted } from "../../src/doctor/read";
 import { instantOf } from "../../src/utils/instant";
-import { readDoctorRun, type DoctorReadInput } from "../../src/daemon/cache/doctor";
+import {
+  readDoctorRun,
+  type DoctorReadInput,
+} from "../../src/daemon/cache/doctor";
 import type { DoctorRuns } from "../../src/renderer/doctor";
 import type { DoctorRead } from "../../src/doctor/gather";
 import { ofRun } from "../../src/daemon/readings";
@@ -113,6 +117,7 @@ export function applyFix(
             machine: facts,
             install: facts.install,
           }),
+        NO_CONFIGS,
       );
       if (landed.kind !== "ok")
         return { kind: "failed", reason: landed.reason };

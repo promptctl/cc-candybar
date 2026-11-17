@@ -31,6 +31,7 @@ import type { SessionPane } from "../claude-input/typing";
 import type { RepoAnswer } from "../config/loader/repo-gate";
 import type { Answered } from "../daemon/foundations/sighting-roles";
 import type { RenderOrigin } from "../config-hint";
+import type { LayerRole } from "../config/layer-role";
 import type { ConfigSnapshot } from "../config/config-snapshot";
 
 // Which request a statusline frame answers: the host's count of the requests
@@ -295,9 +296,10 @@ export interface Present {
 // that take one file from what the renderer read to what it wrote, which the
 // host applies to the file as it stands. A turn's changes land together or
 // not at all, and each is settled with that one outcome.
-// [LAW:single-enforcer] exception: a layer is named by its path, not by its
-// role in a session's chain, until config discovery hands in snapshots.
-// A `claude-settings` file is one the session's doctor reading handed in
+// [LAW:single-enforcer] A config layer is named by its origin and its role in
+// that origin's chain, never by a path: which file that is is discovery's to
+// say, so a renderer cannot name a file the origin's chain does not hold. A
+// `claude-settings` file is one the session's doctor reading handed in
 // (`writableSettingsFiles`, src/doctor/gather.ts): the host refuses any other.
 export interface ConfigChange {
   readonly kind: "change";
@@ -308,7 +310,11 @@ export interface ConfigChange {
 }
 
 export type ChangeTarget =
-  | { readonly kind: "layer"; readonly path: string }
+  | {
+      readonly kind: "layer";
+      readonly origin: RenderOrigin;
+      readonly role: LayerRole;
+    }
   | { readonly kind: "claude-settings"; readonly file: string };
 
 // A source a run makes stale: its full name, for the run's line, and the
@@ -374,9 +380,11 @@ export type Act = { readonly id: EffectId } & (
     }
   | {
       // The answer to a repository's question, which lands with the turn's
-      // changes: the trust book is the host's.
+      // changes: the trust book is the host's. `dir` is the one its signed
+      // link asked about, which must still be `origin`'s repository.
       readonly kind: "approve-repo";
       readonly session: SessionId;
+      readonly origin: RenderOrigin;
       readonly dir: string;
       readonly answer: RepoAnswer;
     }

@@ -1,8 +1,15 @@
 // [LAW:verifiable-goals] A click lands whole or not at all: its writes leave
-// as changes, one per file, and what else it did waits for every one of them
-// to land, or is told why one did not.
+// as changes, one per file, each naming its layer by the click's origin and
+// the layer's role, and what else it did waits for every one of them to land,
+// or is told why one did not. A click reads only its origin's layers, as the
+// snapshot holds them.
 
-import { ConfigWrites } from "../../src/renderer/config-writes";
+import {
+  ConfigWrites,
+  type ClickLayers,
+} from "../../src/renderer/config-writes";
+import type { RenderOrigin } from "../../src/config-hint";
+import type { Layer } from "../../src/config/config-snapshot";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import type { Effect, EffectId } from "../../src/renderer-interface/interface";
 
@@ -12,12 +19,37 @@ const DISK: Record<string, string> = {
   "/b.json5": "{ b: 1 }\n",
 };
 
+const ORIGIN: RenderOrigin = {
+  projectDir: "/p",
+  cwd: "/p",
+  target: { source: "search" },
+};
+const layer = (role: Layer["role"], path: string): Layer => ({
+  role,
+  path,
+  content:
+    DISK[path] === undefined
+      ? { kind: "absent" }
+      : { kind: "text", text: DISK[path] },
+  listed: {},
+});
+// The origin's chain: `/a.json5` the user's, `/b.json5` the project's, and
+// a local layer not written yet.
+const LAYERS: ClickLayers = {
+  origin: ORIGIN,
+  chain: [
+    layer("user", "/a.json5"),
+    layer("project", "/b.json5"),
+    layer("local", "/c.json5"),
+  ],
+};
+
+// A click open over the origin's layers.
 function writes() {
   let minted = 0;
-  return new ConfigWrites(
-    () => ++minted as EffectId,
-    (file) => DISK[file] ?? null,
-  );
+  const w = new ConfigWrites(() => ++minted as EffectId);
+  w.begin("click", () => LAYERS);
+  return w;
 }
 
 const ids = (effects: readonly Effect[]): EffectId[] =>
@@ -34,11 +66,57 @@ describe("a click's config writes", () => {
     expect(applied).toBe(true);
   });
 
-  test("a click reads its own writes, and the disk for the rest", () => {
+  test("a click reads its own writes, and its origin's snapshot for the rest", () => {
     const w = writes();
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     expect(w.read("/a.json5")).toBe("{ a: 2 }\n");
     expect(w.read("/b.json5")).toBe(DISK["/b.json5"]);
+    expect(w.read("/c.json5")).toBeNull();
+  });
+
+  test("a file its origin's chain does not hold is no file the click reads", () => {
+    expect(() => writes().read("/elsewhere.json5")).toThrow(
+      "/elsewhere.json5 is not a config file this session renders from — the click is not taken",
+    );
+  });
+
+  test("a click that reads no layer asks for no snapshot", () => {
+    const w = new ConfigWrites(() => 1 as EffectId);
+    w.begin("click", () => {
+      throw new Error("no snapshot is held");
+    });
+    const effects: Effect[] = [];
+    let applied = false;
+    w.seal(effects, SID, () => (applied = true));
+    expect(applied).toBe(true);
+  });
+
+  test("each change names its layer by the click's origin and the layer's role", () => {
+    const w = writes();
+    const effects: Effect[] = [];
+    w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
+    w.land("/c.json5", null, "{ c: 1 }\n");
+    w.seal(effects, SID, () => {});
+    expect(effects.map((e) => (e.kind === "change" ? e.target : null))).toEqual(
+      [
+        { kind: "layer", origin: ORIGIN, role: "project" },
+        { kind: "layer", origin: ORIGIN, role: "local" },
+      ],
+    );
+  });
+
+  test("an answer to the trust book names the click's origin", () => {
+    const w = writes();
+    const effects: Effect[] = [];
+    w.answer("/p", "approved");
+    w.seal(effects, SID, () => {});
+    expect(effects).toEqual([
+      expect.objectContaining({
+        kind: "approve-repo",
+        origin: ORIGIN,
+        dir: "/p",
+      }),
+    ]);
   });
 
   test("two writes to one file are one change, from the first read to the last write", () => {
@@ -52,7 +130,7 @@ describe("a click's config writes", () => {
         kind: "change",
         id: 1,
         session: SID,
-        target: { kind: "layer", path: "/a.json5" },
+        target: { kind: "layer", origin: ORIGIN, role: "user" },
         changes: [
           {
             op: "replace",
@@ -74,7 +152,7 @@ describe("a click's config writes", () => {
     w.seal(effects, SID, () => (applied = true));
     const [a, b] = ids(effects);
     expect(w.settled(a!, { kind: "ok" })).toBe("owed");
-    expect(() => w.begin("next")).toThrow(
+    expect(() => w.begin("next", () => LAYERS)).toThrow(
       "next began while a click's changes to /a.json5, /b.json5 were still landing",
     );
     const landed = w.settled(b!, { kind: "ok" });
@@ -87,7 +165,7 @@ describe("a click's config writes", () => {
     if (landed === undefined || landed === "owed") throw new Error("unlanded");
     landed.consequence([]);
     expect(applied).toBe(true);
-    expect(() => w.begin("next")).not.toThrow();
+    expect(() => w.begin("next", () => LAYERS)).not.toThrow();
   });
 
   test("a landing that missed reports why, though a later change landed", () => {

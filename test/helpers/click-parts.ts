@@ -21,6 +21,9 @@ import {
   type MainRendererParts,
 } from "../../src/renderer/verbs/port";
 import { NO_CONFIGS } from "./renderers";
+import { discoveryNow } from "./click";
+import { HOST } from "./host";
+import { stateDir } from "../../src/daemon/paths";
 
 export function clickParts(
   verbCtx: DaemonVerbContext,
@@ -35,8 +38,8 @@ export function clickParts(
       kind: "failed",
       reason: `${act.kind}: no host part in this rig`,
     }),
-    stateDir: verbCtx.stateDir,
-    configs: NO_CONFIGS,
+    stateDir: stateDir(HOST),
+    configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
     unheard: () => {},
   },

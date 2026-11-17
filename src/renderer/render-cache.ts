@@ -1607,10 +1607,11 @@ export class RenderCache<
     return loadOrigin(cwd, snapshot, this.deps, served);
   }
 
-  // [LAW:no-silent-failure] An entry loads only from the snapshot the host
-  // handed in for its origin. None is an event the renderer did not park
-  // until its origin's `config` came: a bug, said with the origin.
-  private snapshotFor(origin: RenderOrigin): ConfigSnapshot {
+  // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
+  // snapshot the host handed in for its origin. None is an event the renderer
+  // did not park until its origin's `config` came: a bug, said with the
+  // origin.
+  snapshotFor(origin: RenderOrigin): ConfigSnapshot {
     if (this.closed) throw new Error("render cache used after close");
     const snapshot = this.snapshots.get(originKey(origin));
     if (snapshot === undefined)

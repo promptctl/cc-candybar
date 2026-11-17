@@ -18,12 +18,8 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import {
-  type Locations,
-  writeLayer,
-  writeLayers,
-  type WriteLayer,
-} from "../../config/loader/discovery";
+import type { Locations } from "../../config/loader/discovery";
+import type { ConfigSnapshot } from "../../config/config-snapshot";
 import {
   LAYER_ROLES,
   layerRoleOf,
@@ -61,7 +57,9 @@ import {
   writeDrafts,
   writeThemeDefault,
   writeValues,
+  writeLayerOf,
   type EditStore,
+  type WriteLayer,
 } from "../config-file-store";
 import {
   describeStep,
@@ -140,7 +138,7 @@ import type {
   EffectId,
   EffectOutcome,
 } from "../../renderer-interface/interface";
-import { repoAnswerFields, repoConfigs } from "../../config/repo-configs";
+import { repoAnswerFields } from "../../config/repo-configs";
 import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   CheckedRenderRequest,
@@ -181,6 +179,10 @@ export interface DaemonContext {
   // What this daemon's clicks may write: the gates its root built.
   readonly gates: Gates;
   readonly sessionState: SessionStateRW;
+  // [LAW:one-source-of-truth] The snapshot the host handed in for an origin:
+  // what a click reads and writes its layers from. One not held throws,
+  // naming the origin.
+  readonly snapshotFor: (origin: RenderOrigin) => ConfigSnapshot;
   // [LAW:effects-at-boundaries] The turn's wall instant, which the host read.
   readonly now: () => Instant;
   readonly log: (level: "info" | "warn" | "error", msg: string) => void;
@@ -188,8 +190,6 @@ export interface DaemonContext {
   // turn's effects, which the host performs once its changes have landed
   // (src/renderer/acts.ts).
   readonly acts: Pick<ActsOnTheirWay, "ask">;
-  // The state directory whose answers book a click reads and records in.
-  readonly stateDir: string;
   // Where the user's config and installed plugins live: a click's write
   // resolves its home under them.
   readonly locations: Locations;
@@ -717,12 +717,12 @@ function proveLoadsAsLayer(
   const layer =
     origin === null
       ? undefined
-      : originLayers(ctx, origin).find((l) => l.path === file);
-  if (layer === undefined)
+      : ctx.snapshotFor(origin).chain.find((l) => l.path === file);
+  if (origin === null || layer === undefined)
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from — its step is not taken`,
     );
-  proveLoads(layer, text, read);
+  proveLoads(heldLayer(ctx, origin, layer.role), text, read);
 }
 
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
@@ -762,44 +762,20 @@ function nestOf(ctx: DaemonContext, sid: SessionId): DisclosureNest {
 }
 
 // [LAW:single-enforcer] The layer a config write names in the session's
-// chain, resolved as the render resolves it under the same answers: a click's
-// chain leaves out what the bar's leaves out. A layer the chain has no place
-// for is refused, never written somewhere else.
-function originLayer(
-  ctx: Pick<ClickContext, "stateDir" | "locations">,
+// chain, as the snapshot the host handed in for its origin holds it: a click's
+// chain is the bar's. A layer the chain has no place for is refused, never
+// written somewhere else.
+function heldLayer(
+  ctx: Pick<ClickContext, "snapshotFor" | "locations">,
   origin: RenderOrigin,
   role: LayerRole,
 ): WriteLayer {
-  const write = writeLayer(
-    ctx.locations,
-    repoConfigs(ctx.stateDir).read(),
-    {
-      projectDir: origin.projectDir,
-      configFile: origin.target.path,
-      cwd: origin.cwd,
-    },
+  return writeLayerOf(
+    ctx.snapshotFor(origin),
     role,
+    origin.target.path ?? null,
+    ctx.locations.home,
   );
-  if (write.kind === "refused")
-    throw new BadVerbArgs(`the ${role} layer is not writable: ${write.why}`);
-  return write;
-}
-
-// Every config layer this session's chain can write: what a landing in any
-// of them reloads, and what a history step may have written.
-function originLayers(
-  ctx: Pick<ClickContext, "stateDir" | "locations">,
-  origin: RenderOrigin,
-): readonly WriteLayer[] {
-  const writes = writeLayers(ctx.locations, repoConfigs(ctx.stateDir).read(), {
-    projectDir: origin.projectDir,
-    configFile: origin.target.path,
-    cwd: origin.cwd,
-  });
-  return LAYER_ROLES.flatMap((role) => {
-    const write = writes[role];
-    return write.kind === "layer" ? [write] : [];
-  });
 }
 
 // [LAW:parse-dont-validate] A config write's wire: the session, the layer of
@@ -851,7 +827,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = gate.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
@@ -895,7 +871,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
@@ -956,7 +932,7 @@ const save: VerbHandler = (value, ctx) => {
     return [d.target, result.value];
   });
   gatePlacements("save", gate, placements);
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   writeDrafts(editStore(ctx, sid), into, pairs, placements);
   for (const key of [
     ...drafts.map((d) => d.sessionKey),
@@ -1013,7 +989,7 @@ const savePreset: VerbHandler = (value, ctx) => {
     return [d.configKey, result.value];
   });
   gatePlacements("save-preset", gate, snapshot.placements);
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const name = writePreset(
     editStore(ctx, sid),
     into,
@@ -1059,7 +1035,7 @@ const saveThemeDefault: VerbHandler = (value, ctx) => {
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default — pick one in the menu first",
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const written = writeThemeDefault(
     editStore(ctx, sid),
     into,
@@ -1095,7 +1071,7 @@ const deletePreset: VerbHandler = (value, ctx) => {
     );
   }
   const origin = sessionOrigin(ctx, sid);
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   deletePresetFromFile(editStore(ctx, sid), into, name);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
@@ -1124,7 +1100,7 @@ const resetConfig: VerbHandler = (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`,
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const layers = keys.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
@@ -1211,7 +1187,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const { placed, config } = applyLayoutOpToFile(
     editStore(ctx, sid),
     into,
@@ -1743,7 +1719,14 @@ function journaled<C extends DaemonContext>(
   effects: Effect[],
   handler: (ctx: Journaled<C>) => void,
 ): void {
-  ctx.configWrites.begin(verb);
+  ctx.configWrites.begin(verb, () => {
+    const origin = sid === null ? null : recordedOrigin(ctx, sid);
+    if (origin === null)
+      throw new BadVerbArgs(
+        `${verb}: the click names no session that has rendered — no config to write`,
+      );
+    return { origin, chain: ctx.snapshotFor(origin).chain };
+  });
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),

@@ -141,18 +141,11 @@ export {
   dslConfigCandidatePaths,
   resolveDslConfig,
   configResolutionNotice,
-  writeLayer,
-  writeLayers,
   writableRoles,
   detectConfigCollisions,
   homeLayer,
 } from "./loader/discovery.js";
-export type {
-  WriteLayer,
-  LayerWrite,
-  ConfigLayer,
-  ConfigResolution,
-} from "./loader/discovery.js";
+export type { ConfigLayer, ConfigResolution } from "./loader/discovery.js";
 export type { Unchecked } from "../utils/presence.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export { inheritableSegmentNames } from "./loader/segments.js";

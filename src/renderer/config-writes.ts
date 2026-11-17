@@ -1,18 +1,25 @@
 // [LAW:single-enforcer] How a click's config writes leave the renderer: as
 // `change`s its turn returns, which the host performs, never as a file the
 // renderer writes, and with them its answers to the trust book, which decide
-// which config a session renders. A click lands whole or not at all, so what
-// else it did is its consequence (its journal's commit), held here from its
-// turn until its changes' `effect-done`s: applied once they land, dropped
-// when they do not. The host lands a turn's changes, and hands in their
+// which config a session renders. A click reads and writes only the layers of
+// its session's origin, from the snapshot the host handed in for it, and
+// each change names its layer by that origin and its role. A click lands
+// whole or not at all, so what else it did is its consequence (its journal's
+// commit), held here from its turn until its changes' `effect-done`s: applied
+// once they land, dropped when they do not. The host lands a turn's changes, and hands in their
 // `effect-done`s, before the renderer's next input (src/daemon/renderer-host.ts),
-// so each click reads the files the clicks ahead of it wrote, and at most one
-// click is ever landing.
+// so each click reads the snapshot the clicks ahead of it moved, and at most
+// one click is ever landing.
 
 import { diffChanges, type Change } from "../config/config-changes.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import { DaemonClosing } from "../daemon/foundations/verb-error.js";
+import {
+  BadVerbArgs,
+  DaemonClosing,
+} from "../daemon/foundations/verb-error.js";
 import type { RepoAnswer } from "../config/loader/repo-gate.js";
+import type { Layer } from "../config/config-snapshot.js";
+import type { RenderOrigin } from "../config-hint.js";
 import type {
   Act,
   ConfigChange,
@@ -37,6 +44,21 @@ export interface Landing {
 // one did not.
 export type Landed = Landing & { readonly outcome: EffectOutcome };
 
+// [LAW:one-source-of-truth] The layers a click may read and write: its
+// session's recorded origin, and that origin's chain as the snapshot the
+// renderer holds for it says. Asked for only once the click reads a layer, so
+// a click that writes none needs no snapshot; one that is not held throws,
+// naming the origin.
+export interface ClickLayers {
+  readonly origin: RenderOrigin;
+  readonly chain: readonly Layer[];
+}
+
+// No click is open: nothing reads a layer.
+const noLayers = (): ClickLayers => {
+  throw new Error("a config layer was read with no click open");
+};
+
 export class ConfigWrites {
   // The open click's writes, by file: what it read first, and wrote last.
   private readonly open = new Map<
@@ -55,33 +77,54 @@ export class ConfigWrites {
     [];
   // The open click's answers to the trust book, in the order it gave them.
   private answers: Array<{
+    readonly origin: RenderOrigin;
     readonly dir: string;
     readonly answer: RepoAnswer;
   }> = [];
+  // The open click's layers, asked for once it first reads one.
+  private layersOf: () => ClickLayers = noLayers;
+  private layers: ClickLayers | null = null;
 
-  constructor(
-    private readonly mint: () => EffectId,
-    // The file as it stands on disk.
-    private readonly disk: (file: string) => string | null,
-  ) {}
+  constructor(private readonly mint: () => EffectId) {}
 
-  // A click's journal opens: refused once the daemon's close has begun, so a
-  // click the close cut off writes nothing. [LAW:no-silent-failure] A landing
-  // still owed here is the host's bug: it hands a turn's `effect-done`s in
-  // before the next input.
-  begin(verb: string): void {
+  // A click's journal opens over its session's layers: refused once the
+  // daemon's close has begun, so a click the close cut off writes nothing.
+  // [LAW:no-silent-failure] A landing still owed here is the host's bug: it
+  // hands a turn's `effect-done`s in before the next input.
+  begin(verb: string, layers: () => ClickLayers): void {
     if (this.closed) throw new DaemonClosing(verb);
     if (this.inFlight !== null)
       throw new Error(
         `${verb} began while a click's changes to ${this.inFlight.of.files.join(", ")} were still landing`,
       );
+    this.layersOf = layers;
+    this.layers = null;
   }
 
   // [LAW:one-source-of-truth] `file` as the open click left it: its last
-  // write, else the disk, which holds every click ahead of it.
+  // write, else the text its origin's snapshot holds, which every click ahead
+  // of it moved. A layer that could not be read is no layer here, as it is
+  // none of the merge.
   read(file: string): string | null {
     const written = this.open.get(file);
-    return written === undefined ? this.disk(file) : written.after;
+    if (written !== undefined) return written.after;
+    const { content } = this.layerAt(file);
+    return content.kind === "text" ? content.text : null;
+  }
+
+  // [LAW:no-silent-failure] The layer of the click's chain at `file`: a file
+  // the chain does not hold is no layer a click of this session writes.
+  private layerAt(file: string): Layer {
+    const layer = this.held().chain.find((l) => l.path === file);
+    if (layer === undefined)
+      throw new BadVerbArgs(
+        `${file} is not a config file this session renders from — the click is not taken`,
+      );
+    return layer;
+  }
+
+  private held(): ClickLayers {
+    return (this.layers ??= this.layersOf());
   }
 
   // A write of the open click, from the file as the click read it (`read`):
@@ -105,7 +148,7 @@ export class ConfigWrites {
   // The open click answers the trust book for `dir`: it lands with the
   // click's changes.
   answer(dir: string, answer: RepoAnswer): void {
-    this.answers.push({ dir, answer });
+    this.answers.push({ origin: this.held().origin, dir, answer });
   }
 
   // The open click is over. Its changes and its answers join its turn's
@@ -122,8 +165,19 @@ export class ConfigWrites {
     this.settings = [];
     const written = [...this.open].flatMap(([path, { before, after }]) => {
       const list = diffChanges(before, after);
-      return list.length === 0 ? [] : [{ path, list }];
+      return list.length === 0
+        ? []
+        : [
+            {
+              path,
+              origin: this.held().origin,
+              role: this.layerAt(path).role,
+              list,
+            },
+          ];
     });
+    this.layers = null;
+    this.layersOf = noLayers;
     const files = [
       ...written.map(({ path }) => path),
       ...settings.map(({ file }) => file),
@@ -140,11 +194,11 @@ export class ConfigWrites {
       ConfigChange | Extract<Act, { kind: "approve-repo" }>
     > = [
       ...written.map(
-        ({ path, list }): ConfigChange => ({
+        ({ origin, role, list }): ConfigChange => ({
           kind: "change",
           id: this.mint(),
           session,
-          target: { kind: "layer", path },
+          target: { kind: "layer", origin, role },
           changes: list,
         }),
       ),
@@ -157,10 +211,11 @@ export class ConfigWrites {
           changes: [change],
         }),
       ),
-      ...answers.map(({ dir, answer }) => ({
+      ...answers.map(({ origin, dir, answer }) => ({
         kind: "approve-repo" as const,
         id: this.mint(),
         session,
+        origin,
         dir,
         answer,
       })),

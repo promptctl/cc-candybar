@@ -1,6 +1,9 @@
 // [LAW:verifiable-goals] The host's interpreter over real files: a turn's
 // changes splice into the files as they stand, keep every byte they do not
-// touch, and land together or not at all.
+// touch, and land together or not at all. A layer change lands in the file
+// discovery says its origin's role names, and one naming an origin or a role
+// discovery does not hold, or an answer for a repository its origin does not
+// ask about, is refused whole.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -10,7 +13,10 @@ import { diffChanges, type Change } from "../src/config/config-changes.js";
 import {
   performChanges,
   type ApproveRepo,
+  type LayerPlaces,
 } from "../src/daemon/effect-interpreter.js";
+import type { RenderOrigin } from "../src/config-hint.js";
+import type { LayerRole } from "../src/config/layer-role.js";
 import { repoConfigs, repoConfigsPath } from "../src/config/repo-configs.js";
 import type { SessionId } from "../src/daemon/foundations/session-id.js";
 import type {
@@ -37,16 +43,48 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
+// Discovery as the tests' changes need it: each origin followed, by its
+// project directory, with the file each role of its chain names and the
+// repository it asks about.
+let chains: Map<string, Partial<Record<LayerRole, string>>>;
+let repos: Map<string, string>;
+beforeEach(() => {
+  chains = new Map();
+  repos = new Map();
+});
+const places: LayerPlaces = {
+  path: (origin, role) => {
+    const chain = chains.get(origin.projectDir);
+    return chain === undefined ? undefined : (chain[role] ?? null);
+  },
+  repoDir: (origin) =>
+    chains.has(origin.projectDir)
+      ? (repos.get(origin.projectDir) ?? null)
+      : undefined,
+};
+const originAt = (dir: string): RenderOrigin => ({
+  projectDir: dir,
+  cwd: dir,
+  target: { source: "search" },
+});
+
+// The origin whose chain holds `file` at `role`: one per file, followed.
+const holding = (file: string, role: LayerRole): RenderOrigin => {
+  chains.set(file, { ...chains.get(file), [role]: file });
+  return originAt(file);
+};
+
 let ids = 0;
 const change = (
   file: string,
   before: string | null,
   after: string | null,
+  role: LayerRole = "user",
 ): ConfigChange => ({
   kind: "change",
   id: ++ids as EffectId,
   session: "s" as SessionId,
-  target: { kind: "layer", path: file },
+  target: { kind: "layer", origin: holding(file, role), role },
   changes: diffChanges(before, after),
 });
 
@@ -54,7 +92,7 @@ const change = (
 const perform = (
   changes: readonly ConfigChange[],
   book: Parameters<typeof performChanges>[1],
-) => performChanges(changes, book, () => []);
+) => performChanges(changes, book, () => [], places);
 
 const read = (file: string): string => fs.readFileSync(file, "utf8");
 
@@ -139,6 +177,41 @@ describe("performChanges", () => {
     expect(perform([change(fresh, USER, null)], null)).toEqual({ kind: "ok" });
     expect(fs.existsSync(fresh)).toBe(false);
   });
+
+  test("a change naming an origin discovery does not follow is refused, and nothing is written", () => {
+    const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
+    chains.delete(user);
+    expect(perform([set], null)).toEqual({
+      kind: "refused",
+      reason: `a change names an origin config discovery does not follow (projectDir=${user} cwd=${user} configFile=-) — nothing was written`,
+    });
+    expect(read(user)).toBe(USER);
+  });
+
+  test("a change naming a role its origin's chain does not hold is refused, and no other change of the turn lands", () => {
+    const inUser = change(user, USER, USER.replace("padding: 1", "padding: 3"));
+    const unplaced: ConfigChange = {
+      ...change(project, PROJECT, PROJECT.replace(`" "`, `"|"`)),
+      target: { kind: "layer", origin: originAt(project), role: "local" },
+    };
+    expect(perform([inUser, unplaced], null)).toEqual({
+      kind: "refused",
+      reason: `a change names the local layer, and its origin's chain holds none (projectDir=${project} cwd=${project} configFile=-) — nothing was written`,
+    });
+    expect(read(user)).toBe(USER);
+    expect(read(project)).toBe(PROJECT);
+  });
+
+  test("a change lands in the file its origin's role names now", () => {
+    const moved = path.join(dir, "moved.json5");
+    fs.writeFileSync(moved, USER);
+    const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
+    // Discovery found the role at another file since the change was made.
+    chains.set(user, { user: moved });
+    expect(perform([set], null)).toEqual({ kind: "ok" });
+    expect(read(user)).toBe(USER);
+    expect(read(moved)).toContain("padding: 3");
+  });
 });
 
 // [LAW:verifiable-goals] A click's answers to the trust book land with its
@@ -146,13 +219,19 @@ describe("performChanges", () => {
 // renders, so a book written beside a config change that failed would trust
 // a repository whose config the click never set.
 describe("performChanges with the trust book", () => {
-  const answer = (dir: string): ApproveRepo => ({
-    kind: "approve-repo",
-    id: ++ids as EffectId,
-    session: "s" as SessionId,
-    dir,
-    answer: "approved",
-  });
+  // An answer for `dir` from an origin there that asks about it.
+  const answer = (dir: string): ApproveRepo => {
+    chains.set(dir, chains.get(dir) ?? {});
+    repos.set(dir, dir);
+    return {
+      kind: "approve-repo",
+      id: ++ids as EffectId,
+      session: "s" as SessionId,
+      origin: originAt(dir),
+      dir,
+      answer: "approved",
+    };
+  };
 
   test("an answer lands with the turn's changes, and its line is said once it has", () => {
     const state = path.join(dir, "state");
@@ -194,6 +273,32 @@ describe("performChanges with the trust book", () => {
     }
   });
 
+  test("an answer for a repository its origin does not ask about is refused, and nothing is written", () => {
+    const state = path.join(dir, "state");
+    const asked = answer(dir);
+    repos.set(dir, path.join(dir, "elsewhere"));
+    const outcome = perform(
+      [change(user, USER, USER.replace("dusk", "dawn"))],
+      { stateDir: state, answers: [asked], said: () => {} },
+    );
+    expect(outcome).toEqual({
+      kind: "refused",
+      reason: `the answer for ${dir} is not for the repository its origin asks about (${path.join(dir, "elsewhere")}) — nothing was written`,
+    });
+    expect(read(user)).toBe(USER);
+    expect(fs.existsSync(repoConfigsPath(state))).toBe(false);
+  });
+
+  test("an answer from an origin discovery does not follow is refused", () => {
+    const state = path.join(dir, "state");
+    const asked = answer(dir);
+    chains.delete(dir);
+    expect(
+      perform([], { stateDir: state, answers: [asked], said: () => {} }),
+    ).toMatchObject({ kind: "refused" });
+    expect(fs.existsSync(repoConfigsPath(state))).toBe(false);
+  });
+
   test("a change that moved since it was read writes no answer", () => {
     const state = path.join(dir, "state");
     fs.writeFileSync(user, USER.replace("dusk", "noon"));
@@ -222,14 +327,14 @@ describe("a created local layer is kept out of git", () => {
     const exclude = path.join(root, ".git", "info", "exclude");
     fs.writeFileSync(exclude, "# mine\n*.log");
     const local = path.join(root, ".cc-candybar.local.json5");
-    expect(perform([change(local, null, LOCAL)], null)).toEqual({
+    expect(perform([change(local, null, LOCAL, "local")], null)).toEqual({
       kind: "ok",
     });
     expect(read(local)).toBe(LOCAL);
     expect(read(exclude)).toBe("# mine\n*.log\n/.cc-candybar.local.json5\n");
     // Written again, it is already named: the exclude is left as it is.
     fs.rmSync(local);
-    perform([change(local, null, LOCAL)], null);
+    perform([change(local, null, LOCAL, "local")], null);
     expect(read(exclude)).toBe("# mine\n*.log\n/.cc-candybar.local.json5\n");
   });
 
@@ -238,7 +343,7 @@ describe("a created local layer is kept out of git", () => {
     const exclude = path.join(root, ".git", "info", "exclude");
     fs.writeFileSync(exclude, "*.log\r\n/.cc-candybar.local.json5\r\n");
     const local = path.join(root, ".cc-candybar.local.json5");
-    perform([change(local, null, LOCAL)], null);
+    perform([change(local, null, LOCAL, "local")], null);
     expect(read(exclude)).toBe("*.log\r\n/.cc-candybar.local.json5\r\n");
   });
 
@@ -247,7 +352,7 @@ describe("a created local layer is kept out of git", () => {
     execFileSync("git", ["init", "-q", root]);
     const local = path.join(root, "app[v2]", ".cc-candybar.local.json5");
     fs.mkdirSync(path.dirname(local));
-    perform([change(local, null, LOCAL)], null);
+    perform([change(local, null, LOCAL, "local")], null);
     expect(
       execFileSync("git", ["check-ignore", local], {
         cwd: root,
@@ -265,7 +370,7 @@ describe("a created local layer is kept out of git", () => {
     fs.mkdirSync(tree);
     fs.writeFileSync(path.join(tree, ".git"), `gitdir: ${meta}\n`);
     const local = path.join(tree, ".cc-candybar.local.json5");
-    expect(perform([change(local, null, LOCAL)], null)).toEqual({
+    expect(perform([change(local, null, LOCAL, "local")], null)).toEqual({
       kind: "ok",
     });
     expect(read(path.join(main, ".git", "info", "exclude"))).toBe(
@@ -282,12 +387,23 @@ describe("a created local layer is kept out of git", () => {
     const shared = path.join(root, ".cc-candybar.json5");
     perform(
       [
-        change(local, LOCAL, LOCAL.replace("2", "3")),
-        change(shared, null, LOCAL),
+        change(local, LOCAL, LOCAL.replace("2", "3"), "local"),
+        change(shared, null, LOCAL, "project"),
       ],
       null,
     );
     expect(fs.existsSync(exclude)).toBe(false);
+  });
+
+  test("a file named as a local layer that its chain holds as the user's writes no exclude", () => {
+    const root = repo();
+    const named = path.join(root, ".cc-candybar.local.json5");
+    expect(perform([change(named, null, LOCAL, "user")], null)).toEqual({
+      kind: "ok",
+    });
+    expect(fs.existsSync(path.join(root, ".git", "info", "exclude"))).toBe(
+      false,
+    );
   });
 
   test("an exclude that cannot be found refuses the whole change", () => {
@@ -295,7 +411,7 @@ describe("a created local layer is kept out of git", () => {
     fs.mkdirSync(tree);
     fs.writeFileSync(path.join(tree, ".git"), "not a gitdir line\n");
     const local = path.join(tree, ".cc-candybar.local.json5");
-    expect(perform([change(local, null, LOCAL)], null)).toMatchObject({
+    expect(perform([change(local, null, LOCAL, "local")], null)).toMatchObject({
       kind: "failed",
     });
     expect(fs.existsSync(local)).toBe(false);
@@ -329,7 +445,12 @@ describe("performChanges into Claude Code's settings", () => {
 
   test("a setting as the doctor read it is written in strict JSON", () => {
     expect(
-      performChanges([into(settings, setColor(`"3"`))], null, () => [settings]),
+      performChanges(
+        [into(settings, setColor(`"3"`))],
+        null,
+        () => [settings],
+        places,
+      ),
     ).toEqual({ kind: "ok" });
     expect(JSON.parse(read(settings))).toEqual({
       model: "opus",
@@ -342,6 +463,7 @@ describe("performChanges into Claude Code's settings", () => {
       [into(settings, setColor(`"2"`))],
       null,
       () => [settings],
+      places,
     );
     expect(outcome.kind).toBe("refused");
     expect(read(settings)).toBe(SETTINGS);
@@ -349,7 +471,7 @@ describe("performChanges into Claude Code's settings", () => {
 
   test("a file the session's doctor did not read is refused", () => {
     expect(
-      performChanges([into(settings, setColor(`"3"`))], null, () => []),
+      performChanges([into(settings, setColor(`"3"`))], null, () => [], places),
     ).toEqual({
       kind: "refused",
       reason: `${settings} is not a settings file the session's doctor read — nothing was written`,

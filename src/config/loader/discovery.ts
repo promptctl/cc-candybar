@@ -12,7 +12,6 @@ import type { RepoQuestion } from "../config-snapshot.js";
 import {
   gateRepos,
   repoQuestion,
-  type ApprovedRepo,
   type RepoAnswers,
   type RepoDir,
   type RepoGate,
@@ -108,13 +107,6 @@ const PROJECT_BASES: Readonly<Record<Exclude<LayerRole, "user">, string>> = {
   local: ".cc-candybar.local",
 };
 
-// Whether a file is a project's local layer, by the name it is found under.
-export function isLocalConfigFile(file: string): boolean {
-  return CONFIG_EXTENSIONS.some(
-    (ext) => path.basename(file) === `${PROJECT_BASES.local}.${ext}`,
-  );
-}
-
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
 // (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
@@ -163,7 +155,7 @@ export function homeLayer(path: string): ConfigLayer {
  *   • `unreadable` — an explicit file was named and stat could not see it
  *     (an unsearchable directory, a symlink loop); the errno rides the arm.
  * Every arm carries `home`: the user layer's file, where a durable click to
- * the user role writes (`writeLayer`). `chain` carries `unchecked`: locations stat could not
+ * the user role writes. `chain` carries `unchecked`: locations stat could not
  * see past; the search never stops on a guess, and the notice names each.
  *
  * Every arm carries `repos`: what the session's repositories contribute,
@@ -373,111 +365,29 @@ function userHome(locs: Locations, layers: readonly ConfigLayer[]): string {
   );
 }
 
-/**
- * The file a DURABLE write to one role of the session's chain lands in, and
- * the chain's layers below and above it.
- *
- * The file is the layer the chain holds for the role, or, where it holds
- * none, the file a first write there creates. A value a layer ABOVE it holds
- * wins over anything it says, so a write the chain hides is refused by the
- * writer, naming the layer that holds it (`config-file-store`'s commit) —
- * never a click that silently does nothing.
- *
- * [LAW:one-source-of-truth] A projection of the same resolution the render
- * runs, so the file a click writes is a layer the next reload reads — by
- * construction, not by two lists agreeing.
- */
-export interface WriteLayer {
-  readonly path: string;
-  readonly role: LayerRole;
-  // The other roles' files under and over `path`, lowest first: each where
-  // the chain holds it or a first write there creates it. Which of them is a
-  // layer is the click's to say, since a click may create or change one
-  // before it writes `path`.
-  readonly below: readonly ConfigLayer[];
-  readonly above: readonly ConfigLayer[];
-  // The approved project whose plugins the chain loads, and the working
-  // directory their checkout data paths resolve against.
-  readonly repo: ApprovedRepo | null;
-  readonly cwd: string | null;
-  // Where the installed plugins this chain loads over live.
-  readonly locs: Locations;
-}
-
-// [LAW:types-are-the-program] A role the session's chain has no place for:
-// a project's layers are an approved project's, and an explicit config file
-// is the chain's one layer.
-interface Refused {
-  readonly kind: "refused";
-  readonly why: string;
-}
-export type LayerWrite = ({ readonly kind: "layer" } & WriteLayer) | Refused;
-
-const rank = (role: LayerRole): number => LAYER_ROLES.indexOf(role);
-
-export function writeLayer(
-  locs: Locations,
-  answers: RepoAnswers,
-  query: ConfigQuery & { readonly cwd?: string },
-  role: LayerRole,
-): LayerWrite {
-  return writeLayers(locs, answers, query)[role];
-}
-
-// Every role's write, projected from ONE resolution of the session's chain.
-export function writeLayers(
-  locs: Locations,
-  answers: RepoAnswers,
-  query: ConfigQuery & { readonly cwd?: string },
-): Readonly<Record<LayerRole, LayerWrite>> {
-  const resolved = resolveDslConfig(locs, answers, query);
-  const layers = resolved.kind === "chain" ? resolved.layers : [];
-  const places = chainPlaces(resolved, query);
-  const writeOf = (role: LayerRole): LayerWrite => {
-    const place = placeOf(resolved, layers, query, role);
-    if (place.kind === "refused") return place;
-    return {
-      kind: "layer",
-      path: place.path,
-      role,
-      below: places.filter((l) => rank(l.role) < rank(role)),
-      above: places.filter((l) => rank(l.role) > rank(role)),
-      repo: resolved.repos.plugins,
-      cwd: query.cwd ?? null,
-      locs,
-    };
-  };
-  return Object.fromEntries(
-    LAYER_ROLES.map((role) => [role, writeOf(role)]),
-  ) as Record<LayerRole, LayerWrite>;
-}
-
 // [LAW:dataflow-not-control-flow] The file a role names in the session's
-// chain, or why it names none.
+// chain, or null where the chain has no place for it: a project's layers are
+// an approved project's, and an explicit config file is the chain's one
+// layer. The file is the layer the chain holds for the role, or, where it
+// holds none, the file a first write there creates.
 function placeOf(
   resolved: ConfigResolution,
   layers: readonly ConfigLayer[],
   { projectDir, configFile }: ConfigQuery,
   role: LayerRole,
-): { readonly kind: "at"; readonly path: string } | Refused {
-  if (role === "user") return { kind: "at", path: resolved.home };
-  if (configFile !== undefined)
-    return refused(
-      `${configFile} is the session's one config layer (it was named explicitly), so there is no ${role} layer to write`,
-    );
-  if (projectDir === undefined || resolved.repos.plugins === null)
-    return refused(
-      `the ${role} layer is the project's, and this session has no approved project`,
-    );
-  return {
-    kind: "at",
-    path:
-      layers.find((l) => l.role === role)?.path ??
-      `${path.join(projectDir, PROJECT_BASES[role])}.${CONFIG_EXTENSIONS[0]}`,
-  };
+): string | null {
+  if (role === "user") return resolved.home;
+  if (
+    configFile !== undefined ||
+    projectDir === undefined ||
+    resolved.repos.plugins === null
+  )
+    return null;
+  return (
+    layers.find((l) => l.role === role)?.path ??
+    `${path.join(projectDir, PROJECT_BASES[role])}.${CONFIG_EXTENSIONS[0]}`
+  );
 }
-
-const refused = (why: string): Refused => ({ kind: "refused", why });
 
 // [LAW:one-source-of-truth] The roles a session's chain can write: what its
 // save offers, read off the same placement a write resolves, so the bar never
@@ -499,7 +409,7 @@ export function chainPlaces(
   const layers = resolved.kind === "chain" ? resolved.layers : [];
   return LAYER_ROLES.flatMap((role): ConfigLayer[] => {
     const place = placeOf(resolved, layers, query, role);
-    return place.kind === "at" ? [{ path: place.path, role }] : [];
+    return place === null ? [] : [{ path: place, role }];
   });
 }
 

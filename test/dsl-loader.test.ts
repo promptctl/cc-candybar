@@ -2706,7 +2706,7 @@ describe("a snapshot's listed definitions", () => {
       repo: null,
       plugins: [],
       strays: [],
-      checkout: null,
+      checkout: { root: "/home/u", git: false },
       notices: [],
       watch: null,
     };

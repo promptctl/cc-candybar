@@ -15,10 +15,10 @@ import path from "node:path";
 import { checkConfig } from "../src/check";
 import {
   configResolutionNotice,
-  writeLayer,
   resolveDslConfig,
 } from "../src/config/dsl-loader";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
+import { chainPlaces } from "../src/config/loader/discovery";
 import {
   configLoadedLine,
   type LoadCause,
@@ -131,16 +131,12 @@ describe("the gate over a project's config file", () => {
     expect(explicit.repos.awaiting).toEqual([]);
   });
 
-  test("the durable writer's chain leaves out what the bar's leaves out", () => {
+  test("the chain a click writes leaves out what the bar's leaves out", () => {
     write(".cc-candybar.json5", "{}");
+    const query = { projectDir: project };
     expect(
-      writeLayer(
-        locations(host),
-        book({}),
-        { projectDir: project, cwd: project },
-        "user",
-      ),
-    ).toMatchObject({ above: [] });
+      chainPlaces(resolveDslConfig(locations(host), book({}), query), query),
+    ).toEqual([{ path: expect.any(String), role: "user" }]);
   });
 
   test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {
@@ -270,7 +266,7 @@ const NO_SNAPSHOT: ConfigSnapshot = {
   repo: null,
   plugins: [],
   strays: [],
-  checkout: null,
+  checkout: { root: "/p", git: false },
   notices: [],
   watch: null,
 };

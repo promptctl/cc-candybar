@@ -15,7 +15,8 @@ import {
   prepareConfig,
   type CheckOutcome,
 } from "../src/check";
-import { homeLayer, writeLayer } from "../src/config/dsl-loader";
+import { homeLayer } from "../src/config/dsl-loader";
+import { originOf } from "./helpers/config-host";
 import { loadChain } from "./helpers/discovered-load";
 import type { LayerRole } from "../src/config/layer-role";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -35,7 +36,7 @@ import { fragmentNode } from "../src/config/root";
 import { loadConfigOnce } from "../src/doctor/cli";
 import { textOf, type Frame } from "../src/render/frame";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
-import { EDITS_IN_PLACE } from "./helpers/history-step";
+import { EDITS_IN_PLACE, layerNow } from "./helpers/history-step";
 
 let dir: string;
 let project: string;
@@ -72,18 +73,10 @@ function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
   return o;
 }
 
-// The layer of `role` a click in the project writes, under the answers the
-// bar reads.
-const projectLayer = (role: LayerRole = "user") => {
-  const write = writeLayer(
-    locations(host),
-    repoConfigs(stateDir(host)).read(),
-    { projectDir: project, cwd: project },
-    role,
-  );
-  if (write.kind !== "layer") throw new Error(write.why);
-  return write;
-};
+// The layer of `role` a click in the project writes, in the chain discovery
+// finds there under the answers the bar reads.
+const projectLayer = (role: LayerRole = "user") =>
+  layerNow(host, originOf(project, project), role);
 
 test("a project file that places one segment renders over the user's whole config", async () => {
   // `mine` is declared only by the user's file: the project file loads only
@@ -126,19 +119,14 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectLayer();
-  expect(home).toEqual({
-    kind: "layer",
-    path: userFile,
-    role: "user",
-    below: [],
-    above: [
+  expect(home.path).toBe(userFile);
+  expect(home.snapshot.chain.map(({ path, role }) => ({ path, role }))).toEqual(
+    [
+      { path: userFile, role: "user" },
       { path: projectFile, role: "project" },
       { path: path.join(project, ".cc-candybar.local.json5"), role: "local" },
     ],
-    repo: project,
-    cwd: project,
-    locs: locations(host),
-  });
+  );
   writeValues(EDITS_IN_PLACE, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");

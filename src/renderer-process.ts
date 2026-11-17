@@ -151,7 +151,6 @@ function booted(
       doctor: adapters.doctorStores,
     },
     linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
-    stateDir: paths.state,
     locations: locations(host),
     env: host.env,
     home: host.home,

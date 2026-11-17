@@ -94,7 +94,10 @@ export type Made = MadeEvent | Failure;
 export interface HostWorld {
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
-  readonly configs: Pick<ConfigDiscovery, "follow" | "snapshotOf" | "landed">;
+  readonly configs: Pick<
+    ConfigDiscovery,
+    "follow" | "snapshotOf" | "landed" | "path" | "repoDir"
+  >;
   readonly closing: () => boolean;
   readonly unheard: (text: string) => void;
 }
@@ -265,6 +268,7 @@ export function rendererHost(
                 said: (line) => log("info", line),
               },
               collector.writableSettings,
+              world.configs,
             );
       if (input.event.kind === "start") served = new Set();
       const named = took(subscriptions, frames);
@@ -279,9 +283,15 @@ export function rendererHost(
       const moved =
         landed.kind === "ok" && changes.length + answers.length > 0
           ? world.configs.landed(
-              changes.map(({ target }) =>
-                target.kind === "layer" ? target.path : target.file,
-              ),
+              // A landed layer's origin was followed and its chain held the
+              // role, or the landing was refused.
+              changes.flatMap(({ target }) => {
+                const file =
+                  target.kind === "layer"
+                    ? world.configs.path(target.origin, target.role)
+                    : target.file;
+                return file === null || file === undefined ? [] : [file];
+              }),
               answers.length > 0,
             )
           : [];

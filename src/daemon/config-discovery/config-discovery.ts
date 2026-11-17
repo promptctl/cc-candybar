@@ -11,7 +11,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { originKey, type RenderOrigin } from "../../config-hint.js";
-import type { ConfigSnapshot } from "../../config/config-snapshot.js";
+import type {
+  ConfigSnapshot,
+  LayerRole,
+} from "../../config/config-snapshot.js";
 import {
   discover,
   readShared,
@@ -99,6 +102,25 @@ export class ConfigDiscovery {
   // What discovery found at `origin` last: null while it is not followed.
   snapshotOf(origin: RenderOrigin): ConfigSnapshot | null {
     return this.followed.get(originKey(origin))?.snapshot ?? null;
+  }
+
+  // [LAW:single-enforcer] The file `role` names in `origin`'s chain, as
+  // discovery last found it: what a write naming that layer lands in.
+  // Undefined while the origin is not followed; null when its chain holds no
+  // such layer.
+  path(origin: RenderOrigin, role: LayerRole): string | null | undefined {
+    const followed = this.followed.get(originKey(origin));
+    if (followed === undefined) return undefined;
+    return followed.snapshot.chain.find((l) => l.role === role)?.path ?? null;
+  }
+
+  // The repository `origin`'s directories ask about: undefined while the
+  // origin is not followed, null when they hold nothing to ask about.
+  repoDir(origin: RenderOrigin): string | null | undefined {
+    const followed = this.followed.get(originKey(origin));
+    return followed === undefined
+      ? undefined
+      : (followed.snapshot.repo?.dir ?? null);
   }
 
   // A turn's changes landed on `files`, and, when `answered`, answers to the

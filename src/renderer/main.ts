@@ -97,7 +97,6 @@ import {
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
-import { readConfigText } from "./config-file-store.js";
 import { recordedOriginOf } from "./verbs/index.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
@@ -430,8 +429,6 @@ export interface MainRendererInputs {
   };
   // [LAW:single-enforcer] The signer over the state directory's key.
   readonly linkSigner: LinkSigner;
-  // The state directory whose answers book a load reads and a click records in.
-  readonly stateDir: string;
   // Where the user's config and installed plugins live.
   readonly locations: Locations;
   // The environment an `env` source reads: the daemon's host.
@@ -487,7 +484,7 @@ function startOver(
   );
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
-  const configWrites = new ConfigWrites(mint, readConfigText);
+  const configWrites = new ConfigWrites(mint);
   // [LAW:single-enforcer] A failed act of a session's, on its bar the way its
   // click's own failure is.
   const actFailed = (session: SessionId, reason: string): void =>
@@ -611,7 +608,7 @@ function startOver(
   const verbCtx: DaemonVerbContext = {
     gates,
     sessionState,
-    stateDir: inputs.stateDir,
+    snapshotFor: (origin) => renderCache.snapshotFor(origin),
     locations: inputs.locations,
     configWrites,
     clickLanded: (sessionId) => menuIdle.clicked(sessionId, time.tick),

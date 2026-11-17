@@ -4,10 +4,18 @@
 // (test/helpers/click.ts).
 
 import { rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import {
-  readConfigText,
+  writeLayerOf,
   type EditStore,
+  type WriteLayer,
 } from "../../src/renderer/config-file-store";
+import type { Host } from "../../src/host";
+import type { RenderOrigin } from "../../src/config-hint";
+import type { LayerRole } from "../../src/config/layer-role";
+import { locations } from "../../src/daemon/paths";
+import { discoveryNow } from "./click";
+import { readConfigText } from "../../src/utils/atomic-write";
 import type {
   ConfigFiles,
   Journal,
@@ -31,6 +39,45 @@ export const EDITS_IN_PLACE: EditStore = {
   read: readConfigText,
   record: (file, _before, after) => writeFileSync(file, after),
 };
+
+// A chain's one layer, the user's `file`, with no plugin over it: what a
+// writer does to one file, with nothing beneath or above it.
+export function soleLayer(file: string, home: string): WriteLayer {
+  const layer = {
+    role: "user",
+    path: file,
+    content: { kind: "absent" },
+    listed: {},
+  } as const;
+  return {
+    ...layer,
+    snapshot: {
+      chain: [layer],
+      repo: null,
+      plugins: [],
+      strays: [],
+      checkout: { root: path.dirname(file), git: false },
+      notices: [],
+      watch: null,
+    },
+    home,
+  };
+}
+
+// The layer `role` names in the chain discovery finds at `origin` now, as a
+// click of a session there writes it.
+export function layerNow(
+  host: Host,
+  origin: RenderOrigin,
+  role: LayerRole,
+): WriteLayer {
+  return writeLayerOf(
+    discoveryNow(host).snapshotOf(origin),
+    role,
+    origin.target.path ?? null,
+    locations(host).home,
+  );
+}
 
 // One click's journal over `history`: what `act` does, then the commit.
 export function clickOf<T>(

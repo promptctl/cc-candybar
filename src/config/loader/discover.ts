@@ -139,7 +139,7 @@ export interface SessionPlugins {
   readonly plugins: readonly PluginFile[];
   readonly strays: readonly Stray[];
   readonly notices: readonly string[];
-  readonly checkout: Checkout | null;
+  readonly checkout: Checkout;
 }
 
 // [LAW:single-enforcer] The one place plugin precedence applies: keyed by
@@ -150,7 +150,7 @@ export function sessionPlugins(
   locs: Locations,
   installed: readonly RootListing[],
   repo: ApprovedRepo | null,
-  cwd: string | null,
+  cwd: string,
 ): SessionPlugins {
   const repoRoots = pluginRoots(locs, repo)
     .filter((r) => r.scope === "repo")
@@ -179,7 +179,7 @@ export function sessionPlugins(
     plugins: [...byNs.values()],
     strays,
     notices,
-    checkout: cwd === null ? null : checkoutOf(cwd),
+    checkout: checkoutOf(cwd),
   };
 }
 

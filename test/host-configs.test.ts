@@ -41,7 +41,7 @@ const SNAPSHOT: ConfigSnapshot = {
   repo: null,
   plugins: [],
   strays: [],
-  checkout: null,
+  checkout: { root: "/p", git: false },
   notices: [],
   watch: null,
 };
@@ -87,6 +87,10 @@ function hostOver(
         ? SNAPSHOT
         : null,
     landed: () => landed(),
+    // Every origin's one layer is the test's file: a landing's origin is
+    // one an earlier output named.
+    path: (_origin, role) => (role === "user" ? file : null),
+    repoDir: () => null,
   };
   const host = rendererHost(
     "main",
@@ -129,7 +133,7 @@ test("each origin a turn's landing moved gets its config turn before the landing
     kind: "change",
     id,
     session: S,
-    target: { kind: "layer", path: file },
+    target: { kind: "layer", origin: ORIGIN, role: "user" },
     changes: diffChanges(
       `{ globals: { theme: "dusk" } }\n`,
       `{ globals: { theme: "dawn" } }\n`,

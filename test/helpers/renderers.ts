@@ -75,6 +75,8 @@ export const NO_CONFIGS: HostWorld["configs"] = {
   },
   snapshotOf: () => null,
   landed: () => [],
+  path: () => undefined,
+  repoDir: () => undefined,
 };
 
 // The world of a rig whose renderer asks no act: one it is handed fails by
