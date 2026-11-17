@@ -44,15 +44,6 @@ export function inertHost(): AdapterToHost {
   return {
     wake: () => {},
     log: () => {},
-    doctor: {
-      probeTmux: unhosted("doctor"),
-      remoteLogin: unhosted("doctor"),
-      fontInUse: unhosted("doctor"),
-      daemons: unhosted("doctor"),
-      forge: unhosted("doctor"),
-      transcript: unhosted("doctor"),
-      install: unhosted("doctor"),
-    },
     menuIdle: {
       clicked: () => {},
       observe: () => {},
@@ -61,8 +52,6 @@ export function inertHost(): AdapterToHost {
       confirmClose: async () => true,
     },
     clicks: { gone: async () => false },
-    serving: unhosted("serving"),
-    renderSightings: { ofSession: async () => [] },
     eventAnswered: () => {},
     watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
     storage: { hold: unhosted("storage"), release: unhosted("storage") },
@@ -95,5 +84,7 @@ export function rendererParts({
     mint: minter(),
     // A rig's verbs ask no act, so no `effect-done` is an act's.
     acts: { done: () => false },
+    // A rig runs no doctor.
+    doctorRuns: { subscriptions: () => new Map(), retire: () => {} },
   };
 }

@@ -12,8 +12,10 @@ import {
   type SettingsScope,
   type SettingsChainAt,
   type SettingsSource,
+  type JsonObject,
   isJsonObject,
 } from "./claude-settings";
+import type { JsonValue } from "./var-system/types.js";
 
 // A settings file's bytes and the file they came from, or null for no file.
 // [LAW:no-silent-failure] Only a missing file is absence: one the daemon
@@ -50,9 +52,7 @@ export function readClaudeSettingsText(settingsPath: string): string {
 // that does not parse, or parses to anything but an object, throws naming the
 // file ([LAW:no-silent-failure]: Claude Code is not running with whatever a
 // guess would say).
-export function readClaudeSettings(
-  settingsPath: string,
-): Readonly<Record<string, unknown>> {
+export function readClaudeSettings(settingsPath: string): JsonObject {
   const settings = readClaudeSettingsOutcome(settingsPath);
   if (settings.kind === "failed") throw new Error(settings.reason);
   return settings.value;
@@ -63,7 +63,7 @@ export function readClaudeSettings(
 // phase (src/utils/outcome.ts), and the two are different repairs.
 export function readClaudeSettingsOutcome(
   settingsPath: string,
-): Ok<Readonly<Record<string, unknown>>> | Failed {
+): Ok<JsonObject> | Failed {
   const reason = (e: unknown): string =>
     e instanceof Error ? e.message : String(e);
   let text: string;
@@ -79,14 +79,12 @@ export function readClaudeSettingsOutcome(
   }
 }
 
-function parseSettings(
-  settingsPath: string,
-  text: string,
-): Readonly<Record<string, unknown>> {
-  let parsed: unknown;
+function parseSettings(settingsPath: string, text: string): JsonObject {
+  let parsed: JsonValue;
   try {
     if (/^\s*$/.test(text)) return {};
-    parsed = JSON_DIALECT.parse(text);
+    // [LAW:parse-dont-validate] JSON text parses to JSON values.
+    parsed = JSON_DIALECT.parse(text) as JsonValue;
   } catch (e) {
     throw cannotRead(settingsPath, e);
   }

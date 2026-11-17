@@ -105,7 +105,11 @@ function hostOver(
       return output(effects);
     }),
     () => {},
-    { subscribed: () => {}, holding: () => () => {} },
+    {
+      subscribed: () => {},
+      holding: () => () => {},
+      writableSettings: () => [],
+    },
     world,
   );
   const turn = () =>

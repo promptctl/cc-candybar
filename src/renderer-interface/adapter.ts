@@ -12,7 +12,6 @@ import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
 import type { Crosses, Reaches } from "./crosses.js";
-import type { ClientHint } from "../client-hint.js";
 import type {
   RenderCacheStats,
   StatsSnapshot,
@@ -21,16 +20,12 @@ import type {
   DebugSnapshot,
   DebugWhat,
 } from "../daemon/foundations/debug-types.js";
-import type { ServingDaemon } from "../daemon/foundations/memory-limit.js";
-import type { RenderSighting } from "../daemon/foundations/sightings.js";
 import type {
   Deafness,
   Invalidation,
   WatchTargets,
 } from "../daemon/foundations/watch-targets.js";
 import type { HeldEvent } from "../utils/event-hold.js";
-import type { InstallFacts } from "../doctor/checks.js";
-import type { DoctorMachineEdge } from "../doctor/ports.js";
 
 // A watch the renderer holds, named by the id it minted.
 declare const WATCH_ID: unique symbol;
@@ -84,16 +79,6 @@ export interface LogLine {
   readonly line: string;
 }
 
-// The doctor's reads of the machine, each the host's to make: the gather
-// (src/doctor/gather.ts) runs in the renderer over them.
-export type DoctorReads = Omit<DoctorMachineEdge, "install"> & {
-  // The install check's facts for the daemon's bundle and the clients judged.
-  readonly install: (
-    daemonBundle: string,
-    clients: ReadonlyArray<ClientHint | null>,
-  ) => Promise<InstallFacts>;
-};
-
 // [LAW:effects-at-boundaries] exception: what the renderer reaches in the
 // host that crosses a process: each a notice, which answers nothing, or an
 // awaited call answering plain data.
@@ -103,7 +88,6 @@ export interface AdapterToHost {
   // A line into the host's one log, which rotates itself: two writers would
   // each shift its generations.
   readonly log: (level: Level, line: string) => void;
-  readonly doctor: DoctorReads;
   // Each session's idle clock and the timer that closes its menus. The draw's
   // idle period is read by the host and handed in with the input it draws.
   readonly menuIdle: {
@@ -123,15 +107,6 @@ export interface AdapterToHost {
   };
   // Whether a click's client has left.
   readonly clicks: { readonly gone: (click: RequestId) => Promise<boolean> };
-  // This daemon as the doctor's daemon row judges it.
-  readonly serving: () => Promise<ServingDaemon>;
-  // Which client drew each session's bar, as this process saw it render.
-  readonly renderSightings: {
-    readonly ofSession: (
-      sessionId: SessionId,
-      now: Instant,
-    ) => Promise<readonly RenderSighting[]>;
-  };
   // An answer carrying a daemon-wide held event (the launcher's pipe event,
   // the last renderer's end) reached its client.
   readonly eventAnswered: (event: HeldEvent) => void;

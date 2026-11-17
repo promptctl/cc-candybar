@@ -1,6 +1,5 @@
-// The doctor's ports: its reads of the machine and its stores, as the probes
-// take them. Shared, so the renderer's doctor verbs hold the edges the host
-// hands in.
+// The doctor's ports: its reads of the machine, which the host makes
+// (src/doctor/read.ts), and its stores, which the renderer files.
 
 import type { Outcome } from "../utils/outcome.js";
 import type { Probed } from "./busy.js";
@@ -17,7 +16,6 @@ import type {
 } from "./checks.js";
 import type { TerminalEnvHint } from "../terminal-hint.js";
 import type { ConfiguredTerminal } from "./terminal.js";
-import type { RenderOrigin } from "../config-hint.js";
 import type { StateFile } from "./state-file.js";
 import type { DoctorStoreValues } from "../daemon/foundations/stats-snapshot";
 
@@ -56,11 +54,6 @@ export interface DoctorEdge {
     env: TerminalEnvHint,
     glyphs: string,
   ) => Promise<Probed<FontInUse>>;
-  // What loading the config at an origin finds now — the daemon reloads the
-  // render-cache entry the session's bar is drawn from and answers from it
-  // (so the doctor and the bar's strip report one load), the CLI runs one
-  // load of its own. Both are the one `loadFromDisk`.
-  readonly loadConfig: (origin: RenderOrigin) => ConfigLoad;
   // The directory Claude Code's managed settings live in
   // (`claudeManagedSettingsDir`) — a policy every session on the machine
   // reads, so the daemon's own environment may move it, which test/setup.ts
@@ -79,11 +72,8 @@ export interface DoctorEdge {
 }
 
 // [LAW:effects-at-boundaries] The doctor's reads of the machine: what the
-// gather asks through its edge, and the install check's reads.
-export type DoctorMachineEdge = Pick<
-  DoctorEdge,
-  "probeTmux" | "remoteLogin" | "fontInUse" | "daemons" | "forge" | "transcript"
-> & { readonly install: InstallEdge };
+// read asks through its edge, and the install check's reads.
+export type DoctorMachineEdge = DoctorEdge & { readonly install: InstallEdge };
 
 // One load's outcome, as both a cache entry and a fresh load carry it: the
 // file it resolved, the error that stopped it, the advisories it earned (one

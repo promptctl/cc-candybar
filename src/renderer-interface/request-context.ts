@@ -15,6 +15,7 @@ import type { RateLimitsSeen } from "../daemon/foundations/sightings";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { ClaudeHookData } from "../utils/claude";
 import type { Judged } from "../daemon/foundations/judge-run.js";
+import type { DoctorAsk } from "../doctor/gather";
 
 // A render request that crossed the checkpoint: its hookData carries every
 // required field with its declared type, its cwd is absolute, `hints` is its
@@ -62,8 +63,9 @@ export type DeclaredSources = ReadonlyMap<string, string>;
 
 // What a session's renderer subscribes to: its config's plugin sources, and
 // the runs its `shell` and `file` sources name, by digest, as the host judged
-// each one.
+// each one, and the doctor run it asks to be read, if any.
 export interface Subscribed {
   readonly plugins: DeclaredSources;
   readonly runs: ReadonlyMap<string, Judged>;
+  readonly doctor: DoctorAsk | null;
 }

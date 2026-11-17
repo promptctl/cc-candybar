@@ -10,6 +10,7 @@ import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LauncherFact } from "../proc/launcher";
 import type { HeldEvent } from "../utils/event-hold";
+import type { DoctorReading } from "../doctor/gather";
 
 // [LAW:types-are-the-program] The seam between the host and a renderer: one
 // total document per session. Every field exists on every document; a fact
@@ -109,6 +110,9 @@ export interface WorldState {
   readonly builtins: BuiltinFacts;
   readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;
   readonly runs: Readonly<Record<string, RunFact>>;
+  // The doctor run the session's renderer subscribes to, as the host read it
+  // (src/daemon/cache/doctor.ts); absent while it subscribes to none.
+  readonly doctor: Fact<DoctorReading>;
   readonly daemon: DaemonFacts;
   readonly diagnostics: readonly FactsDiagnostic[];
 }

@@ -25,7 +25,7 @@ import {
 } from "../src/doctor/font-edge";
 import { itermDrawsItself } from "../src/doctor/terminal";
 import { descendsFromRemoteLogin, parseTmuxClient } from "../src/doctor/edge";
-import { gatherFacts } from "../src/doctor/gather";
+import { gatherFacts, type GatherEdge } from "./helpers/doctor-gather";
 import { type DoctorEdge } from "../src/doctor/ports";
 import { type StoresRead } from "../src/daemon/foundations/stats-snapshot";
 import type { Asked } from "../src/doctor/checks";
@@ -38,7 +38,6 @@ import {
   healthyDataEdge,
   noManagedSettings,
   HEALTHY_SERVING,
-  HEALTHY_INSTALL_EDGE,
   CARRIED,
   NAMED,
   STILL,
@@ -651,7 +650,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
   ) => {
     const asked: unknown[][] = [];
     const pids: number[] = [];
-    const e: DoctorEdge = {
+    const e: GatherEdge = {
       ...healthyDaemonEdge(),
       ...healthyDataEdge(),
       ...noManagedSettings(),
@@ -687,7 +686,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       },
     });
   const gathered = async (
-    e: DoctorEdge,
+    e: GatherEdge,
     hints: Partial<Pick<ClientHints, "tmux" | "terminalEnv" | "ssh">>,
     pick: (key: string) => string | null = () => null,
     stores: StoresRead = EMPTY_STORES,
@@ -706,7 +705,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       stores,
     );
   const drawn = async (
-    e: DoctorEdge,
+    e: GatherEdge,
     hints: Partial<Pick<ClientHints, "tmux" | "terminalEnv" | "ssh">>,
   ) => {
     const f = (await gathered(e, hints)).nerdFont;

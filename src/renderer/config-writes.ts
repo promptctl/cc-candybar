@@ -9,7 +9,7 @@
 // ahead of it wrote, and at most one click is ever landing. The host owes every
 // change it is handed its `effect-done` (src/daemon/renderer-host.ts).
 
-import { diffChanges } from "../config/config-changes.js";
+import { diffChanges, type Change } from "../config/config-changes.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { RepoAnswer } from "../config/loader/repo-gate.js";
 import type {
@@ -50,6 +50,10 @@ export class ConfigWrites {
   } | null = null;
   private waiting: Array<() => void> = [];
   private closed = false;
+  // The open click's changes to Claude Code's settings, which no renderer
+  // reads: each made against what the session's doctor reading saw.
+  private settings: Array<{ readonly file: string; readonly change: Change }> =
+    [];
   // The open click's answers to the trust book, in the order it gave them.
   private answers: Array<{
     readonly dir: string;
@@ -80,6 +84,13 @@ export class ConfigWrites {
     });
   }
 
+  // A change of the open click to a settings file of Claude Code's, which the
+  // host lands only while what it read there stands (src/doctor/gather.ts,
+  // `settingChange`).
+  changeSettings(file: string, change: Change): void {
+    this.settings.push({ file, change });
+  }
+
   // The open click answers the trust book for `dir`: it lands with the
   // click's changes.
   answer(dir: string, answer: RepoAnswer): void {
@@ -95,7 +106,9 @@ export class ConfigWrites {
     consequence: Consequence,
   ): void {
     const answers = this.answers;
+    const settings = this.settings;
     this.answers = [];
+    this.settings = [];
     // [LAW:no-ambient-temporal-coupling] A click the daemon's close cut off
     // lands nothing, so nothing of it is performed under the teardown.
     if (this.closed) return this.open.clear();
@@ -103,10 +116,12 @@ export class ConfigWrites {
       const list = diffChanges(before, after);
       return list.length === 0 ? [] : [{ path, list }];
     });
-    const files = written.map(({ path }) => path);
+    const files = [
+      ...written.map(({ path }) => path),
+      ...settings.map(({ file }) => file),
+    ];
     this.open.clear();
-    if (written.length === 0 && answers.length === 0)
-      return consequence(effects);
+    if (files.length === 0 && answers.length === 0) return consequence(effects);
     // [LAW:no-silent-failure] A write is a session's: one with none is the
     // click's bug.
     if (session === null)
@@ -123,6 +138,15 @@ export class ConfigWrites {
           session,
           target: { kind: "layer", path },
           changes: list,
+        }),
+      ),
+      ...settings.map(
+        ({ file, change }): ConfigChange => ({
+          kind: "change",
+          id: this.mint(),
+          session,
+          target: { kind: "claude-settings", file },
+          changes: [change],
         }),
       ),
       ...answers.map(({ dir, answer }) => ({

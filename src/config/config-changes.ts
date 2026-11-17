@@ -20,6 +20,7 @@ import {
   setValue,
   textOf,
   Json5EditError,
+  type Dialect,
   type Node,
   type ObjectNode,
 } from "./json5-edit.js";
@@ -264,11 +265,14 @@ function diffMembers(
 /**
  * `changes` applied to `text` in order, each checked against the document as
  * it then stands. A setting that moved, or an ancestor a change needs that is
- * no longer an object, refuses the whole list.
+ * no longer an object, refuses the whole list. `dialect` is the document's:
+ * a cc-candybar config is JSON5, and Claude Code parses its settings as
+ * strict JSON, so a splice there quotes its keys and leaves no trailing comma.
  */
 export function applyChanges(
   text: string | null,
   changes: readonly Change[],
+  dialect: Dialect = JSON5_DIALECT,
 ): Applied {
   let current = text;
   for (const change of changes) {
@@ -285,7 +289,7 @@ export function applyChanges(
     const found = readAt(current, parsed, change.at);
     if (!sameRead(found, read))
       return { kind: "moved", at: change.at, read, found };
-    current = applied(current, change);
+    current = applied(current, change, dialect);
   }
   return { kind: "applied", text: current };
 }
@@ -302,7 +306,11 @@ function movedAncestor(parsed: Parsed, at: Address): Address | null {
   return null;
 }
 
-function applied(text: string | null, change: Change): string | null {
+function applied(
+  text: string | null,
+  change: Change,
+  dialect: Dialect,
+): string | null {
   if (change.at.length === 0)
     return change.op === "remove" ? null : change.text;
   // Every ancestor is an object and the read matched, so a remove finds its
@@ -310,13 +318,13 @@ function applied(text: string | null, change: Change): string | null {
   // diff removes an ancestor by its own change.
   switch (change.op) {
     case "replace":
-      return setValue(text!, change.at, change.text, JSON5_DIALECT);
+      return setValue(text!, change.at, change.text, dialect);
     case "insert":
       return insertValue(
         text!,
         change.at,
         change.text,
-        JSON5_DIALECT,
+        dialect,
         change.precedes,
       );
     case "remove":

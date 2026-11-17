@@ -9,8 +9,8 @@
 // render each write their own fact and settle, so neither has to arrive before
 // the other for the close to land where the record says.
 //
-// While a click of the session is in flight no deadline exists: its gather and
-// its queues are not idleness, whatever they take. Only a landing moves the
+// While a click of the session is in flight no deadline exists: its queues
+// are not idleness, whatever they take. Only a landing moves the
 // clock, so an abandoned click restarts nothing.
 
 import { closesAt } from "../config/menu-timeout.js";

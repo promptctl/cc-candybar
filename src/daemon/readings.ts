@@ -47,6 +47,8 @@ import {
   type SourceRuns,
 } from "./source-runs.js";
 import type { JsonValue } from "../var-system/types.js";
+import type { DoctorSource } from "./cache/doctor.js";
+import type { DoctorAsk, DoctorReading } from "../doctor/gather.js";
 import type {
   ViewFacts,
   Subscribed,
@@ -76,6 +78,9 @@ export interface RenderPayloadDeps {
   // session's declaration holds each run its renderer subscribes to there,
   // so one digest is one run however many sessions name it.
   readonly sourceRuns: Pick<SourceRuns, "declare">;
+  // [LAW:single-enforcer] The one reader of the doctor's facts: a session's
+  // declaration holds the run its renderer subscribes to there.
+  readonly doctor: Pick<DoctorSource, "declare">;
   // Claude Code's auto-compact window, read from the user settings file at
   // the path a render names.
   readonly autoCompact: AutoCompactProvider;
@@ -143,6 +148,7 @@ export interface Lanes {
   // Each run the session's renderer subscribes to, by digest: its reading
   // and its watch's fault.
   readonly runs: ReadonlyMap<string, RunReading>;
+  readonly doctor: Current<DoctorReading>;
 }
 
 export interface RunReading {
@@ -171,6 +177,7 @@ export type KeyedOwners = Pick<
   | "transcriptLanes"
   | "managedStorage"
   | "sourceRuns"
+  | "doctor"
 >;
 
 // [LAW:types-are-the-program] What a session's declaration hands its stamps:
@@ -192,6 +199,8 @@ export interface DeclaredLanes {
   readonly sources: ReadonlyMap<string, Lane<JsonValue>>;
   // One lane per run the renderer subscribes to, by digest.
   readonly runs: ReadonlyMap<string, SourceLane>;
+  // The doctor run the renderer subscribes to; absent when it asks none.
+  readonly doctor: Lane<DoctorReading>;
 }
 
 // A declaration's lanes, and what threw while it took them.
@@ -204,7 +213,7 @@ export interface Declaration {
 // when its declaration threw whole, or a caller's that declares nothing.
 export function settledLanes(
   outcome: Outcome<never>,
-  { plugins, runs }: Subscribed,
+  { plugins, runs, doctor }: Subscribed,
 ): DeclaredLanes {
   const lane = settledLane(outcome);
   return {
@@ -221,6 +230,7 @@ export function settledLanes(
         { digest, current: () => lane.current(), fault: () => null },
       ]),
     ),
+    doctor: doctorLane(doctor, () => lane),
   };
 }
 
@@ -311,9 +321,25 @@ export function declareLanes(
         ...declare(`run ${shortDigest(digest)}`, take),
       }),
     ),
+    doctor: doctorLane(sources.doctor, (ask) =>
+      declare("doctor", () =>
+        owners.doctor.declare(holds, {
+          session: facts.hookData.session_id,
+          hints: facts.hints,
+          ask,
+        }),
+      ),
+    ),
   };
   return { lanes, faults };
 }
+
+// [LAW:dataflow-not-control-flow] A session whose renderer asks no doctor run
+// reads the doctor as absent.
+const doctorLane = (
+  ask: DoctorAsk | null,
+  take: (ask: DoctorAsk) => Lane<DoctorReading>,
+): Lane<DoctorReading> => (ask === null ? settledLane(ABSENT) : take(ask));
 
 // [LAW:effects-at-boundaries] No I/O, and no write: every read takes what its
 // owner stored, so the world state stamped over it (src/daemon/collector.ts)
@@ -374,6 +400,7 @@ export function readingsOf(
         { reading: lane.current(), fault: lane.fault() },
       ]),
     ),
+    doctor: lanes.doctor.current(),
   };
   return {
     lanes: laneReadings,

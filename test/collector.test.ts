@@ -705,7 +705,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, facts, { plugins: new Map(), runs: new Map() }),
+    declareLanes(owners, holds, facts, { plugins: new Map(), runs: new Map(), doctor: null }),
   );
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^git: .*resolver bug/),
@@ -758,6 +758,7 @@ test("a run whose declaration throws answers its failure, and every other run an
         [broken.digest, judgeRun(broken)],
         [fine.digest, judgeRun(fine)],
       ]),
+      doctor: null,
     }),
   );
   expect(declared.result.faults).toEqual([

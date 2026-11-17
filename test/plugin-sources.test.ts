@@ -5,6 +5,7 @@
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
 import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
+import { NO_DOCTOR } from "./helpers/payload-owners";
 import { eventRenderer, NO_ACTS, NO_PUSHES } from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { withTranscriptLanes } from "./helpers/payload-owners";
@@ -214,6 +215,7 @@ function rig(): Rig {
         launcher: world.launcher,
         clock: systemTimekeeper,
       }),
+      doctor: NO_DOCTOR,
     }),
   );
   const sessionState = new SessionState();

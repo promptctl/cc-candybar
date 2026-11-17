@@ -154,7 +154,7 @@ const OWNED_IMPORTS = {
     owners: ["src/daemon/production-adapters.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
-  productionEdge: {
+  productionMachineEdge: {
     group: ["**/doctor/edge", "**/doctor/edge.js"],
     owners: ["src/daemon/production-adapters.ts", "src/doctor/cli.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
@@ -342,7 +342,6 @@ const ZONE_ROWS = {
   "src/help-text.ts": "shared",
   "src/doctor/data-needs.ts": "shared",
   "src/doctor/gather.ts": "shared",
-  "src/claude-settings-read.ts": "shared",
   "src/index.ts": "root",
   // The renderer process's composition root, the counterpart of the daemon's.
   "src/renderer-process.ts": "root",

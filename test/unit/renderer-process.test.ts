@@ -106,6 +106,12 @@ function rig(start: () => Promise<void> = async () => {}) {
   const link = processRenderer({
     reaches: {
       ...inertHost(),
+      // A call this rig has no host part for, failing as such a reach does.
+      clicks: {
+        gone: async () => {
+          throw new Error("clicks: no host part in this rig");
+        },
+      },
       watches: {
         watch: (id) => watched.push(["watch", id]),
         unwatch: (id) => watched.push(["unwatch", id]),
@@ -751,7 +757,7 @@ describe("a renderer process's close", () => {
     link.arm();
     const child = children[0]!;
     child.say({ kind: "started", pid: 9001 });
-    child.say({ kind: "call", n: 1, reach: "serving", args: [] });
+    child.say({ kind: "call", n: 1, reach: "clicks.gone", args: [] });
     await settled();
     expect(child.written.at(-1)).toMatchObject({
       kind: "returned",
@@ -760,7 +766,7 @@ describe("a renderer process's close", () => {
         kind: "failed",
         failure: {
           kind: "threw",
-          message: "serving: no host part in this rig",
+          message: "clicks: no host part in this rig",
         },
       },
     });

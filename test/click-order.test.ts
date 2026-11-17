@@ -1,11 +1,11 @@
-// A click's read-only gathers run ahead of its journal turn, and its session's
-// queue keeps arrival order across them. Doctor
-// clicks here are real verbs over a fake doctor edge whose process probe parks
-// on a gate; the click-path cases drive `replyTo`, the daemon's real click arm.
+// A click lands in its session's arrival order, in the daemon's one journal
+// turn; a doctor click asks the host for its reading and runs no probe in its
+// turn. Clicks here are real verbs; a click is kept in flight by parking
+// another turn ahead of it, and the click-path cases drive `replyTo`, the
+// daemon's real click arm.
 
 import { RuntimeStats } from "../src/daemon/stats";
 import { JournalTurns } from "../src/renderer/journal-turns";
-import { HOST, locs } from "./helpers/host";
 import { MenuIdle } from "../src/daemon/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { clickParts } from "./helpers/click-parts";
@@ -20,7 +20,6 @@ import {
 import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   VERB_DISPATCH,
-  VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
@@ -28,45 +27,32 @@ import {
   encodeSegments,
 } from "../src/click/wire";
 import { ClickAbandoned } from "../src/daemon/foundations/verb-error";
-import { systemLauncher } from "../src/proc/system-launcher";
-import { type Launcher } from "../src/proc/launcher";
-import { productionEdge } from "../src/doctor/edge";
-import { type DoctorEdge } from "../src/doctor/ports";
+import type { ConfigLoad } from "../src/doctor/ports";
 import { instantOf } from "../src/utils/instant";
+import { emptyStores } from "./helpers/doctor-facts";
 import {
-  emptyStores,
-  healthyDaemonEdge,
-  healthyDataEdge,
-  HEALTHY_INSTALL_EDGE,
-  noManagedSettings,
-} from "./helpers/doctor-facts";
-import { recordRender, testVerbContext,
-  verbContextWith } from "./helpers/click";
+  recordRender,
+  testVerbContext,
+  verbContextWith,
+  withDoctor,
+} from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper } from "../src/time";
-import {
-  sessionIdOf,
-  type SessionId,
-} from "../src/daemon/foundations/session-id";
-const SESSION_C = sessionIdOf("session-c");
+import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const A = sessionIdOf("session-a");
-const B = sessionIdOf("session-b");
 const S = sessionIdOf("s");
-type Load = ReturnType<DoctorEdge["loadConfig"]>;
-const LOAD = {
+const LOAD: ConfigLoad = {
   layers: [],
   error: null,
   warning: null,
   unused: [],
   config: EMPTY_DEFAULT,
-} as unknown as Load;
-// As production: a reload that fails keeps the config it had.
-const FAILED_LOAD = { ...LOAD, error: "the file changed" } as Load;
+};
 
 function gate(): { wait: Promise<void>; open: () => void } {
   let open = (): void => {};
@@ -78,17 +64,7 @@ async function drain(): Promise<void> {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 }
 
-const edge = (over: Partial<DoctorEdge>): DoctorEdge =>
-  ({
-    ...healthyDaemonEdge(),
-    ...healthyDataEdge(),
-    ...noManagedSettings(),
-    loadConfig: () => LOAD,
-    probeTmux: async () => ({ kind: "failed", reason: "no tmux" }),
-    ...over,
-  }) as DoctorEdge;
-
-function setup(over: Partial<DoctorEdge> = {}) {
+function setup() {
   const sessionState = new SessionState();
   const logged: string[] = [];
   const base = testVerbContext(sessionState, undefined, EMPTY_DEFAULT);
@@ -96,205 +72,46 @@ function setup(over: Partial<DoctorEdge> = {}) {
     monotonic: () => systemTimekeeper.monotonic(),
     changesLanded: () => base.configWrites.landed(),
   });
-  for (const sid of [A, B, SESSION_C]) {
-    recordRender(sessionState, sid);
-    sessionState.set(sid, SESSION_CLIENT_HINTS_KEY, "{}");
-  }
-  const held = gate();
-  const healthy = healthyDaemonEdge().daemons;
-  const gathers: string[] = [];
-  const ctx = verbContextWith(base, {
-    journalTurns: turns,
-    log: (_level, line) => logged.push(line),
-    doctorStores: emptyStores(),
-    doctor: edge({
-      daemons: async () => {
-        gathers.push(`holder=${turns.getStats().holder}`);
-        await held.wait;
-        return healthy();
-      },
-      ...over,
+  recordRender(sessionState, A);
+  sessionState.set(A, SESSION_CLIENT_HINTS_KEY, "{}");
+  const ctx = withDoctor(
+    verbContextWith(base, {
+      journalTurns: turns,
+      log: (_level, line) => logged.push(line),
     }),
-  });
-  const written = (sid: SessionId) => sessionState.get(sid, "theme");
-  const doctor = (sid: string, c: VerbContext = ctx) =>
-    VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(sid), c);
-  const write = (sid: string, c: VerbContext = ctx) =>
-    VERBS.get(VERB_SET_STATE)!(encodeSegments([sid, "theme", "nord"]), c);
-  const doDoctorThen = (c: VerbContext = ctx) => {
-    const url = effectsUrl([
-      { verb: VERB_DOCTOR_RUN, args: [A] },
-      { verb: VERB_SET_STATE, args: [A, "theme", "nord"] },
-    ]);
-    return VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), c);
-  };
-  const reports = () => logged.filter((l) => l.startsWith("doctor: "));
-  return {
-    sessionState,
-    logged,
-    turns,
-    held,
-    gathers,
-    ctx,
-    written,
-    doctor,
-    write,
-    doDoctorThen,
-    reports,
-  };
-}
-
-describe("a gather holds no turn", () => {
-  test("session B's click lands while A's doctor gather parks, and A's report lands", async () => {
-    const { turns, held, gathers, doctor, write, written, reports } = setup();
-    const a = doctor(A);
-    await drain();
-    expect(gathers).toEqual(["holder=null"]);
-    expect(turns.getStats().holder).toBeNull();
-    await write(B);
-    expect(written(B)).toBe("nord");
-    expect(reports()).toEqual([]);
-    held.open();
-    await a;
-    expect(reports()).toHaveLength(1);
-  });
-
-  test("two sessions' doctor gathers run one at a time, while a write passes both", async () => {
-    const { turns, held, gathers, doctor, write, written, reports } = setup();
-    const a = doctor(A);
-    const b = doctor(B);
-    await drain();
-    expect(gathers).toHaveLength(1);
-    expect(turns.getStats().gathers).toBe(2);
-    await write("session-c");
-    expect(written(SESSION_C)).toBe("nord");
-    held.open();
-    await Promise.all([a, b]);
-    expect(reports()).toHaveLength(2);
-  });
-
-  test("a doctor click whose client left during the gather still files its report", async () => {
-    const { held, doctor, ctx, reports } = setup();
-    let gone = false;
-    const a = doctor(A, { ...ctx, clientGone: async () => gone });
-    await drain();
-    gone = true;
-    held.open();
-    await a;
-    expect(reports()).toHaveLength(1);
-  });
-
-  test("a `do` of doctor then a write whose client left during the gather lands both", async () => {
-    const { held, doDoctorThen, ctx, written, reports } = setup();
-    let gone = false;
-    const a = doDoctorThen({ ...ctx, clientGone: async () => gone });
-    await drain();
-    gone = true;
-    held.open();
-    await a;
-    expect(reports()).toHaveLength(1);
-    expect(written(A)).toBe("nord");
-  });
-
-  test("a gather past a click's first gather runs in the turn, after the first one's write", async () => {
-    const { held, gathers, ctx } = setup();
-    const url = effectsUrl([
-      { verb: VERB_DOCTOR_RUN, args: [A] },
-      { verb: VERB_DOCTOR_RUN, args: [A] },
-    ]);
-    const twice = VERBS.get(VERB_DISPATCH)!(
-      url.slice(url.lastIndexOf("/") + 1),
-      ctx,
-    );
-    held.open();
-    await twice;
-    expect(gathers).toEqual(["holder=null", `holder=${VERB_DISPATCH}`]);
-  });
-});
-
-describe("one session's order", () => {
-  test("a write arriving after a doctor click lands after it", async () => {
-    const { held, doctor, write, written, reports } = setup();
-    const a = doctor(A);
-    const later = write(A);
-    await drain();
-    expect(written(A)).toBeNull();
-    held.open();
-    await Promise.all([a, later]);
-    expect(reports()).toHaveLength(1);
-    expect(written(A)).toBe("nord");
-  });
-
-  test("two doctor-marks reach their verdicts in arrival order", async () => {
-    const order: string[] = [];
-    const first = gate();
-    let probes = 0;
-    const { ctx } = setup({
-      daemons: async () => {
-        if (++probes === 1) await first.wait;
-        return healthyDaemonEdge().daemons();
-      },
-    });
-    const logging: VerbContext = {
-      ...ctx,
-      log: (_l, line) => {
-        if (line.startsWith("doctor: "))
-          order.push(`report${order.length + 1}`);
-      },
-    };
-    const refuse = (m: string) =>
-      VERBS.get(VERB_DOCTOR_MARK)!(
-        encodeSegments([A, "nerdFont", m]),
-        logging,
-      ).catch((e: unknown) =>
-        order.push(`${m}: ${String(e).includes("mark") ? "refused" : e}`),
-      );
-    const one = refuse("drawn");
-    const two = refuse("boxes");
-    await drain();
-    expect(order).toEqual([]);
-    expect(probes).toBe(1);
-    first.open();
-    await Promise.all([one, two]);
-    expect(order).toEqual(["drawn: refused", "boxes: refused"]);
-  });
-
-  test("a later click whose client left while queued behind the gather is refused, and writes nothing", async () => {
-    const { held, doctor, write, ctx, written } = setup();
-    const a = doctor(A);
-    const later = write(A, { ...ctx, clientGone: async () => true });
-    const refused = expect(later).rejects.toBeInstanceOf(ClickAbandoned);
-    held.open();
-    await a;
-    await refused;
-    expect(written(A)).toBeNull();
-  });
-
-  test("a `do` of doctor then a write whose client leaves in the turn wait, after its gather, is refused", async () => {
-    const { held, doDoctorThen, ctx, written, reports, turns } = setup();
+    { stores: emptyStores(), load: LOAD },
+  );
+  // Another click's turn, held until the gate opens: every click after it
+  // waits in the queue, in flight.
+  const parkTurn = () => {
     const parked = gate();
-    let gone = false;
-    // Another click's turn, parked: the write's turn waits behind it.
     const holding = turns.take(
       "parked",
       { waited: () => {}, gone: async () => false },
       () => parked.wait,
     );
-    await drain();
-    const a = doDoctorThen({ ...ctx, clientGone: async () => gone });
-    held.open();
-    await drain();
-    gone = true;
-    const refused = expect(a).rejects.toBeInstanceOf(ClickAbandoned);
-    parked.open();
-    await holding;
-    await refused;
-    expect(reports()).toEqual([]);
-    expect(written(A)).toBeNull();
-  });
-});
+    return { open: parked.open, holding };
+  };
+  const written = (sid: SessionId) => sessionState.get(sid, "theme");
+  const doctor = (sid: string, c: VerbContext = ctx) =>
+    VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(sid), c);
+  const write = (sid: string, c: VerbContext = ctx) =>
+    VERBS.get(VERB_SET_STATE)!(encodeSegments([sid, "theme", "nord"]), c);
+  return { sessionState, logged, turns, ctx, parkTurn, written, doctor, write };
+}
 
-describe("a gather is a snapshot of one config", () => {
+describe("a doctor click", () => {
+  test("runs no probe in its turn: it ends with the run asked of the host, and a write behind it lands at once", async () => {
+    const { ctx, doctor, write, written } = setup();
+    await doctor(A);
+    expect(ctx.doctorRuns.subscriptions().get(A)).toMatchObject({
+      kind: "doctor",
+      ask: { run: 1 },
+    });
+    await write(A);
+    expect(written(A)).toBe("nord");
+  });
+
   // A click lands whole, when it ends: its doctor judges the config the click
   // found, and the write is there for the next click.
   test("a `do` of set-config then doctor judges the config the click found", async () => {
@@ -310,102 +127,74 @@ describe("a gather is a snapshot of one config", () => {
         DEFAULT_DSL_CONFIG,
       );
       const seen: Array<string | null> = [];
-      const healthy = healthyDaemonEdge().daemons;
-      const ctx: VerbContext = verbContextWith(testVerbContext(
-          sessionState,
-          fixture.historyFor(sessionState),
-          config,
-          fixture.host,
-        ), {
-        doctorStores: emptyStores(),
-        doctor: edge({
-          daemons: () => {
+      const ctx = verbContextWith(
+        withDoctor(
+          testVerbContext(
+            sessionState,
+            fixture.historyFor(sessionState),
+            config,
+            fixture.host,
+          ),
+          { stores: emptyStores(), load: LOAD },
+        ),
+        {
+          doctorLoad: () => {
             seen.push(fixture.text());
-            return healthy();
+            return LOAD;
           },
-        })
-});
+        },
+      );
       const url = effectsUrl([
         { verb: VERB_SET_CONFIG, args: [A, "user", "palette", [...ALLOWED][0]!] },
         { verb: VERB_DOCTOR_RUN, args: [A] },
       ]);
       await VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
-      expect(seen).toHaveLength(1);
       expect(seen).toEqual([null]);
       expect(fixture.text()).toContain("palette");
     } finally {
       fixture.dispose();
     }
   });
-
-  test("a config write landing during a gather makes the click re-gather in its turn, and the report matches it", async () => {
-    let load = LOAD;
-    const { held, gathers, doctor, reports } = setup({
-      loadConfig: () => load,
-    });
-    const a = doctor(A);
-    await drain();
-    load = FAILED_LOAD;
-    held.open();
-    await a;
-    expect(gathers).toEqual(["holder=null", `holder=${VERB_DOCTOR_RUN}`]);
-    expect(reports()).toHaveLength(1);
-    expect(reports()[0]).toContain("config=failed(");
-  });
-
-  test("the re-gather asks the real rate limiter nothing twice", async () => {
-    const launcher = systemLauncher(
-      { inherited: process.env },
-      systemTimekeeper,
-    );
-    let load = LOAD;
-    const real = productionEdge(launcher, () => load, HOST);
-    const parked = gate();
-    let daemons = 0;
-    const { ctx, reports, sessionState } = setup();
-    // Inside tmux, so the gather spawns the rate-limited tmux probe.
-    sessionState.set(
-      A,
-      SESSION_CLIENT_HINTS_KEY,
-      JSON.stringify({
-        tmux: {
-          pane: "%1",
-          socket: "/tmp/fqw-no-such-socket",
-          truecolor: null,
-        },
-      }),
-    );
-    const c: VerbContext = {
-      ...ctx,
-      doctor: {
-        ...real,
-        ...healthyDataEdge(),
-        daemons: async () => {
-          if (++daemons === 1) await parked.wait;
-          return healthyDaemonEdge().daemons();
-        },
-      },
-    };
-    const a = VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(A), c);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    load = FAILED_LOAD;
-    parked.open();
-    await a;
-    expect(daemons).toBe(2);
-    expect(reports()[0]).toContain("config=failed(");
-  });
 });
 
-test("a `do` of doctor then a write with a failed probe still writes and shows the error on the bar", async () => {
-  const { doDoctorThen, sessionState, written, reports } = setup({
-    daemons: async () => {
-      throw new Error("ps broke");
-    },
+describe("one session's order", () => {
+  test("a click whose client left while it queued behind another turn is refused, and writes nothing", async () => {
+    const { ctx, parkTurn, write, written } = setup();
+    const parked = parkTurn();
+    const later = write(A, { ...ctx, clientGone: async () => true });
+    const refused = expect(later).rejects.toBeInstanceOf(ClickAbandoned);
+    parked.open();
+    await parked.holding;
+    await refused;
+    expect(written(A)).toBeNull();
   });
-  await expect(doDoctorThen()).rejects.toThrow("ps broke");
-  expect(written(A)).toBe("nord");
-  expect(reports()).toEqual([]);
-  expect(sessionState.get(A, "click.error")).toContain("ps broke");
+
+  test("a click queued behind its session's own click reports the wait; a menu with a click in flight draws no countdown", async () => {
+    const { ctx, parkTurn, write } = setup();
+    const parked = parkTurn();
+    const waits: number[] = [];
+    const first = write(A);
+    const later = write(A, { ...ctx, placeWaited: (ms) => waits.push(ms) });
+    await new Promise((r) => setTimeout(r, 20));
+    parked.open();
+    await Promise.all([parked.holding, first, later]);
+    expect(waits).toHaveLength(1);
+    expect(waits[0]).toBeGreaterThan(0);
+
+    const idle = new MenuIdle({
+      clock: systemTimekeeper,
+      now: () => instantOf(new Date(100000)),
+      close: async () => null,
+      failed: () => {},
+    });
+    idle.observe(A, instantOf(new Date(100000)), true, 30);
+    expect(idle.since(A, instantOf(new Date(100000)))).toBeDefined();
+    idle.clickArrived(A);
+    expect(idle.since(A, instantOf(new Date(100000)))).toBeUndefined();
+    idle.clickSettled(A);
+    expect(idle.since(A, instantOf(new Date(100000)))).toBeDefined();
+    idle.dispose();
+  });
 });
 
 describe("the idle clock", () => {
@@ -478,71 +267,72 @@ describe("the idle clock", () => {
   });
 });
 
-test("the click path counts a click pending from arrival, through a refusal, and logs its gather", async () => {
-  const { ctx, held } = setup();
+// The daemon's click arm over `ctx`'s verbs, with what its host parts hand in.
+function clickArm(
+  ctx: VerbContext,
+  over: {
+    readonly menuIdle: Pick<MenuIdle, "clickArrived" | "clickSettled">;
+    readonly log?: (level: string, line: string) => void;
+    readonly collector?: Parameters<typeof clickParts>[2];
+  },
+) {
+  const {
+    arrival: _a,
+    turnWaited: _t,
+    placeWaited: _p,
+    clientGone: _c,
+    latest: _l,
+    ...verbCtx
+  } = ctx;
+  const parts = {
+    clock: { monotonic: () => performance.now(), now: () => Date.now() },
+    menuIdle: over.menuIdle,
+    payloadProviders: {},
+    frameFeeds: { latest: () => null },
+    log: over.log ?? (() => {}),
+    ...clickParts(verbCtx, over.menuIdle, over.collector),
+  } as unknown as DaemonParts;
+  return (verb: string, value: string, gone: () => boolean) =>
+    replyTo(
+      parts,
+      signedClick(verb, value) as Parameters<typeof replyTo>[1],
+      () => false,
+      new RuntimeStats(systemTimekeeper).accept(),
+      gone,
+    );
+}
+
+const WRITE_A = encodeSegments([A, "theme", "nord"]);
+
+test("the click path counts a click pending from arrival, through a refusal", async () => {
+  const { ctx, parkTurn } = setup();
   const idle = new MenuIdle({
     clock: systemTimekeeper,
     now: () => instantOf(new Date()),
     close: async () => null,
     failed: () => {},
   });
-  const {
-    arrival: _a,
-    turnWaited: _t,
-    placeWaited: _p,
-    gatherTook: _g,
-    clientGone: _c,
-    latest: _l,
-    ...verbCtx
-  } = ctx;
-  const events: string[] = [];
-  const parts = {
-    clock: { monotonic: () => performance.now(), now: () => Date.now() },
-    menuIdle: idle,
-    payloadProviders: {},
-    frameFeeds: { latest: () => null },
-    log: (_level: string, line: string) => events.push(line),
-    ...clickParts(verbCtx, idle),
-  } as unknown as DaemonParts;
-  const send = (gone: () => boolean) =>
-    replyTo(
-      parts,
-      signedClick(VERB_DOCTOR_RUN, encodeURIComponent(A)) as Parameters<
-        typeof replyTo
-      >[1],
-      () => false,
-      new RuntimeStats(systemTimekeeper).accept(),
-      gone,
-    );
-  const sent = send(() => false);
+  const send = clickArm(ctx, { menuIdle: idle });
+  const parked = parkTurn();
+  const sent = send(VERB_SET_STATE, WRITE_A, () => false);
   await drain();
   expect(idle.getStats().pending).toBe(1);
-  held.open();
+  parked.open();
   await sent;
   expect(idle.getStats().pending).toBe(0);
-  expect(events[0]).toMatch(/ gather=\d+ms /);
-  await send(() => true);
+  await send(VERB_SET_STATE, WRITE_A, () => true);
   expect(idle.getStats().pending).toBe(0);
   idle.dispose();
 });
 
 test("a click's turn holds its session in the collector while it runs, with nothing held by the click path, and lets go whether it lands or is refused", async () => {
-  const { ctx, held } = setup();
+  const { ctx, parkTurn } = setup();
   const idle = new MenuIdle({
     clock: systemTimekeeper,
     now: () => instantOf(new Date()),
     close: async () => null,
     failed: () => {},
   });
-  const {
-    arrival: _a,
-    turnWaited: _t,
-    placeWaited: _p,
-    gatherTook: _g,
-    clientGone: _c,
-    latest: _l,
-    ...verbCtx
-  } = ctx;
   // The collector's holds, as the sweep reads them: how many are taken and
   // not yet let go, per session.
   const holds = new Map<string, number>();
@@ -552,31 +342,18 @@ test("a click's turn holds its session in the collector while it runs, with noth
     holds.set(session, (holds.get(session) ?? 0) + 1);
     return () => void holds.set(session, holds.get(session)! - 1);
   };
-  const parts = {
-    clock: { monotonic: () => performance.now(), now: () => Date.now() },
+  const send = clickArm(ctx, {
     menuIdle: idle,
-    payloadProviders: {},
-    frameFeeds: { latest: () => null },
-    log: () => {},
-    ...clickParts(verbCtx, idle, { holding, clicked: () => {} }),
-  } as unknown as DaemonParts;
-  const send = (gone: () => boolean) =>
-    replyTo(
-      parts,
-      signedClick(VERB_DOCTOR_RUN, encodeURIComponent(A)) as Parameters<
-        typeof replyTo
-      >[1],
-      () => false,
-      new RuntimeStats(systemTimekeeper).accept(),
-      gone,
-    );
-  const sent = send(() => false);
+    collector: { holding, clicked: () => {} },
+  });
+  const parked = parkTurn();
+  const sent = send(VERB_SET_STATE, WRITE_A, () => false);
   await drain();
   expect(holds.get(A)).toBe(1);
-  held.open();
+  parked.open();
   await sent;
   expect(holds.get(A)).toBe(0);
-  await send(() => true);
+  await send(VERB_SET_STATE, WRITE_A, () => true);
   expect(taken).toBe(2);
   expect(holds.get(A)).toBe(0);
   idle.dispose();
@@ -584,71 +361,28 @@ test("a click's turn holds its session in the collector while it runs, with noth
 
 test("a click whose session will not decode is a bad request whose event still names its verb", async () => {
   const { ctx } = setup();
-  const {
-    arrival: _a,
-    turnWaited: _t,
-    placeWaited: _p,
-    gatherTook: _g,
-    clientGone: _c,
-    latest: _l,
-    ...verbCtx
-  } = ctx;
   const events: string[] = [];
-  const parts = {
-    clock: { monotonic: () => performance.now(), now: () => Date.now() },
-    payloadProviders: {},
-    log: (_level: string, line: string) => events.push(line),
-    ...clickParts(verbCtx, { clickArrived: () => {}, clickSettled: () => {} }),
-  } as unknown as DaemonParts;
-  const { resp } = await replyTo(
-    parts,
-    // An escape that is no UTF-8: the one malformed segment a signed link,
-    // whose bare `%` is escaped, can still carry.
-    signedClick(VERB_DOCTOR_RUN, "%C0") as Parameters<typeof replyTo>[1],
-    () => false,
-    new RuntimeStats(systemTimekeeper).accept(),
-    () => false,
-  );
+  const send = clickArm(ctx, {
+    menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
+    log: (_level, line) => events.push(line),
+  });
+  // An escape that is no UTF-8: the one malformed segment a signed link,
+  // whose bare `%` is escaped, can still carry.
+  const { resp } = await send(VERB_DOCTOR_RUN, "%C0", () => false);
   expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
   expect(events).toEqual([
     expect.stringMatching(new RegExp(` verb=${VERB_DOCTOR_RUN} `)),
   ]);
 });
 
-test("tsc refuses `ctx.launcher` in a VerbHandler", () => {
+test("tsc refuses the host's edges in a VerbHandler", () => {
   const handler: VerbHandler = async (_value, ctx) => {
     // @ts-expect-error A handler reaches launches through the turn alone.
     void ctx.launcher;
-    // @ts-expect-error As above.
+    // @ts-expect-error The doctor's probes are the host's to run.
     void ctx.doctor;
-    // @ts-expect-error As above.
+    // @ts-expect-error As the launcher.
     void ctx.claudeInput;
   };
   expect(handler).toBeDefined();
-});
-
-test("a click waiting behind its session's gather reports the wait; a menu with a click in flight draws no countdown", async () => {
-  const { held, doctor, write, ctx } = setup();
-  const waits: number[] = [];
-  const a = doctor(A);
-  const later = write(A, { ...ctx, placeWaited: (ms) => waits.push(ms) });
-  await new Promise((r) => setTimeout(r, 20));
-  held.open();
-  await Promise.all([a, later]);
-  expect(waits).toHaveLength(1);
-  expect(waits[0]).toBeGreaterThan(0);
-
-  const idle = new MenuIdle({
-    clock: systemTimekeeper,
-    now: () => instantOf(new Date(100000)),
-    close: async () => null,
-    failed: () => {},
-  });
-  idle.observe(A, instantOf(new Date(100000)), true, 30);
-  expect(idle.since(A, instantOf(new Date(100000)))).toBeDefined();
-  idle.clickArrived(A);
-  expect(idle.since(A, instantOf(new Date(100000)))).toBeUndefined();
-  idle.clickSettled(A);
-  expect(idle.since(A, instantOf(new Date(100000)))).toBeDefined();
-  idle.dispose();
 });

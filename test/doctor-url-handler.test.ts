@@ -33,8 +33,19 @@ import { SessionState } from "../src/renderer/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { asyncSightings, recordRender, testVerbContext,
-  verbContextWith } from "./helpers/click";
+import {
+  recordRender,
+  testVerbContext,
+  verbContextWith,
+  withDoctor,
+} from "./helpers/click";
+import { DoctorHost } from "./helpers/doctor-gather";
+import { clickParts } from "./helpers/click-parts";
+import { replyTo } from "../src/daemon/reply";
+import { RuntimeStats } from "../src/daemon/stats";
+import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { parseClientHints } from "../src/daemon/foundations/protocol";
+import { systemTimekeeper } from "../src/time";
 import {
   emptyStores,
   HEALTHY_FACTS,
@@ -43,6 +54,7 @@ import {
   noManagedSettings,
   HEALTHY_SERVING,
   HEALTHY_INSTALL_EDGE,
+  HEALTHY_BUNDLE,
   healthyClient,
   renderSaid,
 } from "./helpers/doctor-facts";
@@ -369,42 +381,63 @@ describe("the daemon's side of the round trip", () => {
       0,
     );
     const logs: string[] = [];
-    const ctx: VerbContext = verbContextWith(testVerbContext(sessionState, undefined, DEFAULT_DSL_CONFIG), {
-      arrival,
-      clients: asyncSightings(clients),
-      log: (_level, message) => logs.push(message),
-      doctorStores: emptyStores(),
-      doctor: {
-        ...healthyDaemonEdge(),
-        ...healthyDataEdge(),
-        ...noManagedSettings(),
-        probeTmux: async () => ({
-          kind: "ok",
-          value: {
-            features: [],
-            termtype: "",
-            termname: "",
-            pid: 4242,
-            utf8: true,
-          },
-        }),
-        remoteLogin: async () => {
-          throw new Error("remoteLogin must not run in this case");
-        },
-        fontInUse: async () => {
-          throw new Error("fontInUse must not run in this case");
-        },
-        loadConfig: () => ({
+    const ctx: VerbContext = withDoctor(
+      verbContextWith(
+        testVerbContext(sessionState, undefined, DEFAULT_DSL_CONFIG),
+        { arrival, log: (_level, message) => logs.push(message) },
+      ),
+      {
+        stores: emptyStores(),
+        load: {
           layers: [],
           error: null,
           warning: null,
           unused: [],
           config: DEFAULT_DSL_CONFIG,
-        }),
-      }
-});
-    const click = async (verb: string, value: string): Promise<void> =>
+        },
+      },
+    );
+    // The host: the session's hints as its client recorded them, and the
+    // machine as a healthy one answers.
+    const host = new DoctorHost(
+      {
+        edge: {
+          install: HEALTHY_INSTALL_EDGE,
+          ...healthyDaemonEdge(),
+          ...healthyDataEdge(),
+          ...noManagedSettings(),
+          probeTmux: async () => ({
+            kind: "ok",
+            value: {
+              features: [],
+              termtype: "",
+              termname: "",
+              pid: 4242,
+              utf8: true,
+            },
+          }),
+          remoteLogin: async () => {
+            throw new Error("remoteLogin must not run in this case");
+          },
+          fontInUse: async () => {
+            throw new Error("fontInUse must not run in this case");
+          },
+        },
+        sightings: (session, now) => clients.ofSession(session, now),
+        serving: () => HEALTHY_SERVING,
+        bundle: HEALTHY_BUNDLE,
+        clock: systemTimekeeper,
+      },
+      (session) =>
+        parseClientHints(
+          JSON.parse(sessionState.get(session, SESSION_CLIENT_HINTS_KEY)!),
+        ),
+    );
+    // A click, then the end of its turn at the host.
+    const click = async (verb: string, value: string): Promise<void> => {
       await VERBS.get(verb)!(value, ctx);
+      await host.settle(ctx.doctorRuns);
+    };
     return { sessionState, logs, click };
   }
 
@@ -427,6 +460,41 @@ describe("the daemon's side of the round trip", () => {
       nonce: NONCE,
       delivery: CLI,
     });
+  });
+
+  // [LAW:single-enforcer] The probe's arrival is the host's own record: the
+  // click arm files it, and no renderer is asked anything.
+  test("a probe click is answered by the host and never reaches a renderer", async () => {
+    const handlerProbes = new ProbeArrivals();
+    const ctx = testVerbContext(new SessionState());
+    const parts = {
+      clock: { monotonic: () => performance.now(), now: () => Date.now() },
+      menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
+      payloadProviders: {},
+      frameFeeds: { latest: () => null },
+      log: () => {},
+      handlerProbes,
+      ...clickParts(ctx, { clickArrived: () => {}, clickSettled: () => {} }),
+      renderer: new Proxy(
+        {},
+        {
+          get: (_, key) => {
+            throw new Error(`the probe reached the renderer (${String(key)})`);
+          },
+        },
+      ),
+    } as unknown as DaemonParts;
+    const { resp } = await replyTo(
+      parts,
+      { kind: "click", url: PROBE } as Parameters<typeof replyTo>[1],
+      () => false,
+      new RuntimeStats(systemTimekeeper).accept(),
+      () => false,
+    );
+    expect(resp).toMatchObject({ ok: true });
+    expect(handlerProbes.list()).toEqual([
+      expect.objectContaining({ nonce: NONCE }),
+    ]);
   });
 
   test("a link of another scheme is refused as one, not as unsigned", () => {

@@ -714,14 +714,17 @@ export function renderWidth(hints: ClientHints): number {
 // a run whose key or dependency moved is named before the host subscribes
 // it, and until then the world state has no entry for it, while a run the
 // view stopped naming stays there until the host drops it, read by nothing.
+// A doctor run the session asked is waited on as a run is, so the draw after
+// the click that asked it shows its report.
 export function awaitsReading(
-  { builtins, sources, runs }: WorldState,
+  { builtins, sources, runs, doctor }: WorldState,
   named: Iterable<Run>,
 ): boolean {
   return [
     ...AWAITED_BUILTINS.map((name) => builtins[name]),
     ...Object.values(sources),
     ...[...named].map((run) => (runs[run.digest] ?? UNREAD_RUN).reading),
+    doctor,
   ].some(awaitedReading);
 }
 

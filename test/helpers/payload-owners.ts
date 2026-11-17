@@ -16,6 +16,15 @@ import { observable, runInAction } from "mobx";
 import type { Holds } from "../../src/utils/holds";
 import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
 import { HOST } from "./host";
+import type { DoctorSource } from "../../src/daemon/cache/doctor";
+
+// [LAW:no-silent-failure] The doctor owner of a rig that runs no doctor: a
+// subscription naming a doctor run is a test that needs a real one.
+export const NO_DOCTOR: Pick<DoctorSource, "declare"> = {
+  declare: () => {
+    throw new Error("this rig reads no doctor run");
+  },
+};
 import type { ClaudeHookData } from "../../src/utils/claude";
 import type { CheckedHookData } from "../../src/renderer-interface/request-context";
 import type { GitInfo } from "../../src/segments/git";
@@ -437,10 +446,7 @@ function openHome(
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
   const holds = new HoldsClass();
   const keyed = withTranscriptLanes(owners as KeyedOwners, clock);
-  const { lanes, faults } = declareLanes(keyed, holds, facts, {
-    plugins: new Map(),
-    runs: new Map(),
-  });
+  const { lanes, faults } = declareLanes(keyed, holds, facts, { plugins: new Map(), runs: new Map(), doctor: null });
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken
   // fixture, failed here with its stack, as the daemon logs it as an error.
   // The home ends what it built: its holds, and the trigger whose period a

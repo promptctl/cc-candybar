@@ -31,6 +31,7 @@ import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";
 import { ManagedStorage } from "./cache/managed-storage.js";
 import type { SourceRuns } from "./source-runs.js";
+import type { DoctorSource } from "./cache/doctor.js";
 import type { TeardownStep } from "../utils/teardown.js";
 import { TranscriptLanes, type LaneOwners } from "./cache/transcript-lanes.js";
 
@@ -53,6 +54,8 @@ export function createPayloadProviders(opts: {
   // The caller's one owner of every `shell` and `file` run, whose stats and
   // close are the caller's.
   readonly sourceRuns: SourceRuns;
+  // The caller's one reader of the doctor's facts, closed with the caller.
+  readonly doctor: Pick<DoctorSource, "declare">;
 }): RenderPayloadDeps & { readonly closes: readonly TeardownStep[] } {
   const { launcher, clock, logger, ledger } = opts;
   // [LAW:one-source-of-truth] The owners the transcript lanes refresh are the
@@ -101,6 +104,7 @@ export function createPayloadProviders(opts: {
     ...owners,
     home: opts.host.home,
     sourceRuns: opts.sourceRuns,
+    doctor: opts.doctor,
     log: opts.logger,
     // [LAW:single-enforcer] The one close of every owner built here, a named
     // step each, which its caller's teardown runs (runTeardown): a held

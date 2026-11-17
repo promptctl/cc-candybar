@@ -28,10 +28,10 @@ import path from "node:path";
 import { doctorPlan, loadConfigOnce, parseDoctorArgs } from "../src/doctor/cli";
 import { doctorReportKeys, doctorReportPairs } from "../src/doctor/report";
 import { runDoctor } from "../src/doctor/checks";
-import { gatherFacts } from "../src/doctor/gather";
+import { gatherFacts, type GatherEdge } from "./helpers/doctor-gather";
 import { ownProject } from "../src/doctor/sightings";
 import { DOOR_GLYPH } from "../src/config/disclosure";
-import type { DoctorEdge, DoctorMachineEdge } from "../src/doctor/ports";
+import type { DoctorMachineEdge } from "../src/doctor/ports";
 import type { StoresRead } from "../src/daemon/foundations/stats-snapshot";
 import type { HandlerProbeEdge } from "../src/doctor/handler-probe";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
@@ -60,7 +60,7 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const EDGE: DoctorEdge & DoctorMachineEdge = {
+const EDGE: GatherEdge & DoctorMachineEdge = {
   install: HEALTHY_INSTALL_EDGE,
   ...healthyDaemonEdge(),
   ...healthyDataEdge(),
@@ -256,7 +256,7 @@ describe("doctorPlan", () => {
   // brandon-doctor-v62x.ryu: the command has no click to prove links work, so
   // it reads tmux's word on its client and the terminal's own name.
   test("tmux without hyperlinks for its client fails links, naming the line to add", async () => {
-    const edge: DoctorEdge & DoctorMachineEdge = {
+    const edge: GatherEdge & DoctorMachineEdge = {
       ...EDGE,
       probeTmux: async (hint) => {
         const asked = await EDGE.probeTmux(hint);
@@ -473,7 +473,7 @@ describe("doctorPlan", () => {
 // config behind it under an isolated XDG home.
 describe("doctorPlan over a real config", () => {
   let world: World;
-  const REAL: DoctorEdge & DoctorMachineEdge = {
+  const REAL: GatherEdge & DoctorMachineEdge = {
     ...EDGE,
     loadConfig: (origin) => loadConfigOnce(world, origin),
   };

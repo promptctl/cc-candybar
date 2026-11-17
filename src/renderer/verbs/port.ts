@@ -14,6 +14,7 @@ import type {
 } from "../../renderer-interface/interface.js";
 import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
 import type { ActsOnTheirWay } from "../acts.js";
+import type { DoctorRuns } from "../doctor.js";
 import {
   changeDone,
   closeIdleMenus,
@@ -26,13 +27,7 @@ import {
 // are noted, and whether its client is gone.
 type VerbClickFacts = Pick<
   VerbContext,
-  | "arrival"
-  | "placeWaited"
-  | "gatherTook"
-  | "turnWaited"
-  | "clientGone"
-  | "latest"
-  | "effects"
+  "arrival" | "placeWaited" | "turnWaited" | "clientGone" | "latest" | "effects"
 >;
 
 // The facts the renderer brings of one click: the same, the click named by its
@@ -73,6 +68,9 @@ export type MainRendererParts = RendererParts & {
   readonly mint: () => EffectId;
   // The acts this renderer's turns asked of the host, until each is settled.
   readonly acts: Pick<ActsOnTheirWay, "done">;
+  // Each session's doctor run: what its output asks read, and what a retire
+  // ends.
+  readonly doctorRuns: Pick<DoctorRuns, "subscriptions" | "retire">;
 };
 
 // [LAW:single-enforcer] The verb table over the one verb context the daemon

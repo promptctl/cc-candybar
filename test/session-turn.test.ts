@@ -22,7 +22,7 @@ import type { Readings } from "../src/daemon/readings";
 import { readTranscriptLanes } from "./helpers/payload-owners";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
-import { ok, pendingOf } from "../src/utils/outcome";
+import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
 import type { Fact } from "../src/facts/fact";
 import type { Update } from "../src/facts/world-state";
@@ -286,6 +286,7 @@ describe("the all-pending document", () => {
       autoCompact: pendingOf("unread"),
       sources: new Map(),
       runs: new Map(),
+      doctor: ABSENT,
     },
     today: waiting,
     faults: [],
