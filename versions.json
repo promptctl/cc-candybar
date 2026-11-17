@@ -2,88 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-787",
-      "ref": "refs/pull/787/merge",
-      "sha": "c807e807e832102112d15f8cf0dffb8476a54f70",
-      "timestamp": "2026-11-17T17:28:20.305Z",
-      "commits": [
-        {
-          "sha": "c807e807e832102112d15f8cf0dffb8476a54f70",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T17:27:17Z",
-          "message": "Merge 0443ce793aa1728f60c01e7c1a2a546f2f542a99 into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
-        },
-        {
-          "sha": "0443ce793aa1728f60c01e7c1a2a546f2f542a99",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T10:27:05-07:00",
-          "message": "fix(config): a config is held while an entry loads from it, and an unreadable layer fails its load (adf)\n\nAn origin's config stays named for as long as a render-cache entry loads\nfrom it, not only while a session lives, so an idle session's click runs\nat once. A layer discovery could not read fails the load naming the file,\nand the bar keeps its last good state rather than a chain nobody wrote.\nA config turn whose origin was let go before its slot settles as failed.\nA click's seal clears its state even when reading its layers throws.\n"
-        },
-        {
-          "sha": "6b60f7e0460dfa5cf69f9c746a59502d2ac4ab8a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T09:58:23-07:00",
-          "message": "fix(daemon): a start leaves the renderer holding nothing, and no settling goes unheard (adf)\n\n- The host forgets what the renderer was served when it sends a start, not\n  when the start answers, so a start that fails strands no parked context.\n- A turn answers only for the config turns it named; those its landing\n  moved are waited for, and their failures are their own turn's line.\n- Every turn's settling nothing awaits goes through one catch that says a\n  rejection on every bar.\n- resolveDslConfig had no caller: the search's doc lives on searchConfig,\n  and tests read the resolution through a helper of their own.\n- The storage memory says why a lost folder waits for the next period.\n"
-        },
-        {
-          "sha": "a95caccbbd86cf845c063bf263111dbf20bd439f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T09:38:42-07:00",
-          "message": "fix(daemon): a waiting click answers for what it did, and nothing waits forever (adf)\n\n- A turn settles as the config turns it named, so a click that waited for\n  its origin's config answers with that turn's refusals and throws.\n- A config turn whose reload throws still runs every event parked on it.\n- One writable predicate decides what the bar offers and what a write\n  refuses: a layer discovery could not read is neither.\n- `check` is never clean about a layer it could not read, and a directory\n  reads as \"not a file\".\n- A lost storage folder is made again at the next period, so a plugin\n  folder being removed is not refilled under its own rmdir.\n- Drop dead writableRoles and follow()'s unused answer; digest a snapshot\n  once as it is handed in; settle reads notices off the chain it loads.\n- Comments on the doctor, chainOver and repoConfig say what the code does.\n"
-        },
-        {
-          "sha": "7fcfcd91188faeb56f579a7b066e6590a1ddafa1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T09:07:08-07:00",
-          "message": "refactor(config): discovery is the host's, and the renderer imports no file reader (adf)\n"
-        },
-        {
-          "sha": "dcb37268bef45345445ee73ec8052a1d72f2343c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T08:47:44-07:00",
-          "message": "feat(click): a config write names its origin and role (adf)\n"
-        },
-        {
-          "sha": "04c2cc05bea4ab14efc2acdecefd4f1bf93be002",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T08:23:33-07:00",
-          "message": "feat(daemon): config arrives as an origin's snapshot the renderer subscribes to (adf)\n"
-        },
-        {
-          "sha": "610ee958dfd0d9a980641fb1b36686c703d96821",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T07:20:54-07:00",
-          "message": "refactor(config): the loader is text-fed (adf)\n\nDiscovery moves out of the loader into src/config/loader/discover.ts:\nreadShared reads the origin-independent facts once (repository answers,\ninstalled plugin roots and their definitions), and discover resolves an\norigin's chain, reads each layer and the definitions it lists, lists the\nplugin roots, and returns a ConfigSnapshot (src/config/config-snapshot.ts)\nwith the watch targets. It is total: what it cannot read is an unreadable\nlayer or definition, or a notice.\n\nThe loader (dsl-loader, loader/plugins) now opens no file: loadSnapshot\nparses, merges and validates what the snapshot holds, its memo keys by\ncontent, and an entry missing from a layer's listed definitions is a\nConfigError. The render cache, the settings store, check, doctor and\nplugin install discover and then load, so the host can later hand the\nrenderer a snapshot instead of a path.\n"
-        },
-        {
-          "sha": "d8d8e16910e1af2c1c9f92babe1faeffdafb9f9e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T06:51:06-07:00",
-          "message": "docs(design): a config snapshot is an origin's, and the renderer subscribes the origins it needs (adf)\n\nThe A-2 probe found six facts the first snapshot could not carry; the\nsnapshot in section 7 now holds each. A snapshot is keyed by origin end\nto end: the renderer names the origins it needs in its subscriptions,\ndiscovery serves a newly named one in the slot that named it, and an\nevent that needs an origin the renderer does not hold waits for it in\nthe renderer. Writes name an origin and a role.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "ba43c3ab383835c4accd3c0dd502526e7277592c",
-      "timestamp": "2026-11-17T11:55:58.844Z",
+      "sha": "45cc4f8851226aaa029031cb25210d65fa4b0366",
+      "timestamp": "2026-11-17T17:55:09.980Z",
       "commits": [
         {
-          "sha": "ba43c3ab383835c4accd3c0dd502526e7277592c",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-17T11:55:00Z",
-          "message": "chore(release): set `package.json` to 1.228.0\n\n## [1.228.0](https://github.com/promptctl/cc-candybar/compare/v1.227.0...v1.228.0) (2026-11-17)\n\n### Features\n\n* **renderer:** time is handed in as two readings, and the renderer owns its schedules (883) ([#783](https://github.com/promptctl/cc-candybar/issues/783)) ([6813576](https://github.com/promptctl/cc-candybar/commit/681357616352fb4f7476a7b1035b61a244971844))\n"
+          "sha": "45cc4f8851226aaa029031cb25210d65fa4b0366",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T10:54:09-07:00",
+          "message": "feat(daemon): config arrives as an origin's snapshot, and the renderer opens no config file (adf) (#787)\n\n* docs(design): a config snapshot is an origin's, and the renderer subscribes the origins it needs (adf)\n\nThe A-2 probe found six facts the first snapshot could not carry; the\nsnapshot in section 7 now holds each. A snapshot is keyed by origin end\nto end: the renderer names the origins it needs in its subscriptions,\ndiscovery serves a newly named one in the slot that named it, and an\nevent that needs an origin the renderer does not hold waits for it in\nthe renderer. Writes name an origin and a role.\n\n* refactor(config): the loader is text-fed (adf)\n\nDiscovery moves out of the loader into src/config/loader/discover.ts:\nreadShared reads the origin-independent facts once (repository answers,\ninstalled plugin roots and their definitions), and discover resolves an\norigin's chain, reads each layer and the definitions it lists, lists the\nplugin roots, and returns a ConfigSnapshot (src/config/config-snapshot.ts)\nwith the watch targets. It is total: what it cannot read is an unreadable\nlayer or definition, or a notice.\n\nThe loader (dsl-loader, loader/plugins) now opens no file: loadSnapshot\nparses, merges and validates what the snapshot holds, its memo keys by\ncontent, and an entry missing from a layer's listed definitions is a\nConfigError. The render cache, the settings store, check, doctor and\nplugin install discover and then load, so the host can later hand the\nrenderer a snapshot instead of a path.\n\n* feat(daemon): config arrives as an origin's snapshot the renderer subscribes to (adf)\n\n* feat(click): a config write names its origin and role (adf)\n\n* refactor(config): discovery is the host's, and the renderer imports no file reader (adf)\n\n* fix(daemon): a waiting click answers for what it did, and nothing waits forever (adf)\n\n- A turn settles as the config turns it named, so a click that waited for\n  its origin's config answers with that turn's refusals and throws.\n- A config turn whose reload throws still runs every event parked on it.\n- One writable predicate decides what the bar offers and what a write\n  refuses: a layer discovery could not read is neither.\n- `check` is never clean about a layer it could not read, and a directory\n  reads as \"not a file\".\n- A lost storage folder is made again at the next period, so a plugin\n  folder being removed is not refilled under its own rmdir.\n- Drop dead writableRoles and follow()'s unused answer; digest a snapshot\n  once as it is handed in; settle reads notices off the chain it loads.\n- Comments on the doctor, chainOver and repoConfig say what the code does.\n\n* fix(daemon): a start leaves the renderer holding nothing, and no settling goes unheard (adf)\n\n- The host forgets what the renderer was served when it sends a start, not\n  when the start answers, so a start that fails strands no parked context.\n- A turn answers only for the config turns it named; those its landing\n  moved are waited for, and their failures are their own turn's line.\n- Every turn's settling nothing awaits goes through one catch that says a\n  rejection on every bar.\n- resolveDslConfig had no caller: the search's doc lives on searchConfig,\n  and tests read the resolution through a helper of their own.\n- The storage memory says why a lost folder waits for the next period.\n\n* fix(config): a config is held while an entry loads from it, and an unreadable layer fails its load (adf)\n\nAn origin's config stays named for as long as a render-cache entry loads\nfrom it, not only while a session lives, so an idle session's click runs\nat once. A layer discovery could not read fails the load naming the file,\nand the bar keeps its last good state rather than a chain nobody wrote.\nA config turn whose origin was let go before its slot settles as failed.\nA click's seal clears its state even when reading its layers throws."
         }
       ]
     }
