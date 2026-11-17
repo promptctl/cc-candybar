@@ -42,7 +42,7 @@ The menu's door appears in every preset root. It's declared once and referenced 
 
 A destructive control's first click arms a confirm. The door and the tabs disarm it, so a confirm always fires in the same menu it was armed in.
 
-Menus close themselves after a timeout counted from the session's last click. The close is the same journaled write the ✕ makes, so savepoints and back treat it like a click. A click that names no session (copy, open) doesn't restart the clock. An open menu marks an otherwise still frame as able to move, so the doctor asks for a one-second refresh while a menu is open. Without it, neither the closing flash nor the close would show until Claude Code's next event.
+Menus close themselves after a timeout counted from the session's last click. The close is the same journaled write the ✕ makes, so savepoints and back treat it like a click. A click that names no session (copy, open) doesn't restart the clock. A click waiting in the mailbox doesn't pause it: the mailbox orders the click and the close's due turn, so a click ahead of the due moves the deadline, and one behind it lands after the close, as a click a moment after the timeout would. An open menu marks an otherwise still frame as able to move, so the doctor asks for a one-second refresh while a menu is open. Without it, neither the closing flash nor the close would show until Claude Code's next event.
 
 ## Slash commands
 

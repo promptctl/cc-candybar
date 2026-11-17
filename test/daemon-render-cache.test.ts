@@ -49,7 +49,7 @@ import {
 import type { DaemonLogger } from "../src/utils/logger";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { editedConfig, editProjectConfig } from "./helpers/edited-config";
-import { ReloadSignal } from "./helpers/reload-signal";
+import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
 import {
   walkNodes,
@@ -1101,12 +1101,19 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.configLayers).toEqual([file]);
       expect(watchers.size()).toBe(own + 1);
-      // A rewrite of the book, so every retry the signal makes is an event.
+      // A rewrite of the book, so every retry is an event. The watch marks
+      // every entry due, and the renderer's due turns walk them: each read
+      // steps the walk as those turns do.
       const declined = JSON.stringify({
         [realpathSync.native(dir)]: "declined",
       });
-      await reloads.after(entry, () =>
-        writeFileSync(repoConfigsPath(stateDir(host)), declined),
+      await untilHeard(
+        () => writeFileSync(repoConfigsPath(stateDir(host)), declined),
+        () => {
+          while (cache.walking) cache.walkOne();
+          return causes.includes("answers-watch");
+        },
+        "a reload under the answers watch",
       );
       expect(entry.configLayers).toEqual([]);
       expect(entry.repos.declined).toEqual([realpathSync.native(dir)]);

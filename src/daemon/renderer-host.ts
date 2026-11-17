@@ -11,9 +11,9 @@
 // renderer's turns: it sends the renderer its next input only once the last
 // has answered, in the order the inputs arrived, so no two turns of one
 // renderer are ever in flight and a turn never waits for another. An input
-// is made as its slot comes up, so what it reads of the host (the idle clock
-// a request draws, whether a click's client left) is read after every turn
-// ahead of it. A turn's changes land in its own slot, and so do their
+// is made as its slot comes up, so what it reads of the host (whether a
+// click's client left, the newest request of a session) is read after every
+// turn ahead of it. A turn's changes land in its own slot, and so do their
 // `effect-done` turns, so the next input finds them landed: the renderer
 // never waits for a landing. Its acts go on after the slot, and each one's
 // `effect-done` joins the mailbox when it ends.
@@ -23,8 +23,9 @@ import {
   type Effect,
   type EffectOutcome,
   type Event,
-  type Renderer,
   type EventInput,
+  type PushedFrame,
+  type TimedRenderer,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
@@ -54,14 +55,16 @@ import { outlives, type HostAct } from "./acts.js";
 export type RendererName = "main";
 
 // A turn as the host took it: how it ended, how long it waited in the
-// mailbox, what the hop to its renderer cost, null for a turn no renderer
-// answered, and how each of its effects settled before it returned: its
-// changes, and the acts over in the turn, in the order they were returned.
+// mailbox, how long the renderer's own turn took and what the hop to it cost,
+// each null for a turn no renderer answered, and how each of its effects
+// settled before it returned: its changes, and the acts over in the turn, in
+// the order they were returned.
 export type HostTurn = TakenTurn & {
   readonly settled: readonly EffectOutcome[];
 };
 type TakenTurn = TurnOutcome & {
   readonly queuedMs: number;
+  readonly turnMs: number | null;
   readonly hopMs: number | null;
 };
 
@@ -112,12 +115,16 @@ export function rendererHost(
   // The clock a refusal's `effect-done` is stamped by, when it is made, and a
   // hop is timed on.
   clock: Pick<Timekeeper, "now" | "monotonic">,
-  renderer: Renderer,
+  renderer: TimedRenderer,
   log: DaemonLogger,
   collector: {
-    // [LAW:single-enforcer] Where every output's subscriptions go: the
-    // collector, which diffs each whole set against the last.
+    // [LAW:single-enforcer] Where every output's subscriptions go, a push's
+    // reply's included, in the order the turns answered: each is whole, and
+    // replaces the last.
     readonly subscribed: (subscriptions: Subscriptions) => void;
+    // Where every turn's pushed frames go, in the order the turns answered:
+    // the host's feeds, which hand each to its lanes.
+    readonly framed: (frames: readonly PushedFrame[]) => void;
     // [LAW:single-enforcer] [LAW:no-ambient-temporal-coupling] Every turn
     // holds the session its event names until it settles, so no sweep retires
     // a session under a turn on it.
@@ -169,6 +176,7 @@ export function rendererHost(
       record: [],
       effects: [],
       queuedMs,
+      turnMs: null,
       hopMs: null,
     },
     settled: Promise.resolve([]),
@@ -188,12 +196,14 @@ export function rendererHost(
     try {
       release = session === null ? release : collector.holding(session);
       const sentAt = clock.monotonic();
-      const { subscriptions, turnMs, ...output } = await renderer.answer(input);
+      const { subscriptions, frames, turnMs, ...output } =
+        await renderer.answer(input);
       // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
       // turn, so what the process boundary costs is read from the event.
       const turn: TakenTurn = {
         ...output,
         queuedMs,
+        turnMs,
         hopMs: elapsedMs(clock, sentAt) - turnMs,
       };
       // [LAW:single-enforcer] A turn's changes land here, together with its
@@ -226,6 +236,7 @@ export function rendererHost(
               collector.writableSettings,
             );
       collector.subscribed(subscriptions);
+      collector.framed(frames);
       // An act no landing let go: the close is its own cause, and any other
       // is its changes', whose own outcome says why.
       const unperformed: EffectOutcome =
@@ -420,6 +431,9 @@ export function rendererHost(
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
         detail: `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`,
       });
+    // [LAW:one-source-of-truth] What the renderer's state needs, as the push
+    // left it, taken in the push's own slot.
+    collector.subscribed(output.subscriptions);
     if (output.reply.kind !== push.kind)
       throw new Error(
         `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`,
@@ -448,8 +462,11 @@ export function rendererHost(
 // its checkpoint, names none.
 function sessionOf(event: Event): SessionId | null {
   switch (event.kind) {
-    // A start is every session's: it holds none of them alone.
+    // A start, its viewers and a due are every session's: each holds none of
+    // them alone.
     case "start":
+    case "viewers":
+    case "due":
       return null;
     case "config":
     case "request":
@@ -460,7 +477,6 @@ function sessionOf(event: Event): SessionId | null {
       return event.session?.ok ? event.session.id : null;
     case "retire":
     case "effect-done":
-    case "menu-idle":
       return event.session;
   }
 }

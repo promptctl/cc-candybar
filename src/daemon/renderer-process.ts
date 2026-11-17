@@ -1,5 +1,5 @@
 // The renderer's link to the host: in this process, or in a process of its
-// own that a supervisor starts and restarts. The host holds one `Renderer`
+// own that a supervisor starts and restarts. The host holds one renderer
 // either way, and no part outside the link knows which, nor whether a
 // renderer restarted.
 //
@@ -21,8 +21,8 @@ import {
   type AdapterOutput,
   type EffectId,
   type EventInput,
-  type Renderer,
-  type RendererOutput,
+  type TimedOutput,
+  type TimedRenderer,
 } from "../renderer-interface/interface.js";
 import type {
   AdapterToHost,
@@ -37,13 +37,14 @@ import {
   type RendererBoot,
   type RendererLine,
   type RendererOverLines,
+  timed,
 } from "../renderer-interface/wire.js";
 import type { LoadedMainRenderer } from "../renderer/main.js";
 import { RendererDown, failureOf } from "./foundations/verb-error.js";
 
 // What the host holds of its renderer, whichever link it runs over.
 export interface RendererLink {
-  readonly renderer: Renderer;
+  readonly renderer: TimedRenderer;
   // Starts the renderer's process: nothing in process, where it started as
   // it was built.
   arm(): void;
@@ -83,7 +84,7 @@ export type RendererPort = (prepared: {
 // daemon and the page run. It loads as the daemon's build begins.
 export const inProcessPort: RendererPort = ({ load }) => {
   const loaded = load();
-  return { start: (own) => inProcessRenderer(loaded, own.reaches) };
+  return { start: (own) => inProcessRenderer(loaded, own) };
 };
 
 // The renderer in a process of its own, which loads there, so the host never
@@ -98,9 +99,28 @@ export function processPort(
 
 function inProcessRenderer(
   loaded: LoadedMainRenderer,
-  reaches: AdapterToHost,
+  own: Pick<LinkOwner, "reaches" | "clock">,
 ): RendererLink {
-  const renderer = loaded.start(reaches);
+  // [LAW:no-ambient-temporal-coupling] Each input starts on a stack of its
+  // own, as one read off the child's lines does. The host hands an input in
+  // from inside its own MobX actions (a reading settling stamps and delivers a
+  // world state), and MobX batches a whole process: a turn begun inside one
+  // would leave its own reactions (what owes a frame) to run after its output,
+  // and the wake that output declares would miss them.
+  const started = loaded.start(own.reaches);
+  const crossed = rendererOf({
+    event: async (input) => {
+      await Promise.resolve();
+      return started.answer(input);
+    },
+    adapter: async (input) => {
+      await Promise.resolve();
+      return started.answer(input);
+    },
+  });
+  // [LAW:effects-at-boundaries] Timed by its transport, as the child's lines
+  // time a renderer in another process.
+  const renderer = timed(crossed, own.clock);
   return {
     renderer,
     arm: () => {},
@@ -112,8 +132,8 @@ function inProcessRenderer(
 }
 
 // What the daemon hands a link as it starts it: the host's reaches; the
-// host's complete start, which delivers each live session's `config` and each
-// open feed's `pin` through the host's one path to the renderer, resolving
+// host's complete start, which delivers each live session's `config` and who
+// follows each session's frames through the host's one path to the renderer, resolving
 // once every `config` turn has answered; and who holds each end as an event,
 // which every session's world state carries for the bar's ⚠.
 // [LAW:no-ambient-temporal-coupling] The start is the host's state as one
@@ -595,7 +615,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // The ids an input names are the renderer's own again; the ids its output
   // names are the host's.
-  const event = (input: EventInput): Promise<RendererOutput> =>
+  const event = (input: EventInput): Promise<TimedOutput> =>
     sent(async (link) => {
       const { event: e } = input;
       let toSend: EventInput = input;

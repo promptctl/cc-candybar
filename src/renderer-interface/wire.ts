@@ -20,9 +20,11 @@ import {
   type AdapterOutput,
   type Renderer,
   type RendererInput,
-  type RendererOutput,
+  type TimedOutput,
+  type TimedRenderer,
   type EventInput,
 } from "./interface.js";
+import { elapsedMs, type Timekeeper } from "../time.js";
 
 // What a renderer process builds itself from: the host's view of its machine
 // (its environment, home and temporary directory, from which the renderer
@@ -85,7 +87,7 @@ export type RendererLine =
   | {
       readonly kind: "output";
       readonly n: number;
-      readonly output: RendererOutput | AdapterOutput;
+      readonly output: TimedOutput | AdapterOutput;
     }
   // An input whose answer rejected: nothing of its turn is taken, so the
   // host's caller hears it as the turn's failure.
@@ -121,9 +123,7 @@ type ReachKinds<T> = {
 };
 
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
-  wake: "notice",
   log: "notice",
-  menuIdle: { clicked: "notice", observe: "notice" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" },
@@ -191,7 +191,7 @@ export function lineSplitter(heard: (line: string) => void): {
 // and resolves with its output; `heard` takes every line the renderer says;
 // `ended` rejects whatever is still owed, with why.
 export interface RendererOverLines {
-  readonly renderer: Renderer;
+  readonly renderer: TimedRenderer;
   readonly ping: () => Promise<MemorySizes>;
   readonly heapSnapshot: (file: string) => Promise<void>;
   readonly heard: (line: RendererLine) => void;
@@ -242,7 +242,7 @@ export function rendererOverLines(deps: {
       send(line(n));
     });
   const answer = (input: RendererInput) =>
-    owe<RendererOutput | AdapterOutput>(
+    owe<TimedOutput | AdapterOutput>(
       input.kind === "event"
         ? `${input.event.kind} input`
         : `${input.push.kind} push`,
@@ -258,7 +258,7 @@ export function rendererOverLines(deps: {
   const renderer = rendererOf({
     // [LAW:types-are-the-program] exception: the renderer answers each input
     // with the output of its kind, which the line cannot carry to its type.
-    event: (input: EventInput) => answer(input) as Promise<RendererOutput>,
+    event: (input: EventInput) => answer(input) as Promise<TimedOutput>,
     adapter: (input: AdapterInput) => answer(input) as Promise<AdapterOutput>,
   });
   // [LAW:no-ambient-temporal-coupling] Each reach is performed as its line
@@ -362,11 +362,28 @@ export function hostOverLines(
   return host as unknown as AdapterToHost;
 }
 
+// [LAW:effects-at-boundaries] A renderer as its transport hands it to the
+// host: each event's turn timed on the transport's clock around the
+// renderer's answer, which reads none.
+export function timed(
+  renderer: Renderer,
+  clock: Pick<Timekeeper, "monotonic">,
+): TimedRenderer {
+  return rendererOf({
+    event: async (input) => {
+      const from = clock.monotonic();
+      const output = await renderer.answer(input);
+      return { ...output, turnMs: elapsedMs(clock, from) };
+    },
+    adapter: (input) => renderer.answer(input),
+  });
+}
+
 // The renderer's side of the lines past its boot: each input answered by
 // its output, and the host's reads of the process answered here, outside any
 // turn.
 export function serveRenderer(deps: {
-  readonly renderer: Renderer;
+  readonly renderer: TimedRenderer;
   readonly send: (line: RendererLine) => void;
   readonly memory: () => MemorySizes;
   readonly heapSnapshot: (file: string) => void;
@@ -380,7 +397,7 @@ export function serveRenderer(deps: {
         void (
           renderer.answer as (
             i: RendererInput,
-          ) => Promise<RendererOutput | AdapterOutput>
+          ) => Promise<TimedOutput | AdapterOutput>
         )(line.input).then(
           (output) => send({ kind: "output", n: line.n, output }),
           (thrown: unknown) =>

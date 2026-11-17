@@ -19,11 +19,11 @@ import type {
   EffectId,
   EffectOutcome,
   EventInput,
-  RendererOutput,
+  TimedOutput,
 } from "../src/renderer-interface/interface";
 import { instantOf } from "../src/utils/instant";
 import type { Monotonic } from "../src/time";
-import { eventRenderer } from "./helpers/renderers";
+import { eventRenderer, QUIET } from "./helpers/renderers";
 
 const S = sessionIdOf("s");
 const AT = instantOf(new Date(0));
@@ -39,10 +39,11 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-const output = (effects: readonly Effect[]): RendererOutput => ({
+const output = (effects: readonly Effect[]): TimedOutput => ({
   kind: "answered",
   effects,
-  subscriptions: { sources: {}, tmuxStatus: [] },
+  subscriptions: QUIET,
+  frames: [],
   record: [],
   turnMs: 0,
 });
@@ -79,7 +80,7 @@ const change = (before: string, after: string): Effect => ({
 function hostOver(
   effects: readonly Effect[],
   over: Partial<HostWorld> = {},
-  done: (input: EventInput) => Promise<RendererOutput> = async () => output([]),
+  done: (input: EventInput) => Promise<TimedOutput> = async () => output([]),
 ) {
   const did: string[] = [];
   const unheard: string[] = [];
@@ -108,6 +109,7 @@ function hostOver(
     () => {},
     {
       subscribed: () => {},
+      framed: () => {},
       holding: () => () => {},
       writableSettings: () => [],
     },
@@ -117,13 +119,7 @@ function hostOver(
     host.answer(() => ({
       kind: "event",
       at: AT,
-      event: {
-        kind: "menu-idle",
-        session: S,
-        idle: { firedAt: AT, idleS: 30, timeoutS: 30 },
-        latest: null,
-        stillIdle: true,
-      },
+      event: { kind: "due" },
     }));
   return { turn, did, unheard };
 }

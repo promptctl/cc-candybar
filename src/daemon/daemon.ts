@@ -31,7 +31,7 @@ import { createPayloadProviders } from "./payload-providers";
 import { runTeardown, type TeardownStep } from "../utils/teardown";
 import { FileEventDelivery } from "./cache/file-events";
 import type { Timekeeper } from "../time";
-import { LEVEL, type Acceptance } from "./foundations/request-event.js";
+import type { Acceptance } from "./foundations/request-event.js";
 import { RefreshLedger } from "../utils/refresh-ledger";
 import { SourceRuns } from "./source-runs";
 import { WatcherRegistry } from "./cache/watchers";
@@ -41,7 +41,8 @@ import type { DoctorMachineEdge, DoctorStores } from "../doctor/ports";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
-import { FEED_PERIODS, FrameFeeds } from "./frame-feed.js";
+import { FrameFeeds } from "./frame-feed.js";
+import { RendererWake } from "./renderer-wake.js";
 import { type Lane } from "../config/lanes.js";
 import {
   LIST_CLIENTS_FORMAT,
@@ -58,7 +59,6 @@ import { Acts } from "./acts.js";
 import { linkSignerOver } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
-import { parseFrame } from "../render/frame.js";
 import { rendererHost } from "./renderer-host.js";
 import { loadMainRenderer } from "../renderer/main.js";
 import type { RendererPort } from "./renderer-process.js";
@@ -79,8 +79,8 @@ import type {
   Invalidation,
   WatcherHandle,
 } from "./foundations/watch-targets.js";
-import { closeByTurn, MenuIdle } from "./menu-idle.js";
 import type { SessionId } from "./foundations/session-id.js";
+import type { Subscriptions } from "../renderer-interface/interface.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -341,8 +341,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const preparedRenderer = inputs.renderer({
     load: () =>
       loadMainRenderer({
-        clock,
-        now: instant,
         storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
         linkSigner,
         stateDir: paths.state,
@@ -436,29 +434,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     doctor: doctorSource,
   });
   const { managedStorage } = payloadProviders;
-  // [LAW:single-enforcer] Each session's idle clock and the timer that closes
-  // its menus (src/daemon/menu-idle.ts): a click restarts the clock, and the
-  // close is a `menu-idle` turn of the renderer, the journaled write a ✕ makes,
-  // through the host's one path to it, which the parts below hold: no close is
-  // due before a frame has drawn a menu, so the parts exist by then.
-  const menuIdle: MenuIdle = new MenuIdle({
-    clock,
-    now: instant,
-    close: (sessionId, idle) =>
-      closeByTurn(
-        parts.renderer,
-        instant,
-        sessionId,
-        idle,
-        () => frameFeeds.latest(sessionId),
-        () => menuIdle.confirmClose(sessionId, idle.firedAt),
-      ),
-    failed: (sessionId, failure) =>
-      log(
-        LEVEL[failure.kind],
-        `menu-idle: close failed (session=${sessionId}): ${failure.detail}`,
-      ),
-  });
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
   // flight (src/daemon/runs.ts), closed with the daemon.
   const runs = new Runs({
@@ -517,50 +492,33 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     owner: paths.socket,
     log,
   });
-  // Each subscribed session's frames, drawn from its latest render request
-  // (candybar-animation-wbxz.jmm.usl). A change to the session's own state — a
-  // click — brings its next frame forward.
+  // Each subscribed session's subscribers, handed the frames the renderer
+  // draws for them (candybar-animation-wbxz.jmm.usl).
   // [LAW:single-enforcer] The rows the renderer declares on, followed to each
   // session's newest pane.
   const declaredStatusLines = new DeclaredStatusLines(
     tmuxStatusLines,
     (sessionId) => frameFeeds.latest(sessionId)?.hints.tmux,
   );
+  // [LAW:one-source-of-truth] The lanes each session's view switches on, as
+  // the renderer last declared them, which a subscribe is gated on.
+  let declaredLanes: Subscriptions["lanes"] = {};
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
-    frame: async (sessionId, fps, at, following, feeds) => {
-      const { frame } = await parts.renderer.ask(
-        {
-          kind: "frame",
-          session: sessionId,
-          fps,
-          following,
-          feeds,
-          idleSince: menuIdle.since(sessionId, at) ?? null,
-        },
-        at,
-      );
-      // [LAW:parse-dont-validate] The receiving edge of a feed frame.
-      return frame === null ? null : { ...frame, bar: parseFrame(frame.bar) };
-    },
-    lanes: async (sessionId) =>
-      (
-        await parts.renderer.ask(
-          { kind: "lanes", session: sessionId },
-          instant(),
-        )
-      ).lanes,
-    // [LAW:no-ambient-temporal-coupling] The pin's wake of the session's
-    // state only moves the feed's timer, which fires in a later turn.
-    pin: (sessionId) =>
-      parts.renderer.tell({ kind: "pin", session: sessionId }, instant()),
-    unpin: (sessionId) =>
-      parts.renderer.tell({ kind: "unpin", session: sessionId }, instant()),
+    lanes: (sessionId) => declaredLanes[sessionId] ?? null,
     shown: (req) => paneVisibility.shown(req.hints.tmux),
+    // [LAW:no-ambient-temporal-coupling] Made as its turn comes, so it hands
+    // in who follows as of then, whatever moved while it waited.
+    viewersChanged: () =>
+      void parts.renderer.deliver(
+        () => ({
+          kind: "event",
+          at: instant(),
+          event: { kind: "viewers", viewers: frameFeeds.viewers() },
+        }),
+        [],
+      ),
     watching: () => paneVisibility.follow(),
     refreshes: () => refreshLedger.totals(),
-    periods: FEED_PERIODS,
-    clock,
-    instant,
     log,
   });
   // Which watched sessions' panes are on a screen, asked of their tmux servers
@@ -585,12 +543,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // The servers of the sessions someone is watching.
     sockets: () =>
       new Set(frameFeeds.watched().flatMap(({ req }) => tmuxServersOf(req))),
-    onAnswer: (socket, status) => tmuxStatusLines.answered(socket, status),
-    // Only the sessions on a server whose view changed are drawn again.
-    onChange: (sockets) =>
-      frameFeeds.wakeWhere("visibility", (req) =>
-        tmuxServersOf(req).some((socket) => sockets.has(socket)),
-      ),
+    // Each answer can move which pane a status line shows, and so whether it
+    // draws its session.
+    onAnswer: (socket, status) => {
+      tmuxStatusLines.answered(socket, status);
+      frameFeeds.check();
+    },
+    onChange: () => frameFeeds.check(),
     intervalMs: 1000,
     log,
   });
@@ -703,13 +662,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const reaches: AdapterToHost = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice.
-    wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
     log,
-    menuIdle: {
-      clicked: (sessionId, at) => menuIdle.clicked(sessionId, at),
-      observe: (sessionId, at, shown, timeoutS) =>
-        menuIdle.observe(sessionId, at, shown, timeoutS),
-    },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -754,14 +707,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
     // gets its config with its latest stamp, all in the one `start` turn, so
-    // its output names every session it serves; and every open feed gets its
-    // `pin`. All through the host's one path to the renderer, each turn
+    // its output names every session it serves, with who follows each
+    // session's frames now. Through the host's one path to the renderer,
     // recorded there.
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
-    // every input after it, the pins included, finds its sessions handed in.
+    // every input after it finds its sessions handed in.
     start: async () => {
       const at = instant();
-      const started = parts.renderer.start(
+      await parts.renderer.start(
         () => ({
           kind: "event",
           at,
@@ -775,13 +728,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
                   : [{ context: located(req), worldState }];
               },
             ),
+            viewers: frameFeeds.viewers(),
           },
         }),
         [["why", "renderer-start"]],
       );
-      for (const sessionId of frameFeeds.openFeeds())
-        parts.renderer.tell({ kind: "pin", session: sessionId }, at);
-      await started;
     },
     ended: (event) => {
       rendererEnded = event;
@@ -806,7 +757,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     refreshLedger,
     fileEvents,
     payloadProviders,
-    menuIdle,
     runs,
     sourceRuns,
     tmuxStatusLines,
@@ -823,8 +773,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       {
         subscribed: (subscriptions) => {
           collector.subscribed(subscriptions);
+          // [LAW:no-ambient-temporal-coupling] The lanes first: a status line
+          // the same output declares subscribes at once, gated on them.
+          declaredLanes = subscriptions.lanes;
           declaredStatusLines.declare(subscriptions.tmuxStatus);
+          rendererWake.declared(subscriptions.wake);
         },
+        framed: (frames) => frameFeeds.framed(frames),
         holding: (session) => collector.holding(session),
         writableSettings: (session) => collector.writableSettings(session),
       },
@@ -841,6 +796,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       },
     ),
   };
+  // [LAW:single-enforcer] The host's one timer for its renderer: at the
+  // instant it last declared it next needs a turn, answered with a `due`.
+  const rendererWake = new RendererWake({ clock, host: parts.renderer, log });
 
   return {
     stats,
@@ -904,7 +862,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
-        ["menuIdle dispose", () => menuIdle.dispose()],
+        ["rendererWake close", () => rendererWake.close()],
         ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
         ["limits disarm", () => limits.disarm()],

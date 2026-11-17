@@ -1,32 +1,37 @@
 // The host's one path for a push (src/daemon/renderer-host.ts): `ask` hands
 // back the reply of the push's own kind or rejects, and `tell` says a failure
-// on the log, since nothing awaits it; and a start heads the mailbox.
+// on the log, since nothing awaits it; a push's subscriptions are taken as an
+// event's are; and a start heads the mailbox.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { failureOf } from "../../src/daemon/foundations/verb-error";
 import {
   rendererOf,
   type AdapterOutput,
+  type Subscriptions,
 } from "../../src/renderer-interface/interface";
-import { instantOf } from "../../src/utils/instant";
+import { instantOf, type Instant } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
-import { NO_ACTS, pushRenderer } from "../helpers/renderers";
+import { NO_ACTS, pushRenderer, QUIET } from "../helpers/renderers";
 
 const AT = instantOf(new Date(0));
 
 // A host over a renderer that answers every push with `output`; `said`
-// settles with the first line it logs.
+// settles with the first line it logs, and `subscribed` holds each set of
+// subscriptions the host took.
 function hostOver(output: AdapterOutput) {
   let say: (line: string) => void = () => {};
   const said = new Promise<string>((resolve) => (say = resolve));
+  const subscribed: Subscriptions[] = [];
   const host = rendererHost(
     "main",
     { now: () => 0, monotonic: () => 0 as Monotonic },
     pushRenderer(async () => output),
     (level, line) => say(`${level} ${line}`),
     {
-      subscribed: () => {
-        throw new Error("a push names no subscriptions");
+      subscribed: (subscriptions) => void subscribed.push(subscriptions),
+      framed: () => {
+        throw new Error("a push draws no frame");
       },
       writableSettings: () => {
         throw new Error("a push lands no change");
@@ -37,25 +42,40 @@ function hostOver(output: AdapterOutput) {
     },
     NO_ACTS,
   );
-  return { host, said };
+  return { host, said, subscribed };
 }
 
 test("an ask is handed the reply of its push's own kind", async () => {
   const { host } = hostOver({
     kind: "replied",
-    reply: { kind: "lanes", lanes: null },
+    reply: { kind: "reload-every" },
+    subscriptions: QUIET,
   });
-  expect(await host.ask({ kind: "lanes", session: "s" as never }, AT)).toEqual({
-    kind: "lanes",
-    lanes: null,
+  expect(await host.ask({ kind: "reload-every", since: 0 }, AT)).toEqual({
+    kind: "reload-every",
   });
 });
 
+test("a push's subscriptions are taken as its turn's, so what it moved (a reload owing a frame) is declared", async () => {
+  const wake = (AT + 1) as Instant;
+  const { host, subscribed } = hostOver({
+    kind: "replied",
+    reply: { kind: "reload-every" },
+    subscriptions: { ...QUIET, wake },
+  });
+  await host.ask({ kind: "reload-every", since: 0 }, AT);
+  expect(subscribed).toEqual([{ ...QUIET, wake }]);
+});
+
 test("an ask answered with another push's reply rejects, naming both", async () => {
-  const { host } = hostOver({ kind: "replied", reply: { kind: "pin" } });
-  await expect(
-    host.ask({ kind: "lanes", session: "s" as never }, AT),
-  ).rejects.toThrow("renderer main answered push lanes with a pin reply");
+  const { host } = hostOver({
+    kind: "replied",
+    reply: { kind: "close-views" },
+    subscriptions: QUIET,
+  });
+  await expect(host.ask({ kind: "reload-every", since: 0 }, AT)).rejects.toThrow(
+    "renderer main answered push reload-every with a close-views reply",
+  );
 });
 
 test("an ask whose push threw rejects with the renderer's failure", async () => {
@@ -71,13 +91,11 @@ test("an ask whose push threw rejects with the renderer's failure", async () => 
 test("a tell that fails is said on the log, and nothing rejects", async () => {
   const { host, said } = hostOver({
     kind: "threw",
-    failure: failureOf(new Error("no such session")),
+    failure: failureOf(new Error("no such entry")),
   });
-  expect(host.tell({ kind: "unpin", session: "s" as never }, AT)).toBe(
-    undefined,
-  );
+  expect(host.tell({ kind: "reload-every", since: 0 }, AT)).toBe(undefined);
   expect(await said).toMatch(
-    /^error renderer main push unpin threw: .*no such session/,
+    /^error renderer main push reload-every threw: .*no such entry/,
   );
 });
 
@@ -94,7 +112,8 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
         return {
           kind: "answered",
           effects: [],
-          subscriptions: { sources: {}, tmuxStatus: [] },
+          subscriptions: QUIET,
+          frames: [],
           record: [],
           turnMs: 0,
         };
@@ -102,18 +121,23 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
       adapter: async (input) => {
         heard.push(`push:${input.push.kind}`);
         await opened;
-        return { kind: "replied", reply: { kind: "lanes", lanes: null } };
+        return {
+          kind: "replied",
+          reply: { kind: "reload-every" },
+          subscriptions: QUIET,
+        };
       },
     }),
     () => {},
     {
       subscribed: () => {},
+      framed: () => {},
       writableSettings: () => [],
       holding: () => () => {},
     },
     NO_ACTS,
   );
-  const held = host.ask({ kind: "lanes", session: "s" as never }, AT);
+  const held = host.ask({ kind: "reload-every", since: 0 }, AT);
   const waiting = host.deliver(
     () => ({
       kind: "event",
@@ -123,10 +147,14 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     [],
   );
   const started = host.start(
-    () => ({ kind: "event", at: AT, event: { kind: "start", sessions: [] } }),
+    () => ({
+      kind: "event",
+      at: AT,
+      event: { kind: "start", sessions: [], viewers: {} },
+    }),
     [],
   );
   open();
   await Promise.all([held, waiting, started]);
-  expect(heard).toEqual(["push:lanes", "start", "retire"]);
+  expect(heard).toEqual(["push:reload-every", "start", "retire"]);
 });

@@ -4,13 +4,12 @@
 // everything else of the host as an act its turn returns.
 
 import type { RendererParts } from "../draw-bar.js";
-import type { SessionId } from "../../daemon/foundations/session-id.js";
 import type {
   Effect,
   EffectId,
   EffectOutcome,
-  IdleSpan,
 } from "../../renderer-interface/interface.js";
+import type { IdleSpan } from "../menu-idle.js";
 import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
 import type { ActsOnTheirWay } from "../acts.js";
 import type { DoctorRuns } from "../doctor.js";
@@ -35,13 +34,11 @@ export interface RendererVerbs {
   handler(
     verb: string,
   ): ((value: string, click: ClickFacts) => void) | undefined;
-  // The idle clock's close of the session's menus: the journaled write a ✕
-  // makes, when the session is still idle since the firing.
+  // The idle close of the session's menus, fallen due: the journaled write a
+  // ✕ makes.
   closeIdle(
-    sessionId: SessionId,
     latest: CheckedRenderRequest | null,
     idle: IdleSpan,
-    stillIdle: boolean,
     effects: Effect[],
   ): void;
   // A change's `effect-done`, in its turn, whose effects what its click's
@@ -75,8 +72,8 @@ export function verbsOver(ctx: DaemonVerbContext): RendererVerbs {
         handler && ((value, facts) => handler(value, { ...ctx, ...facts }))
       );
     },
-    closeIdle: (sessionId, latest, idle, stillIdle, effects) =>
-      closeIdleMenus(sessionId, latest, idle, stillIdle, ctx, effects),
+    closeIdle: (latest, idle, effects) =>
+      closeIdleMenus(latest, idle, ctx, effects),
     changeDone: (id, outcome, effects) => changeDone(ctx, id, outcome, effects),
   };
 }

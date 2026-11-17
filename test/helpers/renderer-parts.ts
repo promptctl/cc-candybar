@@ -12,9 +12,12 @@ import type {
 } from "../../src/renderer/verbs/port";
 import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
-import { systemTimekeeper } from "../../src/time";
 import { TEST_SIGNER } from "./link-signer";
 import type { EffectId } from "../../src/renderer-interface/interface";
+import type { RendererClocks } from "../../src/renderer/main";
+import { Feeds } from "../../src/renderer/feeds";
+import { MenuIdle } from "../../src/renderer/menu-idle";
+import { TurnTime } from "../../src/renderer/turn-time";
 
 // A renderer that acts no verb: every click names a verb it does not have,
 // and an idle close is refused, so a test that clicks hands in the act it
@@ -40,16 +43,11 @@ const unhosted = (what: string) => (): never => {
   throw new Error(`${what}: no host part in this rig`);
 };
 
-// The host a renderer test draws against: no feed follows a session, no
-// update is offered, file events are heard, and nothing is idle.
+// The host a renderer test draws against: no update is offered and file
+// events are heard.
 export function inertHost(): AdapterToHost {
   return {
-    wake: () => {},
     log: () => {},
-    menuIdle: {
-      clicked: () => {},
-      observe: () => {},
-    },
     eventAnswered: () => {},
     watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
     storage: { hold: unhosted("storage"), release: unhosted("storage") },
@@ -69,7 +67,6 @@ export function rendererParts({
 }): MainRendererParts {
   return {
     ...inertHost(),
-    clock: systemTimekeeper,
     linkSigner: TEST_SIGNER,
     sessionState,
     renderCache: cache as never,
@@ -84,5 +81,17 @@ export function rendererParts({
     acts: { done: () => false },
     // A rig runs no doctor.
     doctorRuns: { subscriptions: () => new Map(), retire: () => {} },
+  };
+}
+
+// The renderer's own clocks for a rig no feed follows: a viewers event names
+// a session only when the test means to draw its frames, through `draw`.
+export function rendererClocks(
+  draw: ConstructorParameters<typeof Feeds>[0]["draw"] = unhosted("feeds"),
+): RendererClocks {
+  return {
+    time: new TurnTime(),
+    feeds: new Feeds({ pin: () => () => {}, draw, log: () => {} }),
+    menuIdle: new MenuIdle(),
   };
 }

@@ -4,12 +4,10 @@
 // a host type. The host reaches the renderer only by an `AdapterPush`, plain
 // data a process can carry, answered by its `AdapterReply`.
 
-import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { Frame, WireFrame } from "../render/frame";
-import type { Instant } from "../utils/instant.js";
-import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
+import type { LaneSwitches } from "../config/lanes.js";
 import type { Crosses, Reaches } from "./crosses.js";
 import type {
   RenderCacheStats,
@@ -82,22 +80,9 @@ export interface LogLine {
 // host that crosses a process: each a notice, which answers nothing, so a
 // turn never waits on the host.
 export interface AdapterToHost {
-  // A feed's next frame brought forward.
-  readonly wake: (sessionId: SessionId, cause: WakeCause) => void;
   // A line into the host's one log, which rotates itself: two writers would
   // each shift its generations.
   readonly log: (level: Level, line: string) => void;
-  // Each session's idle clock and the timer that closes its menus. The draw's
-  // idle period is read by the host and handed in with the input it draws.
-  readonly menuIdle: {
-    readonly clicked: (sessionId: SessionId, at: Instant) => void;
-    readonly observe: (
-      sessionId: SessionId,
-      at: Instant,
-      shown: boolean,
-      timeoutS: number,
-    ) => void;
-  };
   // An answer carrying a daemon-wide held event (the launcher's pipe event,
   // the last renderer's end) reached its client.
   readonly eventAnswered: (event: HeldEvent) => void;
@@ -124,13 +109,6 @@ export interface AdapterToHost {
 // process could not carry, naming it.
 export const REACHES_CROSS: Reaches<AdapterToHost> = true;
 
-// Why a feed's next frame was brought forward: a value its bar reads changed
-// (`data`), its session's own state moved (`state`), its config reloaded
-// (`reload`), or which panes are on a screen changed (`visibility`).
-export const WAKE_CAUSES = ["data", "state", "reload", "visibility"] as const;
-
-export type WakeCause = (typeof WAKE_CAUSES)[number];
-
 // What reloads every entry at once: the answers on disk moved, or file events
 // resumed after a span in which an edit may have gone unheard.
 export type EveryEntryLoad =
@@ -142,24 +120,6 @@ export type EveryEntryLoad =
 // (src/renderer-interface/interface.ts), answered by a reply of its own kind.
 // The list is the work left: each later step deletes an arm.
 export type AdapterPush =
-  // The feed's draw of one frame of a subscribed session, with the lanes that
-  // follow it and draw it now, what each lane was sent of late, and its idle
-  // period.
-  | {
-      readonly kind: "frame";
-      readonly session: SessionId;
-      readonly fps: number;
-      readonly following: readonly Lane[];
-      readonly feeds: LaneFeeds;
-      // When the idle period of the menus its last frame drew began, as the
-      // host's idle clock reads it at the push.
-      readonly idleSince: Instant | null;
-    }
-  // The lanes the session's view switches on, which a subscribe is gated by.
-  | { readonly kind: "lanes"; readonly session: SessionId }
-  // The feed's pin on the session's view, from its open to its close.
-  | { readonly kind: "pin"; readonly session: SessionId }
-  | { readonly kind: "unpin"; readonly session: SessionId }
   // The stats reply's reads of the renderer's state.
   | { readonly kind: "stats" }
   // The debug reply's projection of the most recently drawn view.
@@ -185,10 +145,6 @@ export type AdapterPush =
 
 // The replies that carry what their push read.
 type Reading =
-  // Null while the session has no view.
-  | { readonly kind: "frame"; readonly frame: WireFeedFrame | null }
-  // Null while the session has no view.
-  | { readonly kind: "lanes"; readonly lanes: LaneSwitches | null }
   | { readonly kind: "stats"; readonly stats: RendererStats }
   | { readonly kind: "debug"; readonly snapshot: DebugSnapshot };
 type ReadingPush = Reading["kind"];
@@ -213,4 +169,8 @@ export interface RendererStats {
   readonly renderCache: RenderCacheStats;
   readonly effectCache: StatsSnapshot["effectCache"];
   readonly sessionState: StatsSnapshot["sessionState"];
+  readonly menuIdle: StatsSnapshot["menuIdle"];
+  // Frames the renderer drew for its feeds, pushed or not: the host counts
+  // those it was handed.
+  readonly framesDrawn: number;
 }

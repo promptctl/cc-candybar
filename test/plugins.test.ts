@@ -670,7 +670,7 @@ describe("a plugin's own variables", () => {
           v.startsWith("plugins.hello."),
         ),
       ).toEqual([]);
-      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
+      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
         ` +${path.join(dir, "hello/plugin.json5")} data=none`,
       );
     } finally {
@@ -764,7 +764,7 @@ describe("a plugin's own variables", () => {
       sessionState: new SessionState(),
     });
     try {
-      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
+      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
         " plugins loaded=2 sources=0 pluginVariables=4 dropped=1 ",
       );
     } finally {
@@ -783,7 +783,7 @@ describe("a plugin's own variables", () => {
       sessionState: new SessionState(),
     });
     try {
-      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
+      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
         " pluginVariables=0 ",
       );
     } finally {
@@ -949,8 +949,8 @@ describe("an installed plugin", () => {
       });
       // [LAW:nothing-unseen] The daemon's load line names the file it read,
       // and the checkout it resolved against.
-      const line = pluginLoadLine(loaded.layers, loaded.state!, loaded.ms);
-      expect(line).toMatch(/ checkout=git:\S+ ms=\d+ /);
+      const line = pluginLoadLine(loaded.layers, loaded.state!);
+      expect(line).toMatch(/ checkout=git:\S+ /);
       expect(line).toContain(
         ` +${path.join(dir, "data/cc-candybar/plugins/lit/plugin.json5")} data=${data}`,
       );
@@ -1100,7 +1100,7 @@ describe("an installed plugin", () => {
         sessionState: new SessionState(),
       });
       loaded.state?.registry.dispose();
-      return pluginLoadLine(loaded.layers, loaded.state!, loaded.ms);
+      return pluginLoadLine(loaded.layers, loaded.state!);
     };
     const before = load();
     expect(before).toContain(` checkout=dir:${path.join(dir, "outer/inner")} `);

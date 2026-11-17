@@ -29,7 +29,13 @@ import {
   type FrameStream,
   type StreamEnd,
 } from "../../../src/daemon/client-frames";
-import { FEED_PERIODS } from "../../../src/daemon/frame-feed";
+import { FEED_PERIODS } from "../../../src/renderer/feeds";
+
+// The feed's periods in the milliseconds this file measures in.
+const PERIOD_MS = {
+  moving: FEED_PERIODS.moving * 1000,
+  still: FEED_PERIODS.still * 1000,
+};
 import {
   followFrames,
   SWITCHED_OFF_RETRY_MS,
@@ -67,10 +73,7 @@ import {
   renderLines,
 } from "../../helpers/daemon-log";
 import { POLLED } from "../../../src/config/settings-menu";
-import {
-  effectsUrl,
-  VERB_SET_STATE,
-} from "../../../src/click/wire";
+import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import {
   startDaemon,
   statsOf,
@@ -453,12 +456,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     ]);
     // Measured from the click's answer, so a loop held up before it delays
     // both alike.
-    expect(frames[2]!.at - secondAt).toBeLessThan(FEED_PERIODS.still / 2);
+    expect(frames[2]!.at - secondAt).toBeLessThan(PERIOD_MS.still / 2);
     // [LAW:no-ambient-temporal-coupling] The still bar's next frame falls due
     // a period after its first STARTED drawing, which is after the
     // subscription opened, so a frame in before a period from then can only be
     // the click's.
-    expect(frames[1]!.at).toBeLessThan(FEED_PERIODS.still);
+    expect(frames[1]!.at).toBeLessThan(PERIOD_MS.still);
   });
 
   // The closing summary of `sessionId`'s feed, once the daemon has logged it.
@@ -521,8 +524,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // Measured from the write, as the click's is: the still bar's next frame
     // falls due a still period after the last one started, just before the
     // write, so a frame in by half of one is the wake's.
-    expect(frames[2]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
-    expect(await closedSummary(sid)).toMatch(/ woke=data:[1-9]\d*,/u);
+    expect(frames[2]!.at - wrote).toBeLessThan(PERIOD_MS.still / 2);
+    expect(await closedSummary(sid)).toMatch(/ owed=data:[1-9]\d*,/u);
   });
 
   test("a config saved under an open feed is pushed with no request after it, woken by the reload", async () => {
@@ -613,7 +616,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // the few milliseconds a frame's timer and moment are rounded to, far
     // under a moving period; a bar someone could see draws three in a tenth
     // of a second.
-    expect(span).toBeGreaterThan(2 * FEED_PERIODS.still - FEED_PERIODS.moving);
+    expect(span).toBeGreaterThan(2 * PERIOD_MS.still - PERIOD_MS.moving);
     // The bar moved while it was drawn at the still rate, so the rate is the
     // unseen pane's and not a bar that stopped moving.
     expect(await closedSummary("feed-unseen")).toMatch(/ unseen=[1-9]/u);
@@ -701,7 +704,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   ): Promise<void> =>
     await click(
       sockPath,
-      drawnLink(sockPath, effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }])),
+      drawnLink(
+        sockPath,
+        effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
+      ),
     );
 
   // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
@@ -1028,7 +1034,6 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       if (i === 0 || !shown[i] || shown[i - 1]) continue;
       expect(onset.at - frames[i - 1]!.at).toBeGreaterThan(500);
     }
-    expect(await closedSummary(sid)).not.toMatch(/ woke=[^ ]*frame/u);
   });
 
   test("a frame records nothing: no session-state write", async () => {

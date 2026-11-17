@@ -30,7 +30,7 @@ import type {
   AdapterInput,
   AdapterOutput,
   EffectId,
-  RendererOutput,
+  TimedOutput,
 } from "../../src/renderer-interface/interface";
 import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant } from "../../src/utils/instant";
@@ -41,6 +41,7 @@ import {
 } from "../../src/daemon/foundations/verb-error";
 import { heldClock, type HeldClock } from "../helpers/held-clock";
 import { inertHost } from "../helpers/renderer-parts";
+import { QUIET } from "../helpers/renderers";
 
 // One renderer process as the test plays it: what the host wrote to it, and
 // what it says back.
@@ -154,10 +155,14 @@ const settled = async (): Promise<void> => {
 
 const pin: AdapterInput = {
   kind: "adapter",
-  push: { kind: "pin", session: SESSION },
+  push: { kind: "reload-every", since: 0 },
   at: 0 as Instant,
 };
-const PINNED: AdapterOutput = { kind: "replied", reply: { kind: "pin" } };
+const PINNED: AdapterOutput = {
+  kind: "replied",
+  reply: { kind: "reload-every" },
+  subscriptions: QUIET,
+};
 
 describe("a renderer process's start", () => {
   test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the host's digest", () => {
@@ -214,7 +219,7 @@ describe("a renderer process's start", () => {
   test("the complete start heads what waits for the boot, so an input during the boot follows it as a change", async () => {
     const unpin: AdapterInput = {
       ...pin,
-      push: { kind: "unpin", session: SESSION },
+      push: { kind: "close-journal" },
     };
     const r = rig(async () => {
       await r.link.renderer.answer(pin);
@@ -527,11 +532,12 @@ describe("ids a renderer mints", () => {
       event: { kind: "retire", session: SESSION },
     } as never);
     await settled();
-    const answeredWith: RendererOutput = {
+    const answeredWith: TimedOutput = {
       kind: "answered",
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, tmuxStatus: [] },
+      subscriptions: QUIET,
+      frames: [],
       turnMs: 0,
     };
     child.say({ kind: "output", n: inputs(child)[0]!.n, output: answeredWith });
@@ -578,7 +584,8 @@ describe("ids a renderer mints", () => {
         kind: "answered",
         record: [],
         effects: [{ kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" }],
-        subscriptions: { sources: {}, tmuxStatus: [] },
+        subscriptions: QUIET,
+        frames: [],
         turnMs: 0,
       },
     });

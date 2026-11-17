@@ -78,9 +78,18 @@ export function requestEvent(
   outcome: RequestOutcome,
   tookMs: number,
 ): { readonly level: LogLevel; readonly line: string } {
+  return outcomeEvent(kind, [...facts, ["took", `${tookMs}ms`]], outcome);
+}
+
+// The event's facts and outcome alone: a feed's frame, drawn in a turn the
+// host's turn line times, says no time of its own.
+export function outcomeEvent(
+  kind: RequestKind,
+  facts: RequestFacts,
+  outcome: RequestOutcome,
+): { readonly level: LogLevel; readonly line: string } {
   const fields: RequestFacts = [
     ...facts,
-    ["took", `${tookMs}ms`],
     ["outcome", outcome.kind],
     ...detailOf(outcome),
   ];

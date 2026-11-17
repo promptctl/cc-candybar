@@ -226,6 +226,12 @@ test("an installed plugin nothing places, added with the config unchanged, build
   ).toBe(true);
 });
 
+// The walk a catch-up asks for, stepped through as the renderer's due turns
+// step it, one entry each.
+const walk = (r: { readonly cache: { walking: boolean; walkOne(): void } }) => {
+  while (r.cache.walking) r.cache.walkOne();
+};
+
 // File events resuming after a span re-read every entry: an edit made while
 // the OS delivered nothing was never heard by the entry's own watch.
 test("a catch-up reloads every entry under events-resumed: the one edited while its watch heard nothing builds the new config, the other keeps its view", () => {
@@ -247,7 +253,7 @@ test("a catch-up reloads every entry under events-resumed: the one edited while 
   const since = Date.parse("2026-10-27T04:00:00.000Z");
   const before = r.loads.length;
   r.cache.reloadEvery({ kind: "events-resumed", since });
-  clock.advance(0);
+  walk(r);
   expect(r.causes.slice(before)).toEqual([
     { kind: "events-resumed", since },
     { kind: "events-resumed", since },
@@ -259,16 +265,17 @@ test("a catch-up reloads every entry under events-resumed: the one edited while 
   expect(r.reopened()).toBe(1);
 });
 
-// [LAW:no-ambient-temporal-coupling] A catch-up reloads one entry per turn of
-// the loop, so work waiting on the loop (a client's request) runs between
-// entries instead of behind all of them.
+// [LAW:no-ambient-temporal-coupling] A catch-up reloads one entry per due
+// turn, so an input waiting in the renderer's mailbox (a client's request)
+// runs between entries instead of behind all of them. A case steps the walk as
+// the renderer's due turns do.
 describe("a catch-up walks the entries one per turn", () => {
   const since = Date.parse("2026-10-27T04:00:00.000Z");
   const resumed = { kind: "events-resumed", since } as const;
   const walked = (r: ReturnType<typeof rig>, from: number) =>
     r.reloaded.slice(from);
 
-  test("nothing reloads in the turn that asks, the most recently used entry reloads first, and work deferred behind it runs between the first entry and the second", () => {
+  test("nothing reloads in the turn that asks, and each step reloads one entry, the most recently used first", () => {
     fakeWatches();
     const clock = heldClock(new Date());
     const r = rig({ clock });
@@ -279,12 +286,13 @@ describe("a catch-up walks the entries one per turn", () => {
     r.cache.reloadEvery(resumed);
     expect(walked(r, from)).toEqual([]);
     expect(r.cache.stats.due).toBe(2);
-    let between: string[] | null = null;
-    clock.defer(() => (between = walked(r, from)));
-    clock.advance(0);
-    expect(between).toEqual([a]);
+    expect(r.cache.walking).toBe(true);
+    r.cache.walkOne();
+    expect(walked(r, from)).toEqual([a]);
+    r.cache.walkOne();
     expect(walked(r, from)).toEqual([a, b]);
     expect(r.cache.stats.due).toBe(0);
+    expect(r.cache.walking).toBe(false);
   });
 
   test("an entry drawn during the walk is the next one reloaded", () => {
@@ -296,8 +304,9 @@ describe("a catch-up walks the entries one per turn", () => {
     const c = r.project("c");
     const from = r.reloaded.length;
     r.cache.reloadEvery(resumed);
-    clock.defer(() => r.cache.getOrCreate(a, a, path.join(a, "config.json5")));
-    clock.advance(0);
+    r.cache.walkOne();
+    r.cache.getOrCreate(a, a, path.join(a, "config.json5"));
+    walk(r);
     expect(walked(r, from)).toEqual([c, a, b]);
   });
 
@@ -312,7 +321,7 @@ describe("a catch-up walks the entries one per turn", () => {
     r.project("c");
     expect(r.cache.stats.due).toBe(1);
     const from = r.reloaded.length;
-    clock.advance(0);
+    walk(r);
     expect(walked(r, from)).toEqual([b]);
   });
 
@@ -325,9 +334,9 @@ describe("a catch-up walks the entries one per turn", () => {
     r.cache.reloadEvery(resumed);
     r.cache.close();
     const from = r.reloaded.length;
-    clock.advance(0);
+    expect(r.cache.walking).toBe(false);
+    r.cache.walkOne();
     expect(walked(r, from)).toEqual([]);
-    expect(clock.pending()).toBe(0);
   });
 
   test("a second catch-up before the walk ends reloads each entry once, for the later cause", () => {
@@ -343,7 +352,7 @@ describe("a catch-up walks the entries one per turn", () => {
       heard: { kind: "unknown" },
     } as const;
     r.cache.reloadEvery(answers);
-    clock.advance(0);
+    walk(r);
     expect(walked(r, from)).toEqual([b, a]);
     expect(r.causes.slice(from)).toEqual([answers, answers]);
   });
@@ -359,7 +368,7 @@ describe("a catch-up walks the entries one per turn", () => {
     const from = r.reloaded.length;
     expect(r.reload()).toBe("kept");
     expect(r.cache.stats.due).toBe(1);
-    clock.advance(0);
+    walk(r);
     expect(walked(r, from)).toEqual([dir, b]);
   });
 
@@ -378,7 +387,7 @@ describe("a catch-up walks the entries one per turn", () => {
     failing = b;
     const from = r.reloaded.length;
     r.cache.reloadEvery(resumed);
-    clock.advance(0);
+    walk(r);
     expect(walked(r, from)).toEqual([b, a]);
     expect(r.cache.stats.due).toBe(0);
     const threw = r.lines.filter((l) =>
@@ -391,7 +400,7 @@ describe("a catch-up walks the entries one per turn", () => {
     );
     failing = null;
     r.cache.reloadEvery(resumed);
-    clock.advance(0);
+    walk(r);
     expect(walked(r, from)).toEqual([b, a, b, a]);
   });
 });

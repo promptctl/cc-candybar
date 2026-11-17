@@ -7,6 +7,7 @@ import {
   lineSplitter,
   rendererOverLines,
   serveRenderer,
+  timed,
   type HostLine,
   type RendererLine,
 } from "../../src/renderer-interface/wire";
@@ -14,30 +15,43 @@ import {
   rendererOf,
   type AdapterInput,
   type Renderer,
+  type TimedRenderer,
 } from "../../src/renderer-interface/interface";
-import type { AdapterToHost } from "../../src/renderer-interface/adapter";
-import type { SessionId } from "../../src/daemon/foundations/session-id";
+import type {
+  AdapterToHost,
+  StorageHoldId,
+} from "../../src/renderer-interface/adapter";
 import type { Instant } from "../../src/utils/instant";
+import type { Monotonic } from "../../src/time";
 import {
   CrossedFailure,
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
 import { inertHost } from "../helpers/renderer-parts";
+import { QUIET } from "../helpers/renderers";
 
-const SESSION = "s1" as SessionId;
+const HOLD = 7 as StorageHoldId;
 
-// A renderer that tells the host two notices and answers; and one push that
-// throws.
+// A renderer that tells the host two notices and answers; one push that
+// throws; and an event it answers with nothing.
 function talkingRenderer(host: AdapterToHost): Renderer {
   return rendererOf({
-    event: async () => {
-      throw new Error("no events here");
-    },
+    event: async () => ({
+      kind: "answered",
+      effects: [],
+      record: [],
+      subscriptions: QUIET,
+      frames: [],
+    }),
     adapter: async (input) => {
-      if (input.push.kind === "lanes") throw new Error("lanes refused");
-      host.log("info", "pinned");
-      host.menuIdle.clicked(SESSION, 7 as Instant);
-      return { kind: "replied", reply: { kind: "pin" } };
+      if (input.push.kind === "reload-every") throw new Error("reload refused");
+      host.log("info", "closing");
+      host.storage.hold(HOLD, ["/folder"]);
+      return {
+        kind: "replied",
+        reply: { kind: "close-journal" },
+        subscriptions: QUIET,
+      };
     },
   });
 }
@@ -50,16 +64,22 @@ function recordingHost(): { host: AdapterToHost; saw: string[] } {
     host: {
       ...inertHost(),
       log: (_level, msg) => saw.push(`log ${msg}`),
-      menuIdle: {
-        ...inertHost().menuIdle,
-        clicked: (session, at) => saw.push(`clicked ${session} ${at}`),
+      storage: {
+        ...inertHost().storage,
+        hold: (id, folders) => saw.push(`hold ${id} ${folders.join(",")}`),
       },
     },
   };
 }
 
+// A clock whose every reading is 5 ms after the last.
+function steppingClock(): { monotonic: () => Monotonic } {
+  let at = 0;
+  return { monotonic: () => (at += 5) as Monotonic };
+}
+
 // Each line crosses as JSON does, and on a later turn, as a pipe carries it.
-function overLines(host: AdapterToHost): Renderer {
+function overLines(host: AdapterToHost): TimedRenderer {
   const crossed = <T>(line: T): T => JSON.parse(JSON.stringify(line)) as T;
   let toRenderer: (line: HostLine) => void = () => {};
   const lines = rendererOverLines({
@@ -73,7 +93,7 @@ function overLines(host: AdapterToHost): Renderer {
     queueMicrotask(() => lines.heard(crossed(line))),
   );
   toRenderer = serveRenderer({
-    renderer: talkingRenderer(reaches),
+    renderer: timed(talkingRenderer(reaches), steppingClock()),
     send: (line) => queueMicrotask(() => lines.heard(crossed(line))),
     memory: () => ({ rss: 1, heapTotal: 1 }),
     heapSnapshot: () => {},
@@ -81,21 +101,29 @@ function overLines(host: AdapterToHost): Renderer {
   return lines.renderer;
 }
 
-const push = (kind: "pin" | "lanes"): AdapterInput => ({
-  kind: "adapter",
-  push: { kind, session: SESSION },
-  at: 0 as Instant,
-});
+const push = (
+  push: { kind: "close-journal" } | { kind: "reload-every"; since: number },
+): AdapterInput => ({ kind: "adapter", push, at: 0 as Instant });
 
 describe("the renderer over lines", () => {
   test("answers as it does in this process, reaching the host in the same order", async () => {
     const here = recordingHost();
     const there = recordingHost();
-    const inProcess = await talkingRenderer(here.host).answer(push("pin"));
-    const crossed = await overLines(there.host).answer(push("pin"));
+    const asked = push({ kind: "close-journal" });
+    const inProcess = await talkingRenderer(here.host).answer(asked);
+    const crossed = await overLines(there.host).answer(asked);
     expect(crossed).toEqual(inProcess);
     expect(there.saw).toEqual(here.saw);
-    expect(there.saw).toEqual(["log pinned", `clicked ${SESSION} 7`]);
+    expect(there.saw).toEqual(["log closing", `hold ${HOLD} /folder`]);
+  });
+
+  test("an event's output crosses with its turn timed on the serving side, around the renderer's answer", async () => {
+    const crossed = await overLines(recordingHost().host).answer({
+      kind: "event",
+      at: 0 as Instant,
+      event: { kind: "due" },
+    });
+    expect(crossed.turnMs).toBe(5);
   });
 
   test("two notices heard in one chunk reach the host in the order sent", () => {
@@ -107,9 +135,9 @@ describe("the renderer over lines", () => {
         throw new Error(message);
       },
     });
-    lines.heard({ kind: "notice", reach: "menuIdle.clicked", args: [SESSION, 7] });
+    lines.heard({ kind: "notice", reach: "storage.hold", args: [HOLD, ["/f"]] });
     lines.heard({ kind: "notice", reach: "log", args: ["info", "after"] });
-    expect(saw).toEqual([`clicked ${SESSION} 7`, "log after"]);
+    expect(saw).toEqual([`hold ${HOLD} /f`, "log after"]);
   });
 
   test("a line heard after the renderer's end reaches nothing, and is said", () => {
@@ -129,8 +157,9 @@ describe("the renderer over lines", () => {
   });
 
   test("a push that threw fails as it does in this process, its failure kept", async () => {
-    const here = talkingRenderer(recordingHost().host).answer(push("lanes"));
-    const there = overLines(recordingHost().host).answer(push("lanes"));
+    const asked = push({ kind: "reload-every", since: 0 });
+    const here = talkingRenderer(recordingHost().host).answer(asked);
+    const there = overLines(recordingHost().host).answer(asked);
     const thrownHere = failureOf(await here.catch((e: unknown) => e));
     const thrownThere = await there.catch((e: unknown) => e);
     expect(thrownThere).toBeInstanceOf(CrossedFailure);

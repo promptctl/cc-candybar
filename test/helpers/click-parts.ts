@@ -5,15 +5,16 @@
 // these in.
 
 import { holdable, NO_PUSHES } from "./renderers";
-import { minter } from "./renderer-parts";
+import { minter, rendererClocks } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
 import { rendererHost, type HostWorld } from "../../src/daemon/renderer-host";
 import type { ActsOnTheirWay } from "../../src/renderer/acts";
-import { mainRenderer } from "../../src/renderer/main";
+import { mainRenderer, type RendererClocks } from "../../src/renderer/main";
+import { timed } from "../../src/renderer-interface/wire";
 import { systemTimekeeper } from "../../src/time";
-import { instantOf } from "../../src/utils/instant";
+import { instantOf, type Instant } from "../../src/utils/instant";
 import {
   verbsOver,
   type DaemonVerbContext,
@@ -39,29 +40,44 @@ export function clickParts(
   },
 ): Pick<DaemonParts, "renderer" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
+  // The clocks the renderer's turns keep: a case draws a session's menus by
+  // telling its idle clock what a draw drew.
+  clocks: RendererClocks;
   // Another turn, held in the renderer's mailbox until `open`: every input
   // sent after it waits there, in flight.
   park: () => { readonly open: () => void; readonly holding: Promise<unknown> };
 } {
+  // [LAW:one-source-of-truth] A click's instant and its landing are the
+  // renderer's own clocks', as the renderer wires its verb context: a click
+  // moves the idle deadline its due turns read.
+  const clocks = rendererClocks();
+  const now = (): Instant => (clocks.time.now() / 1000) as Instant;
   // A click's turn reads the verbs and, for its output, the open views'
   // subscriptions: this rig opens none.
   const parts = {
-    verbs: verbsOver(verbCtx),
-    renderCache: { subscriptions: () => ({ sources: {} }) },
+    verbs: verbsOver({
+      ...verbCtx,
+      now,
+      clickLanded: (session) => clocks.menuIdle.clicked(session, now()),
+    }),
+    renderCache: {
+      subscriptions: () => ({ sources: {} }),
+      walking: false,
+      holdView: () => null,
+    },
     // No view is open, so no lane is read.
     laneActs: { noted: () => {}, clicked: () => {} },
-    // What the renderer times each turn by.
-    clock: systemTimekeeper,
     mint: minter(),
     // The acts the test's verb context asks, settled by this rig's host.
     acts: verbCtx.acts as ActsOnTheirWay,
     // The doctor runs the test's clicks start, whose asks the turn names.
     doctorRuns: verbCtx.doctorRuns,
+    log: verbCtx.log,
   } as unknown as MainRendererParts;
   // The teardown's journal step, answered as the main renderer answers it, in
   // its place in the mailbox: no other push is a click's.
   const held = holdable(
-    mainRenderer(parts, (push) => {
+    mainRenderer(parts, clocks, (push) => {
       if (push.kind !== "close-journal") return NO_PUSHES();
       verbCtx.configWrites.close();
       return { kind: "close-journal" };
@@ -70,10 +86,11 @@ export function clickParts(
   const renderer = rendererHost(
     "main",
     systemTimekeeper,
-    held.renderer,
+    timed(held.renderer, systemTimekeeper),
     () => {},
     {
       subscribed: () => {},
+      framed: () => {},
       holding: collector.holding,
       writableSettings: () => [],
     },
@@ -82,6 +99,7 @@ export function clickParts(
   return {
     renderer,
     collector,
+    clocks,
     linkSigner: TEST_SIGNER,
     park: () => {
       const open = held.hold();
@@ -89,7 +107,7 @@ export function clickParts(
         () => ({
           kind: "event",
           at: instantOf(new Date()),
-          event: { kind: "start", sessions: [] },
+          event: { kind: "start", sessions: [], viewers: {} },
         }),
         [],
       );

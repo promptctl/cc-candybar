@@ -21,12 +21,13 @@ import type { DoctorStoreValues } from "../daemon/foundations/stats-snapshot";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
-// crate's source digest, and whether a native client ships here.
+// crate's source digest, and whether a native client ships here. Each is read
+// when the check asks, not when the edge is built.
 export interface InstallEdge {
   readonly realpath: (p: string) => Asked<string>;
   readonly checkoutOf: (bundle: string) => string | null;
   readonly digest: (dir: string) => Asked<string>;
-  readonly nativeShipped: boolean;
+  readonly nativeShipped: () => boolean;
 }
 
 // The documents the doctor keeps under the daemon's state directory

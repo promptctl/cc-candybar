@@ -106,6 +106,24 @@ export interface LaneFeed {
 }
 export type LaneFeeds = Readonly<Record<Lane, LaneFeed>>;
 
+// [LAW:nothing-unseen] Who follows one lane of a session's frames, as the
+// host's surfaces see it: how many subscribers of that lane follow the
+// session, and whether one of them draws the bar where the lane puts it now
+// (a client's draws whatever it is sent; the daemon's own tmux status line
+// only while it shows the session's pane).
+export interface LaneViewer {
+  readonly subscribers: number;
+  readonly drawing: boolean;
+}
+
+// [LAW:one-source-of-truth] A session's viewers, as the host hands them in:
+// each lane's, and whether the session's pane is on a screen, which decides
+// the rate its frames are drawn at.
+export interface Viewers {
+  readonly shown: boolean;
+  readonly lanes: Readonly<Record<Lane, LaneViewer>>;
+}
+
 // [LAW:types-are-the-program] Who a render is drawn for: a client's render
 // request, answered to that client alone, or the frame feed, whose frames are
 // pushed to every lane's subscribers — with that feed's ceiling, the most

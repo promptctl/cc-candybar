@@ -8,14 +8,29 @@ import type {
   EventInput,
   Renderer,
   RendererOutput,
+  Subscriptions,
+  TimedOutput,
+  TimedRenderer,
 } from "../../src/renderer-interface/interface";
 import { rendererOf } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
+import type { Collector } from "../../src/daemon/collector";
+import type { SessionId } from "../../src/daemon/foundations/session-id";
 
-// A renderer whose events `answered` answers, and which no push reaches.
+// What a renderer that needs nothing declares: no source, no row, no lane
+// and no next turn.
+export const QUIET: Subscriptions = {
+  sources: {},
+  tmuxStatus: [],
+  lanes: {},
+  wake: null,
+};
+
+// A renderer whose events `answered` answers, as its transport times them,
+// and which no push reaches.
 export function eventRenderer(
-  answered: (input: EventInput) => Promise<RendererOutput>,
-): Renderer {
+  answered: (input: EventInput) => Promise<TimedOutput>,
+): TimedRenderer {
   return rendererOf({
     event: answered,
     adapter: async (input) => {
@@ -27,7 +42,7 @@ export function eventRenderer(
 // A renderer whose pushes `replied` answers, and which no event reaches.
 export function pushRenderer(
   replied: (input: AdapterInput) => Promise<AdapterOutput>,
-): Renderer {
+): TimedRenderer {
   return rendererOf({
     event: async (input) => {
       throw new Error(`this renderer takes no event (${input.event.kind})`);
@@ -58,10 +73,10 @@ export const NO_ACTS: HostWorld = {
 };
 
 // `renderer`, with `heard` told each event before it answers.
-export function hearingEvents(
-  renderer: Renderer,
+export function hearingEvents<O extends RendererOutput>(
+  renderer: Renderer<O>,
   heard: (input: EventInput) => void,
-): Renderer {
+): Renderer<O> {
   return rendererOf({
     event: (input) => {
       heard(input);
@@ -74,8 +89,10 @@ export function hearingEvents(
 // `renderer`, with a turn a test holds: `hold` keeps the next input's turn
 // from reaching it until `open`, so every input sent after that one waits
 // behind it in the host's mailbox, in flight.
-export function holdable(renderer: Renderer): {
-  readonly renderer: Renderer;
+export function holdable<O extends RendererOutput>(
+  renderer: Renderer<O>,
+): {
+  readonly renderer: Renderer<O>;
   readonly hold: () => () => void;
 } {
   let held: Promise<void> = Promise.resolve();
@@ -96,3 +113,15 @@ export function holdable(renderer: Renderer): {
     },
   };
 }
+
+// What a host hands its turns over a daemon's collector, where no feed is
+// open, so a pushed frame reaches nothing.
+export const unframed = (
+  collector: Pick<Collector, "subscribed" | "holding" | "writableSettings">,
+) => ({
+  subscribed: (subscriptions: Subscriptions) =>
+    collector.subscribed(subscriptions),
+  framed: () => {},
+  holding: (session: SessionId) => collector.holding(session),
+  writableSettings: (session: SessionId) => collector.writableSettings(session),
+});

@@ -27,6 +27,7 @@ import {
   hostOverLines,
   lineSplitter,
   serveRenderer,
+  timed,
   type HostLine,
   type RendererBoot,
   type RendererLine,
@@ -100,7 +101,9 @@ export function runRenderer(world: World): void {
       return;
     }
     served = serveRenderer({
-      renderer,
+      // [LAW:effects-at-boundaries] Each turn timed here, at the transport,
+      // on this process's clock: the renderer reads none.
+      renderer: timed(renderer, world.clock),
       send,
       memory: () => {
         const { rss, heapTotal } = process.memoryUsage();
@@ -140,8 +143,6 @@ function booted(
   const { clock } = world;
   const adapters = rendererAdapters(paths, clock);
   return loadMainRenderer({
-    clock,
-    now: () => instantAt(clock),
     storage: {
       ...adapters.storage(reaches.log),
       doctor: adapters.doctorStores,

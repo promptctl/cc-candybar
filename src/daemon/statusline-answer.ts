@@ -33,8 +33,6 @@ import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { HostTurn, RendererHost } from "./renderer-host.js";
-import type { MenuIdle } from "./menu-idle.js";
-import type { FrameFeeds } from "./frame-feed.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -95,10 +93,6 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 export async function answerStatusline(
   host: RendererHost,
   collector: Pick<Collector, "requested" | "holding" | "settled">,
-  // The session's idle clock and its feeds, which the request's draw reads
-  // as its turn comes.
-  menuIdle: Pick<MenuIdle, "since">,
-  feeds: Pick<FrameFeeds<CheckedRenderRequest>, "following" | "feedsOf">,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after">,
   // The daemon's close, which ends the request's wait.
   closing: AbortSignal,
@@ -191,21 +185,13 @@ export async function answerStatusline(
     // [LAW:nothing-unseen] How the wait went, on the render event: an answer
     // drawn with values pending says so by name.
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-    // [LAW:no-ambient-temporal-coupling] Made as its turn comes, so what it
-    // reads of the host follows every input ahead of it: a click that landed
-    // during the wait is drawn by this request's idle reading.
+    // [LAW:no-ambient-temporal-coupling] Made as its turn comes, so a close
+    // begun during the wait refuses it.
     delivered = await host.answer(
       unlessClosing(() => ({
         kind: "event",
         at,
-        event: {
-          kind: "request",
-          id,
-          context: req,
-          idleSince: menuIdle.since(session, at) ?? null,
-          following: [...feeds.following(session)],
-          feeds: feeds.feedsOf(session, at),
-        },
+        event: { kind: "request", id, context: req },
       })),
     );
   } finally {
@@ -213,8 +199,11 @@ export async function answerStatusline(
   }
   recorded(facts, delivered);
   // [LAW:nothing-unseen] Both turns' waits in the mailbox and hops, beside
-  // `took`: what reaching the renderer cost this request.
+  // `took`: what reaching the renderer cost this request. And how long the
+  // request's own turn took to make the frame: with `encoded=` for its bytes,
+  // what the draw's reserve is held to (DRAW_RESERVE_MS).
   noteFacts(facts, {
+    drew: delivered.turnMs === null ? "-" : `${delivered.turnMs}ms`,
     mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
     hop:
       configured.hopMs === null || delivered.hopMs === null
@@ -268,7 +257,7 @@ export async function answerStatusline(
     return failed(host, failure, "its frame could not be encoded: ");
   }
   // [LAW:nothing-unseen] The bytes' share of the draw's reserve, beside the
-  // renderer's `drew=`.
+  // turn's `drew=`.
   noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
   return {
     outcome: { kind: "ok" },

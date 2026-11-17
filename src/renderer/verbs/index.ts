@@ -173,7 +173,7 @@ import {
   parseSessionId,
   type SessionId,
 } from "../../daemon/foundations/session-id";
-import type { IdleSpan } from "../../renderer-interface/interface";
+import type { IdleSpan } from "../menu-idle.js";
 
 // What the daemon hands everything that writes a session's state: a click's
 // verb, and the idle timer that closes its menus (`closeIdleMenus`).
@@ -181,7 +181,8 @@ export interface DaemonContext {
   // What this daemon's clicks may write: the gates its root built.
   readonly gates: Gates;
   readonly sessionState: SessionStateRW;
-  // [LAW:effects-at-boundaries] The daemon's clock.
+  // [LAW:no-ambient-temporal-coupling] The instant of the turn in progress,
+  // which the host handed in.
   readonly now: () => Instant;
   readonly log: (level: "info" | "warn" | "error", msg: string) => void;
   // [LAW:single-enforcer] Where every act a click asks of the host goes: its
@@ -208,7 +209,7 @@ export interface DaemonContext {
   // beside the settings history.
   readonly navigation: NavigationHistory;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
-  // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
+  // turn: the session's idle period begins again (src/renderer/menu-idle.ts).
   readonly clickLanded: (sessionId: SessionId) => void;
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
@@ -1855,21 +1856,16 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 // mode releases its savepoint, and ◁ back can reopen what it closed — and the
 // closing view, which folds everything open inside what closes. It writes
 // `closed` to each menu open at the top, the write its ✕ makes. No URL names
-// it: it is not in VERBS. Whether it goes ahead is the host's idle clock's
-// to say, as its turn came (`stillIdle`): a click since the firing keeps
-// what it opened.
+// it: it is not in VERBS. It is due only while the session is idle as its
+// turn finds it (src/renderer/menu-idle.ts): a click ahead of it in the
+// mailbox moved the deadline, and nothing falls due.
 export function closeIdleMenus(
-  sid: SessionId,
   latest: CheckedRenderRequest | null,
   idle: IdleSpan,
-  stillIdle: boolean,
   ctx: DaemonContext,
   effects: Effect[],
 ): void {
-  if (!stillIdle) {
-    ctx.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
-    return;
-  }
+  const sid = idle.session;
   journaled("menu-idle", sid, latest, ctx, effects, (c) => {
     const roots = openRoots(nestOf(c, sid), (key) =>
       c.navigating.get(sid, key),

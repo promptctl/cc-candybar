@@ -95,7 +95,7 @@ import {
 } from "../config/loader/plugins.js";
 import { ownedBy, pluginNs } from "../config/loader/plugin-scope.js";
 import { projectionsOf } from "../config/loader/projections.js";
-import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
+import type { StoreTime } from "./turn-time.js";
 import type { RenderCacheStats } from "../daemon/foundations/stats-snapshot";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
@@ -165,8 +165,8 @@ export const MAX_ENTRIES = 256;
 // the session source (src/renderer/session-source.ts) a view's payload is
 // derived through; they are not part of cache identity or lifecycle.
 export interface RenderDeps<S extends ViewSource = ViewSource> {
-  // The daemon's clock (StateDeps).
-  clock: Timekeeper;
+  // The renderer's time (StateDeps).
+  clock: StoreTime;
   // The daemon's state directory, where the repositories' answers are kept
   // (StateDeps).
   stateDir: string;
@@ -196,9 +196,8 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
 
 // What building one config's state needs.
 export interface StateDeps {
-  // The clock its variables' ages and the load's own duration run on: the
-  // daemon's.
-  readonly clock: Timekeeper;
+  // The time its variables' ages run on: the turn's instant.
+  readonly clock: StoreTime;
   // The state directory whose answers book a load reads: which repositories'
   // plugins it may run.
   readonly stateDir: string;
@@ -355,6 +354,7 @@ export interface ConfigChain {
 // `git:<root>`, or `dir:<cwd>` for a directory in no checkout, `-` with no
 // session — which it dropped, and how long the load took: a drop is also on
 // the bar's message, but the rest is said nowhere else. The daemon's own sink.
+// How long a load took is the turn's, which the host's turn line says.
 export function pluginLoadLine(
   layers: readonly string[],
   {
@@ -362,7 +362,6 @@ export function pluginLoadLine(
     config,
     compiled,
   }: Pick<DslRenderState, "plugins" | "config" | "compiled">,
-  ms: number,
 ): string {
   const { checkout, loaded, dropped, unreached } = plugins;
   const checkoutField =
@@ -389,7 +388,7 @@ export function pluginLoadLine(
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
   return (
-    `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` +
+    `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
     loaded.map((p) => ` +${p.path} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")
@@ -664,9 +663,6 @@ export type LoadOutcome = {
   readonly home: string;
   readonly repos: RepoGate;
   readonly warning: string | null;
-  // How long the attempt took, resolution to built state or to its error:
-  // the one number that shows a load getting slower or faster.
-  readonly ms: number;
 } & (
   | {
       readonly kind: "built" | "kept";
@@ -961,11 +957,10 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
 }
 
 // What every load of one chain shares, whatever its attempt: the advisories
-// its resolution earned, and when it started.
+// its resolution earned.
 export interface LoadFrame {
   readonly repos: RepoGate;
   readonly advisories: ReadonlyArray<string | null>;
-  readonly started: Monotonic;
 }
 
 // [LAW:single-enforcer] The one place a load's outcome is composed, for every
@@ -979,14 +974,12 @@ export function settle(
   chain: ConfigChain,
   resolveWarnings: readonly string[],
   attempt: Attempt,
-  clock: Pick<Timekeeper, "monotonic">,
 ): LoadOutcome {
   const common = {
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain.layers.map((l) => l.path),
     home: chain.home,
     repos: frame.repos,
-    ms: elapsedMs(clock, frame.started),
   };
   const warning = (own: readonly string[]): string | null =>
     joinWarnings([...frame.advisories, ...resolveWarnings, ...own]);
@@ -1026,7 +1019,7 @@ function loadChain(
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain);
   if (resolved.kind === "failed") {
-    return settle(frame, chain, [], resolved, deps.clock);
+    return settle(frame, chain, [], resolved);
   }
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
@@ -1034,7 +1027,7 @@ function loadChain(
     served?.loadKey === resolved.key
       ? { kind: "kept", state: served }
       : buildRenderState(resolved, deps);
-  return settle(frame, chain, resolved.warnings, attempt, deps.clock);
+  return settle(frame, chain, resolved.warnings, attempt);
 }
 
 // [LAW:effects-at-boundaries] One attempt at the disk: read the user's
@@ -1051,7 +1044,6 @@ export function loadFromDisk(
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const started = deps.clock.monotonic();
   const resolution = resolveDslConfig(
     deps.locations,
     repoConfigs(deps.stateDir).read(),
@@ -1085,7 +1077,7 @@ export function loadFromDisk(
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
   // and its diagnostics count `lastError` and `lastWarning`.
-  return loadChain({ repos, advisories, started }, cwd, chain, deps, served);
+  return loadChain({ repos, advisories }, cwd, chain, deps, served);
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
@@ -1331,9 +1323,6 @@ export class RenderCache<
   // that asked. Keyed by the entry itself, so an entry evicted and opened
   // again is a new one, whose own first load read the disk after the span.
   private readonly due = new Map<CacheEntry, EveryEntryLoad>();
-  // What cancels the one turn armed to reload the next due entry, while one
-  // is.
-  private walk: (() => void) | null = null;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
   // The last storage hold id minted.
@@ -1442,7 +1431,7 @@ export class RenderCache<
 
     const loaded = this.load(projectDir, cwd, configFile, null);
     if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // is counted by the indicator beside its settings door, loud, and the
@@ -1595,7 +1584,7 @@ export class RenderCache<
   }
 
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
-  // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
+  // from the feed's open to its close (src/renderer/feeds.ts). Keyed by
   // session, so it follows the view wherever a request or a reload moves it.
   pin(sessionId: SessionId): () => void {
     this.pins.set(sessionId, (this.pins.get(sessionId) ?? 0) + 1);
@@ -1736,9 +1725,7 @@ export class RenderCache<
   close(): void {
     if (this.closed) return;
     this.lifetime.abort(new Error("the render cache closed"));
-    // The drops below empty the due set, so no turn is armed again.
-    this.walk?.();
-    this.walk = null;
+    // The drops below empty the due set, so no walk falls due again.
     this.answersWatch.release();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
@@ -1983,7 +1970,7 @@ export class RenderCache<
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     if (loaded.kind === "built") {
       entry.state = loaded.state;
       this.serve(loaded.state);
@@ -2018,30 +2005,26 @@ export class RenderCache<
   // disk as it is now answers both.
   reloadEvery(cause: EveryEntryLoad): void {
     for (const entry of this.entries.values()) this.due.set(entry, cause);
-    this.armWalk();
   }
 
-  // [LAW:single-enforcer] The one place a walk turn is armed: none while one
-  // is armed, so a batch started from inside a turn leaves one walker, and
-  // one whenever an entry is due.
-  private armWalk(): void {
-    if (this.walk !== null || this.due.size === 0) return;
-    this.walk = this.deps.clock.defer(() => this.walkOne());
+  // [LAW:dataflow-not-control-flow] Whether an entry waits on the walk: the
+  // renderer's wake asks for a turn at once while one does, and each such
+  // turn walks one entry (`walkOne`).
+  get walking(): boolean {
+    return this.due.size > 0;
   }
 
-  // The turn takes the most recently used due entry, read off the map as it
-  // is now, so a bar someone draws during the walk is re-read on the next
-  // turn, not where it stood when the batch began. Nothing is due when every
-  // entry left since the turn was armed: dropped, or re-read by its own
-  // reload.
-  // The turn runs outside any watcher's callback, so it is its own error
-  // boundary, as the watcher registry is for a reload a watch drives: a
-  // reload that throws is logged and ends only its own turn, where uncaught
-  // it would end the daemon. [LAW:no-silent-failure] exception: the throw
-  // reaches the log and not the bar's ⚠, as on the watch path; one fix at the
-  // reload itself answers both.
-  private walkOne(): void {
-    this.walk = null;
+  // One step of the walk, in a turn of its own: the most recently used due
+  // entry, read off the map as it is now, so a bar someone draws during the
+  // walk is re-read on the next step, not where it stood when the batch
+  // began. Nothing is due when every entry left since the batch: dropped, or
+  // re-read by its own reload.
+  // A step is its own error boundary, as the watcher registry is for a
+  // reload a watch drives: a reload that throws is logged and ends only its
+  // own step, so one broken entry stops no other's. [LAW:no-silent-failure]
+  // exception: the throw reaches the log and not the bar's ⚠, as on the
+  // watch path; one fix at the reload itself answers both.
+  walkOne(): void {
     let next: readonly [CacheEntry, EveryEntryLoad] | null = null;
     for (const entry of this.entries.values()) {
       const cause = this.due.get(entry);
@@ -2056,8 +2039,6 @@ export class RenderCache<
         "error",
         `every-entry reload threw projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} configFile=${valueOf(entry.configFile ?? "-")} cause=${valueOf(causeField(cause))}: ${inspect(e)}`,
       );
-    } finally {
-      this.armWalk();
     }
   }
 
