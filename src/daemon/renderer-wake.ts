@@ -23,6 +23,7 @@ import { instantAt } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { eventLine } from "../utils/logfmt.js";
 import { LEVEL } from "./foundations/request-event.js";
+import { DaemonClosing, failureOf } from "./foundations/verb-error.js";
 import { tookOf, type RendererHost } from "./renderer-host.js";
 
 // [LAW:no-ambient-temporal-coupling] How far the wall clock read as a due is
@@ -152,6 +153,10 @@ export class RendererWake {
       // Made as its slot comes: declarations are taken again from here, so
       // the due's own output declares what follows it.
       this.phase = { kind: "idle" };
+      // [LAW:no-ambient-temporal-coupling] A due queued before the daemon's
+      // close and reached after it is refused: no frame or idle close runs
+      // once the teardown has begun.
+      if (this.closed) return failureOf(new DaemonClosing("wake"));
       // [LAW:single-enforcer] exception: kept to the microsecond, since a due
       // is read against a frame period of a few ms.
       recordMs(this.lateness, clock.monotonic() - moment);

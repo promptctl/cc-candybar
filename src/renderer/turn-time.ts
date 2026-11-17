@@ -49,22 +49,32 @@ export class TurnTime implements StoreTime {
 
   // The earliest instant something waits for, or null for none.
   next(): Instant | null {
-    let soonest: Instant | null = null;
-    for (const { until } of this.later)
-      if (soonest === null || until < soonest) soonest = until;
-    return soonest;
+    return this.earliest(Infinity as Instant)?.until ?? null;
   }
 
-  // Runs what fell due by `at`, earliest first, each taken as it runs: one
-  // that throws fails the turn and is not run again, and those behind it
-  // stay due, run by the next `due`.
+  // Runs what fell due by `at`, earliest first, each taken from what is held
+  // as it runs: one an earlier one cancelled is not run, one that throws
+  // fails the turn and is not run again, and those behind it stay due, run
+  // by the next `due`.
   due(at: Instant): void {
-    const due = [...this.later]
-      .filter(({ until }) => until <= at)
-      .sort((a, b) => a.until - b.until);
-    for (const later of due) {
+    for (
+      let later = this.earliest(at);
+      later !== null;
+      later = this.earliest(at)
+    ) {
       this.later.delete(later);
       later.fire();
     }
+  }
+
+  private earliest(at: Instant): Later | null {
+    let soonest: Later | null = null;
+    for (const later of this.later)
+      if (
+        later.until <= at &&
+        (soonest === null || later.until < soonest.until)
+      )
+        soonest = later;
+    return soonest;
   }
 }

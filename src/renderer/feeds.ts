@@ -22,7 +22,6 @@
 
 import {
   LANE_NAMES,
-  LANES,
   MOVING_FPS,
   perLane,
   UNFOLLOWED,
@@ -32,7 +31,12 @@ import {
 } from "../config/lanes.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
-import type { FeedFrame, Level } from "../renderer-interface/adapter.js";
+import {
+  answerOf,
+  type Answers,
+  type FeedFrame,
+  type Level,
+} from "../renderer-interface/adapter.js";
 import type { PushedFrame } from "../renderer-interface/interface.js";
 import type { Instant } from "../utils/instant.js";
 
@@ -70,16 +74,6 @@ export function noteSent(rate: Instant[], at: Instant): void {
   const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S && sent <= at);
   rate.splice(0, rate.length, ...kept, at);
 }
-
-interface Answers {
-  readonly resp: string;
-  readonly statusline: string;
-}
-
-// [LAW:one-source-of-truth] A lane drawing the bar elsewhere draws the bar;
-// the one drawing it in the statusline draws what the statusline shows.
-const answerOf = (answers: Answers, lane: Lane): string =>
-  LANES[lane].handsOff ? answers.resp : answers.statusline;
 
 interface Feed {
   viewers: Viewers;
@@ -313,7 +307,8 @@ export class Feeds {
       noteSent(rate, at);
       feed.rates.set(lane, rate);
     }
-    frames.push({ session: sessionId, frame });
+    const { resp: _resp, statusline: _statusline, ...drawn } = frame;
+    frames.push({ session: sessionId, frame: { ...drawn, answers } });
   }
 
   private open(sessionId: SessionId, viewers: Viewers, at: Instant): void {

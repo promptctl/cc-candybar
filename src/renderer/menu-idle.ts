@@ -37,9 +37,6 @@ interface Idle {
   since: Instant;
   timeoutS: number;
   shown: boolean;
-  // The instant of the draw `shown` and `timeoutS` were read off: a draw for
-  // an earlier instant (a request answered behind a frame) tells nothing.
-  drawnAt: Instant;
 }
 
 export class MenuIdle {
@@ -48,7 +45,7 @@ export class MenuIdle {
   private record(sessionId: SessionId, at: Instant): Idle {
     const held = this.sessions.get(sessionId);
     if (held !== undefined) return held;
-    const idle: Idle = { since: at, timeoutS: 0, shown: false, drawnAt: at };
+    const idle: Idle = { since: at, timeoutS: 0, shown: false };
     this.sessions.set(sessionId, idle);
     return idle;
   }
@@ -62,13 +59,13 @@ export class MenuIdle {
 
   // What a draw at `at` drew. A menu newly drawn starts the idle period: one
   // that opened long after the last click counts from its first frame.
+  // [LAW:no-ambient-temporal-coupling] The renderer takes one turn at a time,
+  // so the last draw it was handed is the newest, whatever its instant reads.
   drew(sessionId: SessionId, at: Instant, drawn: MenusDrawn): void {
     const idle = this.record(sessionId, at);
-    if (at < idle.drawnAt) return;
     if (drawn.shown && !idle.shown && at > idle.since) idle.since = at;
     idle.shown = drawn.shown;
     idle.timeoutS = drawn.timeoutS;
-    idle.drawnAt = at;
   }
 
   // A click of the session landed in the turn at `at`: its idle period

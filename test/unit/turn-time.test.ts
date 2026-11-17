@@ -25,3 +25,20 @@ test("a deferral that throws fails its turn, and those behind it stay due for th
   expect(ran).toEqual(["first", "second"]);
   expect(time.next()).toBe(null);
 });
+
+test("a deferral cancelled by one run before it in the same turn is not run", () => {
+  const time = new TurnTime();
+  time.turn(at(10));
+  const ran: string[] = [];
+  let cancelSecond = (): void => {};
+  time.after(100, () => {
+    ran.push("first");
+    cancelSecond();
+  });
+  cancelSecond = time.after(200, () => ran.push("second"));
+
+  time.turn(at(11));
+  time.due(at(11));
+  expect(ran).toEqual(["first"]);
+  expect(time.next()).toBe(null);
+});

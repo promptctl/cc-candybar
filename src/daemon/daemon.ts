@@ -838,6 +838,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
         // ends is not started again, so no step below waits on a fresh boot.
         ["renderer close begins", () => link.beginClose()],
+        // [LAW:no-ambient-temporal-coupling] Before any of the renderer's
+        // steps: a due queued behind one is refused when its slot comes.
+        ["rendererWake close", () => rendererWake.close()],
         // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
         // back before it goes (src/daemon/tmux-status.ts).
         // [LAW:no-ambient-temporal-coupling] Before any of the renderer's turns:
@@ -852,7 +855,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
-        ["rendererWake close", () => rendererWake.close()],
         ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
         ["limits disarm", () => limits.disarm()],

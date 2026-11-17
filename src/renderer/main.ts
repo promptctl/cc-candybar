@@ -122,6 +122,10 @@ export function mainRenderer(
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, () => void>();
+  // The newest request context each session's config handed in, from its
+  // config turn to its retire, the span its idle record keeps: what its idle
+  // close resolves its config by, whether or not its view is still open.
+  const contexts = new Map<SessionId, CheckedRenderRequest>();
   // The subscriptions this renderer last returned: none before its first turn.
   let subscriptions: Subscriptions = {
     sources: {},
@@ -149,10 +153,13 @@ export function mainRenderer(
         // told once this turn is sent, so a session whose config throws
         // below leaves no feed unopened until a pane next moves.
         feeds.viewersAre(event.viewers, at);
-        for (const { context, worldState } of event.sessions)
+        for (const { context, worldState } of event.sessions) {
+          contexts.set(context.hookData.session_id, context);
           configureSession(parts, context, worldState, at, record);
+        }
         return;
       case "config":
+        contexts.set(event.context.hookData.session_id, event.context);
         configureSession(parts, event.context, event.worldState, at, record);
         return;
       case "request": {
@@ -190,6 +197,7 @@ export function mainRenderer(
         // session the host has discarded.
         parts.doctorRuns.retire(event.session);
         menuIdle.retire(event.session);
+        contexts.delete(event.session);
         retireSession(parts, event.session);
         return;
       case "effect-done": {
@@ -228,7 +236,11 @@ export function mainRenderer(
       // [LAW:no-silent-failure] A close that threw is said against its
       // session, and stops neither another session's close nor the frames.
       try {
-        parts.verbs.closeIdle(viewFacts(idle.session), idle, effects);
+        parts.verbs.closeIdle(
+          contexts.get(idle.session) ?? null,
+          idle,
+          effects,
+        );
       } catch (thrown) {
         parts.log(
           "error",
@@ -237,13 +249,6 @@ export function mainRenderer(
       }
     }
     feeds.due(at, frames);
-  };
-
-  // The request the session's view is declared with, or null while it has
-  // none: what its idle close resolves its config by, as a click's does.
-  const viewFacts = (session: SessionId): CheckedRenderRequest | null => {
-    using hold = parts.renderCache.holdView(session);
-    return hold === null ? null : hold.view.facts();
   };
 
   // The open views' subscriptions as they stand at `at`. A session's doctor

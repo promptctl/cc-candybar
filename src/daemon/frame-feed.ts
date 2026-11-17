@@ -20,7 +20,6 @@ import type { Frame } from "../render/frame";
 import { parseFrame } from "../render/frame";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
 import {
-  LANES,
   perLane,
   type Lane,
   type LaneSwitches,
@@ -29,7 +28,11 @@ import {
 import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
-import type { Level } from "../renderer-interface/adapter";
+import {
+  answerOf,
+  type Answers,
+  type Level,
+} from "../renderer-interface/adapter";
 import type { PushedFrame } from "../renderer-interface/interface";
 
 // A subscriber: each frame's bar, which a lane drawing it elsewhere encodes,
@@ -58,8 +61,8 @@ export interface FeedDeps<Req> {
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
   // [LAW:one-source-of-truth] Who follows every session's frames moved: the
-  // whole of it, for the renderer.
-  viewersChanged(viewers: Readonly<Record<SessionId, Viewers>>): void;
+  // renderer is handed `viewers()` whole, read as its turn comes.
+  viewersChanged(): void;
   // The first feed opened: whatever runs only while some feed exists starts,
   // and the returned stop is called when the last feed closes.
   watching(): () => void;
@@ -84,16 +87,6 @@ interface Feed {
   // The ledger's refreshes when the feed opened.
   readonly refreshesAtOpen: Readonly<Record<RefreshTrigger, number>>;
 }
-
-interface Answers {
-  readonly resp: string;
-  readonly statusline: string;
-}
-
-// [LAW:one-source-of-truth] A lane drawing the bar elsewhere draws the bar;
-// the one drawing it in the statusline draws what the statusline shows.
-const answerOf = (answers: Answers, lane: Lane): string =>
-  LANES[lane].handsOff ? answers.resp : answers.statusline;
 
 // Sessions whose latest request is kept, least recently noted evicted first —
 // except a session someone is watching, whose feed draws from it.
@@ -219,7 +212,7 @@ export class FrameFeeds<Req> {
     const said = JSON.stringify(viewers);
     if (said === this.told) return;
     this.told = said;
-    this.deps.viewersChanged(viewers);
+    this.deps.viewersChanged();
   }
 
   // The frames a renderer's turn drew, in order: each goes to the session's
@@ -240,10 +233,7 @@ export class FrameFeeds<Req> {
       // [LAW:parse-dont-validate] The receiving edge of a feed frame.
       feed.last = {
         bar: parseFrame(frame.bar),
-        answers: {
-          resp: JSON.stringify(frame.resp),
-          statusline: JSON.stringify(frame.statusline),
-        },
+        answers: frame.answers,
       };
       this.pushed++;
       feed.pushed++;

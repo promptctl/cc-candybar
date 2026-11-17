@@ -106,14 +106,13 @@ describe("MenuIdle: the close is derived from the session's record", () => {
     expect(idle.next()).toBe(4630);
   });
 
-  test("a draw for an instant before the last one tells nothing", () => {
+  test("the last draw handed in is the newest, though the wall clock stepped back under it", () => {
     const idle = new MenuIdle();
-    // The newer frame, drawn after a ✕ click, shows no menu.
     idle.drew(S, at(1001), drawn(false));
-    // A request answered behind it drew the menu, for its earlier instant.
+    // The clock stepped back a second; the menu this draw drew still closes,
+    // a timeout after the idle period began, which no step moves back.
     idle.drew(S, at(1000), drawn(true));
-    expect(idle.next()).toBeNull();
-    expect(idle.idleSince(S)).toBeNull();
+    expect(idle.next()).toBe(1031);
   });
 
   test("a click in another session moves nothing here", () => {

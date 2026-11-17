@@ -7,7 +7,7 @@
 import type { Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { Frame, WireFrame } from "../render/frame";
-import type { LaneSwitches } from "../config/lanes.js";
+import { LANES, type Lane, type LaneSwitches } from "../config/lanes.js";
 import type { Crosses, Reaches } from "./crosses.js";
 import type {
   RenderCacheStats,
@@ -63,10 +63,24 @@ export interface FeedFrame {
   readonly failure: LogLine | null;
 }
 
-// A FeedFrame as it crosses a process: its bar's Infinity arrives as null, so
-// the host reads it through `parseFrame`.
-export type WireFeedFrame = Omit<FeedFrame, "bar"> & {
+// A frame's two answers as serialized: the renderer serializes them once, to
+// tell a frame that changed, and the host sends them as they are.
+export interface Answers {
+  readonly resp: string;
+  readonly statusline: string;
+}
+
+// [LAW:one-source-of-truth] A lane drawing the bar elsewhere draws the bar;
+// the one drawing it in the statusline draws what the statusline shows.
+export const answerOf = (answers: Answers, lane: Lane): string =>
+  LANES[lane].handsOff ? answers.resp : answers.statusline;
+
+// A FeedFrame as it is pushed across a process: its answers serialized, and
+// its bar's Infinity arriving as null, so the host reads it through
+// `parseFrame`.
+export type WireFeedFrame = Omit<FeedFrame, "bar" | "resp" | "statusline"> & {
   readonly bar: WireFrame;
+  readonly answers: Answers;
 };
 
 export type Level = "info" | "warn" | "error";

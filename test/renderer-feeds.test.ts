@@ -12,6 +12,7 @@
 import { FEED_PERIODS, Feeds, noteSent } from "../src/renderer/feeds";
 import { renderFrame, type RendererParts } from "../src/renderer/draw-bar";
 import type { FeedFrame } from "../src/renderer-interface/adapter";
+import type { Response } from "../src/daemon/foundations/protocol";
 import type { PushedFrame } from "../src/renderer-interface/interface";
 import {
   MOVING_FPS,
@@ -133,9 +134,10 @@ function harness(motion: Motion) {
     // The seconds after T0 each frame was drawn at, to the millisecond.
     drawnAt: () => draws.map((d) => Math.round((d.at - T0) * 1000) / 1000),
     outputs: () =>
-      pushed.map(({ frame }) =>
-        frame.resp.ok && "output" in frame.resp ? frame.resp.output : "-",
-      ),
+      pushed.map(({ frame }) => {
+        const resp = JSON.parse(frame.answers.resp) as Response;
+        return resp.ok && "output" in resp ? resp.output : "-";
+      }),
   };
 }
 
@@ -296,7 +298,7 @@ describe("a feed's frames", () => {
     h.follow(viewers({ band: 1, statusline: 1 }));
     h.play(1);
     const statusline = new Set(
-      h.pushed.map(({ frame }) => JSON.stringify(frame.statusline)),
+      h.pushed.map(({ frame }) => frame.answers.statusline),
     );
     expect(statusline.size).toBe(1);
     // Counted against the lanes that frame changed: the band every frame,

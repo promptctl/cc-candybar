@@ -54,10 +54,10 @@ function harness() {
   };
   const told: Array<Readonly<Record<SessionId, Viewers>>> = [];
   const log: string[] = [];
-  const feeds = new FrameFeeds<string>({
+  const feeds: FrameFeeds<string> = new FrameFeeds<string>({
     lanes: () => state.lanes,
     shown: (req) => !req.startsWith("hidden"),
-    viewersChanged: (viewers) => told.push(viewers),
+    viewersChanged: () => told.push(feeds.viewers()),
     watching: () => {
       state.opened++;
       return () => void state.stopped++;
@@ -86,8 +86,13 @@ function pushed(
     session,
     frame: {
       bar: barOf([{ text: output }]),
-      resp: { ok: true, output },
-      statusline: { ok: true, output: opts.handoff ?? output },
+      answers: {
+        resp: JSON.stringify({ ok: true, output }),
+        statusline: JSON.stringify({
+          ok: true,
+          output: opts.handoff ?? output,
+        }),
+      },
       evaluated: 0,
       cellBreaks: 0,
       lanes: opts.lanes === undefined ? ALL_ON : opts.lanes,
