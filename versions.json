@@ -4,15 +4,22 @@
     {
       "version": "pr-782",
       "ref": "refs/pull/782/merge",
-      "sha": "77c3e36d59809ef99bec8fd66d41b906620a3d75",
-      "timestamp": "2026-11-17T07:45:05.324Z",
+      "sha": "b86f0874dd5802c9a764b480cf361ad203e5677c",
+      "timestamp": "2026-11-17T08:04:05.810Z",
       "commits": [
         {
-          "sha": "77c3e36d59809ef99bec8fd66d41b906620a3d75",
+          "sha": "b86f0874dd5802c9a764b480cf361ad203e5677c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T00:44:03-07:00",
-          "message": "Merge aa681eb314cd45cd7a1f3c7f027bda3b77e3d90d into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T08:03:10Z",
+          "message": "Merge 36ff0c538f4c7b84d9ba2d08b51382dfd6f9d6f4 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+        },
+        {
+          "sha": "36ff0c538f4c7b84d9ba2d08b51382dfd6f9d6f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T01:02:58-07:00",
+          "message": "fix(renderer): the wake times its dues on the monotonic clock, and a host fault after a turn's landing no longer swallows its effect-done (883)\n\n- A due's wait is armed from the wall once, then timed on the monotonic\n  clock to the whole millisecond at or after its instant, and handed in at\n  its slot's instant like every input: a wall stepped back delays no due,\n  and no input runs at an instant earlier than a turn ahead of it.\n- A due that threw holds off every declaration after it until a due\n  answers, and a due no renderer answered re-arms the last declaration.\n- The instant already armed keeps its timer.\n- A feed woken after the wall stepped back draws at once, as `due` does.\n- A click makes no menu-idle record: only draws do, and retirement ends them.\n- Taking a turn's declarations and frames after its changes landed cannot\n  fail the turn: a throw there is the host's fault, on every bar.\n- A push nobody awaits writes its turn line with what it cost.\n- tmux's poll announces only a view that changed.\n- Viewers turns close with the wake, first in the teardown.\n- The crossing reaches keep their effects-at-boundaries exception marker;\n  a stale comment and memory lines are brought in line.\n"
         },
         {
           "sha": "aa681eb314cd45cd7a1f3c7f027bda3b77e3d90d",

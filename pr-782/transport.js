@@ -72790,7 +72790,6 @@ var FrameFeeds = class {
 
 // src/daemon/renderer-wake.ts
 init_globals();
-var TIMER_RESOLUTION_S = 2e-3;
 var DUE_AFTER_THROW_MS = 1e3;
 var SUMMARY_EVERY_MS = 6e4;
 var noCosts = () => ({
@@ -72807,6 +72806,13 @@ var RendererWake = class {
   }
   deps;
   state = { kind: "idle" };
+  // The instant the renderer last declared: a due no renderer answered
+  // declared nothing, and this stands.
+  wake = null;
+  // [LAW:no-silent-failure] Until when a due that threw holds the next one
+  // off, whichever turn declares it: a throw that repeats is a beat of
+  // failures, said once, not a spin. A due that answers clears it.
+  heldUntil = null;
   // Whether a due's throw has been said since a due last answered: a due
   // that keeps throwing is said once.
   throwSaid = false;
@@ -72815,12 +72821,10 @@ var RendererWake = class {
   // [LAW:single-enforcer] Every output's wake lands here, in the order the
   // turns answered: the latest declaration is the one timer.
   declare({ subscriptions: { wake }, turn }) {
-    if (this.state.kind === "closed" || this.state.kind === "queued") return;
-    if (this.state.kind === "armed") this.state.cancel();
-    this.state = { kind: "idle" };
-    if (wake === null) return;
-    const at = turn.due !== null && turn.threw ? Math.max(wake, turn.due + DUE_AFTER_THROW_MS / 1e3) : wake;
-    this.arm(at);
+    if (turn.due !== null)
+      this.heldUntil = turn.threw ? heldOff(turn.due) : null;
+    this.wake = wake;
+    this.rearm();
   }
   // The daemon's close: no due after it. First in the teardown, so nothing
   // the close does to the renderer wakes it again.
@@ -72829,17 +72833,31 @@ var RendererWake = class {
     this.state = { kind: "closed" };
     this.summarize();
   }
-  arm(at) {
-    const ms = Math.max(0, at * 1e3 - this.deps.clock.now());
-    const cancel = this.deps.clock.after(ms, () => this.fired(at));
-    this.state = { kind: "armed", at, cancel };
+  // [LAW:dataflow-not-control-flow] The one timer, to the latest declaration
+  // held off by a throw. The instant already armed stands as it is.
+  rearm() {
+    if (this.state.kind === "closed" || this.state.kind === "queued") return;
+    const at = this.wake === null ? null : Math.max(this.wake, this.heldUntil ?? this.wake);
+    if (this.state.kind === "armed") {
+      if (this.state.at === at) return;
+      this.state.cancel();
+    }
+    this.state = { kind: "idle" };
+    if (at === null) return;
+    const ms = Math.max(0, Math.ceil(at * 1e3) - this.deps.clock.now());
+    this.arm(at, this.deps.clock.monotonic() + ms);
   }
-  // [LAW:no-ambient-temporal-coupling] A timer runs on the monotonic clock
-  // and may fire before the wall reaches the instant it was set for: the
-  // rest is waited, so no due is handed in before the instant it is for.
-  fired(at) {
-    if (at - this.deps.clock.now() / 1e3 > TIMER_RESOLUTION_S) {
-      this.arm(at);
+  arm(at, moment2) {
+    const ms = Math.max(0, moment2 - this.deps.clock.monotonic());
+    const cancel = this.deps.clock.after(ms, () => this.fired(at, moment2));
+    this.state = { kind: "armed", at, moment: moment2, cancel };
+  }
+  // [LAW:no-ambient-temporal-coupling] A timer may fire before its moment on
+  // the monotonic clock: the rest is waited, so no due is handed in early.
+  // The wall has no say here, so one stepped back delays no due.
+  fired(at, moment2) {
+    if (this.deps.clock.monotonic() < moment2) {
+      this.arm(at, moment2);
       return;
     }
     this.state = { kind: "queued" };
@@ -72847,27 +72865,26 @@ var RendererWake = class {
   }
   async handIn(at) {
     let lateMs = 0;
+    let handedAt = at;
     const turn = await this.deps.due((slotAt2) => {
       if (this.state.kind === "closed")
         return failureOf(new DaemonClosing("due"));
       this.state = { kind: "idle" };
+      handedAt = slotAt2;
       lateMs = Math.max(0, (slotAt2 - at) * 1e3);
-      return {
-        kind: "event",
-        at: Math.min(
-          Math.max(at, slotAt2),
-          slotAt2 + TIMER_RESOLUTION_S
-        ),
-        event: { kind: "due" }
-      };
+      return { kind: "event", at: slotAt2, event: { kind: "due" } };
     });
     if (turn.kind === "answered") this.throwSaid = false;
-    else if (turn.failure.kind !== "down" && turn.failure.kind !== "closing" && !this.throwSaid) {
-      this.throwSaid = true;
-      this.deps.log(
-        "error",
-        `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${turn.failure.detail}`
-      );
+    else if (turn.failure.kind !== "down" && turn.failure.kind !== "closing") {
+      if (!this.throwSaid) {
+        this.throwSaid = true;
+        this.deps.log(
+          "error",
+          `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${turn.failure.detail}`
+        );
+      }
+      this.heldUntil = heldOff(handedAt);
+      this.rearm();
     }
     this.costs.dues++;
     this.costs.lateMs += lateMs;
@@ -72892,6 +72909,7 @@ var RendererWake = class {
     this.summarizedAt = this.deps.clock.monotonic();
   }
 };
+var heldOff = (due) => due + DUE_AFTER_THROW_MS / 1e3;
 
 // src/daemon/pane-visibility.ts
 init_globals();
@@ -72929,6 +72947,10 @@ function statusLinesOf(listPanes, listClients) {
       shownBy.set(session, pane);
   }
   return { sessionOf: sessionOf2, shownBy };
+}
+function sameStatusLines(a, b) {
+  const same2 = (x, y) => x.size === y.size && [...x].every(([key, value]) => y.get(key) === value);
+  return same2(a.sessionOf, b.sessionOf) && same2(a.shownBy, b.shownBy);
 }
 var PaneVisibility = class {
   constructor(deps) {
@@ -73453,10 +73475,11 @@ var TmuxStatusLines = class {
   }
   // [LAW:single-enforcer] The one place what a server's status lines show
   // changes, its view or a session laid out: each is what `draws` reads, so
-  // each is announced.
+  // each change is announced. A poll that answers the same view moves nothing.
   viewOf(server, view) {
+    const moved = server.view === null || !sameStatusLines(server.view, view);
     server.view = view;
-    this.deps.changed();
+    if (moved) this.deps.changed();
   }
   laidOut(server, session, layout) {
     if (layout === null) server.layouts.delete(session);
@@ -75311,16 +75334,21 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         },
         collector.writableSettings
       );
-      if (!world.closing()) {
-        collector.declared({
-          subscriptions,
-          turn: {
-            due: input.event.kind === "due" ? input.at : null,
-            threw: output.kind === "threw"
-          }
-        });
-        collector.framed(frames);
-      }
+      if (!world.closing())
+        try {
+          collector.declared({
+            subscriptions,
+            turn: {
+              due: input.event.kind === "due" ? input.at : null,
+              threw: output.kind === "threw"
+            }
+          });
+          collector.framed(frames);
+        } catch (thrown2) {
+          const said2 = `renderer ${name} ${input.event.kind} turn's output was not taken: ${failureOf(thrown2).detail}`;
+          log("error", said2);
+          world.unheard(said2);
+        }
       const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
       const owed = [];
       const acts = [];
@@ -75431,7 +75459,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return turn;
   };
   const deliver = recorded2("last");
-  const ask2 = async (push) => {
+  const ask2 = async (push) => (await pushed(push)).reply;
+  const pushed = async (push) => {
     const output = await inMailbox(async (_queuedMs, holds2) => {
       holds2(`push:${push.kind}`);
       try {
@@ -75460,12 +75489,25 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       throw new Error(
         `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`
       );
-    return output.reply;
+    return {
+      reply: output.reply,
+      turnMs: output.turnMs
+    };
   };
-  const tell = (push) => void ask2(push).catch((thrown2) => {
-    const failure = failureOf(thrown2);
-    if (failure.kind !== "down") log("error", failure.detail);
-  });
+  const tell = (push) => void pushed(push).then(
+    ({ turnMs }) => log(
+      "info",
+      eventLine("turn", [
+        ["renderer", name],
+        ["input", `push:${push.kind}`],
+        ["ms", String(turnMs)]
+      ])
+    ),
+    (thrown2) => {
+      const failure = failureOf(thrown2);
+      if (failure.kind !== "down") log("error", failure.detail);
+    }
+  );
   const stats = () => ({
     holder: holder?.input ?? null,
     heldMs: holder === null ? 0 : elapsedMs(clock, holder.since),
@@ -86051,9 +86093,10 @@ var Feeds = class {
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
   // to the earliest its spacing allows after its last frame, never later
   // than it already falls due. Answers whether it moved anything: a wake that
-  // did not was coalesced into a frame already due.
+  // did not was coalesced into a frame already due. A last frame later than
+  // `at` saw the wall step back, and spaces nothing, as in `due`.
   hasten(feed2, at) {
-    const spaced = feed2.last === null ? at : Math.max(at, feed2.last + this.spacingOf(feed2) / 1e3);
+    const spaced = feed2.last === null || feed2.last > at ? at : Math.max(at, feed2.last + this.spacingOf(feed2) / 1e3);
     if (feed2.next !== null && feed2.next <= spaced) return false;
     feed2.next = spaced;
     return true;
@@ -86130,9 +86173,12 @@ var MenuIdle = class {
     idle.shown = menus.shown;
     idle.timeoutS = menus.timeoutS;
   }
-  // A click of the session landed at `at`: a new idle period begins.
+  // A click of the session landed at `at`: a new idle period begins. A
+  // session never drawn has no period to begin again: its records come only
+  // from draws, which its retirement ends, and its first draw begins one.
   clicked(sessionId2, at) {
-    this.record(sessionId2, at).since = at;
+    const idle = this.sessions.get(sessionId2);
+    if (idle !== void 0) idle.since = at;
   }
   // The earliest close due, or null while no session draws a menu.
   next() {
@@ -93265,13 +93311,15 @@ function createDaemon(inputs) {
     clock,
     log
   });
-  let viewersOwed = false;
+  let viewers = "current";
   function viewersChanged() {
-    if (viewersOwed || closing.signal.aborted) return;
-    viewersOwed = true;
+    if (viewers !== "current") return;
+    viewers = "owed";
     void parts.renderer.answer((at) => {
-      viewersOwed = false;
-      return closing.signal.aborted ? failureOf(new DaemonClosing("viewers")) : {
+      if (viewers === "closed")
+        return failureOf(new DaemonClosing("viewers"));
+      viewers = "current";
+      return {
         kind: "event",
         at,
         event: { kind: "viewers", viewers: frameFeeds.viewers() }
@@ -93376,6 +93424,8 @@ function createDaemon(inputs) {
   });
   const rendererWatches = /* @__PURE__ */ new Map();
   const reaches = {
+    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
+    // the host's part in its crossing shape: a notice.
     log,
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
@@ -93541,9 +93591,11 @@ function createDaemon(inputs) {
     async close() {
       const rendererStep = (kind) => () => parts.renderer.ask({ kind });
       const teardown = [
-        // [LAW:no-ambient-temporal-coupling] First of all: no due is handed
-        // in from here, so nothing the close does wakes the renderer again.
+        // [LAW:no-ambient-temporal-coupling] First of all: no due and no
+        // viewers turn is handed in from here, so nothing the close does
+        // wakes the renderer again.
         ["renderer wake close", () => rendererWake.close()],
+        ["renderer viewers close", () => void (viewers = "closed")],
         // [LAW:no-ambient-temporal-coupling] Then: from here a renderer that
         // ends is not started again, so no step below waits on a fresh boot.
         ["renderer close begins", () => link.beginClose()],
