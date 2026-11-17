@@ -1,7 +1,8 @@
 // What a view's last drawn frame showed (brandon-unfiled-3248.8ro6): each
 // placement's drawing — or that it drew nothing — and the name each globals
 // rule settled on. A frame is otherwise a pure reading of the view's values;
-// this is the one thing a draw writes, and nothing reads it but the next draw.
+// this is the one thing a draw makes beside its frame, returned with it and
+// kept by the turn that drew it, and nothing reads it but the next draw.
 //
 // [LAW:one-source-of-truth] It is THE record of what a placement last drew. A
 // placement whose value is not answered yet draws its loading cell from it,
@@ -64,19 +65,20 @@ export interface FrameRecord<Line> {
   readonly rules: ReadonlyMap<ExpressionSlot, string>;
 }
 
-// One draw's record as the walk writes it, kept only once the frame is drawn.
+// One draw's record as the walk writes it.
 export interface FrameWrite<Line> {
   // Records what the bar shows of the placement `id`, and returns it.
   readonly placed: (id: string, lines: readonly Line[]) => readonly Line[];
   readonly rule: (slot: ExpressionSlot, name: string) => void;
-  // [LAW:no-ambient-temporal-coupling] Called after the rows serialize: a
-  // row's fill grows its cells in place, so a drawing is the width it was
-  // drawn at only then, and a draw that throws part-way keeps the last.
-  readonly commit: () => void;
+  // [LAW:no-ambient-temporal-coupling] Read after the rows serialize: a row's
+  // fill grows its cells in place, so a drawing is the width it was drawn at
+  // only then.
+  readonly record: () => FrameRecord<Line>;
 }
 
 // [LAW:no-shared-mutable-globals] One view's frame memory: one owner, the
-// view, and one writer, the draw.
+// view, and one writer, the turn that keeps what a draw returned (`keep`), so
+// a draw that throws leaves the last.
 export class FrameMemory<Line> {
   private last: FrameRecord<Line> | null = null;
 
@@ -113,10 +115,12 @@ export class FrameMemory<Line> {
         return lines;
       },
       rule: (slot, name) => rules.set(slot, name),
-      commit: () => {
-        this.last = { source, placements, rules };
-      },
+      record: () => ({ source, placements, rules }),
     };
+  }
+
+  keep(record: FrameRecord<Line>): void {
+    this.last = record;
   }
 }
 

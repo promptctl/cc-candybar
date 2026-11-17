@@ -18,7 +18,7 @@
 //     segment's continuation line, a nested vertical container's later rows)
 //     is a row of the same band and is led once too;
 //   - a body whose every child is hidden lays no row and so no ✕ — not on
-//     the bar, and not in the trigger's cell sink.
+//     the bar, and not in the trigger's drawn segment cells.
 
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
@@ -130,15 +130,16 @@ function build(src: string, withDefault: boolean) {
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   recordRender(sessionState, SID);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
-  const sink = new Map<string, readonly RichText[]>();
+  // The segments of the latest draw, by placement id.
+  let segments: ReadonlyMap<string, readonly RichText[]> = new Map();
   const render = (): readonly Row[] => {
     const errors: string[] = [];
     const out = drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
-      perSegmentSink: sink,
       onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-    }).frame;
+    });
     if (errors.length > 0) throw new Error(errors.join("\n"));
-    return out.rows;
+    segments = out.segments;
+    return out.frame.rows;
   };
   // Drive a click through the daemon's own handlers — the gate the row ✕
   // passes is the cycle action's, derived like every other set.
@@ -164,7 +165,7 @@ function build(src: string, withDefault: boolean) {
   };
   return {
     render,
-    sink,
+    segments: (): ReadonlyMap<string, readonly RichText[]> => segments,
     click,
     clickWriting,
     dispose: () => registry.dispose(),
@@ -264,13 +265,13 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
     for (const row of [lines[0]!, lines[1]!, lines[7]!]) {
       expect(closeLinks(row)).toEqual([]);
     }
-    // The trigger sinks the one ✕ it led its body with beside its own cells.
-    const leads = rt.sink.get(key)!.filter((c) => c.plain === DISCLOSURE_GLYPH_CLOSE);
+    // The trigger's drawn segment holds the one ✕ it led its body with, beside its own cells.
+    const leads = rt.segments().get(key)!.filter((c) => c.plain === DISCLOSURE_GLYPH_CLOSE);
     expect(leads).toHaveLength(1);
     rt.dispose();
   });
 
-  test("a body whose every child is hidden lays no row and no ✕, on the bar or in the sink", async () => {
+  test("a body whose every child is hidden lays no row and no ✕, on the bar or in its drawn segment", async () => {
     const rt = build(DROPS, false);
     const key = `${GROUP_NS}bare`;
     let lines = rt.render();
@@ -279,7 +280,7 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
     // Bar row, toggle `wide`, toggle `bare` — open, with nothing under it.
     expect(lines).toHaveLength(3);
     expect(lines.flatMap(closeLinks)).toEqual([]);
-    const cells = rt.sink.get(key)!;
+    const cells = rt.segments().get(key)!;
     expect(cells.length).toBeGreaterThan(0);
     expect(cells.filter((c) => c.plain === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
     rt.dispose();

@@ -34,7 +34,12 @@ import {
   SESSION_RENDER_ORIGIN_KEY,
 } from "../daemon/foundations/session-keys";
 import { roleOf } from "../daemon/foundations/sighting-roles";
-import { drawDsl, type RenderWarning } from "../dsl/render.js";
+import {
+  drawDsl,
+  keepFrame,
+  type DrawnMemory,
+  type RenderWarning,
+} from "../dsl/render.js";
 import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
@@ -44,6 +49,7 @@ import {
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
+import type { RichText } from "@promptctl/rich-js";
 import type { WorldState } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
@@ -88,7 +94,7 @@ import {
   type DiagnosticGeometry,
 } from "../render/diagnostics.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
-import { type Instant, type Readings } from "../utils/instant.js";
+import { type Instant, type Readings, type Tick } from "../utils/instant.js";
 import {
   drawEvent,
   noteFacts,
@@ -96,7 +102,7 @@ import {
 } from "../daemon/foundations/request-event.js";
 
 import type { SessionState } from "./session-state";
-import type { RenderWarningRecords } from "./render-warnings.js";
+import type { RecordScope, RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { signingFrames, type LinkSigner } from "../click/link-signer.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
@@ -163,12 +169,13 @@ export function renderFrame(
   try {
     using setup = setUpFrame(parts, sessionId, readings, facts);
     if (setup === null) return null;
-    const { drawn, evaluated, cellBreaks, delivered, lanes } = drawRender(
+    const { drawn, evaluated, cellBreaks, copies, lanes, kept } = drawRender(
       parts,
       setup,
       { by: "feed", fps },
       feeds,
     );
+    keepDraw(parts, setup.view, kept);
     // [LAW:single-enforcer] Signed as they leave the renderer, the bar and
     // what the statusline shows alike, each link once.
     const signed = signingFrames(parts.linkSigner);
@@ -183,7 +190,13 @@ export function renderFrame(
     // [LAW:one-source-of-truth] What the frame's copy clicks copy, recorded
     // as it is handed to the feed: a frame whose bytes match the last shows
     // the same links, and a feed's close retires what the feed drew.
-    delivered();
+    deliver(parts, {
+      session: sessionId,
+      by: "feed",
+      copies,
+      clickShown: null,
+      eventsShown: [],
+    });
     const resp = JSON.stringify(answer);
     return {
       bar,
@@ -496,19 +509,16 @@ export function drawRender(
   // The held events this draw showed (the launcher's pipe event, the last
   // renderer's end), which an answer carrying them marks answered.
   eventsShown: readonly HeldEvent[];
-  // Records what the frame's copy clicks copy, once it reached its client.
-  delivered: () => void;
+  // What the frame's copy clicks copy, by key, recorded once the frame
+  // reached its client (`deliver`).
+  copies: ReadonlyMap<string, string>;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
+  // What the draw made, which the turn that drew it keeps (`keepDraw`).
+  kept: DrawMemory;
 } {
-  const {
-    sessionState,
-    renderCache,
-    linkSigner,
-    renderWarnings,
-    effectSessions,
-    menuIdle,
-  } = parts;
+  const { sessionState, linkSigner, renderWarnings, effectSessions, menuIdle } =
+    parts;
   const { req, readings, facts, sessionId, entry, state, view, hintsError } =
     setup;
   const { at } = readings;
@@ -689,10 +699,6 @@ export function drawRender(
     pr: prFactOf(payload.git),
     feeds: feedsFact(projected.feeds),
   });
-  // [LAW:no-silent-failure] What drawDsl had to settle for itself and could
-  // not honour (`RenderWarning`): this frame's own, recorded for its renderer
-  // after the walk, so the bar still renders and the indicator counts them.
-  const drawnWarnings: RenderWarning[] = [];
   // [LAW:one-source-of-truth] The options drawDsl draws with are the SAME
   // `effective` struct the payload was just built from, projected by the one
   // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
@@ -701,7 +707,19 @@ export function drawRender(
   const effects = effectSessions.of(sessionId);
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
   // its opening): the draw hands only its own instant's facts.
-  const { frame, evaluated, cellBreaks, rules } = drawDsl(
+  // [LAW:no-silent-failure] What the walk had to settle for itself and could
+  // not honour (`RenderWarning`) is this frame's own, recorded for its
+  // renderer by the turn that keeps the frame, so the bar still renders and
+  // the indicator counts them.
+  const {
+    frame,
+    memory,
+    warnings: drawnWarnings,
+    segments,
+    evaluated,
+    cellBreaks,
+    rules,
+  } = drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -709,16 +727,7 @@ export function drawRender(
     projected,
     at,
     renderOpts,
-    // [LAW:single-enforcer] The per-segment StripCell sink for the
-    // `debug segments` projection. Its identity stays stable for the
-    // view's lifetime; drawDsl clears + repopulates it
-    // in place. Cells are cheap (already computed during the render);
-    // the per-segment ANSI serialization happens lazily inside the
-    // debug handler so normal renders pay no extra serializer cost.
-    {
-      perSegmentSink: view.lastRenderCellsBySegment,
-      onRenderWarning: (warning) => drawnWarnings.push(warning),
-    },
+    undefined,
     // [LAW:one-source-of-truth] The draw's own settings and the session's
     // effect memory. The theme, style and effect are not among them: the
     // view's slots settle those names (src/dsl/parts.ts), the same ones its
@@ -732,15 +741,6 @@ export function drawRender(
   // never arrives, leaves the shown frame's copies.
   const keys = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i) => [keys[i]!, m.copy]));
-  const delivered = (): void =>
-    renderCache.delivered(sessionId, drawing.by, copies);
-  // What this frame drew is what the session's idle close follows.
-  menuIdle.drew(
-    sessionId,
-    readings.tick,
-    frame.rows.some((row) => row.kind === "menu"),
-    effective.menuTimeout,
-  );
   // [LAW:one-source-of-truth] The idle period this walk drew with.
   noteFacts(facts, {
     menuIdle:
@@ -752,12 +752,7 @@ export function drawRender(
   // moved is shown by the renderer's next frame: a feed's next spaced frame,
   // a request's next poll. Nothing wakes for it, since a frame whose own
   // indicator moves what it warns would wake itself forever.
-  const recorded = renderWarnings.drawn(
-    sessionId,
-    drawing.by,
-    scope,
-    drawnWarnings,
-  );
+  const recorded = renderWarnings.moves(sessionId, drawing.by, drawnWarnings);
   const geometry: DiagnosticGeometry = {
     width,
     // A feed's one frame is shown by every lane switched on, so it pages
@@ -788,7 +783,7 @@ export function drawRender(
           frame,
           viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
         );
-  const fx = effects.lastFrame();
+  const fx = memory.motion.frame;
   // Each placement wearing its own effect, on its own clock; `-` for none.
   const own =
     fx.own
@@ -881,9 +876,62 @@ export function drawRender(
     cellBreaks,
     clickShown,
     eventsShown,
-    delivered,
+    copies,
     lanes,
+    kept: {
+      session: sessionId,
+      by: drawing.by,
+      frame: memory,
+      warnings: { scope, list: drawnWarnings },
+      // What this frame drew is what the session's idle close follows.
+      menu: {
+        tick: readings.tick,
+        shown: frame.rows.some((row) => row.kind === "menu"),
+        timeoutS: effective.menuTimeout,
+      },
+      segments,
+    },
   };
+}
+
+// [LAW:effects-at-boundaries] What one draw of a session made beside its
+// frame, as values: the draw writes none of it, so drawing the same frame
+// twice from the same state and instant leaves the renderer as it found it.
+export interface DrawMemory {
+  readonly session: SessionId;
+  readonly by: Drawing["by"];
+  // The view's record of what the frame drew, and the session's motion.
+  readonly frame: DrawnMemory;
+  // What the frame warned, in the scope its renderer's record is kept in.
+  readonly warnings: {
+    readonly scope: RecordScope;
+    readonly list: readonly RenderWarning[];
+  };
+  // Whether the frame showed a menu, under the timeout its settings resolve
+  // to, at the tick of the turn that drew it.
+  readonly menu: {
+    readonly tick: Tick;
+    readonly shown: boolean;
+    readonly timeoutS: number;
+  };
+  readonly segments: ReadonlyMap<string, readonly RichText[]>;
+}
+
+// [LAW:single-enforcer] The state machine's one store of a draw's memory,
+// called by the turn that drew it once the draw returned: each piece to its
+// one owner, so a draw that throws keeps nothing and the last frame's memory
+// stands.
+function keepDraw(
+  parts: RendererParts,
+  view: SessionView<SessionSource>,
+  kept: DrawMemory,
+): void {
+  const { session, by, frame, warnings, menu, segments } = kept;
+  keepFrame(view.state.compiled, view.store, frame.record);
+  parts.effectSessions.keep(session, frame.motion);
+  parts.renderWarnings.keep(session, by, warnings.scope, warnings.list);
+  parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
+  view.lastRenderCellsBySegment = segments;
 }
 
 // The warning a load carried, beside what a draw could not honour.
@@ -982,9 +1030,8 @@ export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
-  // What to record once that frame reached its client: the copies its copy
-  // clicks copy, and the click error and the launcher's pipe event it showed.
-  readonly delivered: () => void;
+  // What to record once that frame reached its client (`deliver`).
+  readonly delivery: Delivery;
 }
 
 export function answerRequest(
@@ -1011,12 +1058,13 @@ export function answerRequest(
     effects,
   );
   const sessionId = req.hookData.session_id;
-  const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
+  const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
     parts,
     setup,
     ANSWERING,
     feeds.feedsOf(sessionId, time.tick),
   );
+  keepDraw(parts, setup.view, kept);
   const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
@@ -1034,38 +1082,38 @@ export function answerRequest(
   });
   return {
     frame,
-    delivered: answerDelivered(
-      parts,
-      sessionId,
-      delivered,
+    delivery: {
+      session: sessionId,
+      by: ANSWERING.by,
+      copies,
       clickShown,
       eventsShown,
-    ),
+    },
   };
 }
 
-// What an answer records once it reached its client. Built here, apart from
-// the draw, because a closure keeps alive every variable its function's other
-// closures capture: one made inside the draw would hold the draw's setup until
-// its frame settles.
-// [LAW:single-enforcer] An answer carrying the click error or a daemon-wide
-// held event that reaches its client is the one that delivered it
-// (src/utils/event-hold.ts).
-function answerDelivered(
-  parts: RendererParts,
-  sessionId: SessionId,
-  copied: () => void,
-  clickShown: ClickErrorRecord | null,
-  eventsShown: readonly HeldEvent[],
-): () => void {
-  return () => {
-    copied();
-    if (clickShown !== null)
-      answeredClickError(parts.sessionState, sessionId, clickShown);
-    // Daemon-wide: one session's answer having shown the event is what makes
-    // it not silent.
-    for (const event of eventsShown) parts.eventAnswered(event);
-  };
+// What a frame that reached its client showed, which its delivery records:
+// what its copy clicks copy, and the click error and the held events it
+// carried.
+export interface Delivery {
+  readonly session: SessionId;
+  readonly by: Drawing["by"];
+  readonly copies: ReadonlyMap<string, string>;
+  readonly clickShown: ClickErrorRecord | null;
+  readonly eventsShown: readonly HeldEvent[];
+}
+
+// [LAW:single-enforcer] The one record of a delivery. An answer carrying the
+// click error or a daemon-wide held event that reaches its client is the one
+// that delivered it (src/utils/event-hold.ts).
+export function deliver(parts: RendererParts, delivery: Delivery): void {
+  const { session, by, copies, clickShown, eventsShown } = delivery;
+  parts.renderCache.delivered(session, by, copies);
+  if (clickShown !== null)
+    answeredClickError(parts.sessionState, session, clickShown);
+  // Daemon-wide: one session's answer having shown the event is what makes
+  // it not silent.
+  for (const event of eventsShown) parts.eventAnswered(event);
 }
 
 // What Claude Code's statusline shows of `drawn`: the bar, or — while lanes

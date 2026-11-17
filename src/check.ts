@@ -785,7 +785,7 @@ export async function renderEffective(
   const { drawn, opts } = bindPass(prepared, effective, width, at);
   for (const line of stragglers(settle, await runs.settled(settle.signal)))
     advisories.add(line);
-  const { frame } = drawDsl(
+  const { frame, warnings } = drawDsl(
     config,
     compiled,
     store,
@@ -796,10 +796,10 @@ export async function renderEffective(
     {
       onSegmentError: (placementId: string, message: string) =>
         failures.set(`segment "${placementId}"`, message),
-      onRenderWarning: warned,
     },
     effective,
   );
+  for (const warning of warnings) warned(warning);
   return { rendered: frame, failures, advisories };
 }
 

@@ -51,20 +51,21 @@ function runtime(source: string) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  // Every warning raised across this runtime's renders, in order.
   const warnings: RenderWarning[] = [];
-  const render = (pct: number): string =>
-    textOf(
-      drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        { session_id: "s-rule-throws", ctx: { pct } },
-        instantOf(new Date()),
-        OPTS,
-        { onRenderWarning: (w) => warnings.push(w) },
-      ).frame,
+  const render = (pct: number): string => {
+    const drawn = drawPayload(
+      config,
+      compiled,
+      store,
+      registry,
+      { session_id: "s-rule-throws", ctx: { pct } },
+      instantOf(new Date()),
+      OPTS,
     );
+    warnings.push(...drawn.warnings);
+    return textOf(drawn.frame);
+  };
   return { render, warnings, dispose: () => registry.dispose() };
 }
 

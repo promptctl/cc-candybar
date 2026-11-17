@@ -1127,14 +1127,13 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 // plugin's session file) is held by the host's collector at the session's
 // keys and reaches the view as its world state, so a view holds none.
 //
-// `lastRenderCellsBySegment` is the per-segment StripCell sink that drawDsl
-// writes on each render — pre-layout cells, NOT serialized ANSI. Storing cells
-// (not strings) keeps the hot path free of the per-segment renderStripCells
-// call: the debug projection serializes on demand only when a `debug segments`
-// request actually arrives. The map identity is stable for the view's
-// lifetime; drawDsl clears + repopulates it in place. A segment hidden by
-// `when` is absent from the map — its presence in the keys is the "this
-// segment rendered" signal.
+// `lastRenderCellsBySegment` is the per-segment cells the view's last kept
+// frame drew (`DrawnFrame.segments`), replaced by the turn that keeps a frame
+// — pre-layout cells, NOT serialized ANSI. Storing cells (not strings) keeps
+// the hot path free of the per-segment renderStripCells call: the debug
+// projection serializes on demand only when a `debug segments` request
+// actually arrives. A segment hidden by `when` is absent from the map — its
+// presence in the keys is the "this segment rendered" signal.
 export interface SessionView<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
@@ -1152,7 +1151,7 @@ export interface SessionView<
   // What the view draws from: its payload and selections, bound to its
   // store's inputs and slots (`bindView`) when it opened.
   readonly source: S;
-  readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+  lastRenderCellsBySegment: ReadonlyMap<string, readonly RichText[]>;
   // The view is no session's bar from now on (a successor took it, or it
   // closed): it stops saying what it draws from moved, though a render that
   // holds it still draws from it.

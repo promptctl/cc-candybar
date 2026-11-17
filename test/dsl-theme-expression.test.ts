@@ -19,7 +19,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 // bar rendered under that theme BY NAME, so "it changed colour" is never mistaken
 // for "it changed to the right colour" — the discipline pe6's style-expression
 // tests established one dimension over. And a cell's colour is read BY SEGMENT
-// NAME off the `perSegmentSink` the daemon itself renders with, never as "the
+// NAME off the segments the daemon's own draw returns, never as "the
 // first background SGR on the row": every row leads with the synthesized `🍫`
 // door, so a positional read measures the door's accent and would agree with
 // itself while measuring the wrong cell.
@@ -38,7 +38,6 @@ import { bindRender, renderLook } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/renderer/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
-import type { RichText } from "@promptctl/rich-js";
 import { decideThemeName, resolveThemeSelection, THEME_FLOOR } from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import {
@@ -95,18 +94,15 @@ interface Painted {
 // with the render warnings it raised and each segment's own colour read back.
 function themeBar(source = src(RULE)) {
   const rig = buildRig({ source, label: "<theme-expr>", palettes: ALLOWED, sessionId: SID });
+  // Every warning raised across this bar's renders, in order.
   const warnings: RenderWarning[] = [];
-  const sink = new Map<string, readonly RichText[]>();
   const render = (pct: number): Painted => {
-    const frame = rig.draw({
+    const { frame, segments, warnings: raised } = rig.draw({
       payload: { session_id: SID, ctx: { pct } },
-      observers: { perSegmentSink: sink, onRenderWarning: (w) => warnings.push(w) },
-    }).frame;
-    // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE: drawDsl clears
-    // it at the top of the next call, so a colour read deferred past that call
-    // would measure a render this Painted never described.
+    });
+    warnings.push(...raised);
     const bgs = new Map(
-      [...sink].map(([name, cells]) => [
+      [...segments].map(([name, cells]) => [
         name,
         (cells[0] && resolvedStyle(cells[0].style).bgcolor?.value?.hex) ?? "(no bg)",
       ]),
@@ -313,8 +309,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     );
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-      const sink = new Map<string, readonly RichText[]>();
-      const out = drawPayload(
+      const { frame: out, segments } = drawPayload(
         config,
         compiled,
         store,
@@ -322,9 +317,8 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         { session_id: SID, ctx: { pct: 0 } },
         instantOf(new Date()),
         OPTS,
-        { perSegmentSink: sink },
-      ).frame;
-      const plainBg = resolvedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
+      );
+      const plainBg = resolvedStyle(segments.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("nord"));
       expect(textOf(out)).toContain("T=nord");
     } finally {
@@ -341,8 +335,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     );
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-      const sink = new Map<string, readonly RichText[]>();
-      const out = drawPayload(
+      const { frame: out, segments } = drawPayload(
         config,
         compiled,
         store,
@@ -350,9 +343,8 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         { session_id: SID, ctx: { pct: 90 } },
         instantOf(new Date()),
         OPTS,
-        { perSegmentSink: sink },
-      ).frame;
-      const plainBg = resolvedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
+      );
+      const plainBg = resolvedStyle(segments.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("dracula"));
     } finally {
       registry.dispose();
@@ -540,9 +532,8 @@ describe("a rule inside a preset's globals", () => {
         (key) => (key === "preset" ? "ruled" : null),
         () => false,
       );
-      const sink = new Map<string, readonly RichText[]>();
       const render = (pct: number): { frame: Frame; bg: string } => {
-        const frame = drawPayload(
+        const { frame, segments } = drawPayload(
           config,
           compiled,
           store,
@@ -550,10 +541,10 @@ describe("a rule inside a preset's globals", () => {
           { session_id: SID, ctx: { pct } },
           instantOf(new Date()),
           OPTS,
-          { perSegmentSink: sink },
+          undefined,
           effective,
-        ).frame;
-        const cells = sink.get("plain")!;
+        );
+        const cells = segments.get("plain")!;
         return { frame, bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex };
       };
       const hot = render(90);
@@ -605,8 +596,7 @@ describe("a rule inside a preset's globals", () => {
       presetSrc("{{ if true }}no-such-theme{{ end }}"),
       (config, registry, store) => {
         const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-        const said: RenderWarning[] = [];
-        drawPayload(
+        const { warnings: said } = drawPayload(
           config,
           compiled,
           store,
@@ -614,9 +604,9 @@ describe("a rule inside a preset's globals", () => {
           { session_id: SID, ctx: { pct: 0 } },
           instantOf(new Date()),
           OPTS,
-          { onRenderWarning: (w) => said.push(w) },
+          undefined,
           selectionFor(config, {}, picked({ preset: "ruled" })),
-        ).frame;
+        );
         expect(said).toEqual([
           { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
         ]);
@@ -628,8 +618,7 @@ describe("a rule inside a preset's globals", () => {
     const shared = "{{ if true }}none{{ end }}";
     withRegistry(presetSrc(shared, shared), (config, registry, store) => {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-      const said: RenderWarning[] = [];
-      drawPayload(
+      const { warnings: said } = drawPayload(
         config,
         compiled,
         store,
@@ -637,9 +626,9 @@ describe("a rule inside a preset's globals", () => {
         { session_id: SID, ctx: { pct: 0 } },
         instantOf(new Date()),
         OPTS,
-        { onRenderWarning: (w) => said.push(w) },
+        undefined,
         selectionFor(config, {}, picked({ preset: "ruled" })),
-      ).frame;
+      );
       expect(said).toEqual([
         { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
       ]);

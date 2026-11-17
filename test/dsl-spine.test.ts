@@ -13,7 +13,6 @@ import { join } from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot, PRESET_FLOOR } from "../src/config/presets";
-import type { RenderObservers } from "../src/dsl/render";
 import { buildRig } from "./helpers/rig";
 
 // [LAW:single-enforcer] Inlined fixture values formerly served by
@@ -61,7 +60,8 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     palettes: ReadonlySet<string> = ALLOWED_PALETTES,
   ) {
     const rig = buildRig({ source, palettes, cwd, env: ENV });
-    return { ...rig, drawHook: (observers?: RenderObservers) => rig.draw({ payload: HOOK_DATA, observers }).frame };
+    const drawn = () => rig.draw({ payload: HOOK_DATA });
+    return { ...rig, drawn, drawHook: () => drawn().frame };
   }
 
   test("parseDslConfig accepts the committed fixture", () => {
@@ -106,21 +106,12 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(a.rows).toEqual(b.rows);
   });
 
-  test("perSegmentSink receives one RichText[] per rendered (non-hidden) segment, cleared on each call", () => {
-    const { config, drawHook } = spineBar(HOOK_DATA.workspace.current_dir);
-    const sink = new Map<
-      string,
-      readonly import("@promptctl/rich-js").RichText[]
-    >();
-    // Pre-seed with a stale entry to verify drawDsl clears it.
-    sink.set("doesNotExist", []);
+  test("a draw returns one RichText[] per rendered (non-hidden) segment, and none for a hidden one", () => {
+    const { config, drawn } = spineBar(HOOK_DATA.workspace.current_dir);
+    const { segments } = drawn();
 
-    drawHook({ perSegmentSink: sink });
-
-    // Stale entry from a previous render must be gone.
-    expect(sink.has("doesNotExist")).toBe(false);
-    // Every layout entry that wasn't `when`-hidden appears in the sink.
-    expect(sink.size).toBeGreaterThan(0);
+    // Every layout entry that wasn't `when`-hidden appears in `segments`.
+    expect(segments.size).toBeGreaterThan(0);
     // [LAW:one-source-of-truth] The tree the render WALKED is the active
     // preset's resolved root, not `config.root` — the synthesis passes
     // (settings menu, edit chrome) write `presets[name].root` and leave
@@ -129,10 +120,20 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const allLayoutSegments = [
       ...walkNodes(presetRoot(config, PRESET_FLOOR).node),
     ].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
-    for (const [name, cells] of sink) {
+    for (const [name, cells] of segments) {
       expect(allLayoutSegments).toContain(name);
       expect(cells.length).toBeGreaterThan(0);
     }
+
+    // The same bar with sessionId `when`-hidden draws directory alone.
+    const hiddenSource = FIXTURE_SOURCE.replace(
+      "root: { h: ['directory', 'sessionId'] }",
+      "root: { h: ['directory', { seg: 'sessionId', when: '{{ eq 1 2 }}' }] }",
+    );
+    expect(hiddenSource).not.toBe(FIXTURE_SOURCE);
+    const hidden = spineBar(HOOK_DATA.workspace.current_dir, hiddenSource).drawn().segments;
+    expect(hidden.has("directory")).toBe(true);
+    expect(hidden.has("sessionId")).toBe(false);
   });
 
   // [LAW:verifiable-goals] The exact bytes are committed as a snapshot.

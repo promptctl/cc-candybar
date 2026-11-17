@@ -70,10 +70,10 @@ function renderPair(
   }
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
-  const sink = new Map<string, readonly RichText[]>();
+  let segments: ReadonlyMap<string, readonly RichText[]>;
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    drawPayload(
+    ({ segments } = drawPayload(
       config,
       compiled,
       store,
@@ -87,13 +87,12 @@ function renderPair(
         padding: 0,
         width: Number.POSITIVE_INFINITY,
       },
-      { perSegmentSink: sink },
-    ).frame;
+    ));
   } finally {
     registry.dispose();
   }
   const textOf = (id: string): string =>
-    (sink.get(id) ?? []).map((t) => t.plain).join("").trim();
+    (segments.get(id) ?? []).map((t) => t.plain).join("").trim();
   return { full: textOf("full"), lean: textOf("lean") };
 }
 

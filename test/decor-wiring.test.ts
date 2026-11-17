@@ -96,9 +96,10 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const sessionState = new SessionState();
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const sink = new Map<string, readonly RichText[]>();
-  const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame =>
-    drawPayload(
+  // The segments of the latest draw: `bgOf` / `fgOf` read the frame `render` last drew.
+  let segments: ReadonlyMap<string, readonly RichText[]> = new Map();
+  const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame => {
+    const drawn = drawPayload(
       config,
       compiled,
       store,
@@ -106,21 +107,24 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       { session_id: "s1", ...payload },
       instantOf(new Date()),
       OPTS,
-      { perSegmentSink: sink },
+      undefined,
       selectionFor(config, {
         ...(look === undefined ? {} : { style: { kind: "decided" as const, name: "test", value: look } }),
         ...(variation === undefined ? {} : { variation }),
         ...(shade === undefined ? {} : { shade }),
       }),
-    ).frame;
+    );
+    segments = drawn.segments;
+    return drawn.frame;
+  };
   const root = compiled.roots.get(PRESET_FLOOR)!;
   const bgOf = (name: string): string => {
-    const cell = sink.get(name)?.[0];
+    const cell = segments.get(name)?.[0];
     if (cell === undefined) throw new Error(`segment "${name}" did not render`);
     return resolvedStyle(cell.style).bgcolor?.value?.hex ?? "(no bg)";
   };
   const fgOf = (name: string): string =>
-    resolvedStyle(sink.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
+    resolvedStyle(segments.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
   // [LAW:behavior-not-structure] rich-js `transposePalette` directly, never the
   // render's memoized `transposedPalette`: the function under test cannot be
   // the oracle that checks it.

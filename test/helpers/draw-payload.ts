@@ -1,10 +1,14 @@
-// One frame of a fixed payload: bound and drawn in one call, the seam a
-// session's view reads, given a constant. A test draws by this; the daemon and
-// check bind a view of their own and call `drawDsl`.
+// One frame of a fixed payload: bound, drawn and kept in one call, the seam a
+// session's view reads, given a constant. A test draws by this as a turn
+// draws: what the frame leaves — the view's record of it, and the motion of
+// the session's effects when the selection hands some — is kept, so the next
+// call draws on from it. The daemon and check bind a view of their own and
+// call `drawDsl`.
 import type { ValidatedConfig } from "../../src/config/dsl-types";
 import {
   bindPayload,
   drawDsl,
+  keepFrame,
   type CompiledConfig,
   type DrawnFrame,
   type RenderObservers,
@@ -44,7 +48,7 @@ export function drawPayload(
     sessionOfPayload(payload),
     run,
   );
-  return drawDsl(
+  const frame = drawDsl(
     config,
     compiled,
     store,
@@ -55,4 +59,7 @@ export function drawPayload(
     observers,
     selection,
   );
+  keepFrame(compiled, store, frame.memory.record);
+  selection.effects?.keep(frame.memory.motion);
+  return frame;
 }

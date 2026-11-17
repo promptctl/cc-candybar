@@ -15,7 +15,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { linkClick } from "./helpers/click";
-import { registerDslConfig, type DrawnFrame, type RenderWarning } from "../src/dsl/render";
+import { registerDslConfig, type DrawnFrame } from "../src/dsl/render";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
@@ -43,7 +43,6 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const errors: string[] = [];
-  const warnings: RenderWarning[] = [];
   const draw = (
     payload: object,
     at: Instant,
@@ -60,11 +59,10 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
       opts,
       {
         onSegmentError: (id, message) => errors.push(`${id}: ${message}`),
-        onRenderWarning: (warning) => warnings.push(warning),
       },
       selection,
     );
-  return { compiled, registry, errors, warnings, draw };
+  return { compiled, registry, errors, draw };
 }
 
 describe("a frame evaluates the parts whose inputs moved", () => {
@@ -239,9 +237,7 @@ describe("a kept part keeps nothing of where it was first asked", () => {
       ),
     );
     for (const at of [A, B]) {
-      view.warnings.length = 0;
-      view.draw({}, at);
-      expect(view.warnings).toEqual([
+      expect(view.draw({}, at).warnings).toEqual([
         expect.objectContaining({
           kind: "rule",
           slot: "style",
@@ -285,8 +281,7 @@ describe("a kept part keeps nothing of where it was first asked", () => {
         }`,
       ),
     );
-    view.draw({}, A);
-    expect(view.warnings).toEqual([
+    expect(view.draw({}, A).warnings).toEqual([
       expect.objectContaining({
         kind: "rule",
         message: expect.stringMatching(/action "ghost" is not declared/),

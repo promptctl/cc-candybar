@@ -84,18 +84,19 @@ function themeBar(src: string) {
     host: durable.host,
   });
   const { config } = rig;
-  let sink = new Map<string, readonly RichText[]>();
+  // The segments of the latest draw, by placement id.
+  let segments: ReadonlyMap<string, readonly RichText[]> = new Map();
   const render = (barTheme = BAR_A): Frame => {
-    sink = new Map();
-    return rig.draw({
+    const drawn = rig.draw({
       opts: { width: 200 },
-      observers: { perSegmentSink: sink },
       selection: selectionFor(config, { theme: decided(barTheme) }),
-    }).frame;
+    });
+    segments = drawn.segments;
+    return drawn.frame;
   };
   // The background a placement's cell wears, read by its id.
   const bgOf = (id: string): string => {
-    const cell = sink.get(id)?.[0];
+    const cell = segments.get(id)?.[0];
     if (cell === undefined) throw new Error(`placement "${id}" did not render`);
     return resolvedStyle(cell.style).bgcolor!.value!.hex;
   };

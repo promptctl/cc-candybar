@@ -262,38 +262,39 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-  const sink = new Map<string, readonly RichText[]>();
-  const bg = (): string => {
-    const cells = sink.get("cell");
+  const bg = (segments: ReadonlyMap<string, readonly RichText[]>): string => {
+    const cells = segments.get("cell");
     if (cells === undefined) throw new Error(`segment "cell" did not render`);
     return resolvedStyle(cells[0]!.style).bgcolor!.value!.hex;
   };
   try {
     const effective = resolveEffectiveGlobals(config, () => null, () => false);
     const at = instantOf(new Date());
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: SID },
-      at,
-      renderOptionsOf(effective, OPTS_WIDTH),
-      { perSegmentSink: sink },
-      effective,
-    ).frame;
-    const daemon = bg();
-    drawPayload(
-      config,
-      compiled,
-      store,
-      registry,
-      { session_id: SID },
-      at,
-      renderOptionsOf(effective, OPTS_WIDTH),
-      { perSegmentSink: sink },
-    ).frame;
-    return { daemon, compileOnly: bg() };
+    const daemon = bg(
+      drawPayload(
+        config,
+        compiled,
+        store,
+        registry,
+        { session_id: SID },
+        at,
+        renderOptionsOf(effective, OPTS_WIDTH),
+        undefined,
+        effective,
+      ).segments,
+    );
+    const compileOnly = bg(
+      drawPayload(
+        config,
+        compiled,
+        store,
+        registry,
+        { session_id: SID },
+        at,
+        renderOptionsOf(effective, OPTS_WIDTH),
+      ).segments,
+    );
+    return { daemon, compileOnly };
   } finally {
     registry.dispose();
   }

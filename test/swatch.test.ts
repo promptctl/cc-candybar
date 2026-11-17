@@ -60,8 +60,7 @@ function rig(template: string) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  const sink = new Map<string, readonly RichText[]>();
-  const rendered = drawPayload(
+  const { frame: rendered, segments } = drawPayload(
     config,
     compiled,
     store,
@@ -69,10 +68,9 @@ function rig(template: string) {
     PAYLOAD,
     instantOf(new Date()),
     OPTS,
-    { perSegmentSink: sink },
-  ).frame;
+  );
   registry.dispose();
-  return { rendered, cells: sink.get("s") ?? [] };
+  return { rendered, cells: segments.get("s") ?? [] };
 }
 
 // Each swatch glyph's (foreground, background), in drawing order.

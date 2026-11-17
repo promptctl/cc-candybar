@@ -14,14 +14,13 @@ import type { Frame } from "../src/render/frame";
 // resolveThemeSelection the daemon calls. No parallel rig.
 //
 // [LAW:behavior-not-structure] A cell's colour is read BY SEGMENT NAME, off the
-// `perSegmentSink` the daemon itself renders with, never by position in the
+// segments the daemon's own draw returns, never by position in the
 // row. Position is a fact about the layout, not about the recolor: a read of
 // "the first background" measures whichever cell happens to lead the row, and
 // silently starts measuring a different segment the day a cell is added ahead
 // of it.
 
 import { backgroundsOf, boldUrls } from "./helpers/frame";
-import type { RichText } from "@promptctl/rich-js";
 import { buildRig } from "./helpers/rig";
 import { effectsOf } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
@@ -66,7 +65,6 @@ interface Painted {
 
 function recolorBar() {
   const rig = buildRig({ source: SRC, label: "<recolor>", palettes: ALLOWED, sessionId: SID });
-  const sink = new Map<string, readonly RichText[]>();
 
   // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the
   // daemon does — the session's chosen theme over the config default. This is
@@ -76,15 +74,11 @@ function recolorBar() {
   // globals.palette)`, and the SELECTION carries the palette, so there is no
   // separate base palette here to fall out of step with the name.)
   const render = (): Painted => {
-    const bar = rig.draw({
+    const { frame: bar, segments } = rig.draw({
       payload: { session_id: SID },
-      observers: { perSegmentSink: sink },
-    }).frame;
-    // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE. drawDsl
-    // clears it at the top of the next call, so a colour read deferred past
-    // that call would measure a render this Painted never described.
+    });
     const bgs = new Map(
-      [...sink].map(([name, cells]) => [
+      [...segments].map(([name, cells]) => [
         name,
         cells[0] && resolvedStyle(cells[0].style).bgcolor?.value?.hex,
       ]),

@@ -52,7 +52,7 @@ const loopT = (
     fx.clockAt(when, ANIMATION_SPEEDS[speed]),
     STILL_FRAME,
   );
-  motion.drawn();
+  fx.keep(motion.memory());
   return fx.lastFrame().t;
 };
 

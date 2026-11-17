@@ -83,10 +83,11 @@ export interface FrameTransitions<Line> {
 }
 
 // [LAW:no-ambient-temporal-coupling] One render's motion: what each placement
-// the walk reaches draws, each row's motion, and the moment the frame is
-// drawn. What the frame drew becomes what the next one compares against only
-// then, so a render that throws part-way leaves the last drawn frame in place
-// rather than a half-recorded one.
+// the walk reaches draws, each row's motion, and the session's motion memory
+// as the frame leaves it, read once the frame is drawn. It becomes what the
+// next frame reads only when the turn that drew it keeps it
+// (`SessionEffects.keep`), so a render that throws part-way leaves the last
+// drawn frame's in place rather than a half-recorded one.
 export interface FrameMotion<Line> {
   // The walk reports each placement with the lines it returned and draws what
   // comes back: those lines — or, while it leaves the bar, the rows it held of
@@ -99,7 +100,7 @@ export interface FrameMotion<Line> {
     kind: RowKind,
     items: readonly RowItem[],
   ) => RowMotion;
-  readonly drawn: () => void;
+  readonly memory: () => SessionMotion;
 }
 
 // [LAW:types-are-the-program] What one row is drawn under: nothing, or an
@@ -220,6 +221,61 @@ interface Passage {
   readonly done: (t: number) => boolean;
   readonly effect: Effect;
 }
+
+// [LAW:types-are-the-program] A session's motion memory as its last kept
+// frame left it: one value a frame reads and returns its successor of.
+export interface SessionMotion {
+  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
+  // changed to its current value: the effect's own t = 0 is a recorded fact,
+  // never inferred from when renders happened to arrive.
+  readonly inForce: InForce | null;
+  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
+  // its last drawn frame left it — where the clock stood and the speed it ran
+  // at from there: the anchor every later reading is measured from, so a
+  // change of speed changes the clock's slope from the frame it lands in and
+  // never its reading, so no loop jumps phase. The host clock itself before
+  // the session's first frame.
+  readonly anchor: Timeline;
+  // The same fact for each placement wearing its own effect, by placement id,
+  // kept for the placements the latest frame drew: one that stopped being
+  // drawn starts its effect again at t = 0 when it is drawn again, as the
+  // effect comes into force for it again.
+  readonly placements: ReadonlyMap<string, InForce>;
+  // The effects made for the rows the latest frame drew, by row and scope (the
+  // bar's, or one placement's), with the name each was made for. Each frame
+  // starts an empty map and keeps only what it draws, so a row that stopped
+  // being drawn (a menu closed) takes its effects and their settled shares with
+  // it.
+  readonly made: ReadonlyMap<string, ReadonlyMap<Scope, RowEffect>>;
+  // The transitions in flight at the last frame drawn, by placement — what a
+  // placement's appearing and leaving go on from when the next frame is drawn
+  // from the same source as the view's record of it (`FrameRecord`) — or
+  // null: no frame drawn, or the last drawn with transitions off, which
+  // nothing compares against.
+  readonly passages: ReadonlyMap<string, Passage> | null;
+  // [LAW:nothing-unseen] What the latest frame wore, for the render's event.
+  readonly frame: EffectFrame;
+}
+
+const NO_MOTION: SessionMotion = {
+  inForce: null,
+  anchor: Timeline.play(0),
+  placements: new Map(),
+  made: new Map(),
+  passages: null,
+  frame: {
+    effect: EFFECT_FLOOR,
+    t: 0,
+    speed: 1,
+    made: 0,
+    reused: 0,
+    own: [],
+    basis: "off",
+    revision: 0,
+    fades: [],
+    leaves: [],
+  },
+};
 
 // A placement the frame drew — for one leaving, what it held of its last
 // drawing — and the transition it is passing through, or none.
@@ -361,51 +417,12 @@ function closingFlash(
 
 /**
  * [LAW:no-shared-mutable-globals] One session's effect memory, owned by whoever
- * keeps the session (the daemon, per session id; a compile-only render, for the
- * one render it draws). Its only writer is `motion`, called once per render.
+ * keeps the session (the renderer, per session id; a compile-only render, for
+ * the one render it draws). A frame reads it (`clockAt`, `motion`) and returns
+ * its successor; its only writer is `keep`, called by the turn that drew it.
  */
 export class SessionEffects<Line> {
-  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
-  // changed to its current value: the effect's own t = 0 is a recorded fact,
-  // never inferred from when renders happened to arrive.
-  private inForce: InForce | null = null;
-  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
-  // its last drawn frame left it — where the clock stood and the speed it ran
-  // at from there: the anchor every later reading is measured from, so a
-  // change of speed changes the clock's slope from the frame it lands in and
-  // never its reading, so no loop jumps phase. The host clock itself before
-  // the session's first frame.
-  private anchor: Timeline = Timeline.play(0);
-  // The same fact for each placement wearing its own effect, by placement id,
-  // kept for the placements the latest render drew: one that stopped being
-  // drawn starts its effect again at t = 0 when it is drawn again, as the
-  // effect comes into force for it again.
-  private placements = new Map<string, InForce>();
-  // The effects made for the rows the latest render drew, by row and scope (the
-  // bar's, or one placement's), with the name each was made for. Each render
-  // starts an empty map and keeps only what it draws, so a row that stopped
-  // being drawn (a menu closed) takes its effects and their settled shares with
-  // it.
-  private made = new Map<string, Map<Scope, RowEffect>>();
-  // The transitions in flight at the last frame drawn, by placement — what a
-  // placement's appearing and leaving go on from when the next frame is drawn
-  // from the same source as the view's record of it (`FrameRecord`) — or
-  // null: no frame drawn, or the last drawn with transitions off, which
-  // nothing compares against.
-  private passages: ReadonlyMap<string, Passage> | null = null;
-  // [LAW:nothing-unseen] What the latest render wore, for the render's event.
-  private frame: EffectFrame = {
-    effect: EFFECT_FLOOR,
-    t: 0,
-    speed: 1,
-    made: 0,
-    reused: 0,
-    own: [],
-    basis: "off",
-    revision: 0,
-    fades: [],
-    leaves: [],
-  };
+  private kept: SessionMotion = NO_MOTION;
 
   constructor(private readonly key: string) {}
 
@@ -413,14 +430,21 @@ export class SessionEffects<Line> {
   // effects were made fresh rather than reused — one made every frame pays
   // rich-js's share settling every frame — and each placement's own.
   lastFrame(): EffectFrame {
-    return this.frame;
+    return this.kept.frame;
   }
 
   // The effects this session holds: the ones its latest render drew, and the
   // transitions still in flight.
   get heldCount(): number {
-    const passing = this.passages?.size ?? 0;
-    return [...this.made.values()].reduce((n, row) => n + row.size, passing);
+    const { passages, made } = this.kept;
+    const passing = passages?.size ?? 0;
+    return [...made.values()].reduce((n, row) => n + row.size, passing);
+  }
+
+  // [LAW:single-enforcer] The one writer: the turn that drew a frame keeps
+  // the memory it returned.
+  keep(motion: SessionMotion): void {
+    this.kept = motion;
   }
 
   /**
@@ -429,10 +453,13 @@ export class SessionEffects<Line> {
    * the last drawn frame passed at the speed in force then; before the first
    * frame the timeline is the host clock itself, so a session that has only
    * ever run at 1x reads the wall instant at every frame. Reads only: the frame
-   * that draws keeps it as the anchor (`drawn`).
+   * that draws returns it as the anchor (`memory`).
    */
   clockAt(at: Instant, speed: number): FrameClock {
-    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed) };
+    return {
+      wall: at,
+      timeline: Timeline.withRate(this.kept.anchor, at, speed),
+    };
   }
 
   /**
@@ -454,6 +481,7 @@ export class SessionEffects<Line> {
     // Every animation of the frame reads the animation clock: `at` is the
     // time it reads, and every `since` is a reading of the same clock.
     const at = animationAt(clock);
+    const { kept } = this;
     // [LAW:one-source-of-truth] A part `t` seconds into its own clock at this
     // frame counts on the session's timeline, sought so it reads `t` at the
     // frame's instant: it moves at the session's speed, and says when it next
@@ -461,19 +489,19 @@ export class SessionEffects<Line> {
     const onSession = (t: number): Timeline =>
       Timeline.seek(clock.timeline, clock.wall, t);
     const inForce =
-      this.inForce?.name === name ? this.inForce : { name, since: at };
+      kept.inForce?.name === name ? kept.inForce : { name, since: at };
     const bar: Omit<Part, "owners"> = {
       scope: BAR_SCOPE,
       name,
       t: at - inForce.since,
     };
-    const knownPlacements = this.placements;
+    const knownPlacements = kept.placements;
     const placements = new Map<string, InForce>();
-    const known = this.made;
+    const known = kept.made;
     const made = new Map<string, Map<Scope, RowEffect>>();
     const own: OwnEffectFrame[] = [];
     const { last } = given;
-    const inFlight = this.passages;
+    const inFlight = kept.passages;
     // [LAW:dataflow-not-control-flow] What this frame compares against is a
     // value: the last frame's placements, or none to compare at all.
     const basis: FadeBasis = !given.transitions
@@ -747,16 +775,16 @@ export class SessionEffects<Line> {
       // compared or kept, so every placement draws exactly what it returned.
       placed: basis === "off" ? (_id, lines) => lines : reached,
       row,
-      drawn: () => {
-        this.anchor = clock.timeline;
-        this.inForce = inForce;
-        this.placements = placements;
-        this.made = made;
+      memory: () => ({
+        anchor: clock.timeline,
+        inForce,
+        placements,
+        made,
         // A frame drawn with transitions off is kept as no frame at all:
         // nothing can be compared against it.
-        this.passages = basis === "off" ? null : passages;
-        this.frame = frame;
-      },
+        passages: basis === "off" ? null : passages,
+        frame,
+      }),
     };
   }
 }
@@ -775,16 +803,23 @@ export class EffectSessions<Line> {
 
   constructor(private readonly maxSessions: number = MAX_SESSIONS) {}
 
+  // The session's memory as a draw reads it: a session with none kept yet
+  // draws from a fresh one, held only once its frame is kept.
   of(sessionId: SessionId): SessionEffects<Line> {
-    const known =
-      this.sessions.get(sessionId) ?? new SessionEffects<Line>(sessionId);
+    return this.sessions.get(sessionId) ?? new SessionEffects<Line>(sessionId);
+  }
+
+  // [LAW:single-enforcer] The one writer: the turn that drew the session's
+  // frame keeps the memory it returned, as the most recently rendered.
+  keep(sessionId: SessionId, motion: SessionMotion): void {
+    const known = this.of(sessionId);
+    known.keep(motion);
     this.sessions.delete(sessionId);
     this.sessions.set(sessionId, known);
     for (const oldest of this.sessions.keys()) {
       if (this.sessions.size <= this.maxSessions) break;
       this.sessions.delete(oldest);
     }
-    return known;
   }
 
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every

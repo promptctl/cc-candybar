@@ -55,24 +55,25 @@ function runtime(source: string) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  // Every warning raised across this runtime's renders, in order.
   const warnings: RenderWarning[] = [];
   const segmentErrors: Array<readonly [string, string]> = [];
-  const render = (pct = 0): string =>
-    textOf(
-      drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        { session_id: "s-when-throws", ctx: { pct } },
-        instantOf(new Date()),
-        OPTS,
-        {
-          onRenderWarning: (w) => warnings.push(w),
-          onSegmentError: (id, message) => segmentErrors.push([id, message]),
-        },
-      ).frame,
+  const render = (pct = 0): string => {
+    const drawn = drawPayload(
+      config,
+      compiled,
+      store,
+      registry,
+      { session_id: "s-when-throws", ctx: { pct } },
+      instantOf(new Date()),
+      OPTS,
+      {
+        onSegmentError: (id, message) => segmentErrors.push([id, message]),
+      },
     );
+    warnings.push(...drawn.warnings);
+    return textOf(drawn.frame);
+  };
   return {
     render,
     warnings,

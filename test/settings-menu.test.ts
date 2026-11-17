@@ -96,12 +96,7 @@ function menuBar(
   // `✓` runs the settings menu's `save`, which acts on the config the
   // session renders.
   const rig = buildRig({ source: src, label: "<user>", base: dflt });
-  // Each segment's cells from the last render, by name.
-  const sink = new Map<string, readonly RichText[]>();
-  const render = (): Frame => {
-    sink.clear();
-    return rig.draw({ payload, observers: { perSegmentSink: sink } }).frame;
-  };
+  const render = (): Frame => rig.draw({ payload }).frame;
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = linkUrls(out).find((u) =>
@@ -110,7 +105,7 @@ function menuBar(
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     await rig.click(url);
   };
-  return { ...rig, sink, render, clickWriting };
+  return { ...rig, render, clickWriting };
 }
 
 const PAYLOAD = {

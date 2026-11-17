@@ -4,7 +4,6 @@
 // own journaled write — and the flash on the rendered bar.
 
 import { linkUrls } from "./helpers/frame";
-import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import {
   ANIMATION_SPEED_NAMES,
@@ -170,14 +169,11 @@ function idleBar(src: string) {
     sessionId: SID,
   });
   const { config, sessionState } = rig;
-  const sink = new Map<string, readonly RichText[]>();
   // A frame drawn at `when`, its session idle since `idleSince`.
   const draw = (when: Instant, idleSince?: Instant) => {
-    sink.clear();
     return rig.draw({
       payload: PAYLOAD,
       at: when,
-      observers: { perSegmentSink: sink },
       selection: selectionFor(
         config,
         idleSince === undefined ? {} : { idleSince },

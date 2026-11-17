@@ -192,25 +192,26 @@ function build(src: string, withDefault = false) {
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const palette = getThemePalette(THEME);
-  const sink = new Map<string, readonly RichText[]>();
+  // The segments of the latest draw, by placement id.
+  let segments: ReadonlyMap<string, readonly RichText[]> = new Map();
   recordRender(sessionState, SID);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   // [LAW:no-silent-failure] A segment that throws renders a ⚠ cell and skips
-  // the sink, which would read here as "did not render"; say what it was.
+  // its drawn segment, which would read here as "did not render"; say what it was.
   const render = (): Frame => {
     const errors: string[] = [];
     const out = drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
-      perSegmentSink: sink,
       onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-    }).frame;
+    });
     if (errors.length > 0) throw new Error(errors.join("\n"));
-    return out;
+    segments = out.segments;
+    return out.frame;
   };
   const root = compiled.roots.get(PRESET_FLOOR)!;
-  // The sink holds a segment's laid lines flattened: its inline cell first,
+  // A drawn segment holds its laid lines flattened: its inline cell first,
   // then one cell per dropped line (a `{{ menu }}` body on the band's plane).
   const cellsOf = (name: string): readonly RichText[] => {
-    const cells = sink.get(name);
+    const cells = segments.get(name);
     if (cells === undefined || cells.length === 0) {
       throw new Error(`segment "${name}" did not render`);
     }

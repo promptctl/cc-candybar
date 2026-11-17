@@ -147,10 +147,11 @@ function ownUrls(rendered: Frame): string[] {
 function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
   const rig = buildRig({ source: src, palettes: ALLOWED, sessionId });
   const palette = getThemePalette("textual-dark");
-  const sink = new Map<string, readonly RichText[]>();
-  const render = (): Frame =>
-    rig.draw({
-      observers: { perSegmentSink: sink },
+  // The segments of the latest draw, by placement id.
+  let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
+  const segments = (): ReadonlyMap<string, readonly RichText[]> => latest;
+  const render = (): Frame => {
+    const drawn = rig.draw({
       // `look` is the session's style pick, resolved as the daemon resolves it.
       // [LAW:no-silent-failure] naming an undeclared style would collapse to the
       // floor, so tests that depend on a style assert its effect.
@@ -159,7 +160,10 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
         {},
         picked(look === undefined ? {} : { style: look }),
       ),
-    }).frame;
+    });
+    latest = drawn.segments;
+    return drawn.frame;
+  };
   const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = ownUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
@@ -167,7 +171,7 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
     if (!url) throw new Error(`no toggle writing ${key}=${value} rendered`);
     await rig.click(url);
   };
-  return { ...rig, sink, palette, render, clickToggle };
+  return { ...rig, segments, palette, render, clickToggle };
 }
 
 // A theme picker menu beside a plain label, in one horizontal row. Identity is
@@ -634,11 +638,11 @@ describe("toggle round trip + drop stacking", () => {
   // The instance-boundary property: a band is one more step on ITS trigger's
   // address, so opening it is invisible to every other segment's colour.
   test("opening a menu changes the colour of no other cell", async () => {
-    const { render, sink, clickToggle } = menuBar(MENU_SRC);
+    const { render, segments, clickToggle } = menuBar(MENU_SRC);
     const snapshot = (): Map<string, string> => {
       render();
       return new Map(
-        [...sink.entries()].map(([name, cells]) => [
+        [...segments().entries()].map(([name, cells]) => [
           name,
           cells.map((c) => `${c.plain}|${resolvedStyle(c.style).bgcolor?.value?.hex}|${resolvedStyle(c.style).color?.value?.hex}`).join("\n"),
         ]),
@@ -1164,7 +1168,7 @@ describe("a menu's `distribution` option places its band", () => {
     );
 
   test("`monotonic` places every option cell by monotonic over the whole domain", async () => {
-    const { render, sink, compiled, palette, clickToggle } = menuBar(
+    const { render, segments, compiled, palette, clickToggle } = menuBar(
       WITH('"distribution" "monotonic"'),
     );
     render();
@@ -1172,7 +1176,7 @@ describe("a menu's `distribution` option places its band", () => {
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
     const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
-    const body = sink.get("themepicker")![1]!;
+    const body = segments().get("themepicker")![1]!;
     const options = [...WORDS];
     const optionSpans = body.spans.filter(
       (s) =>
@@ -1240,10 +1244,10 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   // A `{{ menu }}` drops its body onto the line below the trigger, so the grid
   // is cell 1; a bare `{{ picker }}` IS the line, so it is cell 0.
   const optionCells = (
-    sink: Map<string, readonly RichText[]>,
+    segments: ReadonlyMap<string, readonly RichText[]>,
     segName: string,
     domain: readonly string[],
-  ) => optionCellsOf(sink.get(segName)![1]!, domain);
+  ) => optionCellsOf(segments.get(segName)![1]!, domain);
 
   // A style picker beside the theme picker, so both colour-valued domains are
   // exercised on one bar. `globals.style` names a real style deliberately — see
@@ -1272,14 +1276,14 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   test("every theme option is its name in the list's own text, beside that theme's swatch", async () => {
     // The fixture's globals wear `dim`: the names are written in the text of
     // the bar's own (styled) list, while each swatch is its theme unstyled.
-    const { render, sink, config, palette, clickToggle } =
+    const { render, segments, config, palette, clickToggle } =
       menuBar(BOTH_PICKERS_SRC);
     render();
     await clickToggle(render(), TKEY, "applyTheme");
     render();
-    const cells = optionCells(sink, "themepicker", [...ALLOWED]);
+    const cells = optionCells(segments(), "themepicker", [...ALLOWED]);
     expect(cells.length).toBe(ALLOWED.size);
-    const body = sink.get("themepicker")![1]!;
+    const body = segments().get("themepicker")![1]!;
     const ground = groundOf(body);
     const text = textOn(
       transposePalette(palette, config.styles["dim"]!),
@@ -1308,7 +1312,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
 
   test("a theme option's colour is a function of the option ALONE — not its index, count or distribution", async () => {
     const colours = async (dictEntry: string): Promise<Map<string, string>> => {
-      const { render, sink, clickToggle } = menuBar(
+      const { render, segments, clickToggle } = menuBar(
         BOTH_PICKERS_SRC.replace(
           '{{ menu "applyTheme" "\u25b8" "\u25be" }}',
           `{{ menu "applyTheme" "\u25b8" "\u25be" (dict ${dictEntry}) }}`,
@@ -1317,9 +1321,9 @@ describe("a picker over a colour-valued domain paints what picking would apply",
       render();
       await clickToggle(render(), TKEY, "applyTheme");
       render();
-      const body = sink.get("themepicker")![1]!;
+      const body = segments().get("themepicker")![1]!;
       return new Map(
-        optionCells(sink, "themepicker", [...ALLOWED]).map((c) => [
+        optionCells(segments(), "themepicker", [...ALLOWED]).map((c) => [
           c.name,
           JSON.stringify([
             c.bg,
@@ -1339,15 +1343,15 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   });
 
   test("every style option's swatch is the BASE palette under that style, not the bar's already-styled one", async () => {
-    const { render, sink, config, palette, clickToggle } =
+    const { render, segments, config, palette, clickToggle } =
       menuBar(BOTH_PICKERS_SRC, S1, "dim");
     render();
     await clickToggle(render(), LKEY, "applyStyle");
     render();
     const names = Object.keys(config.styles);
-    const cells = optionCells(sink, "lookpicker", names);
+    const cells = optionCells(segments(), "lookpicker", names);
     expect(cells.length).toBe(names.length);
-    const body = sink.get("lookpicker")![1]!;
+    const body = segments().get("lookpicker")![1]!;
     const ground = groundOf(body);
     for (const cell of cells) {
       // rich-js's transposePalette DIRECTLY, never cc-candybar's memoized
@@ -1374,8 +1378,8 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     floor.render();
     const trigger = (cells: readonly RichText[]): string | undefined =>
       resolvedStyle(cells[0]!.style).bgcolor?.value?.hex;
-    expect(trigger(sink.get("lookpicker")!)).not.toBe(
-      trigger(floor.sink.get("lookpicker")!),
+    expect(trigger(segments().get("lookpicker")!)).not.toBe(
+      trigger(floor.segments().get("lookpicker")!),
     );
     // The chaining guard, and the reason this renders under a look at all:
     // the bar wears base-under-vivid, so a painter handed the SEGMENT's palette
@@ -1412,9 +1416,9 @@ describe("a picker over a colour-valued domain paints what picking would apply",
       },
       root: { h: ['grid'] },
     }`;
-    const { render, sink, palette } = menuBar(PICKER_SRC);
+    const { render, segments, palette } = menuBar(PICKER_SRC);
     render();
-    const line = sink.get("grid")![0]!;
+    const line = segments().get("grid")![0]!;
     const cells = optionCellsOf(line, [...ALLOWED]);
     expect(cells.length).toBe(ALLOWED.size);
     const ground = groundOf(line);
@@ -1431,7 +1435,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
 
   test("a picker over a domain that is NOT colour-valued keeps its band placement", async () => {
     const WORDS = ["alpha", "bravo", "charlie", "delta"];
-    const { render, sink, compiled, palette, clickToggle } = menuBar(
+    const { render, segments, compiled, palette, clickToggle } = menuBar(
       BOTH_PICKERS_SRC.replace(
         "{ set: 'theme', from: 'themes' }",
         `{ set: 'word', from: ${JSON.stringify(WORDS)} }`,
@@ -1444,7 +1448,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
     const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
-    const cells = optionCells(sink, "themepicker", WORDS);
+    const cells = optionCells(segments(), "themepicker", WORDS);
     expect(cells.length).toBe(WORDS.length);
     for (const cell of cells) {
       expect(cell.bg).toBe(

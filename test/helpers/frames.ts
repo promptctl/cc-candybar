@@ -1,7 +1,7 @@
 // One frame of a session's motion drawn over a view's frame memory, composed as
 // `drawDsl` composes them (src/dsl/render.ts): the walk reports each placement
-// to the motion, the view records what comes back, and the record is kept once
-// the frame is drawn.
+// to the motion, the view records what comes back, and `drawn` keeps both
+// memories, as the turn that drew a frame does.
 import type {
   FrameClock,
   FrameTransitions,
@@ -31,8 +31,8 @@ export function framed<Line>(
       record.placed(id, motion.placed(id, lines)),
     row: motion.row,
     drawn: () => {
-      motion.drawn();
-      record.commit();
+      fx.keep(motion.memory());
+      memory.keep(record.record());
     },
   };
 }

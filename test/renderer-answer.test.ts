@@ -27,9 +27,15 @@ import type {
   Subscription,
 } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
-import { renderFrame, type RendererParts } from "../src/renderer/draw-bar";
+import {
+  drawRender,
+  renderFrame,
+  setUpRender,
+  type RendererParts,
+} from "../src/renderer/draw-bar";
+import { partsOf } from "../src/dsl/parts";
 import { renderFailedFrame } from "../src/render/frame";
-import { MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
@@ -435,6 +441,63 @@ describe("a feed's frame", () => {
     expect(draw((AT + 1) as Instant)?.failure).toBeNull();
     expect(changed.slice(changedBefore)).toEqual([]);
     expect(rig.sessionState.latestRevision()).toBe(revision);
+  });
+});
+
+describe("a draw", () => {
+  // [LAW:effects-at-boundaries] The draw returns its frame and the memory it
+  // made; the turn that drew it stores that memory. So a draw is a function of
+  // the renderer's state and the instant: drawn twice from the same state, it
+  // gives the same frame and the same memory, and leaves the state as it was.
+  test("drawn twice from the same state and instant, gives the same frame and memory and changes nothing", async () => {
+    const t = renderer();
+    const context = checked();
+    // A bar that moves and whose placements pass through transitions, so the
+    // session's motion and the view's record both carry something.
+    fs.writeFileSync(
+      path.join(dir, "config.json5"),
+      "{ globals: { effect: 'wheel', transitions: true } }",
+    );
+    await configure(t, context);
+    answered(
+      await t.r.answer({
+        kind: "event",
+        ...READ,
+        event: { kind: "request", id: REQUEST, context },
+      }),
+    );
+    const { parts } = t;
+    const later = { at: (AT + 1) as Instant, tick: 1 as Tick };
+    const draw = () => {
+      using setup = setUpRender(parts, context, later, []);
+      return { ...drawRender(parts, setup, ANSWERING, UNFOLLOWED_FEEDS), setup };
+    };
+    const view = viewOf(t.rig)!;
+    const frameMemory = partsOf(view.state.compiled, view.store).memory;
+    const motion = parts.effectSessions.of(SESSION).lastFrame();
+    const warned = parts.renderWarnings.of(SESSION, "request");
+    const idle = parts.menuIdle.stats();
+    const segments = view.lastRenderCellsBySegment;
+
+    const first = draw();
+    const { source } = first.kept.frame.record;
+    const record = frameMemory.from(source);
+    const second = draw();
+
+    expect(second.drawn.body).toEqual(first.drawn.body);
+    expect(second.kept).toEqual(first.kept);
+    expect(first.kept.frame.motion.frame).toMatchObject({
+      effect: "wheel",
+      basis: "compared",
+    });
+    // What the request's turn kept is what both draws read, and still stands.
+    expect(record).not.toBeNull();
+    expect(record).not.toBe(first.kept.frame.record);
+    expect(frameMemory.from(source)).toBe(record);
+    expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
+    expect(parts.renderWarnings.of(SESSION, "request")).toBe(warned);
+    expect(parts.menuIdle.stats()).toEqual(idle);
+    expect(view.lastRenderCellsBySegment).toBe(segments);
   });
 });
 
