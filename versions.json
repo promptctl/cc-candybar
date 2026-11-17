@@ -4,15 +4,22 @@
     {
       "version": "pr-785",
       "ref": "refs/pull/785/merge",
-      "sha": "2bbff784db6426cc26c42178559f65c0f0fe8d10",
-      "timestamp": "2026-11-17T11:16:10.390Z",
+      "sha": "adfad24d1154eaa6e0e767f3482098d8352d95ad",
+      "timestamp": "2026-11-17T11:26:23.554Z",
       "commits": [
         {
-          "sha": "2bbff784db6426cc26c42178559f65c0f0fe8d10",
+          "sha": "adfad24d1154eaa6e0e767f3482098d8352d95ad",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T04:15:06-07:00",
-          "message": "Merge bbaa3387f092c53ec522b58fe7c603e45b11fd20 into 681357616352fb4f7476a7b1035b61a244971844\n"
+          "timestamp": "2026-11-17T11:25:25Z",
+          "message": "Merge 1f9be9e0bdf759084213ebc1bd9252c17bcbf524 into 681357616352fb4f7476a7b1035b61a244971844\n"
+        },
+        {
+          "sha": "1f9be9e0bdf759084213ebc1bd9252c17bcbf524",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T04:25:14-07:00",
+          "message": "fix(renderer): a frame keeps its memory once nothing of its turn can throw, and a closed feed's record goes with it (0ol)\n"
         },
         {
           "sha": "bbaa3387f092c53ec522b58fe7c603e45b11fd20",

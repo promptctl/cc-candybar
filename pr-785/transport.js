@@ -50540,8 +50540,10 @@ var EffectSessions = class {
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
   // effect made for a row keeps rich-js's settled shares, so their count is the
   // size that grows.
-  getStats() {
-    let effects = 0;
+  // The passages in flight live with the surfaces that drew them, and come
+  // in as `passages`.
+  getStats(passages) {
+    let effects = passages;
     for (const session of this.sessions.values()) effects += session.heldCount;
     return { sessions: this.sessions.size, effects };
   }
@@ -85426,7 +85428,6 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
         { by: "feed", fps },
         feeds
       );
-      keepDraw(parts, setup, kept);
       const signed = signingFrames(parts.linkSigner);
       const bar = signed(drawn.body);
       const answer2 = RENDER_ANSWERS.ansi(bar);
@@ -85436,6 +85437,9 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
         drawn,
         handedOffTo(lanes, following)
       );
+      const resp = JSON.stringify(answer2);
+      const statuslineResp = statusline === drawn.body ? resp : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)));
+      keepDraw(parts, setup, kept);
       deliver(parts, {
         session: sessionId2,
         by: "feed",
@@ -85443,14 +85447,9 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
         clickShown: null,
         eventsShown: []
       });
-      const resp = JSON.stringify(answer2);
       return {
         bar,
-        answers: {
-          resp,
-          // Mostly the bar itself, and one frame encodes once.
-          statusline: statusline === drawn.body ? resp : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)))
-        },
+        answers: { resp, statusline: statuslineResp },
         evaluated: evaluated2,
         cellBreaks,
         failure: null
@@ -85736,9 +85735,10 @@ function drawRender(parts, setup, drawing2, feeds) {
     renderOpts,
     void 0,
     // [LAW:one-source-of-truth] The draw's own settings, the session's
-    // effect memory and the record of the surface's last frame of the view. The theme, style and effect are not among them: the
-    // view's slots settle those names (src/dsl/parts.ts), the same ones its
-    // payload's `.effective` fields read.
+    // effect memory and the record of the surface's last frame of the view.
+    // The theme, style and effect are not among them: the view's slots settle
+    // those names (src/dsl/parts.ts), the same ones its payload's `.effective`
+    // fields read.
     {
       ...effective,
       effects,
@@ -85915,12 +85915,12 @@ function answerRequest(parts, req, facts, effects) {
       ANSWERING,
       feeds.feedsOf(sessionId2, time.tick)
     );
-    keepDraw(parts, setup, kept);
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
     const frame2 = signingFrames(parts.linkSigner)(
       toStatusline ? statuslineOf(sessionId2, setup.state.writable, drawn, elsewhere) : drawn.body
     );
+    keepDraw(parts, setup, kept);
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-"
     });
@@ -90893,9 +90893,20 @@ var RenderCache = class {
   }
   // The renderer no longer draws the session's bar (its feed closed): what
   // its last frame listed is on no surface now, so a click naming it is
-  // refused rather than copying a list gone stale.
+  // refused rather than copying a list gone stale, and the surface's next
+  // frame, if it opens again, is a first frame that fades nothing in.
   stopDrawing(sessionId2, by) {
     this.copies.get(sessionId2)?.delete(by);
+    this.views.get(sessionId2)?.frames.delete(by);
+  }
+  // [LAW:nothing-unseen] The passages every view's surfaces hold in flight:
+  // each one a rich-js effect, counted beside the sessions' row effects.
+  heldPassages() {
+    let held = 0;
+    for (const view of this.views.values())
+      for (const record2 of view.frames.values())
+        held += record2.passages?.size ?? 0;
+    return held;
   }
 };
 
@@ -91531,7 +91542,7 @@ function startOver(inputs, sessionState, history, host) {
           kind: "stats",
           stats: {
             renderCache: renderCache.stats,
-            effectCache: effectSessions.getStats(),
+            effectCache: effectSessions.getStats(renderCache.heldPassages()),
             sessionState: {
               sessions: sessionState.size(),
               observers: sessionState.observers(),
