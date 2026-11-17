@@ -4,15 +4,22 @@
     {
       "version": "pr-783",
       "ref": "refs/pull/783/merge",
-      "sha": "2b314d4fba59bbda8463713d59dbbbc7da9c3a46",
-      "timestamp": "2026-11-17T09:49:11.952Z",
+      "sha": "4b68473b03119776ca92459a7f6558dbd7bd742c",
+      "timestamp": "2026-11-17T10:04:15.973Z",
       "commits": [
         {
-          "sha": "2b314d4fba59bbda8463713d59dbbbc7da9c3a46",
+          "sha": "4b68473b03119776ca92459a7f6558dbd7bd742c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T09:48:14Z",
-          "message": "Merge e4f15db104046e03435704e7346dd55d82a296c9 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T10:03:26Z",
+          "message": "Merge 43d39fa66d4c6ab66b66e39b4921efa1531fe5ea into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+        },
+        {
+          "sha": "43d39fa66d4c6ab66b66e39b4921efa1531fe5ea",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T03:03:15-07:00",
+          "message": "fix(renderer): every scheduling promise has a failure path, a start and a viewers change fail per feed and per session, and one fold reads the earliest tick (883)\n\nSecond high review of #783: a due or a viewers delivery that rejected stopped its scheduling for good; a due's unawaited act settling could reject unhandled; one feed's pin throwing in a start configured no session. The dead refused-before-its-slot branch goes, and two memory lines that described the turns before this change are corrected.\n"
         },
         {
           "sha": "e4f15db104046e03435704e7346dd55d82a296c9",

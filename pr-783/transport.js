@@ -28817,6 +28817,13 @@ var instantOf = (date2) => date2.getTime() / 1e3;
 var dateOf = (at) => new Date(at * 1e3);
 var instantAt = (clock) => instantOf(new Date(clock.now()));
 var tickAt = (clock) => clock.monotonic() / 1e3;
+var earliestOf = (ticks) => {
+  let earliest = null;
+  for (const tick of ticks)
+    if (tick !== null && (earliest === null || tick < earliest))
+      earliest = tick;
+  return earliest;
+};
 var readingsAt = (clock) => ({ at: instantAt(clock), tick: tickAt(clock) });
 
 // src/proc/launch.ts
@@ -45412,8 +45419,8 @@ var Timeline = {
   stagger(animations, delay) {
     finiteSeconds("Timeline.stagger delay", delay);
     const span = finiteSeconds("Timeline.stagger delay times the last index", Math.max(0, animations.length - 1) * delay);
-    const earliest2 = Math.min(0, span);
-    const cascade = Animation.all(animations.map((animation, i2) => Timeline.run(Timeline.play(i2 * delay - earliest2), animation)));
+    const earliest = Math.min(0, span);
+    const cascade = Animation.all(animations.map((animation, i2) => Timeline.run(Timeline.play(i2 * delay - earliest), animation)));
     return Animation.of({ ...cascade, reduced: () => Animation.all(animations.map((animation) => animation.reduced())) });
   }
 };
@@ -72671,17 +72678,26 @@ var FrameFeeds = class {
     if (this.delivery !== "current") return;
     if (JSON.stringify(this.viewers()) === this.handed) return;
     this.delivery = "owed";
-    let made = false;
     void this.deps.deliver(() => {
-      made = true;
       if (this.delivery === "owed") this.delivery = "current";
       const viewers = this.viewers();
       this.handed = JSON.stringify(viewers);
       return viewers;
-    }).then(({ kind }) => {
-      if (kind !== "answered") this.handed = null;
-      if (!made && this.delivery === "owed") this.delivery = "current";
-    });
+    }).then(
+      ({ kind }) => {
+        if (kind !== "answered") this.handed = null;
+      },
+      // [LAW:no-silent-failure] A delivery that rejected is said, and what
+      // it owed is owed to the next announcement.
+      (thrown2) => {
+        this.deps.log(
+          "error",
+          `feed viewers delivery rejected: ${inspect(thrown2)}`
+        );
+        this.handed = null;
+        if (this.delivery === "owed") this.delivery = "current";
+      }
+    );
   }
   // The renderer was handed the viewers some other way, a start's: null once
   // that turn failed, so what it holds is unknown, as after a failed delivery.
@@ -75198,7 +75214,14 @@ var RendererWake = class {
         return;
       }
       this.state = { kind: "queued" };
-      void this.deps.due().then((ended) => this.answered(tick, ended));
+      void this.deps.due().then(
+        (ended) => this.answered(tick, ended),
+        (thrown2) => this.answered(tick, {
+          kind: "threw",
+          failure: failureOf(thrown2),
+          turnMs: null
+        })
+      );
     });
   }
   answered(tick, ended) {
@@ -75479,7 +75502,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     due: async () => {
       const {
         event,
-        slotted: { turn }
+        slotted: { turn, settled: settled3 }
       } = await throughSlot(
         () => wake.closed() ? {
           kind: "closing",
@@ -75488,6 +75511,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         } : { kind: "event", event: { kind: "due" } },
         "idle"
       );
+      void settled3.catch((thrown2) => {
+        const text4 = `renderer ${name}'s due acts did not settle: ${failureOf(thrown2).detail}`;
+        log("error", text4);
+        world.unheard(text4);
+      });
       record2(event, [], turn);
       return turn;
     },
@@ -85996,10 +86024,7 @@ var TurnTime = class {
   }
   // The earliest tick held work is due at, or null when none is held.
   next() {
-    let next = null;
-    for (const { until: until2 } of this.held)
-      if (next === null || until2 < next) next = until2;
-    return next;
+    return earliestOf([...this.held].map(({ until: until2 }) => until2));
   }
   // The work due by this turn's tick, earliest first. Each is taken from what
   // is still held as it runs, so one let go by work before it never runs, and
@@ -86062,13 +86087,11 @@ var MenuIdle = class {
   // The earliest tick a session's menus close at, or null when none shows a
   // menu.
   next() {
-    let next = null;
-    for (const idle of this.sessions.values()) {
-      if (!idle.shown) continue;
-      const at = closesAt(idle.since, idle.timeoutS);
-      if (next === null || at < next) next = at;
-    }
-    return next;
+    return earliestOf(
+      [...this.sessions.values()].map(
+        (idle) => idle.shown ? closesAt(idle.since, idle.timeoutS) : null
+      )
+    );
   }
   // The sessions whose idle period has run out by `tick`, each taken as
   // closed: what its last draw showed no longer stands, and a new period
@@ -86152,22 +86175,28 @@ var Feeds = class {
   // whose viewers moved is brought forward, since who follows it is drawn
   // into its frame. A feed's first frame falls due at once, in a later turn
   // than this one.
+  // Each feed is its own error boundary: one whose pin or unpin throws keeps
+  // no other feed from opening or closing.
   view(viewers, tick) {
-    for (const feed2 of [...this.feeds.values()])
-      if (!Object.hasOwn(viewers, feed2.sessionId)) this.close(feed2, tick);
-    for (const [sessionId2, seen2] of Object.entries(viewers)) {
-      const feed2 = this.feeds.get(sessionId2);
-      if (feed2 === void 0) {
-        this.open(sessionId2, seen2, tick);
-        continue;
-      }
-      const before = feed2.viewers;
-      feed2.viewers = seen2;
-      this.keepRates(feed2);
-      if (before.shown !== seen2.shown) this.wake(sessionId2, "visibility", tick);
-      else if (JSON.stringify(before) !== JSON.stringify(seen2))
-        this.wake(sessionId2, "viewers", tick);
+    runEach([
+      ...[...this.feeds.values()].filter((feed2) => !Object.hasOwn(viewers, feed2.sessionId)).map((feed2) => () => this.close(feed2, tick)),
+      ...Object.entries(viewers).map(
+        ([sessionId2, seen2]) => () => this.see(sessionId2, seen2, tick)
+      )
+    ]);
+  }
+  see(sessionId2, seen2, tick) {
+    const feed2 = this.feeds.get(sessionId2);
+    if (feed2 === void 0) {
+      this.open(sessionId2, seen2, tick);
+      return;
     }
+    const before = feed2.viewers;
+    feed2.viewers = seen2;
+    this.keepRates(feed2);
+    if (before.shown !== seen2.shown) this.wake(sessionId2, "visibility", tick);
+    else if (JSON.stringify(before) !== JSON.stringify(seen2))
+      this.wake(sessionId2, "viewers", tick);
   }
   // Something the session's bar shows changed, for `cause`: its next frame,
   // if anyone watches it, falls due as soon as the feed's spacing allows.
@@ -86186,11 +86215,7 @@ var Feeds = class {
   // The earliest tick a feed's next frame falls due, or null when none waits
   // on a tick.
   next() {
-    let next = null;
-    for (const feed2 of this.feeds.values())
-      if (feed2.next !== null && (next === null || feed2.next < next))
-        next = feed2.next;
-    return next;
+    return earliestOf([...this.feeds.values()].map((feed2) => feed2.next));
   }
   // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each
   // drawn into `frames` and its next set, in the order the feeds opened. Each
@@ -91188,9 +91213,12 @@ function mainRenderer(parts, pushed) {
   const turn = (event, record2, effects, frames) => {
     switch (event.kind) {
       case "start":
-        feeds.view(event.viewers, time.tick);
-        for (const { context, worldState } of event.sessions)
-          configureSession(parts, context, worldState, record2);
+        runEach([
+          () => feeds.view(event.viewers, time.tick),
+          ...event.sessions.map(
+            ({ context, worldState }) => () => configureSession(parts, context, worldState, record2)
+          )
+        ]);
         return;
       case "config":
         configureSession(parts, event.context, event.worldState, record2);
@@ -91264,7 +91292,9 @@ function mainRenderer(parts, pushed) {
     return {
       sources: Object.fromEntries(merged),
       lanes,
-      wake: earliest([time, menuIdle, feeds])
+      // [LAW:one-source-of-truth] The tick the renderer next wants a turn
+      // at: the earliest any owner of a tick holds.
+      wake: earliestOf([time.next(), menuIdle.next(), feeds.next()])
     };
   };
   const ending = (run3) => {
@@ -91304,14 +91334,6 @@ function mainRenderer(parts, pushed) {
       };
     })
   });
-}
-function earliest(owners) {
-  let wake = null;
-  for (const owner of owners) {
-    const next = owner.next();
-    if (next !== null && (wake === null || next < wake)) wake = next;
-  }
-  return wake;
 }
 function closeIdleMenus2(parts, effects) {
   for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
