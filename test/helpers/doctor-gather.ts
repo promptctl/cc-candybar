@@ -33,7 +33,7 @@ import type {
 } from "../../src/doctor/ports";
 import { readDoctor, type Sighted } from "../../src/doctor/read";
 import { instantOf } from "../../src/utils/instant";
-import { readDoctorRun } from "../../src/daemon/cache/doctor";
+import { readDoctorRun, type DoctorReadInput } from "../../src/daemon/cache/doctor";
 import type { DoctorRuns } from "../../src/renderer/doctor";
 import type { DoctorRead } from "../../src/doctor/gather";
 import { ofRun } from "../../src/daemon/readings";
@@ -63,13 +63,8 @@ export async function gatherFacts(
   const machine = await readDoctor(
     edge,
     hints,
-    doctorAsk(
-      0,
-      load,
-      sessionPick,
-      { cwd: origin.cwd, projectDir: origin.projectDir },
-      scope,
-    ),
+    doctorAsk(0, load, sessionPick, scope),
+    { cwd: origin.cwd, projectDir: origin.projectDir },
     { serving, rateLimits, transcripts, bars, width },
   );
   const {
@@ -158,7 +153,11 @@ export class DoctorHost {
 
   constructor(
     private readonly deps: Parameters<typeof readDoctorRun>[0],
-    private readonly hints: (session: SessionId) => ClientHints,
+    // What the session's newest request reported: its hints, and where it
+    // runs.
+    private readonly request: (
+      session: SessionId,
+    ) => Pick<DoctorReadInput, "hints" | "origin">,
   ) {}
 
   async settle(
@@ -171,7 +170,7 @@ export class DoctorHost {
         subscription.ask,
         await readDoctorRun(this.deps, {
           session,
-          hints: this.hints(session),
+          ...this.request(session),
           ask: subscription.ask,
         }),
       );

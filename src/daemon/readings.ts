@@ -49,7 +49,11 @@ import {
 } from "./source-runs.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { DoctorSource } from "./cache/doctor.js";
-import type { DoctorAsk, DoctorReading } from "../doctor/gather.js";
+import type {
+  DoctorAsk,
+  DoctorOrigin,
+  DoctorReading,
+} from "../doctor/gather.js";
 import type {
   ViewFacts,
   Subscribed,
@@ -235,6 +239,15 @@ export function settledLanes(
   };
 }
 
+// [LAW:one-source-of-truth] Where a request says its session runs, as its
+// render resolves its config from (src/daemon/render-checkpoint.ts).
+function originOf({ cwd, hookData }: ViewFacts): DoctorOrigin {
+  return {
+    cwd: cwd ?? hookData.workspace.current_dir,
+    projectDir: hookData.workspace.project_dir,
+  };
+}
+
 // [LAW:one-source-of-truth] The repo a request names.
 function gitAt({
   cwd,
@@ -327,6 +340,7 @@ export function declareLanes(
         owners.doctor.declare(holds, {
           session: facts.hookData.session_id,
           hints: facts.hints,
+          origin: originOf(facts),
           ask,
         }),
       ),

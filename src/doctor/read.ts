@@ -40,7 +40,12 @@ import type { ServingDaemon } from "../daemon/foundations/memory-limit.js";
 import type { SightedBar } from "./sightings.js";
 import type { DoctorEdge } from "./ports.js";
 import { seen } from "./busy.js";
-import { asked, type DoctorAsk, type MachineFacts } from "./gather.js";
+import {
+  asked,
+  type DoctorAsk,
+  type DoctorOrigin,
+  type MachineFacts,
+} from "./gather.js";
 
 // Each distinct transcript the renders named, read once: a statusline and a
 // `frames` display drawing one session name one file. A render that saw an
@@ -264,6 +269,7 @@ export async function readDoctor(
   edge: DoctorEdge,
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh">,
   ask: DoctorAsk,
+  origin: DoctorOrigin,
   sighted: Sighted,
 ): Promise<MachineFacts> {
   const tmux = await tmuxFacts(edge, hints.tmux);
@@ -281,7 +287,7 @@ export async function readDoctor(
           terminal: read,
         })),
     edge.daemons(),
-    segmentDataFacts(edge, ask.needs, ask.origin.cwd, sighted.rateLimits),
+    segmentDataFacts(edge, ask.needs, origin.cwd, sighted.rateLimits),
   ]);
   const { bars } = sighted;
   return {
@@ -297,7 +303,7 @@ export async function readDoctor(
     claudeSettings: settingsChains(
       {
         managedDir: edge.managedSettingsDir,
-        projectDir: ask.origin.projectDir,
+        projectDir: origin.projectDir,
         userFile: claudeSettingsPath(
           claudeConfigDir(hints.claudeConfigDir, edge.home),
         ),

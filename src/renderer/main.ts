@@ -151,8 +151,10 @@ export function mainRenderer(
         parts.worldStates.take(event.worldState);
         return;
       case "retire":
-        retireSession(parts, event.session);
+        // The run first: a teardown that throws leaves no run asking for a
+        // session the host has discarded.
         parts.doctorRuns.retire(event.session);
+        retireSession(parts, event.session);
         return;
       case "effect-done": {
         if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;

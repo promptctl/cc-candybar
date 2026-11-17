@@ -1346,35 +1346,39 @@ function sessionHints(
 // name it, after the turn's changes have landed.
 function startRun(ctx: ClickContext, sid: SessionId): void {
   const origin = sessionOrigin(ctx, sid);
-  ctx.doctorRuns.start(sid, {
+  ctx.doctorRuns.start(ctx.sessionState, sid, {
     at: ctx.now(),
     load: ctx.doctorLoad(origin),
     target: origin.target,
-    origin: { cwd: origin.cwd, projectDir: origin.projectDir },
     pick: (key) => ctx.sessionState.get(sid, key),
     arrival: ctx.arrival,
   });
 }
 
 // [LAW:single-enforcer] What a fix or a mark judges: the facts of the report
-// the session's run wrote, never a reading made for another config. With no
-// reading in, the click starts a run unless one is on its way, and asks to be
-// clicked again.
+// the session's run wrote, never a reading made for another config or long
+// enough ago that the terminal may have moved. With no such reading, the
+// click starts a run unless one is on its way, and asks to be clicked again.
 function reportedFacts(
   ctx: ClickContext,
   sid: SessionId,
   verb: string,
 ): DoctorFacts {
-  const facts = ctx.doctorRuns.facts(sid, ctx.arrival);
+  const facts = ctx.doctorRuns.facts(sid, ctx.arrival, ctx.now());
   if (facts !== null) return facts;
-  if (!ctx.doctorRuns.running(sid)) startRun(ctx, sid);
+  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
   throw new BadVerbArgs(
     `${verb}: the doctor's report is being read — click again once it is in`,
   );
 }
 
-const doctorRun: VerbHandler = async (value, ctx) =>
-  startRun(ctx, requireSessionId(oneArg(value)));
+// A click while the session's run is on its way starts no other: the launcher
+// refuses a probe within a second of the last of its kind, so a second run
+// behind the first would be refused, and the first is the one the click asks.
+const doctorRun: VerbHandler = async (value, ctx) => {
+  const sid = requireSessionId(oneArg(value));
+  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
+};
 
 // The fix THIS check's verdict carries over the reported facts. A settings fix
 // is a change guarded by what the run read of the one setting it writes

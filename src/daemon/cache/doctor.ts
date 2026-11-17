@@ -25,17 +25,22 @@ import type { ClientHints } from "../foundations/protocol";
 import type { SessionId } from "../foundations/session-id";
 import type { RenderSighting } from "../foundations/sightings";
 import type { ServingDaemon } from "../foundations/memory-limit";
-import type { DoctorAsk, DoctorReading } from "../../doctor/gather";
+import type {
+  DoctorAsk,
+  DoctorOrigin,
+  DoctorReading,
+} from "../../doctor/gather";
 import { readDoctor } from "../../doctor/read";
 import type { DoctorMachineEdge } from "../../doctor/ports";
 import { barsOf, sessionWidth } from "../../doctor/sightings";
 import { installFacts } from "../../doctor/edge";
 
 // What one session's doctor subscription is read with: the session, the
-// hints its newest request reported, and its renderer's ask.
-export interface DoctorRead {
+// hints and the origin its newest request reported, and its renderer's ask.
+export interface DoctorReadInput {
   readonly session: SessionId;
   readonly hints: ClientHints;
+  readonly origin: DoctorOrigin;
   readonly ask: DoctorAsk;
 }
 
@@ -61,30 +66,19 @@ export interface DoctorSourceDeps {
 }
 
 export class DoctorSource {
-  private readonly readings: KeyedSource<DoctorRead, DoctorReading>;
-  // [LAW:single-enforcer] One read at a time, daemon-wide: the probes of two
-  // runs share the launcher's rate-limit windows, so two at once would have
-  // one refused. A read abandoned while it waits never starts.
-  private queue: Promise<unknown> = Promise.resolve();
+  private readonly readings: KeyedSource<DoctorReadInput, DoctorReading>;
 
   constructor(deps: DoctorSourceDeps) {
     this.readings = new KeyedSource({
       name: "doctor",
       scope: "session",
-      // The session and its ask: the hints are what the first declaration
-      // of a run reported, so a request that moves them reads no run again.
+      // The session and its ask: the hints and origin are what the first
+      // declaration of a run reported, so a request that moves them reads no
+      // run again.
       keyOf: ({ session, ask }) => `${session}\n${JSON.stringify(ask)}`,
       fields: ({ session, ask }) => `sid=${valueOf(session)} run=${ask.run}`,
-      read: (input, signal) => {
-        // Started once the read before it settled, however it settled.
-        const start = (): Promise<Outcome<DoctorReading>> =>
-          signal.aborted
-            ? Promise.resolve(failed("doctor read abandoned", "read"))
-            : readDoctorRun({ ...deps, edge: deps.edge(signal) }, input);
-        const read = this.queue.then(start, start);
-        this.queue = read;
-        return read;
-      },
+      read: (input, signal) =>
+        readDoctorRun({ ...deps, edge: deps.edge(signal) }, input),
       every: () => null,
       watch: NO_WATCH,
       maxEntries: 0,
@@ -95,7 +89,7 @@ export class DoctorSource {
     });
   }
 
-  declare(holds: Holds, input: DoctorRead): Lane<DoctorReading> {
+  declare(holds: Holds, input: DoctorReadInput): Lane<DoctorReading> {
     return this.readings.declare(holds, input);
   }
 
@@ -112,11 +106,11 @@ export async function readDoctorRun(
   deps: Pick<DoctorSourceDeps, "sightings" | "serving" | "bundle" | "clock"> & {
     readonly edge: DoctorMachineEdge;
   },
-  { session, hints, ask }: DoctorRead,
+  { session, hints, origin, ask }: DoctorReadInput,
 ): Promise<Outcome<DoctorReading>> {
   try {
     const said = deps.sightings(session, instantAt(deps.clock));
-    const machine = await readDoctor(deps.edge, hints, ask, {
+    const machine = await readDoctor(deps.edge, hints, ask, origin, {
       serving: { kind: "ok", value: deps.serving() },
       rateLimits: { kind: "ok", value: said.map((s) => s.rateLimits) },
       transcripts: { kind: "ok", value: said.map((s) => s.transcript) },

@@ -29,7 +29,7 @@ A run is the renderer's: it asks, the host reads, and the reading comes back in 
 - The URL handler always delivers to the default socket. So if a shell's socket override names a different daemon, the check refuses before opening any link.
 - Render sightings live in memory, not in session state. Session state persists and is never pruned, so a session recorded by an older daemon would fail its row forever.
 - Clicked terminals get a file of their own, separate from the mark book. Older builds parse the mark book strictly and refuse keys they don't know.
-- If the spawn rate limit refuses a probe, the run's reading fails and the reason shows on the bar. The refusal never becomes a fact. The host reads one run at a time for that reason: two sessions' runs share the limit's windows, so read together one would be refused.
+- If the spawn rate limit refuses a probe, the run's reading fails and the reason shows on the bar. The refusal never becomes a fact. The limit is per probe kind and counts from the last launch's start, so two runs within a second refuse each other however they are ordered; a click while a run is on its way starts none, and a run refused is clicked again.
 - The CLI reads the doctor's stores through the daemon, never from files of its own.
 - Session state is one unversioned file that builds of either age read, because a rollback or a pinned install runs over a newer build's records. So a record there only gains fields and a field keeps its meaning. A new value of an existing field needs the same care: a parser that refuses values it doesn't know fails every click on that build.
 - Node resolves its entry point through links, but argv[1] keeps the symlink of npm's global bin. Name a bundle by the resolved path.

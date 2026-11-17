@@ -265,13 +265,8 @@ export async function doctorPlan(
       edge,
       hints,
       // No session: the bar a session started here opens on.
-      doctorAsk(
-        0,
-        load,
-        () => null,
-        { cwd, projectDir: origin.projectDir },
-        scope,
-      ),
+      doctorAsk(0, load, () => null, scope),
+      { cwd, projectDir: origin.projectDir },
       {
         serving: answer.serving,
         rateLimits: rateLimitsOf(

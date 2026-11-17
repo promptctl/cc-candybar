@@ -62,14 +62,17 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
-import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
-import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
+import { VERBS, BadVerbArgs, parseRenderOrigin } from "../src/renderer/verbs";
+import {
+  SESSION_CLIENT_HINTS_KEY,
+  SESSION_RENDER_ORIGIN_KEY,
+} from "../src/daemon/foundations/session-keys";
 import type { VerbContext } from "../src/renderer/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/ports";
 import type { TmuxHint } from "../src/tmux-hint";
 import type { TerminalEnvHint } from "../src/terminal-hint";
-import { instantOf } from "../src/utils/instant";
+import { instantOf, type Instant } from "../src/utils/instant";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -201,7 +204,12 @@ function doctorBar(
       bundle: HEALTHY_BUNDLE,
       clock: systemTimekeeper,
     },
-    () => parseClientHints(hints),
+    (session) => ({
+      hints: parseClientHints(hints),
+      origin: parseRenderOrigin(
+        sessionState.get(session, SESSION_RENDER_ORIGIN_KEY)!,
+      ),
+    }),
   );
   landsSettingsOf(ctx, (session) => host.writable(session));
   // A click, then the end of its turn at the host: what the turn's
@@ -467,6 +475,24 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // [LAW:no-silent-failure] A session the daemon never rendered has no client
   // facts; the doctor refuses loudly rather than diagnose a guessed "not in
   // tmux".
+  // A run that replaces a report takes its rows off the bar: no verdict or
+  // [fix] stands for a run no longer the session's while the next is read.
+  test("a doctor-run click takes the last report's rows off the bar until its own reading lands", async () => {
+    const rt = doctorBar(HINT);
+    await rt.openTools();
+    await rt.clickVerb(VERB_DOCTOR_RUN);
+    const run = rt.urlOfVerb(VERB_DOCTOR_RUN)!;
+    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeDefined();
+    await clickUrl(run, rt.ctx);
+    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
+    // A second click while the run is on its way asks no other.
+    const asked = rt.ctx.doctorRuns.subscriptions().get(S1);
+    await clickUrl(run, rt.ctx);
+    expect(rt.ctx.doctorRuns.subscriptions().get(S1)).toEqual(asked);
+    await rt.click(run);
+    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeDefined();
+  });
+
   test("a doctor-run click for a session that never rendered is refused", async () => {
     const rt = doctorBar(HINT);
     const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
@@ -632,6 +658,23 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       expect(rt.logs.at(-1)).toMatch(
         /nerdFont=ok .* mark=drawn tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native\/same\/- daemons=1 others=- memory=phys_footprint:120\/512 processes=host:4100:160 postMortems=0\/0 data=\S+ transcripts=1\/0\/0 unparsed=0 frames=0\/0\/1\/0\/0 chains=absent truecolorEnv=unset \(session=s1\)$/,
       );
+    });
+
+    // A reading names the terminal that drew the bar when it was read, and a
+    // mark is filed under that terminal for good: a report read long enough
+    // ago that the session may have moved is read again before it is marked.
+    test("a mark on a report read two minutes ago is refused, and the report is read again", async () => {
+      const rt = doctorBar(null, CLEAN_LOAD, ITERM_MENLO);
+      await rt.openTools();
+      await rt.clickVerb(VERB_DOCTOR_RUN);
+      const url = markUrl(rt, "drawn")!;
+      fontCalls.length = 0;
+      const later = instantOf(new Date(Date.now() + 121_000));
+      (rt.ctx as { now: () => Instant }).now = () => later;
+      await expect(rt.click(url)).rejects.toThrow(/being read/);
+      expect(fontCalls).toHaveLength(1);
+      expect(rt.render()).toContain(`${BUNDLED_GLYPHS} [✓ shapes] [✗ boxes]`);
+      expect(rt.logs.some((l) => l.startsWith("doctor-mark:"))).toBe(false);
     });
 
     test("marking ✗ keeps the row failed, says boxes, and leaves ✓ to mark later", async () => {

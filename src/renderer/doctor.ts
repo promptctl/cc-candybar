@@ -24,7 +24,7 @@ import {
   type DoctorRead,
 } from "../doctor/gather";
 import type { ConfigLoad, DoctorStores } from "../doctor/ports";
-import { runDoctor, type DoctorFacts } from "../doctor/checks";
+import { CHECKS, runDoctor, type DoctorFacts } from "../doctor/checks";
 import { clickArrived, type ClickArrival } from "../doctor/sightings";
 import { sightingOf } from "../doctor/terminal";
 import { withClicked } from "../doctor/clicked-terminals";
@@ -32,6 +32,7 @@ import {
   configFields,
   daemonFields,
   dataFields,
+  doctorReportKeys,
   doctorReportPairs,
   frameFields,
   installFields,
@@ -40,28 +41,40 @@ import {
   terminalFeatureFields,
   transcriptFields,
   truecolorEnvFields,
+  VERDICT_UNRUN,
 } from "../doctor/report";
 
 type Log = (level: "info" | "warn" | "error", msg: string) => void;
 
 // One run of a session's doctor: what it asked, what it judges, how its click
-// arrived, and the host's reading once it is in.
+// arrived, and the host's reading once it is in, with when it landed.
 interface Run {
   readonly ask: DoctorAsk;
   readonly load: ConfigLoad;
   readonly target: ConfigTarget;
   readonly arrival: ClickArrival;
-  reading: DoctorRead | null;
+  reading: { readonly read: DoctorRead; readonly at: Instant } | null;
 }
 
+// How long a reading answers a click on its report. A reading names the
+// terminal that drew the bar when it was read, and a mark or a link click is
+// filed under that terminal for good, so a click judges only a reading as
+// recent as the report the user is answering; an older one is read again.
+const FRESH_FOR = 120;
+
+// Every check's row gated off: its verdict back to unrun.
+const UNRUN = CHECKS.map((check) => ({
+  key: doctorReportKeys(check.name).verdict,
+  value: VERDICT_UNRUN,
+}));
+
 // What a run is asked with: the config load it judges, captured by the click
-// that asked it, and where the session runs.
+// that asked it.
 export interface RunRequest {
   // When the click that asked it ran.
   readonly at: Instant;
   readonly load: ConfigLoad;
   readonly target: ConfigTarget;
-  readonly origin: DoctorAsk["origin"];
   readonly pick: (key: string) => string | null;
   readonly arrival: ClickArrival;
 }
@@ -86,11 +99,14 @@ export class DoctorRuns {
   // host reads afresh. [LAW:one-source-of-truth] A run is named by the
   // millisecond its click ran, kept rising, so a renderer that starts again
   // names no run an earlier one asked: the host may still hold that run's
-  // reading, which would be taken for the new run's.
-  start(session: SessionId, request: RunRequest): void {
+  // reading, which would be taken for the new run's. The report the run
+  // replaces goes from `store`, the click's view, with it: no verdict or
+  // [fix] stands for a run no longer the session's.
+  start(store: SessionStateRW, session: SessionId, request: RunRequest): void {
+    store.setBatch(session, UNRUN);
     this.last = Math.max(Math.round(request.at * 1000), this.last + 1);
     this.runs.set(session, {
-      ask: doctorAsk(this.last, request.load, request.pick, request.origin, {
+      ask: doctorAsk(this.last, request.load, request.pick, {
         kind: "clicked",
         sessionId: session,
         via: request.arrival.via,
@@ -102,9 +118,9 @@ export class DoctorRuns {
     });
   }
 
-  // Whether the session has a run, read or still on its way.
-  running(session: SessionId): boolean {
-    return this.runs.has(session);
+  // Whether the session's run is on its way: asked, its reading not in.
+  awaiting(session: SessionId): boolean {
+    return this.runs.get(session)?.reading === null;
   }
 
   // [LAW:one-source-of-truth] What each session's unread run asks the host to
@@ -139,22 +155,26 @@ export class DoctorRuns {
         session,
         this.judged(run, reading, run.arrival),
       );
-      run.reading = reading;
+      run.reading = { read: reading, at: doctor.at };
     } catch (e) {
       this.fail(session, e instanceof Error ? e.message : String(e));
     }
   }
 
   // [LAW:single-enforcer] The session's run's facts as they stand for a click
-  // that arrived as `arrival`: its reading, its load, the stores as they hold
-  // now, and what the click proves of the URL handler. Null while no reading
-  // is in.
-  facts(session: SessionId, arrival: ClickArrival): DoctorFacts | null {
+  // at `now` that arrived as `arrival`: its reading, its load, the stores as
+  // they hold now, and what the click proves of the URL handler. Null while
+  // no reading is in, or none read in the last FRESH_FOR seconds.
+  facts(
+    session: SessionId,
+    arrival: ClickArrival,
+    now: Instant,
+  ): DoctorFacts | null {
     const run = this.runs.get(session);
     const reading = run?.reading ?? null;
-    return run === undefined || reading === null
+    return run === undefined || reading === null || now - reading.at > FRESH_FOR
       ? null
-      : this.judged(run, reading, arrival);
+      : this.judged(run, reading.read, arrival);
   }
 
   // [LAW:single-enforcer] One write of the whole report, through setBatch —

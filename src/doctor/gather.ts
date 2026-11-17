@@ -56,16 +56,23 @@ export const readStores = (stores: DoctorStores): StoresRead => ({
 
 // [LAW:types-are-the-program] What a run asks of the machine, decided by the
 // config it judges: the glyphs to ask the terminal's font about (none, "",
-// asks nothing) and the outside data a placed segment needs. `origin` is
-// where the session runs: the checkout a forge is asked about, and the
-// project whose settings files are read. `sighted` is whose bars the run
-// judges. `run` names the run, so a new run is a new ask, read again.
+// asks nothing) and the outside data a placed segment needs. `sighted` is
+// whose bars the run judges. `run` names the run, so a new run is a new ask,
+// read again.
 export interface DoctorAsk {
   readonly run: number;
   readonly glyphs: string;
   readonly needs: DataNeeds;
-  readonly origin: { readonly cwd: string; readonly projectDir: string };
   readonly sighted: SightingScope;
+}
+
+// Where the session runs: the checkout a forge is asked about, and the
+// project whose settings files are read — and so may be written by a fix.
+// [LAW:single-enforcer] The host takes it from the session's own request,
+// never from the ask, so no renderer names the files a fix may write.
+export interface DoctorOrigin {
+  readonly cwd: string;
+  readonly projectDir: string;
 }
 
 // What the host reads for an ask: every fact but the config's, the stores'
@@ -100,7 +107,6 @@ export function doctorAsk(
   run: number,
   load: ConfigLoad,
   sessionPick: (key: string) => string | null,
-  origin: DoctorAsk["origin"],
   sighted: SightingScope,
 ): DoctorAsk {
   const globals = resolveEffectiveGlobals(
@@ -117,7 +123,6 @@ export function doctorAsk(
       ]),
     ].join(""),
     needs: dataNeeds(load.config, globals.preset),
-    origin,
     sighted,
   };
 }
