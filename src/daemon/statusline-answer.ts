@@ -136,8 +136,8 @@ export async function answerStatusline(
     // request's keys, and its output's subscriptions reach the collector as
     // the turn answers, so the wait covers every run the view names. The
     // wait is the host's, between the two turns, and holds no place in the
-    // mailbox: what lands meanwhile, a retire that drops a run included, is
-    // the renderer's to take while the request waits.
+    // mailbox: another input's turn that lands meanwhile, one that evicts
+    // the session's view included, moves what the wait covers.
     configured = await host.answer(() => ({
       kind: "event",
       at,

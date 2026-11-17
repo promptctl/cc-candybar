@@ -125,30 +125,30 @@ export function rendererHost(
   world: HostWorld,
 ): RendererHost {
   const mailbox = new KeyedSerialQueue<RendererName>();
-  // [LAW:nothing-unseen] The input in the renderer's turn, and since when.
-  let holder: { readonly input: string; readonly since: Monotonic } | null =
-    null;
+  // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
+  // when: its answer, its changes landing and their `effect-done` turns.
+  let holder: { input: string; readonly since: Monotonic } | null = null;
   let queued = 0;
 
   // [LAW:single-enforcer] The one way into the renderer's turn: `slot` once
-  // every slot asked for before it has ended, handed how long it waited.
-  const inMailbox = <T>(slot: (queuedMs: number) => Promise<T>): Promise<T> => {
+  // every slot asked for before it has ended, handed how long it waited and
+  // a way to name the input holding it.
+  const inMailbox = <T>(
+    slot: (queuedMs: number, holds: (input: string) => void) => Promise<T>,
+  ): Promise<T> => {
     const asked = clock.monotonic();
     queued++;
-    return mailbox.run(name, () => {
+    return mailbox.run(name, async () => {
       queued--;
-      return slot(elapsedMs(clock, asked));
+      const queuedMs = elapsedMs(clock, asked);
+      const held = { input: "-", since: clock.monotonic() };
+      holder = held;
+      try {
+        return await slot(queuedMs, (input) => void (held.input = input));
+      } finally {
+        holder = null;
+      }
     });
-  };
-
-  // The renderer's answer to one input, holding its turn.
-  const answered = async <T>(input: string, answer: () => Promise<T>) => {
-    holder = { input, since: clock.monotonic() };
-    try {
-      return await answer();
-    } finally {
-      holder = null;
-    }
   };
 
   // A turn no renderer answered: nothing of it was taken, so the
@@ -179,10 +179,7 @@ export function rendererHost(
     try {
       release = session === null ? release : collector.holding(session);
       const sentAt = clock.monotonic();
-      const { subscriptions, turnMs, ...output } = await answered(
-        input.event.kind,
-        () => renderer.answer(input),
-      );
+      const { subscriptions, turnMs, ...output } = await renderer.answer(input);
       // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
       // turn, so what the process boundary costs is read from the event.
       const turn: TakenTurn = {
@@ -351,11 +348,12 @@ export function rendererHost(
   };
 
   // One input from its arrival to its settling: made in its slot, and its
-  // acts settled after it.
-  const answer = async (
+  // acts settled after it. `event` is null when its make failed, so no input
+  // was made.
+  const taken = async (
     make: () => EventInput | Failure,
-  ): Promise<HostTurn> => {
-    const { turn, settled } = await inMailbox((queuedMs) => {
+  ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
+    const { event, slotted } = await inMailbox(async (queuedMs, holds) => {
       // [LAW:no-silent-failure] A make that threw is the turn's failure.
       let made: EventInput | Failure;
       try {
@@ -363,21 +361,26 @@ export function rendererHost(
       } catch (thrown) {
         made = failureOf(thrown);
       }
-      return made.kind === "event"
-        ? inSlot(made, queuedMs)
-        : Promise.resolve(unanswered(made, queuedMs));
+      if (made.kind !== "event")
+        return { event: null, slotted: unanswered(made, queuedMs) };
+      holds(made.event.kind);
+      return { event: made.event, slotted: await inSlot(made, queuedMs) };
     });
-    return { ...turn, settled: await settled };
+    return {
+      event,
+      turn: { ...slotted.turn, settled: await slotted.settled },
+    };
   };
+  const answer = async (make: () => EventInput | Failure): Promise<HostTurn> =>
+    (await taken(make)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.
   const deliver = async (
     make: () => EventInput,
     about: TurnRecord,
   ): Promise<TurnOutcome> => {
-    const made: { input?: EventInput } = {};
-    const turn = await answer(() => (made.input = make()));
-    record(made.input?.event ?? null, about, turn);
+    const { event, turn } = await taken(make);
+    record(event, about, turn);
     return turn;
   };
   // [LAW:single-enforcer] The one place a push's output is judged: a push is
@@ -388,14 +391,15 @@ export function rendererHost(
   ): Promise<ReplyTo<P["kind"]>> => {
     // A renderer that rejected fails the push as one whose turn threw, so
     // every failure is said with the renderer and the push it failed.
-    const output = await inMailbox(() =>
-      answered(`push:${push.kind}`, () =>
-        renderer.answer({ kind: "adapter", push, at }),
-      ).catch(
-        (thrown: unknown) =>
-          ({ kind: "threw", failure: failureOf(thrown) }) as const,
-      ),
-    );
+    const output = await inMailbox((_queuedMs, holds) => {
+      holds(`push:${push.kind}`);
+      return renderer
+        .answer({ kind: "adapter", push, at })
+        .catch(
+          (thrown: unknown) =>
+            ({ kind: "threw", failure: failureOf(thrown) }) as const,
+        );
+    });
     // The failure keeps its kind, so a push no renderer took reads as one.
     if (output.kind === "threw")
       throw new CrossedFailure({

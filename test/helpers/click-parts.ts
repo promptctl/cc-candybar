@@ -58,7 +58,15 @@ export function clickParts(
     // The doctor runs the test's clicks start, whose asks the turn names.
     doctorRuns: verbCtx.doctorRuns,
   } as unknown as MainRendererParts;
-  const held = holdable(mainRenderer(parts, NO_PUSHES));
+  // The teardown's journal step, answered as the main renderer answers it, in
+  // its place in the mailbox: no other push is a click's.
+  const held = holdable(
+    mainRenderer(parts, (push) => {
+      if (push.kind !== "close-journal") return NO_PUSHES();
+      verbCtx.configWrites.close();
+      return { kind: "close-journal" };
+    }),
+  );
   const renderer = rendererHost(
     "main",
     systemTimekeeper,

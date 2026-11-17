@@ -550,9 +550,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         )
       ).lanes,
     // [LAW:no-ambient-temporal-coupling] The pin's wake of the session's
-    // state only moves the feed's timer, which fires in a later turn. A click
-    // that awaits gives up the loop, so a frame may show its writes ahead of
-    // its commit; the step stays whole.
+    // state only moves the feed's timer, which fires in a later turn.
     pin: (sessionId) =>
       parts.renderer.tell({ kind: "pin", session: sessionId }, instant()),
     unpin: (sessionId) =>
@@ -849,9 +847,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     exit,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in holds or waits for a journal's turn,
-    // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
-    // reached as the daemon closed is refused here and opens no feed.
+    // the way in. A click that got in waits its turn in the renderer's
+    // mailbox: one ahead of the close runs whole, and one behind it is
+    // refused; a subscribe its request reached as the daemon closed is
+    // refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
       return handleRequest(parts, req, timedOut, accepted, clientLeft);
@@ -894,8 +893,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // one waits behind whatever turn the renderer is in, which can outlast
         // shutdown's backstop, while this waits only on its own tmux calls.
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
-        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
-        // journal in flight, so none opens after.
+        // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
+        // every click ahead of it lands whole, and none behind it begins.
         ["configWrites close", rendererStep("close-journal")],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the

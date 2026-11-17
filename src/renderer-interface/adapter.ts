@@ -177,8 +177,8 @@ export type AdapterPush =
       readonly heard: Invalidation | null;
       readonly deaf: readonly Deafness[];
     }
-  // The daemon's teardown, in its three renderer steps: the journal in flight
-  // commits, the views close, and the session state flushes, last.
+  // The daemon's teardown, in its three renderer steps: no click begins
+  // after the first, the views close, and the session state flushes, last.
   | { readonly kind: "close-journal" }
   | { readonly kind: "close-views" }
   | { readonly kind: "close-session-state" };

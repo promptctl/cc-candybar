@@ -76,10 +76,9 @@ function setup(
   recordRender(sessionState, A);
   sessionState.set(A, SESSION_CLIENT_HINTS_KEY, "{}");
   const ctx = withDoctor(
-    verbContextWith(
-      testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
-      { log: (_level, line) => logged.push(line) },
-    ),
+    verbContextWith(testVerbContext(sessionState, undefined, EMPTY_DEFAULT), {
+      log: (_level, line) => logged.push(line),
+    }),
     { stores: emptyStores(), load: LOAD },
   );
   const { arrival: _a, latest: _l, effects: _e, ...verbCtx } = ctx;
@@ -108,7 +107,9 @@ function setup(
     payloadProviders: {},
     frameFeeds: { latest: () => null },
     log: (_level: string, line: string) => events.push(line),
-    tmuxStatusLines: { linkAt: over.linkAt ?? (() => ({ kind: "link", url: "" })) },
+    tmuxStatusLines: {
+      linkAt: over.linkAt ?? (() => ({ kind: "link", url: "" })),
+    },
     ...host,
   } as unknown as DaemonParts;
   const stats = new RuntimeStats(systemTimekeeper);
@@ -132,7 +133,14 @@ function setup(
     send(VERB_SET_STATE, encodeSegments([A, "theme", theme]), gone);
   // An idle close of A's menus, as the clock fires one.
   const closeIdle = () =>
-    closeByTurn(host.renderer, at, A, IDLE, () => null, () => true);
+    closeByTurn(
+      host.renderer,
+      at,
+      A,
+      IDLE,
+      () => null,
+      () => true,
+    );
   return {
     sessionState,
     ctx,
@@ -146,6 +154,9 @@ function setup(
       jest.advanceTimersByTime(s * 1000);
     },
     park: host.park,
+    // The teardown's first renderer step, as the daemon sends it: it takes
+    // its place in the mailbox behind every input that arrived before it.
+    closeJournal: () => host.renderer.ask({ kind: "close-journal" }, at()),
     renderer: host.renderer,
     send,
     dispatch,
@@ -200,7 +211,10 @@ describe("a doctor click", () => {
         },
       );
       const url = effectsUrl([
-        { verb: VERB_SET_CONFIG, args: [A, "user", "palette", [...ALLOWED][0]!] },
+        {
+          verb: VERB_SET_CONFIG,
+          args: [A, "user", "palette", [...ALLOWED][0]!],
+        },
         { verb: VERB_DOCTOR_RUN, args: [A] },
       ]);
       VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
@@ -271,9 +285,9 @@ describe("the mailbox's order", () => {
     await new Promise((r) => setTimeout(r, 20));
     parked.open();
     await Promise.all([parked.holding, sent]);
-    expect(Number(fieldOf(events[0]!, "mailbox")!.replace("ms", ""))).toBeGreaterThan(
-      0,
-    );
+    expect(
+      Number(fieldOf(events[0]!, "mailbox")!.replace("ms", "")),
+    ).toBeGreaterThan(0);
     idle.dispose();
   });
 
@@ -332,11 +346,11 @@ describe("the idle close decides as its turn comes", () => {
   });
 
   test("a close the renderer refuses goes to failed, and is no unhandled rejection", async () => {
-    const { idle, at, advance, ctx, failures } = setup();
+    const { idle, at, advance, closeJournal, failures } = setup();
     const unhandled: unknown[] = [];
     const heard = (e: unknown): void => void unhandled.push(e);
     process.on("unhandledRejection", heard);
-    ctx.configWrites.close();
+    await closeJournal();
     idle.observe(A, at(), true, 30);
     advance(30);
     await jest.advanceTimersByTimeAsync(0);
@@ -349,15 +363,19 @@ describe("the idle close decides as its turn comes", () => {
   });
 });
 
+// The close takes its place in the mailbox in arrival order: what arrived
+// before it runs whole, and what arrived after it is refused.
 describe("close", () => {
-  test("an idle close waiting in the mailbox lands nothing once the daemon closes", async () => {
-    const { ctx, sessionState, park, closeIdle, undoDepth, idle } = setup();
+  test("an idle close behind the close in the mailbox lands nothing", async () => {
+    const { closeJournal, sessionState, park, closeIdle, undoDepth, idle } =
+      setup();
     const before = sessionState.revision(A);
     const parked = park();
+    const closed = closeJournal();
     const closing = closeIdle();
     await drain();
-    ctx.configWrites.close();
     parked.open();
+    await closed;
     expect((await closing)?.message).toContain("the daemon closed");
     expect(sessionState.revision(A)).toBe(before);
     expect(undoDepth()).toBe(0);
@@ -365,20 +383,35 @@ describe("close", () => {
   });
 
   test("a click that landed before the close stays one step", async () => {
-    const { ctx, dispatch, undoDepth, idle } = setup();
+    const { closeJournal, dispatch, undoDepth, idle } = setup();
     await dispatch("nord", "plain");
-    ctx.configWrites.close();
+    await closeJournal();
     expect(undoDepth()).toBe(1);
     idle.dispose();
   });
 
-  test("a click waiting in the mailbox as the daemon closes is refused, as a `closing` outcome at info", async () => {
-    const { ctx, park, write, events, undoDepth, idle } = setup();
+  test("a click waiting in the mailbox ahead of the close lands whole", async () => {
+    const { closeJournal, park, write, theme, undoDepth, idle } = setup();
     const parked = park();
     const queued = write("dracula");
     await drain();
-    ctx.configWrites.close();
+    const closed = closeJournal();
     parked.open();
+    expect((await queued).resp).toMatchObject({ ok: true });
+    await closed;
+    expect(theme()).toBe("dracula");
+    expect(undoDepth()).toBe(1);
+    idle.dispose();
+  });
+
+  test("a click behind the close in the mailbox is refused, as a `closing` outcome at info", async () => {
+    const { closeJournal, park, write, events, undoDepth, idle } = setup();
+    const parked = park();
+    const closed = closeJournal();
+    const queued = write("dracula");
+    await drain();
+    parked.open();
+    await closed;
     const { resp } = await queued;
     expect(resp).toMatchObject({
       ok: false,
@@ -386,6 +419,20 @@ describe("close", () => {
     });
     expect(events[0]).toContain("closing=");
     expect(undoDepth()).toBe(0);
+    idle.dispose();
+  });
+});
+
+describe("the mailbox's stats", () => {
+  test("name the input holding the mailbox for its whole slot, and how many wait behind it", async () => {
+    const { renderer, park, write, idle } = setup();
+    const parked = park();
+    const queued = write("nord");
+    await drain();
+    expect(renderer.stats()).toMatchObject({ holder: "start", queued: 1 });
+    parked.open();
+    await queued;
+    expect(renderer.stats()).toEqual({ holder: null, heldMs: 0, queued: 0 });
     idle.dispose();
   });
 });

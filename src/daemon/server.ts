@@ -502,8 +502,8 @@ function shutdown(code: number): void {
 }
 
 // [LAW:no-ambient-temporal-coupling] The daemon's close awaits the renderer's
-// steps of its teardown, so the journal in flight commits before the abort and
-// the session state flushes last, whichever process the renderer runs in; the
+// steps of its teardown, so every click ahead of the close lands before the
+// abort and the session state flushes last, whichever process the renderer runs in; the
 // exit follows the close, still inside the backstop armed above.
 async function closeThenExit(code: number): Promise<void> {
   // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every step runs,

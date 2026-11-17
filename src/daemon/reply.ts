@@ -283,6 +283,9 @@ export async function replyTo(
   if (req.kind === "stats") {
     // [LAW:single-enforcer] Stats requests do NOT bump request counters —
     // observability shouldn't pollute the metric being observed.
+    // [LAW:nothing-unseen] The mailbox as the request found it, before its
+    // own push joins it: the input holding it and everything ahead.
+    const mailbox = parts.renderer.stats();
     const { stats: drawn } = await renderer.ask(
       { kind: "stats" },
       instantAt(clock),
@@ -300,7 +303,7 @@ export async function replyTo(
         ...drawn,
         collector: parts.collector.stats(),
         menuIdle: menuIdle.getStats(),
-        mailbox: parts.renderer.stats(),
+        mailbox,
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),

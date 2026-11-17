@@ -235,7 +235,7 @@ describe("a connection over a stream", () => {
   // a client leaving: a url frame stays in flight until handled, no one is
   // said to have left, and the request deadline still holds over it — so a
   // click that waited past the deadline is refused, as every client's is
-  // (src/renderer/journal-turns.ts), and a repeat click cannot revert it.
+  // (src/daemon/reply.ts), and a repeat click cannot revert it.
   test("a url frame whose writer hung up stays in flight, under the deadline, with no client gone", async () => {
     const request = held();
     const daemon = standIn({ handle: request.handle });
