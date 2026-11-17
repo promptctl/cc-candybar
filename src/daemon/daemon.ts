@@ -490,6 +490,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       "url-handle",
     ].join(" "),
     owner: paths.socket,
+    drawingMoved: () => frameFeeds.check(),
     log,
   });
   // Each subscribed session's subscribers, handed the frames the renderer

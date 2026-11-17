@@ -444,6 +444,9 @@ export interface TmuxStatusDeps {
   readonly handler: string;
   // This daemon's socket: what it writes into tmux is marked with it.
   readonly owner: string;
+  // [LAW:one-source-of-truth] A layout written or put back moved which held
+  // panes draw in a status line: who follows each session is told again.
+  readonly drawingMoved: () => void;
   readonly log: (level: "info" | "warn", msg: string) => void;
 }
 
@@ -832,6 +835,7 @@ export class TmuxStatusLines {
           });
         else this.leave(socket, server, session, found.why);
       }
+      this.deps.drawingMoved();
     }
     const answers = await this.ask(socket, [showGlobal(BINDING_OPTION)]);
     const saved = answers?.[0] ?? "";
@@ -891,6 +895,7 @@ export class TmuxStatusLines {
       status: plan.kind === "ours" ? plan.status : plan.prior.base,
     };
     server.layouts.set(session, layout);
+    this.deps.drawingMoved();
     if (plan.kind === "lay-out") await this.write(socket, plan.commands);
     this.deps.log(
       "info",
@@ -945,6 +950,7 @@ export class TmuxStatusLines {
     const layout = server.layouts.get(session);
     if (layout === undefined) return;
     server.layouts.delete(session);
+    this.deps.drawingMoved();
     const answers = await this.ask(socket, RESTORE_QUERIES(session));
     if (answers === null) return;
     const plan = restorePlan(session, layout.prior, answers);

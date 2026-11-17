@@ -177,6 +177,8 @@ function harness(ids: readonly string[] = ["$1"]) {
   const unsubscribed: string[] = [];
   const newest = new Map<string, SessionId>();
   const logs: string[] = [];
+  // Whether any held pane drew, as each `drawingMoved` found it.
+  const drawingAtMove: boolean[] = [];
   const owner = new TmuxStatusLines({
     edge: tmux,
     subscribe: (sessionId, sub) => {
@@ -186,6 +188,8 @@ function harness(ids: readonly string[] = ["$1"]) {
     sessionInPane: (_socket, pane) => newest.get(pane) ?? null,
     handler: "cc-candybar url-handle",
     owner: OWNER,
+    drawingMoved: () =>
+      drawingAtMove.push([...subs.values()].some((sub) => sub.drawing())),
     log: (_level, msg) => logs.push(msg),
   });
   const hold = (sessionId: SessionId, pane: string): void => {
@@ -204,7 +208,7 @@ function harness(ids: readonly string[] = ["$1"]) {
     subs.get(sessionId)!.frame(bar, "");
     await owner.settled();
   };
-  return { tmux, owner, subs, unsubscribed, newest, logs, hold, answer, frame };
+  return { tmux, owner, subs, unsubscribed, newest, logs, drawingAtMove, hold, answer, frame };
 }
 
 const session = (h: ReturnType<typeof harness>, id = "$1") => h.tmux.sessions.get(id)!;
@@ -374,6 +378,13 @@ describe("TmuxStatusLines", () => {
     await h.answer({ "%1": "$1", "%2": "$1" }, { $1: "%2" });
     expect(h.subs.get("s1")!.drawing()).toBe(false);
     expect(h.subs.get("s2")!.drawing()).toBe(true);
+  });
+
+  test("a layout written tells who follows again, with the held pane drawing in it", async () => {
+    const h = harness();
+    h.hold(S1, "%1");
+    await h.answer({ "%1": "$1" }, { $1: "%1" });
+    expect(h.drawingAtMove).toContain(true);
   });
 
   test("a session another daemon laid out is left alone, and said once", async () => {
