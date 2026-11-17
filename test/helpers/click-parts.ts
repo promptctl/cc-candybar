@@ -4,17 +4,16 @@
 // the test hands in its own. A test that builds its daemon parts by hand spreads
 // these in.
 
-import { NO_PUSHES } from "./renderers";
+import { holdable, NO_PUSHES } from "./renderers";
 import { minter } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
-import { ClicksInFlight } from "../../src/daemon/clicks-in-flight";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
-import type { MenuIdle } from "../../src/daemon/menu-idle";
 import { rendererHost, type HostWorld } from "../../src/daemon/renderer-host";
 import type { ActsOnTheirWay } from "../../src/renderer/acts";
 import { mainRenderer } from "../../src/renderer/main";
 import { systemTimekeeper } from "../../src/time";
+import { instantOf } from "../../src/utils/instant";
 import {
   verbsOver,
   type DaemonVerbContext,
@@ -23,7 +22,6 @@ import {
 
 export function clickParts(
   verbCtx: DaemonVerbContext,
-  menuIdle: Pick<MenuIdle, "clickArrived" | "clickSettled">,
   collector: Pick<Collector, "holding" | "clicked"> = {
     holding: () => () => {},
     clicked: () => {},
@@ -39,15 +37,16 @@ export function clickParts(
     closing: () => false,
     unheard: () => {},
   },
-): Pick<DaemonParts, "renderer" | "clicks" | "linkSigner"> & {
+): Pick<DaemonParts, "renderer" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
+  // Another turn, held in the renderer's mailbox until `open`: every input
+  // sent after it waits there, in flight.
+  park: () => { readonly open: () => void; readonly holding: Promise<unknown> };
 } {
-  // A click's turn reads the verbs, the idle clock and, for its output, the
-  // open views' subscriptions: this rig opens none.
-  const clicks = new ClicksInFlight();
+  // A click's turn reads the verbs and, for its output, the open views'
+  // subscriptions: this rig opens none.
   const parts = {
-    verbs: verbsOver(verbCtx, { gone: async (click) => clicks.gone(click) }),
-    menuIdle,
+    verbs: verbsOver(verbCtx),
     renderCache: { subscriptions: () => ({ sources: {} }) },
     // No view is open, so no lane is read.
     laneActs: { noted: () => {}, clicked: () => {} },
@@ -59,21 +58,42 @@ export function clickParts(
     // The doctor runs the test's clicks start, whose asks the turn names.
     doctorRuns: verbCtx.doctorRuns,
   } as unknown as MainRendererParts;
+  // The teardown's journal step, answered as the main renderer answers it, in
+  // its place in the mailbox: no other push is a click's.
+  const held = holdable(
+    mainRenderer(parts, (push) => {
+      if (push.kind !== "close-journal") return NO_PUSHES();
+      verbCtx.configWrites.close();
+      return { kind: "close-journal" };
+    }),
+  );
+  const renderer = rendererHost(
+    "main",
+    systemTimekeeper,
+    held.renderer,
+    () => {},
+    {
+      subscribed: () => {},
+      holding: collector.holding,
+      writableSettings: () => [],
+    },
+    world,
+  );
   return {
-    renderer: rendererHost(
-      "main",
-      systemTimekeeper,
-      mainRenderer(parts, NO_PUSHES),
-      () => {},
-      {
-        subscribed: () => {},
-        holding: collector.holding,
-        writableSettings: () => [],
-      },
-      world,
-    ),
-    clicks,
+    renderer,
     collector,
     linkSigner: TEST_SIGNER,
+    park: () => {
+      const open = held.hold();
+      const holding = renderer.deliver(
+        () => ({
+          kind: "event",
+          at: instantOf(new Date()),
+          event: { kind: "start", sessions: [] },
+        }),
+        [],
+      );
+      return { open, holding };
+    },
   };
 }

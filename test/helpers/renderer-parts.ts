@@ -21,7 +21,9 @@ import type { EffectId } from "../../src/renderer-interface/interface";
 // means to observe.
 export const NO_VERBS: RendererVerbs = {
   handler: () => undefined,
-  closeIdle: () => Promise.reject(new Error("this rig closes no menus")),
+  closeIdle: () => {
+    throw new Error("this rig closes no menus");
+  },
   // A rig's verbs write no config, so no `effect-done` is a change's.
   changeDone: () => false,
 };
@@ -47,11 +49,7 @@ export function inertHost(): AdapterToHost {
     menuIdle: {
       clicked: () => {},
       observe: () => {},
-      clickArrived: () => {},
-      clickSettled: () => {},
-      confirmClose: async () => true,
     },
-    clicks: { gone: async () => false },
     eventAnswered: () => {},
     watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
     storage: { hold: unhosted("storage"), release: unhosted("storage") },

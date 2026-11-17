@@ -485,7 +485,7 @@ describe("the daemon's side of the round trip", () => {
       frameFeeds: { latest: () => null },
       log: () => {},
       handlerProbes,
-      ...clickParts(ctx, { clickArrived: () => {}, clickSettled: () => {} }),
+      ...clickParts(ctx),
       renderer: new Proxy(
         {},
         {

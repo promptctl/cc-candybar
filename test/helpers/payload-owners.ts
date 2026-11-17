@@ -50,9 +50,9 @@ import { settledLane, type Current, type Lane } from "../../src/utils/reading";
 import { HostService } from "../../src/segments/host";
 import { assembleFacts } from "../../src/daemon/facts-assembly";
 import { instantOf } from "../../src/utils/instant";
+import { settledWorld } from "./settled";
 import {
   composePayload,
-  settleWorld,
   todayOf,
   type ConfigFileFacts,
   type DrawInputs,
@@ -175,13 +175,12 @@ export function todayReadingOf(inputs: LanedInputs) {
 }
 
 // A request's wait over the inputs' lanes, as the daemon settles one over its
-// world state (settleWorld): the document is stamped again on every owner
+// world state (`settledWorld`): the document is stamped again on every owner
 // landing the wait hears.
 export async function settleLanes(inputs: LanedInputs): Promise<void> {
-  await settleWorld(
+  await settledWorld(
     () => documentOf(inputs),
     () => [],
-    new AbortController().signal,
   );
 }
 

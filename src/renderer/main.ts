@@ -74,7 +74,7 @@ import {
   serializeSegmentCells,
 } from "./debug.js";
 import type { Instant } from "../utils/instant.js";
-import { failureOf } from "../daemon/foundations/verb-error.js";
+import { failureOf, type Failure } from "../daemon/foundations/verb-error.js";
 import {
   rendererOf,
   type Effect,
@@ -84,11 +84,15 @@ import {
   type Subscription,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
-import { JournalTurns } from "./journal-turns.js";
 import { ConfigWrites } from "./config-writes.js";
 import { readConfigText } from "./config-file-store.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
+
+// How a turn ended, apart from what it returned.
+type TurnEnd =
+  | { readonly kind: "answered" }
+  | { readonly kind: "threw"; readonly failure: Failure };
 
 export function mainRenderer(
   parts: MainRendererParts,
@@ -107,12 +111,15 @@ export function mainRenderer(
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
   // click's changes are owed their `effect-done` however its handler ended.
-  const turn = async (
+  // [LAW:no-ambient-temporal-coupling] A turn runs whole: it awaits nothing,
+  // so the host's mailbox, which sends the next input only once this one has
+  // answered, is the one order of the renderer's turns.
+  const turn = (
     event: Event,
     at: Instant,
     record: RequestFacts,
     effects: Effect[],
-  ): Promise<void> => {
+  ): void => {
     switch (event.kind) {
       case "start":
         for (const { context, worldState } of event.sessions)
@@ -122,11 +129,10 @@ export function mainRenderer(
         configureSession(parts, event.context, event.worldState, at, record);
         return;
       case "request": {
-        const { frame, delivered } = await answerRequest(
+        const { frame, delivered } = answerRequest(
           parts,
           event.context,
           at,
-          event.waitMs,
           {
             following: new Set(event.following),
             feeds: event.feeds,
@@ -171,26 +177,39 @@ export function mainRenderer(
         return;
       }
       case "click":
-        await clickTurn(parts, event, record, effects);
+        clickTurn(parts, event, effects);
         return;
       case "menu-idle":
-        // [LAW:no-ambient-temporal-coupling] Whether the session is still
-        // idle is the clock's to say, in the close's own journal turn: a
-        // click since the firing keeps what it opened.
-        // [LAW:effects-at-boundaries] exception: the idle clock stays with
-        // the host, so the turn asks it in place.
-        await parts.verbs.closeIdle(
+        parts.verbs.closeIdle(
           event.session,
           event.latest,
-          {
-            ...event.idle,
-            confirm: () =>
-              parts.menuIdle.confirmClose(event.session, event.idle.firedAt),
-          },
+          event.idle,
+          event.stillIdle,
           effects,
         );
         return;
     }
+  };
+
+  // The open views' subscriptions as they stand now. A session's doctor run
+  // is read whether or not a view of it is open: a view evicted or failed to
+  // open is no reason a run asked for goes unread.
+  const subscribed = (): Subscriptions => {
+    const views = parts.renderCache.subscriptions().sources;
+    const merged = new Map(
+      Object.entries(views) as Array<[SessionId, Subscription[]]>,
+    );
+    for (const [session, run] of parts.doctorRuns.subscriptions())
+      merged.set(session, [...(merged.get(session) ?? []), run]);
+    const sources = Object.fromEntries(merged) as Subscriptions["sources"];
+    return {
+      sources,
+      // [LAW:one-source-of-truth] Read off the same open views: a session
+      // whose view closes stops being named, so its row goes.
+      tmuxStatus: (Object.keys(sources) as SessionId[]).filter(
+        (session) => viewLanes(parts, session)?.tmuxStatus === true,
+      ),
+    };
   };
 
   return rendererOf({
@@ -212,36 +231,19 @@ export function mainRenderer(
       // ended. Read as part of the turn, so a read that throws fails the
       // turn and still hands on its effects, which are owed their
       // `effect-done`; the subscriptions last returned then stand.
-      const ended = await turn(input.event, input.at, record, effects)
-        .finally(() => {
-          const views = parts.renderCache.subscriptions().sources;
-          // A session's doctor run is read whether or not a view of it is
-          // open: a view evicted or failed to open is no reason a run asked
-          // for goes unread.
-          const merged = new Map(
-            Object.entries(views) as Array<[SessionId, Subscription[]]>,
-          );
-          for (const [session, run] of parts.doctorRuns.subscriptions())
-            merged.set(session, [...(merged.get(session) ?? []), run]);
-          const sources = Object.fromEntries(
-            merged,
-          ) as Subscriptions["sources"];
-          subscriptions = {
-            sources,
-            // [LAW:one-source-of-truth] Read off the same open views: a
-            // session whose view closes stops being named, so its row goes.
-            tmuxStatus: (Object.keys(sources) as SessionId[]).filter(
-              (session) => viewLanes(parts, session)?.tmuxStatus === true,
-            ),
-          };
-        })
-        .then(
-          () => ({ kind: "answered" }) as const,
-          // [LAW:single-enforcer] Classified here, where it was thrown: a
-          // class crosses no process.
-          (thrown: unknown) =>
-            ({ kind: "threw", failure: failureOf(thrown) }) as const,
-        );
+      let ended: TurnEnd;
+      try {
+        try {
+          turn(input.event, input.at, record, effects);
+        } finally {
+          subscriptions = subscribed();
+        }
+        ended = { kind: "answered" };
+      } catch (thrown) {
+        // [LAW:single-enforcer] Classified here, where it was thrown: a
+        // class crosses no process.
+        ended = { kind: "threw", failure: failureOf(thrown) };
+      }
       return {
         ...ended,
         effects,
@@ -330,12 +332,6 @@ function startOver(
     ask: (effects, act) => acts.ask(effects, act),
     refused: actFailed,
     log,
-  });
-  // [LAW:single-enforcer] The one queue every journal waits its turn in, the
-  // renderer's own: no host part takes a turn.
-  const journalTurns = new JournalTurns({
-    monotonic: () => clock.monotonic(),
-    changesLanded: () => configWrites.landed(),
   });
   const navigationHistory = new NavigationHistory();
   // Each session's effect memory — when its effect came into force — held in
@@ -433,7 +429,6 @@ function startOver(
     sessionState,
     stateDir: inputs.stateDir,
     locations: inputs.locations,
-    journalTurns,
     configWrites,
     clickLanded: (sessionId) => host.menuIdle.clicked(sessionId, now()),
     log,
@@ -542,7 +537,6 @@ function startOver(
               observers: sessionState.observers(),
               revision: sessionState.latestRevision(),
             },
-            journalTurns: journalTurns.getStats(),
           },
         };
       case "debug":
@@ -559,10 +553,9 @@ function startOver(
       case "reload-config":
         reloadConfig(push.origin);
         return { kind: "reload-config" };
-      // [LAW:no-ambient-temporal-coupling] No journal opens after this, and
-      // the one in flight stops at its next await once the host's abort lands.
+      // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
+      // runs whole, so none is in flight.
       case "close-journal":
-        journalTurns.close();
         configWrites.close();
         return { kind: "close-journal" };
       case "close-views":
@@ -576,7 +569,7 @@ function startOver(
   return mainRenderer(
     {
       ...parts,
-      verbs: verbsOver(verbCtx, host.clicks),
+      verbs: verbsOver(verbCtx),
       mint,
       acts,
       doctorRuns,

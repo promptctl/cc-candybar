@@ -7,7 +7,6 @@ import { bareGates } from "./gates";
 import { HOST } from "./host";
 import type { Host } from "../../src/host";
 import { TEST_SIGNER } from "./link-signer";
-import { JournalTurns } from "../../src/renderer/journal-turns";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
 import { DoctorRuns } from "../../src/renderer/doctor";
 import type { ConfigLoad, DoctorStores } from "../../src/doctor/ports";
@@ -224,15 +223,8 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
-    clientGone: async () => false,
     latest: null,
-    journalTurns: new JournalTurns({
-      monotonic: () => systemTimekeeper.monotonic(),
-      changesLanded: () => configWrites.landed(),
-    }),
     clickLanded: () => {},
-    placeWaited: () => {},
-    turnWaited: () => {},
     log: () => {},
     now: () => instantOf(new Date()),
     // A test that drives a doctor click hands in its own (`withDoctor`);

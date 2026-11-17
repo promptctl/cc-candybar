@@ -16,7 +16,6 @@
 // that mirror this shape; user configs MUST agree (a path that doesn't
 // resolve falls back to the variable's declared default).
 
-import { when } from "mobx";
 import type { HistoryDepth } from "./settings-history";
 import path from "node:path";
 import type { ClaudeHookData } from "../utils/claude.js";
@@ -54,7 +53,6 @@ import {
 } from "../utils/outcome.js";
 import { isBundledPreset } from "./bundled-presets.js";
 import {
-  type BuiltinFacts,
   type SpeedObservation,
   type SpeedSample,
   type TodayFacts,
@@ -80,7 +78,6 @@ import {
 } from "../config/globals-fields.js";
 import { type Instant } from "../utils/instant.js";
 import type { Fact } from "../facts/fact.js";
-import type { Run } from "../facts/source-identity.js";
 import type { JsonValue } from "../var-system/types.js";
 import type { SourceRun } from "../var-system/sources.js";
 import type { ViewFacts } from "../renderer-interface/request-context";
@@ -699,79 +696,6 @@ export interface DrawInputs {
 // value the payload's `term.cols` and the draw's options both carry.
 export function renderWidth(hints: ClientHints): number {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
-}
-
-// Whether a request still waits on its world state before it draws: some
-// fact that has never answered, among every built-in and every plugin source,
-// except the two whose first answer is slow and external: today's day sums (a scan of every transcript under the Claude Code
-// directory) and the branch's PR (a forge's network call). A first bar that
-// waited on them would be as slow as the slowest, and a bar with every
-// built-in placed always reads both, so they draw pending and land in a later
-// world state. A fact the daemon itself superseded (a click's move) is not
-// waited on either: it draws its loading cell, and its landing reaches the
-// next frame.
-// The runs it waits on are the ones its view names, read in the world state:
-// a run whose key or dependency moved is named before the host subscribes
-// it, and until then the world state has no entry for it, while a run the
-// view stopped naming stays there until the host drops it, read by nothing.
-// A doctor run is not waited on: its read probes the terminal, fonts and the
-// forge, so its report lands in a later world state, as the PR does.
-export function awaitsReading(
-  { builtins, sources, runs }: WorldState,
-  named: Iterable<Run>,
-): boolean {
-  return [
-    ...AWAITED_BUILTINS.map((name) => builtins[name]),
-    ...Object.values(sources),
-    ...[...named].map((run) => (runs[run.digest] ?? UNREAD_RUN).reading),
-  ].some(awaitedReading);
-}
-
-// [LAW:types-are-the-program] Whether a request waits on each built-in, every
-// one named, so a new built-in fails the build here until it says.
-const AWAITED: Readonly<Record<keyof BuiltinFacts, boolean>> = {
-  session: true,
-  today: false,
-  speed: true,
-  context: true,
-  metrics: true,
-  activity: true,
-  cache: true,
-  autocompact: true,
-  git: true,
-  pr: false,
-  tmux: true,
-  hostName: true,
-  hostUser: true,
-};
-const AWAITED_BUILTINS = (
-  Object.keys(AWAITED) as ReadonlyArray<keyof BuiltinFacts>
-).filter((name) => AWAITED[name]);
-
-// [LAW:single-enforcer] The one rule for whether a draw waits on a fact: it
-// has never answered. Why it is pending decides, never which fact it is
-// [LAW:dataflow-not-control-flow]. The request's wait and `check`'s both ask
-// it.
-export const awaitedReading = (fact: Reading<unknown>): boolean =>
-  fact.kind === "pending" && fact.why === "unread";
-
-// A request's wait on its world state (rule 1 of the model): it waits until
-// its session's world state has no fact it waits on that has never answered
-// (`awaitsReading`), or `signal` ends it. The request triggers no read: the
-// collector's reads follow the world, and their landings reach the renderer
-// as world states, so the answer is drawn from the same world state a frame
-// drawn after it reads.
-export async function settleWorld(
-  worldState: () => WorldState,
-  named: () => Iterable<Run>,
-  signal: AbortSignal,
-): Promise<void> {
-  try {
-    await when(() => !awaitsReading(worldState(), named()), { signal });
-  } catch (e) {
-    // The signal's abort is the one rejection the wait expects.
-    if (!signal.aborted) throw e;
-  }
 }
 
 // [LAW:dataflow-not-control-flow] A value derived from several lanes is not

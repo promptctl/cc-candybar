@@ -177,7 +177,6 @@ const request = async (t: { r: Renderer; rig: SessionRig }) => {
       kind: "request",
       id: REQUEST,
       context,
-      waitMs: 5000,
       idleSince: null,
       following: [],
       feeds: UNFOLLOWED_FEEDS,
@@ -290,8 +289,7 @@ describe("a statusline request", () => {
           kind: "request",
           id: REQUEST,
           context,
-          waitMs: 5000,
-          idleSince: null,
+              idleSince: null,
           following: [],
           feeds: UNFOLLOWED_FEEDS,
         },
@@ -542,6 +540,8 @@ describe("the session's config, ahead of its request", () => {
       { since: () => undefined },
       UNFOLLOWED,
       systemTimekeeper,
+      new AbortController().signal,
+      () => {},
       checked(),
       REQUEST,
       AT,
@@ -570,8 +570,7 @@ describe("the session's config, ahead of its request", () => {
         kind: "request",
         id: REQUEST,
         context: checked(),
-        waitMs: 5000,
-        idleSince: null,
+          idleSince: null,
         following: [],
         feeds: UNFOLLOWED_FEEDS,
       },
@@ -618,6 +617,7 @@ describe("two requests of one session at different keys", () => {
       () => {},
       t.rig.served.collector, NO_ACTS,
     );
+    t.rig.served.route(host);
     const ask = (pane: string, id: number) =>
       answerStatusline(
         host,
@@ -625,6 +625,8 @@ describe("two requests of one session at different keys", () => {
         { since: () => undefined },
         UNFOLLOWED,
         systemTimekeeper,
+        new AbortController().signal,
+        () => {},
         checked(pane),
         id as RequestId,
         AT,
@@ -639,6 +641,8 @@ describe("two requests of one session at different keys", () => {
     });
     // The second arrives while the first waits on its pane.
     const second = ask("%2", 2);
+    // Each config reaches the renderer as its turn in the mailbox comes.
+    await new Promise((resolve) => setImmediate(resolve));
     expect(requests.map((w) => w.builtins.tmux.kind)).toEqual([
       "pending",
       "pending",
@@ -671,23 +675,21 @@ describe("a click", () => {
     value: "",
     session: { ok: true, id: SESSION },
     arrival: { via: "link", delivery: { kind: "cli" } },
-    id: 1 as RequestId,
     latest,
   });
 
-  test("answers with what the open views read once its act has landed", async () => {
-    // The act closes the session's view after a turn of the loop, so an
-    // output read before it landed would still name the view's sources.
-    let act = async (): Promise<void> => {};
+  test("answers with what the open views read once its handler has run", async () => {
+    // The handler closes the session's view, so an output read before it ran
+    // would still name the view's sources.
+    let act = (): void => {};
     const t = renderer({
       ...NO_VERBS,
       handler: (verb) => (verb === "act" ? () => act() : undefined),
-      closeIdle: () => Promise.reject(new Error("no idle close here")),
+      closeIdle: () => {
+        throw new Error("no idle close here");
+      },
     });
-    act = async () => {
-      await Promise.resolve();
-      t.rig.cache.retireSession(SESSION);
-    };
+    act = () => t.rig.cache.retireSession(SESSION);
     const before = await request(t);
     expect(Object.keys(before.subscriptions.sources)).toEqual([SESSION]);
     const { effects, subscriptions, record } = answered(
@@ -699,14 +701,16 @@ describe("a click", () => {
     expect(record).toEqual([]);
   });
 
-  test("that throws once its act has landed names what the open views read then", async () => {
-    let act = async (): Promise<void> => {};
+  test("that throws once its handler has acted names what the open views read then", async () => {
+    let act = (): void => {};
     const t = renderer({
       ...NO_VERBS,
       handler: (verb) => (verb === "act" ? () => act() : undefined),
-      closeIdle: () => Promise.reject(new Error("no idle close here")),
+      closeIdle: () => {
+        throw new Error("no idle close here");
+      },
     });
-    act = async () => {
+    act = () => {
       t.rig.cache.retireSession(SESSION);
       throw new Error("a later step broke");
     };
@@ -723,11 +727,13 @@ describe("a click", () => {
       ...NO_VERBS,
       handler: (verb) =>
         verb === "act"
-          ? async (_value, facts) => {
+          ? (_value, facts) => {
               seen = facts.latest;
             }
           : undefined,
-      closeIdle: () => Promise.reject(new Error("no idle close here")),
+      closeIdle: () => {
+        throw new Error("no idle close here");
+      },
     });
     await request(t);
     await handIn(t.r, { kind: "retire", session: SESSION });
@@ -752,7 +758,7 @@ describe("the idle close", () => {
     const t = renderer({
       ...NO_VERBS,
       handler: () => undefined,
-      closeIdle: async (sessionId) => {
+      closeIdle: (sessionId) => {
         closed.push(sessionId);
       },
     });
@@ -767,6 +773,7 @@ describe("the idle close", () => {
         session: SESSION,
         idle,
         latest: null,
+        stillIdle: true,
       }),
     );
     expect(effects).toEqual([]);

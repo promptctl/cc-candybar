@@ -71,7 +71,6 @@ import {
 } from "../utils/event-hold.js";
 import { located } from "./statusline-answer.js";
 import { DoctorSource } from "./cache/doctor.js";
-import { ClicksInFlight } from "./clicks-in-flight.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -442,7 +441,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // close is a `menu-idle` turn of the renderer, the journaled write a ✕ makes,
   // through the host's one path to it, which the parts below hold: no close is
   // due before a frame has drawn a menu, so the parts exist by then.
-  const menuIdle = new MenuIdle({
+  const menuIdle: MenuIdle = new MenuIdle({
     clock,
     now: instant,
     close: (sessionId, idle) =>
@@ -451,7 +450,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         instant,
         sessionId,
         idle,
-        frameFeeds.latest(sessionId),
+        () => frameFeeds.latest(sessionId),
+        () => menuIdle.confirmClose(sessionId, idle.firedAt),
       ),
     failed: (sessionId, failure) =>
       log(
@@ -550,9 +550,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         )
       ).lanes,
     // [LAW:no-ambient-temporal-coupling] The pin's wake of the session's
-    // state only moves the feed's timer, which fires in a later turn. A click
-    // that awaits gives up the loop, so a frame may show its writes ahead of
-    // its commit; the step stays whole.
+    // state only moves the feed's timer, which fires in a later turn.
     pin: (sessionId) =>
       parts.renderer.tell({ kind: "pin", session: sessionId }, instant()),
     unpin: (sessionId) =>
@@ -689,11 +687,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     watched: (sessionId) => frameFeeds.feedOpen(sessionId),
     deliver: (event) =>
-      parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
+      parts.renderer.deliver(
+        () => ({ kind: "event", event, at: instant() }),
+        [],
+      ),
     log,
   });
 
-  const clicks = new ClicksInFlight();
   // [LAW:single-enforcer] Each watch the renderer holds, by the id it minted,
   // from its `watch` to its `unwatch`.
   const rendererWatches = new Map<WatchId, WatcherHandle>();
@@ -702,19 +702,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // renderer file names a host type.
   const reaches: AdapterToHost = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice, or an awaited call.
+    // the host's part in its crossing shape: a notice.
     wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
     log,
     menuIdle: {
       clicked: (sessionId, at) => menuIdle.clicked(sessionId, at),
-      clickArrived: (sessionId) => menuIdle.clickArrived(sessionId),
-      clickSettled: (sessionId) => menuIdle.clickSettled(sessionId),
       observe: (sessionId, at, shown, timeoutS) =>
         menuIdle.observe(sessionId, at, shown, timeoutS),
-      confirmClose: async (sessionId, firedAt) =>
-        menuIdle.confirmClose(sessionId, firedAt),
     },
-    clicks: { gone: async (click) => clicks.gone(click) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -762,20 +757,31 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // its output names every session it serves; and every open feed gets its
     // `pin`. All through the host's one path to the renderer, each turn
     // recorded there.
+    // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
+    // every input after it, the pins included, finds its sessions handed in.
     start: async () => {
       const at = instant();
-      for (const sessionId of frameFeeds.openFeeds())
-        parts.renderer.tell({ kind: "pin", session: sessionId }, at);
-      const sessions = [...collector.liveDocuments()].flatMap(
-        ([sessionId, worldState]) => {
-          const req = frameFeeds.latest(sessionId);
-          return req === null ? [] : [{ context: located(req), worldState }];
-        },
-      );
-      await parts.renderer.deliver(
-        { kind: "event", at, event: { kind: "start", sessions } },
+      const started = parts.renderer.start(
+        () => ({
+          kind: "event",
+          at,
+          event: {
+            kind: "start",
+            sessions: [...collector.liveDocuments()].flatMap(
+              ([sessionId, worldState]) => {
+                const req = frameFeeds.latest(sessionId);
+                return req === null
+                  ? []
+                  : [{ context: located(req), worldState }];
+              },
+            ),
+          },
+        }),
         [["why", "renderer-start"]],
       );
+      for (const sessionId of frameFeeds.openFeeds())
+        parts.renderer.tell({ kind: "pin", session: sessionId }, at);
+      await started;
     },
     ended: (event) => {
       rendererEnded = event;
@@ -783,7 +789,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
   });
   const parts: DaemonParts = {
-    clicks,
+    closing: closing.signal,
     home: host.home,
     tmp: host.tmp,
     launcher,
@@ -844,9 +850,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     exit,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in holds or waits for a journal's turn,
-    // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
-    // reached as the daemon closed is refused here and opens no feed.
+    // the way in. A click that got in waits its turn in the renderer's
+    // mailbox: one ahead of the close runs whole, and one behind it is
+    // refused; a subscribe its request reached as the daemon closed is
+    // refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
       return handleRequest(parts, req, timedOut, accepted, clientLeft);
@@ -889,9 +896,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // one waits behind whatever turn the renderer is in, which can outlast
         // shutdown's backstop, while this waits only on its own tmux calls.
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
-        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
-        // journal in flight, so none opens after.
-        ["journalTurns close", rendererStep("close-journal")],
+        // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
+        // every click ahead of it lands whole, and none behind it begins.
+        ["renderer journal close", rendererStep("close-journal")],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.

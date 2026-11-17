@@ -43,21 +43,17 @@ const handed: Reaches<{ readonly on: (heard: () => void) => void }> = true;
 // @ts-expect-error an argument list's undefined arrives as null
 const hole: Reaches<{ readonly see: (tmux: string | undefined) => void }> =
   true;
-// @ts-expect-error an awaited answer that holds a Map does not cross
-const held: Reaches<{ readonly ask: () => Promise<Map<string, number>> }> =
-  true;
+// @ts-expect-error an awaited answer does not cross: a turn never waits
+const held: Reaches<{ readonly ask: () => Promise<number> }> = true;
 // @ts-expect-error a reach group that grew one in-place reach is found
 const grown: Reaches<AdapterToHost & { readonly x: { y: () => number } }> =
   true;
 // @ts-expect-error an answer of `any` holds whatever it was handed
 const untyped: Reaches<{ readonly read: () => any }> = true;
-// @ts-expect-error an awaited `any` holds whatever it was handed
-const awaitedAny: Reaches<{ readonly read: () => Promise<any> }> = true;
-// A notice and an awaited call, in a group, cross.
+// Notices, in a group, cross.
 const reaches: Reaches<{
   readonly told: (line: string) => void;
-  readonly asked: { readonly when: (at: number) => Promise<number | null> };
-  readonly done: () => Promise<void>;
+  readonly heard: { readonly at: (at: number | null) => void };
 }> = true;
 
 describe("Crosses", () => {
@@ -86,8 +82,7 @@ describe("Reaches", () => {
       held,
       grown,
       untyped,
-      awaitedAny,
       reaches,
-    ]).toHaveLength(8);
+    ]).toHaveLength(7);
   });
 });

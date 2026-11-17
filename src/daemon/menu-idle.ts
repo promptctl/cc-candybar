@@ -27,18 +27,28 @@ import type { MenuIdleStats } from "./foundations/stats-snapshot";
 // renderer, answering with its failure, or null when it closed. The clock
 // hears a failure, then waits a timeout before trying again, and its `failed`
 // writes the one line, so nothing else is logged here.
+// [LAW:no-ambient-temporal-coupling] Made as its turn comes: the session's
+// newest request, and whether it is still idle since the firing
+// (`confirmClose`), are read after every turn ahead of it.
 export async function closeByTurn(
   host: Pick<RendererHost, "answer">,
   at: () => Instant,
   sessionId: SessionId,
   idle: IdleSpan,
-  latest: CheckedRenderRequest | null,
+  latest: () => CheckedRenderRequest | null,
+  stillIdle: () => boolean,
 ): Promise<Failure | null> {
-  const delivered = await host.answer({
+  const delivered = await host.answer(() => ({
     kind: "event",
     at: at(),
-    event: { kind: "menu-idle", session: sessionId, idle, latest },
-  });
+    event: {
+      kind: "menu-idle",
+      session: sessionId,
+      idle,
+      latest: latest(),
+      stillIdle: stillIdle(),
+    },
+  }));
   return delivered.kind === "threw" ? delivered.failure : null;
 }
 
@@ -61,7 +71,7 @@ export interface MenuIdleDeps {
   readonly now: () => Instant;
   // Close the session's menus: the journaled write a ✕ makes
   // (`closeIdleMenus`, src/renderer/verbs/index.ts), as a renderer turn
-  // (`closeByTurn`), which asks `confirmClose` in its turn.
+  // (`closeByTurn`), which asks `confirmClose` as its turn comes.
   readonly close: (
     sessionId: SessionId,
     idle: IdleSpan,
@@ -225,9 +235,9 @@ export class MenuIdle {
   // every menu shut — so the timer waits for a render that draws a menu again
   // (a group open by default, a close that failed) and closes it a timeout
   // after this one: never at once, and never for a session that stopped
-  // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
-  // among the journals, so whether the session is still idle is read in that
-  // turn: a click since this firing keeps what it opened. The record follows
+  // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn in
+  // the renderer's mailbox, so whether the session is still idle is read as
+  // that turn comes: a click since this firing keeps what it opened. The record follows
   // that decision (`confirmClose`), and until the close settles no frame arms
   // another. A close that failed waits a timeout too, so it is retried at that
   // pace and not at every frame.

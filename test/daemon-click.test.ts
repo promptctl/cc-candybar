@@ -95,7 +95,7 @@ describe("click protocol", () => {
     const ctx: VerbContext = testVerbContext(new SessionState());
     for (const verb of ["copy", "set-state"]) {
       const handler = VERBS.get(verb)!;
-      await expect(handler("%", ctx)).rejects.toThrow(BadVerbArgs);
+      expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
     }
   });
 });
@@ -110,8 +110,8 @@ describe("apply-update verb", () => {
     expect(actsOf(ctx)).toEqual([
       { kind: "apply-update", id: expect.any(Number), session: "sess-1" },
     ]);
-    await expect(handler("", ctx)).rejects.toThrow(BadVerbArgs);
-    await expect(handler(encodeURIComponent("../etc"), ctx)).rejects.toThrow(BadVerbArgs);
+    expect(() => handler("", ctx)).toThrow(BadVerbArgs);
+    expect(() => handler(encodeURIComponent("../etc"), ctx)).toThrow(BadVerbArgs);
     expect(actsOf(ctx)).toHaveLength(1);
   });
 
@@ -219,8 +219,8 @@ describe("step-state handler", () => {
   test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", async () => {
     const { ctx } = setup();
     const step = VERBS.get(VERB_STEP_STATE)!;
-    await expect(step(encodeSegments(["s1", KEY, "x"]), ctx),
-    ).rejects.toThrow(BadVerbArgs);
+    expect(() => step(encodeSegments(["s1", KEY, "x"]), ctx),
+    ).toThrow(BadVerbArgs);
   });
 
   // Two configs declaring the same stepper differently are two gates: each
@@ -262,8 +262,8 @@ describe("step-state handler", () => {
     expect(range.sessionState.get(S1, KEY)).toBe("16");
     // Each refuses what only the other's config declares.
     await expect(words.click(2)).rejects.toThrow(/not a bounded \(range\) state key/);
-    await expect(set(encodeSegments(["s1", KEY, "cool"]), range.ctx),
-    ).rejects.toThrow(/must be an integer, got "cool"/);
+    expect(() => set(encodeSegments(["s1", KEY, "cool"]), range.ctx),
+    ).toThrow(/must be an integer, got "cool"/);
   });
 
   test("an unset key whose config shows a non-integer is refused, not stepped from min", async () => {
@@ -277,8 +277,8 @@ describe("step-state handler", () => {
   test("a key the session's config declares no range for is rejected, not silently stepped", async () => {
     const step = VERBS.get(VERB_STEP_STATE)!;
     const { ctx } = setup();
-    await expect(step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
-    ).rejects.toThrow(BadVerbArgs);
+    expect(() => step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
+    ).toThrow(BadVerbArgs);
   });
 
   test("step-state is a registered leaf verb", () => {

@@ -16,7 +16,7 @@ import { stateDir } from "../../src/daemon/paths";
 import type { DaemonFacts } from "../../src/facts/world-state";
 import { daemonFactsOf } from "./daemon-facts";
 import { collected } from "./collected";
-import { settleWorld } from "../../src/renderer/render-payload";
+import { settledWorld } from "./settled";
 import {
   sessionSource,
   type SessionSource,
@@ -249,10 +249,9 @@ export async function settledRequest(
     rig.cache.holdSession(dir, dir, configFile, request),
   );
   cleanups.push(() => held[Symbol.dispose]());
-  await settleWorld(
+  await settledWorld(
     () => rig.served.worldStates.of(request.hookData.session_id),
-    () => held.view.registry.namedRuns().values(),
-    new AbortController().signal,
+    () => [...held.view.registry.namedRuns().values()].map((r) => r.digest),
   );
   return held.view;
 }

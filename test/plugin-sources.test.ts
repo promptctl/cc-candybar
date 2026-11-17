@@ -884,6 +884,8 @@ function statusline(r: Rig, configFile: string) {
       { since: () => undefined },
       UNFOLLOWED,
       systemTimekeeper,
+      new AbortController().signal,
+      () => {},
       checked.req,
       ++id as RequestId,
       instantOf(new Date()),

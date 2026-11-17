@@ -2,7 +2,6 @@
 
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { inTmux } from "../tmux-hint.js";
-import { inspect } from "node:util";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
@@ -42,7 +41,6 @@ import {
   renderOptionsOf,
   prFactOf,
   sourcesFactOf,
-  settleWorld,
   instantFacts,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
@@ -92,7 +90,6 @@ import {
 } from "../render/diagnostics.js";
 import { DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { type Instant } from "../utils/instant.js";
-import { waitWithin } from "../utils/reading.js";
 import {
   noteFacts,
   requestEvent,
@@ -997,14 +994,13 @@ export interface RequestAnswer {
   readonly delivered: () => void;
 }
 
-export async function answerRequest(
+export function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
   at: Instant,
-  waitMs: number,
-  // What the host's feeds knew of the session as the request arrived: which
-  // lanes follow it and draw it now, and what each was sent of late; and when
-  // its menus' idle period began, as the host's clock read it.
+  // What the host's feeds knew of the session as the request's turn came:
+  // which lanes follow it and draw it now, and what each was sent of late;
+  // and when its menus' idle period began, as the host's clock read it.
   feed: {
     readonly following: ReadonlySet<Lane>;
     readonly feeds: LaneFeeds;
@@ -1014,11 +1010,9 @@ export async function answerRequest(
   // The request's turn's effects, which the setups its session's clicks owe
   // join.
   effects: Effect[],
-): Promise<RequestAnswer> {
-  const { clock, log } = parts;
-  // [LAW:no-ambient-temporal-coupling] The wait is counted from this turn's
-  // start on the renderer's own clock.
-  const turnFrom = clock.monotonic();
+): RequestAnswer {
+  const { clock } = parts;
+  const drawFrom = clock.monotonic();
   using setup = setUpRender(parts, req, at, facts);
   // [LAW:effects-at-boundaries] What the request's arrival starts beyond its
   // own answer: the setups its session's clicks owe, by the lanes its
@@ -1028,45 +1022,6 @@ export async function answerRequest(
     laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
     effects,
   );
-  // Rules 1 and 2 of the model: the answer shows what this request carried,
-  // so it waits for the first value of every fact of its world state it
-  // waits on (`awaitedReading`), its view's runs among them, until its
-  // client's deadline. It triggers no read: a warm session's world state is
-  // current already, so it draws at once. What has not answered by then draws
-  // as pending, and lands for the next frame.
-  const waitFrom = clock.monotonic();
-  // [LAW:one-source-of-truth] The event's figure and the wait's timer are one
-  // reading. Setup has spent part of what the request arrived with, and below
-  // zero says by how much it overran: the timer fires at once.
-  const budget = waitMs - (waitFrom - turnFrom);
-  noteFacts(facts, {
-    deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
-  });
-  const ended = await waitWithin(
-    (signal) =>
-      settleWorld(
-        () => parts.worldStates.of(setup.sessionId),
-        () => setup.view.registry.namedRuns().values(),
-        signal,
-      ),
-    budget,
-    // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
-    // it is a bug, said against the session, never one that ends the daemon.
-    (e, ended) =>
-      log(
-        "error",
-        `render wait failed after it ended ended=${ended} sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`,
-      ),
-    clock.after,
-    parts.renderCache.closing,
-  );
-  // [LAW:nothing-unseen] How the wait went, on the render event: an answer
-  // drawn with values pending says so by name.
-  const drawFrom = clock.monotonic();
-  noteFacts(facts, {
-    waited: `${Math.round(drawFrom - waitFrom)}ms`,
-    ended,
-  });
   const sessionId = req.hookData.session_id;
   const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
     parts,
@@ -1086,9 +1041,8 @@ export async function answerRequest(
       : drawn.body,
   );
   // [LAW:nothing-unseen] Which lanes the statusline handed the bar to, and
-  // how long the turn after the wait took to make the frame: with the host's
-  // `encoded=` for its bytes, what the draw's reserve is held to
-  // (DRAW_RESERVE_MS).
+  // how long the turn took to make the frame: with the host's `encoded=` for
+  // its bytes, what the draw's reserve is held to (DRAW_RESERVE_MS).
   noteFacts(facts, {
     handoff: (toStatusline ? elsewhere : []).join(",") || "-",
     drew: `${elapsedMs(clock, drawFrom)}ms`,

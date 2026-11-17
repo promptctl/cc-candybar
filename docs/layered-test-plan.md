@@ -91,7 +91,7 @@ This table is the target, read from `DaemonParts`, `verbCtx` and the imports on 
 | Piece | What moves into it | Ports its tests fake |
 |---|---|---|
 | Foundations | `src/daemon/foundations/`: session keys, the gates (`createGates`, built by `daemonGates()`), `encodeRenderOrigin`, `roleOf`, `answeredOf`. The link signer is `src/click/link-signer.ts`, below the daemon already | Signing key |
-| Sessions | `SessionState`, `SettingsHistory`, `NavigationHistory`, `JournalTurns`, `MenuIdle` | Session store, clock |
+| Sessions | `SessionState`, `SettingsHistory`, `NavigationHistory`, `MenuIdle` | Session store, clock |
 | Config | Resolving and parsing a load | Watched store |
 | Sources | Payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery` | Launcher, watched store, git, forge, tmux, remote data |
 | Watchdogs | `updateWatch`, `binaryWatch`, `limits` | Launcher, clock, watched store, the release port |

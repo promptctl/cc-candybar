@@ -70,3 +70,29 @@ export function hearingEvents(
     adapter: (input) => renderer.answer(input),
   });
 }
+
+// `renderer`, with a turn a test holds: `hold` keeps the next input's turn
+// from reaching it until `open`, so every input sent after that one waits
+// behind it in the host's mailbox, in flight.
+export function holdable(renderer: Renderer): {
+  readonly renderer: Renderer;
+  readonly hold: () => () => void;
+} {
+  let held: Promise<void> = Promise.resolve();
+  const turn = <T>(answer: () => Promise<T>): Promise<T> => {
+    const waiting = held;
+    held = Promise.resolve();
+    return waiting.then(answer);
+  };
+  return {
+    renderer: rendererOf({
+      event: (input) => turn(() => renderer.answer(input)),
+      adapter: (input) => turn(() => renderer.answer(input)),
+    }),
+    hold: () => {
+      let open = (): void => {};
+      held = new Promise<void>((resolve) => (open = resolve));
+      return open;
+    },
+  };
+}

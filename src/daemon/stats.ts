@@ -288,7 +288,7 @@ export class RuntimeStats {
       collector: { sessions: 0, retiring: 0 },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0 },
+      mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
@@ -332,7 +332,7 @@ export class RuntimeStats {
     collector: StatsSnapshot["collector"];
     effectCache: StatsSnapshot["effectCache"];
     menuIdle: StatsSnapshot["menuIdle"];
-    journalTurns: StatsSnapshot["journalTurns"];
+    mailbox: StatsSnapshot["mailbox"];
     runs: RunStats;
     sessionState: StatsSnapshot["sessionState"];
     frameFeeds: FeedStats;
@@ -380,7 +380,7 @@ export class RuntimeStats {
       collector: extras.collector,
       effectCache: extras.effectCache,
       menuIdle: extras.menuIdle,
-      journalTurns: extras.journalTurns,
+      mailbox: extras.mailbox,
       runs: extras.runs,
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,

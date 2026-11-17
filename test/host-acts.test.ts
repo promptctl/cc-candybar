@@ -79,14 +79,15 @@ const change = (before: string, after: string): Effect => ({
 function hostOver(
   effects: readonly Effect[],
   over: Partial<HostWorld> = {},
-  done: (input: EventInput) => Promise<RendererOutput> = async () =>
-    output([]),
+  done: (input: EventInput) => Promise<RendererOutput> = async () => output([]),
 ) {
   const did: string[] = [];
   const unheard: string[] = [];
   const world: HostWorld = {
     perform: async (act: HostAct): Promise<EffectOutcome> => {
-      did.push(`perform ${act.kind} ${act.id} (file says ${fs.readFileSync(file, "utf8").includes("dawn") ? "dawn" : "dusk"})`);
+      did.push(
+        `perform ${act.kind} ${act.id} (file says ${fs.readFileSync(file, "utf8").includes("dawn") ? "dawn" : "dusk"})`,
+      );
       return { kind: "ok" };
     },
     stateDir: path.join(dir, "state"),
@@ -113,7 +114,7 @@ function hostOver(
     world,
   );
   const turn = () =>
-    host.answer({
+    host.answer(() => ({
       kind: "event",
       at: AT,
       event: {
@@ -121,25 +122,31 @@ function hostOver(
         session: S,
         idle: { firedAt: AT, idleS: 30, timeoutS: 30 },
         latest: null,
+        stillIdle: true,
       },
-    });
+    }));
   return { turn, did, unheard };
 }
 
-test("an act is performed once the turn's changes have landed, and both are settled before the turn's caller hears it", async () => {
+test("an act is performed once the turn's changes have landed and had their effect-done, wherever the turn returned it, and both are settled before the turn's caller hears it", async () => {
   const set = change(FILE, FILE.replace("dusk", "dawn"));
   const act = copy();
-  const { turn, did } = hostOver([act, set]);
+  // The change's effect-done turn takes a few microtasks to answer.
+  const { turn, did } = hostOver([act, set], {}, async (input) => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    did.push(`answered ${input.event.kind}`);
+    return output([]);
+  });
   const answered = await turn();
-  // The act saw the file the change wrote.
-  expect(did).toEqual(
-    expect.arrayContaining([
-      `done ${set.id} ok`,
-      `perform copy ${act.id} (file says dawn)`,
-      `done ${act.id} ok`,
-    ]),
-  );
-  expect(did).toHaveLength(3);
+  // The act saw the file the change wrote, and began only once the renderer
+  // had answered the change's landing.
+  expect(did).toEqual([
+    `done ${set.id} ok`,
+    "answered effect-done",
+    `perform copy ${act.id} (file says dawn)`,
+    `done ${act.id} ok`,
+    "answered effect-done",
+  ]);
   expect(answered.settled).toEqual([{ kind: "ok" }, { kind: "ok" }]);
 });
 
@@ -203,7 +210,11 @@ test("each act over in its turn starts once the one before it has ended", async 
   expect(did).toEqual([`start ${a.id}`]);
   ends[0]!();
   await new Promise((r) => setImmediate(r));
-  expect(did.filter((d) => !d.startsWith("done"))).toEqual([`start ${a.id}`, `end ${a.id}`, `start ${b.id}`]);
+  expect(did.filter((d) => !d.startsWith("done"))).toEqual([
+    `start ${a.id}`,
+    `end ${a.id}`,
+    `start ${b.id}`,
+  ]);
   ends[1]!();
   await answered;
 });

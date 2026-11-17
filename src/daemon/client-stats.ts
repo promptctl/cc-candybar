@@ -285,10 +285,10 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  armed         ${s.menuIdle.armed}`);
   lines.push(`  pending       ${s.menuIdle.pending}`);
   lines.push(``);
-  lines.push(`journalTurns`);
-  lines.push(`  holder        ${s.journalTurns.holder ?? "-"}`);
-  lines.push(`  held          ${s.journalTurns.heldMs}ms`);
-  lines.push(`  queued        ${s.journalTurns.queued}`);
+  lines.push(`mailbox`);
+  lines.push(`  holder        ${s.mailbox.holder ?? "-"}`);
+  lines.push(`  held          ${s.mailbox.heldMs}ms`);
+  lines.push(`  queued        ${s.mailbox.queued}`);
   lines.push(``);
   lines.push(`sessionState`);
   lines.push(`  sessions      ${s.sessionState.sessions}`);

@@ -127,7 +127,10 @@ export interface StatsSnapshot {
   // Sessions whose idle clock is kept, and those with a timer armed to close
   // their menus (src/daemon/menu-idle.ts).
   menuIdle: MenuIdleStats;
-  journalTurns: JournalTurnStats;
+  // The renderer's mailbox (src/daemon/renderer-host.ts): the input in its
+  // turn and for how long, and how many wait behind it. A holder held long is
+  // a turn the renderer has not answered.
+  mailbox: MailboxStats;
   // `run` acts (src/daemon/runs.ts): programs started, those that failed
   // (a non-zero exit or no start), timed out, and runs in flight now.
   runs: RunStats;
@@ -297,8 +300,9 @@ export interface SourceRunsStats {
   readonly watches: number;
 }
 
-export interface JournalTurnStats {
-  // The verb holding the turn and for how long; `queued` wait behind it.
+export interface MailboxStats {
+  // The input in the renderer's turn and for how long; `queued` wait behind
+  // it.
   readonly holder: string | null;
   readonly heldMs: number;
   readonly queued: number;

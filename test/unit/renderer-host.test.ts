@@ -1,10 +1,13 @@
 // The host's one path for a push (src/daemon/renderer-host.ts): `ask` hands
 // back the reply of the push's own kind or rejects, and `tell` says a failure
-// on the log, since nothing awaits it.
+// on the log, since nothing awaits it; and a start heads the mailbox.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { failureOf } from "../../src/daemon/foundations/verb-error";
-import type { AdapterOutput } from "../../src/renderer-interface/interface";
+import {
+  rendererOf,
+  type AdapterOutput,
+} from "../../src/renderer-interface/interface";
 import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
 import { NO_ACTS, pushRenderer } from "../helpers/renderers";
@@ -31,7 +34,8 @@ function hostOver(output: AdapterOutput) {
       holding: () => {
         throw new Error("a push holds no session");
       },
-    }, NO_ACTS,
+    },
+    NO_ACTS,
   );
   return { host, said };
 }
@@ -75,4 +79,54 @@ test("a tell that fails is said on the log, and nothing rejects", async () => {
   expect(await said).toMatch(
     /^error renderer main push unpin threw: .*no such session/,
   );
+});
+
+test("a start heads the mailbox, behind only the slot in progress", async () => {
+  const heard: string[] = [];
+  let open = (): void => {};
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const host = rendererHost(
+    "main",
+    { now: () => 0, monotonic: () => 0 as Monotonic },
+    rendererOf({
+      event: async (input) => {
+        heard.push(input.event.kind);
+        return {
+          kind: "answered",
+          effects: [],
+          subscriptions: { sources: {}, tmuxStatus: [] },
+          record: [],
+          turnMs: 0,
+        };
+      },
+      adapter: async (input) => {
+        heard.push(`push:${input.push.kind}`);
+        await opened;
+        return { kind: "replied", reply: { kind: "lanes", lanes: null } };
+      },
+    }),
+    () => {},
+    {
+      subscribed: () => {},
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  const held = host.ask({ kind: "lanes", session: "s" as never }, AT);
+  const waiting = host.deliver(
+    () => ({
+      kind: "event",
+      at: AT,
+      event: { kind: "retire", session: "s" as never },
+    }),
+    [],
+  );
+  const started = host.start(
+    () => ({ kind: "event", at: AT, event: { kind: "start", sessions: [] } }),
+    [],
+  );
+  open();
+  await Promise.all([held, waiting, started]);
+  expect(heard).toEqual(["push:lanes", "start", "retire"]);
 });

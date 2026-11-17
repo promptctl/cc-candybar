@@ -34,10 +34,8 @@ function host(
   });
   const {
     arrival: _a,
-    turnWaited: _t,
-    placeWaited: _p,
-    clientGone: _c,
     latest: _l,
+    effects: _e,
     ...verbCtx
   } = testVerbContext(new SessionState());
   // The clipboard, as the host's copy act writes it.
@@ -60,7 +58,7 @@ function host(
     frameFeeds: { latest: () => null },
     handlerProbes: new ProbeArrivals(),
     log: (_level: string, line: string) => events.push(line),
-    ...clickParts(verbCtx, idle, undefined, world),
+    ...clickParts(verbCtx, undefined, world),
   } as unknown as DaemonParts;
   const frame = async (url: string, urlV = URL_FRAME_VERSION) => {
     const handled = await handleRequest(

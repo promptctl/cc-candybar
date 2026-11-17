@@ -1,12 +1,15 @@
 // [LAW:no-ambient-temporal-coupling] FIFO per key: each key's tasks run one at
 // a time, each after the last has settled, and a rejection is its own caller's
 // and never stops the tasks behind it. A task runs at once, in the caller's
-// turn, while its key is idle.
+// turn, while its key is idle. A task placed `first` runs next, ahead of every
+// task waiting on its key, behind only the one running.
+export type Place = "first" | "last";
+
 export class KeyedSerialQueue<K> {
   // Each key's tasks still to run, while one runs.
   private readonly waiting = new Map<K, Array<() => Promise<void>>>();
 
-  run<T>(key: K, task: () => Promise<T>): Promise<T> {
+  run<T>(key: K, task: () => Promise<T>, at: Place = "last"): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       // [LAW:types-are-the-program] An entry never rejects, so the drain below
       // has no failure to carry.
@@ -19,7 +22,8 @@ export class KeyedSerialQueue<K> {
       };
       const behind = this.waiting.get(key);
       if (behind !== undefined) {
-        behind.push(entry);
+        if (at === "first") behind.unshift(entry);
+        else behind.push(entry);
         return;
       }
       const tasks: Array<() => Promise<void>> = [];

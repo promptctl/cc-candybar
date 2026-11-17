@@ -6,6 +6,8 @@
 // collector, as the host hands back every output's (src/daemon/renderer-host.ts).
 
 import { Collector, type CollectorDeps } from "../../src/daemon/collector";
+import type { RendererHost } from "../../src/daemon/renderer-host";
+import { instantAt } from "../../src/utils/instant";
 import { retireSession } from "../../src/renderer/draw-bar";
 import type { RenderCache } from "../../src/renderer/render-cache";
 import type { ViewFacts } from "../../src/renderer-interface/request-context";
@@ -29,6 +31,12 @@ export interface Collected {
   // A session's `config` turn: its world state taken, the session's view
   // opened as `hold` opens it, and the turn's subscriptions handed back.
   config<H>(facts: ViewFacts, hold: () => H): H;
+  // Every input the collector hands in goes through `host` from now on, as
+  // the daemon's does, so it takes its place in the host's mailbox behind
+  // the turns sent before it: a case whose requests go through `host` must
+  // route the collector's inputs there too, or a world state can overtake a
+  // config turn still waiting in the mailbox.
+  route(host: Pick<RendererHost, "deliver">): void;
 }
 
 export function collected(
@@ -38,6 +46,7 @@ export function collected(
 ): Collected {
   const worldStates = new WorldStates(() => {});
   let served: Served | null = null;
+  let routed: Pick<RendererHost, "deliver"> | null = null;
   const cache = (): Served => {
     if (served === null)
       throw new Error("the collector handed in before its cache was served");
@@ -53,6 +62,11 @@ export function collected(
     // world state, so a wait resolved inside the take sees no run it names
     // subscribed yet.
     deliver: async (event) => {
+      if (routed !== null)
+        return routed.deliver(
+          () => ({ kind: "event", event, at: instantAt(systemTimekeeper) }),
+          [],
+        );
       if (event.kind === "world-state") worldStates.take(event.worldState);
       else retireSession({ renderCache: cache(), worldStates }, event.session);
       await Promise.resolve();
@@ -66,6 +80,9 @@ export function collected(
     worldStates,
     serve: (c) => {
       served = c;
+    },
+    route: (host) => {
+      routed = host;
     },
     config: (facts, hold) => {
       worldStates.take(collector.requested(facts));
