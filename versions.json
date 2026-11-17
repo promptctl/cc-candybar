@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-781",
+      "ref": "refs/pull/781/merge",
+      "sha": "6722fc7c5a18b7f6808d20df20a326b1874ef91d",
+      "timestamp": "2026-11-17T05:57:26.458Z",
+      "commits": [
+        {
+          "sha": "6722fc7c5a18b7f6808d20df20a326b1874ef91d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T22:56:14-07:00",
+          "message": "Merge 01df73f0167ebae866ece54ffcaea7d80b61411e into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+        },
+        {
+          "sha": "01df73f0167ebae866ece54ffcaea7d80b61411e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T22:55:41-07:00",
+          "message": "feat(renderer): time is handed in: the renderer declares its wake, and animation and the idle close are its schedules (883)\n\nThe renderer reads no clock and sets no timer. Every output declares\n`wake`, the one instant it next needs a turn, derived from its state; the\nhost keeps one timer to it and hands in a `due` turn. The menu idle close,\npushed-frame cadence, the reload walk and the torn-write settle each derive\ntheir next instant, and a due turn runs them in order.\n\n- Feeds and MenuIdle move into the renderer; viewers are handed in whole,\n  and pushed frames leave in the output's `frames`.\n- The host's frame feeds keep only the subscriber book; the host idle\n  clock, its `menu-idle` input and the feeds' pin/frame pushes are gone.\n- turnMs is timed by the transport; the variable store and the verbs\n  read the turn's instant; the doctor's native check is read when asked.\n- The in-process link starts each input on a stack of its own, so a turn's\n  reactions run inside it before its wake is declared.\n- The daemon takes declared lanes before the status lines they gate.\n- Spec and memory updated.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1",
