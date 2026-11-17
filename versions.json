@@ -4,15 +4,22 @@
     {
       "version": "pr-789",
       "ref": "refs/pull/789/merge",
-      "sha": "0223fe6839678d056836a31cab4e5fecb8e231f2",
-      "timestamp": "2026-11-17T21:38:58.696Z",
+      "sha": "c044358ebf0d6377faf43df0a3c10a59c6c573cc",
+      "timestamp": "2026-11-17T21:59:23.697Z",
       "commits": [
         {
-          "sha": "0223fe6839678d056836a31cab4e5fecb8e231f2",
+          "sha": "c044358ebf0d6377faf43df0a3c10a59c6c573cc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T14:37:48-07:00",
-          "message": "Merge 3a01f0f9d2382847bc7492515a9300b03cea4174 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+          "timestamp": "2026-11-17T21:58:10Z",
+          "message": "Merge e895aae55d142491ee82ca92bed8e05747a15d0a into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "e895aae55d142491ee82ca92bed8e05747a15d0a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T14:57:58-07:00",
+          "message": "fix(daemon): an undo step whose layer left the chain is forgotten, a click leaves no session live, and a document no start handed in files nothing (uh4)\n\nFrom the high review of the stored-state change:\n- A step's role with no layer in the click's chain is a target that moved,\n  so the step leaves the stacks instead of refusing every undo after it.\n- A click's context no longer joins the renderer's live sessions: only a\n  context event makes one live and only a retire ends it, so a session\n  clicked but never requested pinned its origin's config forever.\n- A doctor document starts as one that did not read, so a filing before\n  any start hands it in cannot replace what the host holds.\n- Contexts read back at load are older than every session noted before it.\n- A heap snapshot asks the renderer only once its file is open.\n- Memory and pointer fixes.\n"
         },
         {
           "sha": "3a01f0f9d2382847bc7492515a9300b03cea4174",

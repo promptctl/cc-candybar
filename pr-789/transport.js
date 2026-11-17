@@ -87876,11 +87876,11 @@ function stepOf(click3, sessionId2, change, to) {
       what: `session setting "${change.key}"`
     };
   const file = click3.files.pathOf(change.role);
-  if (digestOf2(file) !== change.file)
+  if (file === null || digestOf2(file) !== change.file)
     return {
       kind: "moved",
       target: identity(change),
-      what: `the ${change.role} layer, now ${file}, not the file this step wrote`
+      what: file === null ? `the ${change.role} layer (this session renders from none now)` : `the ${change.role} layer, now ${file}, not the file this step wrote`
     };
   const applied3 = applyChanges(
     click3.files.read(file),
@@ -90803,16 +90803,11 @@ var ConfigWrites = class {
   roleOf(file) {
     return this.layerAt(file).role;
   }
-  // [LAW:no-silent-failure] The file the open click's chain holds for
-  // `role`: a role it holds no layer for is no layer a step of this session
-  // writes.
+  // The file the open click's chain holds for `role`, or null when it holds
+  // none: a repository no longer approved, or an explicit config file in
+  // place of the chain.
   pathOf(role) {
-    const layer = this.held().chain.find((l) => l.role === role);
-    if (layer === void 0)
-      throw new BadVerbArgs(
-        `the ${role} layer is not one this session renders from \u2014 its step is not taken`
-      );
-    return layer.path;
+    return this.held().chain.find((l) => l.role === role)?.path ?? null;
   }
   // A write of the open click, from the file as the click read it (`read`):
   // one change per file, from the click's first read of it to its last write.
@@ -91124,7 +91119,10 @@ function historyOwner(history, log) {
   };
 }
 function storedDocument(store, empty2, parse4) {
-  let held = { kind: "ok", value: empty2 };
+  let held = {
+    kind: "failed",
+    reason: `${store} was not handed in by the renderer's start`
+  };
   let handed;
   return {
     store,
@@ -91262,7 +91260,6 @@ function mainRenderer(parts, pushed) {
       case "click": {
         const session = event.session?.ok === true ? event.session.id : null;
         const latest = event.latest ?? (session === null ? null : contexts.get(session) ?? null);
-        if (latest !== null) contexts.set(latest.session, latest);
         const click3 = { ...event, latest };
         if (waits(latest?.requested ?? null, click3, record2)) return;
         clickTurn(parts, click3, effects);
@@ -91634,12 +91631,18 @@ var SessionRequests = class {
   // [LAW:no-ambient-temporal-coupling] Read once this daemon has won the
   // socket: a daemon still in its close writes the file until it exits, so a
   // read made before then could hold contexts its flush then replaces. A
-  // session noted already keeps what it was noted with.
+  // session noted already keeps what it was noted with, and stays newer than
+  // every context the file holds, so the bound drops the file's first.
   load() {
     if (this.file === null) return;
+    const noted = [...this.held];
+    this.held.clear();
     for (const context of this.read(this.file))
-      if (!this.held.has(context.session))
-        this.held.set(context.session, { context, request: null });
+      this.held.set(context.session, { context, request: null });
+    for (const [session, held] of noted) {
+      this.held.delete(session);
+      this.held.set(session, held);
+    }
     this.evictOldest();
   }
   // A request past the checkpoint, received `order`-th among requests of
