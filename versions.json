@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-779",
-      "ref": "refs/pull/779/merge",
-      "sha": "7b3ecc710765cae52338e117c9cd8f55580ed4be",
-      "timestamp": "2026-11-17T01:48:04.412Z",
-      "commits": [
-        {
-          "sha": "7b3ecc710765cae52338e117c9cd8f55580ed4be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T01:46:59Z",
-          "message": "Merge e019fc4bc3b112f07458288e46e10b67da23d487 into cace2e3245afefd551669afd6dd6c7b7b35875ba\n"
-        },
-        {
-          "sha": "e019fc4bc3b112f07458288e46e10b67da23d487",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T18:46:45-07:00",
-          "message": "fix(doctor): the host names where a run's session runs, and a click judges only a fresh reading (8ts)\n\nThe extra high review's findings:\n\n- The settings files a fix may write come from the session's own request:\n  the ask no longer carries an origin, so no renderer names its own write\n  allow-list.\n- The daemon-wide read queue is gone. The launcher's limit is per probe\n  kind and counts from the last launch, so serializing reads never kept a\n  run clear of it; a doctor-run click while a run is on its way starts none.\n- A fix or a mark judges a reading at most two minutes old. A reading names\n  the terminal that drew the bar when it was read, and a mark or a link\n  click is filed under it for good; an older one is read again first.\n- A new run takes the last report's rows off the bar until its own reading\n  lands, so no verdict or [fix] stands for a run no longer the session's.\n- A retire drops the session's doctor run before its view, so a teardown\n  that throws leaves no run asking for a discarded session.\n- The read's input is DoctorReadInput, apart from the reading's read arm.\n"
-        },
-        {
-          "sha": "6fa438cfb60b9dd4f8fed78b317a673290b43a21",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T18:28:53-07:00",
-          "message": "fix(doctor): every failure of a run's lane names the run, and a run is read whether or not its session has a view (8ts)\n\nThe medium review's findings:\n\n- The doctor lane is declared for one ask, so it is the one place that names\n  the run on every way the lane fails: the read, its declaration, the\n  session's whole declaration, the source's close. A failure from an earlier\n  run is never taken for a later one.\n- A session's doctor run joins the renderer's subscriptions whether or not a\n  view of the session is open, so a run asked after an eviction is read.\n- A run is read once its report is written; a report that throws fails the\n  run with the reason on the bar instead of leaving it read and unreported.\n- A fix or a mark judges the URL handler by how its own click arrived, and\n  files the clicked terminal for each link click, as before the move.\n- A whitespace-only file is its own parse, an empty object with no text, so\n  no span points into a document it is not.\n"
-        },
-        {
-          "sha": "bac1370b0e5e521f30c840ece7b465e39a09c47d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T18:15:52-07:00",
-          "message": "fix(doctor): a run asks for its reading until it lands, and the host reads one run at a time (8ts)\n\nThe high review's findings on the doctor's subscription, answered by holding it\nonly as long as it is needed:\n\n- A run is named by when its click ran, kept rising, so a renderer that starts\n  again never names a run the host still holds an earlier reading for.\n- The renderer stops asking once a reading lands, so later world states no\n  longer carry the whole machine; the collector keeps the settings files the\n  latest reading named, which is what a fix may write.\n- The doctor source keeps no unheld reading, reads one run at a time (two\n  runs' probes share the rate limit's windows), and scopes each read's\n  launches to its signal, so an abandoned read leaves no probe running.\n- A failed read is the fact's own failure, the one channel, so a failure from\n  the lane's declaration ends the run instead of leaving it \"being read\".\n- No draw waits on the doctor: its read probes fonts, the terminal and the\n  forge, so the report lands in a later world state, as the PR does.\n- A mark's or a post-mortems fix's report is written through the click's\n  journaled view, one with the rest of its click.\n- A settings file holding only whitespace is an empty object to the splice,\n  as it is to every reader, so a fix inserts into it instead of refusing.\n"
-        },
-        {
-          "sha": "d9be0507f43c52179c5a5f584bb2f52a439db52e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T17:52:44-07:00",
-          "message": "feat(doctor): the host reads a doctor run, and a fix lands only on the settings it diagnosed (8ts)\n\nA doctor click asks; it no longer probes. The renderer's doctor runs\nsubscribe with what each run asks, the host reads the machine for it\n(a keyed source in the collector) and hands the reading back in the\nsession's world state, and the renderer writes the report from that\nreading, the run's config load and the doctor's stores. No renderer code\nreads Claude Code's settings or spawns a probe; the doctor's reaches,\nthe in-click gathers and their stats are gone.\n\nA settings fix is a change guarded by what the run read of that one\nsetting, targeted at a settings file the session's reading named, and\nwritten in strict JSON. The host refuses it when the setting moved since\nthe diagnosis, or when no reading named the file, with the reason on the\nbar; the run starts again either way.\n\nA request waits on the session's unread doctor reading as it waits on a\nnamed run, so the draw after the click shows the report. A probe the rate\nlimit refused fails the run's reading, shown on the bar. Settings\ndocuments are typed as JSON so a reading crosses the wire.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "cace2e3245afefd551669afd6dd6c7b7b35875ba",
-      "timestamp": "2026-11-17T00:20:49.605Z",
+      "sha": "5db003d3ba2a42ea4935f43b1639a40e148f13b4",
+      "timestamp": "2026-11-17T01:55:14.642Z",
       "commits": [
         {
-          "sha": "cace2e3245afefd551669afd6dd6c7b7b35875ba",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-17T00:19:45Z",
-          "message": "chore(release): set `package.json` to 1.225.1\n\n## [1.225.1](https://github.com/promptctl/cc-candybar/compare/v1.225.0...v1.225.1) (2026-11-17)\n\n### Bug Fixes\n\n* **daemon:** once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (w8l) ([#778](https://github.com/promptctl/cc-candybar/issues/778)) ([78cebd1](https://github.com/promptctl/cc-candybar/commit/78cebd1db6caad5c0c7815f4c9c14e0f86e76157))\n"
+          "sha": "5db003d3ba2a42ea4935f43b1639a40e148f13b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T18:54:15-07:00",
+          "message": "feat(doctor): the host reads a doctor run, and a fix lands only on the settings it diagnosed (8ts) (#779)\n\n* feat(doctor): the host reads a doctor run, and a fix lands only on the settings it diagnosed (8ts)\n\nA doctor click asks; it no longer probes. The renderer's doctor runs\nsubscribe with what each run asks, the host reads the machine for it\n(a keyed source in the collector) and hands the reading back in the\nsession's world state, and the renderer writes the report from that\nreading, the run's config load and the doctor's stores. No renderer code\nreads Claude Code's settings or spawns a probe; the doctor's reaches,\nthe in-click gathers and their stats are gone.\n\nA settings fix is a change guarded by what the run read of that one\nsetting, targeted at a settings file the session's reading named, and\nwritten in strict JSON. The host refuses it when the setting moved since\nthe diagnosis, or when no reading named the file, with the reason on the\nbar; the run starts again either way.\n\nA request waits on the session's unread doctor reading as it waits on a\nnamed run, so the draw after the click shows the report. A probe the rate\nlimit refused fails the run's reading, shown on the bar. Settings\ndocuments are typed as JSON so a reading crosses the wire.\n\n* fix(doctor): a run asks for its reading until it lands, and the host reads one run at a time (8ts)\n\nThe high review's findings on the doctor's subscription, answered by holding it\nonly as long as it is needed:\n\n- A run is named by when its click ran, kept rising, so a renderer that starts\n  again never names a run the host still holds an earlier reading for.\n- The renderer stops asking once a reading lands, so later world states no\n  longer carry the whole machine; the collector keeps the settings files the\n  latest reading named, which is what a fix may write.\n- The doctor source keeps no unheld reading, reads one run at a time (two\n  runs' probes share the rate limit's windows), and scopes each read's\n  launches to its signal, so an abandoned read leaves no probe running.\n- A failed read is the fact's own failure, the one channel, so a failure from\n  the lane's declaration ends the run instead of leaving it \"being read\".\n- No draw waits on the doctor: its read probes fonts, the terminal and the\n  forge, so the report lands in a later world state, as the PR does.\n- A mark's or a post-mortems fix's report is written through the click's\n  journaled view, one with the rest of its click.\n- A settings file holding only whitespace is an empty object to the splice,\n  as it is to every reader, so a fix inserts into it instead of refusing.\n\n* fix(doctor): every failure of a run's lane names the run, and a run is read whether or not its session has a view (8ts)\n\nThe medium review's findings:\n\n- The doctor lane is declared for one ask, so it is the one place that names\n  the run on every way the lane fails: the read, its declaration, the\n  session's whole declaration, the source's close. A failure from an earlier\n  run is never taken for a later one.\n- A session's doctor run joins the renderer's subscriptions whether or not a\n  view of the session is open, so a run asked after an eviction is read.\n- A run is read once its report is written; a report that throws fails the\n  run with the reason on the bar instead of leaving it read and unreported.\n- A fix or a mark judges the URL handler by how its own click arrived, and\n  files the clicked terminal for each link click, as before the move.\n- A whitespace-only file is its own parse, an empty object with no text, so\n  no span points into a document it is not.\n\n* fix(doctor): the host names where a run's session runs, and a click judges only a fresh reading (8ts)\n\nThe extra high review's findings:\n\n- The settings files a fix may write come from the session's own request:\n  the ask no longer carries an origin, so no renderer names its own write\n  allow-list.\n- The daemon-wide read queue is gone. The launcher's limit is per probe\n  kind and counts from the last launch, so serializing reads never kept a\n  run clear of it; a doctor-run click while a run is on its way starts none.\n- A fix or a mark judges a reading at most two minutes old. A reading names\n  the terminal that drew the bar when it was read, and a mark or a link\n  click is filed under it for good; an older one is read again first.\n- A new run takes the last report's rows off the bar until its own reading\n  lands, so no verdict or [fix] stands for a run no longer the session's.\n- A retire drops the session's doctor run before its view, so a teardown\n  that throws leaves no run asking for a discarded session.\n- The read's input is DoctorReadInput, apart from the reading's read arm."
         }
       ]
     }

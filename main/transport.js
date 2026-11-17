@@ -15744,8 +15744,8 @@ var require_printTree = __commonJS({
           continue;
         const isLast = i2 === last2;
         const child = fn(tab + (isLast ? " " : "\u2502") + "  ");
-        const branch = child ? isLast ? "\u2514\u2500" : "\u251C\u2500" : "\u2502";
-        str += "\n" + tab + branch + (child ? " " + child : "");
+        const branch2 = child ? isLast ? "\u2514\u2500" : "\u251C\u2500" : "\u2502";
+        str += "\n" + tab + branch2 + (child ? " " + child : "");
       }
       return str;
     };
@@ -36019,7 +36019,7 @@ function cacheTallyFacts(deps) {
     usage: tally(deps.usageStore.getStats())
   };
 }
-function settledLanes(outcome, { plugins: plugins2, runs }) {
+function settledLanes(outcome, { plugins: plugins2, runs, doctor }) {
   const lane = settledLane(outcome);
   return {
     git: lane,
@@ -36034,7 +36034,14 @@ function settledLanes(outcome, { plugins: plugins2, runs }) {
         digest2,
         { digest: digest2, current: () => lane.current(), fault: () => null }
       ])
-    )
+    ),
+    doctor: doctorLane(doctor, () => lane)
+  };
+}
+function originOf({ cwd: cwd2, hookData: hookData2 }) {
+  return {
+    cwd: cwd2 ?? hookData2.workspace.current_dir,
+    projectDir: hookData2.workspace.project_dir
   };
 }
 function gitAt({
@@ -36103,10 +36110,28 @@ function declareLanes(owners, holds2, facts, sources) {
         fault: () => null,
         ...declare(`run ${shortDigest(digest2)}`, take)
       })
+    ),
+    doctor: doctorLane(
+      sources.doctor,
+      (ask2) => declare(
+        "doctor",
+        () => owners.doctor.declare(holds2, {
+          session: facts.hookData.session_id,
+          hints: facts.hints,
+          origin: originOf(facts),
+          ask: ask2
+        })
+      )
     )
   };
   return { lanes, faults };
 }
+function doctorLane(ask2, take) {
+  if (ask2 === null) return settledLane(ABSENT);
+  const lane = take(ask2);
+  return { current: () => ofRun(ask2, lane.current()) };
+}
+var ofRun = ({ run: run3 }, current2) => current2.kind === "failed" ? ok({ run: run3, kind: "failed", reason: current2.reason }) : current2;
 function readingsOf(inputs, lanes) {
   const { deps } = inputs;
   const sessionId2 = inputs.hookData.session_id;
@@ -36148,7 +36173,8 @@ function readingsOf(inputs, lanes) {
         digest2,
         { reading: lane.current(), fault: lane.fault() }
       ])
-    )
+    ),
+    doctor: lanes.doctor.current()
   };
   return {
     lanes: laneReadings,
@@ -51912,626 +51938,6 @@ function readTailSync(path44, maxBytes) {
 // src/doctor/gather.ts
 init_globals();
 
-// src/claude-settings-read.ts
-init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
-
-// src/config/json5-edit.ts
-init_globals();
-var import_json5 = __toESM(require_dist(), 1);
-var Json5EditError = class extends Error {
-  constructor(reason, offset) {
-    super(`${reason} (at offset ${offset})`);
-    this.reason = reason;
-    this.offset = offset;
-    this.name = "Json5EditError";
-  }
-  reason;
-  offset;
-};
-var IDENT_START = /[A-Za-z_$\p{L}]/u;
-var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
-var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
-var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
-var Scanner = class {
-  constructor(text4) {
-    this.text = text4;
-  }
-  text;
-  pos = 0;
-  peek() {
-    return this.text[this.pos] ?? "";
-  }
-  fail(message2) {
-    throw new Json5EditError(message2, this.pos);
-  }
-  skipTrivia() {
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") return;
-      if (WHITESPACE.test(c)) {
-        this.pos++;
-      } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
-      } else if (c === "/" && this.text[this.pos + 1] === "*") {
-        const close = this.text.indexOf("*/", this.pos + 2);
-        if (close === -1) this.fail("unterminated block comment");
-        this.pos = close + 2;
-      } else {
-        return;
-      }
-    }
-  }
-  expect(c) {
-    if (this.peek() !== c) this.fail(`expected "${c}"`);
-    this.pos++;
-  }
-  value() {
-    this.skipTrivia();
-    const c = this.peek();
-    if (c === "{") return this.object();
-    if (c === "[") return this.array();
-    if (c === '"' || c === "'") {
-      const span2 = this.stringSpan();
-      return { kind: "string", span: span2, value: this.decode(span2) };
-    }
-    if (c === "") this.fail("unexpected end of input");
-    const start = this.pos;
-    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
-      this.pos++;
-    }
-    if (this.pos === start) this.fail(`unexpected character "${c}"`);
-    const span = { start, end: this.pos };
-    const decoded = this.decode(span);
-    if (decoded === null) return { kind: "null", span };
-    if (typeof decoded === "boolean") {
-      return { kind: "boolean", span, value: decoded };
-    }
-    if (typeof decoded === "number") {
-      return { kind: "number", span, value: decoded };
-    }
-    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
-  }
-  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
-  decode(span) {
-    try {
-      return import_json5.default.parse(this.text.slice(span.start, span.end));
-    } catch (e) {
-      throw new Json5EditError(e.message, span.start);
-    }
-  }
-  stringSpan() {
-    const start = this.pos;
-    const quote2 = this.peek();
-    this.pos++;
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") this.fail("unterminated string");
-      if (c === "\\") {
-        const crlf = this.text.startsWith("\r\n", this.pos + 1);
-        this.pos += crlf ? 3 : 2;
-        continue;
-      }
-      this.pos++;
-      if (c === quote2) return { start, end: this.pos };
-      if (c === "\n") this.fail("unterminated string");
-    }
-  }
-  key() {
-    const c = this.peek();
-    if (c === '"' || c === "'") {
-      const span = this.stringSpan();
-      return { key: this.decode(span), span };
-    }
-    const start = this.pos;
-    if (!IDENT_START.test(c)) this.fail("expected an object key");
-    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
-      this.pos++;
-    }
-    return {
-      key: this.text.slice(start, this.pos),
-      span: { start, end: this.pos }
-    };
-  }
-  object() {
-    const start = this.pos;
-    this.expect("{");
-    const entries = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "}") break;
-      const { key, span: keySpan } = this.key();
-      if (entries.some((e) => e.key === key)) {
-        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
-      }
-      this.skipTrivia();
-      this.expect(":");
-      const value = this.value();
-      entries.push({
-        key,
-        keySpan,
-        value,
-        span: { start: keySpan.start, end: value.span.end }
-      });
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "}") this.fail('expected "," or "}"');
-    }
-    this.expect("}");
-    return { kind: "object", span: { start, end: this.pos }, entries };
-  }
-  array() {
-    const start = this.pos;
-    this.expect("[");
-    const elements = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "]") break;
-      elements.push(this.value());
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "]") this.fail('expected "," or "]"');
-    }
-    this.expect("]");
-    return { kind: "array", span: { start, end: this.pos }, elements };
-  }
-};
-function parseDocument(text4) {
-  const s = new Scanner(text4);
-  const root = s.value();
-  s.skipTrivia();
-  if (s.pos !== text4.length) s.fail("trailing content after the document");
-  return root;
-}
-function entryOf2(node, key) {
-  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
-}
-function nodeAt(root, path44) {
-  let node = root;
-  for (const key of path44) {
-    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
-  }
-  return node;
-}
-function textOf(text4, node) {
-  return text4.slice(node.span.start, node.span.end);
-}
-function movableTextOf(text4, node) {
-  const indent2 = indentOfLine(text4, node.span.start);
-  const literals = literalSpans(node);
-  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
-  let lineStart = node.span.start;
-  return textOf(text4, node).split("\n").map((line, i2) => {
-    const at = lineStart;
-    lineStart += line.length + 1;
-    const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
-    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
-  }).join("\n");
-}
-function literalSpans(node) {
-  switch (node.kind) {
-    case "object":
-      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
-    case "array":
-      return node.elements.flatMap(literalSpans);
-    case "string":
-      return [node.span];
-    default:
-      return [];
-  }
-}
-var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-function keyText(key) {
-  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
-}
-var JSON5_DIALECT = {
-  key: keyText,
-  trailingComma: ",",
-  parse: (text4) => import_json5.default.parse(text4)
-};
-var JSON_DIALECT = {
-  key: (key) => JSON.stringify(key),
-  trailingComma: "",
-  parse: (text4) => JSON.parse(text4)
-};
-function json5Text(value) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
-    return `[
-${items.join("\n")}
-]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).filter(
-      ([, v]) => v !== void 0
-    );
-    if (entries.length === 0) return "{}";
-    const items = entries.map(
-      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
-    );
-    return `{
-${items.join("\n")}
-}`;
-  }
-  return JSON.stringify(value);
-}
-function eolOf(text4) {
-  return text4.includes("\r\n") ? "\r\n" : "\n";
-}
-function reindent(valueText, indent2, eol) {
-  return valueText.split("\n").join(`${eol}${indent2}`);
-}
-function entryText(path44, valueText, dialect) {
-  const [head, ...rest2] = path44;
-  const inner = rest2.length === 0 ? valueText : `{
-  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
-}`;
-  return `${dialect.key(head)}: ${inner}`;
-}
-function splice(text4, start, end, insert) {
-  return text4.slice(0, start) + insert + text4.slice(end);
-}
-function lineStartOf(text4, offset) {
-  return text4.lastIndexOf("\n", offset - 1) + 1;
-}
-function isBlank(s) {
-  return /^[ \t]*$/.test(s);
-}
-function indentOfLine(text4, offset) {
-  const ls = lineStartOf(text4, offset);
-  return /^[ \t]*/.exec(text4.slice(ls))[0];
-}
-function startsLine(text4, offset) {
-  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
-}
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
-function trailerAfter(text4, end) {
-  let i2 = end;
-  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
-  const commaEnd = text4[i2] === "," ? i2 + 1 : -1;
-  if (commaEnd !== -1) i2 = commaEnd;
-  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
-  LINE_TRAILER.lastIndex = i2;
-  const m = LINE_TRAILER.exec(text4);
-  if (m === null) return { commaEnd, line: null };
-  const next = i2 + m[0].length;
-  return { commaEnd, line: { at: next - m[1].length, next } };
-}
-function removeMember(text4, span) {
-  const { commaEnd, line } = trailerAfter(text4, span.end);
-  if (startsLine(text4, span.start) && line !== null) {
-    return splice(text4, lineStartOf(text4, span.start), line.next, "");
-  }
-  if (commaEnd !== -1) {
-    let end = commaEnd;
-    while (end < text4.length && text4[end] === " ") end++;
-    return splice(text4, span.start, end, "");
-  }
-  let start = span.start;
-  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
-    start--;
-  }
-  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
-  return splice(text4, span.start, span.end, "");
-}
-function insertLineAfter(text4, span, trailer, memberText, indent2) {
-  const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
-  const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text4);
-  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
-  return splice(withComma, at, at, line);
-}
-function appendMember(text4, container, memberText, dialect) {
-  const members = container.kind === "object" ? container.entries : container.elements;
-  const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text4, container.span.start);
-  if (last2 === void 0) {
-    const inner = baseIndent + "  ";
-    const eol = eolOf(text4);
-    return splice(
-      text4,
-      container.span.start + 1,
-      container.span.end - 1,
-      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
-    );
-  }
-  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
-  if (startsLine(text4, last2.span.start) && line !== null) {
-    const indent2 = text4.slice(
-      lineStartOf(text4, last2.span.start),
-      last2.span.start
-    );
-    return insertLineAfter(
-      text4,
-      last2.span,
-      { commaEnd, line },
-      memberText,
-      indent2
-    );
-  }
-  const at = commaEnd === -1 ? last2.span.end : commaEnd;
-  const sep2 = commaEnd === -1 ? ", " : " ";
-  const tail = commaEnd === -1 ? "" : ",";
-  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
-}
-function setValue(text4, path44, valueText, dialect) {
-  if (path44.length === 0) {
-    throw new Json5EditError("setValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) {
-    const eol = eolOf(text4);
-    return `{${eol}  ${reindent(entryText(path44, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
-  return setBelow(text4, parseDocument(text4), path44, valueText, dialect);
-}
-function insertValue(text4, path44, valueText, dialect, precedes) {
-  const parentPath = path44.slice(0, -1);
-  const leaf = path44[path44.length - 1];
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  if (leaf === void 0 || parent?.kind !== "object")
-    throw new Json5EditError(
-      `cannot insert ${path44.join(".")}: its parent is not an object`,
-      parent?.span.start ?? 0
-    );
-  if (entryOf2(parent, leaf) !== void 0)
-    throw new Json5EditError(
-      `cannot insert ${path44.join(".")}: it is already there`,
-      parent.span.start
-    );
-  const member = entryText([leaf], valueText, dialect);
-  const next = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
-  if (next === void 0) return appendMember(text4, parent, member, dialect);
-  if (!startsLine(text4, next.span.start))
-    return splice(text4, next.span.start, next.span.start, `${member}, `);
-  const indent2 = indentOfLine(text4, next.span.start);
-  const eol = eolOf(text4);
-  const at = lineStartOf(text4, next.span.start);
-  return splice(
-    text4,
-    at,
-    at,
-    `${indent2}${reindent(member, indent2, eol)},${eol}`
-  );
-}
-function setBelow(text4, start, path44, valueText, dialect) {
-  let node = start;
-  for (let i2 = 0; i2 < path44.length; i2++) {
-    if (node.kind !== "object") {
-      throw new Json5EditError(
-        `cannot set ${path44.join(".")}: ${path44.slice(0, i2).join(".") || "the document"} is not an object`,
-        node.span.start
-      );
-    }
-    const entry = entryOf2(node, path44[i2]);
-    if (entry === void 0) {
-      return appendMember(
-        text4,
-        node,
-        entryText(path44.slice(i2), valueText, dialect),
-        dialect
-      );
-    }
-    if (i2 === path44.length - 1) {
-      const indent2 = indentOfLine(text4, entry.keySpan.start);
-      return splice(
-        text4,
-        entry.value.span.start,
-        entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text4))
-      );
-    }
-    node = entry.value;
-  }
-  throw new Json5EditError("unreachable: path exhausted", 0);
-}
-function deleteValue(text4, path44, keep2 = 0) {
-  if (path44.length === 0) {
-    throw new Json5EditError("deleteValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) return text4;
-  const parentPath = path44.slice(0, -1);
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf2(parent, path44[path44.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text4;
-  const pruned = removeMember(text4, entry.span);
-  return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
-}
-var CHILD_KEYS = ["h", "v", "children"];
-function placementIdOf(node) {
-  if (node.kind === "string") return node.value;
-  if (node.kind !== "object") return void 0;
-  const seg2 = entryOf2(node, "seg")?.value;
-  const kind = entryOf2(node, "kind")?.value;
-  const name = entryOf2(node, "name")?.value;
-  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
-  if (segName === void 0) return void 0;
-  const id2 = entryOf2(node, "id")?.value;
-  return id2?.kind === "string" ? id2.value : segName;
-}
-function childArraysOf(node) {
-  if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
-    (v) => v?.kind === "array"
-  );
-}
-function rowEntriesOf(node) {
-  const rows = entryOf2(node, "rows")?.value;
-  return rows?.kind === "object" ? rows.entries : null;
-}
-function restagesFragment(node) {
-  if (node.kind !== "object") return true;
-  const rows = rowEntriesOf(node);
-  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
-}
-function* nodesIn(node, bareAt) {
-  yield { node, bareAt };
-  for (const array of childArraysOf(node)) {
-    for (const child of array.elements) yield* nodesIn(child, null);
-  }
-  for (const row2 of rowEntriesOf(node) ?? []) {
-    yield* nodesIn(
-      row2.value,
-      bareAt === null ? null : [...bareAt, "rows", row2.key]
-    );
-  }
-}
-function hasSegmentRef(root, id2) {
-  for (const { node } of nodesIn(root, null)) {
-    if (placementIdOf(node) === id2) return true;
-  }
-  return false;
-}
-function refAt(text4, rootPath, id2) {
-  const root = nodeAt(parseDocument(text4), rootPath);
-  if (root === void 0) return null;
-  for (const { node, bareAt } of nodesIn(root, rootPath)) {
-    if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text4, ref: node };
-    const wrapped = setValue(
-      text4,
-      bareAt,
-      `{ h: [${textOf(text4, node)}] }`,
-      JSON5_DIALECT
-    );
-    return refAt(wrapped, rootPath, id2);
-  }
-  return null;
-}
-function removeSegmentRef(text4, rootPath, target) {
-  const hit = refAt(text4, rootPath, target);
-  return hit === null ? null : removeMember(hit.text, hit.ref.span);
-}
-function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
-  const hit = refAt(text4, rootPath, anchor);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
-  const { commaEnd, line } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && line !== null) {
-    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
-    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
-      src,
-      ref.span.start,
-      ref.span.start,
-      `${newText},${eolOf(src)}${indent2}`
-    );
-  }
-  const refText = textOf(src, ref);
-  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
-  return splice(src, ref.span.start, ref.span.end, pair);
-}
-function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
-  const hit = refAt(text4, rootPath, id2);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const settings = `{ ${keyText(setting)}: ${valueText} }`;
-  if (ref.kind === "string") {
-    return splice(
-      src,
-      ref.span.start,
-      ref.span.end,
-      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
-    );
-  }
-  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
-}
-
-// src/claude-settings-read.ts
-function readSettingsFile(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
-      return null;
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
-  }
-}
-var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
-function readClaudeSettingsText(settingsPath) {
-  return readSettingsFile(settingsPath)?.text ?? "";
-}
-function readClaudeSettingsOutcome(settingsPath) {
-  const reason = (e) => e instanceof Error ? e.message : String(e);
-  let text4;
-  try {
-    text4 = readClaudeSettingsText(settingsPath);
-  } catch (e) {
-    return failed(reason(e), "read");
-  }
-  try {
-    return ok(parseSettings(settingsPath, text4));
-  } catch (e) {
-    return failed(reason(e), "parse");
-  }
-}
-function parseSettings(settingsPath, text4) {
-  let parsed2;
-  try {
-    if (/^\s*$/.test(text4)) return {};
-    parsed2 = JSON_DIALECT.parse(text4);
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed2)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed2;
-}
-function readSettingsChain(at) {
-  const dropIns = import_node_path14.default.join(at.managedDir, "managed-settings.d");
-  const located2 = [
-    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
-      scope: "managed",
-      path: import_node_path14.default.join(dropIns, name)
-    })),
-    {
-      scope: "managed",
-      path: import_node_path14.default.join(at.managedDir, "managed-settings.json")
-    },
-    {
-      scope: "project-local",
-      path: projectLocalSettingsFile(at.projectDir)
-    },
-    {
-      scope: "project",
-      path: import_node_path14.default.join(at.projectDir, ".claude", "settings.json")
-    },
-    { scope: "user", path: at.userFile }
-  ];
-  const read2 = located2.flatMap((l) => {
-    const file = readSettingsFile(l.path);
-    if (file === null) return [];
-    const settings = parseSettings(l.path, file.text);
-    const { env: env2 = {} } = settings;
-    if (!isJsonObject(env2)) {
-      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
-    }
-    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
-  });
-  const user = read2.find((r) => r.source.scope === "user");
-  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
-}
-function visibleJsonFiles(dir) {
-  try {
-    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
-  } catch (e) {
-    if (e.code === "ENOENT") return [];
-    throw cannotRead(dir, e);
-  }
-}
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
-
 // src/doctor/data-needs.ts
 init_globals();
 
@@ -53584,7 +52990,7 @@ function isRecord(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function parseStatusV2(stdout2) {
-  let branch = "detached";
+  let branch2 = "detached";
   let oid = ABSENT;
   let upstream = ABSENT;
   let aheadBehind = ABSENT;
@@ -53601,7 +53007,7 @@ function parseStatusV2(stdout2) {
         oid = v === "(initial)" ? ABSENT : ok(v);
       } else if (rest2.startsWith("branch.head ")) {
         const v = rest2.slice("branch.head ".length).trim();
-        branch = v === "(detached)" ? "detached" : v;
+        branch2 = v === "(detached)" ? "detached" : v;
       } else if (rest2.startsWith("branch.upstream ")) {
         upstream = ok(rest2.slice("branch.upstream ".length).trim());
       } else if (rest2.startsWith("branch.ab ")) {
@@ -53630,7 +53036,7 @@ function parseStatusV2(stdout2) {
   if (conflicts > 0) status = "conflicts";
   else if (staged || unstaged || untracked2) status = "dirty";
   return {
-    branch,
+    branch: branch2,
     status,
     aheadBehind,
     oid,
@@ -58494,6 +57900,539 @@ function ident(name) {
 
 // src/config/loader/diagnostics.ts
 init_globals();
+
+// src/config/json5-edit.ts
+init_globals();
+var import_json5 = __toESM(require_dist(), 1);
+var Json5EditError = class extends Error {
+  constructor(reason, offset) {
+    super(`${reason} (at offset ${offset})`);
+    this.reason = reason;
+    this.offset = offset;
+    this.name = "Json5EditError";
+  }
+  reason;
+  offset;
+};
+var IDENT_START = /[A-Za-z_$\p{L}]/u;
+var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
+var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
+var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var Scanner = class {
+  constructor(text4) {
+    this.text = text4;
+  }
+  text;
+  pos = 0;
+  peek() {
+    return this.text[this.pos] ?? "";
+  }
+  fail(message2) {
+    throw new Json5EditError(message2, this.pos);
+  }
+  skipTrivia() {
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") return;
+      if (WHITESPACE.test(c)) {
+        this.pos++;
+      } else if (c === "/" && this.text[this.pos + 1] === "/") {
+        const nl = this.text.indexOf("\n", this.pos);
+        this.pos = nl === -1 ? this.text.length : nl;
+      } else if (c === "/" && this.text[this.pos + 1] === "*") {
+        const close = this.text.indexOf("*/", this.pos + 2);
+        if (close === -1) this.fail("unterminated block comment");
+        this.pos = close + 2;
+      } else {
+        return;
+      }
+    }
+  }
+  expect(c) {
+    if (this.peek() !== c) this.fail(`expected "${c}"`);
+    this.pos++;
+  }
+  value() {
+    this.skipTrivia();
+    const c = this.peek();
+    if (c === "{") return this.object();
+    if (c === "[") return this.array();
+    if (c === '"' || c === "'") {
+      const span2 = this.stringSpan();
+      return { kind: "string", span: span2, value: this.decode(span2) };
+    }
+    if (c === "") this.fail("unexpected end of input");
+    const start = this.pos;
+    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
+      this.pos++;
+    }
+    if (this.pos === start) this.fail(`unexpected character "${c}"`);
+    const span = { start, end: this.pos };
+    const decoded = this.decode(span);
+    if (decoded === null) return { kind: "null", span };
+    if (typeof decoded === "boolean") {
+      return { kind: "boolean", span, value: decoded };
+    }
+    if (typeof decoded === "number") {
+      return { kind: "number", span, value: decoded };
+    }
+    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
+  }
+  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
+  decode(span) {
+    try {
+      return import_json5.default.parse(this.text.slice(span.start, span.end));
+    } catch (e) {
+      throw new Json5EditError(e.message, span.start);
+    }
+  }
+  stringSpan() {
+    const start = this.pos;
+    const quote2 = this.peek();
+    this.pos++;
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") this.fail("unterminated string");
+      if (c === "\\") {
+        const crlf = this.text.startsWith("\r\n", this.pos + 1);
+        this.pos += crlf ? 3 : 2;
+        continue;
+      }
+      this.pos++;
+      if (c === quote2) return { start, end: this.pos };
+      if (c === "\n") this.fail("unterminated string");
+    }
+  }
+  key() {
+    const c = this.peek();
+    if (c === '"' || c === "'") {
+      const span = this.stringSpan();
+      return { key: this.decode(span), span };
+    }
+    const start = this.pos;
+    if (!IDENT_START.test(c)) this.fail("expected an object key");
+    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
+      this.pos++;
+    }
+    return {
+      key: this.text.slice(start, this.pos),
+      span: { start, end: this.pos }
+    };
+  }
+  object() {
+    const start = this.pos;
+    this.expect("{");
+    const entries = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "}") break;
+      const { key, span: keySpan } = this.key();
+      if (entries.some((e) => e.key === key)) {
+        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
+      }
+      this.skipTrivia();
+      this.expect(":");
+      const value = this.value();
+      entries.push({
+        key,
+        keySpan,
+        value,
+        span: { start: keySpan.start, end: value.span.end }
+      });
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "}") this.fail('expected "," or "}"');
+    }
+    this.expect("}");
+    return { kind: "object", span: { start, end: this.pos }, entries };
+  }
+  array() {
+    const start = this.pos;
+    this.expect("[");
+    const elements = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "]") break;
+      elements.push(this.value());
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "]") this.fail('expected "," or "]"');
+    }
+    this.expect("]");
+    return { kind: "array", span: { start, end: this.pos }, elements };
+  }
+};
+function parseDocument(text4) {
+  const s = new Scanner(text4);
+  const root = s.value();
+  s.skipTrivia();
+  if (s.pos !== text4.length) s.fail("trailing content after the document");
+  return root;
+}
+function entryOf2(node, key) {
+  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
+}
+function nodeAt(root, path44) {
+  let node = root;
+  for (const key of path44) {
+    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
+  }
+  return node;
+}
+function textOf(text4, node) {
+  return text4.slice(node.span.start, node.span.end);
+}
+function movableTextOf(text4, node) {
+  const indent2 = indentOfLine(text4, node.span.start);
+  const literals = literalSpans(node);
+  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
+  let lineStart = node.span.start;
+  return textOf(text4, node).split("\n").map((line, i2) => {
+    const at = lineStart;
+    lineStart += line.length + 1;
+    const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
+    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
+  }).join("\n");
+}
+function literalSpans(node) {
+  switch (node.kind) {
+    case "object":
+      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
+    case "array":
+      return node.elements.flatMap(literalSpans);
+    case "string":
+      return [node.span];
+    default:
+      return [];
+  }
+}
+var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function keyText(key) {
+  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
+}
+var JSON5_DIALECT = {
+  key: keyText,
+  trailingComma: ",",
+  parse: (text4) => import_json5.default.parse(text4)
+};
+var JSON_DIALECT = {
+  key: (key) => JSON.stringify(key),
+  trailingComma: "",
+  parse: (text4) => JSON.parse(text4)
+};
+function json5Text(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
+    return `[
+${items.join("\n")}
+]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).filter(
+      ([, v]) => v !== void 0
+    );
+    if (entries.length === 0) return "{}";
+    const items = entries.map(
+      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
+    );
+    return `{
+${items.join("\n")}
+}`;
+  }
+  return JSON.stringify(value);
+}
+function eolOf(text4) {
+  return text4.includes("\r\n") ? "\r\n" : "\n";
+}
+function reindent(valueText, indent2, eol) {
+  return valueText.split("\n").join(`${eol}${indent2}`);
+}
+function entryText(path44, valueText, dialect) {
+  const [head, ...rest2] = path44;
+  const inner = rest2.length === 0 ? valueText : `{
+  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
+}`;
+  return `${dialect.key(head)}: ${inner}`;
+}
+function splice(text4, start, end, insert) {
+  return text4.slice(0, start) + insert + text4.slice(end);
+}
+function lineStartOf(text4, offset) {
+  return text4.lastIndexOf("\n", offset - 1) + 1;
+}
+function isBlank(s) {
+  return /^[ \t]*$/.test(s);
+}
+function indentOfLine(text4, offset) {
+  const ls = lineStartOf(text4, offset);
+  return /^[ \t]*/.exec(text4.slice(ls))[0];
+}
+function startsLine(text4, offset) {
+  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
+}
+var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+function trailerAfter(text4, end) {
+  let i2 = end;
+  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
+  const commaEnd = text4[i2] === "," ? i2 + 1 : -1;
+  if (commaEnd !== -1) i2 = commaEnd;
+  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
+  LINE_TRAILER.lastIndex = i2;
+  const m = LINE_TRAILER.exec(text4);
+  if (m === null) return { commaEnd, line: null };
+  const next = i2 + m[0].length;
+  return { commaEnd, line: { at: next - m[1].length, next } };
+}
+function removeMember(text4, span) {
+  const { commaEnd, line } = trailerAfter(text4, span.end);
+  if (startsLine(text4, span.start) && line !== null) {
+    return splice(text4, lineStartOf(text4, span.start), line.next, "");
+  }
+  if (commaEnd !== -1) {
+    let end = commaEnd;
+    while (end < text4.length && text4[end] === " ") end++;
+    return splice(text4, span.start, end, "");
+  }
+  let start = span.start;
+  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
+    start--;
+  }
+  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
+  return splice(text4, span.start, span.end, "");
+}
+function insertLineAfter(text4, span, trailer, memberText, indent2) {
+  const hasComma = trailer.commaEnd !== -1;
+  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
+  const at = trailer.line.at + (hasComma ? 0 : 1);
+  const eol = eolOf(text4);
+  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
+  return splice(withComma, at, at, line);
+}
+function appendMember(text4, container, memberText, dialect) {
+  const members = container.kind === "object" ? container.entries : container.elements;
+  const last2 = members[members.length - 1];
+  const baseIndent = indentOfLine(text4, container.span.start);
+  if (last2 === void 0) {
+    const inner = baseIndent + "  ";
+    const eol = eolOf(text4);
+    return splice(
+      text4,
+      container.span.start + 1,
+      container.span.end - 1,
+      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
+    );
+  }
+  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
+  if (startsLine(text4, last2.span.start) && line !== null) {
+    const indent2 = text4.slice(
+      lineStartOf(text4, last2.span.start),
+      last2.span.start
+    );
+    return insertLineAfter(
+      text4,
+      last2.span,
+      { commaEnd, line },
+      memberText,
+      indent2
+    );
+  }
+  const at = commaEnd === -1 ? last2.span.end : commaEnd;
+  const sep2 = commaEnd === -1 ? ", " : " ";
+  const tail = commaEnd === -1 ? "" : ",";
+  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
+}
+function setValue(text4, path44, valueText, dialect) {
+  if (path44.length === 0) {
+    throw new Json5EditError("setValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) {
+    const eol = eolOf(text4);
+    return `{${eol}  ${reindent(entryText(path44, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
+  }
+  return setBelow(text4, parseDocument(text4), path44, valueText, dialect);
+}
+function insertValue(text4, path44, valueText, dialect, precedes) {
+  const parentPath = path44.slice(0, -1);
+  if (/^\s*$/.test(text4) && parentPath.length === 0)
+    return setValue(text4, path44, valueText, dialect);
+  const leaf = path44[path44.length - 1];
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  if (leaf === void 0 || parent?.kind !== "object")
+    throw new Json5EditError(
+      `cannot insert ${path44.join(".")}: its parent is not an object`,
+      parent?.span.start ?? 0
+    );
+  if (entryOf2(parent, leaf) !== void 0)
+    throw new Json5EditError(
+      `cannot insert ${path44.join(".")}: it is already there`,
+      parent.span.start
+    );
+  const member = entryText([leaf], valueText, dialect);
+  const next = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
+  if (next === void 0) return appendMember(text4, parent, member, dialect);
+  if (!startsLine(text4, next.span.start))
+    return splice(text4, next.span.start, next.span.start, `${member}, `);
+  const indent2 = indentOfLine(text4, next.span.start);
+  const eol = eolOf(text4);
+  const at = lineStartOf(text4, next.span.start);
+  return splice(
+    text4,
+    at,
+    at,
+    `${indent2}${reindent(member, indent2, eol)},${eol}`
+  );
+}
+function setBelow(text4, start, path44, valueText, dialect) {
+  let node = start;
+  for (let i2 = 0; i2 < path44.length; i2++) {
+    if (node.kind !== "object") {
+      throw new Json5EditError(
+        `cannot set ${path44.join(".")}: ${path44.slice(0, i2).join(".") || "the document"} is not an object`,
+        node.span.start
+      );
+    }
+    const entry = entryOf2(node, path44[i2]);
+    if (entry === void 0) {
+      return appendMember(
+        text4,
+        node,
+        entryText(path44.slice(i2), valueText, dialect),
+        dialect
+      );
+    }
+    if (i2 === path44.length - 1) {
+      const indent2 = indentOfLine(text4, entry.keySpan.start);
+      return splice(
+        text4,
+        entry.value.span.start,
+        entry.value.span.end,
+        reindent(valueText, indent2, eolOf(text4))
+      );
+    }
+    node = entry.value;
+  }
+  throw new Json5EditError("unreachable: path exhausted", 0);
+}
+function deleteValue(text4, path44, keep2 = 0) {
+  if (path44.length === 0) {
+    throw new Json5EditError("deleteValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) return text4;
+  const parentPath = path44.slice(0, -1);
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  const entry = parent === void 0 ? void 0 : entryOf2(parent, path44[path44.length - 1]);
+  if (entry === void 0 || parent?.kind !== "object") return text4;
+  const pruned = removeMember(text4, entry.span);
+  return parentPath.length > keep2 && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep2) : pruned;
+}
+var CHILD_KEYS = ["h", "v", "children"];
+function placementIdOf(node) {
+  if (node.kind === "string") return node.value;
+  if (node.kind !== "object") return void 0;
+  const seg2 = entryOf2(node, "seg")?.value;
+  const kind = entryOf2(node, "kind")?.value;
+  const name = entryOf2(node, "name")?.value;
+  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
+  if (segName === void 0) return void 0;
+  const id2 = entryOf2(node, "id")?.value;
+  return id2?.kind === "string" ? id2.value : segName;
+}
+function childArraysOf(node) {
+  if (node.kind !== "object") return [];
+  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
+    (v) => v?.kind === "array"
+  );
+}
+function rowEntriesOf(node) {
+  const rows = entryOf2(node, "rows")?.value;
+  return rows?.kind === "object" ? rows.entries : null;
+}
+function restagesFragment(node) {
+  if (node.kind !== "object") return true;
+  const rows = rowEntriesOf(node);
+  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
+}
+function* nodesIn(node, bareAt) {
+  yield { node, bareAt };
+  for (const array of childArraysOf(node)) {
+    for (const child of array.elements) yield* nodesIn(child, null);
+  }
+  for (const row2 of rowEntriesOf(node) ?? []) {
+    yield* nodesIn(
+      row2.value,
+      bareAt === null ? null : [...bareAt, "rows", row2.key]
+    );
+  }
+}
+function hasSegmentRef(root, id2) {
+  for (const { node } of nodesIn(root, null)) {
+    if (placementIdOf(node) === id2) return true;
+  }
+  return false;
+}
+function refAt(text4, rootPath, id2) {
+  const root = nodeAt(parseDocument(text4), rootPath);
+  if (root === void 0) return null;
+  for (const { node, bareAt } of nodesIn(root, rootPath)) {
+    if (placementIdOf(node) !== id2) continue;
+    if (bareAt === null) return { text: text4, ref: node };
+    const wrapped = setValue(
+      text4,
+      bareAt,
+      `{ h: [${textOf(text4, node)}] }`,
+      JSON5_DIALECT
+    );
+    return refAt(wrapped, rootPath, id2);
+  }
+  return null;
+}
+function removeSegmentRef(text4, rootPath, target) {
+  const hit = refAt(text4, rootPath, target);
+  return hit === null ? null : removeMember(hit.text, hit.ref.span);
+}
+function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
+  const hit = refAt(text4, rootPath, anchor);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const newText = placement.id === void 0 ? JSON.stringify(placement.seg) : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
+    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
+    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
+      src,
+      ref.span.start,
+      ref.span.start,
+      `${newText},${eolOf(src)}${indent2}`
+    );
+  }
+  const refText = textOf(src, ref);
+  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
+  return splice(src, ref.span.start, ref.span.end, pair);
+}
+function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
+  const hit = refAt(text4, rootPath, id2);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const settings = `{ ${keyText(setting)}: ${valueText} }`;
+  if (ref.kind === "string") {
+    return splice(
+      src,
+      ref.span.start,
+      ref.span.end,
+      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
+    );
+  }
+  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+}
+
+// src/config/loader/diagnostics.ts
 var ConfigError = class extends Error {
   file;
   issues;
@@ -59863,21 +59802,6 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
   };
 }
 
-// src/doctor/busy.ts
-init_globals();
-var busy = (what) => ({ kind: "busy", what });
-var DoctorBusy = class extends Error {
-  constructor(what) {
-    super(`the doctor looked at ${what} less than a second ago \u2014 click again`);
-    this.name = "DoctorBusy";
-  }
-};
-async function seen(answer2) {
-  const probed = await answer2;
-  if (probed.kind === "busy") throw new DoctorBusy(probed.what);
-  return probed;
-}
-
 // src/doctor/gather.ts
 function asked(read2) {
   try {
@@ -59894,39 +59818,22 @@ var readStores = (stores) => ({
   clicked: stores.clicked.read(),
   postMortemsRead: stores.postMortemsRead.read()
 });
-function oneAskPerClick(edge) {
-  const asked2 = /* @__PURE__ */ new Map();
-  const once2 = (question, ask2) => {
-    const key = JSON.stringify(question);
-    const answer2 = asked2.get(key) ?? ask2();
-    asked2.set(key, answer2);
-    return answer2;
-  };
+function doctorAsk(run3, load, sessionPick, sighted) {
+  const globals = resolveEffectiveGlobals(
+    load.config,
+    sessionPick,
+    () => false
+  );
   return {
-    ...edge,
-    probeTmux: (hint) => once2(["tmux", hint], () => edge.probeTmux(hint)),
-    remoteLogin: (pid2) => once2(["remote", pid2], () => edge.remoteLogin(pid2)),
-    fontInUse: (terminal, env2, glyphs) => once2(
-      ["font", terminal, env2, glyphs],
-      () => edge.fontInUse(terminal, env2, glyphs)
-    )
-  };
-}
-async function transcriptReads2(edge, said2) {
-  if (said2.kind === "failed") return said2;
-  const byPath = /* @__PURE__ */ new Map();
-  for (const { path: file, answered } of said2.value) {
-    byPath.set(file, answered || (byPath.get(file) ?? false));
-  }
-  return {
-    kind: "ok",
-    value: await Promise.all(
-      [...byPath].map(async ([file, answered]) => ({
-        path: file,
-        answered,
-        read: await edge.transcript(file)
-      }))
-    )
+    run: run3,
+    glyphs: [
+      .../* @__PURE__ */ new Set([
+        ...stripPrivateGlyphs(globals),
+        ...privateGlyphsIn(JSON.stringify(load.config))
+      ])
+    ].join(""),
+    needs: dataNeeds(load.config, globals.preset),
+    sighted
   };
 }
 function configFacts(load, target) {
@@ -59941,208 +59848,61 @@ function configFacts(load, target) {
     unused: load.unused
   };
 }
-var readSettings = (at) => asked(() => readSettingsChain(at));
-function settingsChains(originAt, bars) {
-  const keyOf2 = (at) => JSON.stringify([at.managedDir, at.projectDir, at.userFile]);
-  const originKey = keyOf2(originAt);
-  const atOrigin = [];
-  const others = /* @__PURE__ */ new Map();
-  for (const bar of bars) {
-    const at = {
-      managedDir: originAt.managedDir,
-      projectDir: bar.projectDir,
-      userFile: claudeSettingsPath(bar.claudeConfigDir)
-    };
-    const key = keyOf2(at);
-    if (key === originKey) {
-      atOrigin.push(bar);
-    } else {
-      const chain3 = others.get(key) ?? { at, bars: [] };
-      chain3.bars.push(bar);
-      others.set(key, chain3);
-    }
-  }
-  const chain2 = (at, its) => ({
-    at,
-    sources: readSettings(at),
-    bars: its.map(({ role, frame: frame2 }) => ({ role, frame: frame2 }))
-  });
+function doctorFacts(machine, install2, load, target, stores, urlHandler2) {
   return {
-    origin: chain2(originAt, atOrigin),
-    elsewhere: [...others.values()].map(({ at, bars: its }) => chain2(at, its))
-  };
-}
-async function tmuxFacts(edge, hint) {
-  if (hint === void 0) return { kind: "unreported" };
-  if (hint === null) return { kind: "outside" };
-  return { kind: "inside", hint, client: await seen(edge.probeTmux(hint)) };
-}
-function terminalIdentity(tmux3, env2) {
-  switch (tmux3.kind) {
-    case "unreported":
-      return { kind: "unreported" };
-    case "outside":
-      return env2 === void 0 ? { kind: "unreported" } : { kind: "seen", identified: identifyFromEnv(env2), tmuxClient: null };
-    case "inside": {
-      if (tmux3.client.kind === "failed") {
-        return { kind: "unasked", reason: tmux3.client.reason };
-      }
-      const client = tmux3.client.value;
-      return client === null ? {
-        kind: "unasked",
-        reason: "tmux has no client attached to the pane's session"
-      } : {
-        kind: "seen",
-        identified: identifyInTmux(client),
-        tmuxClient: client
-      };
-    }
-  }
-}
-async function terminalFacts(edge, identity2, hints, glyphs) {
-  if (identity2.kind !== "seen") return identity2;
-  const { identified, tmuxClient: client } = identity2;
-  const env2 = hints.terminalEnv;
-  if (identified.kind !== "known") return identified;
-  const { name, version } = identified.terminal;
-  if (isBundling(name)) return { kind: "bundling", name, version };
-  if (!isConfigured(name)) return { kind: "unread", name, version };
-  const { ITERM_PROFILE: startedIn, ...unattached } = env2 ?? {};
-  const remote = client === null ? { kind: "ok", value: hints.ssh === true } : await seen(edge.remoteLogin(client.pid));
-  return {
-    kind: "configured",
-    name,
-    version,
-    // A remote terminal runs on the machine the login came from, so no font
-    // on this one says what it draws with.
-    font: remote.kind === "failed" ? {
-      kind: "failed",
-      reason: `whether the terminal is remote could not be asked: ${remote.reason}`
-    } : remote.value ? {
-      kind: "failed",
-      reason: "the terminal is on the far side of a remote login, so its font is on the machine it runs on"
-    } : await seen(
-      edge.fontInUse(
-        { name, version },
-        client === null ? env2 ?? {} : unattached,
-        glyphs
-      )
-    )
-  };
-}
-async function need(segments, fact) {
-  const [first2, ...rest2] = segments;
-  return first2 === void 0 ? { kind: "unneeded" } : { kind: "needed", segments: [first2, ...rest2], fact: await fact() };
-}
-async function segmentDataFacts(edge, needs, origin, rateLimits) {
-  return {
-    pullRequests: await need(needs.pullRequests, () => edge.forge(origin.cwd)),
-    rateLimits: await need(needs.rateLimits, () => rateLimits)
-  };
-}
-async function gatherFacts(edge, hints, origin, sessionPick, serving, rateLimits, transcripts, sighted, bars, width, stores) {
-  const load = edge.loadConfig(origin);
-  const globals = resolveEffectiveGlobals(
-    load.config,
-    sessionPick,
-    () => false
-  );
-  const tmux3 = await tmuxFacts(edge, hints.tmux);
-  const terminal = terminalIdentity(tmux3, hints.terminalEnv);
-  const glyphs = [
-    .../* @__PURE__ */ new Set([
-      ...stripPrivateGlyphs(globals),
-      ...privateGlyphsIn(JSON.stringify(load.config))
-    ])
-  ].join("");
-  const [nerdFont2, processes, data] = await Promise.all([
-    // [LAW:types-are-the-program] The measured glyphs parsed into the facts'
-    // union: none to draw is the arm with no terminal to read.
-    glyphs === "" ? { kind: "none" } : terminalFacts(edge, terminal, hints, glyphs).then((read2) => ({
-      kind: "glyphs",
-      glyphs,
-      terminal: read2
-    })),
-    edge.daemons(),
-    segmentDataFacts(
-      edge,
-      dataNeeds(load.config, globals.preset),
-      origin,
-      rateLimits
-    )
-  ]);
-  return {
-    tmux: tmux3,
-    width,
-    terminal,
-    nerdFont: nerdFont2,
+    ...machine,
+    config: configFacts(load, target),
     marks: stores.marks,
     clicked: stores.clicked,
-    daemon: {
-      serving,
-      processes,
-      read: stores.postMortemsRead
-    },
-    config: configFacts(load, origin.target),
-    sighted,
-    frames: bars.kind === "failed" ? bars : { kind: "read" },
-    data,
-    transcripts: await transcriptReads2(edge, transcripts),
-    claudeSettings: settingsChains(
-      {
-        managedDir: edge.managedSettingsDir,
-        projectDir: origin.projectDir,
-        userFile: claudeSettingsPath(
-          claudeConfigDir(hints.claudeConfigDir, edge.home)
-        )
-      },
-      bars.kind === "ok" ? bars.value : []
-    )
+    daemon: { ...machine.daemon, read: stores.postMortemsRead },
+    urlHandler: urlHandler2,
+    install: install2
   };
 }
-function applyFix(stores, fix, facts) {
-  switch (fix.kind) {
-    case "claude-settings": {
-      const settingsPath = fix.file.path;
-      const text4 = readClaudeSettingsText(settingsPath);
-      const next = setValue(
-        text4,
-        fix.path,
-        JSON.stringify(fix.value),
-        JSON_DIALECT
-      );
-      writeAtomic(settingsPath, next);
-      const reread = (chain2) => ({
-        ...chain2,
-        sources: readSettings(chain2.at)
-      });
-      const { origin, elsewhere } = facts.claudeSettings;
-      return {
-        kind: "ok",
-        value: {
-          ...facts,
-          claudeSettings: {
-            origin: reread(origin),
-            elsewhere: elsewhere.map(reread)
-          }
-        }
-      };
-    }
-    case "post-mortems-read": {
-      const read2 = stores.postMortemsRead.update(
-        (current2) => current2.through === null || laterIdentity(fix.through, current2.through) ? { through: fix.through } : current2
-      );
-      return read2.kind === "failed" ? read2 : {
-        kind: "ok",
-        value: { ...facts, daemon: { ...facts.daemon, read: read2 } }
-      };
-    }
-    default: {
-      const _exhaustive = fix;
-      return _exhaustive;
-    }
-  }
+var chainsOf = (settings) => [settings.origin, ...settings.elsewhere];
+var writableSettingsFiles = ({
+  machine
+}) => chainsOf(machine.claudeSettings).flatMap(({ at }) => [
+  at.userFile,
+  projectLocalSettingsFile(at.projectDir)
+]);
+var readSources = (settings) => chainsOf(settings).flatMap(
+  ({ sources }) => sources.kind === "ok" ? sources.value : []
+);
+var readThrough = (through) => (current2) => current2.through === null || laterIdentity(through, current2.through) ? { through } : current2;
+function settingChange(fix, sources) {
+  const file = sources.find((s) => s.path === fix.file.path);
+  return file === void 0 ? {
+    op: "insert",
+    at: [],
+    text: `${branch(fix.path, fix.value)}
+`,
+    precedes: null
+  } : changeUnder(file.settings, [], fix.path, fix.value);
 }
+function changeUnder(parent, at, [key, ...rest2], value) {
+  const here = [...at, key];
+  const read2 = parent[key];
+  if (read2 === void 0)
+    return {
+      op: "insert",
+      at: here,
+      text: branch(rest2, value),
+      precedes: null
+    };
+  const [next, ...more] = rest2;
+  return next === void 0 || !isJsonObject(read2) ? {
+    op: "replace",
+    at: here,
+    text: branch(rest2, value),
+    read: { kind: "value", text: JSON.stringify(read2) }
+  } : changeUnder(read2, here, [next, ...more], value);
+}
+var branch = (keys2, value) => JSON.stringify(
+  keys2.reduceRight((inner, key) => ({ [key]: inner }), value),
+  null,
+  2
+);
 
 // src/daemon/foundations/debug-types.ts
 init_globals();
@@ -60675,10 +60435,10 @@ var refusedRender = (problems) => ({
 // src/daemon/update-act.ts
 init_globals();
 init_os();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
-  return import_node_path15.default.join(stateDir2, "update-act", key);
+  return import_node_path14.default.join(stateDir2, "update-act", key);
 }
 function judgeAct(facts) {
   if (facts === null) return IDLE;
@@ -60697,11 +60457,11 @@ function judgeAct(facts) {
   return { kind: "failed", act: act2, identity: record2.identity, reason };
 }
 var filesOf = (actDir) => ({
-  stdout: import_node_path15.default.join(actDir, "stdout"),
-  stderr: import_node_path15.default.join(actDir, "stderr"),
-  status: import_node_path15.default.join(actDir, "status")
+  stdout: import_node_path14.default.join(actDir, "stdout"),
+  stderr: import_node_path14.default.join(actDir, "stderr"),
+  status: import_node_path14.default.join(actDir, "status")
 });
-var recordOf = (actDir) => import_node_path15.default.join(actDir, "record.json");
+var recordOf = (actDir) => import_node_path14.default.join(actDir, "record.json");
 function actNumbers(dir) {
   let names;
   try {
@@ -60725,9 +60485,9 @@ function lastLineOf(file) {
   }
 }
 function removeAct(dir, act2) {
-  const leaving = import_node_path15.default.join(dir, `.removed-${act2}-${process.pid}`);
+  const leaving = import_node_path14.default.join(dir, `.removed-${act2}-${process.pid}`);
   try {
-    fs_default.renameSync(import_node_path15.default.join(dir, String(act2)), leaving);
+    fs_default.renameSync(import_node_path14.default.join(dir, String(act2)), leaving);
   } catch (err) {
     if (err.code === "ENOENT") return;
     throw err;
@@ -60752,7 +60512,7 @@ var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf(act2) {
-    const actDir = import_node_path15.default.join(dir, String(act2));
+    const actDir = import_node_path14.default.join(dir, String(act2));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
     if (known === null || !sameJob(known.record, record2)) {
@@ -60780,7 +60540,7 @@ function makeActReader(dir, read2, jobs, clock) {
         if (act2 === void 0) return null;
         if (act2 === vanished) {
           throw new Error(
-            `${import_node_path15.default.join(dir, String(act2))}: an act with no record`
+            `${import_node_path14.default.join(dir, String(act2))}: an act with no record`
           );
         }
         const facts = await factsOf(act2);
@@ -60792,7 +60552,7 @@ function makeActReader(dir, read2, jobs, clock) {
 }
 function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
-  const staging = fs_default.mkdtempSync(import_node_path15.default.join(dir, ".claim-"));
+  const staging = fs_default.mkdtempSync(import_node_path14.default.join(dir, ".claim-"));
   try {
     fs_default.writeFileSync(recordOf(staging), JSON.stringify(record2));
     fs_default.renameSync(staging, actDir);
@@ -60807,7 +60567,7 @@ function stakeClaim(dir, actDir, record2) {
 }
 async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
   const act2 = (after ?? 0) + 1;
-  const actDir = import_node_path15.default.join(dir, String(act2));
+  const actDir = import_node_path14.default.join(dir, String(act2));
   const job = launcher.launchJobSync(command, filesOf(actDir));
   if (!job.ok) throw new Error(`apply-update: ${job.error}`);
   let stood = false;
@@ -60840,7 +60600,7 @@ var CLAIMED_FIRST = {
   reason: "another act claimed this bundle first"
 };
 function endOverdue(dir, facts, jobs) {
-  const status = filesOf(import_node_path15.default.join(dir, String(facts.act))).status;
+  const status = filesOf(import_node_path14.default.join(dir, String(facts.act))).status;
   return jobs.endJob(facts.record.pid, status, { kind: "timeout" });
 }
 
@@ -60928,23 +60688,23 @@ var PACKAGE_VERSION = "1.225.1";
 
 // src/daemon/build-currency.ts
 init_globals();
-var import_node_path17 = __toESM(require_path_browserify(), 1);
+var import_node_path16 = __toESM(require_path_browserify(), 1);
 init_url();
 
 // src/source-digest.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 var isSourceEntry = (name) => !name.startsWith(".") && !name.endsWith("~");
 function entryBytes(p2, st) {
   return st.isSymbolicLink() ? import_buffer.Buffer.from(fs_default.readlinkSync(p2)) : fs_default.readFileSync(p2);
 }
 function sourceEntries(root, dir, keep2 = isSourceEntry) {
   return fs_default.readdirSync(dir).filter(keep2).sort().flatMap((name) => {
-    const p2 = import_node_path16.default.join(dir, name);
+    const p2 = import_node_path15.default.join(dir, name);
     const st = fs_default.lstatSync(p2, { throwIfNoEntry: false });
     if (st === void 0) return [];
     if (st.isDirectory()) return sourceEntries(root, p2);
-    const rel = import_node_path16.default.relative(root, p2).split(import_node_path16.default.sep).join("/");
+    const rel = import_node_path15.default.relative(root, p2).split(import_node_path15.default.sep).join("/");
     return [[rel, entryBytes(p2, st)]];
   });
 }
@@ -60971,8 +60731,8 @@ function crateDigest(crateDir) {
 
 // src/daemon/build-currency.ts
 function sourceCheckoutOf(bundlePath) {
-  const root = import_node_path17.default.dirname(import_node_path17.default.dirname(bundlePath));
-  return fs_default.existsSync(import_node_path17.default.join(root, "src")) ? root : null;
+  const root = import_node_path16.default.dirname(import_node_path16.default.dirname(bundlePath));
+  return fs_default.existsSync(import_node_path16.default.join(root, "src")) ? root : null;
 }
 function bundleStamp(digest2) {
   if (digest2 === null) {
@@ -60987,11 +60747,11 @@ function bakedDigest() {
 }
 function checkoutVersion(root) {
   const raw = JSON.parse(
-    fs_default.readFileSync(import_node_path17.default.join(root, "package.json"), "utf8")
+    fs_default.readFileSync(import_node_path16.default.join(root, "package.json"), "utf8")
   );
   const version = typeof raw === "object" && raw !== null ? raw.version : void 0;
   if (typeof version !== "string") {
-    throw new Error(`${import_node_path17.default.join(root, "package.json")} has no version string`);
+    throw new Error(`${import_node_path16.default.join(root, "package.json")} has no version string`);
   }
   return version;
 }
@@ -61000,7 +60760,7 @@ function assessBuild(entryUrl, runningStamp) {
     const root = sourceCheckoutOf(fileURLToPath(entryUrl));
     if (root === null) return { kind: "not-source-checkout" };
     const running = runningStamp();
-    const digest2 = sourceDigest(import_node_path17.default.join(root, "src"));
+    const digest2 = sourceDigest(import_node_path16.default.join(root, "src"));
     if (digest2 === running.digest)
       return { kind: "current", root, stamp: running };
     return {
@@ -61445,7 +61205,7 @@ function unknownOptionDomain(from, perConfigDomains) {
 
 // src/config/edit-chrome.ts
 init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
+var import_node_path17 = __toESM(require_path_browserify(), 1);
 
 // src/config/setting-control.ts
 init_globals();
@@ -63323,7 +63083,7 @@ function editableUnit(child, spliced, first2, ctx) {
   ];
 }
 function fileLabel(file) {
-  return import_node_path18.default.join(import_node_path18.default.basename(import_node_path18.default.dirname(file)), import_node_path18.default.basename(file));
+  return import_node_path17.default.join(import_node_path17.default.basename(import_node_path17.default.dirname(file)), import_node_path17.default.basename(file));
 }
 function insertedUnit(child, insertedBy, spliced, ctx) {
   const decl = ctx.segments[child.name];
@@ -64414,7 +64174,7 @@ init_globals();
 
 // src/attach-launcher.ts
 init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
+var import_node_path18 = __toESM(require_path_browserify(), 1);
 
 // src/claude-command-line.ts
 init_globals();
@@ -64439,14 +64199,14 @@ function claudeCommandLine(command) {
 // src/attach-launcher.ts
 var ATTACH_DIR = "cc-extra";
 function attachLauncherOf(bundle) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+  return import_node_path18.default.join(import_node_path18.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
 }
 function moduleGraphReaderOf(launcher) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(launcher), "bun-graph.js");
+  return import_node_path18.default.join(import_node_path18.default.dirname(launcher), "bun-graph.js");
 }
 var ATTACH_PRELOAD = "attach-preload.cjs";
 function attachPreloadOf(bundle) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(bundle), ATTACH_PRELOAD);
+  return import_node_path18.default.join(import_node_path18.default.dirname(bundle), ATTACH_PRELOAD);
 }
 var PRELOAD_VARIABLE = "BUN_OPTIONS";
 function attachCommandLine(preload, command) {
@@ -64494,11 +64254,11 @@ var CLICK_BUDGETS = {
 
 // src/daemon/acquire.ts
 init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
+var import_node_path20 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/limits.ts
 init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
+var import_node_path19 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/memory-report.ts
 init_globals();
@@ -64648,7 +64408,7 @@ function readCharge(probed, previous) {
 }
 function artifactFile(dir, kind, identity2) {
   const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path20.default.join(dir, `${prefix}${identity2}${suffix}`);
+  return import_node_path19.default.join(dir, `${prefix}${identity2}${suffix}`);
 }
 function breachArtifactOf(base) {
   for (const kind of Object.keys(BREACH_ARTIFACTS)) {
@@ -64817,7 +64577,7 @@ async function attempt2(log, what, body) {
 function postMortemsOf(files) {
   const byIdentity = /* @__PURE__ */ new Map();
   for (const file of files) {
-    const base = import_node_path20.default.basename(file);
+    const base = import_node_path19.default.basename(file);
     const kind = breachArtifactOf(base);
     if (kind === null) continue;
     const { prefix, suffix } = BREACH_ARTIFACTS[kind];
@@ -64866,7 +64626,7 @@ function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
         if (e.code === "ENOENT") return [];
         throw e;
       }
-      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path20.default.join(dir, f));
+      return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path19.default.join(dir, f));
     },
     removeFile: (file) => fs_default.unlinkSync(file),
     shutdown,
@@ -64877,6 +64637,95 @@ function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
 
 // src/daemon/acquire.ts
 init_process();
+
+// src/claude-settings-read.ts
+init_globals();
+var import_node_path21 = __toESM(require_path_browserify(), 1);
+function readSettingsFile(settingsPath) {
+  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read2.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
+    case "ok":
+      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
+  }
+}
+var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
+function readClaudeSettingsText(settingsPath) {
+  return readSettingsFile(settingsPath)?.text ?? "";
+}
+function readClaudeSettingsOutcome(settingsPath) {
+  const reason = (e) => e instanceof Error ? e.message : String(e);
+  let text4;
+  try {
+    text4 = readClaudeSettingsText(settingsPath);
+  } catch (e) {
+    return failed(reason(e), "read");
+  }
+  try {
+    return ok(parseSettings(settingsPath, text4));
+  } catch (e) {
+    return failed(reason(e), "parse");
+  }
+}
+function parseSettings(settingsPath, text4) {
+  let parsed2;
+  try {
+    if (/^\s*$/.test(text4)) return {};
+    parsed2 = JSON_DIALECT.parse(text4);
+  } catch (e) {
+    throw cannotRead(settingsPath, e);
+  }
+  if (!isJsonObject(parsed2)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return parsed2;
+}
+function readSettingsChain(at) {
+  const dropIns = import_node_path21.default.join(at.managedDir, "managed-settings.d");
+  const located2 = [
+    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
+      scope: "managed",
+      path: import_node_path21.default.join(dropIns, name)
+    })),
+    {
+      scope: "managed",
+      path: import_node_path21.default.join(at.managedDir, "managed-settings.json")
+    },
+    {
+      scope: "project-local",
+      path: projectLocalSettingsFile(at.projectDir)
+    },
+    {
+      scope: "project",
+      path: import_node_path21.default.join(at.projectDir, ".claude", "settings.json")
+    },
+    { scope: "user", path: at.userFile }
+  ];
+  const read2 = located2.flatMap((l) => {
+    const file = readSettingsFile(l.path);
+    if (file === null) return [];
+    const settings = parseSettings(l.path, file.text);
+    const { env: env2 = {} } = settings;
+    if (!isJsonObject(env2)) {
+      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
+    }
+    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
+  });
+  const user = read2.find((r) => r.source.scope === "user");
+  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
+}
+function visibleJsonFiles(dir) {
+  try {
+    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
+  } catch (e) {
+    if (e.code === "ENOENT") return [];
+    throw cannotRead(dir, e);
+  }
+}
+var messageOf = (e) => e instanceof Error ? e.message : String(e);
 
 // src/install/platforms.ts
 init_globals();
@@ -65327,8 +65176,8 @@ var GitDataProvider = class {
     if (outcome.kind === "ok") {
       for (const f of gitInfoFailures(outcome.value)) failures.add(f);
     }
-    const branch = branchOf(outcome);
-    const prMove = branch === void 0 ? unkeyedPr(state.pr, failures) : this.movePr(state, branch, remote);
+    const branch2 = branchOf(outcome);
+    const prMove = branch2 === void 0 ? unkeyedPr(state.pr, failures) : this.movePr(state, branch2, remote);
     this.held(state);
     this.gitRefreshes.recorded(
       `${state.root} asked=${asked2.join(",") || "-"} pr=${prMove} watch=${followed.move}`,
@@ -65349,9 +65198,9 @@ var GitDataProvider = class {
   // own period. [LAW:decomposition] The lookup is the PR source's own work,
   // started here and never awaited by a git pass, so a slow forge never holds
   // back the next local refresh.
-  movePr(state, branch, remote) {
+  movePr(state, branch2, remote) {
     const { pr } = state;
-    const key = `${branch}|${remote.kind === "ok" ? remote.value : remote.kind}`;
+    const key = `${branch2}|${remote.kind === "ok" ? remote.value : remote.kind}`;
     if (key === pr.key && !pr.missed) return "kept";
     pr.key = key;
     pr.remote = remote;
@@ -71650,6 +71499,7 @@ function createPayloadProviders(opts) {
     ...owners,
     home: opts.host.home,
     sourceRuns: opts.sourceRuns,
+    doctor: opts.doctor,
     log: opts.logger,
     // [LAW:single-enforcer] The one close of every owner built here, a named
     // step each, which its caller's teardown runs (runTeardown): a held
@@ -71934,7 +71784,7 @@ var RuntimeStats = class _RuntimeStats {
       collector: { sessions: 0, retiring: 0 },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0, gathers: 0 },
+      journalTurns: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
@@ -72110,7 +71960,7 @@ var Holds = class {
 
 // src/daemon/facts-assembly.ts
 init_globals();
-var FACTS_VERSION = 3;
+var FACTS_VERSION = 4;
 var over = (reading, project) => reading.kind === "ok" ? ok(project(reading.value)) : reading;
 function prOf(git) {
   switch (git.kind) {
@@ -72168,9 +72018,10 @@ function assembleFacts(prior, session, readings, daemon3, at) {
       ];
     })
   );
+  const doctor = stamp2(prior?.doctor, lanes.doctor);
   const diagnostics = readings.faults;
-  const parts = { builtins, sources, runs, daemon: daemon3, diagnostics };
-  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && sameFacts(runs, prior.runs) && compareStructural(
+  const parts = { builtins, sources, runs, doctor, daemon: daemon3, diagnostics };
+  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && sameFacts(runs, prior.runs) && doctor === prior.doctor && compareStructural(
     { daemon: daemon3, diagnostics },
     { daemon: prior.daemon, diagnostics: prior.diagnostics }
   )) {
@@ -72241,6 +72092,7 @@ function capturing(pattern2) {
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
+var writableOf = ({ doctor }, kept) => doctor.kind === "ok" && doctor.value.kind === "read" ? writableSettingsFiles(doctor.value) : kept;
 var locatorOf = (req) => ({
   hookData: req.hookData,
   cwd: req.cwd,
@@ -72261,9 +72113,11 @@ var sourcesOf2 = (subscriptions, prior) => ({
         ]
       ] : []
     )
-  )
+  ),
+  // A renderer runs one doctor run per session at a time.
+  doctor: subscriptions.flatMap((s) => s.kind === "doctor" ? [s.ask] : [])[0] ?? null
 });
-var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2));
+var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2)) && compareStructural(a.doctor, b.doctor);
 function release3({ stop: stop2, holds: holds2 }) {
   stop2();
   holds2.close();
@@ -72370,6 +72224,12 @@ var Collector = class {
       record2.turns--;
     };
   }
+  // [LAW:single-enforcer] The settings files the session's latest doctor
+  // reading handed in: the only ones a `claude-settings` change of the
+  // session may write.
+  writableSettings(session) {
+    return this.records.get(session)?.stamped.writable ?? [];
+  }
   // Each session the collector reads now, with its latest stamp: what a
   // renderer's complete start configures again. Unlike a request, it marks no
   // session active, so a restart keeps none past a sweep that would retire it.
@@ -72404,7 +72264,11 @@ var Collector = class {
     this.records.clear();
   }
   open(session, locator) {
-    const subscriptions = { plugins: /* @__PURE__ */ new Map(), runs: /* @__PURE__ */ new Map() };
+    const subscriptions = {
+      plugins: /* @__PURE__ */ new Map(),
+      runs: /* @__PURE__ */ new Map(),
+      doctor: null
+    };
     const reader = this.reader({ session, locator, subscriptions });
     const first2 = reader.inputs.get();
     let document;
@@ -72421,7 +72285,11 @@ var Collector = class {
       reader.holds.close();
       throw e;
     }
-    const stamped = { document, from: first2 };
+    const stamped = {
+      document,
+      from: first2,
+      writable: writableOf(document, [])
+    };
     return {
       session,
       stamped,
@@ -72549,6 +72417,7 @@ var Collector = class {
       );
     stamped.document = next;
     stamped.from = moved;
+    stamped.writable = writableOf(next, stamped.writable);
     return next !== prior;
   }
   assembled(prior, readings, daemon3, at) {
@@ -74690,7 +74559,8 @@ init_globals();
 var import_json53 = __toESM(require_dist(), 1);
 var ABSENT3 = { kind: "absent" };
 function parse2(text4) {
-  if (text4 === null || /^\s*$/.test(text4)) return { kind: "none" };
+  if (text4 === null) return { kind: "none" };
+  if (/^\s*$/.test(text4)) return { kind: "empty" };
   try {
     return { kind: "document", root: parseDocument(text4) };
   } catch (e) {
@@ -74700,9 +74570,15 @@ function parse2(text4) {
 }
 function readAt(text4, parsed2, at) {
   if (text4 === null) return ABSENT3;
-  if (at.length === 0 || parsed2.kind !== "document")
-    return { kind: "file", text: text4 };
-  return readOf(text4, nodeAt(parsed2.root, at));
+  if (at.length === 0) return { kind: "file", text: text4 };
+  switch (parsed2.kind) {
+    case "empty":
+      return ABSENT3;
+    case "document":
+      return readOf(text4, nodeAt(parsed2.root, at));
+    default:
+      return { kind: "file", text: text4 };
+  }
 }
 function readOf(text4, node) {
   return node === void 0 ? ABSENT3 : { kind: "value", text: movableTextOf(text4, node) };
@@ -74799,7 +74675,7 @@ function diffMembers(at, beforeText, was, afterText, will) {
   });
   return [...gone, ...changed];
 }
-function applyChanges(text4, changes) {
+function applyChanges(text4, changes, dialect = JSON5_DIALECT) {
   let current2 = text4;
   for (const change of changes) {
     const parsed2 = parse2(current2);
@@ -74815,12 +74691,13 @@ function applyChanges(text4, changes) {
     const found2 = readAt(current2, parsed2, change.at);
     if (!sameRead(found2, read2))
       return { kind: "moved", at: change.at, read: read2, found: found2 };
-    current2 = applied(current2, change);
+    current2 = applied(current2, change, dialect);
   }
   return { kind: "applied", text: current2 };
 }
 function movedAncestor(parsed2, at) {
   if (at.length === 0) return null;
+  if (parsed2.kind === "empty") return at.length === 1 ? null : at.slice(0, 1);
   if (parsed2.kind !== "document") return [];
   for (let depth = 0; depth < at.length; depth++) {
     const up = at.slice(0, depth);
@@ -74828,18 +74705,18 @@ function movedAncestor(parsed2, at) {
   }
   return null;
 }
-function applied(text4, change) {
+function applied(text4, change, dialect) {
   if (change.at.length === 0)
     return change.op === "remove" ? null : change.text;
   switch (change.op) {
     case "replace":
-      return setValue(text4, change.at, change.text, JSON5_DIALECT);
+      return setValue(text4, change.at, change.text, dialect);
     case "insert":
       return insertValue(
         text4,
         change.at,
         change.text,
-        JSON5_DIALECT,
+        dialect,
         change.precedes
       );
     case "remove":
@@ -75354,17 +75231,25 @@ function detectConfigCollisions(locs, projectDir) {
 var import_node_path39 = __toESM(require_path_browserify(), 1);
 var writeText = (file, text4) => text4 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text4);
 var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.kind === "file" ? "the file as it was read" : read2.text;
-function performChanges(changes, book) {
+function performChanges(changes, book, writable) {
   const rewrites = /* @__PURE__ */ new Map();
   let answered = [];
   try {
-    for (const { target, changes: list2 } of changes) {
-      const file = resolvedTarget(target.path);
+    for (const { session, target, changes: list2 } of changes) {
+      const file = resolvedTarget(
+        target.kind === "layer" ? target.path : target.file
+      );
+      if (target.kind === "claude-settings" && !writable(session).some((f) => resolvedTarget(f) === file))
+        return {
+          kind: "refused",
+          reason: `${file} is not a settings file the session's doctor read \u2014 nothing was written`
+        };
       const prior = rewrites.get(file);
       const was = prior === void 0 ? readConfigText(file) : prior.was;
       const applied3 = applyChanges(
         prior === void 0 ? was : prior.will,
-        list2
+        list2,
+        target.kind === "layer" ? JSON5_DIALECT : JSON_DIALECT
       );
       if (applied3.kind === "moved")
         return {
@@ -75456,37 +75341,41 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       const answers = output.effects.filter(
         (effect) => effect.kind === "approve-repo"
       );
-      const landed = world.closing() ? { kind: "closing", reason: "the daemon is closing" } : changes.length + answers.length === 0 ? { kind: "ok" } : performChanges(changes, {
-        stateDir: world.stateDir,
-        answers,
-        said: (line) => log("info", line)
-      });
+      const landed = world.closing() ? { kind: "closing", reason: "the daemon is closing" } : changes.length + answers.length === 0 ? { kind: "ok" } : performChanges(
+        changes,
+        {
+          stateDir: world.stateDir,
+          answers,
+          said: (line) => log("info", line)
+        },
+        collector.writableSettings
+      );
       const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
-      const inTurn2 = [];
+      const inTurn = [];
       let before = Promise.resolve();
       for (const effect of output.effects) {
         if (effect.kind === "present") {
           if (input.event.kind !== "request")
-            inTurn2.push(
+            inTurn.push(
               settle3(effect, {
                 kind: "failed",
                 reason: `a ${input.event.kind} turn answers no request`
               })
             );
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
-          inTurn2.push(settle3(effect, landed));
+          inTurn.push(settle3(effect, landed));
         else {
           const acted = landed.kind === "ok" ? before.then(() => world.perform(effect)) : Promise.resolve(unperformed);
           const settled3 = acted.then((outcome) => settle3(effect, outcome));
           if (outlives(effect)) void settled3;
           else {
-            inTurn2.push(settled3);
+            inTurn.push(settled3);
             before = acted;
           }
         }
       }
       collector.subscribed(subscriptions);
-      return { ...output, settled: await Promise.all(inTurn2) };
+      return { ...output, settled: await Promise.all(inTurn) };
     } finally {
       release4();
     }
@@ -86072,7 +85961,6 @@ async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, i
     await handler(value, {
       arrival,
       placeWaited: (ms) => noteFacts(record2, { placeWait: `${ms}ms` }),
-      gatherTook: (ms) => noteFacts(record2, { gather: `${ms}ms` }),
       turnWaited: (ms) => noteFacts(record2, { turnWait: `${ms}ms` }),
       click: id2,
       latest,
@@ -87751,17 +87639,7 @@ function withMark(book, check, sighting, mark) {
 }
 var fileMarkBook = (dir) => stateFile(dir, "doctor-marks.json", {}, parseMarkBook);
 
-// src/doctor/clicked-terminals.ts
-init_globals();
-var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typeof t2 === "string") ? { kind: "ok", value: doc } : { kind: "failed", reason: "is not a list of terminals" };
-var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
-var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
-
 // src/renderer/verbs/index.ts
-var inTurn = (handler) => ({
-  gathers: false,
-  prepare: async (value) => (ctx) => handler(value, ctx)
-});
 function requireSessionId(value) {
   const parsed2 = parseSessionId(value);
   if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
@@ -88370,186 +88248,107 @@ function sessionHints(ctx, sid) {
   }
   return parseClientHints(parsed2);
 }
-function writeReport(ctx, sid, facts) {
-  const reports = runDoctor(facts);
-  ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
+function startRun(ctx, sid) {
+  const origin = sessionOrigin(ctx, sid);
+  ctx.doctorRuns.start(ctx.sessionState, sid, {
+    at: ctx.now(),
+    load: ctx.doctorLoad(origin),
+    target: origin.target,
+    pick: (key) => ctx.sessionState.get(sid, key),
+    arrival: ctx.arrival
+  });
+}
+function reportedFacts(ctx, sid, verb) {
+  const facts = ctx.doctorRuns.facts(sid, ctx.arrival, ctx.now());
+  if (facts !== null) return facts;
+  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
+  throw new BadVerbArgs(
+    `${verb}: the doctor's report is being read \u2014 click again once it is in`
+  );
+}
+var doctorRun = async (value, ctx) => {
+  const sid = requireSessionId(oneArg(value));
+  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
+};
+var doctorFix = async (value, ctx) => {
+  const [sessionId2 = "", checkName = ""] = decodeWire(
+    () => decodeSegments(value)
+  );
+  const sid = requireSessionId(sessionId2);
+  const check = checkByName(checkName);
+  if (check === void 0) {
+    throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
+  }
+  const facts = reportedFacts(ctx, sid, "doctor-fix");
+  const verdict = check.probe(facts);
+  if (verdict.ok || verdict.fix === void 0) {
+    throw new BadVerbArgs(
+      `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
+    );
+  }
+  const { fix } = verdict;
+  const asked2 = () => ctx.log(
+    "info",
+    `doctor-fix: ${check.name} \u2192 ${describeFix(fix)} (session=${sid})`
+  );
+  switch (fix.kind) {
+    case "claude-settings":
+      ctx.configWrites.changeSettings(
+        fix.file.path,
+        settingChange(fix, readSources(facts.claudeSettings))
+      );
+      asked2();
+      startRun(ctx, sid);
+      return;
+    case "post-mortems-read": {
+      const read2 = ctx.doctorStores.postMortemsRead.update(
+        readThrough(fix.through)
+      );
+      if (read2.kind === "failed") {
+        throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${read2.reason}`);
+      }
+      asked2();
+      ctx.doctorRuns.report(ctx.sessionState, sid, {
+        ...facts,
+        daemon: { ...facts.daemon, read: read2 }
+      });
+      return;
+    }
+  }
+};
+var doctorMark = async (value, ctx) => {
+  const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
+    () => decodeSegments(value)
+  );
+  const sid = requireSessionId(sessionId2);
+  const check = checkByName(checkName);
+  if (check === void 0) {
+    throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
+  }
+  if (!GLYPH_MARKS.includes(mark)) {
+    throw new BadVerbArgs(
+      `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
+    );
+  }
+  const facts = reportedFacts(ctx, sid, "doctor-mark");
+  const verdict = check.probe(facts);
+  if (verdict.ok || verdict.sighting === void 0) {
+    throw new BadVerbArgs(
+      `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
+    );
+  }
+  const made = [check.name, verdict.sighting.id, mark];
+  const marks = ctx.doctorStores.marks.update(
+    (book) => withMark(book, ...made)
+  );
+  if (marks.kind === "failed") {
+    throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
+  }
   ctx.log(
     "info",
-    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${sid})`
+    `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
   );
-}
-async function clickGather(ctx, sid, doctor, load) {
-  const scope = {
-    kind: "clicked",
-    sessionId: sid,
-    via: ctx.arrival.via
-  };
-  const [said2, serving] = await Promise.all([
-    ctx.clients.ofSession(sid, ctx.now()),
-    ctx.serving()
-  ]);
-  let facts;
-  let install2;
-  try {
-    [facts, install2] = await Promise.all([
-      gatherFacts(
-        { ...doctor, loadConfig: () => load },
-        sessionHints(ctx, sid),
-        sessionOrigin(ctx, sid),
-        (key) => ctx.sessionState.get(sid, key),
-        { kind: "ok", value: serving },
-        { kind: "ok", value: said2.map((s) => s.rateLimits) },
-        { kind: "ok", value: said2.map((s) => s.transcript) },
-        scope,
-        { kind: "ok", value: barsOf(scope, said2) },
-        sessionWidth(sid, said2),
-        readStores(ctx.doctorStores)
-      ),
-      // The client that drew the bar this click came from, and the daemon the
-      // click reached — this process.
-      ctx.installFacts(
-        ctx.bundle,
-        said2.map((s) => s.client)
-      )
-    ]);
-  } catch (e) {
-    if (e instanceof DoctorBusy) throw new BadVerbArgs(e.message);
-    throw e;
-  }
-  const gathered = {
-    facts,
-    install: install2,
-    current: async (now2) => {
-      const stands = doctor.loadConfig(sessionOrigin(now2, sid));
-      const same2 = stands.config === load.config && stands.error === load.error && stands.warning === load.warning;
-      return same2 ? gathered : clickGather(now2, sid, doctor, stands);
-    }
-  };
-  return gathered;
-}
-var gatherClick = (ctx, sid) => {
-  const doctor = oneAskPerClick(ctx.doctor);
-  return clickGather(
-    ctx,
-    sid,
-    doctor,
-    doctor.loadConfig(sessionOrigin(ctx, sid))
-  );
-};
-async function clickFacts(ctx, sid, gathered) {
-  const { facts, install: install2 } = await ctx.gather(gathered.current);
-  const stores = readStores(ctx.doctorStores);
-  const read2 = {
-    ...facts,
-    marks: stores.marks,
-    clicked: stores.clicked,
-    daemon: { ...facts.daemon, read: stores.postMortemsRead }
-  };
-  return {
-    ...read2,
-    urlHandler: clickArrived(ctx.arrival),
-    install: install2,
-    clicked: clickedFrom(ctx, read2)
-  };
-}
-function clickedFrom(ctx, { terminal, clicked }) {
-  const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-  if (sighting === null || ctx.arrival.via !== "link") return clicked;
-  try {
-    return ctx.doctorStores.clicked.update(
-      (list2) => withClicked(list2, sighting)
-    );
-  } catch (e) {
-    ctx.log(
-      "warn",
-      `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`
-    );
-    return clicked;
-  }
-}
-var doctorRun = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const sid = requireSessionId(oneArg(value));
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => writeReport(c, sid, await clickFacts(c, sid, gathered));
-  }
-};
-var doctorFix = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const [sessionId2 = "", checkName = ""] = decodeWire(
-      () => decodeSegments(value)
-    );
-    const sid = requireSessionId(sessionId2);
-    const check = checkByName(checkName);
-    if (check === void 0) {
-      throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
-    }
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => {
-      const facts = await clickFacts(c, sid, gathered);
-      const verdict = check.probe(facts);
-      if (verdict.ok || verdict.fix === void 0) {
-        throw new BadVerbArgs(
-          `doctor-fix: ${check.label} \u2014 ${verdict.ok ? "nothing to fix" : verdict.reason}`
-        );
-      }
-      const after = applyFix(c.doctorStores, verdict.fix, facts);
-      if (after.kind === "failed") {
-        throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${after.reason}`);
-      }
-      c.log(
-        "info",
-        `doctor-fix: ${check.name} \u2192 ${describeFix(verdict.fix)} (session=${sid})`
-      );
-      writeReport(c, sid, after.value);
-    };
-  }
-};
-var doctorMark = {
-  gathers: true,
-  prepare: async (value, ctx) => {
-    const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
-      () => decodeSegments(value)
-    );
-    const sid = requireSessionId(sessionId2);
-    const check = checkByName(checkName);
-    if (check === void 0) {
-      throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
-    }
-    if (!GLYPH_MARKS.includes(mark)) {
-      throw new BadVerbArgs(
-        `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`
-      );
-    }
-    const gathered = await gatherClick(ctx, sid);
-    return async (c) => {
-      const facts = await clickFacts(c, sid, gathered);
-      const verdict = check.probe(facts);
-      if (verdict.ok || verdict.sighting === void 0) {
-        throw new BadVerbArgs(
-          `doctor-mark: ${check.label} \u2014 ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`
-        );
-      }
-      const made = [
-        check.name,
-        verdict.sighting.id,
-        mark
-      ];
-      const marks = c.doctorStores.marks.update(
-        (book) => withMark(book, ...made)
-      );
-      if (marks.kind === "failed") {
-        throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
-      }
-      c.log(
-        "info",
-        `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
-      );
-      writeReport(c, sid, { ...facts, marks });
-    };
-  }
+  ctx.doctorRuns.report(ctx.sessionState, sid, { ...facts, marks });
 };
 var slash = async (value, ctx) => {
   const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
@@ -88648,59 +88447,47 @@ var repoConfig = async (value, ctx) => {
   ctx.journal.wrote();
 };
 var LEAF_VERBS = /* @__PURE__ */ new Map([
-  [VERB_COPY, inTurn(copy)],
-  [VERB_OPEN_VSCODE, inTurn(openVscode)],
-  [VERB_SET_STATE, inTurn(setState)],
-  [VERB_STEP_STATE, inTurn(stepState)],
-  [VERB_SET_CONFIG, inTurn(setConfig)],
-  [VERB_STEP_CONFIG, inTurn(stepConfig)],
-  [VERB_RESET_CONFIG, inTurn(resetConfig)],
-  [VERB_SAVE, inTurn(save)],
-  [VERB_SAVE_PRESET, inTurn(savePreset)],
-  [VERB_SAVE_THEME_DEFAULT, inTurn(saveThemeDefault)],
-  [VERB_DELETE_PRESET, inTurn(deletePreset2)],
-  [VERB_APPLY_LAYOUT_OP, inTurn(applyLayoutOp2)],
-  [VERB_UNDO, inTurn(undo)],
-  [VERB_REDO, inTurn(redo)],
-  [VERB_BACK, inTurn(back)],
-  [VERB_REWIND, inTurn(rewind)],
-  [VERB_APPLY_UPDATE, inTurn(applyUpdate)],
+  [VERB_COPY, copy],
+  [VERB_OPEN_VSCODE, openVscode],
+  [VERB_SET_STATE, setState],
+  [VERB_STEP_STATE, stepState],
+  [VERB_SET_CONFIG, setConfig],
+  [VERB_STEP_CONFIG, stepConfig],
+  [VERB_RESET_CONFIG, resetConfig],
+  [VERB_SAVE, save],
+  [VERB_SAVE_PRESET, savePreset],
+  [VERB_SAVE_THEME_DEFAULT, saveThemeDefault],
+  [VERB_DELETE_PRESET, deletePreset2],
+  [VERB_APPLY_LAYOUT_OP, applyLayoutOp2],
+  [VERB_UNDO, undo],
+  [VERB_REDO, redo],
+  [VERB_BACK, back],
+  [VERB_REWIND, rewind],
+  [VERB_APPLY_UPDATE, applyUpdate],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],
-  [VERB_SLASH, inTurn(slash)],
-  [VERB_RUN, inTurn(run2)],
-  [VERB_REPO_CONFIG, inTurn(repoConfig)],
-  [VERB_COPY_DIAGNOSTIC, inTurn(copyDiagnostic)]
+  [VERB_SLASH, slash],
+  [VERB_RUN, run2],
+  [VERB_REPO_CONFIG, repoConfig],
+  [VERB_COPY_DIAGNOSTIC, copyDiagnostic]
 ]);
-var hoisted = (verb, value, ctx) => ctx.journalTurns.gathering(() => verb.prepare(value, ctx)).catch(
-  (e) => () => Promise.reject(e)
-);
-async function perform(verb, value, ctx, gathered) {
-  const step4 = gathered ?? await ctx.gather((full) => verb.prepare(value, full));
-  await step4(ctx);
-}
-async function headGather(steps2, ctx) {
-  const [head] = steps2;
-  const leaf = head === void 0 ? void 0 : LEAF_VERBS.get(head.verb);
-  return leaf?.gathers ? hoisted(leaf, head.value, ctx) : void 0;
-}
 function stepsOf(verb, value) {
   return batchAdjacentWrites(
     verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }]
   );
 }
-async function foldEffects(steps2, sid, ctx, gathered) {
+async function foldEffects(steps2, sid, ctx) {
   const errors2 = [];
   let operational = false;
-  for (const [i2, { verb, value }] of steps2.entries()) {
+  for (const { verb, value } of steps2) {
     const leaf = LEAF_VERBS.get(verb);
     if (!leaf) {
       errors2.push(`unknown effect verb "${verb}"`);
       continue;
     }
     try {
-      await perform(leaf, value, ctx, i2 === 0 ? gathered : void 0);
+      await leaf(value, ctx);
     } catch (e) {
       const failure = failureOf(e);
       if (failure.kind !== "bad-request" && failure.kind !== "threw") {
@@ -88726,7 +88513,7 @@ function throwAll(failures) {
     );
   }
 }
-async function journaled(sid, latest, ctx, effects, turn, handler) {
+async function journaled(sid, latest, ctx, effects, handler) {
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
@@ -88740,17 +88527,13 @@ async function journaled(sid, latest, ctx, effects, turn, handler) {
     (sid2) => nestOf(ctx, sid2),
     (line) => ctx.log("info", line)
   );
-  const journaling = {
-    ...ctx,
-    session: sid,
-    sessionState: closing(journal.sessionState),
-    journal,
-    navigating: closing(navigation.sessionState)
-  };
   try {
     await handler({
-      ...journaling,
-      gather: (work) => turn.landed(work(journaling))
+      ...ctx,
+      session: sid,
+      sessionState: closing(journal.sessionState),
+      journal,
+      navigating: closing(navigation.sessionState)
     });
   } catch (e) {
     failures.push(e);
@@ -88798,13 +88581,11 @@ function click(verb) {
       {
         placed: ctx.placeWaited,
         waited: ctx.turnWaited,
-        gone: ctx.clientGone,
-        gathered: ctx.gatherTook
+        gone: ctx.clientGone
       },
-      () => headGather(steps2, ctx),
-      (gathered, turn) => journaled(sid, ctx.latest, ctx, ctx.effects, turn, async (c) => {
+      () => journaled(sid, ctx.latest, ctx, ctx.effects, async (c) => {
         try {
-          await foldEffects(steps2, sid, c, gathered);
+          await foldEffects(steps2, sid, c);
         } finally {
           if (sid !== null) ctx.clickLanded(sid);
         }
@@ -88827,7 +88608,7 @@ function closeIdleMenus(sid, latest, idle, ctx, effects) {
       waited: (ms) => ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
       gone: async () => false
     },
-    (turn) => journaled(sid, latest, ctx, effects, turn, async (c) => {
+    (turn) => journaled(sid, latest, ctx, effects, async (c) => {
       if (!await turn.landed(idle.confirm())) {
         c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
         return;
@@ -89278,6 +89059,152 @@ var WorldStates = class {
   }
   drop(session) {
     runInAction(() => this.documents.delete(session));
+  }
+};
+
+// src/renderer/doctor.ts
+init_globals();
+
+// src/doctor/clicked-terminals.ts
+init_globals();
+var parseClickedTerminals = (doc) => Array.isArray(doc) && doc.every((t2) => typeof t2 === "string") ? { kind: "ok", value: doc } : { kind: "failed", reason: "is not a list of terminals" };
+var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : [...clicked, sighting];
+var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
+
+// src/renderer/doctor.ts
+var FRESH_FOR = 120;
+var UNRUN = CHECKS.map((check) => ({
+  key: doctorReportKeys(check.name).verdict,
+  value: VERDICT_UNRUN
+}));
+var DoctorRuns = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  deps;
+  runs = /* @__PURE__ */ new Map();
+  last = 0;
+  // A new run of the session, replacing the one it held: a new ask, which the
+  // host reads afresh. [LAW:one-source-of-truth] A run is named by the
+  // millisecond its click ran, kept rising, so a renderer that starts again
+  // names no run an earlier one asked: the host may still hold that run's
+  // reading, which would be taken for the new run's. The report the run
+  // replaces goes from `store`, the click's view, with it: no verdict or
+  // [fix] stands for a run no longer the session's.
+  start(store, session, request2) {
+    store.setBatch(session, UNRUN);
+    this.last = Math.max(Math.round(request2.at * 1e3), this.last + 1);
+    this.runs.set(session, {
+      ask: doctorAsk(this.last, request2.load, request2.pick, {
+        kind: "clicked",
+        sessionId: session,
+        via: request2.arrival.via
+      }),
+      load: request2.load,
+      target: request2.target,
+      arrival: request2.arrival,
+      reading: null
+    });
+  }
+  // Whether the session's run is on its way: asked, its reading not in.
+  awaiting(session) {
+    return this.runs.get(session)?.reading === null;
+  }
+  // [LAW:one-source-of-truth] What each session's unread run asks the host to
+  // read: held until its reading is in, which the run then keeps, so no world
+  // state after it carries the reading again.
+  subscriptions() {
+    return new Map(
+      [...this.runs].flatMap(
+        ([session, { ask: ask2, reading }]) => reading === null ? [[session, { kind: "doctor", ask: ask2 }]] : []
+      )
+    );
+  }
+  // A world state taken: the first that carries the reading of its session's
+  // unread run writes the run's report, or shows why the run was not read.
+  // The run is read once its report is written: one that could not be
+  // written fails the run, with the reason on the bar.
+  took({ session, doctor }) {
+    const run3 = this.runs.get(session);
+    if (run3 === void 0 || run3.reading !== null || doctor.kind !== "ok" || doctor.value.run !== run3.ask.run)
+      return;
+    const reading = doctor.value;
+    if (reading.kind === "failed") return this.fail(session, reading.reason);
+    try {
+      this.report(
+        this.deps.sessionState,
+        session,
+        this.judged(run3, reading, run3.arrival)
+      );
+      run3.reading = { read: reading, at: doctor.at };
+    } catch (e) {
+      this.fail(session, e instanceof Error ? e.message : String(e));
+    }
+  }
+  // [LAW:single-enforcer] The session's run's facts as they stand for a click
+  // at `now` that arrived as `arrival`: its reading, its load, the stores as
+  // they hold now, and what the click proves of the URL handler. Null while
+  // no reading is in, or none read in the last FRESH_FOR seconds.
+  facts(session, arrival, now2) {
+    const run3 = this.runs.get(session);
+    const reading = run3?.reading ?? null;
+    return run3 === void 0 || reading === null || now2 - reading.at > FRESH_FOR ? null : this.judged(run3, reading.read, arrival);
+  }
+  // [LAW:single-enforcer] One write of the whole report, through setBatch —
+  // the row cap flips, the reason and fixable land, in one reactive
+  // transaction — into `store`: a click's journaled view, so the report is
+  // one with the rest of its click, or the session state a reading lands in.
+  report(store, session, facts) {
+    const reports = runDoctor(facts);
+    store.setBatch(session, doctorReportPairs(reports));
+    this.deps.log(
+      "info",
+      `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${session})`
+    );
+  }
+  retire(session) {
+    this.runs.delete(session);
+  }
+  fail(session, reason) {
+    this.runs.delete(session);
+    this.deps.failed(session, `doctor: ${reason}`);
+  }
+  judged(run3, { machine, install: install2 }, arrival) {
+    const facts = doctorFacts(
+      machine,
+      install2,
+      run3.load,
+      run3.target,
+      readStores(this.deps.stores),
+      clickArrived(arrival)
+    );
+    return { ...facts, clicked: this.filed(arrival, facts) };
+  }
+  // [LAW:one-source-of-truth] A click that arrived by a link is a link the
+  // session's terminal drew and the user clicked, so it settles for good that
+  // this terminal draws links: filed (src/doctor/clicked-terminals.ts) where
+  // `cc-candybar doctor` — which cannot click — reads it. Nothing is filed
+  // from a tmux status-line click (tmux ran it, no link), where nothing names
+  // the terminal, or over a list that does not read (the store answers that
+  // failure, which the run reports as its own).
+  // [LAW:no-silent-failure] The filing rides along with the click it came
+  // with, so a write that fails is logged — and the event's `clicked=no`
+  // shows nothing was filed — while the run reports over the list as read.
+  filed(arrival, facts) {
+    const { terminal, clicked } = facts;
+    const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
+    if (sighting === null || arrival.via !== "link") return clicked;
+    try {
+      return this.deps.stores.clicked.update(
+        (list2) => withClicked(list2, sighting)
+      );
+    } catch (e) {
+      this.deps.log(
+        "warn",
+        `doctor: clicked terminal not filed for ${JSON.stringify(sighting)}: ${e instanceof Error ? e.message : String(e)}`
+      );
+      return clicked;
+    }
   }
 };
 
@@ -90750,7 +90677,6 @@ function rendererOf(arms) {
 // src/renderer/journal-turns.ts
 init_globals();
 var DAEMON_WIDE = "journals";
-var GATHERS = "gathers";
 var JournalTurns = class {
   constructor(deps) {
     this.deps = deps;
@@ -90758,11 +90684,9 @@ var JournalTurns = class {
   deps;
   queue = new KeyedSerialQueue();
   sessions = new KeyedSerialQueue();
-  gathers = new KeyedSerialQueue();
   open = true;
   holder = null;
   queued = 0;
-  gathersInFlight = 0;
   // Runs `body` in its turn, unless the daemon closed or the asker left while
   // it waited: a click whose client took a TIMEOUT never lands, so clicking
   // again cannot revert a toggle.
@@ -90788,50 +90712,21 @@ var JournalTurns = class {
     });
   }
   // A click from arrival to landing: in `session`'s order (a click naming none
-  // goes straight on), `gather` outside any turn, `body` in one.
-  // [LAW:single-enforcer] `gone` is read for a click's waits and never for its
-  // own gather: a client that left at the head of its queue, or after the
-  // gather while the turn was awaited, refuses the click; one that left during
-  // the gather does not, since a gather outlasts a client's budget through no
-  // fault of a re-click. With no gather `left` is false, as it was just read.
-  click(verb, session, { placed: placed2, waited, gone, gathered }, gather, body) {
+  // goes straight on), `body` in its turn.
+  click(verb, session, { placed: placed2, waited, gone }, body) {
     const arrived2 = this.deps.monotonic();
-    const inPlace = async () => {
+    const inPlace = () => {
       placed2(elapsedMs(this.deps, arrived2));
-      this.refuseClosed(verb);
-      if (await gone()) throw new ClickAbandoned(verb);
-      this.refuseClosed(verb);
-      const started2 = this.deps.monotonic();
-      const gathering = await gather();
-      gathered(elapsedMs(this.deps, started2));
-      const left = await gone();
-      return this.take(
-        verb,
-        { waited, gone: async () => !left && await gone() },
-        (turn) => body(gathering, turn)
-      );
+      return this.take(verb, { waited, gone }, body);
     };
     return session === null ? inPlace() : this.sessions.run(session, inPlace);
-  }
-  // A click's gather, one at a time daemon-wide and in no turn, as the turn once
-  // kept them: its probes share rate windows across sessions, so a slow gather
-  // refuses none behind it. Two within a window still meet the limiter's
-  // refusal, the doctor's 'click again'.
-  async gathering(gather) {
-    this.gathersInFlight++;
-    try {
-      return await this.gathers.run(GATHERS, gather);
-    } finally {
-      this.gathersInFlight--;
-    }
   }
   getStats() {
     const { holder, queued } = this;
     return {
       holder: holder?.verb ?? null,
       heldMs: holder === null ? 0 : elapsedMs(this.deps, holder.since),
-      queued,
-      gathers: this.gathersInFlight
+      queued
     };
   }
   close() {
@@ -90856,6 +90751,9 @@ var ConfigWrites = class {
   landing = null;
   waiting = [];
   closed = false;
+  // The open click's changes to Claude Code's settings, which no renderer
+  // reads: each made against what the session's doctor reading saw.
+  settings = [];
   // The open click's answers to the trust book, in the order it gave them.
   answers = [];
   // [LAW:one-source-of-truth] `file` as the open click left it: its last
@@ -90873,6 +90771,12 @@ var ConfigWrites = class {
       after
     });
   }
+  // A change of the open click to a settings file of Claude Code's, which the
+  // host lands only while what it read there stands (src/doctor/gather.ts,
+  // `settingChange`).
+  changeSettings(file, change) {
+    this.settings.push({ file, change });
+  }
   // The open click answers the trust book for `dir`: it lands with the
   // click's changes.
   answer(dir, answer2) {
@@ -90883,16 +90787,20 @@ var ConfigWrites = class {
   // and answered nothing has its consequence now.
   seal(effects, session, consequence) {
     const answers = this.answers;
+    const settings = this.settings;
     this.answers = [];
+    this.settings = [];
     if (this.closed) return this.open.clear();
     const written3 = [...this.open].flatMap(([path44, { before, after }]) => {
       const list2 = diffChanges(before, after);
       return list2.length === 0 ? [] : [{ path: path44, list: list2 }];
     });
-    const files = written3.map(({ path: path44 }) => path44);
+    const files = [
+      ...written3.map(({ path: path44 }) => path44),
+      ...settings.map(({ file }) => file)
+    ];
     this.open.clear();
-    if (written3.length === 0 && answers.length === 0)
-      return consequence(effects);
+    if (files.length === 0 && answers.length === 0) return consequence(effects);
     if (session === null)
       throw new Error(
         `a click with no session wrote ${[...files, ...answers.map((a) => `the answer for ${a.dir}`)].join(", ")}`
@@ -90905,6 +90813,15 @@ var ConfigWrites = class {
           session,
           target: { kind: "layer", path: path44 },
           changes: list2
+        })
+      ),
+      ...settings.map(
+        ({ file, change }) => ({
+          kind: "change",
+          id: this.mint(),
+          session,
+          target: { kind: "claude-settings", file },
+          changes: [change]
         })
       ),
       ...answers.map(({ dir, answer: answer2 }) => ({
@@ -90987,6 +90904,7 @@ function mainRenderer(parts, pushed) {
         parts.worldStates.take(event.worldState);
         return;
       case "retire":
+        parts.doctorRuns.retire(event.session);
         retireSession(parts, event.session);
         return;
       case "effect-done": {
@@ -91032,7 +90950,15 @@ function mainRenderer(parts, pushed) {
       const from = parts.clock.monotonic();
       const effects = [];
       const ended = await turn(input.event, input.at, record2, effects).finally(() => {
-        const { sources } = parts.renderCache.subscriptions();
+        const views = parts.renderCache.subscriptions().sources;
+        const merged = new Map(
+          Object.entries(views)
+        );
+        for (const [session, run3] of parts.doctorRuns.subscriptions())
+          merged.set(session, [...merged.get(session) ?? [], run3]);
+        const sources = Object.fromEntries(
+          merged
+        );
         subscriptions = {
           sources,
           // [LAW:one-source-of-truth] Read off the same open views: a
@@ -91091,9 +91017,16 @@ function startOver(inputs, sessionState, history, host) {
   const effectSessions = new EffectSessions();
   const renderWarnings = new RenderWarningRecords();
   const updateGate = new UpdateGate(gates);
-  const worldStates = new WorldStates(
-    (document) => updateGate.took(document.daemon.update.newer)
-  );
+  const doctorRuns = new DoctorRuns({
+    sessionState,
+    stores: inputs.storage.doctor,
+    log,
+    failed: actFailed
+  });
+  const worldStates = new WorldStates((document) => {
+    updateGate.took(document.daemon.update.newer);
+    doctorRuns.took(document);
+  });
   const watches = new Watches(host.watches);
   const renderCache = new RenderCache(
     {
@@ -91156,7 +91089,6 @@ function startOver(inputs, sessionState, history, host) {
   const reloadConfig = (origin) => renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
     kind: "write"
   });
-  const { install: installFacts2, ...machineReads } = host.doctor;
   const verbCtx = {
     gates,
     sessionState,
@@ -91168,33 +91100,23 @@ function startOver(inputs, sessionState, history, host) {
     log,
     acts,
     now: now2,
-    doctor: {
-      ...machineReads,
-      // The load the session's bar is drawn from: its cache entry's load
-      // outcome, and what the config that entry renders left unused.
-      // [LAW:no-ambient-temporal-coupling] Reloaded first, as a save does: a
-      // doctor click is a verdict on the files as they are now, not on
-      // whether the fs watcher has caught up with an edit made a moment ago.
-      loadConfig: (origin) => {
-        const at = [origin.projectDir, origin.cwd, origin.target.path];
-        renderCache.reload(...at, { kind: "doctor" });
-        const entry = renderCache.getOrCreate(...at);
-        return {
-          layers: entry.configLayers,
-          error: entry.lastError,
-          warning: entry.lastWarning,
-          unused: entry.state.unused,
-          config: entry.state.config
-        };
-      },
-      home: inputs.home,
-      managedSettingsDir: claudeManagedSettingsDirIn(inputs.env)
+    doctorRuns,
+    // The load the session's bar is drawn from: its cache entry's load
+    // outcome, and what the config that entry renders left unused, reloaded
+    // first (`startRun`).
+    doctorLoad: (origin) => {
+      const at = [origin.projectDir, origin.cwd, origin.target.path];
+      renderCache.reload(...at, { kind: "doctor" });
+      const entry = renderCache.getOrCreate(...at);
+      return {
+        layers: entry.configLayers,
+        error: entry.lastError,
+        warning: entry.lastWarning,
+        unused: entry.state.unused,
+        config: entry.state.config
+      };
     },
-    installFacts: installFacts2,
     doctorStores: inputs.storage.doctor,
-    clients: host.renderSightings,
-    bundle: inputs.bundle,
-    serving: host.serving,
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -91296,7 +91218,13 @@ function startOver(inputs, sessionState, history, host) {
     }
   };
   return mainRenderer(
-    { ...parts, verbs: verbsOver(verbCtx, host.clicks), mint, acts },
+    {
+      ...parts,
+      verbs: verbsOver(verbCtx, host.clicks),
+      mint,
+      acts,
+      doctorRuns
+    },
     pushed
   );
 }
@@ -91328,15 +91256,6 @@ function bootEnv(env2) {
 var REACH_KINDS = {
   wake: "notice",
   log: "notice",
-  doctor: {
-    probeTmux: "call",
-    remoteLogin: "call",
-    fontInUse: "call",
-    daemons: "call",
-    forge: "call",
-    transcript: "call",
-    install: "call"
-  },
   menuIdle: {
     clicked: "notice",
     clickArrived: "notice",
@@ -91345,8 +91264,6 @@ var REACH_KINDS = {
     confirmClose: "call"
   },
   clicks: { gone: "call" },
-  serving: "call",
-  renderSightings: { ofSession: "call" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" }
@@ -91357,6 +91274,182 @@ function reachesOf(table, prefix = "") {
   );
 }
 var REACHES = reachesOf(REACH_KINDS);
+
+// src/daemon/cache/doctor.ts
+init_globals();
+
+// src/doctor/read.ts
+init_globals();
+
+// src/doctor/busy.ts
+init_globals();
+var busy = (what) => ({ kind: "busy", what });
+var DoctorBusy = class extends Error {
+  constructor(what) {
+    super(`the doctor looked at ${what} less than a second ago \u2014 click again`);
+    this.name = "DoctorBusy";
+  }
+};
+async function seen(answer2) {
+  const probed = await answer2;
+  if (probed.kind === "busy") throw new DoctorBusy(probed.what);
+  return probed;
+}
+
+// src/doctor/read.ts
+async function transcriptReads2(edge, said2) {
+  if (said2.kind === "failed") return said2;
+  const byPath = /* @__PURE__ */ new Map();
+  for (const { path: file, answered } of said2.value) {
+    byPath.set(file, answered || (byPath.get(file) ?? false));
+  }
+  return {
+    kind: "ok",
+    value: await Promise.all(
+      [...byPath].map(async ([file, answered]) => ({
+        path: file,
+        answered,
+        read: await edge.transcript(file)
+      }))
+    )
+  };
+}
+var readSettings = (at) => asked(() => readSettingsChain(at));
+function settingsChains(originAt, bars) {
+  const keyOf2 = (at) => JSON.stringify([at.managedDir, at.projectDir, at.userFile]);
+  const originKey = keyOf2(originAt);
+  const atOrigin = [];
+  const others = /* @__PURE__ */ new Map();
+  for (const bar of bars) {
+    const at = {
+      managedDir: originAt.managedDir,
+      projectDir: bar.projectDir,
+      userFile: claudeSettingsPath(bar.claudeConfigDir)
+    };
+    const key = keyOf2(at);
+    if (key === originKey) {
+      atOrigin.push(bar);
+    } else {
+      const chain3 = others.get(key) ?? { at, bars: [] };
+      chain3.bars.push(bar);
+      others.set(key, chain3);
+    }
+  }
+  const chain2 = (at, its) => ({
+    at,
+    sources: readSettings(at),
+    bars: its.map(({ role, frame: frame2 }) => ({ role, frame: frame2 }))
+  });
+  return {
+    origin: chain2(originAt, atOrigin),
+    elsewhere: [...others.values()].map(({ at, bars: its }) => chain2(at, its))
+  };
+}
+async function tmuxFacts(edge, hint) {
+  if (hint === void 0) return { kind: "unreported" };
+  if (hint === null) return { kind: "outside" };
+  return { kind: "inside", hint, client: await seen(edge.probeTmux(hint)) };
+}
+function terminalIdentity(tmux3, env2) {
+  switch (tmux3.kind) {
+    case "unreported":
+      return { kind: "unreported" };
+    case "outside":
+      return env2 === void 0 ? { kind: "unreported" } : { kind: "seen", identified: identifyFromEnv(env2), tmuxClient: null };
+    case "inside": {
+      if (tmux3.client.kind === "failed") {
+        return { kind: "unasked", reason: tmux3.client.reason };
+      }
+      const client = tmux3.client.value;
+      return client === null ? {
+        kind: "unasked",
+        reason: "tmux has no client attached to the pane's session"
+      } : {
+        kind: "seen",
+        identified: identifyInTmux(client),
+        tmuxClient: client
+      };
+    }
+  }
+}
+async function terminalFacts(edge, identity2, hints, glyphs) {
+  if (identity2.kind !== "seen") return identity2;
+  const { identified, tmuxClient: client } = identity2;
+  const env2 = hints.terminalEnv;
+  if (identified.kind !== "known") return identified;
+  const { name, version } = identified.terminal;
+  if (isBundling(name)) return { kind: "bundling", name, version };
+  if (!isConfigured(name)) return { kind: "unread", name, version };
+  const { ITERM_PROFILE: startedIn, ...unattached } = env2 ?? {};
+  const remote = client === null ? { kind: "ok", value: hints.ssh === true } : await seen(edge.remoteLogin(client.pid));
+  return {
+    kind: "configured",
+    name,
+    version,
+    // A remote terminal runs on the machine the login came from, so no font
+    // on this one says what it draws with.
+    font: remote.kind === "failed" ? {
+      kind: "failed",
+      reason: `whether the terminal is remote could not be asked: ${remote.reason}`
+    } : remote.value ? {
+      kind: "failed",
+      reason: "the terminal is on the far side of a remote login, so its font is on the machine it runs on"
+    } : await seen(
+      edge.fontInUse(
+        { name, version },
+        client === null ? env2 ?? {} : unattached,
+        glyphs
+      )
+    )
+  };
+}
+async function need(segments, fact) {
+  const [first2, ...rest2] = segments;
+  return first2 === void 0 ? { kind: "unneeded" } : { kind: "needed", segments: [first2, ...rest2], fact: await fact() };
+}
+async function segmentDataFacts(edge, needs, cwd2, rateLimits) {
+  return {
+    pullRequests: await need(needs.pullRequests, () => edge.forge(cwd2)),
+    rateLimits: await need(needs.rateLimits, () => rateLimits)
+  };
+}
+async function readDoctor(edge, hints, ask2, origin, sighted) {
+  const tmux3 = await tmuxFacts(edge, hints.tmux);
+  const terminal = terminalIdentity(tmux3, hints.terminalEnv);
+  const [nerdFont2, processes, data] = await Promise.all([
+    // [LAW:types-are-the-program] The asked glyphs parsed into the facts'
+    // union: none to draw is the arm with no terminal to read.
+    ask2.glyphs === "" ? { kind: "none" } : terminalFacts(edge, terminal, hints, ask2.glyphs).then((read2) => ({
+      kind: "glyphs",
+      glyphs: ask2.glyphs,
+      terminal: read2
+    })),
+    edge.daemons(),
+    segmentDataFacts(edge, ask2.needs, origin.cwd, sighted.rateLimits)
+  ]);
+  const { bars } = sighted;
+  return {
+    tmux: tmux3,
+    width: sighted.width,
+    terminal,
+    nerdFont: nerdFont2,
+    daemon: { serving: sighted.serving, processes },
+    sighted: ask2.sighted,
+    frames: bars.kind === "failed" ? bars : { kind: "read" },
+    data,
+    transcripts: await transcriptReads2(edge, sighted.transcripts),
+    claudeSettings: settingsChains(
+      {
+        managedDir: edge.managedSettingsDir,
+        projectDir: origin.projectDir,
+        userFile: claudeSettingsPath(
+          claudeConfigDir(hints.claudeConfigDir, edge.home)
+        )
+      },
+      bars.kind === "ok" ? bars.value : []
+    )
+  };
+}
 
 // src/doctor/edge.ts
 init_globals();
@@ -92623,7 +92716,9 @@ function productionMachineEdge(launcher, host) {
     daemons: () => daemons(launcher),
     forge: (cwd2) => forgeLogin(launcher, cwd2),
     transcript: async (file) => readTranscriptWindow(file),
-    install: productionInstallEdge
+    install: productionInstallEdge,
+    home: host.home,
+    managedSettingsDir: claudeManagedSettingsDirIn(host.env)
   };
 }
 function transcriptWindow(bytes, whole) {
@@ -92696,6 +92791,63 @@ function forgeLoginOf(cli, host, nonZero, run3) {
     return login({ loggedOut: firstLine(run3.stderr) });
   }
   return { kind: "failed", reason: launchFailure(cli, run3) };
+}
+
+// src/daemon/cache/doctor.ts
+var DoctorSource = class {
+  readings;
+  constructor(deps) {
+    this.readings = new KeyedSource({
+      name: "doctor",
+      scope: "session",
+      // The session and its ask: the hints and origin are what the first
+      // declaration of a run reported, so a request that moves them reads no
+      // run again.
+      keyOf: ({ session, ask: ask2 }) => `${session}
+${JSON.stringify(ask2)}`,
+      fields: ({ session, ask: ask2 }) => `sid=${valueOf(session)} run=${ask2.run}`,
+      read: (input, signal) => readDoctorRun({ ...deps, edge: deps.edge(signal) }, input),
+      every: () => null,
+      watch: NO_WATCH,
+      maxEntries: 0,
+      lines: REFRESH_TRIGGERS,
+      logger: deps.logger,
+      ledger: deps.ledger,
+      clock: deps.clock
+    });
+  }
+  declare(holds2, input) {
+    return this.readings.declare(holds2, input);
+  }
+  close() {
+    this.readings.close();
+  }
+};
+async function readDoctorRun(deps, { session, hints, origin, ask: ask2 }) {
+  try {
+    const said2 = deps.sightings(session, instantAt(deps.clock));
+    const machine = await readDoctor(deps.edge, hints, ask2, origin, {
+      serving: { kind: "ok", value: deps.serving() },
+      rateLimits: { kind: "ok", value: said2.map((s) => s.rateLimits) },
+      transcripts: { kind: "ok", value: said2.map((s) => s.transcript) },
+      bars: { kind: "ok", value: barsOf(ask2.sighted, said2) },
+      width: sessionWidth(session, said2)
+    });
+    return ok({
+      run: ask2.run,
+      kind: "read",
+      machine,
+      // The clients that drew the session's bars, and the daemon the run
+      // reached — this process.
+      install: installFacts(
+        deps.edge.install,
+        deps.bundle,
+        said2.map((s) => s.client)
+      )
+    });
+  } catch (e) {
+    return failed(e instanceof Error ? e.message : String(e), "read");
+  }
 }
 
 // src/daemon/clicks-in-flight.ts
@@ -92952,7 +93104,6 @@ function createDaemon(inputs) {
       env: host.env,
       home: host.home,
       gates,
-      bundle: bundle.path,
       memoryLimitBytes: memoryLimitBytes2
     }),
     // The key crosses in base64, so the boot crosses as a line.
@@ -92961,7 +93112,6 @@ function createDaemon(inputs) {
       return {
         digest: bundle.digest,
         host: { ...host, env: bootEnv(host.env) },
-        bundle: bundle.path,
         memoryLimitBytes: memoryLimitBytes2,
         linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
       };
@@ -92994,6 +93144,20 @@ function createDaemon(inputs) {
     watchers: watcherRegistry,
     fileEvents
   });
+  const doctorSource = new DoctorSource({
+    // The doctor's edge sets no signal of its own, so each read's launches
+    // carry the read's.
+    edge: (signal) => inputs.doctorEdge(
+      { ...launcher, launch: (opts) => launcher.launch({ ...opts, signal }) },
+      host
+    ),
+    sightings: (sessionId2, now2) => renderSightings.ofSession(sessionId2, now2),
+    serving: () => limits.serving(),
+    bundle: bundle.path,
+    clock,
+    logger: log,
+    ledger: refreshLedger
+  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
@@ -93002,7 +93166,8 @@ function createDaemon(inputs) {
     clock,
     logger: log,
     ledger: refreshLedger,
-    sourceRuns
+    sourceRuns,
+    doctor: doctorSource
   });
   const { managedStorage } = payloadProviders;
   const menuIdle = new MenuIdle({
@@ -93193,16 +93358,11 @@ function createDaemon(inputs) {
   });
   const clicks = new ClicksInFlight();
   const rendererWatches = /* @__PURE__ */ new Map();
-  const doctorEdge = inputs.doctorEdge(launcher, host);
   const reaches = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
     // the host's part in its crossing shape: a notice, or an awaited call.
     wake: (sessionId2, cause) => frameFeeds.wake(sessionId2, cause),
     log,
-    doctor: {
-      ...doctorEdge,
-      install: async (daemonBundle, clients) => installFacts(doctorEdge.install, daemonBundle, clients)
-    },
     menuIdle: {
       clicked: (sessionId2, at) => menuIdle.clicked(sessionId2, at),
       clickArrived: (sessionId2) => menuIdle.clickArrived(sessionId2),
@@ -93211,10 +93371,6 @@ function createDaemon(inputs) {
       confirmClose: async (sessionId2, firedAt) => menuIdle.confirmClose(sessionId2, firedAt)
     },
     clicks: { gone: async (click3) => clicks.gone(click3) },
-    serving: async () => limits.serving(),
-    renderSightings: {
-      ofSession: async (sessionId2, now2) => renderSightings.ofSession(sessionId2, now2)
-    },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -93312,7 +93468,8 @@ function createDaemon(inputs) {
           collector.subscribed(subscriptions);
           declaredStatusLines.declare(subscriptions.tmuxStatus);
         },
-        holding: (session) => collector.holding(session)
+        holding: (session) => collector.holding(session),
+        writableSettings: (session) => collector.writableSettings(session)
       },
       {
         perform: (act2) => acts.perform(act2),
@@ -93335,7 +93492,7 @@ function createDaemon(inputs) {
     clock,
     exit: exit2,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in is gathering, or holds or waits for a journal's turn,
+    // the way in. A click that got in holds or waits for a journal's turn,
     // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
     // reached as the daemon closed is refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
@@ -93394,6 +93551,7 @@ function createDaemon(inputs) {
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
+        ["doctorSource close", () => doctorSource.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last: a run that ends in the teardown holds its click error first.
