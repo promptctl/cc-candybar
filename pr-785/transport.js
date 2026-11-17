@@ -50540,10 +50540,8 @@ var EffectSessions = class {
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
   // effect made for a row keeps rich-js's settled shares, so their count is the
   // size that grows.
-  // The passages in flight live with the surfaces that drew them, and come
-  // in as `passages`.
-  getStats(passages) {
-    let effects = passages;
+  getStats() {
+    let effects = 0;
     for (const session of this.sessions.values()) effects += session.heldCount;
     return { sessions: this.sessions.size, effects };
   }
@@ -71790,6 +71788,7 @@ var RuntimeStats = class _RuntimeStats {
         pinned: 0,
         due: 0,
         retiredViews: 0,
+        passages: 0,
         accountedBytes: 0,
         budgetBytes: 0
       },
@@ -90624,6 +90623,10 @@ var RenderCache = class {
     for (const lease of this.viewHolds.values()) {
       if (lease.retired !== null) retiredViews++;
     }
+    let passages = 0;
+    for (const view of this.views.values())
+      for (const record2 of view.frames.values())
+        passages += record2.passages?.size ?? 0;
     return {
       size: this.entries.size,
       held,
@@ -90633,6 +90636,7 @@ var RenderCache = class {
       pinned: this.pins.size,
       due: this.due.size,
       retiredViews,
+      passages,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes()
     };
@@ -90898,15 +90902,6 @@ var RenderCache = class {
   stopDrawing(sessionId2, by) {
     this.copies.get(sessionId2)?.delete(by);
     this.views.get(sessionId2)?.frames.delete(by);
-  }
-  // [LAW:nothing-unseen] The passages every view's surfaces hold in flight:
-  // each one a rich-js effect, counted beside the sessions' row effects.
-  heldPassages() {
-    let held = 0;
-    for (const view of this.views.values())
-      for (const record2 of view.frames.values())
-        held += record2.passages?.size ?? 0;
-    return held;
   }
 };
 
@@ -91542,7 +91537,7 @@ function startOver(inputs, sessionState, history, host) {
           kind: "stats",
           stats: {
             renderCache: renderCache.stats,
-            effectCache: effectSessions.getStats(renderCache.heldPassages()),
+            effectCache: effectSessions.getStats(),
             sessionState: {
               sessions: sessionState.size(),
               observers: sessionState.observers(),

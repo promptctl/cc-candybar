@@ -4,15 +4,22 @@
     {
       "version": "pr-785",
       "ref": "refs/pull/785/merge",
-      "sha": "adfad24d1154eaa6e0e767f3482098d8352d95ad",
-      "timestamp": "2026-11-17T11:26:23.554Z",
+      "sha": "ee63de04500969bcd3d1a5704b60e3b59fa40fee",
+      "timestamp": "2026-11-17T11:35:32.104Z",
       "commits": [
         {
-          "sha": "adfad24d1154eaa6e0e767f3482098d8352d95ad",
+          "sha": "ee63de04500969bcd3d1a5704b60e3b59fa40fee",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T11:25:25Z",
-          "message": "Merge 1f9be9e0bdf759084213ebc1bd9252c17bcbf524 into 681357616352fb4f7476a7b1035b61a244971844\n"
+          "timestamp": "2026-11-17T11:34:21Z",
+          "message": "Merge 1b9d4d88f1dd97e37cb75b685c1d2b108b744425 into 681357616352fb4f7476a7b1035b61a244971844\n"
+        },
+        {
+          "sha": "1b9d4d88f1dd97e37cb75b685c1d2b108b744425",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T04:34:10-07:00",
+          "message": "refactor(renderer): passages counted under the render cache's stats, and tests read a draw's segments as its value (0ol)\n"
         },
         {
           "sha": "1f9be9e0bdf759084213ebc1bd9252c17bcbf524",
