@@ -240,6 +240,9 @@ export function rendererHost(
   ): Promise<Slotted> => {
     const session = sessionOf(input.event);
     let release = (): void => {};
+    // [LAW:one-source-of-truth] A renderer sent its `start` holds no config,
+    // whether or not the start answers: every origin it names after is new.
+    if (input.event.kind === "start") served = new Set();
     try {
       release = session === null ? release : collector.holding(session);
       const sentAt = clock.monotonic();
@@ -283,16 +286,14 @@ export function rendererHost(
               collector.writableSettings,
               world.configs,
             );
-      if (input.event.kind === "start") served = new Set();
       const named = took(subscriptions, frames);
       // [LAW:no-ambient-temporal-coupling] Every origin the output newly
       // names, and every one the landing moved, gets its `config` turn here,
       // ahead of the landing's `effect-done` turns.
-      const configured: Array<Promise<readonly EffectOutcome[]>> = [];
+      const waited: Array<Promise<readonly EffectOutcome[]>> = [];
       for (const origin of named)
-        configured.push(
-          (await configInSlot(origin, "config-subscribed")).settled,
-        );
+        waited.push((await configInSlot(origin, "config-subscribed")).settled);
+      const reloaded: Array<Promise<unknown>> = [];
       const moved =
         landed.kind === "ok" && changes.length + answers.length > 0
           ? world.configs.landed(
@@ -309,7 +310,7 @@ export function rendererHost(
             )
           : [];
       for (const origin of moved)
-        configured.push((await configInSlot(origin, "config-landed")).settled);
+        reloaded.push((await configInSlot(origin, "config-landed")).settled);
       // An act no landing let go: the close is its own cause, and any other
       // is its changes', whose own outcome says why.
       const unperformed: EffectOutcome =
@@ -344,20 +345,23 @@ export function rendererHost(
             ? before.then(() => world.perform(act))
             : Promise.resolve(unperformed);
         const settled = acted.then((outcome) => settle(act, outcome));
-        if (outlives(act)) void settled;
+        if (outlives(act)) unawaited("act", settled);
         else {
           owed.push(settled);
           before = acted;
         }
       }
       // [LAW:no-silent-failure] A turn settles as what it caused: its own
-      // effects, and the `config` turns it named or moved, which run what
-      // waited on them, so a click that waited answers for what it did.
-      const settled = Promise.all(configured)
-        .then(async (caused) => [
-          ...caused.flat(),
-          ...(await Promise.all(owed)),
-        ])
+      // effects, and those of the `config` turns it named, which run what
+      // waited on it, so a click that waited answers for what it did. A
+      // `config` turn its landing moved runs nothing of its own: it is
+      // waited for, and its failure is its own turn's line.
+      const settled = Promise.all([
+        Promise.all(waited),
+        Promise.all(reloaded),
+        Promise.all(owed),
+      ])
+        .then(([caused, , own]) => [...caused.flat(), ...own])
         .finally(release);
       return { turn, settled };
     } catch (thrown) {
@@ -575,6 +579,14 @@ export function rendererHost(
       return turn;
     };
   const deliver = recorded("last");
+  // [LAW:no-silent-failure] A turn's settling nothing awaits, which rejected,
+  // is the daemon's, on every bar.
+  const unawaited = (what: string, settling: Promise<unknown>): void =>
+    void settling.catch((thrown: unknown) => {
+      const text = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown).detail}`;
+      log("error", text);
+      world.unheard(text);
+    });
   // [LAW:single-enforcer] The one place a push's output is judged: a push is
   // answered by the reply of its own kind, or it failed.
   const ask = async <P extends AdapterPush>(
@@ -593,7 +605,10 @@ export function rendererHost(
         // A push answers in no slot of a turn: each origin it newly names
         // gets its `config` turn behind it.
         for (const origin of took(subscriptions, []))
-          void deliver(configMade(origin), [["why", "config-subscribed"]]);
+          unawaited(
+            "config",
+            deliver(configMade(origin), [["why", "config-subscribed"]]),
+          );
         return answered;
       } catch (thrown) {
         return {
@@ -629,7 +644,10 @@ export function rendererHost(
     });
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)
-      void deliver(configMade(origin), [["why", "config-moved"]]);
+      unawaited(
+        "config",
+        deliver(configMade(origin), [["why", "config-moved"]]),
+      );
   };
   const stats = (): MailboxStats => ({
     holder: holder?.input ?? null,
@@ -661,13 +679,7 @@ export function rendererHost(
             : { kind: "event", event: { kind: "due" } },
         "idle",
       );
-      // [LAW:no-silent-failure] Nothing awaits the acts' settling, so a
-      // settling that rejected is the daemon's, on every bar.
-      void settled.catch((thrown: unknown) => {
-        const text = `renderer ${name}'s due acts did not settle: ${failureOf(thrown).detail}`;
-        log("error", text);
-        world.unheard(text);
-      });
+      unawaited("due acts", settled);
       record(event, [], turn);
       return turn;
     },

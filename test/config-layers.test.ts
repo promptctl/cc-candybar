@@ -29,7 +29,7 @@ import {
   writePreset,
   writeValues,
 } from "../src/renderer/config-file-store";
-import { resolveDslConfig } from "../src/daemon/config-discovery/config-search";
+import { resolutionOf } from "./helpers/config-search";
 import { instantOf } from "../src/utils/instant";
 import { repoConfigs } from "../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../src/daemon/paths";
@@ -279,7 +279,7 @@ test("the user's file is a layer even when the session's project is its director
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
   answerRepo(xdgDir);
-  const resolved = resolveDslConfig(
+  const resolved = resolutionOf(
     locations(host),
     repoConfigs(stateDir(host)).read(),
     { projectDir: xdgDir },

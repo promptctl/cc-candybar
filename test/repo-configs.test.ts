@@ -14,7 +14,7 @@ import path from "node:path";
 
 import { checkConfig } from "../src/check";
 import { configResolutionNotice } from "../src/config/dsl-loader";
-import { resolveDslConfig } from "../src/daemon/config-discovery/config-search";
+import { resolutionOf } from "./helpers/config-search";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 import { chainPlaces } from "../src/config/loader/chain-places";
 import {
@@ -76,14 +76,14 @@ function write(rel: string, text: string): string {
 }
 
 const layersOf = (answers: RepoAnswers) => {
-  const r = resolveDslConfig(locations(host), answers, { projectDir: project });
+  const r = resolutionOf(locations(host), answers, { projectDir: project });
   return r.kind === "chain" ? r.layers.map((l) => l.path) : null;
 };
 
 describe("the gate over a project's config file", () => {
   test("unanswered, it is no layer, and the gate names the directory awaiting", () => {
     const file = write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(locations(host), book({}), {
+    const resolved = resolutionOf(locations(host), book({}), {
       projectDir: project,
     });
     expect(layersOf(book({}))).toEqual([]);
@@ -100,7 +100,7 @@ describe("the gate over a project's config file", () => {
 
   test("declined, it is no layer and nothing awaits", () => {
     write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(
+    const resolved = resolutionOf(
       locations(host),
       book({ [project]: "declined" }),
       { projectDir: project },
@@ -117,7 +117,7 @@ describe("the gate over a project's config file", () => {
     expect(layersOf(book({}))).toEqual([user]);
     const named = write("named.json5", "{}");
     write(".cc-candybar.json5", "{}");
-    const explicit = resolveDslConfig(locations(host), book({}), {
+    const explicit = resolutionOf(locations(host), book({}), {
       projectDir: project,
       configFile: named,
     });
@@ -132,13 +132,13 @@ describe("the gate over a project's config file", () => {
     write(".cc-candybar.json5", "{}");
     const query = { projectDir: project };
     expect(
-      chainPlaces(resolveDslConfig(locations(host), book({}), query), query),
+      chainPlaces(resolutionOf(locations(host), book({}), query), query),
     ).toEqual([{ path: expect.any(String), role: "user" }]);
   });
 
   test("a book that cannot be read answers for nobody, asks nothing, and says so", () => {
     write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(
+    const resolved = resolutionOf(
       locations(host),
       { kind: "failed", reason: "repo-configs.json is not JSON" },
       { projectDir: project },
@@ -198,7 +198,7 @@ describe("the gate over a project's plugins", () => {
       recursive: true,
     });
     expect(
-      resolveDslConfig(locations(host), book({}), { projectDir: project }).repos
+      resolutionOf(locations(host), book({}), { projectDir: project }).repos
         .awaiting,
     ).toEqual([]);
   });
@@ -386,7 +386,7 @@ describe("a repository's worktrees answer as the repository", () => {
     execFileSync("git", args, { stdio: "ignore" });
   };
   const resolveAt = (answers: RepoAnswers, dir: string) =>
-    resolveDslConfig(locations(host), answers, { projectDir: dir });
+    resolutionOf(locations(host), answers, { projectDir: dir });
   const layersAt = (answers: RepoAnswers, dir: string) => {
     const r = resolveAt(answers, dir);
     return r.kind === "chain" ? r.layers.map((l) => l.path) : null;

@@ -153,6 +153,22 @@ test("each origin a turn's landing moved gets its config turn before the landing
   expect(answered.settled).toEqual([{ kind: "ok" }]);
 });
 
+// [LAW:one-source-of-truth] A renderer sent its start holds no config, so
+// every origin it names after gets its config turn, though the start failed.
+test("a start the renderer did not answer still leaves every origin it names after new", async () => {
+  const { host, heard } = hostOver((event) => {
+    if (event.kind === "start") throw new Error("the renderer went down");
+    return output([], [ORIGIN]);
+  });
+  await host.answer(() => ({ kind: "event", event: due }));
+  await host.answer(() => ({
+    kind: "event",
+    event: { kind: "start", viewers: {}, sessions: [] },
+  }));
+  await host.answer(() => ({ kind: "event", event: due }));
+  expect(heard).toEqual(["due", "config", "start", "due", "config"]);
+});
+
 test("an origin a watch moved that the renderer let go by its slot is abandoned, and no config is handed in", async () => {
   const { host, heard, logged } = hostOver(() => output([], []));
   host.moved([ORIGIN]);
@@ -184,6 +200,42 @@ describe("a turn settles as the config turns it named", () => {
     expect(answered.settled).toEqual([
       { kind: "refused", reason: expect.any(String) },
     ]);
+  });
+
+  // Its landing's config turns run nothing of the turn's: what fails there
+  // is that turn's own line, never the turn's answer.
+  test("a config turn its landing moved is waited for, and its failure is not among its outcomes", async () => {
+    const change: Effect = {
+      kind: "change",
+      id: 1 as EffectId,
+      session: S,
+      target: { kind: "layer", origin: ORIGIN, role: "user" },
+      changes: diffChanges(
+        `{ globals: { theme: "dusk" } }\n`,
+        `{ globals: { theme: "dawn" } }\n`,
+      ),
+    };
+    let configs = 0;
+    const { host, heard, logged } = hostOver(
+      (event) => {
+        if (event.kind === "config" && ++configs === 2)
+          return {
+            ...output([], [ORIGIN]),
+            kind: "threw",
+            failure: {
+              kind: "threw",
+              message: "the reload broke",
+              detail: "the reload broke",
+            },
+          };
+        return output(event.kind === "due" ? [change] : [], [ORIGIN]);
+      },
+      () => [ORIGIN],
+    );
+    const answered = await host.answer(() => ({ kind: "event", event: due }));
+    expect(heard).toEqual(["due", "config", "config", "effect-done ok"]);
+    expect(answered.settled).toEqual([{ kind: "ok" }]);
+    expect(logged.some((l) => l.includes("the reload broke"))).toBe(true);
   });
 
   test("one that threw is its failure", async () => {

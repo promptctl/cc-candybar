@@ -46,7 +46,7 @@ const FORWARDER_BIN = "cc-candybar-url-handler";
 
 // [LAW:one-source-of-truth] `install` writes no renderer flags into
 // ~/.claude/settings.json. All authoring lives in `.cc-candybar.json5` or
-// `.cc-candybar.json` (see resolveDslConfig — both extensions accepted,
+// `.cc-candybar.json` (see searchConfig — both extensions accepted,
 // .json5 preferred); the install command's job is staging the runtime,
 // wiring the URL handler, and pointing settings at the staged entry.
 const DEFAULT_INSTALL_ARGS: readonly string[] = [];

@@ -52,18 +52,11 @@ import {
  * answer decides whether its files load (`gateRepos`, whose `approved` the
  * layers are filtered by): the render, `check` and the durable writer all
  * resolve here.
+ *
+ * It answers the one repository question its directories ask, too.
+ * [LAW:one-source-of-truth] The question is ruled from the same directories
+ * and answers the gate is, in the same pass, so the two cannot disagree.
  */
-export function resolveDslConfig(
-  locs: Locations,
-  answers: RepoAnswers,
-  query: ConfigQuery,
-): ConfigResolution {
-  return searchConfig(locs, answers, query).resolution;
-}
-
-// The search, and the one repository question its directories ask.
-// [LAW:one-source-of-truth] The question is ruled from the same directories
-// and answers the gate is, in the same pass, so the two cannot disagree.
 export function searchConfig(
   locs: Locations,
   answers: RepoAnswers,

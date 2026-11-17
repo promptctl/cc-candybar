@@ -16,9 +16,8 @@
 //
 // [LAW:single-enforcer] No parallel validation path: the verdict is reached
 // through the exact functions the daemon runs (RenderCache.reloadInto →
-// buildState, then the per-request render in draw-bar.ts) — resolveDslConfig →
-// detectConfigCollisions → loadConfig → validateRenderable → registerDslConfig →
-// deriveActionValidators → drawDsl. "check passes" and "the daemon renders"
+// buildState, then the per-request render in draw-bar.ts) — discover →
+// loadSnapshot → registerDslConfig → deriveActionValidators → drawDsl. "check passes" and "the daemon renders"
 // cannot diverge, because they are one code path as far as the Frame, and
 // encoding a Frame refuses nothing: it is the print's, so a verdict with no
 // `--render` encodes nothing. Check additionally waits, before each pass, for

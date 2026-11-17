@@ -81,7 +81,7 @@ export function configCandidates(
  * one-per-user, so its env answers for whichever shell spawned it, not for
  * the session being rendered ([LAW:no-ambient-temporal-coupling]).
  *
- * [LAW:single-enforcer] One enumerator; `resolveDslConfig` layers the
+ * [LAW:single-enforcer] One enumerator; `searchConfig` layers the
  * files that exist, watchers listen on all of them, no second list.
  *
  * [LAW:dataflow-not-control-flow] Location is the dominant precedence axis;
