@@ -144,6 +144,15 @@ export function checkRenderRequest(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`,
     );
   }
+  // The project directory too: it resolves the project's config layer and is
+  // kept in the session book, which reads back only absolute paths. Its
+  // type is the schema's, checked above.
+  const projectDir: unknown = req.hookData?.workspace?.project_dir;
+  if (typeof projectDir === "string" && !isAbsolute(projectDir)) {
+    wireProblems.push(
+      `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`,
+    );
+  }
   // The args too: parseRenderArgs reads them below, outside the render's own
   // error path, so a value that is not a list of strings is refused here
   // rather than thrown past the render event.

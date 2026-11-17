@@ -48,6 +48,16 @@ export const SESSION_BOOK_FILE: SessionFileKind<DurableContext> = {
   },
 };
 
+// [LAW:one-source-of-truth] Whether two contexts keep as one record: every
+// field the record holds, compared where it lies, since this runs on every
+// request.
+const sameDurable = (a: DurableContext, b: DurableContext): boolean =>
+  a.origin.projectDir === b.origin.projectDir &&
+  a.origin.cwd === b.origin.cwd &&
+  a.origin.target.path === b.origin.target.path &&
+  a.origin.target.source === b.origin.target.source &&
+  a.claudeConfigDir === b.claudeConfigDir;
+
 // Where the book is kept: its file, or nowhere.
 export interface SessionBookStorage {
   load(): ReadonlyMap<SessionId, DurableContext>;
@@ -87,12 +97,7 @@ export class SessionBook {
     const session = req.hookData.session_id;
     const durable = durableOf(req);
     const held = this.book.get(session);
-    if (
-      held !== undefined &&
-      JSON.stringify(SESSION_BOOK_FILE.record(held)) ===
-        JSON.stringify(SESSION_BOOK_FILE.record(durable))
-    )
-      return;
+    if (held !== undefined && sameDurable(held, durable)) return;
     this.book.delete(session);
     this.book.set(session, durable);
     this.bound();

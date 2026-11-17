@@ -42,6 +42,7 @@ import {
   type RendererOverLines,
 } from "../renderer-interface/wire.js";
 import { RendererDown, failureOf } from "./foundations/verb-error.js";
+import type { RendererName } from "./foundations/renderer-name.js";
 
 // What the host holds of its renderer, whichever link it runs over.
 export interface RendererLink {
@@ -76,6 +77,8 @@ export interface RendererProcess {
 // port is handed how to build the renderer and its boot as the daemon's build
 // begins, and its `start` the host's reaches once the host's parts exist.
 export type RendererPort = (prepared: {
+  // The renderer's name, which every line its link says carries.
+  readonly name: RendererName;
   // The renderer in this process, built over the host's reaches from the
   // stored state the host holds as it is called.
   readonly build: (reaches: AdapterToHost) => Renderer;
@@ -88,20 +91,21 @@ export type RendererPort = (prepared: {
 
 // [LAW:one-type-per-behavior] The renderer in this process: what a test's
 // daemon and the page run.
-export const inProcessPort: RendererPort = ({ build }) => ({
-  start: (own) => inProcessRenderer(build, own.reaches, own.clock),
+export const inProcessPort: RendererPort = ({ name, build }) => ({
+  start: (own) => inProcessRenderer(name, build, own.reaches, own.clock),
 });
 
 // The renderer in a process of its own, built there from its boot.
 export function processPort(
   run: Pick<ProcessOwner, "launcher" | "entry" | "cwd" | "heapCapMb">,
 ): RendererPort {
-  return ({ boot, node }) => ({
-    start: (own) => processRenderer({ ...own, ...run, node, boot }),
+  return ({ name, boot, node }) => ({
+    start: (own) => processRenderer({ ...own, ...run, name, node, boot }),
   });
 }
 
 function inProcessRenderer(
+  name: RendererName,
   build: (reaches: AdapterToHost) => Renderer,
   reaches: AdapterToHost,
   clock: Pick<Timekeeper, "monotonic">,
@@ -110,7 +114,8 @@ function inProcessRenderer(
   // before it fails as no renderer's.
   let built: TimedRenderer | null = null;
   const live = (): TimedRenderer => {
-    if (built === null) throw new RendererDown("renderer main has not started");
+    if (built === null)
+      throw new RendererDown(`renderer ${name} has not started`);
     return built;
   };
   // [LAW:no-ambient-temporal-coupling] An input reaches the renderer once
@@ -176,6 +181,7 @@ export interface ProcessOwner extends LinkOwner {
   readonly cwd: string;
   readonly heapCapMb: number;
   readonly boot: () => RendererBoot;
+  readonly name: RendererName;
 }
 
 // How often the supervisor pings a live renderer, and how long one may go
@@ -276,7 +282,7 @@ interface Minted<T> {
 }
 
 export function processRenderer(own: ProcessOwner): RendererLink {
-  const { clock, log } = own;
+  const { clock, log, name } = own;
   let phase: Phase = { kind: "idle" };
   let generation = 0;
   // Renderers in a row that ended young.
@@ -301,10 +307,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   const down = (): RendererDown =>
     new RendererDown(
       phase.kind === "down"
-        ? `renderer main is down: ${phase.why}`
+        ? `renderer ${name} is down: ${phase.why}`
         : phase.kind === "closed"
-          ? "renderer main is closed"
-          : "renderer main has not started",
+          ? `renderer ${name} is closed`
+          : `renderer ${name} has not started`,
     );
 
   // The host's reaches as one renderer reaches them: the ids it mints for
@@ -319,7 +325,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         own.reaches.storage.hold(host, folders);
       },
       release: (id) => {
-        const host = hostIdOf(held.holds, id);
+        const host = hostIdOf(name, held.holds, id);
         held.holds.delete(id);
         own.reaches.storage.release(host);
       },
@@ -349,7 +355,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     let heardBy: (text: string) => void = () => {};
     const stdout = lineSplitter((text) => heardBy(text));
     const stderr = lineSplitter((text) =>
-      log("warn", `renderer main[${generationOf}]: ${text}`),
+      log("warn", `renderer ${name}[${generationOf}]: ${text}`),
     );
     const channel = own.launcher.launchChannel({
       bin: own.node[0] as string,
@@ -379,7 +385,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         send: (line) => write(channel, line),
         host: reachesFor(held),
         fault: (message) =>
-          log("error", `renderer main[${generationOf}]: ${message}`),
+          log("error", `renderer ${name}[${generationOf}]: ${message}`),
       }),
     };
     phase = { kind: "starting", link, queued: [] };
@@ -394,7 +400,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       .catch((thrown: unknown) =>
         log(
           "error",
-          `renderer main[${generationOf}] start failed: ${failureOf(thrown).detail}`,
+          `renderer ${name}[${generationOf}] start failed: ${failureOf(thrown).detail}`,
         ),
       );
     heardBy = (text) => heard(link, start, text);
@@ -420,7 +426,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       line = JSON.parse(text) as RendererLine;
     } catch {
       // [LAW:no-silent-failure] A line that is not the wire's is said.
-      log("warn", `renderer main[${link.generation}]: ${text}`);
+      log("warn", `renderer ${name}[${link.generation}]: ${text}`);
       return;
     }
     switch (line.kind) {
@@ -433,7 +439,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         link.refusal = line.failure.message;
         log(
           "error",
-          `renderer main[${link.generation}] refused its boot: ${line.failure.detail}`,
+          `renderer ${name}[${link.generation}] refused its boot: ${line.failure.detail}`,
         );
         return;
       default:
@@ -448,7 +454,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:nothing-unseen] The start, with what was refused while none ran.
     log(
       "info",
-      `renderer main[${link.generation}] started pid=${link.channel.pid ?? "-"} refused-while-down=${refused}`,
+      `renderer ${name}[${link.generation}] started pid=${link.channel.pid ?? "-"} refused-while-down=${refused}`,
     );
     refused = 0;
     for (const send of queued) send();
@@ -464,7 +470,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   };
 
   const ended = (link: Link, how: string): void => {
-    link.lines.ended(new RendererDown(`renderer main ${how}`));
+    link.lines.ended(new RendererDown(`renderer ${name} ${how}`));
     if (link.tookOver) gone.push(link);
     else release(link);
     // [LAW:no-ambient-temporal-coupling] An end once the close has begun
@@ -480,7 +486,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     if (phase.kind === "closed") {
       log(
         level,
-        `renderer main[${link.generation}] ${how} in the daemon's close`,
+        `renderer ${name}[${link.generation}] ${how} in the daemon's close`,
       );
       return;
     }
@@ -490,7 +496,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // A boot that never answered ended young, however long it was judged.
     young = booted && lived >= YOUNG_MS ? 0 : young + 1;
     const delay = backoffMs(young);
-    const why = `renderer main[${link.generation}] ${how}`;
+    const why = `renderer ${name}[${link.generation}] ${how}`;
     phase = {
       kind: "down",
       why: how,
@@ -618,7 +624,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         // there is no one to tell.
         if (effect === undefined || effect.by !== link.held)
           throw new RendererDown(
-            `renderer main: effect ${e.of} was returned by a renderer that has ended`,
+            `renderer ${name}: effect ${e.of} was returned by a renderer that has ended`,
           );
         effects.delete(e.of);
         toSend = { ...input, event: { ...e, of: effect.id } };
@@ -669,7 +675,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
                   )
                 : Promise.reject(
                     new Error(
-                      `renderer main[${link.generation}] is not live, so its heap was not written`,
+                      `renderer ${name}[${link.generation}] is not live, so its heap was not written`,
                     ),
                   ),
           };
@@ -679,11 +685,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
 // [LAW:no-silent-failure] A renderer naming an id it never handed the host is
 // a renderer's bug, said.
-function hostIdOf<T>(held: ReadonlyMap<T, T>, id: T): T {
+function hostIdOf<T>(name: RendererName, held: ReadonlyMap<T, T>, id: T): T {
   const host = held.get(id);
   if (host === undefined)
     throw new Error(
-      `renderer main named ${String(id)}, which it holds none of`,
+      `renderer ${name} named ${String(id)}, which it holds none of`,
     );
   return host;
 }

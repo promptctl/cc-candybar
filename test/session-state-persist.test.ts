@@ -46,10 +46,11 @@ describe("the session state's file", () => {
   // A daemon over the file: the host's held stores, loaded as it serves, and
   // a renderer built from them, each of its writes taken as a turn's are.
   const daemonOver = (session: SessionStorage, maxSessions?: number) => {
-    const stores = new HeldStores(
-      { session, history: EPHEMERAL_HISTORY_STORAGE, doctor: emptyStores() },
-      () => {},
-    );
+    const stores = new HeldStores({
+      session,
+      history: EPHEMERAL_HISTORY_STORAGE,
+      doctor: emptyStores(),
+    });
     stores.load();
     const state = new SessionState(stores.current().sessions, maxSessions);
     const turn = (write: (state: SessionState) => void): void => {

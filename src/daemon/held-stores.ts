@@ -3,7 +3,6 @@
 // every renderer it builds, and moved only by the stored writes the renderer's
 // turns return, each written behind to its file.
 
-import type { DaemonLogger } from "../utils/logger.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { SessionStorage } from "../renderer-interface/session-state.js";
 import type {
@@ -47,10 +46,7 @@ export class HeldStores {
   private doctor: StoresRead = EMPTY_STORED_STATE.doctor;
   private closed = false;
 
-  constructor(
-    private readonly storage: ProfileStorage,
-    private readonly log: DaemonLogger,
-  ) {}
+  constructor(private readonly storage: ProfileStorage) {}
 
   // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, so a
   // daemon that won the socket reads what the one before it flushed in its
@@ -76,10 +72,13 @@ export class HeldStores {
   }
 
   // A turn's stored writes, in the order it made them.
-  // [LAW:no-silent-failure] A write its file refused is said: the renderer
-  // holds it, and so does this copy, which the next write, and the close's
-  // flush, write again.
+  // [LAW:no-silent-failure] Every write is held, and what its file refused
+  // throws once all are, so the host's taking says it on every bar. The
+  // renderer holds the refused write too, and the store's next write saves
+  // the copy held here whole.
   take(writes: readonly StoreWrite[]): void {
+    const refused: string[] = [];
+    const documents: DocumentWrite[] = [];
     let sessions = false;
     let history = false;
     for (const write of writes)
@@ -95,12 +94,36 @@ export class HeldStores {
         case "marks":
         case "clicked":
         case "postMortemsRead":
-          this.hold(write);
+          // [LAW:no-silent-failure] A renderer files only a document that
+          // read, so one filed over a failure is a renderer's bug, refused.
+          if (this.doctor[write.store].kind !== "ok") {
+            refused.push(
+              `the renderer filed ${write.store}, which did not read; nothing was written`,
+            );
+            break;
+          }
+          this.doctor = {
+            ...this.doctor,
+            [write.store]: { kind: "ok", value: write.value },
+          };
+          documents.push(write);
           break;
       }
-    if (this.closed) return;
-    if (sessions) this.storage.session.save(Object.fromEntries(this.sessions));
-    if (history) this.saveHistory();
+    if (!this.closed) {
+      if (sessions)
+        this.storage.session.save(Object.fromEntries(this.sessions));
+      if (history)
+        attempt(refused, () =>
+          this.storage.history.save(Object.fromEntries(this.history)),
+        );
+      for (const write of documents)
+        attempt(refused, () => {
+          const filed = fileDocument(this.storage.doctor, write);
+          if (filed.kind === "failed")
+            throw new Error(`${write.store} not filed: ${filed.reason}`);
+        });
+    }
+    if (refused.length > 0) throw new Error(`stored: ${refused.join("; ")}`);
   }
 
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
@@ -111,44 +134,17 @@ export class HeldStores {
     this.storage.session.flush();
     this.closed = true;
   }
+}
 
-  private saveHistory(): void {
-    try {
-      this.storage.history.save(Object.fromEntries(this.history));
-    } catch (thrown) {
-      this.log(
-        "error",
-        thrown instanceof Error ? thrown.message : String(thrown),
-      );
-    }
-  }
+type DocumentWrite = Extract<StoreWrite, { store: keyof StoresRead }>;
 
-  private hold(write: Extract<StoreWrite, { store: keyof StoresRead }>): void {
-    // [LAW:no-silent-failure] A renderer files only a document that read, so
-    // one filed over a failure is a renderer's bug, refused and said.
-    if (this.doctor[write.store].kind !== "ok") {
-      this.log(
-        "error",
-        `stored: the renderer filed ${write.store}, which did not read; nothing was written`,
-      );
-      return;
-    }
-    this.doctor = {
-      ...this.doctor,
-      [write.store]: { kind: "ok", value: write.value },
-    };
-    if (this.closed) return;
-    let filed: StoresRead[typeof write.store];
-    try {
-      filed = fileDocument(this.storage.doctor, write);
-    } catch (thrown) {
-      filed = {
-        kind: "failed",
-        reason: thrown instanceof Error ? thrown.message : String(thrown),
-      };
-    }
-    if (filed.kind === "failed")
-      this.log("error", `stored: ${write.store} not filed: ${filed.reason}`);
+// One file's write, whose throw joins the turn's refusals and stops none of
+// the writes after it.
+function attempt(refused: string[], write: () => void): void {
+  try {
+    write();
+  } catch (thrown) {
+    refused.push(thrown instanceof Error ? thrown.message : String(thrown));
   }
 }
 
@@ -162,7 +158,7 @@ function moved<V>(store: Map<SessionId, V>, key: SessionId, value: V | null) {
 // are of one name, which the switch cannot carry to the file's type.
 function fileDocument(
   doctor: DoctorStores,
-  write: Extract<StoreWrite, { store: keyof StoresRead }>,
+  write: DocumentWrite,
 ): StoresRead[keyof StoresRead] {
   const file = doctor[write.store] as {
     update: (

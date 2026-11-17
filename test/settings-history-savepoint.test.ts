@@ -325,14 +325,11 @@ describe("the savepoint under the history's bounds", () => {
 describe("the savepoint survives a restart", () => {
   // The host's stores over the history file, loaded as a daemon serves.
   const heldOver = (historyFile: string): HeldStores => {
-    const stores = new HeldStores(
-      {
-        session: EPHEMERAL_SESSION_STORAGE,
-        history: fileHistoryStorage(historyFile, () => {}),
-        doctor: emptyStores(),
-      },
-      () => {},
-    );
+    const stores = new HeldStores({
+      session: EPHEMERAL_SESSION_STORAGE,
+      history: fileHistoryStorage(historyFile, () => {}),
+      doctor: emptyStores(),
+    });
     stores.load();
     return stores;
   };

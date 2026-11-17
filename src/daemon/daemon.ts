@@ -335,9 +335,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:single-enforcer] The renderer's stored state, held here: every
   // renderer is built from what it holds then, and every turn's stored writes
   // move it.
-  const stores = new HeldStores(inputs.profile(inputs.rendererName, log), log);
+  const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
   const sessionBook = new SessionBook(inputs.sessionBook(log));
   const preparedRenderer = inputs.renderer({
+    name: inputs.rendererName,
     build: (reaches) =>
       mainRendererOf(
         {

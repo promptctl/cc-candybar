@@ -34,6 +34,7 @@ import type {
 import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import {
   RendererDown,
   failureOf,
@@ -126,6 +127,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     entry: "/app/index.mjs",
     cwd: "/state",
     heapCapMb: 512,
+    name: MAIN_RENDERER,
     boot: () => ({
       digest: "d1",
       host: { env: {}, home: "/home", tmp: "/tmp" },

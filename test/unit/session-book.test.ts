@@ -118,7 +118,12 @@ describe("the book's file", () => {
     ["a relative project", { projectDir: "p", cwd: "/p", configFile: null }],
     [
       "a relative config file",
-      { projectDir: "/p", cwd: "/p", configFile: "x.json5", source: "argument" },
+      {
+        projectDir: "/p",
+        cwd: "/p",
+        configFile: "x.json5",
+        source: "argument",
+      },
     ],
     [
       "a relative Claude Code directory",
@@ -137,9 +142,7 @@ describe("the book's file", () => {
     const { saves, storage: kept } = storage();
     new SessionBook(kept).heard(req);
     expect(
-      JSON.parse(
-        JSON.stringify(SESSION_BOOK_FILE.record(saves.at(-1)![S1]!)),
-      ),
+      JSON.parse(JSON.stringify(SESSION_BOOK_FILE.record(saves.at(-1)![S1]!))),
     ).toEqual({
       projectDir: "/p",
       cwd: "/p",
@@ -152,7 +155,9 @@ describe("the book's file", () => {
 
 describe("the book", () => {
   test("a click finds a session heard since the start live, and one read back with no live part", () => {
-    const book = new SessionBook(storage(new Map([[S2, durable("/q")]])).storage);
+    const book = new SessionBook(
+      storage(new Map([[S2, durable("/q")]])).storage,
+    );
     book.load();
     const req = request("s1");
     book.heard(req);
@@ -171,7 +176,12 @@ describe("the book", () => {
 
   test("a session heard before the load keeps what it said over what the file holds", () => {
     const book = new SessionBook(
-      storage(new Map([[S1, durable("/old")], [S2, durable("/q")]])).storage,
+      storage(
+        new Map([
+          [S1, durable("/old")],
+          [S2, durable("/q")],
+        ]),
+      ).storage,
     );
     book.heard(request("s1", "/new"));
     book.load();
@@ -187,6 +197,45 @@ describe("the book", () => {
     expect(saves).toHaveLength(1);
     book.heard(request("s1", "/q"));
     expect(saves.at(-1)).toEqual({ [S1]: durable("/q") });
+  });
+
+  test("a request that moves only the Claude Code directory is saved again", () => {
+    const { storage: kept, saves } = storage();
+    const book = new SessionBook(kept);
+    book.heard(request("s1", "/p"));
+    book.heard(request("s1", "/p", { claudeConfigDir: "/u/.claude-x" }));
+    expect(saves).toHaveLength(2);
+    expect(saves.at(-1)).toEqual({
+      [S1]: { ...durable("/p"), claudeConfigDir: "/u/.claude-x" },
+    });
+  });
+
+  // The book reads back only absolute paths, so the checkpoint refuses a
+  // project it could not: nothing is kept that a restart would drop.
+  test("a request whose project directory is not absolute never reaches the book", () => {
+    const refused = checkRenderRequest(
+      {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        hookData: {
+          hook_event_name: "Status",
+          session_id: "s1",
+          transcript_path: "/p/transcript.jsonl",
+          cwd: "/p",
+          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+          workspace: { current_dir: "/p", project_dir: "p", added_dirs: [] },
+        },
+        args: ["cc-candybar"],
+        cwd: "/p",
+      },
+      { firstSightOfUnknownHookField: () => false },
+      () => {},
+      "/nowhere/home",
+    );
+    expect(refused).toEqual({
+      ok: false,
+      problems: [`field 'workspace.project_dir' is not an absolute path: "p"`],
+    });
   });
 
   test("the book holds its newest sessions and drops the oldest", () => {
