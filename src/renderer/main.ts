@@ -22,6 +22,7 @@ import {
   type RendererParts,
 } from "./draw-bar.js";
 import { TurnTime } from "./turn-time.js";
+import { runEach } from "../utils/run-each.js";
 import { MenuIdle } from "./menu-idle.js";
 import { FEED_PERIODS, Feeds } from "./feeds.js";
 import type { LaneSwitches } from "../config/lanes.js";
@@ -191,10 +192,14 @@ export function mainRenderer(
         // [LAW:dataflow-not-control-flow] Every owner of a tick, in one
         // order: held work first (a walk's load, a settled write), so the
         // menus a close reads and the frames drawn after it see it landed;
-        // then the closes, so the frames drawn show them.
-        time.runDue();
-        closeIdleMenus(parts, effects);
-        frames.push(...feeds.drawDue({ at: time.at, tick: time.tick }));
+        // then the closes, so the frames drawn show them. Each owner runs
+        // whatever one before it threw, so one session's failure stalls no
+        // other's close or frames.
+        runEach([
+          () => time.runDue(),
+          () => closeIdleMenus(parts, effects),
+          () => feeds.drawDue({ at: time.at, tick: time.tick }, frames),
+        ]);
         return;
     }
   };

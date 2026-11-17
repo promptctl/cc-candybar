@@ -9,6 +9,7 @@
 
 import type { Instant, Readings, Tick } from "../utils/instant.js";
 import type { Timekeeper } from "../time.js";
+import { runEach } from "../utils/run-each.js";
 
 interface Deferral {
   readonly until: Tick;
@@ -69,18 +70,19 @@ export class TurnTime {
 
   // The work due by this turn's tick, earliest first. Each is taken from what
   // is still held as it runs, so one let go by work before it never runs, and
-  // one that throws is not held again. Work held while these run waits for
-  // the next due turn, so a chain of work spreads over turns, and inputs
-  // between them are taken.
+  // one that throws is not held again, nor keeps the work after it from
+  // running. Work held while these run waits for the next due turn, so a
+  // chain of work spreads over turns, and inputs between them are taken.
   runDue(): void {
     const { tick } = this;
     const due = [...this.held]
       .filter(({ until }) => until <= tick)
       .sort((a, b) => a.until - b.until);
-    for (const deferral of due) {
-      if (!this.held.delete(deferral)) continue;
-      deferral.run();
-    }
+    runEach(
+      due.map((deferral) => () => {
+        if (this.held.delete(deferral)) deferral.run();
+      }),
+    );
   }
 
   // [LAW:one-source-of-truth] The store's face: the turn's wall instant, in

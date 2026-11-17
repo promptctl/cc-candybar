@@ -319,9 +319,10 @@ export async function replyTo(
 
   if (req.kind === "render") {
     // [LAW:effects-at-boundaries] The render request's two clock reads: the
-    // instant the bar is drawn at (every time read in the render reads it),
-    // and the monotonic start its wait and duration are measured from, so a
-    // clock stepped meanwhile moves neither.
+    // instant it arrived at, which its client sightings are stamped with, and the
+    // monotonic start its wait and duration are measured from, so a clock
+    // stepped meanwhile moves neither. The bar is drawn at its turn's own
+    // readings, made as its slot comes.
     const started = new Date(clock.now());
     const at = instantOf(started);
     const t0 = clock.monotonic();

@@ -2,12 +2,20 @@
 // a time, each after the last has settled, and a rejection is its own caller's
 // and never stops the tasks behind it. A task runs at once, in the caller's
 // turn, while its key is idle. A task placed `first` runs next, ahead of every
-// task waiting on its key, behind only the one running.
-export type Place = "first" | "last";
+// task waiting on its key, behind only the one running. A task placed `idle`
+// runs once no other task waits on its key: every task placed `first` or
+// `last` before it starts runs ahead of it, whenever it was placed.
+export type Place = "first" | "last" | "idle";
+
+type Entry = () => Promise<void>;
 
 export class KeyedSerialQueue<K> {
-  // Each key's tasks still to run, while one runs.
-  private readonly waiting = new Map<K, Array<() => Promise<void>>>();
+  // Each key's tasks still to run, while one runs: those placed `idle` apart,
+  // since every other waits ahead of them.
+  private readonly waiting = new Map<
+    K,
+    { readonly tasks: Entry[]; readonly idle: Entry[] }
+  >();
 
   run<T>(key: K, task: () => Promise<T>, at: Place = "last"): Promise<T> {
     return new Promise<T>((resolve, reject) => {
@@ -22,15 +30,16 @@ export class KeyedSerialQueue<K> {
       };
       const behind = this.waiting.get(key);
       if (behind !== undefined) {
-        if (at === "first") behind.unshift(entry);
-        else behind.push(entry);
+        if (at === "first") behind.tasks.unshift(entry);
+        else if (at === "last") behind.tasks.push(entry);
+        else behind.idle.push(entry);
         return;
       }
-      const tasks: Array<() => Promise<void>> = [];
-      this.waiting.set(key, tasks);
-      const drain = (next: () => Promise<void>): void =>
+      const waiting = { tasks: [] as Entry[], idle: [] as Entry[] };
+      this.waiting.set(key, waiting);
+      const drain = (next: Entry): void =>
         void next().then(() => {
-          const after = tasks.shift();
+          const after = waiting.tasks.shift() ?? waiting.idle.shift();
           if (after === undefined) this.waiting.delete(key);
           else drain(after);
         });

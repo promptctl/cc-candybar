@@ -185,20 +185,30 @@ export class FrameFeeds<Req> {
   // draws the bar now, and whether the session's pane is on a screen.
   viewers(): Viewers {
     const viewers: Record<SessionId, SessionViewers> = {};
-    for (const [sessionId, { followers }] of this.watched) {
-      const lanes: Partial<Record<Lane, LaneViewers>> = {};
-      let joined = 0;
-      for (const [sub, follower] of followers) {
-        const seen = lanes[sub.lane];
-        lanes[sub.lane] = {
-          subscribers: (seen?.subscribers ?? 0) + 1,
-          drawing: (seen?.drawing ?? false) || sub.drawing(),
-        };
-        joined = Math.max(joined, follower.joined);
-      }
-      viewers[sessionId] = { lanes, shown: this.shown(sessionId), joined };
-    }
+    for (const [sessionId, watched] of this.watched)
+      viewers[sessionId] = this.seen(sessionId, watched);
     return viewers;
+  }
+
+  // Who watches the session now, as `viewers` reads it: undefined while
+  // nobody does.
+  viewersOf(sessionId: SessionId): SessionViewers | undefined {
+    const watched = this.watched.get(sessionId);
+    return watched === undefined ? undefined : this.seen(sessionId, watched);
+  }
+
+  private seen(sessionId: SessionId, watched: Watched): SessionViewers {
+    const lanes: Partial<Record<Lane, LaneViewers>> = {};
+    let joined = 0;
+    for (const [sub, follower] of watched.followers) {
+      const seen = lanes[sub.lane];
+      lanes[sub.lane] = {
+        subscribers: (seen?.subscribers ?? 0) + 1,
+        drawing: (seen?.drawing ?? false) || sub.drawing(),
+      };
+      joined = Math.max(joined, follower.joined);
+    }
+    return { lanes, shown: this.shown(sessionId), joined };
   }
 
   // [LAW:single-enforcer] Who watches may have changed, or how: the renderer
@@ -227,9 +237,10 @@ export class FrameFeeds<Req> {
       });
   }
 
-  // The renderer was handed the viewers some other way: a start's.
-  handedIn(viewers: Viewers): void {
-    this.handed = JSON.stringify(viewers);
+  // The renderer was handed the viewers some other way, a start's: null once
+  // that turn failed, so what it holds is unknown, as after a failed delivery.
+  handedIn(viewers: Viewers | null): void {
+    this.handed = viewers === null ? null : JSON.stringify(viewers);
   }
 
   // [LAW:one-source-of-truth] The lanes each session's view switches on, as

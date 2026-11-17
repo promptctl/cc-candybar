@@ -52,7 +52,10 @@ function hostOver(output: Ended) {
     clockAt({ wall: 0, mono: 0 }),
     held(
       pushRenderer(
-        async (): Promise<AdapterOutput> => ({ ...output, subscriptions: NONE }),
+        async (): Promise<AdapterOutput> => ({
+          ...output,
+          subscriptions: NONE,
+        }),
       ),
     ),
     (level, line) => say(`${level} ${line}`),
@@ -79,7 +82,11 @@ test("an ask is handed the reply of its push's own kind, and its subscriptions a
   expect(
     await host.ask({
       kind: "reload-config",
-      origin: { projectDir: "/p", cwd: "/p", target: { kind: "default" } } as never,
+      origin: {
+        projectDir: "/p",
+        cwd: "/p",
+        target: { kind: "default" },
+      } as never,
     }),
   ).toEqual({ kind: "reload-config" });
   expect(taken).toEqual([NONE]);
@@ -212,7 +219,10 @@ test("an input carries the clock's two readings as its slot comes, never as it w
     },
     NO_ACTS,
   );
-  const first = host.deliver(() => ({ kind: "event", event: { kind: "due" } }), []);
+  const first = host.deliver(
+    () => ({ kind: "event", event: { kind: "due" } }),
+    [],
+  );
   // Asked while the first holds the mailbox, at the clock as it stands.
   const second = host.deliver(
     () => ({ kind: "event", event: { kind: "due" } }),
@@ -333,4 +343,70 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
   fire.at(-1)!();
   await settled();
   expect(heard).toEqual(["retire", "due", "retire"]);
+});
+
+test("a `due` waits behind every input that arrives while it waits, so a click that has arrived lands before an idle close", async () => {
+  const fire: Array<() => void> = [];
+  const heard: string[] = [];
+  const read = { wall: 0, mono: 0 };
+  let open = (): void => {};
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const named = (event: { kind: string; session?: unknown }): string =>
+    event.kind === "retire" ? `retire:${String(event.session)}` : event.kind;
+  const host = rendererHost(
+    "main",
+    {
+      ...clockAt(read),
+      after: (_ms: number, run: () => void) => {
+        fire.push(run);
+        return () => {};
+      },
+    },
+    held(
+      rendererOf({
+        event: async (input) => {
+          heard.push(named(input.event));
+          // The long turn the `due` waits behind.
+          if (named(input.event) === "retire:long") await opened;
+          return {
+            ...answered(),
+            subscriptions: {
+              ...NONE,
+              wake: input.event.kind === "due" ? null : (1 as Tick),
+            },
+          };
+        },
+        adapter: async () => {
+          throw new Error("no push here");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  const retire = (session: string) =>
+    host.deliver(
+      () => ({
+        kind: "event",
+        event: { kind: "retire", session: session as never },
+      }),
+      [],
+    );
+  await retire("first");
+  const long = retire("long");
+  await settled();
+  read.mono = 1000;
+  fire[0]!();
+  // Arrives after the `due` joined the mailbox, as a click would.
+  const behind = retire("click");
+  open();
+  await Promise.all([long, behind]);
+  await settled();
+  expect(heard).toEqual(["retire:first", "retire:long", "retire:click", "due"]);
 });

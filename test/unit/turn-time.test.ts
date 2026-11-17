@@ -12,9 +12,9 @@ const at = (wall: number, tick: number): Readings => ({
 
 test("a turn reads its input's readings, and none is there to read outside one, even after a turn that threw", () => {
   const time = new TurnTime();
-  expect(time.during(at(100, 5), () => [time.at, time.tick, time.clock.now()])).toEqual(
-    [100, 5, 100_000],
-  );
+  expect(
+    time.during(at(100, 5), () => [time.at, time.tick, time.clock.now()]),
+  ).toEqual([100, 5, 100_000]);
   expect(() => time.at).toThrow("the renderer's time was read outside a turn");
   expect(() =>
     time.during(at(100, 5), () => {
@@ -70,4 +70,20 @@ test("work held while due work runs waits for the next due turn, so a chain spre
   expect(time.next()).toBe(0);
   time.during(at(0, 0), () => time.runDue());
   expect(runs).toBe(2);
+});
+
+test("held work that throws keeps none due after it from running, is not held again, and its throw is the turn's", () => {
+  const time = new TurnTime();
+  const ran: string[] = [];
+  time.during(at(0, 0), () => {
+    time.after(0, () => {
+      throw new Error("the walk broke");
+    });
+    time.after(10, () => ran.push("after"));
+  });
+  expect(() => time.during(at(0, 1), () => time.runDue())).toThrow(
+    "the walk broke",
+  );
+  expect(ran).toEqual(["after"]);
+  expect(time.next()).toBeNull();
 });

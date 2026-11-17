@@ -505,10 +505,13 @@ export function rendererHost(
   // [LAW:single-enforcer] The one timer the renderer's turns are scheduled
   // by: its `due` is an input like any other, made in its slot, and refused
   // once the wake has closed.
+  // [LAW:no-ambient-temporal-coupling] A `due` is the renderer's idle work:
+  // every input that arrives while it waits goes ahead of it, so a click that
+  // has arrived lands before an idle close reads its session idle.
   const wake: RendererWake = new RendererWake({
     clock,
-    due: () =>
-      deliver(
+    due: async () => {
+      const { event, turn } = await taken(
         () =>
           wake.closed()
             ? {
@@ -517,12 +520,15 @@ export function rendererHost(
                 detail: "a due made after the renderer's wake closed",
               }
             : { kind: "event", event: { kind: "due" } },
-        [],
-      ),
-    said: (text) => {
-      log("error", text);
-      world.unheard(text);
+        "idle",
+      );
+      record(event, [], turn);
+      return turn;
     },
+    // Each failed `due` is its own turn's line: the run is said once, on
+    // every bar.
+    said: (text) => world.unheard(text),
+    log: (text) => log("info", text),
   });
   return {
     name,

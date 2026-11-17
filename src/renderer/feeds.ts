@@ -11,8 +11,8 @@
 // and the renderer's wake (`Subscriptions.wake`) is the earliest of them.
 
 import {
+  distributionOf,
   durationHistogram,
-  durationsOf,
   encodedOf,
   recordMs,
   type Histogram,
@@ -23,6 +23,7 @@ import {
   MOVING_FPS,
   perLane,
   UNFOLLOWED,
+  UNFOLLOWED_FEEDS,
   type Lane,
   type LaneFeeds,
 } from "../config/lanes.js";
@@ -36,6 +37,7 @@ import {
 } from "../renderer-interface/interface.js";
 import type { Level } from "../renderer-interface/adapter.js";
 import type { Instant, Readings, Tick } from "../utils/instant.js";
+import { runEach } from "../utils/run-each.js";
 
 // Milliseconds from the start of one frame to the next: the closest a feed
 // draws a bar on a screen, and the furthest apart it draws any bar — what a
@@ -217,19 +219,26 @@ export class Feeds {
   }
 
   // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each
-  // drawn and its next set, in the order the feeds opened.
-  drawDue(readings: Readings): PushedFrame[] {
+  // drawn into `frames` and its next set, in the order the feeds opened. Each
+  // feed is its own error boundary, so one that throws keeps no other's frame
+  // from going out.
+  drawDue(readings: Readings, frames: PushedFrame[]): void {
     const { tick } = readings;
-    const frames: PushedFrame[] = [];
-    for (const feed of this.feeds.values()) {
-      if (feed.next === null || feed.next > tick) continue;
-      recordMs(feed.lateness, (tick - feed.next) * 1000);
-      const frame = this.drawOne(feed, readings);
-      if (frame !== null) frames.push(frame);
-      if (tick - feed.summarizedAt >= SUMMARY_EVERY_S)
-        this.summarize(feed, "running", tick);
-    }
-    return frames;
+    runEach(
+      [...this.feeds.values()]
+        .flatMap((feed) =>
+          feed.next !== null && feed.next <= tick
+            ? [{ feed, next: feed.next }]
+            : [],
+        )
+        .map(({ feed, next }) => () => {
+          recordMs(feed.lateness, (tick - next) * 1000);
+          const frame = this.drawOne(feed, readings);
+          if (frame !== null) frames.push(frame);
+          if (tick - feed.summarizedAt >= SUMMARY_EVERY_S)
+            this.summarize(feed, "running", tick);
+        }),
+    );
   }
 
   // The lanes that follow the session and draw it now.
@@ -243,7 +252,7 @@ export class Feeds {
   // relative to now it is the draw's, and it changes nothing a feed wakes on.
   feedsOf(sessionId: SessionId, tick: Tick): LaneFeeds {
     const feed = this.feeds.get(sessionId);
-    if (feed === undefined) return perLane(() => UNFOLLOWED);
+    if (feed === undefined) return UNFOLLOWED_FEEDS;
     const since = tick - RATE_WINDOW_S;
     const { shown, lanes } = feed.viewers;
     return perLane((lane) => {
@@ -430,13 +439,3 @@ const lanesOf = (viewers: SessionViewers): string =>
   Object.entries(viewers.lanes)
     .map(([lane, seen]) => `${lane}:${seen.subscribers}`)
     .join(",") || "-";
-
-// One of a feed's timings over its life. The spread between p50 and the tail
-// is the jitter.
-const distributionOf = (h: Histogram): string => {
-  const d = durationsOf(h);
-  const ms = (v: number): string => v.toFixed(2);
-  return d.count === 0
-    ? "-"
-    : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
-};

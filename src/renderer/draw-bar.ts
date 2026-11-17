@@ -202,9 +202,10 @@ export function renderFrame(
   } catch (error) {
     const outcome = renderFailure(failureOf(error));
     const { level, line } = drawEvent("render", facts, outcome);
-    const failed = JSON.stringify(failedWith(outcome.message));
+    const answer = failedWith(outcome.message);
+    const failed = JSON.stringify(answer);
     return {
-      bar: renderFailedFrame(failedWith(outcome.message).error),
+      bar: renderFailedFrame(answer.error),
       answers: { resp: failed, statusline: failed },
       evaluated: 0,
       cellBreaks: 0,

@@ -10,11 +10,20 @@
 
 import type { Timekeeper } from "../time.js";
 import { tickAt, type Tick } from "../utils/instant.js";
+import {
+  distributionOf,
+  durationHistogram,
+  encodedOf,
+  recordMs,
+} from "./foundations/durations.js";
 import type { Failure } from "./foundations/verb-error.js";
 
 // How long a `due` that failed holds every later wake off: a renderer whose
 // due turn throws, and declares the same tick, is not handed it again at once.
 export const FAILED_DUE_HOLD_S = 1;
+
+// How often the wake writes its summary to the log.
+const SUMMARY_EVERY_S = 60;
 
 type State =
   | { readonly kind: "idle" }
@@ -24,16 +33,25 @@ type State =
   | { readonly kind: "queued" }
   | { readonly kind: "closed" };
 
+// How a `due` turn ended, and how long the renderer's turn took: null when no
+// renderer answered it.
+export type DueEnded = { readonly turnMs: number | null } & (
+  | { readonly kind: "answered" }
+  | { readonly kind: "threw"; readonly failure: Failure }
+);
+
 export interface WakeDeps {
   readonly clock: Pick<Timekeeper, "monotonic" | "after">;
   // Hands the renderer its `due`, resolving with how the turn ended, or the
-  // failure that made none: refused once the wake has closed.
-  readonly due: () => Promise<
-    | { readonly kind: "answered" }
-    | { readonly kind: "threw"; readonly failure: Failure }
-  >;
-  // [LAW:no-silent-failure] Where a run of failed dues is said, once.
+  // failure that made none: refused once the wake has closed. Each turn's
+  // line is the host's.
+  readonly due: () => Promise<DueEnded>;
+  // [LAW:no-silent-failure] Where a run of failed dues is said on every bar,
+  // once.
   readonly said: (text: string) => void;
+  // [LAW:nothing-unseen] Where the wake's summary goes: a `due` turn that
+  // learned nothing writes no line of its own.
+  readonly log: (text: string) => void;
 }
 
 export class RendererWake {
@@ -43,8 +61,18 @@ export class RendererWake {
   // The tick no wake is armed before, after a `due` failed; null while the
   // dues answer.
   private heldUntil: Tick | null = null;
+  // [LAW:nothing-unseen] Every `due` turn the renderer answered, by how long
+  // it took: what drawing the frames, closing idle menus and running held
+  // work costs, read from the log.
+  private readonly took = durationHistogram();
+  private dues = 0;
+  private failed = 0;
+  private readonly opened: Tick;
+  private summarizedAt: Tick;
 
-  constructor(private readonly deps: WakeDeps) {}
+  constructor(private readonly deps: WakeDeps) {
+    this.opened = this.summarizedAt = tickAt(deps.clock);
+  }
 
   // [LAW:one-source-of-truth] The renderer's wake, whole, as an output
   // declared it: re-declaring the armed tick keeps its timer.
@@ -57,6 +85,7 @@ export class RendererWake {
   close(): void {
     if (this.state.kind === "armed") this.state.cancel();
     this.state = { kind: "closed" };
+    this.summarize("closed");
   }
 
   closed(): boolean {
@@ -89,16 +118,19 @@ export class RendererWake {
         return;
       }
       this.state = { kind: "queued" };
-      void this.deps.due().then((ended) => this.answered(tick, ended));
+      void this.deps.due().then((ended) => this.answered(ended));
     });
   }
 
-  private answered(
-    tick: Tick,
-    ended: Awaited<ReturnType<WakeDeps["due"]>>,
-  ): void {
+  private answered(ended: DueEnded): void {
     if (this.state.kind === "closed") return;
     this.state = { kind: "idle" };
+    if (ended.turnMs !== null) {
+      this.dues++;
+      recordMs(this.took, ended.turnMs);
+    }
+    const now = tickAt(this.deps.clock);
+    if (now - this.summarizedAt >= SUMMARY_EVERY_S) this.summarize("running");
     if (ended.kind === "answered") {
       this.heldUntil = null;
       this.arm();
@@ -107,11 +139,26 @@ export class RendererWake {
     // [LAW:single-enforcer] No renderer was live to take it: the supervisor
     // says so, and the next renderer's start declares its own wake.
     if (ended.failure.kind === "down") return;
+    this.failed++;
     if (this.heldUntil === null)
       this.deps.said(
         `the renderer's due turn failed, so what it holds for later waits ${FAILED_DUE_HOLD_S}s between tries: ${ended.failure.detail}`,
       );
-    this.heldUntil = (tick + FAILED_DUE_HOLD_S) as Tick;
+    // [LAW:no-ambient-temporal-coupling] Held from when it answered: a `due`
+    // that waited in the mailbox past its tick is not tried again at once.
+    this.heldUntil = (now + FAILED_DUE_HOLD_S) as Tick;
     this.arm();
+  }
+
+  // [LAW:one-source-of-truth] The closing summary alone writes the whole
+  // histogram: it holds every `due` turn of the wake's life once.
+  private summarize(state: "running" | "closed"): void {
+    const now = tickAt(this.deps.clock);
+    const histogram =
+      state === "running" ? "" : ` tookHistogram=${encodedOf(this.took)}`;
+    this.deps.log(
+      `wake ${state} for=${Math.round(now - this.opened)}s dues=${this.dues} failed=${this.failed} took=${distributionOf(this.took)}${histogram}`,
+    );
+    this.summarizedAt = now;
   }
 }

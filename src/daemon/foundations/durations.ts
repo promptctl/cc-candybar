@@ -48,3 +48,13 @@ export const durationsOf = (h: Histogram): Durations => {
     stddevMs: msOf(h.stdDeviation),
   };
 };
+
+// A timing as a log line spells it. The spread between p50 and the tail is
+// the jitter.
+export const distributionOf = (h: Histogram): string => {
+  const d = durationsOf(h);
+  const ms = (v: number): string => v.toFixed(2);
+  return d.count === 0
+    ? "-"
+    : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
+};

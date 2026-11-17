@@ -55,6 +55,10 @@ export function runRenderer(world: World): void {
         .answer({
           kind: "adapter",
           push: { kind: "close-session-state" },
+          // [LAW:effects-at-boundaries] exception: the process is leaving and
+          // its host may be gone, so this last turn's readings are its own. Its
+          // tick is on another origin than the host's, which nothing reads:
+          // the process ends once the flush has, and no `due` comes after.
           ...readingsAt(world.clock),
         })
         .catch(

@@ -16,14 +16,11 @@ import {
   type FeedDraw,
   type FeedPeriods,
 } from "../../src/renderer/feeds";
-import {
-  UNFOLLOWED,
-  type Lane,
-  type LaneFeeds,
-} from "../../src/config/lanes";
+import { UNFOLLOWED, type Lane, type LaneFeeds } from "../../src/config/lanes";
 import type { Frame } from "../../src/render/frame";
 import type {
   Answers,
+  PushedFrame,
   SessionViewers,
   Viewers,
 } from "../../src/renderer-interface/interface";
@@ -58,6 +55,8 @@ function rig() {
     view: true,
     failure: null as FeedDraw["failure"],
     skew: 1000,
+    // A session whose draw throws past the draw's own catch.
+    throwsFor: null as SessionId | null,
   };
   const draws: Array<{
     session: SessionId;
@@ -79,6 +78,7 @@ function rig() {
         following: [...following],
         feeds: laneFeeds,
       });
+      if (session === script.throwsFor) throw new Error(`${session} broke`);
       if (!script.view) return null;
       return {
         bar: { nextChange: at + script.changeIn } as unknown as Frame,
@@ -100,7 +100,11 @@ function rig() {
     tick: tick(t),
   });
   // A turn at tick `t`: the frames due drawn.
-  const turn = (t: number) => feeds.drawDue(readings(t));
+  const turn = (t: number) => {
+    const frames: PushedFrame[] = [];
+    feeds.drawDue(readings(t), frames);
+    return frames;
+  };
   // Each turn the renderer is woken for, from `from` until `until`: the
   // ticks a frame was drawn at.
   const run = (from: number, until: number): number[] => {
@@ -117,7 +121,10 @@ function rig() {
   return { feeds, script, draws, pins, logged, turn, run, readings };
 }
 
-const view = (viewers: Viewers, at = 0) => (f: Feeds) => f.view(viewers, tick(at));
+const view =
+  (viewers: Viewers, at = 0) =>
+  (f: Feeds) =>
+    f.view(viewers, tick(at));
 
 describe("a feed's life", () => {
   test("opens for a session the viewers name, pinning its view, and closes for one they no longer name, summing up what it drew", () => {
@@ -132,6 +139,15 @@ describe("a feed's life", () => {
     expect(r.logged.at(-1)).toMatch(
       /^info feed sid="s" closed lanes=band:1 for=2s drawn=1 .*latenessHistogram=/,
     );
+  });
+
+  test("a feed whose draw throws keeps no other feed's frame from going out, and its throw is the turn's", () => {
+    const r = rig();
+    view({ [S]: watched(), [T]: watched() })(r.feeds);
+    r.script.throwsFor = S;
+    const frames: PushedFrame[] = [];
+    expect(() => r.feeds.drawDue(r.readings(0), frames)).toThrow("s broke");
+    expect(frames.map((f) => f.session)).toEqual([T]);
   });
 
   test("a frame is drawn with the lanes that follow the session, and its answers handed on as the session's frame", () => {
@@ -168,14 +184,18 @@ describe("when a frame falls due", () => {
     const r = rig();
     r.script.changeIn = 0.3;
     view({ [S]: watched() })(r.feeds);
-    expect(r.run(0, 0.95).map((t) => +t.toFixed(3))).toEqual([0, 0.3, 0.6, 0.9]);
+    expect(r.run(0, 0.95).map((t) => +t.toFixed(3))).toEqual([
+      0, 0.3, 0.6, 0.9,
+    ]);
   });
 
   test("a continuously moving bar is drawn a moving period apart, with the moving rate as its ceiling", () => {
     const r = rig();
     r.script.changeIn = 0.001;
     view({ [S]: watched() })(r.feeds);
-    expect(r.run(0, 0.35).map((t) => +t.toFixed(3))).toEqual([0, 0.1, 0.2, 0.3]);
+    expect(r.run(0, 0.35).map((t) => +t.toFixed(3))).toEqual([
+      0, 0.1, 0.2, 0.3,
+    ]);
     expect(r.draws[0]!.fps).toBe(10);
   });
 
@@ -249,14 +269,22 @@ describe("a wake", () => {
       const drawn: number[] = [];
       for (let ms = 0; ms <= 2000; ms++) {
         const t = ms / 1000;
-        r.feeds.wake(S, (["data", "state", "reload"] as const)[ms % 3]!, tick(t));
+        r.feeds.wake(
+          S,
+          (["data", "state", "reload"] as const)[ms % 3]!,
+          tick(t),
+        );
         if ((r.feeds.next() ?? Infinity) <= t)
           for (const _ of r.turn(t)) drawn.push(t);
       }
       for (let i = 1; i < drawn.length; i++)
-        expect(drawn[i]! - drawn[i - 1]!).toBeGreaterThanOrEqual(spacing - 1e-9);
+        expect(drawn[i]! - drawn[i - 1]!).toBeGreaterThanOrEqual(
+          spacing - 1e-9,
+        );
       r.feeds.closeAll(tick(2));
-      expect(r.logged.at(-1)).toMatch(/ woke=data:\d+,state:\d+,reload:\d+,visibility:0,viewers:0 coalesced=[1-9]/);
+      expect(r.logged.at(-1)).toMatch(
+        / woke=data:\d+,state:\d+,reload:\d+,visibility:0,viewers:0 coalesced=[1-9]/,
+      );
     }
   });
 

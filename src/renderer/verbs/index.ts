@@ -1856,8 +1856,9 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 // closing view, which folds everything open inside what closes. It writes
 // `closed` to each menu open at the top, the write its ✕ makes. No URL names
 // it: it is not in VERBS. It runs in a `due` turn, so a click lands wholly
-// before it or after it: one before restarts the idle period, and the close
-// is not due.
+// before it or after it, and a `due` waits behind every input that arrives
+// while it waits, so a click that has arrived lands before it: it restarts
+// the idle period, and the close is not due.
 export function closeIdleMenus(
   sid: SessionId,
   latest: CheckedRenderRequest | null,

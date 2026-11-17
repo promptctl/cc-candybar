@@ -451,9 +451,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     lanes: {
       edge: inputs.laneEdge(
         launcher,
-        // [LAW:one-source-of-truth] The lanes following a session as the
-        // renderer is handed them.
-        (sessionId) => followingOf(frameFeeds.viewers()[sessionId]),
+        // [LAW:one-source-of-truth] The lanes following a session, read as the
+        // viewers the renderer is handed are.
+        (sessionId) => followingOf(frameFeeds.viewersOf(sessionId)),
         closing.signal,
         probe,
       ),
@@ -693,7 +693,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async () => {
-      await parts.renderer.start(() => {
+      const { kind } = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
         return {
@@ -712,6 +712,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           },
         };
       }, [["why", "renderer-start"]]);
+      // A start that failed may have opened none of its feeds: the next
+      // announcement hands the viewers in again.
+      if (kind !== "answered") frameFeeds.handedIn(null);
     },
     ended: (event) => {
       rendererEnded = event;
