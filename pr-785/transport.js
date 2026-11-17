@@ -47954,10 +47954,10 @@ function wheel(curve, z) {
     const { colors, fills, depth, theme: theme24 } = drawn;
     const own2 = (terminal, color) => !terminal && colors.has(color.hex);
     const boundWith = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
-    const keyOf3 = (color, bound) => `${color.hex} ${bound}`;
+    const keyOf2 = (color, bound) => `${color.hex} ${bound}`;
     const bounds = settled3.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
       const other = side === "fg" ? "bg" : "fg";
-      return own2(pair.terminal[side], pair[side]) ? keyOf3(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
+      return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
     const indexed = measuredIndexed(depth, theme24);
     const placeOf3 = segmentsOf(drawn);
@@ -47965,10 +47965,10 @@ function wheel(curve, z) {
       const written3 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
         const turn = hueTurned(color, turned(place, t2));
-        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf3(color, bound)) ?? UNBOUNDED);
+        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf2(color, bound)) ?? UNBOUNDED);
       };
       const write = (color, bound, place) => {
-        const key = `${keyOf3(color, bound)} ${place.row}:${place.centre}`;
+        const key = `${keyOf2(color, bound)} ${place.row}:${place.centre}`;
         const found2 = written3.get(key) ?? choose(color, bound, place);
         written3.set(key, found2);
         return found2;
@@ -50205,61 +50205,9 @@ var MENU_TIMEOUT_DEFAULT = 120;
 var closesAt = (since, timeoutS) => since + timeoutS;
 var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
-// src/render/frame-memory.ts
-init_globals();
-function recordFrom(last2, source) {
-  return last2 !== null && last2.source.generation === source.generation && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
-}
-function beginRecord(source, returned2) {
-  const placements = /* @__PURE__ */ new Map();
-  const rules = /* @__PURE__ */ new Map();
-  return {
-    placed: (id2, lines2) => {
-      const { drawing: drawing2 } = returned2(id2, lines2);
-      placements.set(
-        id2,
-        drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
-      );
-      return lines2;
-    },
-    rule: (slot, name) => rules.set(slot, name),
-    record: () => ({ source, placements, rules })
-  };
-}
-var generations = /* @__PURE__ */ new WeakMap();
-var nextGeneration = 0;
-function configGeneration(config2) {
-  const held = generations.get(config2);
-  if (held !== void 0) return held;
-  const minted = nextGeneration++;
-  generations.set(config2, minted);
-  return minted;
-}
-var HIDDEN_RECORD = { kind: "hidden" };
-
 // src/render/effect.ts
 var STILL3 = { kind: "still" };
 var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
-var NO_MOTION = {
-  record: null,
-  inForce: null,
-  anchor: Timeline.play(0),
-  placements: /* @__PURE__ */ new Map(),
-  made: /* @__PURE__ */ new Map(),
-  passages: null,
-  frame: {
-    effect: EFFECT_FLOOR,
-    t: 0,
-    speed: 1,
-    made: 0,
-    reused: 0,
-    own: [],
-    basis: "off",
-    revision: 0,
-    fades: [],
-    leaves: []
-  }
-};
 var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
 function isMoving(part) {
   return part.name !== EFFECT_FLOOR;
@@ -50310,33 +50258,44 @@ function closingFlash(fill, text4, begins) {
   const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
   return () => idle;
 }
+var NO_MOTION = {
+  inForce: null,
+  anchor: Timeline.play(0),
+  placements: /* @__PURE__ */ new Map(),
+  made: /* @__PURE__ */ new Map(),
+  frame: {
+    effect: EFFECT_FLOOR,
+    t: 0,
+    speed: 1,
+    made: 0,
+    reused: 0,
+    own: [],
+    basis: "off",
+    revision: 0,
+    fades: [],
+    leaves: []
+  }
+};
 var SessionEffects = class {
   constructor(key) {
     this.key = key;
   }
   key;
   kept = NO_MOTION;
-  // The latest render's effects: the bar's, at what t, how many of its rows'
+  // The latest frame's effects: the bar's, at what t, how many of its rows'
   // effects were made fresh rather than reused — one made every frame pays
   // rich-js's share settling every frame — and each placement's own.
   lastFrame() {
     return this.kept.frame;
   }
-  // The effects this session holds: the ones its latest render drew, and the
-  // transitions still in flight.
+  // The effects this session holds: the ones its latest frame drew.
   get heldCount() {
-    const { passages, made } = this.kept;
-    const passing = passages?.size ?? 0;
-    return [...made.values()].reduce((n, row2) => n + row2.size, passing);
+    return [...this.kept.made.values()].reduce((n, row2) => n + row2.size, 0);
   }
   // [LAW:single-enforcer] The one writer: the turn that drew a frame keeps
-  // the memory it returned.
+  // the motion it returned.
   keep(motion) {
     this.kept = motion;
-  }
-  // The last kept frame's record if it was drawn from `source`, or none.
-  recordFrom(source) {
-    return recordFrom(this.kept.record, source);
   }
   /**
    * The session's animation clock read at the wall instant `at`, running at
@@ -50359,13 +50318,13 @@ var SessionEffects = class {
    * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
    * from off the row, wheel at the theme's own hues. Records every placement
    * the render draws, fades in each one the last frame did not, and dissolves
-   * out each one the last frame drew and this one does not. All of it is kept
-   * once the frame is `drawn`.
+   * out each one the last frame drew and this one does not. All of it comes
+   * back as the frame's `memory`, which the turn that drew it keeps.
    */
   motion(name, clock, given2, flash = null) {
     const at = animationAt(clock);
-    const { kept } = this;
     const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
+    const { kept } = this;
     const inForce = kept.inForce?.name === name ? kept.inForce : { name, since: at };
     const bar = {
       scope: BAR_SCOPE,
@@ -50377,8 +50336,8 @@ var SessionEffects = class {
     const known = kept.made;
     const made = /* @__PURE__ */ new Map();
     const own2 = [];
-    const last2 = this.recordFrom(given2.source);
-    const inFlight = kept.passages;
+    const { last: last2 } = given2;
+    const inFlight = last2?.passages ?? null;
     const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
     const before = basis === "compared" ? (id2) => {
       const record2 = last2.placements.get(id2);
@@ -50545,66 +50504,48 @@ var SessionEffects = class {
       // compared or kept, so every placement draws exactly what it returned.
       placed: basis === "off" ? (_id, lines2) => lines2 : reached,
       row: row2,
-      memory: (record2) => ({
-        record: record2,
-        anchor: clock.timeline,
-        inForce,
-        placements,
-        made,
+      memory: () => ({
+        motion: { anchor: clock.timeline, inForce, placements, made, frame: frame2 },
         // A frame drawn with transitions off is kept as no frame at all:
         // nothing can be compared against it.
-        passages: basis === "off" ? null : passages,
-        frame: frame2
+        passages: basis === "off" ? null : passages
       })
     };
   }
 };
-var MAX_MEMORIES = 512;
+var MAX_SESSIONS = 256;
 var EffectSessions = class {
-  constructor(maxMemories = MAX_MEMORIES) {
-    this.maxMemories = maxMemories;
+  constructor(maxSessions = MAX_SESSIONS) {
+    this.maxSessions = maxSessions;
   }
-  maxMemories;
-  memories = /* @__PURE__ */ new Map();
-  // The memory as a draw reads it: one with nothing kept yet draws from a
-  // fresh one, held only once its frame is kept. Keyed for noise by session
-  // alone, so both surfaces draw the same effect.
-  of(sessionId2, surface) {
-    return this.memories.get(keyOf(sessionId2, surface))?.effects ?? new SessionEffects(sessionId2);
+  maxSessions;
+  sessions = /* @__PURE__ */ new Map();
+  // The session's memory as a draw reads it: a session with none kept yet
+  // draws from a fresh one, held only once its frame is kept.
+  of(sessionId2) {
+    return this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
   }
-  // [LAW:single-enforcer] The one writer: the turn that drew the frame keeps
-  // the memory it returned, as the most recently rendered.
-  keep(sessionId2, surface, motion) {
-    const effects = this.of(sessionId2, surface);
-    effects.keep(motion);
-    const key = keyOf(sessionId2, surface);
-    this.memories.delete(key);
-    this.memories.set(key, { session: sessionId2, effects });
-    for (const oldest of this.memories.keys()) {
-      if (this.memories.size <= this.maxMemories) break;
-      this.memories.delete(oldest);
+  // [LAW:single-enforcer] The one writer: the turn that drew the session's
+  // frame keeps the motion it returned, as the most recently rendered.
+  keep(sessionId2, motion) {
+    const known = this.of(sessionId2);
+    known.keep(motion);
+    this.sessions.delete(sessionId2);
+    this.sessions.set(sessionId2, known);
+    for (const oldest of this.sessions.keys()) {
+      if (this.sessions.size <= this.maxSessions) break;
+      this.sessions.delete(oldest);
     }
-  }
-  // A retired session's memory goes with it, on every surface: its rows are
-  // held nowhere else, and it will never be drawn again.
-  retire(sessionId2) {
-    for (const [key, { session }] of this.memories)
-      if (session === sessionId2) this.memories.delete(key);
   }
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
   // effect made for a row keeps rich-js's settled shares, so their count is the
   // size that grows.
   getStats() {
     let effects = 0;
-    const sessions = /* @__PURE__ */ new Set();
-    for (const memory of this.memories.values()) {
-      effects += memory.effects.heldCount;
-      sessions.add(memory.session);
-    }
-    return { sessions: sessions.size, effects };
+    for (const session of this.sessions.values()) effects += session.heldCount;
+    return { sessions: this.sessions.size, effects };
   }
 };
-var keyOf = (sessionId2, surface) => `${surface}:${sessionId2}`;
 
 // src/render/strip.ts
 var UNBOUNDED_DRAW_WIDTH = 80;
@@ -67906,9 +67847,9 @@ var ObservableLru = class {
 };
 
 // src/utils/transcript-fold.ts
-var MAX_SESSIONS = 256;
+var MAX_SESSIONS2 = 256;
 var TranscriptFold = class {
-  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS) {
+  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS2) {
     this.empty = empty2;
     this.step = step4;
     this.refreshes = refreshes;
@@ -68490,7 +68431,7 @@ function cacheActivityTs(line) {
   const ms = parsed2.timestamp != null ? Date.parse(parsed2.timestamp) : NaN;
   return Number.isNaN(ms) ? null : ms;
 }
-var MAX_SESSIONS2 = 256;
+var MAX_SESSIONS3 = 256;
 var CacheExpiryProvider = class {
   constructor(clock, logger = quietLogger, ledger = new RefreshLedger(logger)) {
     this.clock = clock;
@@ -68504,7 +68445,7 @@ var CacheExpiryProvider = class {
   clock;
   // Observable, so a view's payload over an expiry is recomputed in the turn
   // a new one is stored.
-  known = new ObservableLru(MAX_SESSIONS2);
+  known = new ObservableLru(MAX_SESSIONS3);
   // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
   // warn; an answer believed under its stamp reads nothing, and logs nothing.
   refreshes;
@@ -77420,6 +77361,29 @@ function filled(row2, options) {
   return items();
 }
 
+// src/render/frame-memory.ts
+init_globals();
+function recordFrom(last2, source) {
+  return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
+}
+function beginRecord(source, returned2) {
+  const placements = /* @__PURE__ */ new Map();
+  const rules = /* @__PURE__ */ new Map();
+  return {
+    placed: (id2, lines2) => {
+      const { drawing: drawing2 } = returned2(id2, lines2);
+      placements.set(
+        id2,
+        drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
+      );
+      return lines2;
+    },
+    rule: (slot, name) => rules.set(slot, name),
+    record: (passages) => ({ source, placements, rules, passages })
+  };
+}
+var HIDDEN_RECORD = { kind: "hidden" };
+
 // src/themes/index.ts
 init_globals();
 
@@ -80885,13 +80849,13 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       shade: SHADES[selection2.shade]
     };
     const source = {
-      generation: configGeneration(config2),
+      config: config2,
       preset,
       revision: registry.stateRevision(),
       width: drawOpts.width
     };
     const record2 = beginRecord(source, returnedBy);
-    const last2 = effects.recordFrom(source);
+    const last2 = recordFrom(selection2.record ?? null, source);
     const waited = /* @__PURE__ */ new Set();
     const ruleFrame = {
       held: (slot) => last2?.rules.get(slot),
@@ -80942,6 +80906,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       {
         transitions,
         source,
+        last: last2,
         returned: returnedBy,
         hold: heldLine
       },
@@ -81022,7 +80987,8 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         )
       };
     });
-    const memory = motion.memory(record2.record());
+    const left = motion.memory();
+    const memory = { record: record2.record(left.passages), motion: left.motion };
     const armed = () => rendered.some((row2) => row2.kind === "menu") || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
       ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
     );
@@ -85460,7 +85426,7 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
         { by: "feed", fps },
         feeds
       );
-      keepDraw(parts, setup.view, kept);
+      keepDraw(parts, setup, kept);
       const signed = signingFrames(parts.linkSigner);
       const bar = signed(drawn.body);
       const answer2 = RENDER_ANSWERS.ansi(bar);
@@ -85581,8 +85547,6 @@ function retireSession(parts, session) {
     parts.worldStates.drop(session);
     parts.renderCache.retireSession(session);
   });
-  parts.effectSessions.retire(session);
-  parts.renderWarnings.retire(session);
 }
 function holdSessionAt(parts, req) {
   const { projectDir, cwd: cwd2, target } = req.requested;
@@ -85753,7 +85717,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     feeds: feedsFact(projected.feeds)
   });
   const renderOpts = renderOptionsOf(effective, width);
-  const effects = effectSessions.of(sessionId2, drawing2.by);
+  const effects = effectSessions.of(sessionId2);
   const {
     frame: frame2,
     memory,
@@ -85771,11 +85735,16 @@ function drawRender(parts, setup, drawing2, feeds) {
     at,
     renderOpts,
     void 0,
-    // [LAW:one-source-of-truth] The draw's own settings and the session's
-    // effect memory. The theme, style and effect are not among them: the
+    // [LAW:one-source-of-truth] The draw's own settings, the session's
+    // effect memory and the record of the surface's last frame of the view. The theme, style and effect are not among them: the
     // view's slots settle those names (src/dsl/parts.ts), the same ones its
     // payload's `.effective` fields read.
-    { ...effective, effects, idleSince: idleSince ?? void 0 }
+    {
+      ...effective,
+      effects,
+      record: view.frames.get(drawing2.by),
+      idleSince: idleSince ?? void 0
+    }
   );
   const keys2 = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i2) => [keys2[i2], m.copy]));
@@ -85806,7 +85775,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     frame2,
     viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry)
   );
-  const fx = memory.frame;
+  const fx = memory.motion.frame;
   const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
   const passages = (frames) => frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
   const tagOf = (w) => {
@@ -85886,7 +85855,8 @@ function drawRender(parts, setup, drawing2, feeds) {
     kept: {
       session: sessionId2,
       by: drawing2.by,
-      motion: memory,
+      record: memory.record,
+      motion: memory.motion,
       warnings: { scope, list: drawnWarnings },
       // What this frame drew is what the session's idle close follows.
       menu: {
@@ -85898,12 +85868,14 @@ function drawRender(parts, setup, drawing2, feeds) {
     }
   };
 }
-function keepDraw(parts, view, kept) {
-  const { session, by, motion, warnings, menu, segments } = kept;
-  parts.effectSessions.keep(session, by, motion);
+function keepDraw(parts, setup, kept) {
+  const { session, by, record: record2, motion, warnings, menu, segments } = kept;
+  const { view } = setup;
+  view.frames.set(by, record2);
+  view.lastRenderCellsBySegment = segments;
+  parts.effectSessions.keep(session, motion);
   parts.renderWarnings.keep(session, by, warnings.scope, warnings.list);
   parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
-  view.lastRenderCellsBySegment = segments;
 }
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
@@ -85943,7 +85915,7 @@ function answerRequest(parts, req, facts, effects) {
       ANSWERING,
       feeds.feedsOf(sessionId2, time.tick)
     );
-    keepDraw(parts, setup.view, kept);
+    keepDraw(parts, setup, kept);
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
     const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
     const frame2 = signingFrames(parts.linkSigner)(
@@ -87603,7 +87575,7 @@ var EPHEMERAL_HISTORY_STORAGE = {
   }
 };
 var MAX_STEPS = 50;
-var MAX_SESSIONS3 = 32;
+var MAX_SESSIONS4 = 32;
 var MAX_BYTES = 8 * 1024 * 1024;
 var EMPTY3 = { past: [], future: [] };
 var identity = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
@@ -87852,7 +87824,7 @@ var SettingsHistory = class {
     if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
       next.set(sessionId2, history);
     }
-    while (next.size > MAX_SESSIONS3 || weight(next) > MAX_BYTES) {
+    while (next.size > MAX_SESSIONS4 || weight(next) > MAX_BYTES) {
       const [oldest, h] = next.entries().next().value;
       if (next.size > 1) next.delete(oldest);
       else if (h.past.length + h.future.length > 0) {
@@ -89082,7 +89054,7 @@ function verbsOver(ctx) {
 // src/renderer/navigation-history.ts
 init_globals();
 var MAX_STEPS2 = 20;
-var MAX_SESSIONS4 = 32;
+var MAX_SESSIONS5 = 32;
 var isNavigationKey = (key) => !isSettingKey(key) && !isConfirmKey(key) && key !== UPDATE_DISMISSED_KEY && key !== DIAGNOSTICS_VIEWING;
 var NavigationHistory = class {
   // Observable, so a view's payload over a session's depth (`◁`) is
@@ -89182,7 +89154,7 @@ var NavigationHistory = class {
     runInAction(() => {
       this.past.delete(sessionId2);
       if (steps2.length > 0) this.past.set(sessionId2, steps2);
-      while (this.past.size > MAX_SESSIONS4) {
+      while (this.past.size > MAX_SESSIONS5) {
         this.past.delete(this.past.keys().next().value);
       }
     });
@@ -89193,6 +89165,15 @@ var NavigationHistory = class {
 init_globals();
 var MAX_RECORDS = 512;
 var RENDERERS2 = ["request", "feed"];
+var generations = /* @__PURE__ */ new WeakMap();
+var nextGeneration = 0;
+var generationOf = (config2) => {
+  const held = generations.get(config2);
+  if (held !== void 0) return held;
+  const minted = nextGeneration++;
+  generations.set(config2, minted);
+  return minted;
+};
 var RenderWarningRecords = class {
   constructor(maxRecords = MAX_RECORDS) {
     this.maxRecords = maxRecords;
@@ -89201,16 +89182,16 @@ var RenderWarningRecords = class {
   records = /* @__PURE__ */ new Map();
   // The warnings `by` last recorded for `sessionId`; none before its first.
   of(sessionId2, by) {
-    return this.records.get(keyOf2(sessionId2, by))?.warnings ?? [];
+    return this.records.get(keyOf(sessionId2, by))?.warnings ?? [];
   }
   // The session's warnings as `by` draws them in `scope`: its own record, and
   // every other renderer's drawn from the same config, each warning once
   // across renderers (a warning two renderers met is one fact).
   ofSession(sessionId2, by, scope) {
-    const generation = configGeneration(scope.config);
+    const generation = generationOf(scope.config);
     const listed = [];
     for (const renderer of RENDERERS2) {
-      const held = this.records.get(keyOf2(sessionId2, renderer));
+      const held = this.records.get(keyOf(sessionId2, renderer));
       const own2 = renderer === by ? this.of(sessionId2, by) : held?.generation === generation ? held.warnings : [];
       const earlier = listed.map((w) => JSON.stringify(w));
       for (const w of own2) {
@@ -89229,10 +89210,10 @@ var RenderWarningRecords = class {
   // [LAW:single-enforcer] The one writer: the turn that drew a frame records
   // what it warned.
   keep(sessionId2, by, scope, warnings) {
-    const key = keyOf2(sessionId2, by);
+    const key = keyOf(sessionId2, by);
     this.records.delete(key);
     this.records.set(key, {
-      generation: configGeneration(scope.config),
+      generation: generationOf(scope.config),
       warnings
     });
     for (const oldest of this.records.keys()) {
@@ -89240,13 +89221,8 @@ var RenderWarningRecords = class {
       this.records.delete(oldest);
     }
   }
-  // A retired session's records go with it: no renderer draws it again.
-  retire(sessionId2) {
-    for (const renderer of RENDERERS2)
-      this.records.delete(keyOf2(sessionId2, renderer));
-  }
 };
-var keyOf2 = (sessionId2, by) => `${by}\0${sessionId2}`;
+var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
 
 // src/renderer/acts.ts
 init_globals();
@@ -90263,6 +90239,7 @@ function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
       if (next !== requested.get()) runInAction(() => requested.set(next));
     },
     facts: () => requested.get(),
+    frames: /* @__PURE__ */ new Map(),
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
     retire: stopChanged,
     dispose: () => {
@@ -91684,8 +91661,8 @@ async function transcriptReads2(edge, said2) {
 }
 var readSettings = (at) => asked(() => readSettingsChain(at));
 function settingsChains(originAt, bars) {
-  const keyOf3 = (at) => JSON.stringify([at.managedDir, at.projectDir, at.userFile]);
-  const originKey = keyOf3(originAt);
+  const keyOf2 = (at) => JSON.stringify([at.managedDir, at.projectDir, at.userFile]);
+  const originKey = keyOf2(originAt);
   const atOrigin = [];
   const others = /* @__PURE__ */ new Map();
   for (const bar of bars) {
@@ -91694,7 +91671,7 @@ function settingsChains(originAt, bars) {
       projectDir: bar.projectDir,
       userFile: claudeSettingsPath(bar.claudeConfigDir)
     };
-    const key = keyOf3(at);
+    const key = keyOf2(at);
     if (key === originKey) {
       atOrigin.push(bar);
     } else {

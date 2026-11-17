@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-784",
-      "ref": "refs/pull/784/merge",
-      "sha": "c6c4bc7354b34bcf7804573f53a471f92216e041",
-      "timestamp": "2026-11-17T10:56:47.351Z",
+      "version": "pr-785",
+      "ref": "refs/pull/785/merge",
+      "sha": "2bbff784db6426cc26c42178559f65c0f0fe8d10",
+      "timestamp": "2026-11-17T11:16:10.390Z",
       "commits": [
         {
-          "sha": "c6c4bc7354b34bcf7804573f53a471f92216e041",
+          "sha": "2bbff784db6426cc26c42178559f65c0f0fe8d10",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T10:55:44Z",
-          "message": "Merge 5c0f07ed982f9630dd195b7aee08cf0659892c32 into 681357616352fb4f7476a7b1035b61a244971844\n"
+          "timestamp": "2026-11-17T04:15:06-07:00",
+          "message": "Merge bbaa3387f092c53ec522b58fe7c603e45b11fd20 into 681357616352fb4f7476a7b1035b61a244971844\n"
         },
         {
-          "sha": "5c0f07ed982f9630dd195b7aee08cf0659892c32",
+          "sha": "bbaa3387f092c53ec522b58fe7c603e45b11fd20",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T03:55:33-07:00",
-          "message": "fix(renderer): a retired session's draw memory and warning records go with it (0ol)\n\nThe frame record used to die with the view. Kept per session and surface,\nit now outlived the session that drew it until the LRU cap pushed it out.\nThe retire turn drops each surface's memory and warning records, and the\neffect store holds each memory beside its session id, so stats count\nsessions without parsing keys.\n"
-        },
-        {
-          "sha": "e0865aeaacac33c22b2b9c791a265ae4fd3595ee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T03:47:08-07:00",
-          "message": "fix(renderer): a draw's record and motion are one memory, kept per session and surface (0ol)\n\nA request's answer and a feed's frames drew against one frame record per\nview and one motion per session, so each surface compared against the\nother's frame and reset its passages. The record joins the motion as one\nvalue the draw reads and returns, kept by the turn per session and\nsurface. The view's parts no longer hold a frame memory, and a record\nnames its config by generation, shared with the warning records.\n"
-        },
-        {
-          "sha": "820c40d616fc883070020001b610b755c0f016dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T03:24:29-07:00",
-          "message": "feat(renderer): the draw returns its frame and the memory it made as values, and the turn that drew it stores them (0ol)\n\ndrawDsl and drawRender write nothing: the view's frame record, the\nsession's motion, the frame's warnings, what it showed of a menu and its\nper-segment cells come back as values, and keepDraw stores each in its\nowner in the turn that drew. A delivery is a value the effect-done turn\napplies. A test draws the same frame twice through drawRender and gets\nthe same frame and memory, with the renderer unchanged.\n"
+          "timestamp": "2026-11-17T04:14:43-07:00",
+          "message": "refactor(renderer): a draw returns the memory it made, and the turn that drew it keeps it (0ol)\n\ndrawDsl writes nothing: the frame record, the session's motion, the\nwarnings and the per-segment cells come back on DrawnFrame, and\ndrawRender returns them with the menu it showed as one DrawMemory.\nkeepDraw, called by the turn right after the draw, stores each piece with\nits one owner: the record on the view per surface (request or feed), the\nmotion per session, so both surfaces compare against their own last frame\nand animate under one clock. A delivery is a value the main renderer\nholds until its effect-done, not a closure over the draw.\n"
         }
       ]
     },
