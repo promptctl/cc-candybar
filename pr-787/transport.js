@@ -75056,6 +75056,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const session = sessionOf(input.event);
     let release4 = () => {
     };
+    if (input.event.kind === "start") served = /* @__PURE__ */ new Set();
     try {
       release4 = session === null ? release4 : collector.holding(session);
       const sentAt = clock.monotonic();
@@ -75082,13 +75083,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         collector.writableSettings,
         world.configs
       );
-      if (input.event.kind === "start") served = /* @__PURE__ */ new Set();
       const named3 = took(subscriptions, frames);
-      const configured = [];
+      const waited = [];
       for (const origin of named3)
-        configured.push(
-          (await configInSlot(origin, "config-subscribed")).settled
-        );
+        waited.push((await configInSlot(origin, "config-subscribed")).settled);
+      const reloaded = [];
       const moved2 = landed.kind === "ok" && changes.length + answers.length > 0 ? world.configs.landed(
         // A landed layer's origin was followed and its chain held the
         // role, or the landing was refused.
@@ -75099,7 +75098,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         answers.length > 0
       ) : [];
       for (const origin of moved2)
-        configured.push((await configInSlot(origin, "config-landed")).settled);
+        reloaded.push((await configInSlot(origin, "config-landed")).settled);
       const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
       const owed = [];
       const acts = [];
@@ -75120,16 +75119,17 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       for (const act2 of acts) {
         const acted = landed.kind === "ok" ? before.then(() => world.perform(act2)) : Promise.resolve(unperformed);
         const settled4 = acted.then((outcome) => settle3(act2, outcome));
-        if (outlives(act2)) void settled4;
+        if (outlives(act2)) unawaited("act", settled4);
         else {
           owed.push(settled4);
           before = acted;
         }
       }
-      const settled3 = Promise.all(configured).then(async (caused) => [
-        ...caused.flat(),
-        ...await Promise.all(owed)
-      ]).finally(release4);
+      const settled3 = Promise.all([
+        Promise.all(waited),
+        Promise.all(reloaded),
+        Promise.all(owed)
+      ]).then(([caused, , own2]) => [...caused.flat(), ...own2]).finally(release4);
       return { turn, settled: settled3 };
     } catch (thrown2) {
       release4();
@@ -75266,6 +75266,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return turn;
   };
   const deliver2 = recorded2("last");
+  const unawaited = (what, settling) => void settling.catch((thrown2) => {
+    const text4 = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown2).detail}`;
+    log("error", text4);
+    world.unheard(text4);
+  });
   const ask2 = async (push) => {
     const output = await inMailbox(async (_queuedMs, holds2) => {
       holds2(`push:${push.kind}`);
@@ -75276,7 +75281,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           ...readingsAt(clock)
         });
         for (const origin of took(subscriptions, []))
-          void deliver2(configMade(origin), [["why", "config-subscribed"]]);
+          unawaited(
+            "config",
+            deliver2(configMade(origin), [["why", "config-subscribed"]])
+          );
         return answered;
       } catch (thrown2) {
         return {
@@ -75306,7 +75314,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   });
   const moved = (origins) => {
     for (const origin of origins)
-      void deliver2(configMade(origin), [["why", "config-moved"]]);
+      unawaited(
+        "config",
+        deliver2(configMade(origin), [["why", "config-moved"]])
+      );
   };
   const stats = () => ({
     holder: holder?.input ?? null,
@@ -75327,11 +75338,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         } : { kind: "event", event: { kind: "due" } },
         "idle"
       );
-      void settled3.catch((thrown2) => {
-        const text4 = `renderer ${name}'s due acts did not settle: ${failureOf(thrown2).detail}`;
-        log("error", text4);
-        world.unheard(text4);
-      });
+      unawaited("due acts", settled3);
       record2(event, [], turn);
       return turn;
     },

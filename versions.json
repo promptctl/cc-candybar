@@ -4,15 +4,22 @@
     {
       "version": "pr-787",
       "ref": "refs/pull/787/merge",
-      "sha": "e00e3557f087f0540224b757fe405ac72a018ee0",
-      "timestamp": "2026-11-17T16:39:57.115Z",
+      "sha": "729ef608e09e3b4d651db713304c544a1834ad3f",
+      "timestamp": "2026-11-17T16:59:50.290Z",
       "commits": [
         {
-          "sha": "e00e3557f087f0540224b757fe405ac72a018ee0",
+          "sha": "729ef608e09e3b4d651db713304c544a1834ad3f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T16:38:55Z",
-          "message": "Merge a95caccbbd86cf845c063bf263111dbf20bd439f into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
+          "timestamp": "2026-11-17T16:58:34Z",
+          "message": "Merge 6b60f7e0460dfa5cf69f9c746a59502d2ac4ab8a into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
+        },
+        {
+          "sha": "6b60f7e0460dfa5cf69f9c746a59502d2ac4ab8a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T09:58:23-07:00",
+          "message": "fix(daemon): a start leaves the renderer holding nothing, and no settling goes unheard (adf)\n\n- The host forgets what the renderer was served when it sends a start, not\n  when the start answers, so a start that fails strands no parked context.\n- A turn answers only for the config turns it named; those its landing\n  moved are waited for, and their failures are their own turn's line.\n- Every turn's settling nothing awaits goes through one catch that says a\n  rejection on every bar.\n- resolveDslConfig had no caller: the search's doc lives on searchConfig,\n  and tests read the resolution through a helper of their own.\n- The storage memory says why a lost folder waits for the next period.\n"
         },
         {
           "sha": "a95caccbbd86cf845c063bf263111dbf20bd439f",
