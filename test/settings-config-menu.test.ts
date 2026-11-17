@@ -39,7 +39,6 @@ import {
 } from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
-import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   fileHeldSettings,
   settingCounts,
@@ -51,6 +50,7 @@ import {
   testVerbContext,
   verbContextWith,
   effectsOf,
+  recordHints,
   recordRender,
 } from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -119,11 +119,7 @@ function rig(
   if (durable === undefined) recordRender(sessionState, SID);
   else durable.seedOrigin(sessionState, SID);
   // What a render records of the session's client: here, not in tmux.
-  sessionState.set(
-    SID,
-    SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({ tmux: null }),
-  );
+  recordHints(sessionState, { tmux: null });
   // Everything the daemon's cache entry holds for one config — rebuilt whole
   // on a reload, the old registry disposed once the new one is built.
   const load = (text: string) => {
@@ -530,8 +526,8 @@ describe("the config menu, reached from a user config whose root is one row", ()
     );
     // ONE step in the history: the save's file write and its release together.
     const step = durable.history(SID).past.at(-1)!;
-    expect(step.filter((c) => c.kind === "file")).toEqual([
-      expect.objectContaining({ file: durable.configPath }),
+    expect(step.filter((c) => c.kind === "layer")).toEqual([
+      expect.objectContaining({ role: "user" }),
     ]);
     expect(step.filter((c) => c.kind === "session")).toEqual(
       expect.arrayContaining([

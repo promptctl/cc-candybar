@@ -1,5 +1,5 @@
-// The per-session state store's ports: what a draw reads, what a click
-// writes, and the storage the store saves through (src/renderer/session-state.ts).
+// The per-session state store's ports: what a draw reads, and what a click
+// writes (src/renderer/session-state.ts).
 
 import type { SessionId } from "../daemon/foundations/session-id";
 
@@ -29,25 +29,4 @@ export interface SessionStateRW extends SessionStateReader {
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void;
   clear(sessionId: SessionId, key: string): void;
-}
-
-// Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the
-// on-disk representation and the save currency between store and storage.
-export type SessionSnapshot = Record<string, Record<string, string>>;
-
-// What a storage loads: each session's values, keyed by a session id the storage
-// has already checked. Holding the brand here is what lets the store take the
-// keys as they are.
-export type LoadedSessions = ReadonlyMap<
-  SessionId,
-  Readonly<Record<string, string>>
->;
-
-// [LAW:locality-or-seam] The store depends on this seam, not on the filesystem.
-// The daemon injects a disk-backed impl; tests and non-daemon callers get the
-// ephemeral default. Persistence is a property of the *storage*, not the store.
-export interface SessionStorage {
-  load(): LoadedSessions;
-  save(snapshot: SessionSnapshot): void;
-  flush(): void;
 }

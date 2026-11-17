@@ -3,9 +3,14 @@ import { hostOf } from "../../helpers/host";
 import { readFileSync } from "node:fs";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
-import { sessionStatePath } from "../../../src/daemon/paths";
+import { storePath } from "../../../src/daemon/profile-store";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
-import { click, killAndWait, render, drawnLink } from "../../helpers/daemon-e2e";
+import {
+  click,
+  killAndWait,
+  render,
+  drawnLink,
+} from "../../helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -140,13 +145,18 @@ describe("daemon shutdown contract", () => {
       await render(sockPath, sessionId, stateDir);
       await click(
         sockPath,
-        drawnLink(sockPath, effectsUrl([
-          { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
-        ])),
+        drawnLink(
+          sockPath,
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
+          ]),
+        ),
       );
       await killAndWait(daemon, "SIGTERM");
 
-      const saved = JSON.parse(readFileSync(sessionStatePath(hostOf(env)), "utf8"));
+      const saved = JSON.parse(
+        readFileSync(storePath(stateDir, "session"), "utf8"),
+      );
       expect(saved[sessionId]).toMatchObject({ padding: "4" });
     } finally {
       daemon?.killTree();

@@ -23,14 +23,13 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { testVerbContext,
-  effectsOf, clickActing } from "./helpers/click";
-import { VERB_SLASH } from "../src/click/wire";
 import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../src/daemon/foundations/session-keys";
-import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
+  testVerbContext,
+  effectsOf,
+  clickActing,
+  recordRender,
+} from "./helpers/click";
+import { VERB_SLASH } from "../src/click/wire";
 import type { ClaudeInputEdge } from "../src/claude-input/typing";
 import {
   AUTOCOMPACT_WINDOWS,
@@ -64,20 +63,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
-  sessionState.set(
-    S1,
-    SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({
-      projectDir: "/tmp/proj",
-      cwd: "/tmp/proj",
-      target: { source: "search" },
-    }),
-  );
-  sessionState.set(
-    S1,
-    SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({ tmux: HINT }),
-  );
+  recordRender(sessionState, S1, "/tmp/proj", { tmux: HINT });
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {

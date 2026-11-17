@@ -17,10 +17,8 @@
 import { createAtom, type IAtom, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type {
-  SessionSnapshot,
   SessionStateReader,
   SessionStateRW,
-  SessionStorage,
 } from "../renderer-interface/session-state";
 
 // [LAW:one-source-of-truth] A view of `store` that reports, once a write has
@@ -67,15 +65,6 @@ export function recordingView(
   };
 }
 
-// [LAW:dataflow-not-control-flow] Null-object so the store always calls
-// save()/flush() — no "am I persisting?" branch. The ephemeral case is data
-// (a storage that discards), not a special control path.
-export const EPHEMERAL_SESSION_STORAGE: SessionStorage = {
-  load: () => new Map(),
-  save: () => {},
-  flush: () => {},
-};
-
 // One session's state, and the store's revision when it last changed.
 // [LAW:one-source-of-truth] The revision lives on the entry it describes, so a
 // session the store drops takes its revision with it.
@@ -91,10 +80,9 @@ const DEFAULT_MAX_SESSIONS = 256;
 
 export class SessionState implements SessionStateReader, SessionStateRW {
   // [LAW:types-are-the-program] Insertion order is recency order: the store
-  // cannot hold more than maxSessions, so "bounded on disk" is structural, not
-  // dependent on an external prune caller.
-  private sessions: Map<SessionId, Session>;
-  private storage: SessionStorage;
+  // cannot hold more than maxSessions, so "bounded in the profile" is
+  // structural, not dependent on an external prune caller.
+  private sessions = new Map<SessionId, Session>();
   // [LAW:single-enforcer] The store's revision: counts every change any
   // writer makes, so it never repeats while the store lives.
   private head = 0;
@@ -103,27 +91,35 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // session-state's load — mutations are rare and computeds are cheap.
   private readonly atom: IAtom = createAtom("SessionState");
 
-  constructor(
-    storage: SessionStorage = EPHEMERAL_SESSION_STORAGE,
-    private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
-  ) {
-    this.storage = storage;
-    this.sessions = new Map();
-    this.hydrateFromStorage();
+  constructor(private readonly maxSessions: number = DEFAULT_MAX_SESSIONS) {}
+
+  // A start's sessions, oldest first, in place of whatever the store held: a
+  // session past the bound is dropped, which the stored state hears.
+  restore(
+    loaded: ReadonlyMap<SessionId, Readonly<Record<string, string>>>,
+  ): void {
+    runInAction(() => {
+      this.sessions = new Map(
+        Array.from(loaded, ([id, kv]): [SessionId, Session] => [
+          id,
+          { values: new Map(Object.entries(kv)), revision: ++this.head },
+        ]),
+      );
+      this.evictOldest();
+      this.atom.reportChanged();
+    });
   }
 
-  private hydrateFromStorage(): void {
-    this.sessions = new Map(
-      Array.from(this.storage.load(), ([id, kv]): [SessionId, Session] => [
-        id,
-        { values: new Map(Object.entries(kv)), revision: ++this.head },
-      ]),
+  // [LAW:one-source-of-truth] Each session's revision names what it holds:
+  // the stored state's version of its entry (src/renderer/stored-registry.ts).
+  versions(): ReadonlyMap<SessionId, number> {
+    return new Map(
+      Array.from(this.sessions, ([id, { revision }]) => [id, revision]),
     );
-    this.evictOldest();
-    // [LAW:dataflow-not-control-flow] The disk mirror always reflects the built
-    // in-memory state. An over-cap file trimmed by evictOldest is written back
-    // here, so the on-disk bound holds even if no mutation ever follows.
-    this.persist();
+  }
+
+  values(sessionId: SessionId): Readonly<Record<string, string>> {
+    return Object.fromEntries(this.sessions.get(sessionId)?.values ?? []);
   }
 
   get(sessionId: SessionId, key: string): string | null {
@@ -208,7 +204,6 @@ export class SessionState implements SessionStateReader, SessionStateRW {
       for (const { key, value } of pairs) session.values.set(key, value);
       this.touch(sessionId, session);
       this.evictOldest();
-      this.persist();
       this.atom.reportChanged();
     });
   }
@@ -225,7 +220,6 @@ export class SessionState implements SessionStateReader, SessionStateRW {
         if (session.values.size === 0) this.sessions.delete(sessionId);
         else this.touch(sessionId, session);
       }
-      this.persist();
       this.atom.reportChanged();
     });
   }
@@ -236,7 +230,6 @@ export class SessionState implements SessionStateReader, SessionStateRW {
       for (const id of this.sessions.keys()) {
         if (!activeSessionIds.has(id)) this.sessions.delete(id);
       }
-      this.persist();
       this.atom.reportChanged();
     });
   }
@@ -257,36 +250,5 @@ export class SessionState implements SessionStateReader, SessionStateRW {
       this.sessions.delete(id);
       if (--overflow === 0) break;
     }
-  }
-
-  // Synchronous write of any debounced-pending snapshot. Called on daemon
-  // shutdown so a pending pick isn't lost when the process exits.
-  flush(): void {
-    this.storage.flush();
-  }
-
-  // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
-  // lands, and anything that lands later (a render that was awaiting, a run
-  // settling) stays in memory, so it can never write over the file a next
-  // daemon has taken up.
-  close(): void {
-    this.flush();
-    this.storage = EPHEMERAL_SESSION_STORAGE;
-  }
-
-  private persist(): void {
-    this.storage.save(this.serialize());
-  }
-
-  private serialize(): SessionSnapshot {
-    // [LAW:types-are-the-program] sessionIds are external (hook JSON / click
-    // URLs). A null-prototype root makes "__proto__"/"constructor" ordinary
-    // own keys instead of prototype-mutation vectors — pollution is
-    // unrepresentable rather than guarded against.
-    const snapshot = Object.create(null) as SessionSnapshot;
-    for (const [sessionId, { values }] of this.sessions) {
-      snapshot[sessionId] = Object.fromEntries(values);
-    }
-    return snapshot;
   }
 }

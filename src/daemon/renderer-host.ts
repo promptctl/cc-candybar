@@ -27,7 +27,7 @@
 
 import {
   type ConfigChange,
-  type Effect,
+  type AnsweredEffect,
   type EffectOutcome,
   type Event,
   type EventInput,
@@ -44,6 +44,8 @@ import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
 import type { SessionId } from "./foundations/session-id.js";
+import type { RendererName } from "../renderer-interface/renderer-name.js";
+import type { StoreWrite } from "../renderer-interface/stored.js";
 import { LEVEL } from "./foundations/request-event.js";
 import type { MailboxStats } from "./foundations/stats-snapshot.js";
 import {
@@ -61,9 +63,6 @@ import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 
-// The only renderer there is yet: the main one, in process.
-export type RendererName = "main";
-
 // A turn as the host took it: how it ended, how long it waited in the
 // mailbox, how long the renderer's turn took and what the hop to it cost, null
 // for a turn no renderer answered, and how each of its effects settled before
@@ -72,7 +71,7 @@ export type RendererName = "main";
 export type HostTurn = TakenTurn & {
   readonly settled: readonly EffectOutcome[];
 };
-type TakenTurn = TurnOutcome & {
+type TakenTurn = TurnOutcome<AnsweredEffect> & {
   readonly queuedMs: number;
   readonly turnMs: number | null;
   readonly hopMs: number | null;
@@ -100,6 +99,9 @@ export interface HostWorld {
   >;
   readonly closing: () => boolean;
   readonly unheard: (text: string) => void;
+  // [LAW:single-enforcer] Where every `store` write a turn returns goes: the
+  // renderer's profile store, which a next start hands in.
+  readonly store: (write: StoreWrite) => void;
 }
 
 export interface RendererHost {
@@ -250,8 +252,16 @@ export function rendererHost(
         await renderer.answer(input);
       // [LAW:nothing-unseen] The hop: the round trip less the renderer's own
       // turn, so what the process boundary costs is read from the event.
+      // [LAW:no-ambient-temporal-coupling] What the turn stored is held
+      // first, before anything here can throw: a renderer that ends after
+      // this turn starts again with it, whatever its changes and acts do.
+      const answered: AnsweredEffect[] = [];
+      for (const effect of output.effects)
+        if (effect.kind === "store") world.store(effect);
+        else answered.push(effect);
       const turn: TakenTurn = {
         ...output,
+        effects: answered,
         queuedMs,
         turnMs,
         hopMs: elapsedMs(clock, sentAt) - turnMs,
@@ -266,10 +276,10 @@ export function rendererHost(
       // is left owed its `effect-done`, and the turn's caller hears it only
       // after each `effect-done` turn of what is over in the turn, so a click
       // is answered after what its landing and its acts did.
-      const changes = output.effects.filter(
+      const changes = answered.filter(
         (effect): effect is ConfigChange => effect.kind === "change",
       );
-      const answers = output.effects.filter(
+      const answers = answered.filter(
         (effect): effect is ApproveRepo => effect.kind === "approve-repo",
       );
       const landed: EffectOutcome = world.closing()
@@ -319,7 +329,7 @@ export function rendererHost(
           : { kind: "skipped", reason: `not performed: ${landed.reason}` };
       const owed: Array<Promise<EffectOutcome>> = [];
       const acts: HostAct[] = [];
-      for (const effect of output.effects) {
+      for (const effect of answered) {
         if (effect.kind === "present") {
           if (input.event.kind !== "request")
             owed.push(
@@ -456,7 +466,10 @@ export function rendererHost(
   // session's bar can hold — one with no session, or one whose renderer has
   // ended — is the daemon's, on every bar. The trust book's answer lands with
   // the turn's changes, and its failure is theirs.
-  const doneOf = (effect: Effect, outcome: EffectOutcome): MadeEvent => ({
+  const doneOf = (
+    effect: AnsweredEffect,
+    outcome: EffectOutcome,
+  ): MadeEvent => ({
     kind: "event",
     event: {
       kind: "effect-done",
@@ -491,7 +504,7 @@ export function rendererHost(
   // A change's or a refused present's, in the slot of the turn that
   // returned it: settled once that `effect-done` turn's own acts have.
   const settleInSlot = async (
-    effect: Effect,
+    effect: AnsweredEffect,
     outcome: EffectOutcome,
   ): Promise<{ readonly settled: Promise<EffectOutcome> }> => {
     const input = stamped(doneOf(effect, outcome));

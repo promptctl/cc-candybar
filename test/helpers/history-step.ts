@@ -22,15 +22,29 @@ import type {
   SettingsHistory,
 } from "../../src/renderer/settings-history";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import type { Step } from "../../src/renderer-interface/history-storage";
+import type { Step } from "../../src/renderer/history-steps";
+
+// The user layer of a chain with no click around it: the file a step last
+// named it by.
+let userLayer: string | null = null;
 
 // A history's files with no click around it: read from and written to the
-// disk at once, with no home to prove a step's text against.
+// disk at once, with no home to prove a step's text against. Every file is
+// the user layer.
 export const WRITES_IN_PLACE: ConfigFiles = {
   read: readConfigText,
   land: (file, _before, after) =>
     after === null ? rmSync(file, { force: true }) : writeFileSync(file, after),
   prove: () => {},
+  roleOf: (file) => {
+    userLayer = file;
+    return "user";
+  },
+  pathOf: (role) => {
+    if (role !== "user" || userLayer === null)
+      throw new Error(`no ${role} layer in a history with no click`);
+    return userLayer;
+  },
 };
 
 // A config writer's store with no click around it: it reads the disk, and

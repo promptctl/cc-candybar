@@ -36,7 +36,18 @@ export function privateTmux(dir: string): PrivateTmux {
     config,
     `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a mark' } }, root: { h: ['mark'] } }`,
   );
-  tmux("-f", "/dev/null", "new-session", "-d", "-s", "bar", "-x", "120", "-y", "40");
+  tmux(
+    "-f",
+    "/dev/null",
+    "new-session",
+    "-d",
+    "-s",
+    "bar",
+    "-x",
+    "120",
+    "-y",
+    "40",
+  );
   const pane = tmux("list-panes", "-t", "bar", "-F", "#{pane_id}").trim();
   return {
     socket,

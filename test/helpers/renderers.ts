@@ -5,15 +5,34 @@
 import type {
   AdapterInput,
   AdapterOutput,
+  Event,
   EventInput,
   Renderer,
   RendererOutput,
   TimedRenderer,
 } from "../../src/renderer-interface/interface";
+import { emptyStoredState } from "../../src/renderer-interface/stored";
+import { MAIN_RENDERER } from "../../src/renderer-interface/renderer-name";
+import { TEST_LINK_KEY } from "./link-signer";
 import { rendererOf, timed } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { Collector } from "../../src/daemon/collector";
 import { systemTimekeeper } from "../../src/time";
+
+// A renderer's first start, as a fresh profile hands it in: nothing kept, and
+// the tests' key to sign its links with.
+export const firstStart = (
+  over: Partial<Omit<Extract<Event, { kind: "start" }>, "kind">> = {},
+): Extract<Event, { kind: "start" }> => ({
+  kind: "start",
+  name: MAIN_RENDERER,
+  cause: "first",
+  linkKey: { kind: "ok", value: TEST_LINK_KEY.toString("base64") },
+  stored: emptyStoredState(),
+  viewers: {},
+  sessions: [],
+  ...over,
+});
 
 // `renderer` as the host holds it in process: each turn timed around its
 // answer, on `monotonic` — a unit test's own clock, which reads no time.
@@ -92,6 +111,8 @@ export const NO_ACTS: HostWorld = {
   unheard: (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
   },
+  // A rig keeps nothing its renderer stores.
+  store: () => {},
 };
 
 // `renderer`, with `heard` told each event before it answers.

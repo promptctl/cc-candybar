@@ -34,7 +34,8 @@ import {
 } from "./helpers/bundled-glyphs";
 import { busy } from "../src/doctor/busy";
 import { memoryStateFile } from "./helpers/state-file";
-import { fileMarkBook } from "../src/doctor/mark-book";
+import { parseMarkBook } from "../src/doctor/mark-book";
+import { storedDocument } from "../src/renderer/stored-owners";
 import fs from "node:fs";
 import { POWERLINE } from "./helpers/powerline";
 import os from "node:os";
@@ -53,6 +54,7 @@ import {
   clickUrl,
   effectsOf,
   landsSettingsOf,
+  recordRenderOf,
   verbContextWith,
   withDoctor,
 } from "./helpers/click";
@@ -62,11 +64,7 @@ import {
   VERB_DOCTOR_MARK,
   VERB_DOCTOR_RUN,
 } from "../src/click/wire";
-import { VERBS, BadVerbArgs, parseRenderOrigin } from "../src/renderer/verbs";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../src/daemon/foundations/session-keys";
+import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { TMUX_TRUECOLOR_VAR } from "../src/doctor/checks";
 import type { ConfigLoad, DoctorEdge, DoctorStores } from "../src/doctor/ports";
@@ -146,15 +144,16 @@ function doctorBar(
   });
   const { config, sessionState } = rig;
   // The hints the session's client sends, as the host hands them to the
-  // doctor's read; recorded too, as draw-bar.ts records them, for the click's
-  // own reads.
+  // doctor's read; held in the session's context too, for the click's own
+  // reads.
   const hints = {
     tmux,
     claudeConfigDir: dir,
     terminalEnv: terminal.env,
     termCols: 148,
   };
-  sessionState.set(S1, SESSION_CLIENT_HINTS_KEY, JSON.stringify(hints));
+  const rendered = rig.ctx.latest!;
+  recordRenderOf(sessionState, { ...rendered, hints });
   const clients = new RenderSightings();
   clients.see(
     S1,
@@ -204,11 +203,9 @@ function doctorBar(
       bundle: HEALTHY_BUNDLE,
       clock: systemTimekeeper,
     },
-    (session) => ({
+    () => ({
       hints: parseClientHints(hints),
-      origin: parseRenderOrigin(
-        sessionState.get(session, SESSION_RENDER_ORIGIN_KEY)!,
-      ),
+      origin: rendered.requested,
     }),
   );
   landsSettingsOf(ctx, (session) => host.writable(session));
@@ -498,7 +495,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
     await expect(rt.click(url)).rejects.toThrow(BadVerbArgs);
     await expect(rt.click(url)).rejects.toThrow(
-      /never-rendered has not rendered yet/,
+      /never-rendered has no request the daemon holds/,
     );
   });
 
@@ -521,7 +518,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
   // bar, and the row is read again over the settings as they now are.
   test("a setting changed between the diagnosis and the fix refuses the fix, and the row is read again", async () => {
     const rt = doctorBar(HINT);
-    fs.writeFileSync(rt.settingsPath, `{\n  "env": { "FORCE_COLOR": "3" }\n}\n`);
+    fs.writeFileSync(
+      rt.settingsPath,
+      `{\n  "env": { "FORCE_COLOR": "3" }\n}\n`,
+    );
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
     expect(rt.render()).toContain("✗ tmux truecolor");
@@ -703,33 +703,32 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       ).toThrow(/the mark is "perhaps"/);
     });
 
-    test("a mark book that stops reading before the mark is filed refuses the click and keeps the file", async () => {
+    test("a mark book that stops reading before the mark is filed refuses the click and files nothing", async () => {
       const rt = doctorBar(null, CLEAN_LOAD, ITERM_MENLO);
       await rt.openTools();
       await rt.clickVerb(VERB_DOCTOR_RUN);
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-marks-"));
-      try {
-        const file = path.join(dir, "doctor-marks.json");
-        fs.writeFileSync(file, "junk");
-        // The book read when the run's report was written, and the file broke
-        // before the filing: the real store's refusal is the click's.
-        const marks: DoctorStores["marks"] = {
-          read: () => ({ kind: "ok", value: {} }),
-          update: fileMarkBook(dir).update,
-          plan: fileMarkBook(dir).plan,
-        };
-        const ctx = {
-          ...rt.ctx,
-          doctorStores: { ...rt.ctx.doctorStores, marks },
-        };
-        const mark = async () =>
-          await VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
-        await expect(mark).rejects.toThrow(BadVerbArgs);
-        await expect(mark).rejects.toThrow(`doctor-mark: ${file} is not JSON`);
-        expect(fs.readFileSync(file, "utf8")).toBe("junk");
-      } finally {
-        fs.rmSync(dir, { recursive: true, force: true });
-      }
+      // The book read when the run's report was written, and what the host
+      // handed in did not read: the store's refusal is the click's.
+      const broken = storedDocument("doctor-marks", {}, parseMarkBook);
+      broken.restore({
+        kind: "unreadable",
+        reason: "doctor-marks.json is not JSON",
+      });
+      const marks: DoctorStores["marks"] = {
+        read: () => ({ kind: "ok", value: {} }),
+        update: broken.update,
+      };
+      const ctx = {
+        ...rt.ctx,
+        doctorStores: { ...rt.ctx.doctorStores, marks },
+      };
+      const mark = async () =>
+        await VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", ctx);
+      await expect(mark).rejects.toThrow(BadVerbArgs);
+      await expect(mark).rejects.toThrow(
+        "doctor-mark: doctor-marks.json is not JSON",
+      );
+      expect(broken.versions()).toEqual(new Map());
     });
 
     test("a probe the rate limit refused fails the run with the reason on the bar, and writes no report", async () => {

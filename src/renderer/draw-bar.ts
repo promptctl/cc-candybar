@@ -9,9 +9,11 @@ import {
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { updateNotice } from "../daemon/foundations/update-offer.js";
-import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type {
+  CheckedRenderRequest,
+  SessionContext,
+} from "../renderer-interface/request-context.js";
 import { UPDATE_DISMISSED_KEY } from "../daemon/foundations/update-keys";
-import { type RenderOrigin } from "../config-hint";
 import {
   refusedHints,
   refusedArgsError,
@@ -27,11 +29,6 @@ import {
   type SessionHold,
   type SessionView,
 } from "./render-cache";
-import { encodeRenderOrigin } from "../daemon/foundations/render-origin";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../daemon/foundations/session-keys";
 import { roleOf } from "../daemon/foundations/sighting-roles";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
@@ -73,7 +70,6 @@ import type { FeedDraw, Feeds } from "./feeds.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { TurnTime } from "./turn-time.js";
 import type { LaneActs } from "./lane-acts.js";
-import type { Effect } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -128,7 +124,7 @@ export interface RendererState {
   readonly linkSigner: LinkSigner;
   // [LAW:single-enforcer] What turning a lane on or off asks of the host
   // (src/renderer/lane-acts.ts).
-  readonly laneActs: Pick<LaneActs, "noted" | "clicked">;
+  readonly laneActs: Pick<LaneActs, "clicked">;
   // Each session's idle period, which a draw reports what it showed to and
   // reads its flash from.
   readonly menuIdle: Pick<MenuIdle, "drew" | "since">;
@@ -262,28 +258,17 @@ export function viewLanes(
       );
 }
 
-// The lanes `sessionId`'s settings switch on over the config `origin`
-// resolves to, as the render cache holds it, in the pane its latest request
-// reported — the same request a click's setups follow (src/renderer/
-// lane-acts.ts). A session this daemon has no request from has no pane fact
-// yet, so its switches are its settings alone: what the click moves is owed
-// to its first request, which settles it against the pane that request
-// reports, so a session outside tmux is owed nothing it can run.
+// The lanes the session's settings switch on over the config its origin
+// resolves to, as the render cache holds it, in the pane its newest request
+// reported: the context a click's setups follow (src/renderer/lane-acts.ts).
 export function lanesAt(
   parts: RendererParts,
-  origin: RenderOrigin,
-  sessionId: SessionId,
-  latest: CheckedRenderRequest | null,
+  context: SessionContext,
 ): LaneSwitches {
-  const { renderCache } = parts;
-  using hold = renderCache.hold(origin);
-  // [LAW:dataflow-not-control-flow] exception: a click with no request on
-  // record (none since a restart, or its last one evicted) has no hint, and is measured as if in
-  // tmux so a tmux session's click owes its setup; the owed setup is settled
-  // against the session's own hint when its next event arrives.
+  using hold = parts.renderCache.hold(context.requested);
   return laneSwitches(
-    sessionGlobals(parts, sessionId, hold.state),
-    latest === null || inTmux(latest.hints.tmux),
+    sessionGlobals(parts, context.session, hold.state),
+    inTmux(context.hints.tmux),
   );
 }
 
@@ -340,12 +325,10 @@ const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
   refusedHintsError(refusedHints(req, req.hints));
 
 // [LAW:single-enforcer] A `context` turn: the facts of the context it carries
-// noted, what the context says recorded, its world state taken, and the
-// session's view opened at it and let go, so the turn's output names what the
-// view reads before the request after it waits. The record goes first, so a
-// durable click on a session whose opening threw still resolves the origin
-// that opening was for, and the facts before it, so the request's event says
-// what a failed opening was for.
+// noted, its world state taken, and the session's view opened at it and let
+// go, so the turn's output names what the view reads before the request after
+// it waits. The facts go first, so the request's event says what a failed
+// opening was for.
 //
 // [LAW:one-source-of-truth] The world state and the view's context are taken
 // in one action, so nothing drawn between the two pairs either with another
@@ -363,9 +346,8 @@ export function configureSession(
 }
 
 // What a `context` does whether or not its origin's config is held: its
-// facts noted, what it says recorded, and its world state taken, so the
-// session's documents are taken in the order the host hands them in, and the
-// origin it renders from is the session's.
+// facts noted and its world state taken, so the session's documents are
+// taken in the order the host hands them in.
 export function takeContext(
   parts: RendererParts,
   req: CheckedRenderRequest,
@@ -374,10 +356,7 @@ export function takeContext(
 ): void {
   contextFacts(req, facts);
   noteFacts(facts, { encoding: req.encoding });
-  runInAction(() => {
-    recordRequest(parts, req);
-    parts.worldStates.take(worldState);
-  });
+  parts.worldStates.take(worldState);
 }
 
 // The session's view opened at the context, and let go: what a `context`
@@ -1022,37 +1001,6 @@ interface DrawnBar {
   readonly geometry: DiagnosticGeometry;
 }
 
-// [LAW:effects-at-boundaries] What a render request said, recorded where its
-// context arrives, its session's `context` turn — never by a frame, which only
-// draws, and which would wake its own feed by writing the session's state.
-// Compared before writing: every set() persists and fires the session's MobX
-// atom, so an unconditional per-request write would invalidate every
-// state-driven computed each render.
-function recordRequest(parts: RendererParts, req: CheckedRenderRequest): void {
-  const { sessionState } = parts;
-  const sessionId = req.hookData.session_id;
-  // [LAW:one-source-of-truth] The STAMPED hints: a click arrives with no
-  // hints of its own, so the doctor (verbs/index.ts) reads the facts of this
-  // session's last request from here, re-parsed through the same checkpoint.
-  // The client itself is not recorded: which client drew a session's bar is
-  // RenderSightings' fact (src/daemon/render-sightings.ts), held in memory,
-  // and two clients drawing one session would otherwise rewrite this
-  // persisted record on every request.
-  const { client: _client, ...recorded } = req.hints;
-  const hintRecord = JSON.stringify(recorded);
-  if (sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord) {
-    sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
-  }
-  // [LAW:one-source-of-truth] The config inputs this request named, so a
-  // durable click on this session resolves the same chain (verbs/index.ts
-  // sessionOrigin) and writes the file the next reload reads — never a path
-  // re-derived from the daemon's own cwd.
-  const origin = encodeRenderOrigin(req.requested);
-  if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
-    sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
-  }
-}
-
 // A render request's answer: the bar drawn for its client.
 export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
@@ -1066,9 +1014,6 @@ export function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
   facts: RequestFacts,
-  // The request's turn's effects, which the setups its session's clicks owe
-  // join.
-  effects: Effect[],
 ): RequestAnswer {
   const { time, feeds } = parts;
   using setup = setUpRender(
@@ -1076,14 +1021,6 @@ export function answerRequest(
     req,
     { at: time.at, tick: time.tick },
     facts,
-  );
-  // [LAW:effects-at-boundaries] What the request's arrival starts beyond its
-  // own answer: the setups its session's clicks owe, by the lanes its
-  // settings switch on as it arrived. No draw starts one.
-  parts.laneActs.noted(
-    req,
-    laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
-    effects,
   );
   const sessionId = req.hookData.session_id;
   const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(

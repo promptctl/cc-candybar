@@ -5,6 +5,7 @@
 // the turn's caller hears it, and an act's failure no session's bar can hold
 // is the daemon's.
 
+import { MAIN_RENDERER } from "../src/renderer-interface/renderer-name";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,6 +16,7 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { diffChanges } from "../src/config/config-changes";
 import type {
   Act,
+  AnsweredEffect,
   Effect,
   EffectId,
   EffectOutcome,
@@ -71,7 +73,7 @@ const run = (): Act => ({
   cwd: "/",
   refreshes: [],
 });
-const change = (before: string, after: string): Effect => ({
+const change = (before: string, after: string): AnsweredEffect => ({
   kind: "change",
   id: ++ids as EffectId,
   session: S,
@@ -105,10 +107,11 @@ function hostOver(
     configs: { ...NO_CONFIGS, path: () => file, repoDir: () => null },
     closing: () => false,
     unheard: (text) => void unheard.push(text),
+    store: (write) => void did.push(`store ${write.store} ${write.key}`),
     ...over,
   };
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     CLOCK,
     hostHeld(
       eventRenderer(async (input) => {
@@ -153,6 +156,21 @@ test("an act is performed once the turn's changes have landed and had their effe
     "answered effect-done",
   ]);
   expect(answered.settled).toEqual([{ kind: "ok" }, { kind: "ok" }]);
+});
+
+test("a turn's store writes are the host's first in its slot, before its acts, and are owed no effect-done", async () => {
+  const act = copy();
+  const { turn, did } = hostOver([
+    act,
+    { kind: "store", store: "session", key: S, value: { k: "v" } },
+  ]);
+  const answered = await turn();
+  expect(did).toEqual([
+    `store session ${S}`,
+    `perform copy ${act.id} (file says dusk)`,
+    `done ${act.id} ok`,
+  ]);
+  expect(answered.settled).toEqual([{ kind: "ok" }]);
 });
 
 test("a landing that failed performs no act: each is skipped, and only the changes say why", async () => {

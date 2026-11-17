@@ -102,12 +102,12 @@ const PROJECT_BASES: Readonly<Record<Exclude<LayerRole, "user">, string>> = {
   local: ".cc-candybar.local",
 };
 
-// [LAW:one-source-of-truth] The extension-less base of the XDG location, the
-// tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
-// (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
-// appends each accepted extension; `userHome` appends the documented one.
+// [LAW:one-source-of-truth] The extension-less base of the user's config, the
+// tail of the precedence chain: the renderer's profile names it
+// (src/daemon/paths.ts). The candidate enumerator appends each accepted
+// extension; `userHome` appends the documented one.
 function xdgConfigBase(locs: Locations): string {
-  return path.join(locs.configHome, "cc-candybar", "config");
+  return locs.userConfig;
 }
 
 /**
@@ -279,7 +279,8 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
 // here). Pure over the host, parsed once by the root and handed down.
 export interface Locations {
   readonly home: string;
-  readonly configHome: string;
+  // The extension-less base of the user's config: the renderer's profile's.
+  readonly userConfig: string;
   readonly dataHome: string;
   // Most-preferred first, as `XDG_DATA_DIRS` orders them.
   readonly dataDirs: readonly string[];

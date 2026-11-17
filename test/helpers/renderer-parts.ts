@@ -88,13 +88,16 @@ export function rendererParts({
     worldStates,
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions(),
-    // A rig's sessions have no lane switched, so no setup is owed.
-    laneActs: { noted: () => {}, clicked: () => {} },
+    // A rig's sessions have no lane switched.
+    laneActs: { clicked: () => {} },
     verbs,
     mint: minter(),
     // A rig's verbs ask no act, so no `effect-done` is an act's.
     acts: { done: () => false },
     // A rig runs no doctor.
     doctorRuns: { subscriptions: () => new Map(), retire: () => {} },
+    // A rig keeps nothing, and its start hands in nothing to keep.
+    stored: { drain: () => {} },
+    started: () => {},
   };
 }

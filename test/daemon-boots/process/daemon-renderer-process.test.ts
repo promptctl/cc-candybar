@@ -1,14 +1,20 @@
 // [LAW:verifiable-goals] On a REAL daemon: the renderer runs in a process of
-// its own, a renderer that dies is started again, and the bar the next one
-// draws says the restart happened and what it cost.
+// its own, a renderer that dies is started again with what the last one kept,
+// and the bar the next one draws says the restart happened and what it cost.
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { textOf } from "../../../src/render/frame";
-import { render, renderUntil } from "../../helpers/daemon-e2e";
+import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
+import { textOf, type Frame } from "../../../src/render/frame";
+import {
+  click,
+  drawnLink,
+  render,
+  renderUntil,
+} from "../../helpers/daemon-e2e";
 import {
   spawnIsolatedDaemon,
   type IsolatedDaemonHandle,
@@ -74,6 +80,50 @@ describe("the daemon's renderer process", () => {
     expect(log).toMatch(
       /renderer main\[1\] killed by SIGKILL after \d+ s; next start in 1 s/,
     );
+  });
+
+  // [LAW:one-source-of-truth] What a renderer keeps is the host's, handed to
+  // each start: a pick a killed renderer made is the next one's.
+  test("a renderer killed after a pick is started again with the pick", async () => {
+    // The gap after the bar's first glyph: what a padding pick moves.
+    const lead = (frame: Frame): number =>
+      /^\s*\S+( +)/.exec(textOf(frame))![1]!.length;
+    const before = lead(await render(handle.sockPath, "rproc", projectDir));
+    await click(
+      handle.sockPath,
+      drawnLink(
+        handle.sockPath,
+        effectsUrl([{ verb: VERB_SET_STATE, args: ["rproc", "padding", "4"] }]),
+      ),
+    );
+    const picked = lead(
+      await renderUntil(
+        handle.sockPath,
+        "rproc",
+        projectDir,
+        (frame) => lead(frame) !== before,
+        "the padding pick drawn",
+      ),
+    );
+    const [pid] = rendererStarts(handle);
+    process.kill(pid!, "SIGKILL");
+    await until(
+      () => rendererStarts(handle).length === 2,
+      () => "the renderer to be started again",
+      10_000,
+    );
+    const again = await renderUntil(
+      handle.sockPath,
+      "rproc",
+      projectDir,
+      (frame) => /⚠/.test(textOf(frame)),
+      "the restarted renderer's bar",
+      10_000,
+    );
+    expect(lead(again)).toBe(picked);
+    expect(
+      fs.readFileSync(path.join(handle.stateDir, "daemon.log"), "utf8"),
+    ).toMatch(/renderer main started cause=crashed/);
   });
 
   test("a renderer outlives no daemon, even one killed with no cleanup", async () => {

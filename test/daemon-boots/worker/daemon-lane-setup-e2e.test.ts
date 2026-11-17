@@ -148,7 +148,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await until(() => laneLines(sid).length > 0, "the toggle's setup");
     expect(laneLines(sid)).toEqual([
       expect.stringContaining(
-        `lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${sid})`,
+        `lane: tmuxStatus on — the daemon draws %7's bar in its status line (session=${sid})`,
       ),
     ]);
     // The click itself held the status line: no request came after it.
@@ -221,7 +221,6 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
         .map((l) => l.match(/lane: (\w+ \w+)/)![1])
         .sort(),
     ).toEqual(["band on", "tmuxStatus on"]);
-    for (const line of laneLines(sid)) expect(line).toContain(" by=click ");
   });
 
   test("a status line switched off is released once, and nothing re-takes it", async () => {
@@ -290,22 +289,29 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   });
 
   // The daemon before a restart drew the bar the toggle is clicked on: this
-  // daemon holds no request of the session yet.
-  test("a click before the session's first request owes its setup to that request", async () => {
-    const sid = "lane-owed";
+  // one holds the context the last one kept, so the click acts at once.
+  test("a click after a daemon restart, before the session's next request, sets its lane up at once", async () => {
+    const sid = "lane-restarted";
     await renderIn(sid);
     await daemon.stop();
     daemon = startDaemon(env);
     await switchLanes(sid, true, "tmuxStatus");
-    await renderedAgain(sid);
-    await until(() => laneLines(sid).length > 1, "the owed setup");
-    // Owed at the click, which had no session to set up, and set up once, by
-    // the request.
+    await until(() => laneLines(sid).length > 0, "the toggle's setup");
     expect(laneLines(sid)).toEqual([
-      expect.stringContaining(`lane: owed tmuxStatus on (session=${sid})`),
-      expect.stringContaining(" by=owed "),
+      expect.stringContaining(
+        `lane: tmuxStatus on — the daemon draws %7's bar in its status line (session=${sid})`,
+      ),
     ]);
-    expect(statusLines(sid, "holding")).toHaveLength(1);
+    // No request came after the restart: the click's own context asked it.
+    expect(await renderLines(env, sid)).toHaveLength(1);
+    // The status line is the row the session's view declares, which opens
+    // with its next request.
+    await renderedAgain(sid);
+    await until(
+      () => statusLines(sid, "holding").length > 0,
+      "the status line's hold",
+    );
+    expect(laneLines(sid)).toHaveLength(1);
   });
 
   // A click that writes no config file reloads no entry, however many
@@ -344,7 +350,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
         const at = lines.findIndex((l) => l.includes(clicked));
         return (
           at >= 0 &&
-          lines.slice(at).some((l) => l.includes(" session-state saved "))
+          lines.slice(at).some((l) => l.includes(" session-state.json saved "))
         );
       }, "the session-state save after the click");
       expect(written()).toBe(unwritten);

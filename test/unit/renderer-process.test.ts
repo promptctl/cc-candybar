@@ -3,7 +3,7 @@
 // what waits for a start, how an end is said and backed off from, when a
 // silent renderer is ended, and whose ids cross.
 
-import type { Asked } from "../../src/utils/outcome";
+import { MAIN_RENDERER } from "../../src/renderer-interface/renderer-name";
 import {
   BACKOFF_FIRST_MS,
   BACKOFF_MAX_MS,
@@ -26,6 +26,7 @@ import type { StorageHoldId } from "../../src/renderer-interface/adapter";
 import type {
   AdapterInput,
   AdapterOutput,
+  AnsweredEffect,
   EffectId,
   RendererOutput,
   Timed,
@@ -62,15 +63,15 @@ const CRASHED: Failed = {
 
 const SESSION = "s1" as SessionId;
 
-function rig(start: () => Promise<void> = async () => {}) {
+function rig(
+  start: (cause: "first" | "crashed") => Promise<void> = async () => {},
+) {
   const clock: HeldClock = heldClock(new Date("2026-11-15T00:00:00Z"));
   const children: Child[] = [];
   const logs: string[] = [];
   const levels: string[] = [];
   const ends: HeldEvent[] = [];
   const held: Array<["hold" | "release", StorageHoldId]> = [];
-  // The key as the host reads it now: what each boot carries.
-  const key = { read: { kind: "ok", value: "a2V5" } as Asked<string> };
   const launcher = {
     launchChannel: (opts: ChannelOpts): Channel => {
       let finish: (result: LaunchResult) => void = () => {};
@@ -101,6 +102,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     },
   };
   const link = processRenderer({
+    name: MAIN_RENDERER,
     reaches: {
       ...inertHost(),
       storage: {
@@ -130,7 +132,12 @@ function rig(start: () => Promise<void> = async () => {}) {
       host: { env: {}, home: "/home", tmp: "/tmp" },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
-      linkKey: key.read,
+      locations: {
+        home: "/home",
+        userConfig: "/home/.config/cc-candybar/config",
+        dataHome: "/home/.local/share",
+        dataDirs: [],
+      },
     }),
   });
   // The inputs the host sent the child, in order.
@@ -145,7 +152,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     held,
     link,
     inputs,
-    key,
   };
 }
 
@@ -192,7 +198,12 @@ describe("a renderer process's start", () => {
           host: { env: {}, home: "/home", tmp: "/tmp" },
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
-          linkKey: { kind: "ok", value: "a2V5" },
+          locations: {
+            home: "/home",
+            userConfig: "/home/.config/cc-candybar/config",
+            dataHome: "/home/.local/share",
+            dataDirs: [],
+          },
         },
       },
     ]);
@@ -321,25 +332,20 @@ describe("a renderer process's end", () => {
     ]);
   });
 
-  // Removing a broken key file, its error's own remedy, recovers at the next
-  // start with no restart of the host.
-  test("each start boots with the key as the host reads it then", async () => {
-    const { link, children, clock, key } = rig();
-    key.read = { kind: "failed", reason: "link key holds 3 bytes" };
+  // The start's cause rides its event, so the renderer says in the log
+  // whether it starts fresh or after a crash.
+  test("each start is told why it starts: the first, then each after a crash", async () => {
+    const causes: string[] = [];
+    const { link, children, clock } = rig(async (cause) => {
+      causes.push(cause);
+    });
     link.arm();
     children[0]!.exit(CRASHED);
     await settled();
-    key.read = { kind: "ok", value: "bmV3" };
     clock.advance(backoffMs(1));
-    const boots = children.map(
-      (child) => child.written.find((l) => l.kind === "boot")!,
-    );
-    expect(
-      boots.map((l) => (l.kind === "boot" ? l.boot.linkKey : null)),
-    ).toEqual([
-      { kind: "failed", reason: "link key holds 3 bytes" },
-      { kind: "ok", value: "bmV3" },
-    ]);
+    await settled();
+    expect(children).toHaveLength(2);
+    expect(causes).toEqual(["first", "crashed"]);
   });
 
   test("a renderer that lived past young restarts at once", async () => {
@@ -522,7 +528,7 @@ describe("ids a renderer mints", () => {
     const answered = await output;
     expect(answered).toMatchObject({ kind: "answered" });
     if (answered.kind !== "answered") throw new Error("the turn threw");
-    const hostId = answered.effects[0]!.id;
+    const hostId = (answered.effects[0] as AnsweredEffect).id;
     expect(hostId).not.toBe(7);
     void link.renderer.answer({
       kind: "event",
@@ -571,7 +577,7 @@ describe("ids a renderer mints", () => {
     });
     const answered = await output;
     if (answered.kind !== "answered") throw new Error("the turn threw");
-    const hostId = answered.effects[0]!.id;
+    const hostId = (answered.effects[0] as AnsweredEffect).id;
     first.exit(CRASHED);
     await settled();
     clock.advance(BACKOFF_FIRST_MS);

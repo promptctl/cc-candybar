@@ -42,15 +42,9 @@ export function detectConfigEnv(
 // the file a command's arguments name, else the file its environment names,
 // else the search. A search has no path, so no reader can hold a source that
 // disagrees with one.
-export type RequestedTarget =
+export type ConfigTarget =
   | { readonly source: "search"; readonly path?: undefined }
   | { readonly source: "argument" | "environment"; readonly path: string };
-
-// What a session's config turned out to be: a request's target, or a recorded
-// path whose source this build cannot read.
-export type ConfigTarget =
-  | RequestedTarget
-  | { readonly source: "unknown"; readonly path: string };
 
 // [LAW:single-enforcer] The one precedence of the two spellings a request
 // carries, for a render and a CLI run alike, so the bar and a CLI cannot rank
@@ -59,7 +53,7 @@ export type ConfigTarget =
 export function requestedConfigTarget(
   argument: string | undefined,
   environment: string | undefined,
-): RequestedTarget {
+): ConfigTarget {
   if (argument !== undefined) return { source: "argument", path: argument };
   if (environment !== undefined) {
     return { source: "environment", path: environment };
@@ -77,7 +71,7 @@ export function cliConfigTarget(
   arg: string | undefined,
   host: HostPaths,
   cwd: string,
-): RequestedTarget {
+): ConfigTarget {
   return requestedConfigTarget(
     explicitConfigPath(cwd, arg, host.home),
     detectConfigEnv(host, cwd),
@@ -85,9 +79,9 @@ export function cliConfigTarget(
 }
 
 // [LAW:types-are-the-program] What config resolution takes: where a session
-// runs and what names its config. Recorded for a session, this is what a
-// durable click resolves, so the file it lands in is the one the next reload
-// reads, never a snapshot of the one the last render read.
+// runs and what names its config. A durable click resolves its session's, so
+// the file it lands in is the one the next reload reads, never a snapshot of
+// the one the last render read.
 export interface RenderOrigin {
   readonly projectDir: string;
   readonly cwd: string;
@@ -100,13 +94,6 @@ export interface RenderOrigin {
 // no path, so it spells as the empty name, distinct from any real path.
 export function originKey(origin: RenderOrigin): string {
   return `${origin.projectDir}\0${origin.cwd}\0${origin.target.path ?? ""}`;
-}
-
-// The origin a request names: what a session records. A record read back may
-// name a path whose source this build cannot read, so a session's origin is
-// the wider RenderOrigin.
-export interface RequestedOrigin extends RenderOrigin {
-  readonly target: RequestedTarget;
 }
 
 // [LAW:one-source-of-truth] How a chain of config files reads to a person,

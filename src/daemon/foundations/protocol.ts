@@ -136,8 +136,8 @@ export interface ReaderRenderRequest extends RenderRequest {
 //     client did not report (too old, same as `ssh`); `null` — the client
 //     reported "not in tmux" (total, like `ssh: false`); an object — the tmux
 //     facts the doctor's tmux-truecolor check reasons over (src/doctor). The
-//     daemon records the parsed hints per session (SESSION_CLIENT_HINTS_KEY)
-//     so a click, which carries no hints of its own, can read them.
+//     host holds the parsed hints with each session's context, so a click,
+//     which carries no hints of its own, is handed them.
 //   • `configEnv` absent — the client's shell carries no `CC_CANDYBAR_CONFIG`
 //     (or the client is too old to report one; both read the same way: no
 //     override from the client, the precedence chain applies). Present, it is

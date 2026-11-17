@@ -9,6 +9,7 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
+import { MAIN_RENDERER } from "../../src/renderer-interface/renderer-name";
 import {
   eventRenderer,
   hearingEvents,
@@ -163,7 +164,7 @@ async function answer(
   };
   const answered = await answerStatusline(
     rendererHost(
-      "main",
+      MAIN_RENDERER,
       CLOCK,
       hostHeld(renderer, CLOCK.monotonic),
       (_level, line) => logged.push(line),
@@ -509,7 +510,7 @@ describe("the request's wait, between its context and its request", () => {
     const wait = held();
     const order: string[] = [];
     const host = rendererHost(
-      "main",
+      MAIN_RENDERER,
       CLOCK,
       hostHeld(
         eventRenderer(async ({ event }) => {

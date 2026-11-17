@@ -5,7 +5,7 @@
 
 import path from "node:path";
 import type {
-  Effect,
+  AnsweredEffect,
   Event,
   Present,
   RequestId,
@@ -109,7 +109,7 @@ export async function answerStatusline(
   const session = req.hookData.session_id;
   // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
   // the host's one path to the renderer.
-  const done = (effect: Effect, reason: string | null): void =>
+  const done = (effect: AnsweredEffect, reason: string | null): void =>
     void host.deliver(
       () => ({
         kind: "event",

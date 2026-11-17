@@ -8,8 +8,8 @@ import os from "node:os";
 import path from "node:path";
 
 import { DIAGNOSTICS_VIEWING } from "../../../src/config/door";
-import { sessionStatePath } from "../../../src/daemon/paths";
-import type { SessionSnapshot } from "../../../src/renderer-interface/session-state";
+import { stateDir } from "../../../src/daemon/paths";
+import { storePath } from "../../../src/daemon/profile-store";
 import { sourceDigest } from "../../../src/source-digest";
 import { effectsUrl, VERB_APPLY_UPDATE } from "../../../src/click/wire";
 import { click, killAndWait, drawnLink } from "../../helpers/daemon-e2e";
@@ -44,14 +44,17 @@ async function viewerClosedOnDisk(
   env: NodeJS.ProcessEnv,
   sid: string,
 ): Promise<void> {
-  const file = sessionStatePath(hostOf(env));
+  const file = storePath(stateDir(hostOf(env)), "session");
   // Before the first save there is no file; the write is a rename, so a file
   // that is there is whole.
   const closed = (): boolean =>
     fs.existsSync(file) &&
-    (JSON.parse(fs.readFileSync(file, "utf8")) as SessionSnapshot)[sid]?.[
-      DIAGNOSTICS_VIEWING
-    ] === "0";
+    (
+      JSON.parse(fs.readFileSync(file, "utf8")) as Record<
+        string,
+        Record<string, string>
+      >
+    )[sid]?.[DIAGNOSTICS_VIEWING] === "0";
   await until(closed, () => `the viewer's close saved in ${file}`, 5_000);
 }
 
@@ -219,7 +222,10 @@ describe("a daemon spawned from the built bundle", () => {
         await expect(
           click(
             sockPath,
-            drawnLink(sockPath, effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }])),
+            drawnLink(
+              sockPath,
+              effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [sid] }]),
+            ),
           ),
         ).rejects.toThrow(/already rebuilding/);
         fs.writeFileSync(stub.gate, "");

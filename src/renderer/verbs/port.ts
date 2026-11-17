@@ -9,10 +9,13 @@ import type {
   Effect,
   EffectId,
   EffectOutcome,
+  Event,
 } from "../../renderer-interface/interface.js";
+import type { StoredRegistry } from "../stored-registry.js";
 import type { IdleSpan, MenuIdle } from "../menu-idle.js";
 import type { Feeds } from "../feeds.js";
-import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
+import type { SessionContext } from "../../renderer-interface/request-context.js";
+import type { RenderOrigin } from "../../config-hint.js";
 import type { ActsOnTheirWay } from "../acts.js";
 import type { DoctorRuns } from "../doctor.js";
 import {
@@ -22,8 +25,8 @@ import {
   type VerbContext,
 } from "./index.js";
 
-// What the verb context holds of one click: how it arrived, the newest
-// request of its session, and its turn's effects.
+// What the verb context holds of one click: how it arrived, its session's
+// context as the host handed it in, and its turn's effects.
 export type ClickFacts = Pick<VerbContext, "arrival" | "latest" | "effects">;
 
 // The daemon's verb context, less what each click brings.
@@ -40,16 +43,16 @@ export interface RendererVerbs {
   // journaled write a ✕ makes.
   closeIdle(
     sessionId: SessionId,
-    latest: CheckedRenderRequest | null,
+    latest: SessionContext | null,
     idle: IdleSpan,
     effects: Effect[],
   ): void;
   // A change's `effect-done`, in its turn, whose effects what its click's
   // consequence asks joins: false for an id no click's change holds.
   changeDone(id: EffectId, outcome: EffectOutcome, effects: Effect[]): boolean;
-  // The session whose click's changes are on their way: its consequence
-  // waits on its landing, over its origin's config as the landing left it.
-  landing(): SessionId | null;
+  // The origin of the click whose changes are on their way: its consequence
+  // waits on its landing, over that origin's config as the landing left it.
+  landing(): RenderOrigin | null;
 }
 
 // The main renderer's parts: the draw's, which the host's own frames share,
@@ -67,6 +70,10 @@ export type MainRendererParts = RendererParts & {
   // Each session's doctor run: what its output asks read, and what a retire
   // ends.
   readonly doctorRuns: Pick<DoctorRuns, "subscriptions" | "retire">;
+  // What the renderer keeps: every event turn's end drains what it moved.
+  readonly stored: Pick<StoredRegistry, "drain">;
+  // A start's own facts taken: what it keeps, the key it signs with.
+  readonly started: (start: Extract<Event, { kind: "start" }>) => void;
 };
 
 // [LAW:single-enforcer] The verb table over the one verb context the daemon

@@ -43,7 +43,6 @@ import {
 import type { HostTurn } from "./renderer-host.js";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
-import { readStores } from "../doctor/gather";
 import type { ClickArrival } from "../doctor/sightings";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
@@ -247,7 +246,6 @@ export async function replyTo(
     renderSightings,
     bundle,
     sourceDigest,
-    doctorStores,
   } = parts;
   if (req.kind === "shutdown") {
     return {
@@ -312,7 +310,6 @@ export async function replyTo(
         bundle,
         sourceDigest,
         daemon: limits.serving(),
-        doctorStores: readStores(doctorStores),
       }),
     });
   }
@@ -372,6 +369,7 @@ export async function replyTo(
       // says how that answer is spelled, and no feed reads it
       // (src/daemon/frame-feed.ts).
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order);
+      parts.sessionContexts.note(checked.req);
       // A declared session's row follows the pane its newest request reports.
       parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
@@ -746,7 +744,7 @@ async function handleClick(
             value,
             session,
             arrival,
-            latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
+            latest: session?.ok ? parts.sessionContexts.of(session.id) : null,
           },
         },
   );

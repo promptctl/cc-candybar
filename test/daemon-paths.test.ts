@@ -5,8 +5,13 @@ import os from "node:os";
 import path from "node:path";
 
 import { DaemonLog, logLines } from "../src/daemon/log";
-import { daemonPaths } from "../src/daemon/paths";
+import { daemonPaths, profileOf, stateDir } from "../src/daemon/paths";
+import {
+  MAIN_RENDERER,
+  parseRendererName,
+} from "../src/renderer-interface/renderer-name";
 import { productionAdapters } from "../src/daemon/production-adapters";
+import { storePath } from "../src/daemon/profile-store";
 import { systemTimekeeper } from "../src/time";
 
 // [LAW:effects-at-boundaries] A daemon is aimed by the paths value it is built
@@ -53,7 +58,9 @@ describe("a daemon aimed by its paths value", () => {
   test("every path of the value is under the directories its environment names", () => {
     const aimed = daemonPaths(hostOf(aimedEnv()));
     expect(
-      Object.values(aimed).filter((p) => !p.startsWith(path.join(root, "aimed"))),
+      Object.values(aimed).filter(
+        (p) => !p.startsWith(path.join(root, "aimed")),
+      ),
     ).toEqual([]);
   });
 
@@ -72,11 +79,23 @@ describe("a daemon aimed by its paths value", () => {
       daemonLog.log("info", "a line");
       await daemonLog.drained();
 
-      const storage = adapters.storage(() => {});
-      storage.session.save({ s1: { theme: "x" } });
-      storage.session.flush();
-      storage.history.save({});
-      adapters.doctorStores.clicked.update((seen) => [...seen, "kitty"]);
+      const store = adapters.profileStore(
+        aimed.state,
+        () => {},
+        () => {},
+      );
+      store.apply({
+        kind: "store",
+        store: "session",
+        key: "s1",
+        value: { theme: "x" },
+      });
+      store.close();
+      const contexts = adapters.sessionContexts(
+        () => {},
+        () => {},
+      );
+      contexts.close();
       adapters.linkKey();
       const limits = adapters.limits({
         startedAtMs: 0,
@@ -84,11 +103,14 @@ describe("a daemon aimed by its paths value", () => {
         launcher: unscriptedLauncher,
         log: () => {},
       });
-      limits.writeMemoryReport(path.join(limits.snapshotDir, "report.txt"), "r");
+      limits.writeMemoryReport(
+        path.join(limits.snapshotDir, "report.txt"),
+        "r",
+      );
       limits.writeLogNow();
 
       expect(logLines(aimed.log).join("\n")).toContain("a line");
-      expect(fs.existsSync(aimed.sessionState)).toBe(true);
+      expect(fs.existsSync(storePath(aimed.state, "session"))).toBe(true);
       expect(fs.existsSync(path.join(aimed.state, "link.key"))).toBe(true);
       expect(fs.existsSync(path.join(aimed.state, "report.txt"))).toBe(true);
       expect(ambient.flatMap(tree)).toEqual([]);
@@ -96,4 +118,42 @@ describe("a daemon aimed by its paths value", () => {
       daemonLog.dispose();
     }
   });
+});
+
+// [LAW:one-source-of-truth] A renderer's profile is a function of its name:
+// the main one keeps the layout an installed bar has always had, and every
+// other is one directory of its own under the state directory.
+describe("a renderer's profile", () => {
+  const host = hostOf({
+    XDG_STATE_HOME: "/s",
+    XDG_CONFIG_HOME: "/c",
+  });
+
+  test("the main renderer keeps today's layout", () => {
+    expect(profileOf(MAIN_RENDERER, host)).toEqual({
+      state: stateDir(host),
+      userConfig: "/c/cc-candybar/config",
+    });
+  });
+
+  test("another name is a directory of its own under the state directory", () => {
+    const work = parseRendererName("work")!;
+    expect(profileOf(work, host)).toEqual({
+      state: path.join(stateDir(host), "renderers", "work", "state"),
+      userConfig: path.join(
+        stateDir(host),
+        "renderers",
+        "work",
+        "config",
+        "config",
+      ),
+    });
+  });
+
+  test.each(["", "..", "a/b", "Work", "-x", "x".repeat(65)])(
+    "%j is no name: a name is one path segment",
+    (raw) => {
+      expect(parseRendererName(raw)).toBeNull();
+    },
+  );
 });

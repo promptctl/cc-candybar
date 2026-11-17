@@ -4,32 +4,21 @@
 // none (eslint.config.mjs lets only this file construct each).
 
 import fs from "node:fs";
+import path from "node:path";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
-import { fileStores, productionMachineEdge } from "../doctor/edge";
+import { productionMachineEdge } from "../doctor/edge";
 import { systemLauncher } from "../proc/system-launcher";
 import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
-import { fileStorage } from "./file-storage";
 import { productionLaneEdge } from "./lane-edge.js";
 import { linkKeyFile, linkKeyFromFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
 import { inProcessPort } from "./renderer-process.js";
 import type { DaemonLog } from "./log";
 import type { DaemonPaths } from "./paths";
-
-// [LAW:one-source-of-truth] The files the renderer still opens itself, at
-// the paths its host's own `Host` names: a renderer process builds itself from
-// these, and so does the daemon whose renderer runs in process.
-export function rendererAdapters(
-  paths: DaemonPaths,
-  machine: Timekeeper,
-): Pick<DaemonAdapters, "storage" | "doctorStores"> {
-  return {
-    storage: (log) => fileStorage(paths, log, machine),
-    doctorStores: fileStores(paths.state),
-  };
-}
+import { profileStore } from "./profile-store.js";
+import { SessionContexts } from "./session-contexts.js";
 
 // [LAW:effects-at-boundaries] Every real adapter, over the paths and the log it
 // is given, so a daemon built over a temporary directory touches nothing else.
@@ -44,7 +33,14 @@ export function productionAdapters(
   return {
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
-    ...rendererAdapters(paths, machine),
+    profileStore: (dir, failed, log) => profileStore(dir, machine, failed, log),
+    sessionContexts: (failed, log) =>
+      new SessionContexts(
+        path.join(paths.state, "session-contexts.json"),
+        machine,
+        failed,
+        log,
+      ),
     linkKey: linkKeyFromFile(linkKeyFile(paths.state)),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,

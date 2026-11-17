@@ -25,17 +25,9 @@ import {
 import { clickArrived } from "../src/doctor/sightings";
 import { type ClickArrival, type Delivery } from "../src/doctor/sightings";
 import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../src/click/wire";
-import {
-  VERBS,
-  parseRenderOrigin,
-  type VerbContext,
-} from "../src/renderer/verbs";
+import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { parseClick } from "../src/daemon/click-reading";
 import { linkSignerOver } from "../src/click/link-signer";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../src/daemon/foundations/session-keys";
 import { SessionState } from "../src/renderer/session-state";
 import { doctorReportKeys } from "../src/doctor/report";
 import { forwarderExecutable } from "../src/install/index";
@@ -435,14 +427,10 @@ describe("the daemon's side of the round trip", () => {
         bundle: HEALTHY_BUNDLE,
         clock: systemTimekeeper,
       },
-      (session) => ({
-        hints: parseClientHints(
-          JSON.parse(sessionState.get(session, SESSION_CLIENT_HINTS_KEY)!),
-        ),
-        origin: parseRenderOrigin(
-          sessionState.get(session, SESSION_RENDER_ORIGIN_KEY)!,
-        ),
-      }),
+      () => {
+        const { hints, requested } = ctx.latest!;
+        return { hints: parseClientHints(hints), origin: requested };
+      },
     );
     // A click, then the end of its turn at the host.
     const click = async (verb: string, value: string): Promise<void> => {
@@ -481,7 +469,7 @@ describe("the daemon's side of the round trip", () => {
     const parts = {
       clock: { monotonic: () => performance.now(), now: () => Date.now() },
       payloadProviders: {},
-      frameFeeds: { latest: () => null },
+      sessionContexts: { of: () => null, note: () => {} },
       log: () => {},
       handlerProbes,
       ...clickParts(ctx),
@@ -536,19 +524,14 @@ describe("the daemon's side of the round trip", () => {
   // In the bar, the doctor's own click is the link that came back.
   async function doctorRow(arrival: ClickArrival) {
     const d = daemon(arrival);
-    recordRender(d.sessionState, S1);
     // The session's own Claude Code directory (test/setup.ts's empty one):
     // with none, the doctor reads ~/.claude, the host's real settings.
-    d.sessionState.set(
-      S1,
-      SESSION_CLIENT_HINTS_KEY,
-      JSON.stringify({
-        tmux: null,
-        claudeConfigDir: process.env.CLAUDE_CONFIG_DIR,
-        terminalEnv: { TERM_PROGRAM: "ghostty" },
-        termCols: 148,
-      }),
-    );
+    recordRender(d.sessionState, S1, undefined, {
+      tmux: null,
+      claudeConfigDir: process.env.CLAUDE_CONFIG_DIR,
+      terminalEnv: { TERM_PROGRAM: "ghostty" },
+      termCols: 148,
+    });
     await d.click(VERB_DOCTOR_RUN, "s1");
     const keys = doctorReportKeys("urlHandler");
     return {

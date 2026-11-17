@@ -26,19 +26,21 @@ import { LANES } from "../../../src/config/lanes";
 import type { Daemon } from "../../../src/daemon/daemon";
 import { systemTimekeeper, type Timekeeper } from "../../../src/time";
 import { processProbe } from "../../helpers/host";
+import { daemonPaths, profileOf, stateDir } from "../../../src/daemon/paths";
 import {
-  daemonPaths,
-  sessionStatePath,
-  settingsHistoryPath,
-} from "../../../src/daemon/paths";
+  parseRendererName,
+  type RendererName,
+} from "../../../src/renderer-interface/renderer-name";
+import { storePath } from "../../../src/daemon/profile-store";
+import type { DaemonAdapters } from "../../../src/daemon/daemon";
 import {
   classifyInbound,
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
   type Response,
 } from "../../../src/daemon/foundations/protocol";
-import type { SessionStorage } from "../../../src/renderer-interface/session-state";
 import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
+import { linksOf } from "../../../src/click/read";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { clickBody, hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
@@ -105,15 +107,20 @@ describe("the daemon is a value", () => {
       linkKeyFromFile(linkKeyFile(daemonPaths(hostNow()).state)),
     ).signLink(link);
 
+  // Where the main renderer's `name` store is kept: its profile is the
+  // state directory.
+  const storeOf = (name: "session" | "history"): string =>
+    storePath(stateDir(hostNow()), name);
+
   const construct = (
     inputs: {
       clock?: Timekeeper;
       checkout?: string;
       digest?: string;
-      session?: SessionStorage;
+      profileStore?: DaemonAdapters["profileStore"];
+      rendererName?: RendererName;
     } = {},
   ): Daemon => {
-    const { session } = inputs;
     const { daemon, daemonLog } = buildDaemon({
       host: hostNow(),
       paths: daemonPaths(hostNow()),
@@ -122,7 +129,8 @@ describe("the daemon is a value", () => {
         inputs.digest,
       ),
       ...(inputs.clock && { clock: inputs.clock }),
-      ...(session && { storage: () => ({ session }) }),
+      ...(inputs.profileStore && { profileStore: inputs.profileStore }),
+      ...(inputs.rendererName && { rendererName: inputs.rendererName }),
     });
     open = daemon;
     openLogs.push(daemonLog);
@@ -206,8 +214,8 @@ describe("the daemon is a value", () => {
     }
     // A live scope would refuse the next test's daemon; this file runs one at a
     // time, so what is left here is the case's own.
-    rmSync(sessionStatePath(hostNow()), { force: true });
-    rmSync(settingsHistoryPath(hostNow()), { force: true });
+    rmSync(storeOf("session"), { force: true });
+    rmSync(storeOf("history"), { force: true });
     if (scratchPath !== undefined) process.env.PATH = scratchPath;
     scratchPath = undefined;
   });
@@ -246,7 +254,7 @@ describe("the daemon is a value", () => {
         ),
       ),
     ).rejects.toThrow(closed);
-    expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
+    expect(existsSync(storeOf("history"))).toBe(false);
     const refused = jest.fn();
     expect(() =>
       daemon.subscribe(VALUE_REFUSED, {
@@ -275,15 +283,11 @@ describe("the daemon is a value", () => {
 
   test("a build that throws stands in the way of no next build", async () => {
     writeConfig(PADDED);
-    const unreadable: SessionStorage = {
-      load: () => {
-        throw new Error("the session file cannot be read");
-      },
-      save: () => {},
-      flush: () => {},
+    const unreadable: DaemonAdapters["profileStore"] = () => {
+      throw new Error("the session file cannot be read");
     };
     const settled = [...live.keys()];
-    expect(() => construct({ session: unreadable })).toThrow(
+    expect(() => construct({ profileStore: unreadable })).toThrow(
       "the session file cannot be read",
     );
     expect([...live.keys()].filter((id) => !settled.includes(id))).toEqual([]);
@@ -317,6 +321,31 @@ describe("the daemon is a value", () => {
     const second = construct();
     const after = await answer(second, renderRequest("value-restart"));
     expect(width(after)).toBeGreaterThan(width(before));
+  });
+
+  // [LAW:one-source-of-truth] A renderer's profile is a function of its name
+  // alone: a second name keeps its picks under its own, and the main
+  // profile's files are never written.
+  test("a renderer of a second name writes only under its own profile", async () => {
+    writeConfig(PADDED);
+    const work = parseRendererName("work")!;
+    const daemon = construct({ rendererName: work });
+    const before = await answer(daemon, renderRequest("value-named"));
+    // Its profile's config directory is made, so its settings door is drawn
+    // beside the action.
+    const wide = linksOf(before).find(({ text }) => text.includes("[wide]"));
+    await clickLink(daemon, wide!.url);
+    await close(daemon);
+
+    const own = storePath(profileOf(work, hostNow()).state, "session");
+    expect(JSON.parse(readFileSync(own, "utf8"))["value-named"]).toMatchObject({
+      padding: "4",
+    });
+    expect(existsSync(storeOf("session"))).toBe(false);
+    rmSync(path.join(stateDir(hostNow()), "renderers"), {
+      recursive: true,
+      force: true,
+    });
   });
 
   test("the bundle it is given is the build its stats name", async () => {
@@ -414,7 +443,7 @@ describe("the daemon is a value", () => {
       () => false,
     );
 
-    const sessionFile = sessionStatePath(hostNow());
+    const sessionFile = storeOf("session");
     const { settled: closing } = await daemon.close();
     open = null;
     afterClose = { armed: [], fired: [] };

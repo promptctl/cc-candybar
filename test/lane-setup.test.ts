@@ -27,10 +27,14 @@ import { Acts, type ActDeps, type HostAct } from "../src/daemon/acts";
 import type {
   Act,
   ActRequest,
-  Effect,
+  AnsweredEffect,
   EffectId,
 } from "../src/renderer-interface/interface";
-import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
+import {
+  contextOf,
+  type CheckedRenderRequest,
+  type SessionContext,
+} from "../src/renderer-interface/request-context";
 import type { Answered } from "../src/daemon/foundations/sighting-roles";
 import {
   relaunchArgs,
@@ -889,12 +893,10 @@ describe("the production edge's readers", () => {
   });
 });
 
-// A request of the session, as the renderer holds it: its pane, and what a
-// lane act carries of it.
-const requestIn = (
-  tmux: TmuxHint | null | undefined,
-): CheckedRenderRequest =>
-  ({
+// The session's context as the host holds it, from its newest request: its
+// pane, and what a lane act carries of it.
+const requestIn = (tmux: TmuxHint | null | undefined): SessionContext =>
+  contextOf({
     hookData: {
       session_id: SID,
       transcript_path: TRANSCRIPT,
@@ -902,7 +904,7 @@ const requestIn = (
     },
     hints: { tmux },
     requested: { projectDir: "/p" },
-  }) as unknown as CheckedRenderRequest;
+  } as unknown as CheckedRenderRequest);
 
 const switches = (on: Partial<LaneSwitches>): LaneSwitches => ({
   band: false,
@@ -913,8 +915,7 @@ const switches = (on: Partial<LaneSwitches>): LaneSwitches => ({
 });
 
 // [LAW:verifiable-goals] What a lane switch asks of the host: the act its
-// setup takes, once, when the session's own click moved it, or owed to the
-// session's next click or request when there was no pane to act in.
+// setup takes, once, when the session's own click moved it.
 describe("the acts a lane switch asks", () => {
   const owner = () => {
     const logs: string[] = [];
@@ -926,7 +927,7 @@ describe("the acts a lane switch asks", () => {
       refused: (session, reason) => void refused.push(`${session}: ${reason}`),
       log: (level, msg) => void logs.push(`${level} ${msg}`),
     });
-    const effects: Effect[] = [];
+    const effects: AnsweredEffect[] = [];
     // The acts asked since the last look, without their ids.
     const asked = (): ActRequest[] =>
       effects.splice(0).map(({ id: _, ...act }) => act as ActRequest);
@@ -946,14 +947,13 @@ describe("the acts a lane switch asks", () => {
   // after its commit (journaled, src/renderer/verbs/index.ts).
   test("a click that moves a switch asks its lane's act in its own turn, and only its lane's", () => {
     const { acts, logs, effects, asked } = owner();
-    acts.clicked(SID, requestIn(TMUX), switches({}), switches({ pane: true }), effects);
+    acts.clicked(requestIn(TMUX), switches({}), switches({ pane: true }), effects);
     expect(asked()).toEqual([PANE_ON]);
     expect(logs).toEqual([
-      `info lane: pane on — asked by=click (session=${SID})`,
+      `info lane: pane on — asked (session=${SID})`,
     ]);
     // A click that moves no switch asks nothing.
     acts.clicked(
-      SID,
       requestIn(TMUX),
       switches({ pane: true }),
       switches({ pane: true }),
@@ -995,13 +995,13 @@ describe("the acts a lane switch asks", () => {
     ],
   ] as const)("%s on asks its act, carrying the session as the request reported it", (lane, act) => {
     const { acts, effects, asked } = owner();
-    acts.clicked(SID, requestIn(TMUX), switches({}), switches({ [lane]: true }), effects);
+    acts.clicked(requestIn(TMUX), switches({}), switches({ [lane]: true }), effects);
     expect(asked()).toEqual([act]);
   });
 
   test("pane off asks the bar panes closed", () => {
     const { acts, effects, asked } = owner();
-    acts.clicked(SID, requestIn(TMUX), switches({ pane: true }), switches({}), effects);
+    acts.clicked(requestIn(TMUX), switches({ pane: true }), switches({}), effects);
     expect(asked()).toEqual([{ ...PANE_ON, on: false }]);
   });
 
@@ -1009,7 +1009,7 @@ describe("the acts a lane switch asks", () => {
     "%s off asks nothing, and says why",
     (lane) => {
       const { acts, logs, effects, asked } = owner();
-      acts.clicked(SID, requestIn(TMUX), switches({ [lane]: true }), switches({}), effects);
+      acts.clicked(requestIn(TMUX), switches({ [lane]: true }), switches({}), effects);
       expect(asked()).toEqual([]);
       expect(logs).toEqual([
         expect.stringMatching(new RegExp(`^info lane: ${lane} off — nothing to stop: `)),
@@ -1019,16 +1019,16 @@ describe("the acts a lane switch asks", () => {
 
   test("the tmux status line asks no act: its row is the host's, by the renderer's declaration", () => {
     const { acts, logs, effects, asked } = owner();
-    acts.clicked(SID, requestIn(TMUX), switches({}), switches({ tmuxStatus: true }), effects);
+    acts.clicked(requestIn(TMUX), switches({}), switches({ tmuxStatus: true }), effects);
     expect(asked()).toEqual([]);
     expect(logs).toEqual([
-      `info lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${SID})`,
+      `info lane: tmuxStatus on — the daemon draws %7's bar in its status line (session=${SID})`,
     ]);
   });
 
   test("pane off in a session with no tmux pane has nothing to close, and says so", () => {
     const { acts, logs, refused, effects, asked } = owner();
-    acts.clicked(SID, requestIn(null), switches({ pane: true }), switches({}), effects);
+    acts.clicked(requestIn(null), switches({ pane: true }), switches({}), effects);
     expect(asked()).toEqual([]);
     expect(refused).toEqual([]);
     expect(logs).toEqual([
@@ -1045,20 +1045,20 @@ describe("the acts a lane switch asks", () => {
     "%s on in a session whose tmux hint is %p is refused on its bar, saying why, and asks nothing",
     (lane, tmux, why) => {
       const { acts, logs, refused, effects, asked } = owner();
-      acts.clicked(SID, requestIn(tmux), switches({}), switches({ [lane]: true }), effects);
+      acts.clicked(requestIn(tmux), switches({}), switches({ [lane]: true }), effects);
       expect(asked()).toEqual([]);
       expect(refused).toEqual([
         expect.stringMatching(new RegExp(`^${SID}: lane: ${lane} on: .*${why}`)),
       ]);
       expect(logs).toEqual([
-        expect.stringMatching(new RegExp(`^warn lane: ${lane} on: .*${why}.* by=click`)),
+        expect.stringMatching(new RegExp(`^warn lane: ${lane} on: .*${why}.* `)),
       ]);
     },
   );
 
   test("band on outside tmux still asks its install, carrying why the session has no pane", () => {
     const { acts, refused, effects, asked } = owner();
-    acts.clicked(SID, requestIn(null), switches({}), switches({ band: true }), effects);
+    acts.clicked(requestIn(null), switches({}), switches({ band: true }), effects);
     expect(refused).toEqual([]);
     expect(asked()).toEqual([
       expect.objectContaining({
@@ -1069,96 +1069,18 @@ describe("the acts a lane switch asks", () => {
     ]);
   });
 
-  // A daemon restarted under a bar the old one drew: the toggle is clicked
-  // before this renderer holds a request of the session.
-  test("a click before the session's first request owes its act to that request", () => {
+  // A daemon restarted under a bar the old one drew: the host hands the
+  // click the context its book kept of the session, so the click acts at
+  // once, with no request of the session yet in this daemon.
+  test("a click handed the session's kept context asks its lane's act in its own turn", () => {
     const { acts, logs, effects, asked } = owner();
-    acts.clicked(SID, null, switches({}), switches({ pane: true }), effects);
-    expect(asked()).toEqual([]);
-    acts.noted(requestIn(TMUX), switches({ pane: true }), effects);
+    const kept: SessionContext = JSON.parse(
+      JSON.stringify(requestIn(TMUX)),
+    ) as SessionContext;
+    acts.clicked(kept, switches({}), switches({ pane: true }), effects);
     expect(asked()).toEqual([PANE_ON]);
     expect(logs).toEqual([
-      `info lane: owed pane on (session=${SID})`,
-      `info lane: pane on — asked by=owed (session=${SID})`,
-    ]);
-    // Owed once: the next request asks nothing.
-    acts.noted(requestIn(TMUX), switches({ pane: true }), effects);
-    expect(asked()).toEqual([]);
-  });
-
-  test("a lane toggled on and off again before the session's first request owes nothing", () => {
-    const { acts, logs, effects, asked } = owner();
-    acts.clicked(SID, null, switches({}), switches({ pane: true, band: true }), effects);
-    acts.clicked(
-      SID,
-      null,
-      switches({ pane: true, band: true }),
-      switches({ band: true }),
-      effects,
-    );
-    acts.clicked(SID, null, switches({ band: true }), switches({}), effects);
-    acts.noted(requestIn(TMUX), switches({}), effects);
-    expect(asked()).toEqual([]);
-    expect(logs).toEqual([
-      `info lane: owed band on,pane on (session=${SID})`,
-      `info lane: owed band on (session=${SID})`,
-      `info lane: owed nothing (session=${SID})`,
-    ]);
-  });
-
-  // Another session's save to the file both read, or a hand edit, between the
-  // click and the request.
-  test("an owed lane whose switch is back where it stood by the first request owes nothing", () => {
-    const { acts, logs, effects, asked } = owner();
-    acts.clicked(SID, null, switches({}), switches({ pane: true }), effects);
-    acts.noted(requestIn(TMUX), switches({}), effects);
-    expect(asked()).toEqual([]);
-    expect(logs).toEqual([
-      `info lane: owed pane on (session=${SID})`,
-      `info lane: pane off — nothing owed: its switch is back where the lane is by=owed (session=${SID})`,
-    ]);
-  });
-
-  // A request whose draw failed before its arrival settled anything: the
-  // session's next click is the first event that can.
-  test("a click once the session's request is held settles what earlier clicks owed", () => {
-    const { acts, logs, effects, asked } = owner();
-    acts.clicked(SID, null, switches({}), switches({ pane: true }), effects);
-    acts.clicked(SID, requestIn(TMUX), switches({ pane: true }), switches({}), effects);
-    // Nothing is owed after it: a switch moved later by anything but a click
-    // asks nothing.
-    acts.noted(requestIn(TMUX), switches({ pane: true }), effects);
-    expect(asked()).toEqual([]);
-    expect(logs).toEqual([
-      `info lane: owed pane on (session=${SID})`,
-      `info lane: pane off — nothing owed: its switch is back where the lane is by=click (session=${SID})`,
-    ]);
-  });
-
-  test("a click that settles an earlier click's owed lane says which lane each asked", () => {
-    const { acts, logs, effects, asked } = owner();
-    acts.clicked(SID, null, switches({}), switches({ pane: true }), effects);
-    acts.clicked(
-      SID,
-      requestIn(TMUX),
-      switches({ pane: true }),
-      switches({ pane: true, tmuxStatus: true }),
-      effects,
-    );
-    expect(asked()).toEqual([PANE_ON]);
-    expect(logs).toEqual([
-      `info lane: owed pane on (session=${SID})`,
-      `info lane: pane on — asked by=owed (session=${SID})`,
-      `info lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${SID})`,
-    ]);
-  });
-
-  test("owed setups are kept for 1024 sessions; the oldest is dropped, and said", () => {
-    const { acts, logs, effects } = owner();
-    for (let i = 0; i <= 1024; i++)
-      acts.clicked(sessionIdOf(`s${i}`), null, switches({}), switches({ pane: true }), effects);
-    expect(logs.filter((l) => l.startsWith("warn"))).toEqual([
-      `warn lane: owed dropped sid="s0" lanes=pane`,
+      `info lane: pane on — asked (session=${SID})`,
     ]);
   });
 });

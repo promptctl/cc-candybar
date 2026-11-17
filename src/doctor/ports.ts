@@ -16,7 +16,6 @@ import type {
 } from "./checks.js";
 import type { TerminalEnvHint } from "../terminal-hint.js";
 import type { ConfiguredTerminal } from "./terminal.js";
-import type { StateFile } from "./state-file.js";
 import type { DoctorStoreValues } from "../daemon/foundations/stats-snapshot";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
@@ -29,12 +28,21 @@ export interface InstallEdge {
   readonly nativeShipped: () => boolean;
 }
 
-// The documents the doctor keeps under the daemon's state directory
-// (src/doctor/state-file.ts). [LAW:one-source-of-truth] The daemon is their
-// one owner: its click files them, and `cc-candybar doctor` reads what they
-// hold in the daemon's own answer (`StoresRead`, src/doctor/daemon-answer.ts).
+// One document the doctor keeps: what it holds, or why it does not read; and
+// a filing, which returns what it holds after, or that failure with nothing
+// filed, so a document's other contents are never lost to a filing.
+export interface DocumentStore<T> {
+  readonly read: () => Asked<T>;
+  readonly update: (next: (current: T) => T) => Asked<T>;
+}
+
+// The documents the doctor keeps in the renderer's stored state
+// (src/renderer/stored-owners.ts). [LAW:one-source-of-truth] The renderer is
+// their one owner: its click files them, and `cc-candybar doctor` reads what
+// they hold in the daemon's own answer (`StoresRead`,
+// src/doctor/daemon-answer.ts).
 export type DoctorStores = {
-  readonly [K in keyof DoctorStoreValues]: StateFile<DoctorStoreValues[K]>;
+  readonly [K in keyof DoctorStoreValues]: DocumentStore<DoctorStoreValues[K]>;
 };
 
 export interface DoctorEdge {

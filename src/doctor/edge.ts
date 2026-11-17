@@ -4,9 +4,8 @@
 // [LAW:effects-at-boundaries] The tmux query, the process table, the font, the
 // forge's login, the transcript and the install's files are read here, behind
 // the `DoctorEdge` record the daemon and the CLI both construct with
-// `productionEdge()` and a test fakes. The doctor's stores are files under the
-// state directory (`fileStores`). checks.ts never sees an effect; this file
-// never decides a verdict.
+// `productionEdge()` and a test fakes. checks.ts never sees an effect; this
+// file never decides a verdict.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -53,10 +52,7 @@ import type { ClientHint } from "../client-hint.js";
 import { sourceCheckoutOf } from "../daemon/build-currency.js";
 import { crateDigest } from "../source-digest.js";
 import { shipsNative } from "../install/platforms.js";
-import { fileMarkBook } from "./mark-book.js";
-import { fileClickedTerminals } from "./clicked-terminals.js";
-import { filePostMortemsRead } from "./post-mortems-read.js";
-import type { InstallEdge, DoctorStores, DoctorMachineEdge } from "./ports";
+import type { InstallEdge, DoctorMachineEdge } from "./ports";
 import { asked } from "./gather.js";
 
 export const productionInstallEdge: InstallEdge = {
@@ -114,12 +110,6 @@ export function installFacts(
     },
   };
 }
-
-export const fileStores = (dir: string): DoctorStores => ({
-  marks: fileMarkBook(dir),
-  clicked: fileClickedTerminals(dir),
-  postMortemsRead: filePostMortemsRead(dir),
-});
 
 // `#{client_termfeatures}` lists terminal-features + overrides + terminfo for
 // the client attached to the pane — `RGB` in it is tmux saying both it and the

@@ -9,12 +9,9 @@
 // edit, a restart, a `cd` — sets nothing up: it changes what every session
 // reading that file renders by, and setting a lane up in each would restart
 // every idle Claude Code on the machine for one session's save. A setup needs
-// the session's pane, from the latest request the host holds; a click before
-// there is one (a toggle on a bar the daemon before a restart drew) owes its
-// setups to the session's next click or request, whichever comes first. What
-// is owed is settled against the switches as that event finds them, so a lane
-// whose switch is back where it stood — toggled back, or moved back by another
-// session's save — owes nothing. The tmux status line asks for no act: the
+// the session's pane, from the context the host hands in with the click,
+// which it keeps across its own restarts: a click it holds none for is
+// refused before it reaches here. The tmux status line asks for no act: the
 // renderer declares the sessions whose switch is on in its subscriptions, and
 // the host holds their rows (src/daemon/tmux-status.ts).
 
@@ -25,22 +22,9 @@ import type {
   Effect,
   LaneSession,
 } from "../renderer-interface/interface.js";
-import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
+import type { SessionContext } from "../renderer-interface/request-context.js";
 import { tmuxPaneOf } from "../claude-input/typing.js";
-import { answeredOf } from "../daemon/foundations/sighting-roles.js";
 import type { TmuxHint } from "../tmux-hint.js";
-
-// How many sessions' owed setups are kept.
-const MAX_SESSIONS_OWED = 1024;
-
-// What started a setup: the session's own click, or its first request after
-// a click there was no pane for.
-type SetupCause = "click" | "owed";
-
-// The lanes a session's clicks moved and no setup has brought in line yet,
-// each by where its switch stood before the first of those clicks: what the
-// lane runs, as far as this renderer knows.
-type Owed = Map<Lane, boolean>;
 // [LAW:types-are-the-program] What bringing a lane to a switch asks: an act,
 // nothing (said why), or a refusal the user can act on, shown on the bar.
 type Setup =
@@ -48,21 +32,21 @@ type Setup =
   | { readonly kind: "nothing"; readonly said: string }
   | { readonly kind: "refused"; readonly reason: string };
 
-// The session as its latest request reported it.
+// The session as its newest request reported it.
 interface At {
   readonly sessionId: SessionId;
-  readonly tmux: CheckedRenderRequest["hints"]["tmux"];
+  readonly tmux: SessionContext["hints"]["tmux"];
   readonly session: LaneSession;
 }
 
-const atOf = (req: CheckedRenderRequest): At => ({
-  sessionId: req.hookData.session_id,
-  tmux: req.hints.tmux,
+const atOf = (context: SessionContext): At => ({
+  sessionId: context.session,
+  tmux: context.hints.tmux,
   session: {
-    projectDir: req.requested.projectDir,
-    claudeConfigDir: req.hints.claudeConfigDir ?? null,
-    transcript: req.hookData.transcript_path,
-    answered: answeredOf(req.hookData),
+    projectDir: context.requested.projectDir,
+    claudeConfigDir: context.hints.claudeConfigDir ?? null,
+    transcript: context.transcript,
+    answered: context.answered,
   },
 });
 
@@ -160,9 +144,6 @@ const LANE_SETUP: Readonly<
 };
 
 export class LaneActs {
-  // Each session's owed lanes, least recently owed first.
-  private readonly owed = new Map<SessionId, Owed>();
-
   constructor(
     private readonly deps: {
       readonly ask: (effects: Effect[], act: ActRequest) => void;
@@ -172,96 +153,21 @@ export class LaneActs {
     },
   ) {}
 
-  // A click of `sessionId` moved its switches from `before` to `after`.
-  // `latest` is its newest request the host holds, or null when it holds
-  // none yet. What it asks joins `effects`.
+  // [LAW:dataflow-not-control-flow] A click of the session `context` names
+  // moved its switches from `before` to `after`: each lane that moved is
+  // brought to its switch, and said. What it asks joins `effects`.
   clicked(
-    sessionId: SessionId,
-    latest: CheckedRenderRequest | null,
+    context: SessionContext,
     before: LaneSwitches,
     after: LaneSwitches,
     effects: Effect[],
   ): void {
-    // [LAW:one-source-of-truth] The click's moves join what the session
-    // already owes: a lane owed before keeps where it stood then.
-    const moved = LANE_NAMES.filter((lane) => before[lane] !== after[lane]);
-    const owed = this.take(sessionId);
-    for (const lane of moved) if (!owed.has(lane)) owed.set(lane, before[lane]);
-    const byOf = (lane: Lane): SetupCause =>
-      moved.includes(lane) ? "click" : "owed";
-    if (latest !== null) {
-      this.settle(atOf(latest), owed, after, byOf, effects);
-      return;
-    }
-    for (const [lane, from] of owed)
-      if (from === after[lane]) owed.delete(lane);
-    // [LAW:nothing-unseen] What a click before the session's first request
-    // leaves owed is said at the click, so a setup that never runs still has
-    // its line.
-    if (moved.length > 0) {
-      const lanes = [...owed.keys()].map(
-        (lane) => `${lane} ${after[lane] ? "on" : "off"}`,
-      );
-      this.deps.log(
-        "info",
-        `lane: owed ${lanes.join(",") || "nothing"} (session=${sessionId})`,
-      );
-    }
-    // [LAW:carrying-cost] Bounded like the renderer's other per-session
-    // memories: least recently owed dropped first, and said.
-    if (owed.size > 0) this.owed.set(sessionId, owed);
-    for (const [oldest, lanes] of this.owed) {
-      if (this.owed.size <= MAX_SESSIONS_OWED) break;
-      this.owed.delete(oldest);
-      this.deps.log(
-        "warn",
-        `lane: owed dropped sid=${JSON.stringify(oldest)} lanes=${[...lanes.keys()].join(",")}`,
-      );
-    }
-  }
-
-  // A request `req` arrived, finding its session's switches at `switches`:
-  // the setups its clicks owe are asked now, in its turn's `effects`.
-  noted(
-    req: CheckedRenderRequest,
-    switches: LaneSwitches,
-    effects: Effect[],
-  ): void {
-    // Nearly every request owes nothing.
-    const owed = this.owed.get(req.hookData.session_id);
-    if (owed === undefined) return;
-    this.owed.delete(req.hookData.session_id);
-    this.settle(atOf(req), owed, switches, () => "owed", effects);
-  }
-
-  private take(sessionId: SessionId): Owed {
-    const owed = this.owed.get(sessionId) ?? new Map<Lane, boolean>();
-    this.owed.delete(sessionId);
-    return owed;
-  }
-
-  // [LAW:dataflow-not-control-flow] Each owed lane is brought to its switch
-  // `now`, unless the switch stands where the lane already is, and either
-  // way is said, under what started it: this click's move, or one owed from
-  // before.
-  private settle(
-    at: At,
-    owed: ReadonlyMap<Lane, boolean>,
-    now: LaneSwitches,
-    byOf: (lane: Lane) => SetupCause,
-    effects: Effect[],
-  ): void {
-    for (const [lane, from] of owed) {
-      const on = now[lane];
+    const at = atOf(context);
+    for (const lane of LANE_NAMES) {
+      if (before[lane] === after[lane]) continue;
+      const on = after[lane];
       const what = `lane: ${lane} ${on ? "on" : "off"}`;
-      const where = `by=${byOf(lane)} (session=${at.sessionId})`;
-      if (on === from) {
-        this.deps.log(
-          "info",
-          `${what} — nothing owed: its switch is back where the lane is ${where}`,
-        );
-        continue;
-      }
+      const where = `(session=${at.sessionId})`;
       const setup = LANE_SETUP[lane][on ? "on" : "off"](at);
       switch (setup.kind) {
         case "act":
