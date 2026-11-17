@@ -2,31 +2,52 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-786",
-      "ref": "refs/pull/786/merge",
-      "sha": "573b9bca55e3d97349a48eaabf2c7e05d1219882",
-      "timestamp": "2026-11-17T13:34:52.111Z",
+      "version": "pr-787",
+      "ref": "refs/pull/787/merge",
+      "sha": "f8bed316b0e73a225356bcbdc0d93d22837e042d",
+      "timestamp": "2026-11-17T16:11:46.243Z",
       "commits": [
         {
-          "sha": "573b9bca55e3d97349a48eaabf2c7e05d1219882",
+          "sha": "f8bed316b0e73a225356bcbdc0d93d22837e042d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T06:33:41-07:00",
-          "message": "Merge c6d01fa172d03561b74325014886ae2ee09d11d2 into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
+          "timestamp": "2026-11-17T09:10:40-07:00",
+          "message": "Merge 7fcfcd91188faeb56f579a7b066e6590a1ddafa1 into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
         },
         {
-          "sha": "c6d01fa172d03561b74325014886ae2ee09d11d2",
+          "sha": "7fcfcd91188faeb56f579a7b066e6590a1ddafa1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T06:33:16-07:00",
-          "message": "feat(config): the host discovers each config and the renderer opens no file (adf)\n\nThe host's config discovery reads every file a load needs into one\nConfigSnapshot per origin: the layers' texts, listed and installed plugins,\nthe repository's standing and the checkout. A watch per origin hands the\nrenderer a new snapshot only when what it found moved, and the render cache\nreloads only on a moved snapshot, keeping its state when the load inputs\ndid not move.\n\n- A click's config is discovered at the click, at its session's newest\n  request's origin or, after a restart, the origin its last draw recorded,\n  which the renderer reports to the host as it starts.\n- A click's changes land with a rediscovery of the files written, in the\n  click's place in the mailbox.\n- A write names its layer by role; the path is display text only.\n- The adapter's config reads, the renderer's watches and the reload walk\n  are deleted.\n- Lint refuses fs in the renderer, its start and shared code, with an\n  exception list that fails once its module stops importing fs.\n"
+          "timestamp": "2026-11-17T09:07:08-07:00",
+          "message": "refactor(config): discovery is the host's, and the renderer imports no file reader (adf)\n"
         },
         {
-          "sha": "52c8cff59744a3b1cbfaaedf13df096fd3f1a706",
+          "sha": "dcb37268bef45345445ee73ec8052a1d72f2343c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T05:09:13-07:00",
-          "message": "docs(design): the config snapshot holds every fact a load learns from the filesystem (adf)\n\nThe A-2 probe found six facts the first snapshot could not carry: a\nlayer's listed plugin definitions, a plugin folder's real path, a\ncheckout root, a layer's path for its run actions, discovery's notices,\nand the repository question. The snapshot in section 7 now holds each.\napprove-repo keeps the directory its signed link asked about.\n"
+          "timestamp": "2026-11-17T08:47:44-07:00",
+          "message": "feat(click): a config write names its origin and role (adf)\n"
+        },
+        {
+          "sha": "04c2cc05bea4ab14efc2acdecefd4f1bf93be002",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T08:23:33-07:00",
+          "message": "feat(daemon): config arrives as an origin's snapshot the renderer subscribes to (adf)\n"
+        },
+        {
+          "sha": "610ee958dfd0d9a980641fb1b36686c703d96821",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T07:20:54-07:00",
+          "message": "refactor(config): the loader is text-fed (adf)\n\nDiscovery moves out of the loader into src/config/loader/discover.ts:\nreadShared reads the origin-independent facts once (repository answers,\ninstalled plugin roots and their definitions), and discover resolves an\norigin's chain, reads each layer and the definitions it lists, lists the\nplugin roots, and returns a ConfigSnapshot (src/config/config-snapshot.ts)\nwith the watch targets. It is total: what it cannot read is an unreadable\nlayer or definition, or a notice.\n\nThe loader (dsl-loader, loader/plugins) now opens no file: loadSnapshot\nparses, merges and validates what the snapshot holds, its memo keys by\ncontent, and an entry missing from a layer's listed definitions is a\nConfigError. The render cache, the settings store, check, doctor and\nplugin install discover and then load, so the host can later hand the\nrenderer a snapshot instead of a path.\n"
+        },
+        {
+          "sha": "d8d8e16910e1af2c1c9f92babe1faeffdafb9f9e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T06:51:06-07:00",
+          "message": "docs(design): a config snapshot is an origin's, and the renderer subscribes the origins it needs (adf)\n\nThe A-2 probe found six facts the first snapshot could not carry; the\nsnapshot in section 7 now holds each. A snapshot is keyed by origin end\nto end: the renderer names the origins it needs in its subscriptions,\ndiscovery serves a newly named one in the slot that named it, and an\nevent that needs an origin the renderer does not hold waits for it in\nthe renderer. Writes name an origin and a role.\n"
         }
       ]
     },
