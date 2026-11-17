@@ -4,6 +4,7 @@
 // carries the slot's readings; and an output is taken whole, a taker's throw
 // failing no turn that answered.
 
+import { MAIN_RENDERER } from "../../src/renderer-interface/renderer-name";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import {
   failureOf,
@@ -18,7 +19,7 @@ import {
 import type { AdapterReply } from "../../src/renderer-interface/adapter";
 import type { Monotonic } from "../../src/time";
 import type { Tick } from "../../src/utils/instant";
-import { hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
+import { firstStart, hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
 
 // A renderer held as the host holds it, its turns taking no time.
@@ -48,7 +49,7 @@ function hostOver(output: Ended) {
   const said = new Promise<string>((resolve) => (say = resolve));
   const taken: Subscriptions[] = [];
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
       pushRenderer(
@@ -138,7 +139,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   let open = (): void => {};
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
       rendererOf({
@@ -174,7 +175,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   const started = host.start(
     () => ({
       kind: "event",
-      event: { kind: "start", viewers: {}, sessions: [] },
+      event: firstStart(),
     }),
     [],
   );
@@ -189,7 +190,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
   let open = (): void => {};
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     clockAt(read),
     held(
       rendererOf({
@@ -236,7 +237,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
   const unheard: string[] = [];
   const frames: number[] = [];
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
       rendererOf({
@@ -284,7 +285,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
   const heard: string[] = [];
   const read = { wall: 0, mono: 0 };
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     {
       ...clockAt(read),
       after: (_ms: number, run: () => void) => {
@@ -344,7 +345,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
   let finish = (): void => {};
   const acted = new Promise<void>((resolve) => (finish = resolve));
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     {
       ...clockAt(read),
       after: (_ms: number, run: () => void) => {
@@ -404,7 +405,7 @@ test("a `due` waits behind every input that arrives while it waits, so a click t
   const named = (event: { kind: string; session?: unknown }): string =>
     event.kind === "retire" ? `retire:${String(event.session)}` : event.kind;
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     {
       ...clockAt(read),
       after: (_ms: number, run: () => void) => {

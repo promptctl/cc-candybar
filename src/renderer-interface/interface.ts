@@ -20,7 +20,9 @@ import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
-import type { CheckedRenderRequest } from "./request-context";
+import type { CheckedRenderRequest, SessionContext } from "./request-context";
+import type { StoredState, StoreWrite } from "./stored";
+import type { RendererName } from "./renderer-name";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneSwitches } from "../config/lanes";
@@ -142,10 +144,18 @@ export const OUTPUTS_CROSS: Crosses<RendererOutput | AdapterOutput> = true;
 
 export type Event =
   | {
-      // A renderer's start: every live session's context, as `context` hands
-      // one in, in one turn, so the start's output names everything the
-      // renderer serves and the host releases nothing it still holds for one.
+      // A renderer's start: what it is, what it keeps, and every live
+      // session's context, as `context` hands one in, in one turn, so the
+      // start's output names everything the renderer serves and the host
+      // releases nothing it still holds for one.
       readonly kind: "start";
+      readonly name: RendererName;
+      // The renderer's first start in this daemon, or one after the last
+      // ended.
+      readonly cause: "first" | "crashed";
+      // [LAW:one-source-of-truth] What the renderer keeps across its starts,
+      // as the host holds it: the renderer's every `store` write so far.
+      readonly stored: StoredState;
       // Who watches each session's frames as the start is made, taken
       // before the sessions are opened: a watched session's feed holds its
       // view before the view opens.
@@ -215,11 +225,12 @@ export type Event =
       // null when the click names none.
       readonly session: ParsedSessionId | null;
       readonly arrival: ClickArrival;
-      // [LAW:one-source-of-truth] The newest request of the click's session
-      // the host holds, whose hints are the pane its lanes follow: null when
-      // the click names no session, or the host holds no request of it (none
-      // since a restart, or its record evicted).
-      readonly latest: CheckedRenderRequest | null;
+      // [LAW:one-source-of-truth] The context of the click's session as its
+      // newest request the host holds named it, which its config and its
+      // lanes' pane are read at: null when the click names no session, or
+      // the host holds none of it (one that never rendered, or its record
+      // evicted).
+      readonly latest: SessionContext | null;
     }
   | {
       // Who watches each session's frames now, whole: a feed opens for a
@@ -430,7 +441,12 @@ export type Act = { readonly id: EffectId } & (
 export type ActRequest = Unnamed<Act>;
 type Unnamed<A> = A extends unknown ? Omit<A, "id"> : never;
 
-export type Effect = Present | ConfigChange | Act;
+// The effects the host answers, each by an `effect-done` naming its id.
+export type AnsweredEffect = Present | ConfigChange | Act;
+
+// [LAW:one-type-per-behavior] A `store` write is answered by nothing: the host
+// applies every one in the turn's slot, ahead of its changes and acts.
+export type Effect = AnsweredEffect | StoreWrite;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.
@@ -498,10 +514,11 @@ export interface PushedFrame {
 // How a turn ended, a turn that threw included: its failure as data, a class
 // crossing no process. Either way it carries the record it reached and the
 // effects its acts made, so a click that wrote and then failed still lands
-// what it wrote.
-export type TurnOutcome = {
+// what it wrote. The host's turn holds only the effects it answers, its
+// `store` writes taken as its slot came.
+export type TurnOutcome<E extends Effect = Effect> = {
   readonly record: TurnRecord;
-  readonly effects: readonly Effect[];
+  readonly effects: readonly E[];
 } & (
   | { readonly kind: "answered" }
   | { readonly kind: "threw"; readonly failure: Failure }

@@ -13,7 +13,7 @@
 // a daemon restart starts every session with nothing to go back to.
 
 import { isConfirmKey } from "../config/confirm-step";
-import { isSettingKey } from "../renderer-interface/history-storage";
+import { isSettingKey } from "./history-steps";
 import { UPDATE_DISMISSED_KEY } from "../daemon/foundations/update-keys";
 import { DIAGNOSTICS_VIEWING } from "../config/door";
 import { observable, runInAction } from "mobx";

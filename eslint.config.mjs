@@ -149,11 +149,6 @@ const OWNED_IMPORTS = {
       "The process has its one clock (src/host.ts): take the one you are given.",
   },
   // The real adapters a daemon is handed.
-  fileStores: {
-    group: ["**/doctor/edge", "**/doctor/edge.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
   productionMachineEdge: {
     group: ["**/doctor/edge", "**/doctor/edge.js"],
     owners: ["src/daemon/production-adapters.ts", "src/doctor/cli.ts"],
@@ -174,8 +169,8 @@ const OWNED_IMPORTS = {
     owners: ["src/daemon/production-adapters.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
-  fileStorage: {
-    group: ["**/file-storage", "**/file-storage.js"],
+  profileStore: {
+    group: ["**/profile-store", "**/profile-store.js"],
     owners: ["src/daemon/production-adapters.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
@@ -192,7 +187,7 @@ const OWNED_IMPORTS = {
   // handed down. The daemon process reads it once, in server.ts.
   daemonPaths: {
     group: PATHS,
-    owners: ["src/daemon/server.ts", "src/renderer-process.ts"],
+    owners: ["src/daemon/server.ts"],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   stateDir: {
@@ -237,21 +232,17 @@ const OWNED_IMPORTS = {
     message: "A daemon is handed its paths: take the value you are given.",
   },
   ...Object.fromEntries(
-    [
-      "logPath",
-      "leasePath",
-      "sessionStatePath",
-      "settingsHistoryPath",
-      "daemonRegistryDir",
-      "watchProbeDir",
-    ].map((name) => [
-      name,
-      {
-        group: PATHS,
-        owners: [],
-        message: "A daemon is handed its paths: take the value you are given.",
-      },
-    ]),
+    ["logPath", "leasePath", "daemonRegistryDir", "watchProbeDir"].map(
+      (name) => [
+        name,
+        {
+          group: PATHS,
+          owners: [],
+          message:
+            "A daemon is handed its paths: take the value you are given.",
+        },
+      ],
+    ),
   ),
 };
 
@@ -476,8 +467,13 @@ const importDirection = {
 
 // [LAW:effects-at-boundaries] The renderer opens no file: every fact it reads
 // arrives in its inputs, so a renderer that opened one would read a disk its
-// host never chose and no snapshot recorded.
-const RENDERER_GLOB = "src/renderer/**/*.{ts,mts}";
+// host never chose and no snapshot recorded. Its process's entry is held to it
+// too: what the renderer keeps leaves as its turns' writes.
+// [LAW:one-source-of-truth] The renderer's files, spelled once: the glob
+// its blocks name and the test an owner block's file is put to.
+const RENDERER_DIR = "src/renderer/";
+const RENDERER_ENTRY = "src/renderer-process.ts";
+const RENDERER_FILES = [`${RENDERER_DIR}**/*.{ts,mts}`, RENDERER_ENTRY];
 const RENDERER_FS_PATHS = [
   "fs",
   "node:fs",
@@ -489,7 +485,9 @@ const RENDERER_FS_PATHS = [
     "The renderer opens no file: what it reads is handed in (config snapshots, world state). [LAW:effects-at-boundaries]",
 }));
 const zonePathsOf = (file) =>
-  file.startsWith("src/renderer/") ? RENDERER_FS_PATHS : [];
+  file.startsWith(RENDERER_DIR) || file === RENDERER_ENTRY
+    ? RENDERER_FS_PATHS
+    : [];
 
 // A file's whole rule: flat config replaces a rule per file rather than merging
 // it, so each block carries the child_process paths and every name but its own.
@@ -527,7 +525,7 @@ function ownedImportBlocks() {
       rules: { "no-restricted-imports": restrictedImports(null) },
     },
     {
-      files: [RENDERER_GLOB],
+      files: RENDERER_FILES,
       rules: {
         "no-restricted-imports": restrictedImports(null, RENDERER_FS_PATHS),
       },

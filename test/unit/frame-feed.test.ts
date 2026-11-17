@@ -1,5 +1,5 @@
-// The host's half of a session's frames (src/daemon/frame-feed.ts): it keeps
-// each session's latest request, owns who subscribes on which lane, hands the
+// The host's half of a session's frames (src/daemon/frame-feed.ts): it reads
+// each session's latest request from the host's book, owns who subscribes on which lane, hands the
 // renderer who watches each session, whole and coalesced, and sends each
 // subscriber the frames the renderer drew, only where its lane's answer
 // changed. When frames are drawn is the renderer's (test/unit/feeds.test.ts).
@@ -12,6 +12,7 @@
 import {
   FrameFeeds,
   type FeedDeps,
+  type RequestBook,
   type Subscriber,
 } from "../../src/daemon/frame-feed";
 import type { Refusal } from "../../src/daemon/foundations/protocol";
@@ -26,15 +27,42 @@ import type {
   PushedFrame,
   Viewers,
 } from "../../src/renderer-interface/interface";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../../src/daemon/foundations/session-id";
 
 const S = sessionIdOf("s");
 const T = sessionIdOf("t");
 
-// A request as the daemon notes one: the pane it was drawn from, which the
-// case says is on a screen or not.
+// A request as the daemon notes one: its session, and the pane it was drawn
+// from, which the case says is on a screen or not.
 interface Req {
+  readonly session: SessionId;
   readonly pane: string;
+}
+const req = (session: SessionId, pane: string): Req => ({ session, pane });
+
+// The host's book as the feeds read it: each session's newest request, a
+// later one never replaced by an earlier.
+function book(): RequestBook<Req> {
+  const held = new Map<SessionId, { req: Req; order: number }>();
+  return {
+    note: (r, order) => {
+      const was = held.get(r.session);
+      if (was !== undefined && was.order > order) return false;
+      held.set(r.session, { req: r, order });
+      return true;
+    },
+    latest: (session) => held.get(session)?.req ?? null,
+    newestWhere: (match) => {
+      let newest: { session: SessionId; order: number } | null = null;
+      for (const [session, { req: r, order }] of held)
+        if (match(r) && (newest === null || order > newest.order))
+          newest = { session, order };
+      return newest?.session ?? null;
+    },
+  };
 }
 
 // Feeds over a renderer the case answers: every delivery waits in `owed`
@@ -50,6 +78,7 @@ function rig() {
   const logged: string[] = [];
   const watching = { started: 0, stopped: 0 };
   const deps: FeedDeps<Req> = {
+    requests: book(),
     shown: (req) => !hidden.has(req.pane),
     watching: () => {
       watching.started++;
@@ -111,39 +140,20 @@ const frame = (
 });
 
 describe("a session's requests", () => {
-  test("the latest is the one received last, however late an earlier one's render finishes", () => {
-    const { feeds } = rig();
-    feeds.note(S, { pane: "%2" }, 2);
-    feeds.note(S, { pane: "%1" }, 1);
-    expect(feeds.latest(S)).toEqual({ pane: "%2" });
-    expect(feeds.latest(T)).toBeNull();
-  });
-
   test("newestWhere finds the session of the newest request it matches, and counts its lookups", () => {
     const { feeds } = rig();
-    feeds.note(S, { pane: "%1" }, 1);
-    feeds.note(T, { pane: "%1" }, 2);
-    expect(feeds.newestWhere((req) => req.pane === "%1")).toBe(T);
-    expect(feeds.newestWhere((req) => req.pane === "%9")).toBeNull();
+    feeds.note(S, req(S, "%1"), 1);
+    feeds.note(T, req(T, "%1"), 2);
+    expect(feeds.newestWhere((r) => r.pane === "%1")).toBe(T);
+    expect(feeds.newestWhere((r) => r.pane === "%9")).toBeNull();
     expect(feeds.getStats()).toMatchObject({ lookups: 2, found: 1 });
-  });
-
-  test("a watched session's request outlives the eviction of the least recently noted", () => {
-    const { feeds } = rig();
-    feeds.note(S, { pane: "%0" }, 0);
-    feeds.subscribe(S, subscriber("band").sub);
-    for (let i = 1; i <= 300; i++)
-      feeds.note(sessionIdOf(`other${i}`), { pane: `%${i}` }, i);
-    expect(feeds.latest(S)).toEqual({ pane: "%0" });
-    expect(feeds.latest(sessionIdOf("other1"))).toBeNull();
-    expect(feeds.watchedRequests()).toEqual([{ pane: "%0" }]);
   });
 });
 
 describe("the viewers the renderer is handed", () => {
   test("name each watched session's lanes, their subscribers and whether any draws, and whether its pane is on a screen", async () => {
     const r = rig();
-    r.feeds.note(S, { pane: "%1" }, 1);
+    r.feeds.note(S, req(S, "%1"), 1);
     r.hidden.add("%1");
     r.feeds.subscribe(S, subscriber("band", false).sub);
     r.feeds.subscribe(S, subscriber("band", true).sub);
@@ -212,13 +222,13 @@ describe("the viewers the renderer is handed", () => {
 
   test("a request whose pane comes off a screen is announced; one that changes nothing the renderer is handed is not", async () => {
     const r = rig();
-    r.feeds.note(S, { pane: "%1" }, 1);
+    r.feeds.note(S, req(S, "%1"), 1);
     r.feeds.subscribe(S, subscriber("band").sub);
     await r.slot();
-    r.feeds.note(S, { pane: "%1" }, 2);
+    r.feeds.note(S, req(S, "%1"), 2);
     expect(r.owed).toHaveLength(0);
     r.hidden.add("%2");
-    r.feeds.note(S, { pane: "%2" }, 3);
+    r.feeds.note(S, req(S, "%2"), 3);
     expect(r.owed).toHaveLength(1);
     await r.slot();
     expect(r.handed.at(-1)![S]!.shown).toBe(false);

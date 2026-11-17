@@ -34,7 +34,6 @@ import {
   type RenderSelection,
 } from "../../src/dsl/render";
 import type { LinkSigner } from "../../src/click/link-signer";
-import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
 import {
   sessionIdOf,
   type SessionId,
@@ -48,7 +47,7 @@ import { instantOf, type Instant } from "../../src/utils/instant";
 import { systemTimekeeper } from "../../src/time";
 import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
-import { clickUrl, recordRender, testVerbContext } from "./click";
+import { clickUrl, hasRendered, recordRender, testVerbContext } from "./click";
 import { drawPayload } from "./draw-payload";
 import { unscriptedRuns } from "./fake-launcher";
 import { TEST_SIGNER } from "./link-signer";
@@ -222,11 +221,10 @@ export function buildRig(init: RigInit = {}): Rig {
     ...registered.compiled,
     loadWarnings: registered.loadWarnings,
   };
-  // A click resolves the config its session's last render recorded, so a rig
-  // records one unless the caller's session state already holds an origin.
-  if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) === null) {
+  // A click resolves the config its session's last render left the host
+  // holding, so a rig records one unless the caller already has.
+  if (!hasRendered(sessionState, sessionId))
     recordRender(sessionState, sessionId, cwd);
-  }
   const ctx = testVerbContext(sessionState, init.history, config, init.host);
   return {
     config,

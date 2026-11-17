@@ -1,25 +1,19 @@
 // A renderer's own process: the main renderer, built from the boot line its
 // host sends on stdin, answering every later line as the renderer interface
-// over lines (src/renderer-interface/wire.ts) says. It writes nothing of its
-// own: its log lines are notices into the host's one log.
-//
-// [LAW:one-way-deps] exception: the renderer process's composition root, the
-// counterpart of the daemon's (src/daemon/server.ts): it reads its paths from
-// the host's `Host` and builds the files the renderer still opens itself
-// (session state, the settings history, the doctor's stores), which adf and
-// uh4 hand in instead.
+// over lines (src/renderer-interface/wire.ts) says. It opens no file: its log
+// lines are notices into the host's one log, what it keeps comes with its
+// start and leaves as `store` writes, and a heap snapshot leaves in chunks
+// the host writes.
 
+import { once } from "node:events";
 import v8 from "node:v8";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { World } from "./host.js";
-import { daemonPaths, locations } from "./daemon/paths.js";
-import { rendererAdapters } from "./daemon/production-adapters.js";
-import { linkSigner } from "./click/link-signer.js";
 import { daemonGates } from "./daemon/foundations/update-keys.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
-import { readingsAt } from "./utils/instant.js";
-import { loadMainRenderer } from "./renderer/main.js";
+import { startMainRenderer } from "./renderer/main.js";
+import { linkSigner } from "./click/link-signer.js";
 import { timed, type TimedRenderer } from "./renderer-interface/interface.js";
 import type { AdapterToHost } from "./renderer-interface/adapter.js";
 import { bakedDigest } from "./daemon/build-currency.js";
@@ -37,39 +31,13 @@ export function runRenderer(world: World): void {
     process.stdout.write(`${JSON.stringify(line)}\n`);
   };
   const host = hostOverLines(send);
-  // [LAW:single-enforcer] Every way out flushes the session state first, as
-  // the host's close does: through the renderer's own close step, so a
-  // renderer the host never closed (its host died, a throw ended it) loses
-  // only what no flush could save.
-  let renderer: TimedRenderer | null = null;
   // [LAW:single-enforcer] One way out, taken once, whichever end came first.
+  // Nothing is owed to a file: every turn's `store` writes reached the host
+  // with its output.
   let leaving = false;
-  const leave = async (code: number): Promise<void> => {
+  const leave = (code: number): void => {
     if (leaving) return;
     leaving = true;
-    // [LAW:no-silent-failure] A flush that fails is said, whether its turn
-    // threw or the renderer rejected (as the host's ask judges a push), and
-    // the process still ends.
-    if (renderer !== null) {
-      const flushed = await renderer
-        .answer({
-          kind: "adapter",
-          push: { kind: "close-session-state" },
-          // [LAW:effects-at-boundaries] exception: the process is leaving and
-          // its host may be gone, so this last turn's readings are its own. Its
-          // tick is on another origin than the host's, which nothing reads:
-          // the process ends once the flush has, and no `due` comes after.
-          ...readingsAt(world.clock),
-        })
-        .catch(
-          (thrown: unknown) =>
-            ({ kind: "threw", failure: failureOf(thrown) }) as const,
-        );
-      if (flushed.kind === "threw")
-        process.stderr.write(
-          `the session state did not flush: ${flushed.failure.detail}\n`,
-        );
-    }
     // Each line written so far is on its way before the process ends.
     process.stdout.write("", () => process.exit(code));
   };
@@ -77,16 +45,16 @@ export function runRenderer(world: World): void {
   // host hears as the renderer's lines.
   process.on("uncaughtException", (err) => {
     process.stderr.write(`uncaughtException: ${err.stack ?? err.message}\n`);
-    void leave(1);
+    leave(1);
   });
   process.on("unhandledRejection", (reason) => {
     process.stderr.write(`unhandledRejection: ${inspect(reason)}\n`);
-    void leave(1);
+    leave(1);
   });
   // The host's terminal signals are the host's: it ends this process by
   // closing its stdin.
   for (const sig of ["SIGINT", "SIGHUP"] as const) process.on(sig, () => {});
-  process.on("SIGTERM", () => void leave(0));
+  process.on("SIGTERM", () => leave(0));
 
   let served: ((line: HostLine) => void) | null = null;
   const heard = (text: string): void => {
@@ -96,11 +64,12 @@ export function runRenderer(world: World): void {
       return;
     }
     if (line.kind !== "boot") throw new Error(`a ${line.kind} before the boot`);
+    let renderer: TimedRenderer;
     try {
       renderer = booted(world, line.boot, host);
     } catch (thrown) {
       send({ kind: "refused", failure: failureOf(thrown) });
-      void leave(1);
+      leave(1);
       return;
     }
     served = serveRenderer({
@@ -110,7 +79,19 @@ export function runRenderer(world: World): void {
         const { rss, heapTotal } = process.memoryUsage();
         return { rss, heapTotal };
       },
-      heapSnapshot: (file) => void v8.writeHeapSnapshot(file),
+      // [LAW:no-ambient-temporal-coupling] Each chunk waits for the pipe to
+      // drain: a pipe is written asynchronously on macOS, so a snapshot read
+      // faster than the host takes it would pile up whole in this process,
+      // which is already over its limit.
+      heapSnapshot: async (chunk) => {
+        const snapshot = v8.getHeapSnapshot();
+        snapshot.setEncoding("utf8");
+        for await (const text of snapshot) {
+          chunk(text as string);
+          if (process.stdout.writableNeedDrain)
+            await once(process.stdout, "drain");
+        }
+      },
     });
     send({ kind: "started", pid: process.pid });
   };
@@ -121,7 +102,7 @@ export function runRenderer(world: World): void {
   // close, or its death, which the OS turns into this EOF.
   process.stdin.on("end", () => {
     lines.end();
-    void leave(0);
+    leave(0);
   });
 }
 
@@ -140,22 +121,19 @@ function booted(
   if (boot.linkKey.kind === "failed")
     throw new Error(`the link key could not be read: ${boot.linkKey.reason}`);
   const { host } = boot;
-  const paths = daemonPaths(host);
   const { clock } = world;
-  const adapters = rendererAdapters(paths, clock);
   // [LAW:single-enforcer] Each turn timed in this process, around its
   // answer: the host tells the hop from the turn.
-  const renderer = loadMainRenderer({
-    storage: {
-      ...adapters.storage(reaches.log),
-      doctor: adapters.doctorStores,
+  const renderer = startMainRenderer(
+    {
+      linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
+      locations: boot.locations,
+      env: host.env,
+      home: host.home,
+      gates: daemonGates(),
+      memoryLimitBytes: boot.memoryLimitBytes,
     },
-    linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
-    locations: locations(host),
-    env: host.env,
-    home: host.home,
-    gates: daemonGates(),
-    memoryLimitBytes: boot.memoryLimitBytes,
-  }).start(reaches);
+    reaches,
+  );
   return timed(renderer, () => clock.monotonic());
 }

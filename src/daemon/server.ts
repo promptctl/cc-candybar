@@ -44,6 +44,7 @@ import { REGISTRY_URL } from "../install/currency";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
 import { heapCapMb, memoryLimitBytes } from "./limits";
 import { processPort } from "./renderer-process.js";
+import { MAIN_RENDERER } from "../renderer-interface/renderer-name.js";
 import { mb } from "./foundations/memory-limit";
 import { armParentWatchdog, anchorFromEnv } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
@@ -202,10 +203,11 @@ async function boot(): Promise<void> {
   // as a daemon exit; the client falls back to the last cached render.
   ensureSocketParentSafe(paths.socket);
 
-  // The daemon is built now that we know we are the daemon process: it loads
-  // prior session state and becomes the sole writer of the state file.
+  // The daemon is built now that we know we are the daemon process: it reads
+  // what its renderer keeps and becomes the sole writer of its profile.
   const daemon = createDaemon({
     ...productionAdapters(paths, daemonLog, world.clock),
+    rendererName: MAIN_RENDERER,
     // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
     // launched through the process's launcher: the daemon's close aborts its
     // own launches before the renderer's last steps of it.

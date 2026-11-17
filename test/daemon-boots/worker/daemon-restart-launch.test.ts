@@ -22,6 +22,8 @@ import {
   type Request,
 } from "../../../src/daemon/foundations/protocol";
 import type { DaemonLogger } from "../../../src/utils/logger";
+import { profileStore } from "../../../src/daemon/profile-store";
+import { systemTimekeeper } from "../../../src/time";
 import { renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines } from "../../helpers/daemon-log";
 import {
@@ -124,7 +126,9 @@ esac
       .catch(() => null);
     await until(() => asked().includes("log"), "the pass's commit read");
 
-    await (await first.daemon.close()).settled;
+    await (
+      await first.daemon.close()
+    ).settled;
     const second = start();
 
     // What says the launch was tried: a count of the calls `git` saw reads the
@@ -137,7 +141,9 @@ esac
     expect(second.daemon.stats.subprocessTotal).toBe(0);
     expect(second.daemon.stats.subprocessRefused.size).toBe(0);
 
-    await (await second.daemon.close()).settled;
+    await (
+      await second.daemon.close()
+    ).settled;
     expect(refused()).toBe(1);
     expect(asked().sort()).toEqual(["config", "log", "status"]);
     for (const daemon of up.splice(0).reverse()) await daemon.stop();
@@ -154,7 +160,9 @@ esac
       reason: "rate-limited",
     });
 
-    await (await first.daemon.close()).settled;
+    await (
+      await first.daemon.close()
+    ).settled;
     const second = start();
 
     expect(await second.daemon.launcher.launch(open)).toMatchObject({
@@ -177,7 +185,9 @@ esac
       )
       .catch(() => null);
 
-    await (await first.daemon.close()).settled;
+    await (
+      await first.daemon.close()
+    ).settled;
     start();
     await answer;
 
@@ -199,13 +209,15 @@ esac
       throw new Error("the daemon handed its storage no log");
     };
     const first = start({
-      storage: (log) => {
+      profileStore: (dir, failed, log) => {
         storageLog = log;
-        return {};
+        return profileStore(dir, systemTimekeeper, failed, log);
       },
     });
 
-    await (await first.daemon.close()).settled;
+    await (
+      await first.daemon.close()
+    ).settled;
     start();
     storageLog("warn", "a write that outlived its daemon");
 

@@ -3,13 +3,12 @@
 // [LAW:one-source-of-truth] A doctor click is a link its terminal drew and the
 // user clicked, so it settles for good that the terminal draws links — a fact
 // about the machine, like a mark, but one the daemon files itself on every
-// click rather than one the user makes. So it is its own file beside the mark
-// book (src/doctor/mark-book.ts), which holds only the user's word: the bar's
+// click rather than one the user makes. So it is its own document beside the
+// mark book (src/doctor/mark-book.ts), which holds only the user's word: the bar's
 // doctor files a terminal here, and `cc-candybar doctor`, which cannot click,
 // reads it in the daemon's answer.
 
 import type { Asked } from "./checks.js";
-import { stateFile, type StateFile } from "./state-file.js";
 
 // [LAW:parse-dont-validate] The document as the terminals clicked from — each
 // its sighting (`sightingOf`, src/doctor/terminal.ts).
@@ -27,8 +26,3 @@ export const withClicked = (
   sighting: string,
 ): readonly string[] =>
   clicked.includes(sighting) ? clicked : [...clicked, sighting];
-
-export const fileClickedTerminals = (
-  dir: string,
-): StateFile<readonly string[]> =>
-  stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);

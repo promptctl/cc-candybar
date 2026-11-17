@@ -10,9 +10,14 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { LANES, type Lane, type LaneSwitches } from "../src/config/lanes";
 import type { VerbContext } from "../src/renderer/verbs";
-import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import {
+  clickUrl,
+  recordRenderOf,
+  renderedContext,
+  testVerbContext,
+} from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
+import type { SessionContext } from "../src/renderer-interface/request-context";
 
 const SID = sessionIdOf("lane-click");
 // The bundled bar, whose settings menu declares every lane's switch.
@@ -24,24 +29,25 @@ const CONFIG = parseAndValidate(
 );
 
 interface Clicked {
-  readonly sessionId: string;
-  readonly latest: CheckedRenderRequest | null;
+  readonly context: SessionContext;
   readonly before: LaneSwitches;
   readonly after: LaneSwitches;
 }
 
-function rig(latest: CheckedRenderRequest | null = null) {
+// The session's context the host holds, which every click is handed.
+const HELD = renderedContext(SID);
+
+function rig(latest: SessionContext | null = HELD) {
   const sessionState = new SessionState();
-  recordRender(sessionState, SID);
+  if (latest !== null) recordRenderOf(sessionState, latest);
   const base = testVerbContext(sessionState, undefined, CONFIG);
   const clicked: Clicked[] = [];
   const ctx: VerbContext = {
     ...base,
-    latest,
     lanes: {
       ...base.lanes,
-      clicked: (sessionId, latest, before, after) =>
-        clicked.push({ sessionId, latest, before, after }),
+      clicked: (context, before, after) =>
+        clicked.push({ context, before, after }),
     },
   };
   const toggle = async (sid: string, ...lanes: Lane[]): Promise<void> =>
@@ -74,20 +80,18 @@ test("a toggle's click hands over the switches before it and after its commit", 
   await toggle(SID, "pane");
   expect(clicked).toEqual([
     {
-      sessionId: SID,
-      latest: null,
+      context: HELD,
       before: switches({}),
       after: switches({ pane: true }),
     },
   ]);
 });
 
-test("a click hands over its session's newest request the host holds, whose hints name the pane a lane follows", async () => {
-  // Only its identity is read here.
-  const latest = { hints: {} } as CheckedRenderRequest;
+test("a click hands over the context the host holds of its session, whose hints name the pane a lane follows", async () => {
+  const latest = { ...HELD, hints: { tmux: null } };
   const { clicked, toggle } = rig(latest);
   await toggle(SID, "pane");
-  expect(clicked.map((c) => c.latest)).toEqual([latest]);
+  expect(clicked.map((c) => c.context)).toEqual([latest]);
 });
 
 test("a click of two lane toggles is one click: measured once, both lanes moved", async () => {
@@ -95,18 +99,17 @@ test("a click of two lane toggles is one click: measured once, both lanes moved"
   await toggle(SID, "pane", "tmuxStatus");
   expect(clicked).toEqual([
     {
-      sessionId: SID,
-      latest: null,
+      context: HELD,
       before: switches({}),
       after: switches({ pane: true, tmuxStatus: true }),
     },
   ]);
 });
 
-test("a click of a session that has never rendered measures nothing: it has no config to switch", async () => {
+test("a click of a session the host holds no context of measures nothing: it has no config to switch", async () => {
   const { clicked, toggle } = rig();
   await expect(toggle("never-rendered", "pane")).rejects.toThrow(
-    /has not rendered yet/,
+    /has no request the daemon holds/,
   );
   expect(clicked).toEqual([]);
 });

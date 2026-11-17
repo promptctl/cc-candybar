@@ -1,40 +1,33 @@
+// [LAW:effects-at-boundaries] The file one of a profile's stores lives in
+// (src/daemon/profile-store.ts): read once, at the daemon's start, and
+// written through a debounce, so a store written on every request costs at
+// most one disk write per window.
+
 import fs from "node:fs";
 import path from "node:path";
+import type { Asked } from "../utils/outcome";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
-import type {
-  LoadedSessions,
-  SessionSnapshot,
-  SessionStorage,
-} from "../renderer-interface/session-state";
-import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
-// [LAW:no-silent-failure] Corrupt/missing file → empty state is the *defined*
-// recovery, not a hidden fallback to different data: an empty store re-rolls
-// random picks exactly as a first-ever boot would. Anything that isn't the
-// expected sessionId→key→value shape is rejected here so the store never
-// hydrates from a half-written or hand-edited file.
-function isSnapshot(value: unknown): value is SessionSnapshot {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  for (const kv of Object.values(value)) {
-    if (kv === null || typeof kv !== "object" || Array.isArray(kv))
-      return false;
-    for (const leaf of Object.values(kv)) {
-      if (typeof leaf !== "string") return false;
-    }
-  }
-  return true;
+export interface StoreFile {
+  // The file's text, null while there is none, or why it did not read.
+  read(): Asked<string | null>;
+  // [LAW:no-ambient-temporal-coupling] Owes a write of what the body reads
+  // when the write is made, so saves owed meanwhile coalesce into one.
+  save(): void;
+  // The owed write, now and synchronously: for the daemon's close.
+  flush(): void;
 }
 
-// [LAW:single-enforcer] The debounce + atomic write lives here, not in
-// SessionState. The store calls save() on every mutation; this coalesces the
-// bursty 22-session × 1 Hz write load into at most one disk write per window.
-export class FileSessionStorage implements SessionStorage {
+// [LAW:single-enforcer] The debounce and the atomic write of every store's
+// file.
+export class DebouncedStoreFile implements StoreFile {
   // What clears the debounce timer while one is armed.
   private clearTimer: (() => void) | null = null;
-  private pending: SessionSnapshot | null = null;
+  // Saves made, and how many of them the file holds: a write is owed while
+  // the file is behind.
+  private saves = 0;
+  private written = 0;
   // Whether a debounced write is on its way to the disk.
   private writing = false;
   // Counts synchronous flushes that landed: a debounced write begun before
@@ -43,68 +36,48 @@ export class FileSessionStorage implements SessionStorage {
   private generation = 0;
   // The debounced write's temp file: what a flush removes to supersede it.
   private readonly writingPath: string;
+  private readonly name: string;
 
   constructor(
     private readonly filePath: string,
+    // What the file holds, read as each write is made.
+    private readonly body: () => string,
     // [LAW:effects-at-boundaries] The machine's clock: the debounce and the
     // timings the write logs are real time, as the disk is.
     private readonly clock: Pick<Timekeeper, "after" | "monotonic">,
-    private readonly debounceMs: number = 500,
+    // [LAW:no-silent-failure] A write the disk refused, said beyond the log:
+    // the host puts it on every bar.
+    private readonly failed: (reason: string) => void,
     // [LAW:locality-or-seam] Logging is injected, not hard-wired to
     // daemon.log: the daemon passes its log, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
+    private readonly debounceMs: number = 500,
   ) {
     this.writingPath = `${filePath}.writing`;
+    this.name = path.basename(filePath);
   }
 
-  load(): LoadedSessions {
-    const loaded = new Map<SessionId, Readonly<Record<string, string>>>();
-    let raw: string;
+  read(): Asked<string | null> {
     try {
-      raw = fs.readFileSync(this.filePath, "utf8");
+      return { kind: "ok", value: fs.readFileSync(this.filePath, "utf8") };
     } catch (e) {
-      // [LAW:no-silent-failure] A missing file is the expected first-boot
-      // recovery (silent → empty). Any other read failure (EACCES, EIO) is an
-      // anomaly worth surfacing before recovering to empty.
-      const code = (e as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT") {
-        this.logger(
-          "warn",
-          `session-state read failed (${code}); starting empty`,
-        );
-      }
-      return loaded;
-    }
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (isSnapshot(parsed)) {
-        // [LAW:no-silent-failure] A key the session id checkpoint refuses is
-        // reported and dropped.
-        return sessionKeyed(parsed, (key, problem) =>
-          this.logger(
-            "warn",
-            `session-state load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
-          ),
-        );
-      }
-      this.logger(
-        "warn",
-        `session-state load: unexpected shape, starting empty`,
-      );
-      return loaded;
-    } catch {
-      this.logger("warn", `session-state load: corrupt JSON, starting empty`);
-      return loaded;
+      // A missing file is a store that holds nothing yet.
+      if ((e as NodeJS.ErrnoException).code === "ENOENT")
+        return { kind: "ok", value: null };
+      return {
+        kind: "failed",
+        reason: `${this.filePath}: ${(e as Error).message}`,
+      };
     }
   }
 
-  save(snapshot: SessionSnapshot): void {
-    this.pending = snapshot;
+  save(): void {
+    this.saves++;
     this.schedule();
   }
 
-  // One debounced write at a time, so snapshots land in the order they were
-  // taken; a save that arrives while one is being written waits for it.
+  // One debounced write at a time, so bodies land in the order they were
+  // read; a save that arrives while one is being written waits for it.
   private schedule(): void {
     if (this.clearTimer !== null || this.writing) return;
     this.clearTimer = this.clock.after(
@@ -124,11 +97,13 @@ export class FileSessionStorage implements SessionStorage {
   // any write: run synchronously here it held every bar and click for 180 ms
   // on a CI runner, past every client's reply budget.
   private async write(): Promise<void> {
-    const snapshot = this.pending;
-    if (snapshot === null) return;
+    // [LAW:one-source-of-truth] A save is owed until a write made after it
+    // lands, so the close's flush still writes while this one is on its way.
+    const upTo = this.saves;
+    if (upTo === this.written) return;
     const generation = this.generation;
     const started = this.clock.monotonic();
-    const body = JSON.stringify(snapshot);
+    const body = this.body();
     const tmp = this.writingPath;
     this.writing = true;
     // The thread is held until the first await.
@@ -169,38 +144,37 @@ export class FileSessionStorage implements SessionStorage {
         if (!landed) await fs.promises.rm(tmp, { force: true });
         this.logger(
           "info",
-          `session-state write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
+          `${this.name} write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
         );
         return;
       }
-      this.saved(body, snapshot, started, heldMs);
-      if (this.pending === snapshot) this.pending = null;
+      this.saved(body, started, heldMs);
+      this.written = Math.max(this.written, upTo);
     } catch (e) {
-      this.logger("warn", `session-state save failed: ${(e as Error).message}`);
+      this.refused(e);
     } finally {
       this.writing = false;
       // A save that arrived while this one was written is written next. A
-      // snapshot whose write failed waits for the next save or shutdown's
-      // flush, so a disk that keeps refusing is not retried on a timer.
-      if (this.pending !== null && this.pending !== snapshot) this.schedule();
+      // write that failed stays owed for the next save or the close's flush,
+      // so a disk that keeps refusing is not retried on a timer.
+      if (this.saves > upTo) this.schedule();
     }
   }
 
-  // The synchronous write, for shutdown and for callers that read the file
-  // back at once.
+  // The synchronous write, for the daemon's close.
   flush(): void {
     this.clearTimer?.();
     this.clearTimer = null;
-    if (this.pending === null) return;
-    const snapshot = this.pending;
+    const upTo = this.saves;
+    if (upTo === this.written) return;
     const started = this.clock.monotonic();
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
-      const body = JSON.stringify(snapshot);
+      const body = this.body();
       // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
-      // pid/spawn.lock. Session state carries conversation identifiers, so it
-      // gets the same perms — chmod defeats umask and re-perms a reused tmp.
+      // pid/spawn.lock. Stores carry conversation identifiers, so they get the
+      // same perms — chmod defeats umask and re-perms a reused tmp.
       fs.writeFileSync(tmp, body, { mode: 0o600 });
       fs.chmodSync(tmp, 0o600);
       // [LAW:no-ambient-temporal-coupling] The debounced write's temp file goes
@@ -210,33 +184,32 @@ export class FileSessionStorage implements SessionStorage {
       // overwritten below, or its rename finds nothing. Newer state is never
       // put back under older. A flush the disk refuses before this point
       // discards nothing; one it refuses at the rename below leaves both
-      // writes saying they failed, and the newer state pending for the next
+      // writes saying they failed, and the newer state owed for the next
       // save.
       fs.rmSync(this.writingPath, { force: true });
       fs.renameSync(tmp, this.filePath);
       this.generation++;
-      this.saved(body, snapshot, started, elapsedMs(this.clock, started));
-      // [LAW:one-source-of-truth] `pending` is "state not yet durably written".
-      // Clear it only once the rename lands, so a transient EIO/ENOSPC leaves
-      // the snapshot for a later flush (e.g. shutdown) to retry rather than
-      // silently dropping the last known state.
-      this.pending = null;
+      this.saved(body, started, elapsedMs(this.clock, started));
+      // Caught up only once the rename lands, so a transient EIO/ENOSPC
+      // leaves the write owed for a later flush rather than dropping it.
+      this.written = upTo;
     } catch (e) {
-      this.logger("warn", `session-state save failed: ${(e as Error).message}`);
+      this.refused(e);
     }
+  }
+
+  private refused(e: unknown): void {
+    const reason = `${this.name} save failed: ${(e as Error).message}`;
+    this.logger("warn", reason);
+    this.failed(reason);
   }
 
   // [LAW:nothing-unseen] Every write says what it wrote, how long it took, and
   // how much of that it held the daemon's one thread.
-  private saved(
-    body: string,
-    snapshot: SessionSnapshot,
-    started: Monotonic,
-    heldMs: number,
-  ): void {
+  private saved(body: string, started: Monotonic, heldMs: number): void {
     this.logger(
       "info",
-      `session-state saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
+      `${this.name} saved bytes=${Buffer.byteLength(body)} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
     );
   }
 }

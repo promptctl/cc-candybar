@@ -41,7 +41,6 @@ import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
-import { existsSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
@@ -365,7 +364,7 @@ describe("segment-palette persist action click → the config file", () => {
     const resetUrl = ownUrls(render())[1]!;
     await click(resetUrl);
     expect(durable.text()).toBe(original);
-    expect(existsSync(durable.historyPath)).toBe(false);
+    expect(durable.history()).toEqual({ past: [], future: [] });
   });
 
   // [LAW:one-source-of-truth] `segments` merge by name then by FIELD, so

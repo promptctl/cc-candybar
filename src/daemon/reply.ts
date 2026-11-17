@@ -43,7 +43,6 @@ import {
 import type { HostTurn } from "./renderer-host.js";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
-import { readStores } from "../doctor/gather";
 import type { ClickArrival } from "../doctor/sightings";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
@@ -247,7 +246,6 @@ export async function replyTo(
     renderSightings,
     bundle,
     sourceDigest,
-    doctorStores,
   } = parts;
   if (req.kind === "shutdown") {
     return {
@@ -312,7 +310,6 @@ export async function replyTo(
         bundle,
         sourceDigest,
         daemon: limits.serving(),
-        doctorStores: readStores(doctorStores),
       }),
     });
   }
@@ -746,7 +743,7 @@ async function handleClick(
             value,
             session,
             arrival,
-            latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
+            latest: session?.ok ? parts.sessionRequests.of(session.id) : null,
           },
         },
   );

@@ -39,6 +39,7 @@ import {
 import { renderLines } from "../../helpers/daemon-log";
 import { linkUrls } from "../../helpers/frame";
 import {
+  startArmedDaemon,
   startDaemon,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
@@ -191,7 +192,9 @@ describe("a daemon in this worker", () => {
     await click(daemon, linkUrls(before)[0]!);
     await daemon.stop();
 
-    daemon = startDaemon(env);
+    // Armed, as a daemon that has won the socket is: it reads what the
+    // stopped one left only then.
+    daemon = startArmedDaemon(env);
     expect(width(await render(daemon, sid, projectDir))).toBeGreaterThan(
       width(before),
     );

@@ -46,11 +46,6 @@ import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
 import { BadVerbArgs, type VerbContext } from "../src/renderer/verbs";
 import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../src/daemon/foundations/session-keys";
-import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
-import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
@@ -58,6 +53,7 @@ import {
   clickActing,
   clickUrl,
   effectsOf,
+  recordRender,
   testVerbContext,
   verbContextWith,
 } from "./helpers/click";
@@ -382,20 +378,7 @@ function clickContext(
   view: SessionView<SessionSource>,
   over: Partial<VerbContext> = {},
 ): VerbContext {
-  r.sessionState.set(
-    SID,
-    SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({
-      projectDir: dir,
-      cwd: dir,
-      target: { source: "search" },
-    }),
-  );
-  r.sessionState.set(
-    SID,
-    SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({ claudeConfigDir: "/u/.claude-x" }),
-  );
+  recordRender(r.sessionState, SID, dir, { claudeConfigDir: "/u/.claude-x" });
   return verbContextWith(
     testVerbContext(r.sessionState, undefined, view.state.config),
     {
@@ -675,15 +658,7 @@ describe("a click on a run link", () => {
       const ctx = clickContext(r, view);
       // Another session that has rendered: what its link must prove is the
       // signature.
-      r.sessionState.set(
-        S2,
-        SESSION_RENDER_ORIGIN_KEY,
-        encodeRenderOrigin({
-          projectDir: dir,
-          cwd: dir,
-          target: { source: "search" },
-        }),
-      );
+      recordRender(r.sessionState, S2, dir);
       await expect(clickUrl(relink(tampered), ctx)).rejects.toThrow(
         BadVerbArgs,
       );
@@ -701,7 +676,7 @@ describe("a click on a run link", () => {
     const { view, link } = await drawnLink(r);
     await expect(
       clickUrl(relink({ ...link, sid: "s3" }), clickContext(r, view)),
-    ).rejects.toThrow("session s3 has not rendered yet — no config to act on");
+    ).rejects.toThrow("session s3 has no request the daemon holds — no config or client facts to act on until its next one");
     expect(r.runs.stats()).toMatchObject({ started: 0 });
   });
 

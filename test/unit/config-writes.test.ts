@@ -11,7 +11,11 @@ import {
 import type { RenderOrigin } from "../../src/config-hint";
 import type { Layer } from "../../src/config/config-snapshot";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import type { Effect, EffectId } from "../../src/renderer-interface/interface";
+import type {
+  AnsweredEffect,
+  Effect,
+  EffectId,
+} from "../../src/renderer-interface/interface";
 
 const SID = sessionIdOf("s1");
 const DISK: Record<string, string> = {
@@ -48,12 +52,14 @@ const LAYERS: ClickLayers = {
 function writes() {
   let minted = 0;
   const w = new ConfigWrites(() => ++minted as EffectId);
-  w.begin("click", () => LAYERS);
+  w.begin("click", ORIGIN, () => LAYERS);
   return w;
 }
 
 const ids = (effects: readonly Effect[]): EffectId[] =>
-  effects.map((e) => e.id);
+  effects
+    .filter((e): e is AnsweredEffect => e.kind !== "store")
+    .map((e) => e.id);
 
 describe("a click's config writes", () => {
   test("a click that changed no file has its consequence at once", () => {
@@ -80,9 +86,27 @@ describe("a click's config writes", () => {
     );
   });
 
+  test("a layer is named by its role in the click's chain, and back", () => {
+    const w = writes();
+    expect(w.roleOf("/b.json5")).toBe("project");
+    expect(w.pathOf("local")).toBe("/c.json5");
+    expect(w.heldOrigin()).toEqual(ORIGIN);
+  });
+
+  test("a role the click's chain holds no layer for is no layer a step writes", () => {
+    const w = new ConfigWrites(() => 1 as EffectId);
+    w.begin("click", ORIGIN, () => ({
+      origin: ORIGIN,
+      chain: [layer("user", "/a.json5")],
+    }));
+    expect(() => w.pathOf("project")).toThrow(
+      "the project layer is not one this session renders from — its step is not taken",
+    );
+  });
+
   test("a click that reads no layer asks for no snapshot", () => {
     const w = new ConfigWrites(() => 1 as EffectId);
-    w.begin("click", () => {
+    w.begin("click", null, () => {
       throw new Error("no snapshot is held");
     });
     const effects: Effect[] = [];
@@ -152,7 +176,7 @@ describe("a click's config writes", () => {
     w.seal(effects, SID, () => (applied = true));
     const [a, b] = ids(effects);
     expect(w.settled(a!, { kind: "ok" })).toBe("owed");
-    expect(() => w.begin("next", () => LAYERS)).toThrow(
+    expect(() => w.begin("next", ORIGIN, () => LAYERS)).toThrow(
       "next began while a click's changes to /a.json5, /b.json5 were still landing",
     );
     const landed = w.settled(b!, { kind: "ok" });
@@ -165,7 +189,7 @@ describe("a click's config writes", () => {
     if (landed === undefined || landed === "owed") throw new Error("unlanded");
     landed.consequence([]);
     expect(applied).toBe(true);
-    expect(() => w.begin("next", () => LAYERS)).not.toThrow();
+    expect(() => w.begin("next", ORIGIN, () => LAYERS)).not.toThrow();
   });
 
   test("a landing that missed reports why, though a later change landed", () => {

@@ -24,7 +24,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { click, render, urlWriting } from "../../helpers/daemon-e2e";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
+import {
+  startArmedDaemon,
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(30_000);
@@ -136,14 +140,15 @@ describe("candybar-settings-ui-aok.2: autoWrap and padding are per-session", () 
         textOf(bystanderBefore),
       );
 
-      // A cold restart, through the close a real one takes. SessionState is
-      // disk-backed on purpose (the daemon's close flushes FileSessionStorage),
-      // so a click is not lost when the RSS backstop recycles the daemon
-      // mid-session — the session halves come back exactly as
-      // theme/endcaps/style do, and the bystander is still untouched.
+      // A cold restart, through the close a real one takes, into a daemon
+      // armed as one that won the socket is. The session's picks are kept by
+      // the host on purpose (the close flushes every store write), so a click
+      // is not lost when the RSS backstop recycles the daemon mid-session: the
+      // session halves come back exactly as theme/endcaps/style do, and the
+      // bystander is still untouched.
       const clickerWide = textOf(await render(daemon, CLICKER, projectDir));
       await daemon.stop();
-      daemon = startDaemon(env);
+      daemon = startArmedDaemon(env);
 
       expect(textOf(await render(daemon, CLICKER, projectDir))).toBe(
         clickerWide,

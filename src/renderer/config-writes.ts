@@ -20,6 +20,7 @@ import {
 import type { RepoAnswer } from "../config/loader/repo-gate.js";
 import type { Layer } from "../config/config-snapshot.js";
 import type { RenderOrigin } from "../config-hint.js";
+import type { LayerRole } from "../config/layer-role.js";
 import type {
   Act,
   ConfigChange,
@@ -32,10 +33,12 @@ import type {
 // whose effects what it asks joins.
 export type Consequence = (effects: Effect[]) => void;
 
-// A click whose changes are on their way: the session it clicked, the files
-// they change, and its consequence.
+// A click whose changes are on their way: the session it clicked and the
+// origin it clicked at, whose config its consequence reads; the files they
+// change, and its consequence.
 export interface Landing {
   readonly session: SessionId;
+  readonly origin: RenderOrigin | null;
   readonly files: readonly string[];
   readonly consequence: Consequence;
 }
@@ -45,8 +48,8 @@ export interface Landing {
 export type Landed = Landing & { readonly outcome: EffectOutcome };
 
 // [LAW:one-source-of-truth] The layers a click may read and write: its
-// session's recorded origin, and that origin's chain as the snapshot the
-// renderer holds for it says. Asked for only once the click reads a layer, so
+// session's origin as the host handed it in, and that origin's chain as the
+// snapshot the renderer holds for it says. Asked for only once the click reads a layer, so
 // a click that writes none needs no snapshot; one that is not held throws,
 // naming the origin.
 export interface ClickLayers {
@@ -84,6 +87,8 @@ export class ConfigWrites {
   // The open click's layers, asked for once it first reads one.
   private layersOf: () => ClickLayers = noLayers;
   private layers: ClickLayers | null = null;
+  // The open click's origin, null for one that names no session.
+  private origin: RenderOrigin | null = null;
 
   constructor(private readonly mint: () => EffectId) {}
 
@@ -91,7 +96,11 @@ export class ConfigWrites {
   // daemon's close has begun, so a click the close cut off writes nothing.
   // [LAW:no-silent-failure] A landing still owed here is the host's bug: it
   // hands a turn's `effect-done`s in before the next input.
-  begin(verb: string, layers: () => ClickLayers): void {
+  begin(
+    verb: string,
+    origin: RenderOrigin | null,
+    layers: () => ClickLayers,
+  ): void {
     if (this.closed) throw new DaemonClosing(verb);
     if (this.inFlight !== null)
       throw new Error(
@@ -99,6 +108,7 @@ export class ConfigWrites {
       );
     this.layersOf = layers;
     this.layers = null;
+    this.origin = origin;
   }
 
   // [LAW:one-source-of-truth] `file` as the open click left it: its last
@@ -125,6 +135,28 @@ export class ConfigWrites {
 
   private held(): ClickLayers {
     return (this.layers ??= this.layersOf());
+  }
+
+  // The open click's origin, whose chain it reads.
+  heldOrigin(): RenderOrigin {
+    return this.held().origin;
+  }
+
+  // The role `file` holds in the open click's chain.
+  roleOf(file: string): LayerRole {
+    return this.layerAt(file).role;
+  }
+
+  // [LAW:no-silent-failure] The file the open click's chain holds for
+  // `role`: a role it holds no layer for is no layer a step of this session
+  // writes.
+  pathOf(role: LayerRole): string {
+    const layer = this.held().chain.find((l) => l.role === role);
+    if (layer === undefined)
+      throw new BadVerbArgs(
+        `the ${role} layer is not one this session renders from — its step is not taken`,
+      );
+    return layer.path;
   }
 
   // A write of the open click, from the file as the click read it (`read`):
@@ -185,6 +217,8 @@ export class ConfigWrites {
       this.layersOf = noLayers;
       this.open.clear();
     }
+    const origin = this.origin;
+    this.origin = null;
     const files = [
       ...written.map(({ path }) => path),
       ...settings.map(({ file }) => file),
@@ -227,7 +261,7 @@ export class ConfigWrites {
       })),
     ];
     this.inFlight = {
-      of: { session, files, consequence },
+      of: { session, origin, files, consequence },
       owed: new Set(landing.map((c) => c.id)),
       missed: null,
     };
@@ -246,9 +280,10 @@ export class ConfigWrites {
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
   }
 
-  // The session whose click's changes are on their way, if one's are.
-  landing(): SessionId | null {
-    return this.inFlight?.of.session ?? null;
+  // The origin of the click whose changes are on their way, if one's are and
+  // it clicked at one.
+  landing(): RenderOrigin | null {
+    return this.inFlight?.of.origin ?? null;
   }
 
   // No click begins after this: the daemon is closing.

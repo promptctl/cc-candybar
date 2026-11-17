@@ -16,11 +16,9 @@ import {
   createDaemon,
   type Daemon,
   type DaemonInputs,
-  type DaemonStorage,
   type RunningBundle,
 } from "../../src/daemon/daemon";
 import { memoryLimitBytes } from "../../src/daemon/limits";
-import { fileStorage } from "../../src/daemon/file-storage";
 import { DaemonLog } from "../../src/daemon/log";
 import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
@@ -32,16 +30,13 @@ import {
 import { systemTimekeeper } from "../../src/time";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
 import { daemonGates } from "../../src/daemon/foundations/update-keys";
-import type { DaemonLogger } from "../../src/utils/logger";
+import { MAIN_RENDERER } from "../../src/renderer-interface/renderer-name";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
 
-export type DaemonOverrides = Partial<
-  Omit<DaemonInputs, "storage" | "paths">
-> & {
+export type DaemonOverrides = Partial<Omit<DaemonInputs, "paths">> & {
   readonly paths?: DaemonPaths;
-  readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
 };
 
 // A bundle at `checkout`, which need not exist: nothing runs it unless a case
@@ -93,6 +88,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       clock: systemTimekeeper,
       // A daemon's gates are its own: none is shared with another built here.
       gates: daemonGates(),
+      rendererName: MAIN_RENDERER,
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {
@@ -101,10 +97,6 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       ...overrides,
       paths,
       daemonLog,
-      storage: (log) => ({
-        ...fileStorage(paths, log, systemTimekeeper),
-        ...overrides.storage?.(log),
-      }),
     });
     return { daemon, daemonLog, paths };
   } catch (e) {
@@ -150,9 +142,12 @@ function placeEnv(env: NodeJS.ProcessEnv): void {
 // A daemon a case arms, for what only an armed daemon does: the update notice.
 // Its memory backstop and bundle watch end a daemon through `exit`, so they get
 // nothing to act on: no file to stat, and a limit past any worker's memory.
+// Arming is also what reads what an earlier daemon kept, so a case that
+// restarts one starts the next armed. Its bundle defaults to one at a checkout
+// that need not exist, which nothing here runs.
 export function startArmedDaemon(
   env: NodeJS.ProcessEnv,
-  bundle: RunningBundle,
+  bundle: RunningBundle = bundleAt("/nowhere/checkout"),
 ): InWorkerDaemon {
   const started = startDaemon(env, {
     bundle: { ...bundle, targets: [] },

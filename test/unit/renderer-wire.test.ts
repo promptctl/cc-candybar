@@ -9,6 +9,7 @@ import {
   serveRenderer,
   type HostLine,
   type RendererLine,
+  type RendererOverLines,
 } from "../../src/renderer-interface/wire";
 import {
   rendererOf,
@@ -64,7 +65,11 @@ function recordingHost(): { host: AdapterToHost; saw: string[] } {
 }
 
 // Each line crosses as JSON does, and on a later turn, as a pipe carries it.
-function overLines(host: AdapterToHost): TimedRenderer {
+// The renderer's heap snapshot is `heap`'s.
+function linesTo(
+  host: AdapterToHost,
+  heap: (chunk: (text: string) => void) => Promise<void> = async () => {},
+): RendererOverLines {
   const crossed = <T>(line: T): T => JSON.parse(JSON.stringify(line)) as T;
   let toRenderer: (line: HostLine) => void = () => {};
   const lines = rendererOverLines({
@@ -81,10 +86,13 @@ function overLines(host: AdapterToHost): TimedRenderer {
     renderer: talkingRenderer(reaches),
     send: (line) => queueMicrotask(() => lines.heard(crossed(line))),
     memory: () => ({ rss: 1, heapTotal: 1 }),
-    heapSnapshot: () => {},
+    heapSnapshot: heap,
   });
-  return lines.renderer;
+  return lines;
 }
+
+const overLines = (host: AdapterToHost): TimedRenderer =>
+  linesTo(host).renderer;
 
 const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   kind: "adapter",
@@ -148,6 +156,30 @@ describe("the renderer over lines", () => {
       kind: thrownHere.kind,
       message: thrownHere.message,
     });
+  });
+
+  test("a heap snapshot's chunks reach the host in order, before it is whole", async () => {
+    const heard: string[] = [];
+    const lines = linesTo(recordingHost().host, async (chunk) => {
+      chunk('{"a":');
+      await Promise.resolve();
+      chunk("1}");
+    });
+    await lines.heapSnapshot((text) => heard.push(text));
+    expect(heard.join("")).toBe('{"a":1}');
+    expect(heard).toEqual(['{"a":', "1}"]);
+  });
+
+  test("a heap snapshot that fails after its first chunks fails, saying why", async () => {
+    const heard: string[] = [];
+    const lines = linesTo(recordingHost().host, async (chunk) => {
+      chunk("{");
+      throw new Error("the heap ran out of room");
+    });
+    await expect(
+      lines.heapSnapshot((text) => heard.push(text)),
+    ).rejects.toThrow("the heap ran out of room");
+    expect(heard).toEqual(["{"]);
   });
 
   test("a line split across chunks is heard whole, and a last line without its newline at the end", () => {

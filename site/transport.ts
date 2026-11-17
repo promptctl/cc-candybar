@@ -15,8 +15,7 @@ import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
-import { EPHEMERAL_SESSION_STORAGE } from "../src/renderer/session-state";
-import { EPHEMERAL_HISTORY_STORAGE } from "../src/renderer/settings-history";
+import { MAIN_RENDERER } from "../src/renderer-interface/renderer-name";
 import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/foundations/protocol";
 import { REGISTRY_URL } from "../src/install/currency";
 import { composeBar, parseFrame, type Frame } from "../src/render/frame";
@@ -83,10 +82,7 @@ const pageDaemon = createDaemon({
     node: [],
     targets: [],
   },
-  storage: () => ({
-    session: EPHEMERAL_SESSION_STORAGE,
-    history: EPHEMERAL_HISTORY_STORAGE,
-  }),
+  rendererName: MAIN_RENDERER,
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: WORLD.clock,

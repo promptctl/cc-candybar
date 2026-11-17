@@ -5,6 +5,7 @@
 // `effect-done`; and an origin a watch moved that the renderer let go before
 // its slot came is abandoned, with nothing handed in.
 
+import { MAIN_RENDERER } from "../src/renderer-interface/renderer-name";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,7 +22,7 @@ import type {
   RendererOutput,
 } from "../src/renderer-interface/interface";
 import type { Monotonic } from "../src/time";
-import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
+import { eventRenderer, firstStart, hostHeld, NO_ACTS } from "./helpers/renderers";
 
 const S = sessionIdOf("s");
 const CLOCK = {
@@ -92,7 +93,7 @@ function hostOver(
     repoDir: () => null,
   };
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     CLOCK,
     hostHeld(
       eventRenderer(async ({ event }: EventInput) => {
@@ -163,7 +164,7 @@ test("a start the renderer did not answer still leaves every origin it names aft
   await host.answer(() => ({ kind: "event", event: due }));
   await host.answer(() => ({
     kind: "event",
-    event: { kind: "start", viewers: {}, sessions: [] },
+    event: firstStart(),
   }));
   await host.answer(() => ({ kind: "event", event: due }));
   expect(heard).toEqual(["due", "config", "start", "due", "config"]);

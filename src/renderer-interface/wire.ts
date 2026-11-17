@@ -12,6 +12,7 @@ import type { Failure } from "../daemon/foundations/verb-error.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { Host } from "../host-facts.js";
+import type { Locations } from "../config/loader/chain-places.js";
 import type { Asked } from "../utils/outcome.js";
 import type { AdapterToHost } from "./adapter.js";
 import type { Crosses } from "./crosses.js";
@@ -27,9 +28,10 @@ import {
 } from "./interface.js";
 
 // What a renderer process builds itself from: the host's view of its machine
-// (its environment, home and temporary directory, from which the renderer
-// derives the paths it owns as the host does), and the one memory limit its
-// cache's budget is a share of.
+// (its environment, home and temporary directory), where the user's config
+// and installed plugins live as the host placed them for this renderer, and
+// the one memory limit its cache's budget is a share of. What it keeps comes
+// with its start, and it derives no path of its own.
 export interface RendererBoot {
   // [LAW:one-source-of-truth] The digest of the source the host was built
   // from, which a renderer built from other source refuses: the renderer runs
@@ -43,9 +45,10 @@ export interface RendererBoot {
     readonly env: Readonly<Record<string, string>>;
   };
   readonly memoryLimitBytes: number;
+  readonly locations: Locations;
   // The host's link key in base64, read as this renderer spawned, which it
   // signs every link with; or why it could not be read, which the renderer
-  // refuses its boot with.
+  // refuses its boot with, so the supervisor's backoff is the retry.
   readonly linkKey: Asked<string>;
 }
 
@@ -73,12 +76,9 @@ export type HostLine =
   // [LAW:single-enforcer] The supervisor's one check that the renderer's loop turns:
   // answered outside any turn, with what the process holds of memory.
   | { readonly kind: "ping"; readonly n: number }
-  // A breach's heap snapshot, written under the breach's identity.
-  | {
-      readonly kind: "heap-snapshot";
-      readonly n: number;
-      readonly file: string;
-    };
+  // A breach's heap snapshot, which the renderer says in chunks and the host
+  // writes: the renderer opens no file.
+  | { readonly kind: "heap-snapshot"; readonly n: number };
 
 export type RendererLine =
   // The boot answered: the renderer is built, or why it is not.
@@ -98,6 +98,9 @@ export type RendererLine =
       readonly args: readonly unknown[];
     }
   | { readonly kind: "ping"; readonly n: number; readonly usage: MemorySizes }
+  // The next piece of the heap snapshot asked by `n`, in order.
+  | { readonly kind: "heap-chunk"; readonly n: number; readonly text: string }
+  // The heap snapshot asked by `n` is whole, or why it is not.
   | {
       readonly kind: "heap-snapshot";
       readonly n: number;
@@ -192,7 +195,9 @@ export function lineSplitter(heard: (line: string) => void): {
 export interface RendererOverLines {
   readonly renderer: TimedRenderer;
   readonly ping: () => Promise<MemorySizes>;
-  readonly heapSnapshot: (file: string) => Promise<void>;
+  // The renderer's heap snapshot, each chunk handed to `chunk` as it comes:
+  // settled once it is whole.
+  readonly heapSnapshot: (chunk: (text: string) => void) => Promise<void>;
   readonly heard: (line: RendererLine) => void;
   readonly ended: (why: Error) => void;
 }
@@ -213,6 +218,8 @@ export function rendererOverLines(deps: {
       readonly what: string;
       readonly settle: (line: RendererLine) => boolean;
       readonly fail: (why: Error) => void;
+      // A piece of what was asked, which settles nothing.
+      readonly chunk?: (text: string) => void;
     }
   >();
   let next = 0;
@@ -226,6 +233,7 @@ export function rendererOverLines(deps: {
       resolve: (value: T) => void,
       reject: (why: Error) => void,
     ) => boolean,
+    chunk?: (text: string) => void,
   ): Promise<T> =>
     new Promise<T>((resolve, reject) => {
       if (gone !== null) {
@@ -237,6 +245,7 @@ export function rendererOverLines(deps: {
         what,
         settle: (heard) => settle(heard, resolve, reject),
         fail: reject,
+        ...(chunk !== undefined && { chunk }),
       });
       send(line(n));
     });
@@ -284,6 +293,15 @@ export function rendererOverLines(deps: {
           );
         }
         return;
+      case "heap-chunk": {
+        const waiting = owed.get(line.n);
+        if (waiting?.chunk === undefined) {
+          deps.fault(`renderer sent a heap chunk for ${line.n}, owed none`);
+          return;
+        }
+        waiting.chunk(line.text);
+        return;
+      }
       case "output":
       case "rejected":
       case "ping":
@@ -322,16 +340,17 @@ export function rendererOverLines(deps: {
           return true;
         },
       ),
-    heapSnapshot: (file) =>
+    heapSnapshot: (chunk) =>
       owe<void>(
         "a heap snapshot",
-        (n) => ({ kind: "heap-snapshot", n, file }),
+        (n) => ({ kind: "heap-snapshot", n }),
         (heard, resolve, reject) => {
           if (heard.kind !== "heap-snapshot") return false;
           if (heard.written.kind === "ok") resolve();
           else reject(new CrossedFailure(heard.written.failure));
           return true;
         },
+        chunk,
       ),
     heard,
     ended: (why) => {
@@ -370,7 +389,8 @@ export function serveRenderer(deps: {
   readonly renderer: TimedRenderer;
   readonly send: (line: RendererLine) => void;
   readonly memory: () => MemorySizes;
-  readonly heapSnapshot: (file: string) => void;
+  // The process's heap snapshot, each chunk handed to `chunk` in order.
+  readonly heapSnapshot: (chunk: (text: string) => void) => Promise<void>;
 }): (line: HostLine) => void {
   const { renderer, send } = deps;
   return (line) => {
@@ -392,17 +412,20 @@ export function serveRenderer(deps: {
         send({ kind: "ping", n: line.n, usage: deps.memory() });
         return;
       case "heap-snapshot": {
-        let written: Extract<
-          RendererLine,
-          { kind: "heap-snapshot" }
-        >["written"];
-        try {
-          deps.heapSnapshot(line.file);
-          written = { kind: "ok" };
-        } catch (thrown) {
-          written = { kind: "failed", failure: failureOf(thrown) };
-        }
-        send({ kind: "heap-snapshot", n: line.n, written });
+        const { n } = line;
+        // [LAW:no-silent-failure] A snapshot that failed part way says so:
+        // the host keeps no file of the chunks before it.
+        void deps
+          .heapSnapshot((text) => send({ kind: "heap-chunk", n, text }))
+          .then(
+            () => send({ kind: "heap-snapshot", n, written: { kind: "ok" } }),
+            (thrown: unknown) =>
+              send({
+                kind: "heap-snapshot",
+                n,
+                written: { kind: "failed", failure: failureOf(thrown) },
+              }),
+          );
         return;
       }
       case "boot":

@@ -9,6 +9,7 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import { MAIN_RENDERER } from "../src/renderer-interface/renderer-name";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import {
   sessionIdOf,
@@ -21,6 +22,7 @@ import path from "node:path";
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
+  AnsweredEffect,
   Effect,
   Present,
   Event,
@@ -39,7 +41,11 @@ import {
 import { renderFailedFrame } from "../src/render/frame";
 import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
-import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
+import {
+  contextOf,
+  type CheckedRenderRequest,
+  type SessionContext,
+} from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
 import type { Instant, Tick } from "../src/utils/instant";
 import {
@@ -61,13 +67,13 @@ import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { HeldEvent } from "../src/utils/event-hold";
 import {
+  firstStart,
   hearingEvents,
   hostHeld,
   NO_ACTS,
   NO_PUSHES,
   unfollowedCollector,
 } from "./helpers/renderers";
-import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
 let cleanups: Array<() => void>;
@@ -237,7 +243,7 @@ function viewOf(rig: SessionRig) {
   return held.view;
 }
 
-const done = (r: Renderer, { session, id: of }: Effect, ok: boolean) =>
+const done = (r: Renderer, { session, id: of }: AnsweredEffect, ok: boolean) =>
   r.answer({
     kind: "event",
     ...READ,
@@ -297,14 +303,12 @@ describe("a statusline request", () => {
     const output = await r.answer({
       kind: "event",
       ...READ,
-      event: {
-        kind: "start",
-        viewers: {},
+      event: firstStart({
         sessions: [mine, theirs].map((context) => ({
           context,
           worldState: rig.served.collector.requested(context),
         })),
-      },
+      }),
     });
     expect(output.kind).toBe("answered");
     // Both wait for the one origin they share.
@@ -698,7 +702,7 @@ describe("the session's config, ahead of its request", () => {
     }) as never;
     const kinds: string[] = [];
     const host = rendererHost(
-      "main",
+      MAIN_RENDERER,
       systemTimekeeper,
       hostHeld(hearingEvents(t.r, (input) => kinds.push(input.event.kind))),
       () => {},
@@ -746,17 +750,15 @@ describe("the session's config, ahead of its request", () => {
     );
   });
 
-  test("one whose opening throws has still recorded the config inputs it named, so a durable click resolves the chain it was for", async () => {
+  test("one whose opening throws still names its origin's config, which the session holds until its retire", async () => {
     const t = renderer();
     t.rig.cache.holdSession = (() => {
       throw new Error("the opening broke");
     }) as never;
-    expect(threw(await configure(t, checked())).failure.message).toBe(
-      "the opening broke",
-    );
-    expect(
-      t.rig.sessionState.get(SESSION, SESSION_RENDER_ORIGIN_KEY),
-    ).toContain(path.join(dir, "config.json5"));
+    const context = checked();
+    const thrown = threw(await configure(t, context));
+    expect(thrown.failure.message).toBe("the opening broke");
+    expect(thrown.subscriptions.configs).toEqual([context.requested]);
   });
 });
 
@@ -831,7 +833,7 @@ describe("two requests of one session at different keys", () => {
     t.rig.providers.tmuxService.declare = tmux.declare as never;
     const requests: WorldState[] = [];
     const host = rendererHost(
-      "main",
+      MAIN_RENDERER,
       systemTimekeeper,
       hostHeld(
         hearingEvents(t.r, (input) => {
@@ -891,7 +893,7 @@ describe("a click", () => {
   // A click on the rig's session's link, delivered by the CLI.
   const click = (
     verb: string,
-    latest: CheckedRenderRequest | null = null,
+    latest: SessionContext | null = null,
   ): Event => ({
     kind: "click",
     verb,
@@ -945,7 +947,7 @@ describe("a click", () => {
   });
 
   test("hands its act the host's newest request of its session, though the session has retired", async () => {
-    let seen: CheckedRenderRequest | null | undefined;
+    let seen: SessionContext | null | undefined;
     const t = renderer({
       ...NO_VERBS,
       handler: (verb) =>
@@ -960,7 +962,7 @@ describe("a click", () => {
     });
     await request(t);
     await handIn(t.r, { kind: "retire", session: SESSION });
-    const latest = checked("%3");
+    const latest = contextOf(checked("%3"));
     // The entry its request loaded still names the origin, so the click's
     // config is held and it runs in its own turn.
     answered(await handIn(t.r, click("act", latest)));

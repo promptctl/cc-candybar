@@ -1,9 +1,12 @@
 // The session context a render request carries once it crossed the host's
 // checkpoint: the vocabulary both sides of the renderer interface read
-// (src/renderer-interface/interface.ts). It imports only types, so neither side runs the
-// other's code through it.
+// (src/renderer-interface/interface.ts).
 
-import type { RequestedOrigin } from "../config-hint";
+import type { RenderOrigin } from "../config-hint";
+import {
+  answeredOf,
+  type Answered,
+} from "../daemon/foundations/sighting-roles";
 import type {
   ClientHints,
   ReaderRenderRequest,
@@ -42,10 +45,39 @@ export type CheckedRenderRequest = Omit<
   readonly encoding: RenderEncoding;
   readonly hints: ClientHints;
   readonly rateLimits: RateLimitsSeen;
-  readonly requested: RequestedOrigin;
+  readonly requested: RenderOrigin;
   readonly refusedArgs: readonly RefusedArg[];
   readonly [CHECKED]: true;
 };
+
+// [LAW:one-source-of-truth] What a click and a lane setup read of a session:
+// the config inputs, client facts, conversation and answered mark of its
+// newest request the host holds,
+// which the host keeps across its own restarts so a click before the
+// session's next request still acts. The client is left out: which client
+// drew a session is the host's sighting, and two clients drawing one session
+// would otherwise move it on every request.
+export interface SessionContext {
+  readonly session: SessionId;
+  readonly requested: RenderOrigin;
+  readonly hints: SessionHints;
+  // The conversation, as Claude Code names it in the statusline JSON.
+  readonly transcript: string;
+  readonly answered: Answered;
+}
+
+export type SessionHints = Omit<ClientHints, "client">;
+
+export function contextOf(req: CheckedRenderRequest): SessionContext {
+  const { client: _client, ...hints } = req.hints;
+  return {
+    session: req.hookData.session_id,
+    requested: req.requested,
+    hints,
+    transcript: req.hookData.transcript_path,
+    answered: answeredOf(req.hookData),
+  };
+}
 
 // What a session's declaration reads of its newest request: the keys every
 // keyed lane is read at, the session among them.

@@ -11,6 +11,7 @@ import { NavigationHistory } from "../../src/renderer/navigation-history";
 import { DoctorRuns } from "../../src/renderer/doctor";
 import type { ConfigLoad, DoctorStores } from "../../src/doctor/ports";
 import { clickOf } from "../../src/click/read";
+import { clickSessionOf } from "../../src/click/wire";
 import { changeDone, VERBS } from "../../src/renderer/verbs";
 import {
   ConfigWrites,
@@ -30,6 +31,7 @@ import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { RenderOrigin } from "../../src/config-hint";
 import type {
   Act,
+  AnsweredEffect,
   ConfigChange,
   Effect,
   EffectId,
@@ -40,8 +42,11 @@ import { Acts, outlives, type ActDeps } from "../../src/daemon/acts";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { LaneEdge, LaneHost } from "../../src/daemon/lane-setup";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
-import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
-import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
+import path from "node:path";
+import type {
+  SessionContext,
+  SessionHints,
+} from "../../src/renderer-interface/request-context";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -61,23 +66,77 @@ const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
 ) as LaneSwitches;
 
-// The record a session's render leaves behind, which a click resolves its
-// config from: a session only clicks links its own render drew.
+// The context a session's render in `dir` leaves the host holding, which a
+// click of that session is handed.
+export const renderedContext = (
+  sessionId: SessionId,
+  dir = "/tmp/proj",
+  hints: SessionHints = {},
+): SessionContext => ({
+  session: sessionId,
+  requested: { projectDir: dir, cwd: dir, target: { source: "search" } },
+  hints,
+  transcript: path.join(dir, "transcript.jsonl"),
+  answered: "unknown",
+});
+
+// What each rig's host holds: each session's context as its render left it,
+// which a click of that session is handed (`clickUrl`). A session only clicks
+// links its own render drew. A handler a test calls directly is handed the
+// context of the session that rendered last.
+const rendered = new WeakMap<SessionStateRW, Map<SessionId, SessionContext>>();
+
+const bookOf = (
+  sessionState: SessionStateRW,
+): Map<SessionId, SessionContext> => {
+  const book = rendered.get(sessionState) ?? new Map();
+  rendered.set(sessionState, book);
+  return book;
+};
+
 export function recordRender(
   sessionState: SessionStateRW,
   sessionId: SessionId,
   dir = "/tmp/proj",
+  hints: SessionHints = {},
 ): void {
-  sessionState.set(
-    sessionId,
-    SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({
-      projectDir: dir,
-      cwd: dir,
-      target: { source: "search" },
-    }),
-  );
+  recordRenderOf(sessionState, renderedContext(sessionId, dir, hints));
 }
+
+export function recordRenderOf(
+  sessionState: SessionStateRW,
+  context: SessionContext,
+): void {
+  const book = bookOf(sessionState);
+  // Insertion order is recency.
+  book.delete(context.session);
+  book.set(context.session, context);
+}
+
+// The client facts the last-rendered session's render reports.
+export function recordHints(
+  sessionState: SessionStateRW,
+  hints: SessionHints,
+): void {
+  const held = lastRendered(sessionState);
+  if (held === null) throw new Error("no render held to report hints");
+  recordRenderOf(sessionState, { ...held, hints });
+}
+
+// The context the rig's host holds of `sessionId`, as its book answers a
+// click of that session.
+export const heldContext = (
+  sessionState: SessionStateRW,
+  sessionId: SessionId,
+): SessionContext | null => bookOf(sessionState).get(sessionId) ?? null;
+
+export const hasRendered = (
+  sessionState: SessionStateRW,
+  sessionId: SessionId,
+): boolean => heldContext(sessionState, sessionId) !== null;
+
+const lastRendered = (sessionState: SessionStateRW): SessionContext | null =>
+  [...bookOf(sessionState).values()].at(-1) ?? null;
 
 // [LAW:locality-or-seam] The host's config discovery for a rig with no render
 // cache and no watch: each origin discovered as the disk stands when it is
@@ -157,7 +216,9 @@ class LandingAtOnce extends ConfigWrites {
       this.places,
     );
     if (outcome.kind === "ok") this.landed();
-    for (const { id } of landing)
+    for (const { id } of landing.filter(
+      (e): e is AnsweredEffect => e.kind !== "store",
+    ))
       changeDone(this.context!, id, outcome, effects);
   }
 }
@@ -193,7 +254,12 @@ export function verbContextWith(
   base: VerbContext,
   over: Partial<VerbContext>,
 ): VerbContext {
-  return (base.configWrites as LandingAtOnce).of({ ...base, ...over });
+  const ctx = { ...base, ...over };
+  // The host's book stays live: a session that renders after this is built
+  // is the one its next click is handed.
+  if (!("latest" in over))
+    Object.defineProperty(ctx, "latest", { get: () => base.latest });
+  return (base.configWrites as LandingAtOnce).of(ctx);
 }
 
 // A store a test with no doctor never reaches.
@@ -273,7 +339,9 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
-    latest: null,
+    get latest() {
+      return lastRendered(sessionState);
+    },
     clickLanded: () => {},
     log: () => {},
     now: () => instantOf(new Date()),
@@ -308,7 +376,7 @@ export function testVerbContext(
     // click set up hands in its own `clicked`. A session here rendered in a
     // tmux pane, so the tmux status line is its to switch.
     lanes: {
-      of: (_origin, sid) =>
+      of: ({ session: sid }) =>
         config === undefined
           ? NO_LANES
           : laneSwitches(
@@ -336,7 +404,14 @@ export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   const { verb, value } = linkClick(url);
   const handler = VERBS.get(verb);
   if (!handler) throw new Error(`no handler for verb "${verb}"`);
-  await handler(value, ctx);
+  // As the host hands a click its session's context.
+  const session = clickSessionOf(verb, value);
+  await handler(
+    value,
+    verbContextWith(ctx, {
+      latest: session?.ok ? heldContext(ctx.sessionState, session.id) : null,
+    }),
+  );
 }
 
 // The host's act performer over `deps`; a part the test does not hand in
@@ -383,6 +458,7 @@ export function actingWorld(
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
     unheard,
+    store: () => {},
   };
 }
 

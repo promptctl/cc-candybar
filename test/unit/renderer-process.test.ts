@@ -3,7 +3,7 @@
 // what waits for a start, how an end is said and backed off from, when a
 // silent renderer is ended, and whose ids cross.
 
-import type { Asked } from "../../src/utils/outcome";
+import { MAIN_RENDERER } from "../../src/renderer-interface/renderer-name";
 import {
   BACKOFF_FIRST_MS,
   BACKOFF_MAX_MS,
@@ -26,11 +26,13 @@ import type { StorageHoldId } from "../../src/renderer-interface/adapter";
 import type {
   AdapterInput,
   AdapterOutput,
+  AnsweredEffect,
   EffectId,
   RendererOutput,
   Timed,
 } from "../../src/renderer-interface/interface";
 import type { HeldEvent } from "../../src/utils/event-hold";
+import type { Asked } from "../../src/utils/outcome";
 import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import {
@@ -62,14 +64,15 @@ const CRASHED: Failed = {
 
 const SESSION = "s1" as SessionId;
 
-function rig(start: () => Promise<void> = async () => {}) {
+function rig(
+  start: (cause: "first" | "crashed") => Promise<void> = async () => {},
+) {
   const clock: HeldClock = heldClock(new Date("2026-11-15T00:00:00Z"));
   const children: Child[] = [];
   const logs: string[] = [];
   const levels: string[] = [];
   const ends: HeldEvent[] = [];
   const held: Array<["hold" | "release", StorageHoldId]> = [];
-  // The key as the host reads it now: what each boot carries.
   const key = { read: { kind: "ok", value: "a2V5" } as Asked<string> };
   const launcher = {
     launchChannel: (opts: ChannelOpts): Channel => {
@@ -101,6 +104,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     },
   };
   const link = processRenderer({
+    name: MAIN_RENDERER,
     reaches: {
       ...inertHost(),
       storage: {
@@ -130,6 +134,12 @@ function rig(start: () => Promise<void> = async () => {}) {
       host: { env: {}, home: "/home", tmp: "/tmp" },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
+      locations: {
+        home: "/home",
+        userConfig: "/home/.config/cc-candybar/config",
+        dataHome: "/home/.local/share",
+        dataDirs: [],
+      },
       linkKey: key.read,
     }),
   });
@@ -169,7 +179,7 @@ const PINNED: Timed<AdapterOutput> = {
 };
 
 describe("a renderer process's start", () => {
-  test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the host's digest", () => {
+  test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the host's digest and link key", () => {
     const { link, children } = rig();
     link.arm();
     const [child] = children;
@@ -193,6 +203,12 @@ describe("a renderer process's start", () => {
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
           linkKey: { kind: "ok", value: "a2V5" },
+          locations: {
+            home: "/home",
+            userConfig: "/home/.config/cc-candybar/config",
+            dataHome: "/home/.local/share",
+            dataDirs: [],
+          },
         },
       },
     ]);
@@ -248,6 +264,46 @@ describe("a renderer process's start", () => {
       expect.stringMatching(
         /^renderer main\[1\] refused its boot: .*the session state cannot be read; it restarts/,
       ),
+    ]);
+  });
+
+  test("a start that fails is said, and its renderer serves on", async () => {
+    const { link, children, ends, logs } = rig(async () => {
+      throw new Error("a stored entry would not restore");
+    });
+    link.arm();
+    children[0]!.say({ kind: "started", pid: 9001 });
+    await settled();
+    expect(children[0]!.opts.signal?.aborted).toBe(false);
+    expect(ends).toEqual([]);
+    expect(logs).toContainEqual(
+      expect.stringMatching(
+        /^renderer main\[1\] start failed: .*a stored entry would not restore/,
+      ),
+    );
+    void link.renderer.answer(pin);
+    await settled();
+    expect(children[0]!.written.filter((l) => l.kind === "input")).toHaveLength(1);
+  });
+
+  // Removing a broken key file, its error's own remedy, recovers at the next
+  // start with no restart of the host.
+  test("each start boots with the key as the host reads it then", async () => {
+    const { link, children, clock, key } = rig();
+    key.read = { kind: "failed", reason: "link key holds 3 bytes" };
+    link.arm();
+    children[0]!.exit(CRASHED);
+    await settled();
+    key.read = { kind: "ok", value: "bmV3" };
+    clock.advance(backoffMs(1));
+    const boots = children.map(
+      (child) => child.written.find((l) => l.kind === "boot")!,
+    );
+    expect(
+      boots.map((l) => (l.kind === "boot" ? l.boot.linkKey : null)),
+    ).toEqual([
+      { kind: "failed", reason: "link key holds 3 bytes" },
+      { kind: "ok", value: "bmV3" },
     ]);
   });
 
@@ -321,25 +377,20 @@ describe("a renderer process's end", () => {
     ]);
   });
 
-  // Removing a broken key file, its error's own remedy, recovers at the next
-  // start with no restart of the host.
-  test("each start boots with the key as the host reads it then", async () => {
-    const { link, children, clock, key } = rig();
-    key.read = { kind: "failed", reason: "link key holds 3 bytes" };
+  // The start's cause rides its event, so the renderer says in the log
+  // whether it starts fresh or after a crash.
+  test("each start is told why it starts: the first, then each after a crash", async () => {
+    const causes: string[] = [];
+    const { link, children, clock } = rig(async (cause) => {
+      causes.push(cause);
+    });
     link.arm();
     children[0]!.exit(CRASHED);
     await settled();
-    key.read = { kind: "ok", value: "bmV3" };
     clock.advance(backoffMs(1));
-    const boots = children.map(
-      (child) => child.written.find((l) => l.kind === "boot")!,
-    );
-    expect(
-      boots.map((l) => (l.kind === "boot" ? l.boot.linkKey : null)),
-    ).toEqual([
-      { kind: "failed", reason: "link key holds 3 bytes" },
-      { kind: "ok", value: "bmV3" },
-    ]);
+    await settled();
+    expect(children).toHaveLength(2);
+    expect(causes).toEqual(["first", "crashed"]);
   });
 
   test("a renderer that lived past young restarts at once", async () => {
@@ -522,7 +573,7 @@ describe("ids a renderer mints", () => {
     const answered = await output;
     expect(answered).toMatchObject({ kind: "answered" });
     if (answered.kind !== "answered") throw new Error("the turn threw");
-    const hostId = answered.effects[0]!.id;
+    const hostId = (answered.effects[0] as AnsweredEffect).id;
     expect(hostId).not.toBe(7);
     void link.renderer.answer({
       kind: "event",
@@ -571,7 +622,7 @@ describe("ids a renderer mints", () => {
     });
     const answered = await output;
     if (answered.kind !== "answered") throw new Error("the turn threw");
-    const hostId = answered.effects[0]!.id;
+    const hostId = (answered.effects[0] as AnsweredEffect).id;
     first.exit(CRASHED);
     await settled();
     clock.advance(BACKOFF_FIRST_MS);

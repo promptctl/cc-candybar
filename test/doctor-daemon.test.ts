@@ -18,10 +18,9 @@ import {
   parseServingDaemon,
 } from "../src/doctor/daemon-answer";
 import { daemonFields } from "../src/doctor/report";
-import {
-  filePostMortemsRead,
-  parsePostMortemsRead,
-} from "../src/doctor/post-mortems-read";
+import { parsePostMortemsRead } from "../src/doctor/post-mortems-read";
+import { storedDocument } from "../src/renderer/stored-owners";
+import { DOCUMENT_KEY } from "../src/renderer-interface/stored";
 import { RuntimeStats } from "../src/daemon/stats";
 import { postMortemsOf } from "../src/daemon/limits";
 import { type ServingDaemon } from "../src/daemon/foundations/memory-limit";
@@ -655,15 +654,15 @@ describe("the post-mortems-read record", () => {
     });
   });
 
-  test("every value the store can file reads back, none filed included", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
-    try {
-      const store = filePostMortemsRead(dir);
-      store.update(() => ({ through: null }));
-      expect(store.read()).toEqual({ kind: "ok", value: { through: null } });
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+  test("every value the store can file reads back as the host hands it in, none filed included", () => {
+    const store = postMortemsStore();
+    store.update(() => ({ through: null }));
+    const next = postMortemsStore();
+    next.restore({
+      kind: "read",
+      entries: { [DOCUMENT_KEY]: store.value(DOCUMENT_KEY)! },
+    });
+    expect(next.read()).toEqual({ kind: "ok", value: { through: null } });
   });
 
   test("the fix files only forward: a newer breach another run filed stays filed", () => {
@@ -685,22 +684,28 @@ describe("the post-mortems-read record", () => {
   });
 
   test("a record that stopped reading before the fix refuses it, and nothing is filed", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pm-read-"));
-    try {
-      const file = path.join(dir, "doctor-post-mortems-read.json");
-      fs.writeFileSync(file, "junk");
-      const stores = {
-        ...emptyStores(),
-        postMortemsRead: filePostMortemsRead(dir),
-      };
-      const fix = { kind: "post-mortems-read", through: NEWER } as const;
-      expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({
-        kind: "failed",
-        reason: expect.stringContaining(`${file} is not JSON`),
-      });
-      expect(fs.readFileSync(file, "utf8")).toBe("junk");
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
+    const postMortemsRead = postMortemsStore();
+    postMortemsRead.restore({
+      kind: "unreadable",
+      reason: "doctor-post-mortems-read.json is not JSON",
+    });
+    const stores = { ...emptyStores(), postMortemsRead };
+    const fix = { kind: "post-mortems-read", through: NEWER } as const;
+    expect(applyFix(stores, fix, HEALTHY_FACTS)).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining(
+        "doctor-post-mortems-read.json is not JSON",
+      ),
+    });
+    expect(postMortemsRead.versions()).toEqual(new Map());
   });
 });
+
+// The post-mortems-read document as the renderer keeps it.
+function postMortemsStore() {
+  return storedDocument(
+    "doctor-post-mortems-read",
+    { through: null },
+    parsePostMortemsRead,
+  );
+}

@@ -4,7 +4,8 @@
 // the test hands in its own. A test that builds its daemon parts by hand spreads
 // these in.
 
-import { holdable, hostHeld, NO_PUSHES } from "./renderers";
+import { MAIN_RENDERER } from "../../src/renderer-interface/renderer-name";
+import { firstStart, holdable, hostHeld, NO_PUSHES } from "./renderers";
 import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
@@ -42,6 +43,7 @@ export function clickParts(
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
     unheard: () => {},
+    store: () => {},
   },
 ): Pick<DaemonParts, "renderer" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
@@ -81,7 +83,7 @@ export function clickParts(
     // The renderer says what it does on the log its verbs write to.
     log: verbCtx.log,
     // No view is open, so no lane is read.
-    laneActs: { noted: () => {}, clicked: () => {} },
+    laneActs: { clicked: () => {} },
     // The readings each input carries, and the idle periods a `due` closes.
     time,
     menuIdle,
@@ -91,6 +93,9 @@ export function clickParts(
     acts: verbCtx.acts as ActsOnTheirWay,
     // The doctor runs the test's clicks start, whose asks the turn names.
     doctorRuns: verbCtx.doctorRuns,
+    // The rig keeps nothing, and its start hands in nothing to keep.
+    stored: { drain: () => {} },
+    started: () => {},
   } as unknown as MainRendererParts;
   // The teardown's journal step, answered as the main renderer answers it, in
   // its place in the mailbox: no other push is a click's.
@@ -102,7 +107,7 @@ export function clickParts(
     }),
   );
   const renderer = rendererHost(
-    "main",
+    MAIN_RENDERER,
     systemTimekeeper,
     hostHeld(held.renderer),
     () => {},
@@ -124,7 +129,7 @@ export function clickParts(
       const holding = renderer.deliver(
         () => ({
           kind: "event",
-          event: { kind: "start", viewers: {}, sessions: [] },
+          event: firstStart(),
         }),
         [],
       );

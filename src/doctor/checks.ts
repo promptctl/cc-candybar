@@ -401,9 +401,12 @@ export interface DaemonProcess {
 }
 
 // The newest post-mortem the user has filed as read: `null` while none is.
-export interface PostMortemsRead {
+// A JSON document the renderer stores: a type, not an interface, so it is a
+// JsonValue, which an interface's missing index signature is not.
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+export type PostMortemsRead = {
   readonly through: string | null;
-}
+};
 
 // The daemon row's facts (brandon-doctor-v62x.5mq): the daemon that serves
 // this bar, as it reports itself (src/daemon/limits.ts `serving`); every
@@ -780,7 +783,6 @@ const NAMED_BY: Readonly<
 > = {
   argument: "command argument",
   environment: `$${CONFIG_ENV}`,
-  unknown: "source unknown",
 };
 
 // [LAW:no-silent-failure] Which config a verdict is about. A named file reads

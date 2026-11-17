@@ -35,16 +35,15 @@ import type { DaemonLogger } from "../utils/logger";
 import { recordingView } from "./session-state";
 import { type SessionStateRW } from "../renderer-interface/session-state";
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
+import { digestOf } from "../utils/plain";
 import { type SessionId } from "../daemon/foundations/session-id";
 import {
-  type HistoryStorage,
-  type LoadedHistory,
   type Change,
   type Step,
   type SessionHistory,
   type Savepoint,
   isSettingKey,
-} from "../renderer-interface/history-storage";
+} from "./history-steps";
 import {
   addressText,
   applyChanges,
@@ -67,11 +66,6 @@ export const EMPTY_HISTORY_DEPTH: HistoryDepth = {
   sinceEdit: 0,
 };
 
-export const EPHEMERAL_HISTORY_STORAGE: HistoryStorage = {
-  load: () => new Map(),
-  save: () => {},
-};
-
 // [LAW:carrying-cost] A file change holds two whole-file snapshots, so what a
 // history costs is its bytes, held in memory and rewritten on every step. It
 // is bounded three ways: steps per session, sessions, and total snapshot text.
@@ -88,7 +82,13 @@ const EMPTY: SessionHistory = { past: [], future: [] };
 // [LAW:single-enforcer] `prove` is the gate every click's write passes: the
 // text loads as the file it is written to, between the files as `read` gives
 // them, or the click is refused.
-export type ConfigFiles = Pick<ConfigWrites, "land" | "read"> & {
+// `roleOf` and `pathOf` translate between a file of the click's chain and its
+// role there: a step keeps the role, and is taken at the file the chain holds
+// for it then.
+export type ConfigFiles = Pick<
+  ConfigWrites,
+  "land" | "read" | "roleOf" | "pathOf"
+> & {
   readonly prove: (
     file: string,
     text: string | null,
@@ -125,8 +125,10 @@ export interface Journal {
 // twice records one change from its first `before` to its last `after`.
 type Pending = Map<SessionId, Map<string, Change>>;
 
+// A layer's target is its role and the file the role named, so a step taken
+// at one file is never confused with one taken at another.
 const identity = (c: Change): string =>
-  c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
+  c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.file}`;
 
 export class SettingsHistory {
   // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
@@ -145,14 +147,22 @@ export class SettingsHistory {
     runInAction(() => this.held.replace(next));
   }
 
-  // `loaded` is what the storage held, read before the renderer starts.
   constructor(
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
-    private readonly storage: HistoryStorage = EPHEMERAL_HISTORY_STORAGE,
-    loaded: LoadedHistory = storage.load(),
-  ) {
+  ) {}
+
+  // A start's histories, oldest first, in place of whatever was held.
+  restore(loaded: ReadonlyMap<SessionId, SessionHistory>): void {
     this.state = new Map(loaded);
+  }
+
+  // [LAW:one-source-of-truth] Each history is immutable, so the value is its
+  // own version: the stored state's token for its entry
+  // (src/renderer/stored-registry.ts). The map is replaced, never changed in
+  // place, so it is handed out as it is.
+  versions(): ReadonlyMap<SessionId, SessionHistory> {
+    return this.state;
   }
 
   depth(sessionId: SessionId): HistoryDepth {
@@ -246,7 +256,13 @@ export class SettingsHistory {
     return {
       sessionState,
       file: (sessionId, file, before, after) => {
-        note(sessionId, { kind: "file", file, before, after });
+        note(sessionId, {
+          kind: "layer",
+          role: files.roleOf(file),
+          file: digestOf(file),
+          before,
+          after,
+        });
         files.land(file, before, after);
       },
       wrote: () => {
@@ -403,8 +419,7 @@ export class SettingsHistory {
   }
 
   // Move-to-end keeps insertion order as recency, so the bounds drop the
-  // session that changed least recently. The new state is adopted only once
-  // it is saved, so memory never holds a step the file could not.
+  // session that changed least recently.
   private put(sessionId: SessionId, history: SessionHistory): void {
     const next = new Map(this.state);
     next.delete(sessionId);
@@ -430,7 +445,6 @@ export class SettingsHistory {
         next.delete(oldest);
       }
     }
-    this.storage.save(Object.fromEntries(next));
     this.state = next;
   }
 }
@@ -601,7 +615,7 @@ export function describeStep(step: Step): string {
 function describe(change: Change): string {
   return change.kind === "session"
     ? `session setting "${change.key}"`
-    : change.file;
+    : `the ${change.role} layer`;
 }
 
 // ─── A click ─────────────────────────────────────────────────────────────────
@@ -647,16 +661,26 @@ function stepOf(
           target: identity(change),
           what: `session setting "${change.key}"`,
         };
+  const file = click.files.pathOf(change.role);
+  // [LAW:single-enforcer] A step lands only in the file it was written to:
+  // its role naming another file now (the session moved to another project)
+  // is a target that moved, refused as a setting that moved is.
+  if (digestOf(file) !== change.file)
+    return {
+      kind: "moved",
+      target: identity(change),
+      what: `the ${change.role} layer, now ${file}, not the file this step wrote`,
+    };
   const applied = applyChanges(
-    click.files.read(change.file),
+    click.files.read(file),
     diffChanges(change[from], change[to]),
   );
   return applied.kind === "applied"
-    ? { kind: "file", file: change.file, text: applied.text }
+    ? { kind: "file", file, text: applied.text }
     : {
         kind: "moved",
         target: identity(change),
-        what: `${addressText(applied.at)} in ${change.file}`,
+        what: `${addressText(applied.at)} in ${file}`,
       };
 }
 

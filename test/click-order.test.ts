@@ -15,7 +15,6 @@ import {
   type VerbContext,
   type VerbHandler,
 } from "../src/renderer/verbs";
-import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   VERB_DISPATCH,
   VERB_DOCTOR_RUN,
@@ -32,6 +31,7 @@ import { tickAt, type Tick } from "../src/utils/instant";
 import { fieldOf, fieldsOf } from "../src/utils/logfmt";
 import { emptyStores } from "./helpers/doctor-facts";
 import {
+  heldContext,
   recordRender,
   testVerbContext,
   verbContextWith,
@@ -42,7 +42,10 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper } from "../src/time";
-import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 import { undoOf } from "./helpers/history-step";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -77,7 +80,6 @@ function setup(
   const sessionState = new SessionState();
   const logged: string[] = [];
   recordRender(sessionState, A);
-  sessionState.set(A, SESSION_CLIENT_HINTS_KEY, "{}");
   const ctx = withDoctor(
     verbContextWith(testVerbContext(sessionState, undefined, EMPTY_DEFAULT), {
       log: (_level, line) => logged.push(line),
@@ -90,7 +92,9 @@ function setup(
   const parts = {
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
     payloadProviders: {},
-    frameFeeds: { latest: () => null },
+    sessionRequests: {
+      of: (sid: SessionId) => heldContext(sessionState, sid),
+    },
     log: (_level: string, line: string) => events.push(line),
     tmuxStatusLines: {
       linkAt: over.linkAt ?? (() => ({ kind: "link", url: "" })),
@@ -118,7 +122,10 @@ function setup(
     send(VERB_SET_STATE, encodeSegments([A, "theme", theme]), gone);
   // A wake of the renderer's: the idle closes due as its turn comes.
   const due = () =>
-    host.renderer.deliver(() => ({ kind: "event", event: { kind: "due" } }), []);
+    host.renderer.deliver(
+      () => ({ kind: "event", event: { kind: "due" } }),
+      [],
+    );
   return {
     sessionState,
     ctx,
@@ -157,7 +164,6 @@ describe("a doctor click", () => {
     try {
       const sessionState = new SessionState();
       fixture.seedOrigin(sessionState, A);
-      sessionState.set(A, SESSION_CLIENT_HINTS_KEY, "{}");
       const config = parseAndValidate(
         "<user>",
         `{ actions: { pal: { persist: 'palette', from: 'themes' } } }`,
@@ -200,8 +206,7 @@ describe("a doctor click", () => {
 
 describe("the mailbox's order", () => {
   test("two clicks sent together land in order, one undo step each", async () => {
-    const { ctx, sessionState, park, dispatch, theme, undoDepth } =
-      setup();
+    const { ctx, sessionState, park, dispatch, theme, undoDepth } = setup();
     const parked = park();
     const first = dispatch("nord", "plain");
     const second = dispatch("dracula", "powerline");
@@ -305,8 +310,15 @@ describe("the idle close decides as its turn comes", () => {
 // before it runs whole, and what arrived after it is refused.
 describe("close", () => {
   test("a due behind the close in the mailbox lands nothing", async () => {
-    const { closeJournal, sessionState, park, due, undoDepth, menuIdle, logged } =
-      setup();
+    const {
+      closeJournal,
+      sessionState,
+      park,
+      due,
+      undoDepth,
+      menuIdle,
+      logged,
+    } = setup();
     shownLongAgo(menuIdle);
     const before = sessionState.revision(A);
     const parked = park();
@@ -319,7 +331,9 @@ describe("close", () => {
     expect(await closing).toMatchObject({ kind: "answered" });
     expect(logged).toEqual([
       expect.stringMatching(
-        new RegExp(`^menu-idle: close failed \\(session=${A}\\): .*the daemon closed`),
+        new RegExp(
+          `^menu-idle: close failed \\(session=${A}\\): .*the daemon closed`,
+        ),
       ),
     ]);
     expect(sessionState.revision(A)).toBe(before);

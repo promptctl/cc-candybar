@@ -3,9 +3,10 @@
 // [LAW:one-source-of-truth] A mark answers for a sighting — a terminal, the
 // font it was read to draw with, and the glyphs shown (Sighting.id) — which is
 // a fact about the machine, not about the session that showed it. So the book
-// is one file under the daemon's state directory, read by the bar's doctor
-// and, in the daemon's answer, by `cc-candybar doctor` alike: a mark made in one session answers in the
-// next, and in the CLI, which has no session to make one in.
+// is one document of the renderer's stored state, read by the bar's doctor
+// and, in the daemon's answer, by `cc-candybar doctor` alike: a mark made in
+// one session answers in the next, and in the CLI, which has no session to
+// make one in.
 
 import {
   GLYPH_MARKS,
@@ -13,7 +14,6 @@ import {
   type GlyphMark,
   type MarkBook,
 } from "./checks.js";
-import { stateFile, type StateFile } from "./state-file.js";
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -53,6 +53,3 @@ export function withMark(
 ): MarkBook {
   return { ...book, [check]: { ...book[check], [sighting]: mark } };
 }
-
-export const fileMarkBook = (dir: string): StateFile<MarkBook> =>
-  stateFile(dir, "doctor-marks.json", {}, parseMarkBook);

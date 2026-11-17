@@ -3,6 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import type { Host } from "../host.js";
 import type { Locations } from "../config/loader/chain-places";
+// [LAW:locality-or-seam] Extensionless: the test teardown loads this file
+// without the loader that maps a `.js` import to its source.
+import {
+  MAIN_RENDERER,
+  type RendererName,
+} from "../renderer-interface/renderer-name";
 
 // XDG Base Directory split:
 //   - daemon runtime (pid, log, heap snapshots, spawn.lock) → $XDG_STATE_HOME/cc-candybar
@@ -152,16 +158,47 @@ export function leasePath(host: Host): string {
   return leasePathFor(socketPath(host));
 }
 
-export function sessionStatePath(host: Host): string {
-  return path.join(stateDir(host), "session-state.json");
+// [LAW:one-source-of-truth] Where a renderer's own files live, as a
+// function of its name alone: the directory its stores are kept in, and the
+// extension-less base of its user config. The main renderer's is the layout
+// an installed bar has always had, so it keeps its files; any other's is its
+// own directory under the state directory, so it writes nothing of main's.
+export interface Profile {
+  readonly state: string;
+  readonly userConfig: string;
 }
 
-// [LAW:one-source-of-truth] Each session's undo/redo history over every
-// settings change it made (src/renderer/settings-history.ts). Daemon-owned
-// runtime state, so it sits beside session-state.json — the config files its
-// steps snapshot are the user's, wherever discovery resolved them.
-export function settingsHistoryPath(host: Host): string {
-  return path.join(stateDir(host), "settings-history.json");
+export function profileOf(name: RendererName, host: Host): Profile {
+  if (name === MAIN_RENDERER)
+    return {
+      state: stateDir(host),
+      userConfig: path.join(configHome(host), "cc-candybar", "config"),
+    };
+  const root = path.join(stateDir(host), "renderers", name);
+  return {
+    state: path.join(root, "state"),
+    userConfig: path.join(root, "config", "config"),
+  };
+}
+
+// [LAW:single-enforcer] A profile's directories made, owner-only, and spelled
+// as the disk resolves them, once, as the daemon starts: every path under
+// them is then one spelling, so nothing reads the disk to compare two. A user
+// config the main profile names is the user's, whose directory is not made.
+export function canonicalProfile(profile: Profile, main: boolean): Profile {
+  const real = (dir: string): string => {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    return fs.realpathSync(dir);
+  };
+  const state = real(profile.state);
+  if (main) return { ...profile, state };
+  return {
+    state,
+    userConfig: path.join(
+      real(path.dirname(profile.userConfig)),
+      path.basename(profile.userConfig),
+    ),
+  };
 }
 
 // [LAW:one-source-of-truth] The fork-bomb breaker's daemon-population registry
@@ -233,10 +270,10 @@ export interface DaemonPaths {
   readonly state: string;
   readonly registry: string;
   readonly log: string;
-  readonly sessionState: string;
-  readonly settingsHistory: string;
   readonly watchProbe: string;
   readonly spawnBackoff: string;
+  // What the host keeps of each session's last request.
+  readonly sessionContexts: string;
 }
 
 export function daemonPaths(host: Host): DaemonPaths {
@@ -246,14 +283,24 @@ export function daemonPaths(host: Host): DaemonPaths {
     state: stateDir(host),
     registry: daemonRegistryDir(host),
     log: logPath(host),
-    sessionState: sessionStatePath(host),
-    settingsHistory: settingsHistoryPath(host),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host),
+    sessionContexts: path.join(stateDir(host), "session-contexts.json"),
   };
 }
 
+function configHome(host: Host): string {
+  return xdgEnv(host.env, "XDG_CONFIG_HOME") ?? path.join(host.home, ".config");
+}
+
+// Where the main renderer's config and installed plugins live: what a CLI
+// run judges, as the main renderer reads it.
 export function locations(host: Host): Locations {
+  return locationsFor(host, profileOf(MAIN_RENDERER, host));
+}
+
+// The machine's places, with the profile's user config.
+export function locationsFor(host: Host, profile: Profile): Locations {
   const { env } = host;
   // The XDG default, and on macOS Homebrew's share/ first: Apple-silicon
   // Homebrew lives outside `/usr/local` (`$HOMEBREW_PREFIX`, set by its
@@ -265,8 +312,7 @@ export function locations(host: Host): Locations {
       : xdgDefault;
   return {
     home: host.home,
-    configHome:
-      xdgEnv(env, "XDG_CONFIG_HOME") ?? path.join(host.home, ".config"),
+    userConfig: profile.userConfig,
     dataHome:
       xdgEnv(env, "XDG_DATA_HOME") ?? path.join(host.home, ".local", "share"),
     dataDirs: (xdgEnv(env, "XDG_DATA_DIRS") ?? defaultDataDirs)

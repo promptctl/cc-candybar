@@ -6,7 +6,8 @@
 //
 // Data and frames travel separately. A session's data arrives as ordinary
 // render requests, from the statusline client on Claude Code's own schedule:
-// `note` keeps the latest valid one. The host owns who watches: it hands the
+// the host's book of each session's newest request keeps the latest valid one
+// (src/daemon/session-requests.ts). The host owns who watches: it hands the
 // renderer every session's viewers, whole, and the renderer's feeds decide
 // when each frame is drawn (src/renderer/feeds.ts). Each frame drawn comes back
 // in a turn's output, and the host sends each subscriber what changed for it.
@@ -45,7 +46,18 @@ export interface Subscriber {
   readonly drawing: () => boolean;
 }
 
+// [LAW:one-source-of-truth] The host's one book of each session's newest
+// request, which the feeds read and never copy.
+export interface RequestBook<Req> {
+  // Whether `req` is its session's newest now: false for one a later
+  // request came before.
+  note(req: Req, order: number): boolean;
+  latest(sessionId: SessionId): Req | null;
+  newestWhere(match: (req: Req) => boolean): SessionId | null;
+}
+
 export interface FeedDeps<Req> {
+  readonly requests: RequestBook<Req>;
   // Whether the bar of the session `req` is from is on a screen now: a bar
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
@@ -57,18 +69,6 @@ export interface FeedDeps<Req> {
   // once it has ended.
   deliver(make: () => Viewers): Promise<{ readonly kind: string }>;
   log(level: Level, line: string): void;
-}
-
-// Sessions whose latest request is kept, least recently noted evicted first —
-// except a session someone is watching, whose subscribers it is shown to.
-const MAX_REQUESTS = 256;
-
-// A session's latest request and `order`: where it came in the order the
-// daemon received requests, which is what makes one request later than another
-// when their renders finish out of order.
-interface Noted<Req> {
-  readonly req: Req;
-  readonly order: number;
 }
 
 interface Watched {
@@ -87,11 +87,10 @@ interface Watched {
 type Delivery = "current" | "owed" | "closed";
 
 /**
- * [LAW:no-shared-mutable-globals] Every session's latest request and every
- * watched session's subscribers: one owner, the host.
+ * [LAW:no-shared-mutable-globals] Every watched session's subscribers: one
+ * owner, the host.
  */
 export class FrameFeeds<Req> {
-  private readonly requests = new Map<SessionId, Noted<Req>>();
   private readonly watched = new Map<SessionId, Watched>();
   // The lanes each session with a view switches on, as the renderer's last
   // output said: a subscriber is gated by its lane.
@@ -112,22 +111,11 @@ export class FrameFeeds<Req> {
   constructor(private readonly deps: FeedDeps<Req>) {}
 
   // A valid render request the daemon accepted `order`-th, among requests of
-  // every kind. The latest request a session sent is where the host finds the
-  // session: whether its pane is shown, and which session a lookup matches.
-  // One that arrived before it — a slow render finishing late — is not the
-  // session's latest.
+  // every kind, noted in the host's book. A request whose pane is another, on
+  // or off a screen, moves the rate its bar is drawn at.
   note(sessionId: SessionId, req: Req, order: number): void {
-    const held = this.requests.get(sessionId);
-    if (held !== undefined && held.order > order) return;
     const before = this.watched.has(sessionId) ? this.shown(sessionId) : null;
-    this.requests.delete(sessionId);
-    this.requests.set(sessionId, { req, order });
-    for (const oldest of this.requests.keys()) {
-      if (this.requests.size <= MAX_REQUESTS) break;
-      if (!this.watched.has(oldest)) this.requests.delete(oldest);
-    }
-    // A request whose pane is another, on or off a screen, moves the rate its
-    // bar is drawn at.
+    if (!this.deps.requests.note(req, order)) return;
     if (before !== null && before !== this.shown(sessionId)) this.announce();
   }
 
@@ -176,8 +164,8 @@ export class FrameFeeds<Req> {
   // The latest request of every session someone watches.
   watchedRequests(): Req[] {
     return [...this.watched.keys()].flatMap((sessionId) => {
-      const noted = this.requests.get(sessionId);
-      return noted === undefined ? [] : [noted.req];
+      const req = this.deps.requests.latest(sessionId);
+      return req === null ? [] : [req];
     });
   }
 
@@ -279,19 +267,10 @@ export class FrameFeeds<Req> {
   // The session of the newest request `match` accepts, among the latest
   // request of each session the daemon holds, or null when none does.
   newestWhere(match: (req: Req) => boolean): SessionId | null {
-    let newest: { sessionId: SessionId; order: number } | null = null;
-    for (const [sessionId, { req, order }] of this.requests)
-      if (match(req) && (newest === null || order > newest.order))
-        newest = { sessionId, order };
+    const newest = this.deps.requests.newestWhere(match);
     this.lookups++;
     if (newest !== null) this.found++;
-    return newest?.sessionId ?? null;
-  }
-
-  // The latest request the daemon holds of `sessionId`, or null when it
-  // holds none.
-  latest(sessionId: SessionId): Req | null {
-    return this.requests.get(sessionId)?.req ?? null;
+    return newest;
   }
 
   // The frames the renderer drew are its own count (`RendererStats`).
@@ -335,8 +314,8 @@ export class FrameFeeds<Req> {
   }
 
   private shown(sessionId: SessionId): boolean {
-    const noted = this.requests.get(sessionId);
-    return noted === undefined || this.deps.shown(noted.req);
+    const req = this.deps.requests.latest(sessionId);
+    return req === null || this.deps.shown(req);
   }
 
   // The last frame's answer for `sub`'s lane, unless it was sent that already.

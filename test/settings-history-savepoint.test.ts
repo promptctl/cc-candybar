@@ -10,7 +10,13 @@ import os from "node:os";
 import path from "node:path";
 import { SessionState } from "../src/renderer/session-state";
 import { SettingsHistory } from "../src/renderer/settings-history";
-import { fileHistoryStorage } from "../src/daemon/history-file";
+import { StoredRegistry } from "../src/renderer/stored-registry";
+import { historyOwner } from "../src/renderer/stored-owners";
+import { profileStore } from "../src/daemon/profile-store";
+import type { Effect } from "../src/renderer-interface/interface";
+import type { StoredStore } from "../src/renderer-interface/stored";
+import { emptyStoredState } from "../src/renderer-interface/stored";
+import { heldClock } from "./helpers/held-clock";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { readConfigText } from "../src/utils/atomic-write";
 import {
@@ -34,9 +40,9 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function rig(storage?: ConstructorParameters<typeof SettingsHistory>[2]) {
+function rig() {
   const sessionState = new SessionState();
-  const history = new SettingsHistory(sessionState, () => {}, storage);
+  const history = new SettingsHistory(sessionState, () => {});
   // One click that rewrites the config file: the file already holds `to` when
   // the journal is told, as a verb handler reports it.
   let n = 0;
@@ -310,101 +316,165 @@ describe("the savepoint under the history's bounds", () => {
   });
 });
 
+// The history as a restart hands it back: drained as `store` writes, kept by
+// the host's profile under `dir`, and restored through the history owner.
+function kept(history: SettingsHistory): void {
+  // A registry over a fresh profile, with the history as the case left it.
+  const held = new Map(history.versions());
+  const registry = new StoredRegistry([historyOwner(history, () => {})]);
+  registry.restore(emptyStoredState());
+  history.restore(held);
+  const effects: Effect[] = [];
+  registry.drain(effects);
+  const profile = profileStore(
+    dir,
+    heldClock(new Date()),
+    () => {},
+    () => {},
+  );
+  for (const effect of effects)
+    if (effect.kind === "store") profile.apply(effect);
+  profile.close();
+}
+
+function restarted(logs: string[] = []): SettingsHistory {
+  const history = new SettingsHistory(new SessionState(), () => {});
+  const profile = profileStore(
+    dir,
+    heldClock(new Date()),
+    () => {},
+    () => {},
+  );
+  profile.load();
+  new StoredRegistry([
+    historyOwner(history, (_level, m) => logs.push(m)),
+  ]).restore(profile.stored());
+  return history;
+}
+
+// A history restored from `entries` as a start hands them in, with what the
+// owner said and the writes the first turn's end owes the host.
+function restoredFrom(
+  entries: Extract<StoredStore, { kind: "read" }>["entries"],
+) {
+  const logs: string[] = [];
+  const history = new SettingsHistory(new SessionState(), () => {});
+  const registry = new StoredRegistry([
+    historyOwner(history, (_level, m) => logs.push(m)),
+  ]);
+  registry.restore({
+    ...emptyStoredState(),
+    history: { kind: "read", entries },
+  });
+  const effects: Effect[] = [];
+  registry.drain(effects);
+  return { history, logs, effects };
+}
+
 describe("the savepoint survives a restart", () => {
-  test("it is saved with the history and read back with it, and cancels there", () => {
-    const historyFile = path.join(dir, "history.json");
-    const first = rig(fileHistoryStorage(historyFile, () => {}));
+  test("it is kept with the history and read back with it, and cancels there", () => {
+    const first = rig();
     first.edit();
     first.toggle("arrange");
     first.edit();
-    const second = new SettingsHistory(
-      new SessionState(),
-      () => {},
-      fileHistoryStorage(historyFile, () => {}),
-    );
+    kept(first.history);
+    const second = restarted();
     expect(second.depth(SID)).toEqual({ undo: 2, redo: 0, sinceEdit: 1 });
     rewindOf(second, SID);
     expect(readConfigText(file)).toBe("v1");
   });
 
-  test("a savepoint of the wrong shape is a wrong-shaped file, dropped whole", () => {
-    const historyFile = path.join(dir, "history.json");
-    fs.writeFileSync(
-      historyFile,
-      JSON.stringify({ [SID]: { past: [], future: [], savepoint: 3 } }),
+  // I-10: a stored history names a layer by its role, never by a path, so a
+  // profile moved to another machine or home steps the same layers.
+  test("what the history store keeps names no path", () => {
+    const first = rig();
+    first.edit();
+    first.toggle("arrange");
+    first.edit();
+    kept(first.history);
+    const text = fs.readFileSync(
+      path.join(dir, "settings-history.json"),
+      "utf8",
     );
-    const logs: string[] = [];
-    const storage = fileHistoryStorage(historyFile, (_level, m) =>
-      logs.push(m),
-    );
-    expect(Object.fromEntries(storage.load())).toEqual({});
-    expect(logs.join("\n")).toMatch(/unexpected shape/);
+    expect(text).toContain('"role":"user"');
+    expect(text).not.toContain("/");
   });
 
-  test("changes to a key that is no longer a setting leave alone, named in the log", () => {
-    // brandon-rename-sweep-x4yf: steps recorded under `look` before it was
-    // renamed `style`. Undoing one would restore a key nothing reads; every
-    // other change, and every other session, stays undoable.
-    const historyFile = path.join(dir, "history.json");
+  test("a savepoint of the wrong shape drops its history whole, said", () => {
+    const { history, logs, effects } = restoredFrom({
+      [SID]: { past: [], future: [], savepoint: 3 },
+    });
+    expect(history.versions().size).toBe(0);
+    expect(logs).toEqual([
+      "settings-history: dropped session s1: not a history",
+    ]);
+    // What was dropped is gone from the host's copy too.
+    expect(effects).toEqual([
+      { kind: "store", store: "history", key: SID, value: null },
+    ]);
+  });
+
+  test("changes this build cannot step leave alone, named in the log", () => {
+    // Steps recorded under `look` before it was renamed `style`, and a change
+    // an older build named by its file's path: undoing either would restore
+    // something nothing reads. Every other change, and every other session,
+    // stays undoable.
     const change = (key: string) => ({
       kind: "session",
       key,
       before: null,
       after: "vivid",
     });
+    const layer = {
+      kind: "layer",
+      role: "project",
+      file: "digest",
+      before: "a",
+      after: "b",
+    };
     const file = { kind: "file", file: "/c.json5", before: "a", after: "b" };
-    fs.writeFileSync(
-      historyFile,
-      JSON.stringify({
-        [SID]: {
-          past: [
-            [change("look")],
-            [change("style"), change("progression")],
-            [file],
-          ],
-          future: [[change("look")]],
-          savepoint: {
-            at: 2,
-            net: [change("look"), file],
-            below: [[change("look")]],
-          },
-        },
-        other: { past: [[file]], future: [] },
-      }),
-    );
-    const logs: string[] = [];
-    const storage = fileHistoryStorage(historyFile, (_level, m) =>
-      logs.push(m),
-    );
-    expect(Object.fromEntries(storage.load())).toEqual({
+    const { history, logs, effects } = restoredFrom({
       [SID]: {
-        past: [[change("style")], [file]],
-        future: [],
-        savepoint: { at: 1, net: [file], below: [] },
+        past: [
+          [change("look")],
+          [change("style"), change("progression")],
+          [file, layer],
+          [file],
+        ],
+        future: [[change("look")]],
+        savepoint: {
+          at: 2,
+          net: [change("look"), layer],
+          below: [[change("look")]],
+        },
       },
       other: { past: [[file]], future: [] },
     });
+    expect(Object.fromEntries(history.versions())).toEqual({
+      [SID]: {
+        past: [[change("style")], [layer]],
+        future: [],
+        savepoint: { at: 1, net: [layer], below: [] },
+      },
+      other: { past: [], future: [] },
+    });
     expect(logs).toEqual([
-      'settings-history load: dropped the changes to "look", "progression", no longer a setting',
+      'settings-history: dropped the changes this build cannot step: "look" (no longer a setting), "progression" (no longer a setting), a file an older build named by its path',
     ]);
+    // The host's copy holds what this renderer holds.
+    expect(effects.map((e) => e.kind === "store" && e.key).sort()).toEqual(
+      [SID, "other"].sort(),
+    );
   });
 
-  test("a history written before savepoints existed loads with none", () => {
-    const historyFile = path.join(dir, "history.json");
-    fs.writeFileSync(
-      historyFile,
-      JSON.stringify({
-        [SID]: {
-          past: [[{ kind: "session", key: "theme", before: null, after: "x" }]],
-          future: [],
-        },
-      }),
-    );
-    const history = new SettingsHistory(
-      new SessionState(),
-      () => {},
-      fileHistoryStorage(historyFile, () => {}),
-    );
+  test("a history written before savepoints existed restores with none", () => {
+    const { history, effects } = restoredFrom({
+      [SID]: {
+        past: [[{ kind: "session", key: "theme", before: null, after: "x" }]],
+        future: [],
+      },
+    });
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
+    expect(effects).toEqual([]);
   });
 });

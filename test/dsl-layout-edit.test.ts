@@ -846,7 +846,7 @@ describe("apply-layout-op click → the config file", () => {
         )}`,
         ctx,
       ),
-    ).toThrow(/has not rendered yet/);
+    ).toThrow(/has no request the daemon holds/);
     expect(durable.parsed().root).toEqual({
       v: [{ h: ["directory", "git"] }, "bar"],
     });

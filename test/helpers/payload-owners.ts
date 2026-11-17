@@ -445,7 +445,11 @@ function openHome(
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
   const holds = new HoldsClass();
   const keyed = withTranscriptLanes(owners as KeyedOwners, clock);
-  const { lanes, faults } = declareLanes(keyed, holds, facts, { plugins: new Map(), runs: new Map(), doctor: null });
+  const { lanes, faults } = declareLanes(keyed, holds, facts, {
+    plugins: new Map(),
+    runs: new Map(),
+    doctor: null,
+  });
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken
   // fixture, failed here with its stack, as the daemon logs it as an error.
   // The home ends what it built: its holds, and the trigger whose period a

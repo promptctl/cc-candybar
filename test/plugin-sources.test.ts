@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { MAIN_RENDERER } from "../src/renderer-interface/renderer-name";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { NO_DOCTOR } from "./helpers/payload-owners";
 import {
@@ -856,7 +857,7 @@ function statusline(r: Rig, configFile: string) {
     NO_PUSHES,
   );
   const rendered = rendererHost(
-    "main",
+    MAIN_RENDERER,
     systemTimekeeper,
     hostHeld(
       eventRenderer(async (input) => {

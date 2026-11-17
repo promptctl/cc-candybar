@@ -13,7 +13,7 @@ import type { SourceRuns } from "./source-runs.js";
 import type { RuntimeStats } from "./stats";
 import type { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
-import type { DoctorStores } from "../doctor/ports";
+import type { SessionRequests } from "./session-requests.js";
 import type { RendererHost } from "./renderer-host.js";
 import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
@@ -33,7 +33,9 @@ export interface DaemonParts {
   readonly log: DaemonLogger;
   readonly bundle: string;
   readonly sourceDigest: string | null;
-  readonly doctorStores: DoctorStores;
+  // The host's one book of each session's newest request and its context,
+  // which outlives the daemon, so a click after a restart acts at once.
+  readonly sessionRequests: SessionRequests;
   readonly stats: RuntimeStats;
   readonly handlerProbes: ProbeArrivals;
   // What every click is opened with before any renderer sees it.

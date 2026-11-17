@@ -1,15 +1,18 @@
-// The settings history's shapes and the storage port it saves through: the
-// renderer's history writes them, and the host's file stores them
-// (src/daemon/history-file.ts).
+// The settings history's shapes: what a session's steps hold, as the
+// renderer keeps them and its stored state carries them.
 
 import { SETTING_PROJECTIONS } from "../config/setting-projections";
 import { PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
-import { type SessionId } from "../daemon/foundations/session-id";
+import type { LayerRole } from "../config/layer-role";
 
 // [LAW:types-are-the-program] What a change touched and the two states it
 // stepped between. `null` is absence on both kinds: an unset session key, a
 // config file that does not exist (a first-ever write created it). Undo writes
-// `before`, redo writes `after` — the same write either way.
+// `before`, redo writes `after` — the same write either way. A layer is named
+// by its role in the session's chain, never by a path (I-10): which file that
+// is, is the chain's to say when the step is taken, and `file` is the digest
+// of the one it named when the step was made, so a step never lands in a file
+// it did not write.
 export type Change =
   | {
       readonly kind: "session";
@@ -18,7 +21,8 @@ export type Change =
       readonly after: string | null;
     }
   | {
-      readonly kind: "file";
+      readonly kind: "layer";
+      readonly role: LayerRole;
       readonly file: string;
       readonly before: string | null;
       readonly after: string | null;
@@ -49,20 +53,6 @@ export interface Savepoint {
   readonly at: number;
   readonly net: Step;
   readonly below: readonly Step[];
-}
-
-export type HistoryState = Readonly<Record<string, SessionHistory>>;
-
-// What a storage loads: each session's history, keyed by a session id the
-// storage has already checked.
-export type LoadedHistory = ReadonlyMap<SessionId, SessionHistory>;
-
-// [LAW:locality-or-seam] Persistence is the storage's property, as with
-// SessionStorage: the daemon binds a file, everything else keeps the ephemeral
-// default and never touches disk.
-export interface HistoryStorage {
-  load(): LoadedHistory;
-  save(state: HistoryState): void;
 }
 
 // [LAW:one-source-of-truth] The session keys a settings control writes: a
