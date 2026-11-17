@@ -4,7 +4,7 @@ Checks are data, and one fold runs them for both the menu's button and the CLI. 
 
 Most of the facts the doctor needs are visible only to the statusline client, which inherits Claude Code's environment. They arrive as hints, and the host reads the machine for a run with the hints the session's client sends.
 
-A run is the renderer's: it asks, the host reads, and the reading comes back in the session's world state, naming the run it is for, so a late reading is never taken for a newer run. The renderer judges that reading and nothing fresher. A mark therefore probes nothing, and a fix writes only what the run read.
+A run is the renderer's: it asks, the host reads, and the reading comes back in the session's world state, naming the run it is for, so a late reading is never taken for a newer run. A run is named by when its click ran, not counted, because a renderer that restarts would count from one again while the host still holds the earlier renderer's reading under that name. The renderer keeps the reading and stops asking for it, so later world states don't carry the whole machine; the host keeps the settings files it named, which is what a fix may write. The renderer judges that reading and nothing fresher. A mark therefore probes nothing, and a fix writes only what the run read.
 
 ## Claude Code settings
 
@@ -29,7 +29,7 @@ A run is the renderer's: it asks, the host reads, and the reading comes back in 
 - The URL handler always delivers to the default socket. So if a shell's socket override names a different daemon, the check refuses before opening any link.
 - Render sightings live in memory, not in session state. Session state persists and is never pruned, so a session recorded by an older daemon would fail its row forever.
 - Clicked terminals get a file of their own, separate from the mark book. Older builds parse the mark book strictly and refuse keys they don't know.
-- If the spawn rate limit refuses a probe, the run's reading fails and the reason shows on the bar. The refusal never becomes a fact.
+- If the spawn rate limit refuses a probe, the run's reading fails and the reason shows on the bar. The refusal never becomes a fact. The host reads one run at a time for that reason: two sessions' runs share the limit's windows, so read together one would be refused.
 - The CLI reads the doctor's stores through the daemon, never from files of its own.
 - Session state is one unversioned file that builds of either age read, because a rollback or a pinned install runs over a newer build's records. So a record there only gains fields and a field keeps its meaning. A new value of an existing field needs the same care: a parser that refuses values it doesn't know fails every click on that build.
 - Node resolves its entry point through links, but argv[1] keeps the symlink of npm's global bin. Name a bundle by the resolved path.

@@ -106,11 +106,22 @@ interface DeclaredFor {
 }
 
 // The session's latest document, which its stamps replace and its `config`
-// carries, and the read it was stamped from.
+// carries, the read it was stamped from, and the settings files its latest
+// doctor reading named, which outlast the reading's subscription: a renderer
+// keeps a reading it took and stops asking for it.
 interface Stamped {
   document: WorldState;
   from: StampInputs;
+  writable: readonly string[];
 }
+
+// [LAW:dataflow-not-control-flow] The files a document's doctor reading names,
+// or those kept from an earlier one while it carries none.
+const writableOf = (
+  { doctor }: WorldState,
+  kept: readonly string[],
+): readonly string[] =>
+  doctor.kind === "ok" ? writableSettingsFiles(doctor.value) : kept;
 
 // What a session reads: the holds its declaration took, and what the owners
 // hold at them.
@@ -322,12 +333,11 @@ export class Collector {
     };
   }
 
-  // [LAW:single-enforcer] The settings files the session's doctor reading,
-  // as its latest document carries it, handed in: the only ones a
-  // `claude-settings` change of the session may write.
+  // [LAW:single-enforcer] The settings files the session's latest doctor
+  // reading handed in: the only ones a `claude-settings` change of the
+  // session may write.
   writableSettings(session: SessionId): readonly string[] {
-    const doctor = this.records.get(session)?.stamped.document.doctor;
-    return doctor?.kind === "ok" ? writableSettingsFiles(doctor.value) : [];
+    return this.records.get(session)?.stamped.writable ?? [];
   }
 
   // Each session the collector reads now, with its latest stamp: what a
@@ -391,7 +401,11 @@ export class Collector {
       reader.holds.close();
       throw e;
     }
-    const stamped: Stamped = { document, from: first };
+    const stamped: Stamped = {
+      document,
+      from: first,
+      writable: writableOf(document, []),
+    };
     return {
       session,
       stamped,
@@ -542,6 +556,7 @@ export class Collector {
       );
     stamped.document = next;
     stamped.from = moved;
+    stamped.writable = writableOf(next, stamped.writable);
     return next !== prior;
   }
 

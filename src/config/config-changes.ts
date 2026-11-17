@@ -73,16 +73,20 @@ export type Applied =
 
 const ABSENT: Read = { kind: "absent" };
 
+const EMPTY_OBJECT = parseDocument("{}");
+
 type Parsed =
   | { readonly kind: "none" }
   | { readonly kind: "unparsed" }
   | { readonly kind: "document"; readonly root: Node };
 
-// A file's text as a document. An absent file and one holding only
-// whitespace hold none, and text the span editor refuses is unparsed: a
-// change can only replace it whole.
+// A file's text as a document. An absent file holds none; one holding only
+// whitespace is an empty object, as every reader of a config or a settings
+// file reads it, so a change made against that reading lands in it. Text the
+// span editor refuses is unparsed: a change can only replace it whole.
 function parse(text: string | null): Parsed {
-  if (text === null || /^\s*$/.test(text)) return { kind: "none" };
+  if (text === null) return { kind: "none" };
+  if (/^\s*$/.test(text)) return { kind: "document", root: EMPTY_OBJECT };
   try {
     return { kind: "document", root: parseDocument(text) };
   } catch (e) {

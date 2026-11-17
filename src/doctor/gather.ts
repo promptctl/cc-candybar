@@ -20,6 +20,7 @@ import type {
   Fix,
   InstallFacts,
   PostMortemsRead,
+  SettingsChain,
   UrlHandlerFacts,
 } from "./checks.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
@@ -76,17 +77,13 @@ export type MachineFacts = Omit<
 
 // [LAW:types-are-the-program] One run's reading, as a world state carries it:
 // the run it answers, and the machine as the host read it with the install the
-// clients that drew the session's bars ran — or why it could not be read. A
-// failure names its run too, so one left from an earlier run is never taken
-// for the run after it.
-export type DoctorReading = { readonly run: number } & (
-  | {
-      readonly kind: "read";
-      readonly machine: MachineFacts;
-      readonly install: InstallFacts;
-    }
-  | { readonly kind: "failed"; readonly reason: string }
-);
+// clients that drew the session's bars ran. A read that fails is the fact's
+// own failure (src/daemon/cache/doctor.ts).
+export interface DoctorReading {
+  readonly run: number;
+  readonly machine: MachineFacts;
+  readonly install: InstallFacts;
+}
 
 // [LAW:one-source-of-truth] What a run asks, from the config it judges: the
 // render's own resolution, so the doctor and the bar cannot disagree about
@@ -158,28 +155,29 @@ export function doctorFacts(
   };
 }
 
+// [LAW:one-source-of-truth] Each settings chain a run read: its own, then
+// every other one a bar it judges reads at.
+const chainsOf = (
+  settings: DoctorFacts["claudeSettings"],
+): readonly SettingsChain[] => [settings.origin, ...settings.elsewhere];
+
 // [LAW:single-enforcer] The settings files a run's fix may write: each chain
 // it read, its user file and its project-local file — the scopes
 // `WritableSettings` admits. The host's interpreter refuses a write to any
 // other file (src/daemon/effect-interpreter.ts).
-export const writableSettingsFiles = (
-  reading: DoctorReading,
-): readonly string[] =>
-  reading.kind === "failed"
-    ? []
-    : [
-        reading.machine.claudeSettings.origin,
-        ...reading.machine.claudeSettings.elsewhere,
-      ].flatMap(({ at }) => [
-        at.userFile,
-        projectLocalSettingsFile(at.projectDir),
-      ]);
+export const writableSettingsFiles = ({
+  machine,
+}: DoctorReading): readonly string[] =>
+  chainsOf(machine.claudeSettings).flatMap(({ at }) => [
+    at.userFile,
+    projectLocalSettingsFile(at.projectDir),
+  ]);
 
 // Every settings file the run read, from each chain that read.
 export const readSources = (
   settings: DoctorFacts["claudeSettings"],
 ): readonly SettingsSource[] =>
-  [settings.origin, ...settings.elsewhere].flatMap(({ sources }) =>
+  chainsOf(settings).flatMap(({ sources }) =>
     sources.kind === "ok" ? sources.value : [],
   );
 

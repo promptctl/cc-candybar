@@ -1347,6 +1347,7 @@ function sessionHints(
 function startRun(ctx: ClickContext, sid: SessionId): void {
   const origin = sessionOrigin(ctx, sid);
   ctx.doctorRuns.start(sid, {
+    at: ctx.now(),
     load: ctx.doctorLoad(origin),
     target: origin.target,
     origin: { cwd: origin.cwd, projectDir: origin.projectDir },
@@ -1422,7 +1423,7 @@ const doctorFix: VerbHandler = async (value, ctx) => {
         throw new BadVerbArgs(`doctor-fix: ${check.label} — ${read.reason}`);
       }
       asked();
-      ctx.doctorRuns.report(sid, {
+      ctx.doctorRuns.report(ctx.sessionState, sid, {
         ...facts,
         daemon: { ...facts.daemon, read },
       });
@@ -1467,7 +1468,7 @@ const doctorMark: VerbHandler = async (value, ctx) => {
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
-  ctx.doctorRuns.report(sid, { ...facts, marks });
+  ctx.doctorRuns.report(ctx.sessionState, sid, { ...facts, marks });
 };
 
 // ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────

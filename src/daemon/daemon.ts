@@ -410,9 +410,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
   // [LAW:single-enforcer] The daemon's one reader of the doctor's facts: the
   // collector holds the run a session's renderer subscribes to.
-  const doctorEdge = inputs.doctorEdge(launcher, host);
   const doctorSource = new DoctorSource({
-    edge: doctorEdge,
+    // The doctor's edge sets no signal of its own, so each read's launches
+    // carry the read's.
+    edge: (signal) =>
+      inputs.doctorEdge(
+        { ...launcher, launch: (opts) => launcher.launch({ ...opts, signal }) },
+        host,
+      ),
     sightings: (sessionId, now) => renderSightings.ofSession(sessionId, now),
     serving: () => limits.serving(),
     bundle: bundle.path,

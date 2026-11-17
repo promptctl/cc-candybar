@@ -6,7 +6,8 @@
 //
 // [LAW:dataflow-not-control-flow] A run is read once: an ask is its run, so a
 // new run is a new key and the reading never refreshes on its own. A reading
-// lives as long as the session's subscription names its run.
+// lives as long as the session's subscription names its run, and no longer:
+// a released run is never asked for again.
 
 import type { Timekeeper } from "../../time";
 import type { Holds } from "../../utils/holds";
@@ -18,7 +19,7 @@ import {
 } from "../../utils/refresh-ledger";
 import type { Lane } from "../../utils/reading";
 import { valueOf } from "../../utils/logfmt";
-import { ok, type Outcome } from "../../utils/outcome";
+import { failed, ok, type Outcome } from "../../utils/outcome";
 import { instantAt, type Instant } from "../../utils/instant";
 import type { ClientHints } from "../foundations/protocol";
 import type { SessionId } from "../foundations/session-id";
@@ -30,9 +31,6 @@ import type { DoctorMachineEdge } from "../../doctor/ports";
 import { barsOf, sessionWidth } from "../../doctor/sightings";
 import { installFacts } from "../../doctor/edge";
 
-// Sessions whose readings nobody holds, kept for a hold's return.
-const MAX_ENTRIES = 16;
-
 // What one session's doctor subscription is read with: the session, the
 // hints its newest request reported, and its renderer's ask.
 export interface DoctorRead {
@@ -42,7 +40,10 @@ export interface DoctorRead {
 }
 
 export interface DoctorSourceDeps {
-  readonly edge: DoctorMachineEdge;
+  // [LAW:no-ambient-temporal-coupling] The machine's edge for one read, whose
+  // launches end with it: a read the source abandoned (a run replaced, a
+  // session retired) leaves no probe running.
+  readonly edge: (signal: AbortSignal) => DoctorMachineEdge;
   // What the sessions' renders said, which the reading judges the session's
   // own bars by, as this process saw them.
   readonly sightings: (
@@ -61,6 +62,10 @@ export interface DoctorSourceDeps {
 
 export class DoctorSource {
   private readonly readings: KeyedSource<DoctorRead, DoctorReading>;
+  // [LAW:single-enforcer] One read at a time, daemon-wide: the probes of two
+  // runs share the launcher's rate-limit windows, so two at once would have
+  // one refused. A read abandoned while it waits never starts.
+  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(deps: DoctorSourceDeps) {
     this.readings = new KeyedSource({
@@ -70,10 +75,19 @@ export class DoctorSource {
       // of a run reported, so a request that moves them reads no run again.
       keyOf: ({ session, ask }) => `${session}\n${JSON.stringify(ask)}`,
       fields: ({ session, ask }) => `sid=${valueOf(session)} run=${ask.run}`,
-      read: (input) => readDoctorRun(deps, input),
+      read: (input, signal) => {
+        // Started once the read before it settled, however it settled.
+        const start = (): Promise<Outcome<DoctorReading>> =>
+          signal.aborted
+            ? Promise.resolve(failed("doctor read abandoned", "read"))
+            : readDoctorRun({ ...deps, edge: deps.edge(signal) }, input);
+        const read = this.queue.then(start, start);
+        this.queue = read;
+        return read;
+      },
       every: () => null,
       watch: NO_WATCH,
-      maxEntries: MAX_ENTRIES,
+      maxEntries: 0,
       lines: REFRESH_TRIGGERS,
       logger: deps.logger,
       ledger: deps.ledger,
@@ -91,14 +105,13 @@ export class DoctorSource {
 }
 
 // [LAW:no-silent-failure] A read that throws — a probe the rate limit refused
-// (`DoctorBusy`) among them — is the run's failed reading, which the renderer
+// (`DoctorBusy`) among them — is the run's failed fact, which the renderer
 // shows on the session's bar; no report is made of facts the doctor did not
 // see.
 export async function readDoctorRun(
-  deps: Pick<
-    DoctorSourceDeps,
-    "edge" | "sightings" | "serving" | "bundle" | "clock"
-  >,
+  deps: Pick<DoctorSourceDeps, "sightings" | "serving" | "bundle" | "clock"> & {
+    readonly edge: DoctorMachineEdge;
+  },
   { session, hints, ask }: DoctorRead,
 ): Promise<Outcome<DoctorReading>> {
   try {
@@ -112,7 +125,6 @@ export async function readDoctorRun(
     });
     return ok({
       run: ask.run,
-      kind: "read",
       machine,
       // The clients that drew the session's bars, and the daemon the run
       // reached — this process.
@@ -123,10 +135,6 @@ export async function readDoctorRun(
       ),
     });
   } catch (e) {
-    return ok({
-      run: ask.run,
-      kind: "failed",
-      reason: e instanceof Error ? e.message : String(e),
-    });
+    return failed(e instanceof Error ? e.message : String(e), "read");
   }
 }

@@ -113,7 +113,6 @@ export function applyFix(
         () =>
           writableSettingsFiles({
             run: 0,
-            kind: "read",
             machine: facts,
             install: facts.install,
           }),
@@ -149,9 +148,9 @@ export function applyFix(
 }
 
 // The host's side of a test's doctor runs: at the end of a turn, each run the
-// renderer's doctor subscribes to is read by the daemon's own read, once, and
-// handed back as the session's world state carries it; the settings files a
-// fix may write are the ones those readings name, as the collector's are.
+// renderer's doctor subscribes to is read by the daemon's own read and handed
+// back as the session's world state carries it; the settings files a fix may
+// write are the ones the latest reading named, as the collector's are.
 export class DoctorHost {
   private readonly readings = new Map<SessionId, DoctorReading>();
 
@@ -165,16 +164,18 @@ export class DoctorHost {
   ): Promise<void> {
     for (const [session, subscription] of runs.subscriptions()) {
       if (subscription.kind !== "doctor") continue;
-      const { ask } = subscription;
-      if (this.readings.get(session)?.run === ask.run) continue;
       const doctor = await readDoctorRun(this.deps, {
         session,
         hints: this.hints(session),
-        ask,
+        ask: subscription.ask,
       });
-      if (doctor.kind !== "ok") throw new Error(`doctor read: ${doctor.kind}`);
-      this.readings.set(session, doctor.value);
+      if (doctor.kind === "ok") this.readings.set(session, doctor.value);
       runs.took({ session, doctor: { ...doctor, at: instantOf(new Date()) } });
+      // A run taken, or failed, asks for its reading no more.
+      if (runs.subscriptions().has(session))
+        throw new Error(
+          `session ${session} still asks for run ${subscription.ask.run}`,
+        );
     }
   }
 

@@ -15,6 +15,7 @@ import type { WorldState } from "../facts/world-state";
 import type { Subscription } from "../renderer-interface/interface";
 import type { SessionStateRW } from "../renderer-interface/session-state";
 import type { ConfigTarget } from "../config-hint";
+import type { Instant } from "../utils/instant";
 import {
   doctorAsk,
   doctorFacts,
@@ -50,12 +51,14 @@ interface Run {
   readonly load: ConfigLoad;
   readonly target: ConfigTarget;
   readonly arrival: ClickArrival;
-  reading: Extract<DoctorReading, { kind: "read" }> | null;
+  reading: DoctorReading | null;
 }
 
 // What a run is asked with: the config load it judges, captured by the click
 // that asked it, and where the session runs.
 export interface RunRequest {
+  // When the click that asked it ran.
+  readonly at: Instant;
   readonly load: ConfigLoad;
   readonly target: ConfigTarget;
   readonly origin: DoctorAsk["origin"];
@@ -64,6 +67,7 @@ export interface RunRequest {
 }
 
 export interface DoctorRunsDeps {
+  // Where a reading's report is written as it arrives, outside any click.
   readonly sessionState: SessionStateRW;
   readonly stores: DoctorStores;
   readonly log: Log;
@@ -79,10 +83,14 @@ export class DoctorRuns {
   constructor(private readonly deps: DoctorRunsDeps) {}
 
   // A new run of the session, replacing the one it held: a new ask, which the
-  // host reads afresh.
+  // host reads afresh. [LAW:one-source-of-truth] A run is named by the
+  // millisecond its click ran, kept rising, so a renderer that starts again
+  // names no run an earlier one asked: the host may still hold that run's
+  // reading, which would be taken for the new run's.
   start(session: SessionId, request: RunRequest): void {
+    this.last = Math.max(Math.round(request.at * 1000), this.last + 1);
     this.runs.set(session, {
-      ask: doctorAsk(++this.last, request.load, request.pick, request.origin, {
+      ask: doctorAsk(this.last, request.load, request.pick, request.origin, {
         kind: "clicked",
         sessionId: session,
         via: request.arrival.via,
@@ -99,38 +107,35 @@ export class DoctorRuns {
     return this.runs.has(session);
   }
 
-  // [LAW:one-source-of-truth] What each session's run asks the host to read:
-  // held as long as the run, so its reading stays in the session's world
-  // state, which names the settings files a fix may write.
+  // [LAW:one-source-of-truth] What each session's unread run asks the host to
+  // read: held until its reading is in, which the run then keeps, so no world
+  // state after it carries the reading again.
   subscriptions(): ReadonlyMap<SessionId, Subscription> {
     return new Map(
-      [...this.runs].map(([session, { ask }]) => [
-        session,
-        { kind: "doctor", ask },
-      ]),
+      [...this.runs].flatMap(([session, { ask, reading }]) =>
+        reading === null ? [[session, { kind: "doctor", ask }] as const] : [],
+      ),
     );
   }
 
   // A world state taken: the first that carries the reading of its session's
-  // run writes the run's report, or shows why the reading failed.
+  // unread run writes the run's report. A failed fact is that run's: the
+  // session subscribes to no other.
   took({ session, doctor }: Pick<WorldState, "session" | "doctor">): void {
     const run = this.runs.get(session);
-    if (
-      run === undefined ||
-      run.reading !== null ||
-      doctor.kind !== "ok" ||
-      doctor.value.run !== run.ask.run
-    )
-      return;
-    const reading = doctor.value;
-    if (reading.kind === "failed") {
+    if (run === undefined || run.reading !== null) return;
+    if (doctor.kind === "failed") {
       this.runs.delete(session);
-      this.deps.failed(session, `doctor: ${reading.reason}`);
+      this.deps.failed(session, `doctor: ${doctor.reason}`);
       return;
     }
-    run.reading = reading;
-    const facts = this.composed(run, reading);
-    this.report(session, { ...facts, clicked: this.filed(run, facts) });
+    if (doctor.kind !== "ok" || doctor.value.run !== run.ask.run) return;
+    run.reading = doctor.value;
+    const facts = this.composed(run, doctor.value);
+    this.report(this.deps.sessionState, session, {
+      ...facts,
+      clicked: this.filed(run, facts),
+    });
   }
 
   // [LAW:single-enforcer] The session's run's facts as they stand: its
@@ -146,10 +151,11 @@ export class DoctorRuns {
 
   // [LAW:single-enforcer] One write of the whole report, through setBatch —
   // the row cap flips, the reason and fixable land, in one reactive
-  // transaction.
-  report(session: SessionId, facts: DoctorFacts): void {
+  // transaction — into `store`: a click's journaled view, so the report is
+  // one with the rest of its click, or the session state a reading lands in.
+  report(store: SessionStateRW, session: SessionId, facts: DoctorFacts): void {
     const reports = runDoctor(facts);
-    this.deps.sessionState.setBatch(session, doctorReportPairs(reports));
+    store.setBatch(session, doctorReportPairs(reports));
     this.deps.log(
       "info",
       `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${session})`,
@@ -160,10 +166,7 @@ export class DoctorRuns {
     this.runs.delete(session);
   }
 
-  private composed(
-    run: Run,
-    { machine, install }: NonNullable<Run["reading"]>,
-  ): DoctorFacts {
+  private composed(run: Run, { machine, install }: DoctorReading): DoctorFacts {
     return doctorFacts(
       machine,
       install,

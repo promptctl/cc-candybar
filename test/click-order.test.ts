@@ -106,7 +106,6 @@ describe("a doctor click", () => {
     await doctor(A);
     expect(ctx.doctorRuns.subscriptions().get(A)).toMatchObject({
       kind: "doctor",
-      ask: { run: 1 },
     });
     await write(A);
     expect(written(A)).toBe("nord");
