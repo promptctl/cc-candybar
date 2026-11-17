@@ -6,6 +6,8 @@
 import type { Asked } from "../../src/utils/outcome";
 import {
   BACKOFF_FIRST_MS,
+  BACKOFF_MAX_MS,
+  CLOSE_GRACE_MS,
   HUNG_AFTER_MS,
   PING_PERIOD_MS,
   YOUNG_MS,
@@ -66,6 +68,7 @@ function rig(start: () => Promise<void> = async () => {}) {
   const clock: HeldClock = heldClock(new Date("2026-11-15T00:00:00Z"));
   const children: Child[] = [];
   const logs: string[] = [];
+  const levels: string[] = [];
   const ends: HeldEvent[] = [];
   const watched: Array<["watch" | "unwatch", WatchId]> = [];
   const held: Array<["hold" | "release", StorageHoldId]> = [];
@@ -112,7 +115,10 @@ function rig(start: () => Promise<void> = async () => {}) {
         release: (id) => held.push(["release", id]),
       },
     },
-    log: (_level, msg) => logs.push(msg),
+    log: (level, msg) => {
+      logs.push(msg);
+      levels.push(level);
+    },
     clock,
     start,
     ended: (event) => ends.push(event),
@@ -137,7 +143,7 @@ function rig(start: () => Promise<void> = async () => {}) {
   // The inputs the host sent the child, in order.
   const inputs = (child: Child) =>
     child.written.flatMap((l) => (l.kind === "input" ? [l] : []));
-  return { clock, children, logs, ends, watched, held, link, inputs, key };
+  return { clock, children, logs, levels, ends, watched, held, link, inputs, key };
 }
 
 // Every promise chain the supervisor started settles: it awaits nothing but
@@ -634,6 +640,110 @@ describe("a renderer process's close", () => {
     await expect(link.renderer.answer(pin)).rejects.toThrow(
       new RendererDown("renderer main is closed"),
     );
+  });
+
+  test("once the close has begun, the live renderer takes inputs, and one that ends is said and not started again", async () => {
+    const { link, children, clock, logs, ends } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say({ kind: "started", pid: 9001 });
+    clock.advance(YOUNG_MS);
+    await settled();
+    link.beginClose();
+    const heard = child.written.length;
+    void link.renderer.answer(pin).catch(() => {});
+    await settled();
+    expect(child.written.length).toBeGreaterThan(heard);
+    expect(child.stdinEnded).toBe(false);
+    child.exit(CRASHED);
+    await settled();
+    clock.advance(BACKOFF_MAX_MS);
+    expect(children).toHaveLength(1);
+    expect(logs).toContain(
+      "renderer main[1] killed by SIGSEGV in the daemon's close",
+    );
+    expect(ends).toEqual([]);
+    await expect(link.renderer.answer(pin)).rejects.toThrow(
+      new RendererDown("renderer main is closed"),
+    );
+    await link.close();
+  });
+
+  test("an end in the close is a warning unless the close had ended it and it exited", async () => {
+    const early = rig();
+    early.link.arm();
+    early.children[0]!.say({ kind: "started", pid: 9001 });
+    await settled();
+    early.link.beginClose();
+    early.children[0]!.exit(EXITED);
+    await settled();
+    expect(early.levels.at(-1)).toBe("warn");
+    expect(early.logs.at(-1)).toBe("renderer main[1] exited in the daemon's close");
+    await early.link.close();
+
+    const asked = rig();
+    asked.link.arm();
+    asked.children[0]!.say({ kind: "started", pid: 9001 });
+    await settled();
+    const closed = asked.link.close();
+    asked.children[0]!.exit(EXITED);
+    await closed;
+    expect(asked.levels.at(-1)).toBe("info");
+    expect(asked.logs.at(-1)).toBe("renderer main[1] exited in the daemon's close");
+  });
+
+  test("a boot under way as the close begins ends then, signalled after the grace, and what waited for it fails as closed", async () => {
+    const { link, children, clock } = rig();
+    link.arm();
+    const child = children[0]!;
+    const waiting = link.renderer.answer(pin);
+    link.beginClose();
+    expect(child.stdinEnded).toBe(true);
+    await expect(waiting).rejects.toThrow(
+      new RendererDown("renderer main is closed"),
+    );
+    clock.advance(CLOSE_GRACE_MS);
+    await settled();
+    expect(child.opts.signal?.aborted).toBe(true);
+    await link.close();
+  });
+
+  test("a down renderer's next start never comes once the close has begun", async () => {
+    const { link, children, clock } = rig();
+    link.arm();
+    children[0]!.exit(CRASHED);
+    await settled();
+    link.beginClose();
+    clock.advance(BACKOFF_MAX_MS);
+    expect(children).toHaveLength(1);
+    await link.close();
+  });
+
+  test("a renderer the close still waits on is judged by its pings", async () => {
+    const { link, children, clock, logs } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say({ kind: "started", pid: 9001 });
+    await settled();
+    // Its boot's ping is answered, so only a ping sent in the close can judge
+    // it.
+    const booted = child.written.find((l) => l.kind === "ping");
+    child.say({
+      kind: "ping",
+      n: (booted as { n: number }).n,
+      usage: { rss: 5, heapTotal: 3 },
+    });
+    await settled();
+    link.beginClose();
+    clock.advance(PING_PERIOD_MS + HUNG_AFTER_MS + PING_PERIOD_MS);
+    await settled();
+    expect(child.opts.signal?.aborted).toBe(true);
+    expect(logs).toContainEqual(
+      expect.stringMatching(
+        /^renderer main\[1\] stopped answering .* in the daemon's close$/,
+      ),
+    );
+    await link.close();
   });
 
   test("a call the renderer awaits is answered by the host's reach, its failure keeping its kind", async () => {

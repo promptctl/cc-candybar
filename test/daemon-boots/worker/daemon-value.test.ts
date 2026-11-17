@@ -411,6 +411,11 @@ describe("the daemon is a value", () => {
     open = null;
     afterClose = { armed: [], fired: [] };
     const closedWith = readFileSync(sessionFile, "utf8");
+    // The click's write, still inside its debounce, is on disk once the close
+    // has resolved.
+    expect(JSON.parse(closedWith)["value-close"]).toMatchObject({
+      [setting]: String(on),
+    });
 
     expect(await closing).toEqual({ unreaped: [] });
     expect(processProbe.alive(claudePid)).toBe(false);
