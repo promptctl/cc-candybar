@@ -35,7 +35,8 @@ import { readDoctor, type Sighted } from "../../src/doctor/read";
 import { instantOf } from "../../src/utils/instant";
 import { readDoctorRun } from "../../src/daemon/cache/doctor";
 import type { DoctorRuns } from "../../src/renderer/doctor";
-import type { DoctorReading } from "../../src/doctor/gather";
+import type { DoctorRead } from "../../src/doctor/gather";
+import { ofRun } from "../../src/daemon/readings";
 import type { SightingScope } from "../../src/doctor/sightings";
 
 // The facts a run of `load` reads over `edge`, but the URL handler's and the
@@ -113,6 +114,7 @@ export function applyFix(
         () =>
           writableSettingsFiles({
             run: 0,
+            kind: "read",
             machine: facts,
             install: facts.install,
           }),
@@ -152,7 +154,7 @@ export function applyFix(
 // back as the session's world state carries it; the settings files a fix may
 // write are the ones the latest reading named, as the collector's are.
 export class DoctorHost {
-  private readonly readings = new Map<SessionId, DoctorReading>();
+  private readonly readings = new Map<SessionId, DoctorRead>();
 
   constructor(
     private readonly deps: Parameters<typeof readDoctorRun>[0],
@@ -164,12 +166,17 @@ export class DoctorHost {
   ): Promise<void> {
     for (const [session, subscription] of runs.subscriptions()) {
       if (subscription.kind !== "doctor") continue;
-      const doctor = await readDoctorRun(this.deps, {
-        session,
-        hints: this.hints(session),
-        ask: subscription.ask,
-      });
-      if (doctor.kind === "ok") this.readings.set(session, doctor.value);
+      // Attributed to its run as the host's doctor lane attributes it.
+      const doctor = ofRun(
+        subscription.ask,
+        await readDoctorRun(this.deps, {
+          session,
+          hints: this.hints(session),
+          ask: subscription.ask,
+        }),
+      );
+      if (doctor.kind === "ok" && doctor.value.kind === "read")
+        this.readings.set(session, doctor.value);
       runs.took({ session, doctor: { ...doctor, at: instantOf(new Date()) } });
       // A run taken, or failed, asks for its reading no more.
       if (runs.subscriptions().has(session))

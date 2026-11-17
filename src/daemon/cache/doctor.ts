@@ -125,6 +125,7 @@ export async function readDoctorRun(
     });
     return ok({
       run: ask.run,
+      kind: "read",
       machine,
       // The clients that drew the session's bars, and the daemon the run
       // reached — this process.

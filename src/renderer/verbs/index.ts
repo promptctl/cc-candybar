@@ -1365,7 +1365,7 @@ function reportedFacts(
   sid: SessionId,
   verb: string,
 ): DoctorFacts {
-  const facts = ctx.doctorRuns.facts(sid);
+  const facts = ctx.doctorRuns.facts(sid, ctx.arrival);
   if (facts !== null) return facts;
   if (!ctx.doctorRuns.running(sid)) startRun(ctx, sid);
   throw new BadVerbArgs(

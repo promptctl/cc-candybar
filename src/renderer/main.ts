@@ -213,15 +213,16 @@ export function mainRenderer(
       const ended = await turn(input.event, input.at, record, effects)
         .finally(() => {
           const views = parts.renderCache.subscriptions().sources;
-          const doctor = parts.doctorRuns.subscriptions();
-          // A session's doctor run is read while a view of it is open.
+          // A session's doctor run is read whether or not a view of it is
+          // open: a view evicted or failed to open is no reason a run asked
+          // for goes unread.
+          const merged = new Map(
+            Object.entries(views) as Array<[SessionId, Subscription[]]>,
+          );
+          for (const [session, run] of parts.doctorRuns.subscriptions())
+            merged.set(session, [...(merged.get(session) ?? []), run]);
           const sources = Object.fromEntries(
-            (Object.entries(views) as Array<[SessionId, Subscription[]]>).map(
-              ([session, list]) => {
-                const run = doctor.get(session);
-                return [session, run === undefined ? list : [...list, run]];
-              },
-            ),
+            merged,
           ) as Subscriptions["sources"];
           subscriptions = {
             sources,

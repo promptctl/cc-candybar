@@ -121,7 +121,9 @@ const writableOf = (
   { doctor }: WorldState,
   kept: readonly string[],
 ): readonly string[] =>
-  doctor.kind === "ok" ? writableSettingsFiles(doctor.value) : kept;
+  doctor.kind === "ok" && doctor.value.kind === "read"
+    ? writableSettingsFiles(doctor.value)
+    : kept;
 
 // What a session reads: the holds its declaration took, and what the owners
 // hold at them.

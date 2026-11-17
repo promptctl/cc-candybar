@@ -21,7 +21,7 @@ import {
   doctorFacts,
   readStores,
   type DoctorAsk,
-  type DoctorReading,
+  type DoctorRead,
 } from "../doctor/gather";
 import type { ConfigLoad, DoctorStores } from "../doctor/ports";
 import { runDoctor, type DoctorFacts } from "../doctor/checks";
@@ -51,7 +51,7 @@ interface Run {
   readonly load: ConfigLoad;
   readonly target: ConfigTarget;
   readonly arrival: ClickArrival;
-  reading: DoctorReading | null;
+  reading: DoctorRead | null;
 }
 
 // What a run is asked with: the config load it judges, captured by the click
@@ -119,34 +119,42 @@ export class DoctorRuns {
   }
 
   // A world state taken: the first that carries the reading of its session's
-  // unread run writes the run's report. A failed fact is that run's: the
-  // session subscribes to no other.
+  // unread run writes the run's report, or shows why the run was not read.
+  // The run is read once its report is written: one that could not be
+  // written fails the run, with the reason on the bar.
   took({ session, doctor }: Pick<WorldState, "session" | "doctor">): void {
     const run = this.runs.get(session);
-    if (run === undefined || run.reading !== null) return;
-    if (doctor.kind === "failed") {
-      this.runs.delete(session);
-      this.deps.failed(session, `doctor: ${doctor.reason}`);
+    if (
+      run === undefined ||
+      run.reading !== null ||
+      doctor.kind !== "ok" ||
+      doctor.value.run !== run.ask.run
+    )
       return;
+    const reading = doctor.value;
+    if (reading.kind === "failed") return this.fail(session, reading.reason);
+    try {
+      this.report(
+        this.deps.sessionState,
+        session,
+        this.judged(run, reading, run.arrival),
+      );
+      run.reading = reading;
+    } catch (e) {
+      this.fail(session, e instanceof Error ? e.message : String(e));
     }
-    if (doctor.kind !== "ok" || doctor.value.run !== run.ask.run) return;
-    run.reading = doctor.value;
-    const facts = this.composed(run, doctor.value);
-    this.report(this.deps.sessionState, session, {
-      ...facts,
-      clicked: this.filed(run, facts),
-    });
   }
 
-  // [LAW:single-enforcer] The session's run's facts as they stand: its
-  // reading, its load, and the stores as they hold now. Null while no
-  // reading is in.
-  facts(session: SessionId): DoctorFacts | null {
+  // [LAW:single-enforcer] The session's run's facts as they stand for a click
+  // that arrived as `arrival`: its reading, its load, the stores as they hold
+  // now, and what the click proves of the URL handler. Null while no reading
+  // is in.
+  facts(session: SessionId, arrival: ClickArrival): DoctorFacts | null {
     const run = this.runs.get(session);
     const reading = run?.reading ?? null;
     return run === undefined || reading === null
       ? null
-      : this.composed(run, reading);
+      : this.judged(run, reading, arrival);
   }
 
   // [LAW:single-enforcer] One write of the whole report, through setBatch —
@@ -166,32 +174,45 @@ export class DoctorRuns {
     this.runs.delete(session);
   }
 
-  private composed(run: Run, { machine, install }: DoctorReading): DoctorFacts {
-    return doctorFacts(
+  private fail(session: SessionId, reason: string): void {
+    this.runs.delete(session);
+    this.deps.failed(session, `doctor: ${reason}`);
+  }
+
+  private judged(
+    run: Run,
+    { machine, install }: DoctorRead,
+    arrival: ClickArrival,
+  ): DoctorFacts {
+    const facts = doctorFacts(
       machine,
       install,
       run.load,
       run.target,
       readStores(this.deps.stores),
-      clickArrived(run.arrival),
+      clickArrived(arrival),
     );
+    return { ...facts, clicked: this.filed(arrival, facts) };
   }
 
-  // [LAW:one-source-of-truth] A run asked by a link is a link the session's
-  // terminal drew and the user clicked, so it settles for good that this
-  // terminal draws links: filed (src/doctor/clicked-terminals.ts) where
+  // [LAW:one-source-of-truth] A click that arrived by a link is a link the
+  // session's terminal drew and the user clicked, so it settles for good that
+  // this terminal draws links: filed (src/doctor/clicked-terminals.ts) where
   // `cc-candybar doctor` — which cannot click — reads it. Nothing is filed
   // from a tmux status-line click (tmux ran it, no link), where nothing names
   // the terminal, or over a list that does not read (the store answers that
   // failure, which the run reports as its own).
-  // [LAW:no-silent-failure] The filing rides along with the run it came with,
-  // so a write that fails is logged — and the event's `clicked=no` shows
-  // nothing was filed — while the run reports over the list as it was read.
-  private filed(run: Run, facts: DoctorFacts): DoctorFacts["clicked"] {
+  // [LAW:no-silent-failure] The filing rides along with the click it came
+  // with, so a write that fails is logged — and the event's `clicked=no`
+  // shows nothing was filed — while the run reports over the list as read.
+  private filed(
+    arrival: ClickArrival,
+    facts: DoctorFacts,
+  ): DoctorFacts["clicked"] {
     const { terminal, clicked } = facts;
     const sighting =
       terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-    if (sighting === null || run.arrival.via !== "link") return clicked;
+    if (sighting === null || arrival.via !== "link") return clicked;
     try {
       return this.deps.stores.clicked.update((list) =>
         withClicked(list, sighting),

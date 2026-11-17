@@ -77,13 +77,19 @@ export type MachineFacts = Omit<
 
 // [LAW:types-are-the-program] One run's reading, as a world state carries it:
 // the run it answers, and the machine as the host read it with the install the
-// clients that drew the session's bars ran. A read that fails is the fact's
-// own failure (src/daemon/cache/doctor.ts).
-export interface DoctorReading {
-  readonly run: number;
-  readonly machine: MachineFacts;
-  readonly install: InstallFacts;
-}
+// clients that drew the session's bars ran — or why it was not read. A
+// failure names its run too, so one left from an earlier run is never taken
+// for the run after it (src/daemon/readings.ts).
+export type DoctorReading = { readonly run: number } & (
+  | {
+      readonly kind: "read";
+      readonly machine: MachineFacts;
+      readonly install: InstallFacts;
+    }
+  | { readonly kind: "failed"; readonly reason: string }
+);
+
+export type DoctorRead = Extract<DoctorReading, { kind: "read" }>;
 
 // [LAW:one-source-of-truth] What a run asks, from the config it judges: the
 // render's own resolution, so the doctor and the bar cannot disagree about
@@ -167,7 +173,7 @@ const chainsOf = (
 // other file (src/daemon/effect-interpreter.ts).
 export const writableSettingsFiles = ({
   machine,
-}: DoctorReading): readonly string[] =>
+}: DoctorRead): readonly string[] =>
   chainsOf(machine.claudeSettings).flatMap(({ at }) => [
     at.userFile,
     projectLocalSettingsFile(at.projectDir),

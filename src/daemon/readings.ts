@@ -9,6 +9,7 @@ import {
   ABSENT,
   failed,
   ok,
+  type Ok,
   type Outcome,
   type Reading,
 } from "../utils/outcome.js";
@@ -335,11 +336,27 @@ export function declareLanes(
 }
 
 // [LAW:dataflow-not-control-flow] A session whose renderer asks no doctor run
-// reads the doctor as absent.
-const doctorLane = (
+// reads the doctor as absent. [LAW:single-enforcer] Every way a run's lane
+// fails — its read, its declaration, the session's whole declaration — is a
+// reading of that run, so the renderer never takes one run's failure for a
+// later run's.
+function doctorLane(
   ask: DoctorAsk | null,
   take: (ask: DoctorAsk) => Lane<DoctorReading>,
-): Lane<DoctorReading> => (ask === null ? settledLane(ABSENT) : take(ask));
+): Lane<DoctorReading> {
+  if (ask === null) return settledLane(ABSENT);
+  const lane = take(ask);
+  return { current: () => ofRun(ask, lane.current()) };
+}
+
+// A doctor lane's answer as a reading of the run it was declared for.
+export const ofRun = <C extends Current<DoctorReading>>(
+  { run }: DoctorAsk,
+  current: C,
+): C | Ok<DoctorReading> =>
+  current.kind === "failed"
+    ? ok({ run, kind: "failed", reason: current.reason })
+    : current;
 
 // [LAW:effects-at-boundaries] No I/O, and no write: every read takes what its
 // owner stored, so the world state stamped over it (src/daemon/collector.ts)
