@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "78cebd1db6caad5c0c7815f4c9c14e0f86e76157",
-      "timestamp": "2026-11-17T00:11:26.714Z",
+      "sha": "cace2e3245afefd551669afd6dd6c7b7b35875ba",
+      "timestamp": "2026-11-17T00:20:49.605Z",
       "commits": [
         {
-          "sha": "78cebd1db6caad5c0c7815f4c9c14e0f86e76157",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T17:10:28-07:00",
-          "message": "fix(daemon): once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (w8l) (#778)\n\n* fix(daemon): once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (candybar-host-renderer-x96a.w8l)\n\nThe teardown's first step tells the renderer link the close has begun: a live renderer stays to take the close's steps and is still pinged, a boot under way ends with the close grace, a down renderer's retry is cancelled, and an end in the close is logged and starts nothing. The session-state flush stays an ask the host judges.\n\n* fix(daemon): the closed phase holds the end its close awaits, and the close's beginning is named beginClose (candybar-host-renderer-x96a.w8l)\n\nHigh review of #778: the boot ended at the close's start is carried on the\nclosed phase rather than in a variable beside it; the link's method no longer\nshares the daemon's closing signal's name; the ping test answers the boot's\nping so only a ping sent in the close can judge the hang; the close test reads\nthe setting's value from the session file.\n\n* fix(daemon): a renderer that ends in the close before the close ended it is a warning (candybar-host-renderer-x96a.w8l)"
+          "sha": "cace2e3245afefd551669afd6dd6c7b7b35875ba",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-17T00:19:45Z",
+          "message": "chore(release): set `package.json` to 1.225.1\n\n## [1.225.1](https://github.com/promptctl/cc-candybar/compare/v1.225.0...v1.225.1) (2026-11-17)\n\n### Bug Fixes\n\n* **daemon:** once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (w8l) ([#778](https://github.com/promptctl/cc-candybar/issues/778)) ([78cebd1](https://github.com/promptctl/cc-candybar/commit/78cebd1db6caad5c0c7815f4c9c14e0f86e76157))\n"
         }
       ]
     }
