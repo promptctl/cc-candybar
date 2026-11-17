@@ -282,6 +282,7 @@ export class RuntimeStats {
         pinned: 0,
         due: 0,
         retiredViews: 0,
+        passages: 0,
         accountedBytes: 0,
         budgetBytes: 0,
       },

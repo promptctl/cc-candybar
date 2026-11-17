@@ -4,7 +4,6 @@
 // own journaled write — and the flash on the rendered bar.
 
 import { linkUrls } from "./helpers/frame";
-import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import {
   ANIMATION_SPEED_NAMES,
@@ -13,7 +12,6 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { heldSegments } from "./helpers/draw-payload";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
 import { clickSessionOf } from "../src/click/wire";
@@ -171,17 +169,16 @@ function idleBar(src: string) {
     sessionId: SID,
   });
   const { config, sessionState } = rig;
-  const sink = new Map<string, readonly RichText[]>();
   // A frame drawn at `when`, its session idle since `idleSince`.
   const draw = (when: Instant, idleSince?: Instant) => {
-    return heldSegments(sink, rig.draw({
+    return rig.draw({
       payload: PAYLOAD,
       at: when,
       selection: selectionFor(
         config,
         idleSince === undefined ? {} : { idleSince },
       ),
-    })).frame;
+    }).frame;
   };
   const logged: string[] = [];
   const ctx: VerbContext = {

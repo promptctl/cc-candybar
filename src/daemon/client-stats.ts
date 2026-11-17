@@ -268,6 +268,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  pinned        ${s.renderCache.pinned}`);
   lines.push(`  due           ${s.renderCache.due}`);
   lines.push(`  retired views ${s.renderCache.retiredViews}`);
+  lines.push(`  passages      ${s.renderCache.passages}`);
   lines.push(
     `  accounted     ${fmtBytes(s.renderCache.accountedBytes)} / ${fmtBytes(s.renderCache.budgetBytes)}`,
   );

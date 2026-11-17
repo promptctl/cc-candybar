@@ -13,7 +13,6 @@ import {
   type RenderObservers,
   type RenderSelection,
 } from "../../src/dsl/render";
-import type { RichText } from "@promptctl/rich-js";
 import type { BuildLineOptions } from "../../src/render/strip";
 import type { Instant } from "../../src/utils/instant";
 import type { SourceRegistry } from "../../src/var-system/sources";
@@ -69,14 +68,3 @@ export function drawPayload(
 // The record of the last frame drawn over each store, as a view keeps its
 // surface's.
 const records = new WeakMap<VariableStore, FrameRecord<RenderedLine>>();
-
-// A draw's cells, by placement id, held in `into` in place of the last draw's,
-// for a test that reads them after the draw through a map it handed out.
-export function heldSegments(
-  into: Map<string, readonly RichText[]>,
-  drawn: DrawnFrame,
-): DrawnFrame {
-  into.clear();
-  for (const [id, cells] of drawn.segments) into.set(id, cells);
-  return drawn;
-}

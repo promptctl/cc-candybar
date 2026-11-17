@@ -53,7 +53,6 @@ import {
 } from "../src/config/disclosure";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { heldSegments } from "./helpers/draw-payload";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import type { ActionDecl } from "../src/config/action";
 import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
@@ -97,10 +96,8 @@ function menuBar(
   // `✓` runs the settings menu's `save`, which acts on the config the
   // session renders.
   const rig = buildRig({ source: src, label: "<user>", base: dflt });
-  // Each segment's cells from the last render, by name.
-  const sink = new Map<string, readonly RichText[]>();
   const render = (): Frame => {
-    return heldSegments(sink, rig.draw({ payload })).frame;
+    return rig.draw({ payload }).frame;
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
@@ -110,7 +107,7 @@ function menuBar(
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     await rig.click(url);
   };
-  return { ...rig, sink, render, clickWriting };
+  return { ...rig, render, clickWriting };
 }
 
 const PAYLOAD = {

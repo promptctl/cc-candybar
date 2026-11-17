@@ -14,7 +14,7 @@
 //   - the render's style reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
-import { drawPayload, heldSegments } from "./helpers/draw-payload";
+import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
@@ -96,9 +96,10 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const sessionState = new SessionState();
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const sink = new Map<string, readonly RichText[]>();
-  const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame =>
-    heldSegments(sink, drawPayload(
+  // The cells of the latest draw, which bgOf and fgOf read after it.
+  let segments: ReadonlyMap<string, readonly RichText[]> = new Map();
+  const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame => {
+    const drawn = drawPayload(
       config,
       compiled,
       store,
@@ -112,15 +113,18 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
         ...(variation === undefined ? {} : { variation }),
         ...(shade === undefined ? {} : { shade }),
       }),
-    )).frame;
+    );
+    segments = drawn.segments;
+    return drawn.frame;
+  };
   const root = compiled.roots.get(PRESET_FLOOR)!;
   const bgOf = (name: string): string => {
-    const cell = sink.get(name)?.[0];
+    const cell = segments.get(name)?.[0];
     if (cell === undefined) throw new Error(`segment "${name}" did not render`);
     return resolvedStyle(cell.style).bgcolor?.value?.hex ?? "(no bg)";
   };
   const fgOf = (name: string): string =>
-    resolvedStyle(sink.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
+    resolvedStyle(segments.get(name)![0]!.style).color?.value?.hex ?? "(no fg)";
   // [LAW:behavior-not-structure] rich-js `transposePalette` directly, never the
   // render's memoized `transposedPalette`: the function under test cannot be
   // the oracle that checks it.

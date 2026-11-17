@@ -1,13 +1,12 @@
 // The checkout's location: what `checkoutLocation` reads off a real
 // checkout, and what `directory` draws from it. `gitaculous` reads the same
 // payload fields only to decide whether it has a branch to show at all.
-import { drawPayload, heldSegments } from "./helpers/draw-payload";
+import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
@@ -68,10 +67,9 @@ function drawAll(
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
-  const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    heldSegments(sink, drawPayload(
+    const { segments } = drawPayload(
       config,
       compiled,
       store,
@@ -80,16 +78,16 @@ function drawAll(
       instantOf(new Date(0)),
       { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 0, width: Number.POSITIVE_INFINITY },
       undefined,
-    )).frame;
+    );
+    return new Map(
+      ["directory", "gitaculous"].map((name) => [
+        name,
+        (segments.get(name) ?? []).map((t) => t.plain).join("").trim(),
+      ]),
+    );
   } finally {
     registry.dispose();
   }
-  return new Map(
-    ["directory", "gitaculous"].map((name) => [
-      name,
-      (sink.get(name) ?? []).map((t) => t.plain).join("").trim(),
-    ]),
-  );
 }
 
 function draw(payload: Record<string, unknown>, variables: object = {}): string {

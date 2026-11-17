@@ -1787,6 +1787,10 @@ export class RenderCache<
     for (const lease of this.viewHolds.values()) {
       if (lease.retired !== null) retiredViews++;
     }
+    let passages = 0;
+    for (const view of this.views.values())
+      for (const record of view.frames.values())
+        passages += record.passages?.size ?? 0;
     return {
       size: this.entries.size,
       held,
@@ -1796,6 +1800,7 @@ export class RenderCache<
       pinned: this.pins.size,
       due: this.due.size,
       retiredViews,
+      passages,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes(),
     };
@@ -2158,15 +2163,5 @@ export class RenderCache<
   stopDrawing(sessionId: SessionId, by: Drawing["by"]): void {
     this.copies.get(sessionId)?.delete(by);
     this.views.get(sessionId)?.frames.delete(by);
-  }
-
-  // [LAW:nothing-unseen] The passages every view's surfaces hold in flight:
-  // each one a rich-js effect, counted beside the sessions' row effects.
-  heldPassages(): number {
-    let held = 0;
-    for (const view of this.views.values())
-      for (const record of view.frames.values())
-        held += record.passages?.size ?? 0;
-    return held;
   }
 }

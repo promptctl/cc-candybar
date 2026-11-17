@@ -9,7 +9,7 @@
 //   4. `{{ themePreview "applyAction" }}` is two rows of the selected option's
 //      palette;
 //   5. a link drawn in several colour runs reads as one link.
-import { drawPayload, heldSegments } from "./helpers/draw-payload";
+import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -60,8 +60,7 @@ function rig(template: string) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
-  const sink = new Map<string, readonly RichText[]>();
-  const rendered = heldSegments(sink, drawPayload(
+  const drawn = drawPayload(
     config,
     compiled,
     store,
@@ -70,9 +69,9 @@ function rig(template: string) {
     instantOf(new Date()),
     OPTS,
     undefined,
-  )).frame;
+  );
   registry.dispose();
-  return { rendered, cells: sink.get("s") ?? [] };
+  return { rendered: drawn.frame, cells: drawn.segments.get("s") ?? [] };
 }
 
 // Each swatch glyph's (foreground, background), in drawing order.

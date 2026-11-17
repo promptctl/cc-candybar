@@ -16,7 +16,7 @@
 // [LAW:single-enforcer] Everything runs the real spine: parse → merge →
 // validate, resolveEffectiveGlobals, registerDslConfig + drawDsl.
 
-import { drawPayload, heldSegments } from "./helpers/draw-payload";
+import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
@@ -262,16 +262,15 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-  const sink = new Map<string, readonly RichText[]>();
-  const bg = (): string => {
-    const cells = sink.get("cell");
+  const bg = (segments: ReadonlyMap<string, readonly RichText[]>): string => {
+    const cells = segments.get("cell");
     if (cells === undefined) throw new Error(`segment "cell" did not render`);
     return resolvedStyle(cells[0]!.style).bgcolor!.value!.hex;
   };
   try {
     const effective = resolveEffectiveGlobals(config, () => null, () => false);
     const at = instantOf(new Date());
-    heldSegments(sink, drawPayload(
+    const daemonDrawn = drawPayload(
       config,
       compiled,
       store,
@@ -281,9 +280,9 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       renderOptionsOf(effective, OPTS_WIDTH),
       undefined,
       effective,
-    )).frame;
-    const daemon = bg();
-    heldSegments(sink, drawPayload(
+    );
+    const daemon = bg(daemonDrawn.segments);
+    const compileOnlyDrawn = drawPayload(
       config,
       compiled,
       store,
@@ -292,8 +291,8 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       at,
       renderOptionsOf(effective, OPTS_WIDTH),
       undefined,
-    )).frame;
-    return { daemon, compileOnly: bg() };
+    );
+    return { daemon, compileOnly: bg(compileOnlyDrawn.segments) };
   } finally {
     registry.dispose();
   }

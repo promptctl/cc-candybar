@@ -8,11 +8,10 @@
 //   - with no `fg:` the cell carries no text colour either: the terminal's own
 //     text on its own ground, the one pair known to read there.
 
-import { drawPayload, heldSegments } from "./helpers/draw-payload";
+import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { getThemePalette, resolveColorRef } from "@promptctl/rich-js";
-import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -45,8 +44,7 @@ function render() {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-  const sink = new Map<string, readonly RichText[]>();
-  const out = heldSegments(sink, drawPayload(
+  const drawn = drawPayload(
     config,
     compiled,
     store,
@@ -61,8 +59,9 @@ function render() {
       width: Number.POSITIVE_INFINITY,
     },
     undefined,
-  )).frame;
-  const style = (name: string) => resolvedStyle(sink.get(name)![0]!.style);
+  );
+  const out = drawn.frame;
+  const style = (name: string) => resolvedStyle(drawn.segments.get(name)![0]!.style);
   return { out, style, dispose: () => registry.dispose() };
 }
 

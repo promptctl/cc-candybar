@@ -242,9 +242,9 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     };
     // A menu opens: five rows. It closes: one row, whose effect is reused.
     draw(at(0), 5);
-    expect(sessions.getStats(0)).toEqual({ sessions: 1, effects: 5 });
+    expect(sessions.getStats()).toEqual({ sessions: 1, effects: 5 });
     draw(at(1), 1);
-    expect(sessions.getStats(0)).toEqual({ sessions: 1, effects: 1 });
+    expect(sessions.getStats()).toEqual({ sessions: 1, effects: 1 });
     expect(sessions.of(session).lastFrame()).toMatchObject({ made: 0, reused: 1 });
     // The menu opens again: the rows it released are made afresh.
     draw(at(2), 5);

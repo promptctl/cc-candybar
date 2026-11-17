@@ -460,7 +460,7 @@ describe("a feed's frame", () => {
     expect(view.frames.get("request")).toBe(answeredRecord);
     expect(view.frames.get("feed")).toBeDefined();
     expect(view.frames.get("feed")).not.toBe(answeredRecord);
-    expect(parts.effectSessions.getStats(0).sessions).toBe(1);
+    expect(parts.effectSessions.getStats().sessions).toBe(1);
   });
 
   // A frame that fails as it leaves the renderer reached no lane, so the

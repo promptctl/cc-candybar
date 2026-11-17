@@ -24,7 +24,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 // door, so a positional read measures the door's accent and would agree with
 // itself while measuring the wrong cell.
 
-import { drawPayload, heldSegments } from "./helpers/draw-payload";
+import { drawPayload } from "./helpers/draw-payload";
 import { textOf } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
@@ -38,7 +38,6 @@ import { bindRender, renderLook } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/renderer/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
-import type { RichText } from "@promptctl/rich-js";
 import { decideThemeName, resolveThemeSelection, THEME_FLOOR } from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import {
@@ -308,8 +307,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     );
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-      const sink = new Map<string, readonly RichText[]>();
-      const out = heldSegments(sink, drawPayload(
+      const drawn = drawPayload(
         config,
         compiled,
         store,
@@ -318,8 +316,9 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         instantOf(new Date()),
         OPTS,
         undefined,
-      )).frame;
-      const plainBg = resolvedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
+      );
+      const out = drawn.frame;
+      const plainBg = resolvedStyle(drawn.segments.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("nord"));
       expect(textOf(out)).toContain("T=nord");
     } finally {
@@ -336,8 +335,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     );
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
-      const sink = new Map<string, readonly RichText[]>();
-      const out = heldSegments(sink, drawPayload(
+      const drawn = drawPayload(
         config,
         compiled,
         store,
@@ -346,8 +344,9 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         instantOf(new Date()),
         OPTS,
         undefined,
-      )).frame;
-      const plainBg = resolvedStyle(sink.get("plain")![0]!.style).bgcolor!.value!.hex;
+      );
+      const out = drawn.frame;
+      const plainBg = resolvedStyle(drawn.segments.get("plain")![0]!.style).bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("dracula"));
     } finally {
       registry.dispose();
@@ -535,9 +534,8 @@ describe("a rule inside a preset's globals", () => {
         (key) => (key === "preset" ? "ruled" : null),
         () => false,
       );
-      const sink = new Map<string, readonly RichText[]>();
       const render = (pct: number): { frame: Frame; bg: string } => {
-        const frame = heldSegments(sink, drawPayload(
+        const drawn = drawPayload(
           config,
           compiled,
           store,
@@ -547,9 +545,9 @@ describe("a rule inside a preset's globals", () => {
           OPTS,
           undefined,
           effective,
-        )).frame;
-        const cells = sink.get("plain")!;
-        return { frame, bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex };
+        );
+        const cells = drawn.segments.get("plain")!;
+        return { frame: drawn.frame, bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex };
       };
       const hot = render(90);
       expect(textOf(hot.frame)).toContain("T=dracula L=hot");

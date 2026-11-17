@@ -45,9 +45,8 @@ All paths are relative to `/Users/bmf/code/cc-candybar/.claude/worktrees/synthet
 - The rate cell in `src/config/settings-menu.ts` reads it.
 
 **What is not keyed by `by`, and blocks a second width:**
-- `FrameMemory` holds one `last` per view, and `from(source)` returns nothing when `source.width` differs (`src/render/frame-memory.ts`).
-- `SessionEffects` holds one set of placements, passages and anchor per session (`src/render/effect.ts`).
-- Alternating two widths on one view would make each draw find no comparable last frame. Appearing and leaving fades stop, and held loading cells are lost.
+- A view holds one frame record, with its passages, per `by`, and `recordFrom` returns nothing when `source.width` differs (`src/render/frame-memory.ts`). Two widths drawn by one `by` would make each draw find no comparable last frame: appearing and leaving fades stop, and held loading cells are lost.
+- `SessionEffects` holds one anchor, effect in force and set of placement clocks per session (`src/render/effect.ts`).
 - `bindPayload` does override `term.cols` from `opts.width` (`src/dsl/render.ts`), so a draw at another width is possible by parameter. Its effect on keyed sources and on the view's wake reaction is **unknown**; I did not trace it.
 
 **Rejected options:**
