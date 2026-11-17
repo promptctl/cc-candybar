@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-786",
+      "ref": "refs/pull/786/merge",
+      "sha": "573b9bca55e3d97349a48eaabf2c7e05d1219882",
+      "timestamp": "2026-11-17T13:34:52.111Z",
+      "commits": [
+        {
+          "sha": "573b9bca55e3d97349a48eaabf2c7e05d1219882",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T06:33:41-07:00",
+          "message": "Merge c6d01fa172d03561b74325014886ae2ee09d11d2 into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
+        },
+        {
+          "sha": "c6d01fa172d03561b74325014886ae2ee09d11d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T06:33:16-07:00",
+          "message": "feat(config): the host discovers each config and the renderer opens no file (adf)\n\nThe host's config discovery reads every file a load needs into one\nConfigSnapshot per origin: the layers' texts, listed and installed plugins,\nthe repository's standing and the checkout. A watch per origin hands the\nrenderer a new snapshot only when what it found moved, and the render cache\nreloads only on a moved snapshot, keeping its state when the load inputs\ndid not move.\n\n- A click's config is discovered at the click, at its session's newest\n  request's origin or, after a restart, the origin its last draw recorded,\n  which the renderer reports to the host as it starts.\n- A click's changes land with a rediscovery of the files written, in the\n  click's place in the mailbox.\n- A write names its layer by role; the path is display text only.\n- The adapter's config reads, the renderer's watches and the reload walk\n  are deleted.\n- Lint refuses fs in the renderer, its start and shared code, with an\n  exception list that fails once its module stops importing fs.\n"
+        },
+        {
+          "sha": "52c8cff59744a3b1cbfaaedf13df096fd3f1a706",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T05:09:13-07:00",
+          "message": "docs(design): the config snapshot holds every fact a load learns from the filesystem (adf)\n\nThe A-2 probe found six facts the first snapshot could not carry: a\nlayer's listed plugin definitions, a plugin folder's real path, a\ncheckout root, a layer's path for its run actions, discovery's notices,\nand the repository question. The snapshot in section 7 now holds each.\napprove-repo keeps the directory its signed link asked about.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ba43c3ab383835c4accd3c0dd502526e7277592c",
