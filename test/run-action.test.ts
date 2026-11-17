@@ -20,11 +20,7 @@ import path from "node:path";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import {
-  loadFromDisk,
-  RenderCache,
-  type SessionView,
-} from "../src/renderer/render-cache";
+import { RenderCache, type SessionView } from "../src/renderer/render-cache";
 import { renderOptionsOf } from "../src/renderer/render-payload";
 import { collected } from "./helpers/collected";
 import {
@@ -58,8 +54,13 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
-import { clickActing, clickUrl, effectsOf, testVerbContext,
-  verbContextWith } from "./helpers/click";
+import {
+  clickActing,
+  clickUrl,
+  effectsOf,
+  testVerbContext,
+  verbContextWith,
+} from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
 import { throughout, until } from "./helpers/until";
@@ -71,6 +72,8 @@ import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/daemon/source-runs";
+import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { loadDiscovered } from "./helpers/config-host";
 
 const S2 = sessionIdOf("s2");
 const S9 = sessionIdOf("s9");
@@ -228,7 +231,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   });
   const sessionState = new SessionState();
   const served = collected({ owners: providers, log }, cleanups);
-  const cache = new RenderCache<SessionSource>(
+  const cache = new DiscoveringCache<SessionSource>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
@@ -271,7 +274,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     hold: (configFile, sid) => {
       const facts = viewFacts(dir, sid);
       return served.config(facts, () =>
-        cache.holdSession(dir, dir, configFile, facts),
+        cache.holdSession(originOf(dir, dir, configFile), facts),
       );
     },
   };
@@ -393,10 +396,13 @@ function clickContext(
     SESSION_CLIENT_HINTS_KEY,
     JSON.stringify({ claudeConfigDir: "/u/.claude-x" }),
   );
-  return verbContextWith(testVerbContext(r.sessionState, undefined, view.state.config), {
-    sourcesFor: () => view.state.sources,
-    ...over
-});
+  return verbContextWith(
+    testVerbContext(r.sessionState, undefined, view.state.config),
+    {
+      sourcesFor: () => view.state.sources,
+      ...over,
+    },
+  );
 }
 
 // The session's variables as whichever shell spawned the daemon set them.
@@ -420,7 +426,7 @@ describe("a run's declaration", () => {
 
   test("a plugin's run loads: its refreshes under its namespace, its folder the directory it runs in", () => {
     const r = rig();
-    const loaded = loadFromDisk(dir, dir, config(["mine"]), {
+    const loaded = loadDiscovered(dir, dir, config(["mine"]), {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
@@ -449,7 +455,7 @@ describe("a run's declaration", () => {
       "conf/config.json5",
       `{ plugins: ["../p/plugin.json5"], actions: { mine: { run: ["true"], refreshes: ["${STATUS}"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, file, {
+    const loaded = loadDiscovered(dir, dir, file, {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),

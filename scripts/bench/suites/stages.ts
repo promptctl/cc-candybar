@@ -19,7 +19,12 @@ import {
   type PreparedConfig,
 } from "../../../src/check.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
-import { homeLayer, loadConfigChain } from "../../../src/config/dsl-loader.js";
+import { homeLayer, loadSnapshot } from "../../../src/config/dsl-loader.js";
+import {
+  installedRoots,
+  sessionPlugins,
+  snapshotOf,
+} from "../../../src/daemon/config-discovery/discover.js";
 import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.js";
 import { presetNames } from "../../../src/config/presets.js";
 import { ansiOf } from "../../../src/render/frame.js";
@@ -65,7 +70,9 @@ async function prepared(
     throw new Error(
       `${layers.join(", ") || "the bundled default"} did not prepare cleanly: ${[
         ...warnings,
-        ...config.droppedPlugins.map((d) => `plugin dropped: ${JSON.stringify(d)}`),
+        ...config.droppedPlugins.map(
+          (d) => `plugin dropped: ${JSON.stringify(d)}`,
+        ),
       ].join("; ")}`,
     );
   }
@@ -155,12 +162,15 @@ export const STAGES: readonly Benchmark[] = [
       const cwd = scratchDir("ccbn-stage");
       try {
         const ms = await repeat(plan.samples, () => {
-          loadConfigChain(
-            locations(processWorld().host),
-            [],
+          const locs = locations(processWorld().host);
+          loadSnapshot(
+            snapshotOf(
+              sessionPlugins(locs, installedRoots(locs), null, cwd),
+              [],
+            ),
+            locs.home,
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },
-            { repo: null, cwd },
           );
         });
         return measured([{ name: "load", samples: ms }]);
@@ -244,7 +254,11 @@ export const STAGES: readonly Benchmark[] = [
     drawBenchmark(
       `stages.draw.example.${file.replace(/\.json5$/, "")}`,
       `examples/${file} drawn ${DRAW_WIDTH} columns wide, each draw a second after the last`,
-      { preset: null, width: DRAW_WIDTH, layers: [path.join(EXAMPLES_DIR, file)] },
+      {
+        preset: null,
+        width: DRAW_WIDTH,
+        layers: [path.join(EXAMPLES_DIR, file)],
+      },
       40,
     ),
   ),

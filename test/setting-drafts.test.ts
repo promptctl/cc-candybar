@@ -21,7 +21,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import JSON5 from "json5";
-import { EDITS_IN_PLACE } from "./helpers/history-step";
+import { EDITS_IN_PLACE, soleLayer } from "./helpers/history-step";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const config = (source: string) =>
@@ -31,11 +31,13 @@ const picks =
   (key: string): string | null =>
     p[key] ?? null;
 const drafts = (source: string, p: Record<string, string>) =>
-  settingDrafts(config(source), picks(p)).map(({ sessionKey, value, target }) => ({
-    sessionKey,
-    value,
-    target,
-  }));
+  settingDrafts(config(source), picks(p)).map(
+    ({ sessionKey, value, target }) => ({
+      sessionKey,
+      value,
+      target,
+    }),
+  );
 
 describe("settingDrafts", () => {
   const FILE = `{ globals: { padding: 1 } }`;
@@ -72,9 +74,9 @@ describe("settingDrafts", () => {
   });
 
   test("a pick the render ignores is no draft", () => {
-    expect(drafts(FILE, { preset: "gone", look: "gone", theme: "gone" })).toEqual(
-      [],
-    );
+    expect(
+      drafts(FILE, { preset: "gone", look: "gone", theme: "gone" }),
+    ).toEqual([]);
   });
 
   test("a theme chosen by rule is no draft until a name is picked over it", () => {
@@ -168,36 +170,39 @@ describe("a save under a preset that pins the field lands where it renders", () 
     const before = drafts(source, p);
     writeValues(
       EDITS_IN_PLACE,
-      { path: file, role: "user",
-          below: [],
-          above: [], repo: null, cwd: null, locs: locs() },
+      soleLayer(file, locs().home),
       before.map(({ target, value }) => [target, value] as const),
     );
     const after = readFileSync(file, "utf8");
     return { before, after, left: drafts(after, p) };
   };
 
-  test.each(Object.entries(PIN_AND_PICK) as [PinnedSetting, { pin: string; pick: string }][])(
-    "%s",
-    (name, { pin, pick }) => {
-      const { configKey, sessionKey } = SETTINGS[name];
-      const target = `presets.mine.globals.${configKey}`;
-      const preset = `presets: { mine: { globals: { ${configKey}: ${pin} } } }`;
+  test.each(
+    Object.entries(PIN_AND_PICK) as [
+      PinnedSetting,
+      { pin: string; pick: string },
+    ][],
+  )("%s", (name, { pin, pick }) => {
+    const { configKey, sessionKey } = SETTINGS[name];
+    const target = `presets.mine.globals.${configKey}`;
+    const preset = `presets: { mine: { globals: { ${configKey}: ${pin} } } }`;
 
-      // The file names the preset: only the field is a draft.
-      const named = save(`{ globals: { preset: 'mine' }, ${preset} }`, {
-        [sessionKey]: pick,
-      });
-      expect(named.before).toEqual([{ sessionKey, value: pick, target }]);
-      expect(named.left).toEqual([]);
-      expect(JSON5.parse(named.after).globals).not.toHaveProperty(configKey);
+    // The file names the preset: only the field is a draft.
+    const named = save(`{ globals: { preset: 'mine' }, ${preset} }`, {
+      [sessionKey]: pick,
+    });
+    expect(named.before).toEqual([{ sessionKey, value: pick, target }]);
+    expect(named.left).toEqual([]);
+    expect(JSON5.parse(named.after).globals).not.toHaveProperty(configKey);
 
-      // The session picks the preset: it saves too, and the field still lands
-      // in the preset the file will now name (the `landed` resolution).
-      const picked = save(`{ ${preset} }`, { preset: "mine", [sessionKey]: pick });
-      expect(picked.before).toContainEqual({ sessionKey, value: pick, target });
-      expect(picked.left).toEqual([]);
-      expect(JSON5.parse(picked.after).globals).toEqual({ preset: "mine" });
-    },
-  );
+    // The session picks the preset: it saves too, and the field still lands
+    // in the preset the file will now name (the `landed` resolution).
+    const picked = save(`{ ${preset} }`, {
+      preset: "mine",
+      [sessionKey]: pick,
+    });
+    expect(picked.before).toContainEqual({ sessionKey, value: pick, target });
+    expect(picked.left).toEqual([]);
+    expect(JSON5.parse(picked.after).globals).toEqual({ preset: "mine" });
+  });
 });

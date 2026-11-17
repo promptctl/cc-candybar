@@ -180,7 +180,7 @@ export const VERB_RUN = "run";
 // [LAW:effects-at-boundaries] Answer the bar's question about a repository's
 // cc-candybar config. Args: `[sessionId, dir, answer, mac]` — `answer` is
 // approved or declined, and `mac` signs the session, directory and answer
-// (src/config/repo-configs.ts), so only an answer the bar drew is recorded.
+// (src/config/repo-question.ts), so only an answer the bar drew is recorded.
 export const VERB_REPO_CONFIG = "repo-config";
 
 // Copy what a diagnostic message copies (src/render/diagnostics.ts): its text,

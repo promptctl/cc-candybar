@@ -47,6 +47,7 @@ import {
 import { sumsOf } from "./today";
 import { viewFacts } from "./view-facts";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { DiscoveringCache, originOf } from "./config-host";
 
 export const SESSION = sessionIdOf("golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a");
 export const AT = instantOf(new Date(1_700_000_000_000));
@@ -161,7 +162,7 @@ export function sessionRig(
     clock: systemTimekeeper,
     logger: () => {},
   });
-  const cache = new RenderCache<SessionSource>(
+  const cache = new DiscoveringCache<SessionSource>(
     {
       clock: systemTimekeeper,
       stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
@@ -246,7 +247,7 @@ export async function settledRequest(
 ): Promise<SessionView<SessionSource>> {
   const request = requestOf(dir);
   const held = rig.served.config(request, () =>
-    rig.cache.holdSession(dir, dir, configFile, request),
+    rig.cache.holdSession(originOf(dir, dir, configFile), request),
   );
   cleanups.push(() => held[Symbol.dispose]());
   await settledWorld(

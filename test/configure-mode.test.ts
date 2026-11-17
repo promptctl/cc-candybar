@@ -41,7 +41,11 @@ import {
   EDIT_CONFIGURE_KEY,
 } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
-import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
+import {
+  ADD_GLYPH,
+  CONFIGURE_GLYPH,
+  REMOVE_GLYPH,
+} from "../src/config/edit-glyphs";
 import {
   placementId,
   walkNodes,
@@ -58,6 +62,7 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { picked, selectionFor } from "./helpers/selection";
 import { MENU_PAGE_NS } from "../src/config/reserved-names";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { onLanded } from "./helpers/click";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
@@ -112,7 +117,10 @@ function configureBar(src: string, preset?: string) {
   const render = (): Frame =>
     rig.draw({
       opts: { width: 200 },
-      selection: preset === undefined ? undefined : selectionFor(config, {}, picked({ preset })),
+      selection:
+        preset === undefined
+          ? undefined
+          : selectionFor(config, {}, picked({ preset })),
     }).frame;
   // The config a click reads, re-read from the file on a reload — as the
   // daemon's render cache does.
@@ -120,10 +128,10 @@ function configureBar(src: string, preset?: string) {
   const ctx: VerbContext = {
     ...rig.ctx,
     configFor: () => current,
-    reloadConfig: () => {
-      current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
-    },
   };
+  onLanded(ctx, () => {
+    current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
+  });
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
   // A link whose click writes `value` to `key` — or, for a stepper
   // (`step-state`), steps `key` by `value`. A picker over two words writes
@@ -278,8 +286,12 @@ describe("configure mode: one placement's settings at a time", () => {
     const rt = configureBar(SRC);
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
     // The flag toggles, the word picker's arrow picks, the stepper steps and wraps.
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"));
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
+    );
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"),
+    );
     await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "depth"), "1"));
     const text = textOf(rt.render());
     expect(text).toContain("D-short-3");
@@ -402,10 +414,16 @@ describe("configure mode's drafts are saved into the placement", () => {
     const drafts = () =>
       placementDrafts(rt.config, (k) => rt.sessionState.get(SID, k));
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
+    );
     // Writing a value back to what the file already says is no draft.
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"));
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "long"));
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "short"),
+    );
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("vcs2", "form"), "long"),
+    );
     configurePlacement(rt.sessionState, SID, "default", "vcs");
     await rt.click(rt.urlWriting(rt.render(), draftKey("vcs", "depth"), "1"));
     expect(drafts()).toEqual([
@@ -476,7 +494,9 @@ describe("configure mode survives what a placement's settings do to it", () => {
     durable.write(HIDING);
     const rt = configureBar(HIDING);
     configurePlacement(rt.sessionState, SID, "default", "tag");
-    await rt.click(rt.urlWriting(rt.render(), draftKey("tag", "show"), "false"));
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("tag", "show"), "false"),
+    );
     // The control that turned it off is still there to turn it back on.
     expect(textOf(rt.render())).toContain("☐ show");
     await rt.click(rt.urlWriting(rt.render(), draftKey("tag", "show"), "true"));
@@ -514,11 +534,15 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     durable.write(SRC);
     const rt = configureBar(SRC);
     configurePlacement(rt.sessionState, SID, "default", "vcs2");
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
+    );
     await VERBS.get(VERB_UNDO)!(SID, rt.ctx);
     expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
 
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
+    );
     await VERBS.get(VERB_SAVE)!(`${SID}/user`, rt.ctx);
     expect(rt.sessionState.get(SID, draftKey("vcs2", "detail"))).toBeNull();
     await VERBS.get(VERB_UNDO)!(SID, rt.ctx);
@@ -568,7 +592,9 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       durable.write(src);
       const rt = configureBar(src);
       configurePlacement(rt.sessionState, SID, "default", "vcs2");
-      await rt.click(rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"));
+      await rt.click(
+        rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
+      );
       await VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rt.ctx);
       const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
       const settingsIn = (preset: string) =>
@@ -585,7 +611,9 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     durable.write(SRC);
     const rt = configureBar(SRC);
     configurePlacement(rt.sessionState, SID, "default", "vcs");
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs", "detail"), "true"));
+    await rt.click(
+      rt.urlWriting(rt.render(), draftKey("vcs", "detail"), "true"),
+    );
     rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const remove = rt.urlWriting(
       rt.render(),

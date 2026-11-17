@@ -14,16 +14,28 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { click, findUrl, render, renderUntil, refusedClick } from "../../helpers/daemon-e2e";
+import {
+  click,
+  findUrl,
+  render,
+  renderUntil,
+  refusedClick,
+} from "../../helpers/daemon-e2e";
 import type { DaemonTarget } from "../../helpers/daemon-wire";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
+import {
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
 import {
   prepareIsolatedDaemonEnv,
   type IsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
 import { VERB_REPO_CONFIG } from "../../../src/click/wire";
 import { logPath } from "../../../src/daemon/paths";
-import { repoConfigs, repoConfigsPath } from "../../../src/config/repo-configs";
+import {
+  repoConfigs,
+  repoConfigsPath,
+} from "../../../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../../../src/daemon/paths";
 import {
   indicatorOf,
@@ -31,6 +43,7 @@ import {
   type ViewerPage,
 } from "../../helpers/diagnostics-viewer";
 import { until } from "../../helpers/until";
+import { valueOf } from "../../../src/utils/logfmt";
 
 jest.setTimeout(60_000);
 
@@ -86,7 +99,8 @@ function answerUrl(rendered: Frame, answer: string): string {
   const url = findUrl(linkUrls(rendered), (effects) =>
     effects.some((e) => e.verb === VERB_REPO_CONFIG && e.args[2] === answer),
   );
-  if (url === undefined) throw new Error(`no ${answer} link in:\n${textOf(rendered)}`);
+  if (url === undefined)
+    throw new Error(`no ${answer} link in:\n${textOf(rendered)}`);
   return url;
 }
 
@@ -122,8 +136,7 @@ describe("a repository's config waits for the user's one answer", () => {
   const start = (): void => {
     daemon = startDaemon(isolated.env);
   };
-  const draw = (sid: string): Promise<Frame> =>
-    render(daemon, sid, project);
+  const draw = (sid: string): Promise<Frame> => render(daemon, sid, project);
 
   test("unanswered: nothing runs, the user's config draws, and the bar asks", async () => {
     start();
@@ -137,7 +150,7 @@ describe("a repository's config waits for the user's one answer", () => {
     const rendered = question!.rendered;
     expect(fs.existsSync(marker)).toBe(false);
     // [LAW:nothing-unseen] The load says which repository it left waiting.
-    const loadedLine = ` awaiting=${project} declined=- `;
+    const loadedLine = ` repo=${valueOf(`awaiting:${project}`)} `;
     await until(
       () =>
         fs
@@ -152,7 +165,9 @@ describe("a repository's config waits for the user's one answer", () => {
     const forged = approve.replace(/[0-9a-f]{64}/, "0".repeat(64));
     expect(forged).not.toBe(approve);
     await refusedClick(daemon, forged, "bad-request");
-    expect(fs.existsSync(repoConfigsPath(stateDir(hostOf(isolated.env))))).toBe(false);
+    expect(fs.existsSync(repoConfigsPath(stateDir(hostOf(isolated.env))))).toBe(
+      false,
+    );
     expect(fs.existsSync(marker)).toBe(false);
   });
 

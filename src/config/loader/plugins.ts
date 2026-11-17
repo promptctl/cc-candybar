@@ -16,7 +16,6 @@
 // daemon offers as a message beside the settings door and `cc-candybar check`
 // fails on.
 
-import fs from "node:fs";
 import path from "node:path";
 import JSON5 from "json5";
 import {
@@ -38,7 +37,7 @@ import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { resolveUserPath } from "../../utils/user-path.js";
 import { type Checkout } from "../../utils/git-root.js";
-import type { ApprovedRepo } from "./repo-gate.js";
+import type { PluginFile } from "../config-snapshot.js";
 import {
   isPlainObject,
   describeType,
@@ -106,9 +105,6 @@ export interface DropCause {
 
 // What a definition's paths resolve against beyond its own directory.
 export interface PluginContext {
-  // The session's project, once the user approved it: where the plugins it
-  // ships live. Null where none is known or approved.
-  readonly repo: ApprovedRepo | null;
   // The checkout the session works in, for a `data: { checkout }` path; null
   // where no session is known.
   readonly checkout: Checkout | null;
@@ -208,20 +204,50 @@ function reasonOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// [LAW:single-enforcer] What a `plugins` list must be to name definitions: a
+// list of non-empty paths. Discovery reads the definitions such a list names;
+// the loader reports a list that is not one.
+export function pluginList(raw: unknown): readonly string[] | undefined {
+  return Array.isArray(raw) &&
+    raw.every((p) => typeof p === "string" && p !== "")
+    ? (raw as string[])
+    : undefined;
+}
+
 /**
- * The definition paths a config lists under `plugins:`, absolute: a relative
- * path resolves against the directory of `from`, the file listing it, and `~`
- * against the home directory.
+ * The definition a `plugins` entry names, absolute: a relative path resolves
+ * against the directory of `from`, the file listing it, and `~` against the
+ * home directory. Discovery reads the file it names; the loader finds that
+ * read under the entry as written.
+ */
+export function listedPath(ref: string, from: string, home: string): string {
+  return resolveUserPath(path.dirname(from), ref, home);
+}
+
+/**
+ * The definitions a config at `from` lists under `plugins:`, as discovery
+ * read them for each entry as written.
+ *
+ * [LAW:no-silent-failure] An entry discovery did not read — a text whose list
+ * changed since the snapshot it is proved against — is the file's load error
+ * naming the entry, never a plugin silently left out.
  */
 export function listedPlugins(
   refs: readonly string[],
   from: string,
-  scope: PluginScope,
-  home: string,
-): readonly PluginDefinition[] {
-  return refs.map((ref) =>
-    pluginDefinition(resolveUserPath(path.dirname(from), ref, home), scope),
-  );
+  listed: Readonly<Record<string, PluginFile>>,
+): readonly PluginFile[] {
+  const unread = refs.filter((ref) => !Object.hasOwn(listed, ref));
+  if (unread.length > 0) {
+    throw new ConfigError(
+      from,
+      unread.map((ref) => ({
+        path: "plugins",
+        message: `${JSON.stringify(ref)} is listed, and its definition was not read with ${from}: the list changed since the config was discovered`,
+      })),
+    );
+  }
+  return refs.map((ref) => listed[ref]!);
 }
 
 /**
@@ -231,7 +257,7 @@ export function listedPlugins(
  * two copies never merge; within one list a namespace is taken once.
  */
 export function applyPlugins(
-  definitions: readonly PluginDefinition[],
+  files: readonly PluginFile[],
   ctx: PluginContext,
   base: PluginBase,
   // `replaces`: the layer held declarations under this plugin's namespace.
@@ -241,8 +267,11 @@ export function applyPlugins(
   // either merges its plugin or records why not, and the next step sees the
   // result.
   const taken = new Map<string, string>();
-  return definitions.reduce<PluginLayer>(
-    (layer, definition) => {
+  return files.reduce<PluginLayer>(
+    (layer, found) => {
+      // Its identity is minted from where discovery found it; its bytes are
+      // the snapshot's.
+      const definition = pluginDefinition(found.path, found.scope);
       const file = definition.path;
       const ns =
         definition.name === undefined ? undefined : pluginNs(definition);
@@ -284,21 +313,28 @@ export function applyPlugins(
       }
       taken.set(ns, file);
       const under = withoutPlugin(layer.config, ns);
-      const merged = attempt(() => {
-        const source = fs.readFileSync(file, "utf-8");
-        const config = mergeWithDefault(
-          fragmentOf(
-            file,
-            definition,
-            { source, json: JSON5.parse(source) as unknown },
-            ctx,
-          ),
-          under,
-        );
-        requireOneSourcePerFile(file, ns, config);
-        validate(config, ns, under !== layer.config);
-        return config;
-      });
+      const read = found.definition;
+      // [LAW:dataflow-not-control-flow] A definition discovery could not read
+      // drops as one that does not parse does: its reason is the read's error.
+      const merged: Attempt<DslConfig> =
+        read.kind === "unreadable"
+          ? { ok: false, reason: read.error }
+          : attempt(() => {
+              const source = read.text;
+              const config = mergeWithDefault(
+                fragmentOf(
+                  file,
+                  read.dir,
+                  definition,
+                  { source, json: JSON5.parse(source) as unknown },
+                  ctx,
+                ),
+                under,
+              );
+              requireOneSourcePerFile(file, ns, config);
+              validate(config, ns, under !== layer.config);
+              return config;
+            });
       if (merged.ok) {
         return {
           ...layer,
@@ -605,6 +641,8 @@ function settingFor(
 // into a drop.
 function fragmentOf(
   file: string,
+  // The real path of the definition's folder, as discovery resolved it.
+  dir: string,
   id: PluginId,
   { source, json }: { readonly source: string; readonly json: unknown },
   { checkout, home }: PluginContext,
@@ -639,7 +677,7 @@ function fragmentOf(
       ? undefined
       : dataPathOf(json.data, file, checkout, home, issues);
   const sources =
-    json.sources === undefined ? {} : sourcesOf(json.sources, file, issues);
+    json.sources === undefined ? {} : sourcesOf(json.sources, dir, issues);
   if (issues.length > 0) return fail();
 
   const ctx: ValidateCtx = {
@@ -717,12 +755,7 @@ function fragmentOf(
     // real path its storage is resolved under.
     actions: prefixed(
       ns,
-      setKeysUnder(
-        ns,
-        validateActions(ctx, json.actions, {
-          dir: fs.realpathSync(path.dirname(file)),
-        }),
-      ),
+      setKeysUnder(ns, validateActions(ctx, json.actions, { dir })),
     ),
   };
   issues.push(...wrongScopeRefs(authored, id));
@@ -1023,7 +1056,8 @@ const BUILT_SOURCE = {
 // linked plugin folder replaced by an install is another folder.
 function sourcesOf(
   sources: unknown,
-  file: string,
+  // The definition folder's real path.
+  dir: string,
   issues: ConfigIssue[],
 ): Record<string, SourceVarDecl> {
   if (!isPlainObject(sources)) {
@@ -1033,10 +1067,7 @@ function sourcesOf(
     });
     return {};
   }
-  const storage = path.join(
-    fs.realpathSync(path.dirname(file)),
-    STORAGE_FOLDER,
-  );
+  const storage = path.join(dir, STORAGE_FOLDER);
   const built = JSON.stringify(BUILT_SOURCE);
   const lowered: Record<string, SourceVarDecl> = {};
   for (const [name, source] of Object.entries(sources)) {

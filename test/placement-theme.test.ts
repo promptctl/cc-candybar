@@ -22,10 +22,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { bindRender } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/renderer/session-state";
-import {
-  FOLLOW_BAR,
-  listResolvablePaletteNames,
-} from "../src/themes/policy";
+import { FOLLOW_BAR, listResolvablePaletteNames } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { settingsOf } from "../src/config/dsl-types";
@@ -42,6 +39,7 @@ import {
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { onLanded } from "./helpers/click";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
@@ -104,10 +102,10 @@ function themeBar(src: string) {
   const ctx: VerbContext = {
     ...rig.ctx,
     configFor: () => current,
-    reloadConfig: () => {
-      current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
-    },
   };
+  onLanded(ctx, () => {
+    current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
+  });
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
   return { ...rig, render, bgOf, click, ctx };
 }
@@ -256,7 +254,9 @@ describe("configure mode picks a placement's theme", () => {
       linksOf(out).find(
         (l) =>
           /▀▀▀/u.test(l.text) &&
-          effectsOf(l.url).some((e) => e.args[1] === key && e.args[2] === value),
+          effectsOf(l.url).some(
+            (e) => e.args[1] === key && e.args[2] === value,
+          ),
       )!;
     const lookOf = (value: string) => {
       const { url } = swatchOf(value);
@@ -268,9 +268,7 @@ describe("configure mode picks a placement's theme", () => {
     expect(swatchOf(first!).text).toBe("▀▀▀");
     expect(lookOf(first!)).not.toEqual(lookOf(second!));
     expect(
-      linksOf(out).filter((l) =>
-        listResolvablePaletteNames().includes(l.text),
-      ),
+      linksOf(out).filter((l) => listResolvablePaletteNames().includes(l.text)),
     ).toEqual([]);
 
     const pinnedBefore = rt.bgOf("pinned");
@@ -347,7 +345,11 @@ describe("the layout preview while arranging", () => {
     const drawn = previewPalette(rt, "tag");
     expect(drawn).toHaveLength(2);
     expect(drawn).toContain(paletteForThemeName(PIN));
-    rt.sessionState.set(SID, placementDraftKey("default", "tag", "theme"), BAR_B);
+    rt.sessionState.set(
+      SID,
+      placementDraftKey("default", "tag", "theme"),
+      BAR_B,
+    );
     expect(previewPalette(rt, "tag")).toEqual([
       paletteForThemeName(BAR_B),
       paletteForThemeName(PIN),

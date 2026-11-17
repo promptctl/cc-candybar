@@ -8,9 +8,10 @@
 // the user's and package managers' plugin roots never ask.
 //
 // [LAW:effects-at-boundaries] Pure: the answers are read at each caller's
-// edge (src/config/repo-configs.ts) and handed in.
+// edge (src/daemon/config-discovery/repo-configs.ts) and handed in.
 
 import type { WorktreeLink } from "../../utils/git-root.js";
+import type { RepoQuestion } from "../config-snapshot.js";
 import type { Asked } from "../../utils/outcome.js";
 
 export type RepoAnswer = "approved" | "declined";
@@ -119,11 +120,7 @@ export function gateRepos(
   dirs: readonly RepoDir[],
   project: RepoProject | null,
 ): RepoGate {
-  const reached = [
-    ...new Map(
-      [...dirs, ...(project?.ships ? [project] : [])].map((d) => [d.dir, d]),
-    ).values(),
-  ];
+  const reached = reachedDirs(dirs, project);
   // [LAW:one-source-of-truth] Each reached directory is ruled once, and
   // every list below is a view of those rulings.
   const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
@@ -143,6 +140,37 @@ export function gateRepos(
       d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : [],
     ),
     unread: answers.kind === "failed" ? answers.reason : null,
+  };
+}
+
+// The real directories a session reaches that ask, each once.
+function reachedDirs(
+  dirs: readonly RepoDir[],
+  project: RepoProject | null,
+): readonly RepoDir[] {
+  return [
+    ...new Map(
+      [...dirs, ...(project?.ships ? [project] : [])].map((d) => [d.dir, d]),
+    ).values(),
+  ];
+}
+
+// [LAW:one-source-of-truth] The repository question a session's directories
+// ask, ruled exactly as the gate rules them. A session's config directories
+// are its project's, so it reaches one directory at most; null when it
+// reaches none.
+export function repoQuestion(
+  answers: RepoAnswers,
+  dirs: readonly RepoDir[],
+  project: RepoProject | null,
+): RepoQuestion | null {
+  const [reached] = reachedDirs(dirs, project);
+  if (reached === undefined) return null;
+  const { standing, under } = ruling(answers, reached);
+  return {
+    dir: under,
+    standing,
+    unproven: reached.link.kind === "unproven" ? reached.link.reason : null,
   };
 }
 
@@ -186,11 +214,10 @@ export function repoUnreadNotice(gate: RepoGate): string | null {
 }
 
 // What a verdict outside the bar (`check`) says of each repository
-// it did not run. The bar asks instead.
+// it did not run. The bar asks instead. A book that could not be read is
+// discovery's notice (`repoUnreadNotice`), said beside these.
 export function repoGateLines(gate: RepoGate): readonly string[] {
-  const unread = repoUnreadNotice(gate);
   return [
-    ...(unread === null ? [] : [unread]),
     ...gate.awaiting.map(
       (d) =>
         `awaiting approval: ${d} — its cc-candybar config runs once it is approved in the bar`,

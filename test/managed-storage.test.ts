@@ -395,6 +395,24 @@ describe("ManagedStorage watches", () => {
     expect(r.counters.watchersClosed).toBe(1);
   });
 
+  // [LAW:no-ambient-temporal-coupling] A config load no longer follows a
+  // folder's loss, so its owner is the one that recovers it.
+  // Not at once: a plugin folder being removed would have its storage folder
+  // made in it again before its own removal, which then fails as not empty.
+  test("a folder removed under its watch is made again by its owner at the next period, as a new generation, with no load's hold", async () => {
+    const watches = fakeWatches();
+    const r = rig();
+    r.hold();
+    fs.rmSync(r.folder, { recursive: true });
+    watches[0]!.listener("rename", path.basename(r.folder));
+    await until(() => r.storage.stats().lost === 1, "the loss");
+    expect(r.generation()).toBe(0);
+    expect(fs.existsSync(r.folder)).toBe(false);
+    r.fileEvents.notify({ kind: "period" });
+    expect(r.generation()).toBe(1);
+    expect(fs.statSync(r.folder).isDirectory()).toBe(true);
+  });
+
   test("a held file whose folder is removed reads what the path holds now, not its last value", async () => {
     const watches = fakeWatches();
     const r = rig();
@@ -421,7 +439,7 @@ describe("ManagedStorage watches", () => {
       failedAt: "read",
       reason: expect.stringMatching(
         new RegExp(
-          `^cannot refresh: ${r.folder} could not be created or read: ENOTDIR: .*; reload the config or restart the daemon$`,
+          `^cannot refresh: ${r.folder} could not be created or read: ENOTDIR: .*; retried when the config next loads or file events catch up$`,
         ),
       ),
     });
@@ -449,7 +467,7 @@ describe("ManagedStorage watches", () => {
     expect(await answered(lane)).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} could not be created or read: ${r.folder} is not a folder; reload the config or restart the daemon`,
+      reason: `cannot refresh: ${r.folder} could not be created or read: ${r.folder} is not a folder; retried when the config next loads or file events catch up`,
     });
     expect(r.storage.stats().faults).toMatchObject({ unusable: 1 });
   });
@@ -508,7 +526,7 @@ describe("ManagedStorage watches", () => {
     expect(await answered(lane)).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r0.folder} EMFILE: too many open files, watch '${r0.folder}'; reload the config or restart the daemon`,
+      reason: `cannot refresh: ${r0.folder} EMFILE: too many open files, watch '${r0.folder}'; retried when the config next loads or file events catch up`,
     });
     expect(r0.counters.watchRefusals).toBe(1);
     expect(r0.storage.stats().faults).toEqual({
@@ -536,7 +554,7 @@ describe("ManagedStorage watches", () => {
     expect(lane.current()).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; reload the config or restart the daemon`,
+      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; retried when the config next loads or file events catch up`,
     });
     expect(r.counters.watchErrors).toBe(1);
     expect(r.storage.stats().faults).toEqual({
@@ -658,7 +676,7 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     expect(lane.current()).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; reload the config or restart the daemon`,
+      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; retried when the config next loads or file events catch up`,
     });
     expect(r.storage.stats()).toMatchObject({
       faults: { unusable: 0, refused: 0, error: 1 },
@@ -735,6 +753,17 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     r.fileEvents.set(delivering, { kind: "caught-up", since: STALLED_AT });
     await until(() => lane.current().kind === "ok", "the re-read");
     expect(lane.current()).toEqual(ok("in the new folder"));
+  });
+
+  test("a refused watch's generation opens again once file events catch up, with no load's hold", async () => {
+    const r = rig();
+    fakeWatches(new Set([r.folder]));
+    r.hold();
+    expect(r.storage.stats().faults).toMatchObject({ refused: 1 });
+    jest.restoreAllMocks();
+    fakeWatches();
+    r.fileEvents.set(delivering, { kind: "caught-up", since: STALLED_AT });
+    expect(r.generation()).toBe(1);
   });
 
   test("a period with delivery unchanged re-reads nothing", async () => {

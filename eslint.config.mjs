@@ -197,10 +197,7 @@ const OWNED_IMPORTS = {
   },
   stateDir: {
     group: PATHS,
-    owners: [
-      "src/check.ts",
-      "src/doctor/cli.ts",
-    ],
+    owners: ["src/check.ts", "src/doctor/cli.ts"],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   ...Object.fromEntries(
@@ -477,15 +474,33 @@ const importDirection = {
   },
 };
 
+// [LAW:effects-at-boundaries] The renderer opens no file: every fact it reads
+// arrives in its inputs, so a renderer that opened one would read a disk its
+// host never chose and no snapshot recorded.
+const RENDERER_GLOB = "src/renderer/**/*.{ts,mts}";
+const RENDERER_FS_PATHS = [
+  "fs",
+  "node:fs",
+  "fs/promises",
+  "node:fs/promises",
+].map((name) => ({
+  name,
+  message:
+    "The renderer opens no file: what it reads is handed in (config snapshots, world state). [LAW:effects-at-boundaries]",
+}));
+const zonePathsOf = (file) =>
+  file.startsWith("src/renderer/") ? RENDERER_FS_PATHS : [];
+
 // A file's whole rule: flat config replaces a rule per file rather than merging
 // it, so each block carries the child_process paths and every name but its own.
 // `patterns`, not `paths`: a path matches only the literal import string, and
-// these are imported by relative spellings that differ file to file.
-function restrictedImports(file) {
+// these are imported by relative spellings that differ file to file. A
+// renderer file's block carries the disk's paths beside them.
+function restrictedImports(file, zonePaths = []) {
   return [
     "error",
     {
-      paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS],
+      paths: [...CHILD_PROCESS_PATHS, ...CLOCK_IMPORT_PATHS, ...zonePaths],
       patterns: [
         ...Object.entries(OWNED_IMPORTS)
           .filter(([, { owners }]) => !owners.includes(file))
@@ -511,6 +526,12 @@ function ownedImportBlocks() {
       ignores: ["src/proc/**", CLOCK_FILE],
       rules: { "no-restricted-imports": restrictedImports(null) },
     },
+    {
+      files: [RENDERER_GLOB],
+      rules: {
+        "no-restricted-imports": restrictedImports(null, RENDERER_FS_PATHS),
+      },
+    },
     // src/proc/spawner.ts alone may import child_process, so the rest of
     // src/proc keeps it with the clock's paths, and the spawner only the clock's.
     {
@@ -534,7 +555,9 @@ function ownedImportBlocks() {
     },
     ...owners.map((file) => ({
       files: [file],
-      rules: { "no-restricted-imports": restrictedImports(file) },
+      rules: {
+        "no-restricted-imports": restrictedImports(file, zonePathsOf(file)),
+      },
     })),
   ];
 }

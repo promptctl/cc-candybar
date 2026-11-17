@@ -44,6 +44,7 @@ import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import { configHost } from "./helpers/config-host";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 
@@ -83,14 +84,12 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   const cache = new RenderCache(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(HOST),
       locations: locs(),
       env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
-      watchers,
       source: SOURCES_NOTHING,
       log: (_level, line) => lines.push(line),
     },
@@ -99,7 +98,21 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
   // Run first (cleanups run in reverse): every state the cache serves is torn
   // down before the watchers and git close under it.
   cleanups.push(() => cache.close());
-  return { cache, lines, sessionState, watchers, counters };
+  const configs = configHost(cache, {
+    locations: locs(),
+    stateDir: stateDir(HOST),
+    watchers,
+  });
+  cleanups.push(() => configs.close());
+  return {
+    cache,
+    originAt: configs.at,
+    configs,
+    lines,
+    sessionState,
+    watchers,
+    counters,
+  };
 }
 
 function file(rel: string, text: string): string {
@@ -157,10 +170,7 @@ const drawAlone = (
   compiled: CompiledConfig,
 ): VariableStore => {
   const store = new ProbeStore(systemTimekeeper);
-  const registry = new SourceRegistry(store,
-    "",
-    new SessionState(),
-  );
+  const registry = new SourceRegistry(store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   drawPayload(
     config,
@@ -206,12 +216,12 @@ const carouselConfig = (reader: string, value: string): string =>
 
 describe("entries share a compile exactly when their configs compile alike", () => {
   test("one config in many directories: one compile, a further entry costs ENTRY_BYTES", () => {
-    const { cache, lines } = makeCache(64 * COMPILE_BYTES);
+    const { cache, originAt, lines } = makeCache(64 * COMPILE_BYTES);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const states = ["a", "b", "c"].map((d) => {
       const cwd = path.join(dir, d);
       fs.mkdirSync(cwd);
-      return cache.getOrCreate(cwd, cwd, cfg).state;
+      return cache.getOrCreate(originAt(cwd, cwd, cfg)).state;
     });
     expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
     expect(cache.stats).toMatchObject({
@@ -234,20 +244,22 @@ describe("entries share a compile exactly when their configs compile alike", () 
   // rest take it from the table, so the edit costs one compile, not one per
   // entry.
   test("a changed config reloaded across its entries builds one compile", () => {
-    const { cache, lines } = makeCache(64 * COMPILE_BYTES);
+    const { cache, originAt, configs, lines } = makeCache(64 * COMPILE_BYTES);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const dirs = ["a", "b", "c"].map((d) => path.join(dir, d));
     for (const d of dirs) {
       fs.mkdirSync(d);
-      cache.getOrCreate(d, d, cfg);
+      cache.getOrCreate(originAt(d, d, cfg));
     }
     const built = () =>
       lines.filter((l) => l.startsWith("render-cache compile built ")).length;
     expect(built()).toBe(1);
     fs.writeFileSync(cfg, carouselConfig("other", "beta"));
-    for (const d of dirs) cache.reload(d, d, cfg, { kind: "write" });
+    configs.again();
     expect(built()).toBe(2);
-    const states = dirs.map((d) => cache.getOrCreate(d, d, cfg).state);
+    const states = dirs.map(
+      (d) => cache.getOrCreate(originAt(d, d, cfg)).state,
+    );
     expect(new Set(states.map((s) => s.compiled)).size).toBe(1);
     expect(cache.stats).toMatchObject({ size: 3, compiles: 1 });
     for (const s of states) expect(nextOf(render(s))).toBe("alpha");
@@ -258,11 +270,11 @@ describe("entries share a compile exactly when their configs compile alike", () 
   // must not share: the second's carousel would read a variable its store
   // never declared.
   test("configs differing only in which variable reads a key back get two compiles", () => {
-    const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
+    const { cache, originAt, sessionState } = makeCache(64 * COMPILE_BYTES);
     const one = file("one.json5", carouselConfig("mode", "alpha"));
     const two = file("two.json5", carouselConfig("other", "beta"));
-    const a = cache.getOrCreate(dir, dir, one).state;
-    const b = cache.getOrCreate(dir, dir, two).state;
+    const a = cache.getOrCreate(originAt(dir, dir, one)).state;
+    const b = cache.getOrCreate(originAt(dir, dir, two)).state;
     expect(a.compiled).not.toBe(b.compiled);
     expect(cache.stats.compiles).toBe(2);
     expect(nextOf(render(a))).toBe("beta");
@@ -274,12 +286,12 @@ describe("entries share a compile exactly when their configs compile alike", () 
 // action table last. The table learns a compile only from a state it serves,
 // so the refused load leaves none that nothing could ever reclaim.
 test("a load that fails after compiling leaves no compile behind", () => {
-  const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
+  const { cache, originAt, sessionState } = makeCache(64 * COMPILE_BYTES);
   const clash = file(
     "clash.json5",
     `{ actions: { step: { set: "k", min: 0, max: 3, by: 1 }, flip: { set: "k", cycle: ["x", "y"] } } }`,
   );
-  const entry = cache.getOrCreate(dir, dir, clash);
+  const entry = cache.getOrCreate(originAt(dir, dir, clash));
   expect(entry.lastError).toMatch(/key "k" is an integer spec/);
   // The entry draws the bundled default: its compile is the only one held.
   expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
@@ -287,10 +299,12 @@ test("a load that fails after compiling leaves no compile behind", () => {
 
 describe("the cache is bounded by bytes", () => {
   test("past the budget the least recently used entry leaves, never the newest", () => {
-    const { cache, lines } = makeCache(2 * ENTRY_BYTES + COMPILE_BYTES);
+    const { cache, originAt, lines } = makeCache(
+      2 * ENTRY_BYTES + COMPILE_BYTES,
+    );
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const at = (d: string) =>
-      cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
+      cache.getOrCreate(originAt(path.join(dir, d), path.join(dir, d), cfg));
     const [, b, c] = ["a", "b", "c"].map((d) => at(d).state);
     expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
     expect(cache.stats.accountedBytes).toBeLessThanOrEqual(
@@ -312,10 +326,10 @@ describe("the cache is bounded by bytes", () => {
   // Every entry holds watchers and timers the byte budget does not see; the
   // count ceiling bounds them however high the RSS limit is raised.
   test("past the count ceiling the least recently used entry leaves, whatever the bytes", () => {
-    const { cache, lines } = makeCache(64 * COMPILE_BYTES, 2);
+    const { cache, originAt, lines } = makeCache(64 * COMPILE_BYTES, 2);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
     const at = (d: string) =>
-      cache.getOrCreate(path.join(dir, d), path.join(dir, d), cfg);
+      cache.getOrCreate(originAt(path.join(dir, d), path.join(dir, d), cfg));
     const [, b, c] = ["a", "b", "c"].map((d) => at(d).state);
     expect(cache.stats.size).toBe(2);
     expect(cache.stats.accountedBytes).toBeLessThan(cache.stats.budgetBytes);
@@ -327,9 +341,9 @@ describe("the cache is bounded by bytes", () => {
   });
 
   test("a budget no entry fits still serves the newest", () => {
-    const { cache } = makeCache(0);
+    const { cache, originAt } = makeCache(0);
     const cfg = file("config.json5", carouselConfig("mode", "alpha"));
-    const state = cache.getOrCreate(dir, dir, cfg).state;
+    const state = cache.getOrCreate(originAt(dir, dir, cfg)).state;
     expect(cache.stats.size).toBe(1);
     expect(nextOf(render(state))).toBe("beta");
   });
@@ -338,18 +352,20 @@ describe("the cache is bounded by bytes", () => {
   // map serves: a reload can move an entry onto a compile no other entry
   // carries, which charges a compile as surely as a new entry does.
   test("a reload onto a compile of its own is held to the budget", () => {
-    const { cache, lines } = makeCache(2 * ENTRY_BYTES + COMPILE_BYTES);
+    const { cache, originAt, configs, lines } = makeCache(
+      2 * ENTRY_BYTES + COMPILE_BYTES,
+    );
     const a = path.join(dir, "a");
     const b = path.join(dir, "b");
     fs.mkdirSync(a);
     fs.mkdirSync(b);
     const cfgA = file("a.json5", carouselConfig("mode", "alpha"));
     const cfgB = file("b.json5", carouselConfig("mode", "alpha"));
-    cache.getOrCreate(a, a, cfgA);
-    cache.getOrCreate(b, b, cfgB);
+    cache.getOrCreate(originAt(a, a, cfgA));
+    cache.getOrCreate(originAt(b, b, cfgB));
     expect(cache.stats).toMatchObject({ size: 2, compiles: 1 });
     fs.writeFileSync(cfgB, carouselConfig("other", "beta"));
-    cache.reload(b, b, cfgB, { kind: "write" });
+    configs.again();
     // `b` moved onto a compile of its own; `a`, least recently used, left.
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
     expect(cache.stats.accountedBytes).toBeLessThanOrEqual(
@@ -358,21 +374,23 @@ describe("the cache is bounded by bytes", () => {
     expect(
       lines.filter((l) => l.startsWith("config disposed reason=evict")),
     ).toHaveLength(1);
-    expect(nextOf(render(cache.getOrCreate(b, b, cfgB).state))).toBe("alpha");
+    expect(nextOf(render(cache.getOrCreate(originAt(b, b, cfgB)).state))).toBe(
+      "alpha",
+    );
   });
 
   test("a compile leaves with the last state carrying it, held or not", () => {
-    const { cache } = makeCache(ENTRY_BYTES + COMPILE_BYTES);
+    const { cache, originAt } = makeCache(ENTRY_BYTES + COMPILE_BYTES);
     const one = file("one.json5", carouselConfig("mode", "alpha"));
     const two = file("two.json5", carouselConfig("other", "beta"));
     const three = file("three.json5", carouselConfig("third", "alpha"));
-    cache.getOrCreate(dir, dir, one);
-    cache.getOrCreate(dir, dir, two);
+    cache.getOrCreate(originAt(dir, dir, one));
+    cache.getOrCreate(originAt(dir, dir, two));
     // `one`'s entry was evicted unheld: its compile left with it.
     expect(cache.stats).toMatchObject({ size: 1, compiles: 1 });
     {
-      using held = cache.hold(dir, dir, two);
-      cache.getOrCreate(dir, dir, three);
+      using held = cache.hold(originAt(dir, dir, two));
+      cache.getOrCreate(originAt(dir, dir, three));
       // `two`'s state is retired but a render draws with it: its compile stays.
       expect(cache.stats).toMatchObject({ size: 1, compiles: 2, retired: 1 });
       expect(nextOf(render(held.state))).toBe("alpha");
@@ -463,16 +481,14 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   held.length = 0;
   expect(compileBytes).toBeLessThan(COMPILE_BYTES);
 
-  const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
+  const { cache, originAt, sessionState } = makeCache(64 * COMPILE_BYTES);
   // Rendered once by a session of its own, as every entry the daemon holds has
   // been: the render fills the session's view of it and the view's sink.
   const entry = (i: number) => {
     const cwd = path.join(dir, `c${i}`);
     fs.mkdirSync(cwd);
     using held = cache.holdSession(
-      cwd,
-      cwd,
-      undefined,
+      originAt(cwd, cwd, undefined),
       viewFacts(cwd, `e${i}`),
     );
     drawn(held.view);
@@ -491,9 +507,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const shared = keep[0]!;
   const view = (i: number): SessionView => {
     using held = cache.holdSession(
-      dir + "/c0",
-      dir + "/c0",
-      undefined,
+      originAt(dir + "/c0", dir + "/c0", undefined),
       viewFacts(dir + "/c0", `v${i}`),
     );
     expect(held.state).toBe(shared);
@@ -514,9 +528,7 @@ test("an entry, a compile and a view hold no more than the cache charges for the
   const walked = async (i: number): Promise<SessionView> => {
     const sid = `w${i}`;
     using held = cache.holdSession(
-      dir + "/c0",
-      dir + "/c0",
-      undefined,
+      originAt(dir + "/c0", dir + "/c0", undefined),
       viewFacts(dir + "/c0", sid),
     );
     await walkMenu(held.view, sessionState, held.state.config);
@@ -581,14 +593,15 @@ describe("a steady stream of renders", () => {
 
   // Every session draws once from its directory, as each statusline tick does,
   // and the turn ends, so what a render deferred has run before the next.
-  const round = async (cache: RenderCache): Promise<void> => {
+  const round = async ({
+    cache,
+    originAt,
+  }: ReturnType<typeof makeCache>): Promise<void> => {
     for (const d of DIRS) {
       const cwd = path.join(dir, d);
       for (let s = 0; s < SESSIONS_PER_DIR; s++) {
         using held = cache.holdSession(
-          cwd,
-          cwd,
-          undefined,
+          originAt(cwd, cwd, undefined),
           viewFacts(cwd, `${d}${s}`),
         );
         drawn(held.view);
@@ -601,23 +614,21 @@ describe("a steady stream of renders", () => {
   // a rebuild on every render, disposed as soon as it is replaced, holds the
   // counts flat and still shows here as a line.
   test("builds and retires nothing: the counts hold and nothing is logged", async () => {
-    const { cache, lines, watchers } = makeCache(64 * COMPILE_BYTES);
-    // A catch-up reloads one entry a turn, so `due` is the rest of a reload a
-    // render left behind.
+    const made = makeCache(64 * COMPILE_BYTES);
+    const { cache, lines, watchers } = made;
     const counts = () => {
-      const { size, compiles, views, due } = cache.stats;
-      return { size, compiles, views, due, watches: watchers.size() };
+      const { size, compiles, views } = cache.stats;
+      return { size, compiles, views, watches: watchers.size() };
     };
-    await round(cache);
+    await round(made);
     const first = counts();
     expect(first).toMatchObject({
       size: DIRS.length,
       views: DIRS.length * SESSIONS_PER_DIR,
-      due: 0,
     });
     const logged = lines.length;
-    await round(cache);
-    await round(cache);
+    await round(made);
+    await round(made);
     expect({ counts: counts(), logged: lines.slice(logged) }).toEqual({
       counts: first,
       logged: [],
@@ -625,14 +636,15 @@ describe("a steady stream of renders", () => {
   });
 
   test("opens and closes no watcher", async () => {
-    const { cache, counters } = makeCache(64 * COMPILE_BYTES);
-    await round(cache);
+    const made = makeCache(64 * COMPILE_BYTES);
+    const { counters } = made;
+    await round(made);
     const first = { ...counters };
     // The first round's entries each watch their config, so a reopened watch
     // would count here.
     expect(first.watchersOpened).toBeGreaterThan(0);
-    await round(cache);
-    await round(cache);
+    await round(made);
+    await round(made);
     expect(counters).toEqual(first);
   });
 
@@ -642,13 +654,11 @@ describe("a steady stream of renders", () => {
   // drawn leaves the count where the first left it, and once the cache closes
   // its views nothing observes the session state at all.
   test("a session's clicks through its menu keep no observer of the session state", async () => {
-    const { cache, sessionState } = makeCache(64 * COMPILE_BYTES);
+    const { cache, originAt, sessionState } = makeCache(64 * COMPILE_BYTES);
     const cwd = path.join(dir, DIRS[0]!);
     const walks = async () => {
       using held = cache.holdSession(
-        cwd,
-        cwd,
-        undefined,
+        originAt(cwd, cwd, undefined),
         viewFacts(cwd, `${DIRS[0]}0`),
       );
       drawn(held.view);

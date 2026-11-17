@@ -29,11 +29,15 @@ import JSON5 from "json5";
 import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import {
   inheritedConfig,
-  loadConfigChain,
-  type ConfigLayer,
-  type WriteLayer,
+  loadSnapshot,
   type LoadedChain,
 } from "../config/dsl-loader.js";
+import {
+  writable,
+  type ConfigSnapshot,
+  type Layer,
+} from "../config/config-snapshot.js";
+import { LAYER_ROLES, type LayerRole } from "../config/layer-role.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
   DslConfig,
@@ -114,8 +118,6 @@ export function persistValueText(key: string, raw: string): string {
 }
 
 // ─── The file ────────────────────────────────────────────────────────────────
-
-export { readConfigText } from "../utils/atomic-write.js";
 
 function docOf(text: string): Node | null {
   return /^\s*$/.test(text) ? null : parseDocument(text);
@@ -431,34 +433,90 @@ export interface EditStore {
   readonly record: (file: string, before: string | null, after: string) => void;
 }
 
+// [LAW:one-source-of-truth] The layer a click writes, as the snapshot the
+// host handed in for its session's origin holds it: the chain around it, and
+// the plugins, strays and checkout a write is proved over.
+export interface WriteLayer extends Layer {
+  readonly snapshot: ConfigSnapshot;
+  // The user's home, which a `~` in a listed or data path expands to.
+  readonly home: string;
+}
+
+// [LAW:no-silent-failure] The layer `role` names in `snapshot`'s chain, or
+// the click's refusal naming why it names none: a click never writes
+// somewhere else.
+export function writeLayerOf(
+  snapshot: ConfigSnapshot,
+  role: LayerRole,
+  configFile: string | null,
+  home: string,
+): WriteLayer {
+  const layer = snapshot.chain.find((l) => l.role === role);
+  if (layer === undefined)
+    throw new BadVerbArgs(
+      `the ${role} layer is not writable: ${
+        configFile !== null
+          ? `${configFile} is the session's one config layer (it was named explicitly), so there is no ${role} layer to write`
+          : `the ${role} layer is the project's, and this session has no approved project`
+      }`,
+    );
+  if (!writable(layer.content))
+    throw new BadVerbArgs(
+      `the ${role} layer is not writable: ${layer.path} could not be read (${layer.content.error}), and a click does not write over a file it could not read`,
+    );
+  return { ...layer, snapshot, home };
+}
+
 // [LAW:one-source-of-truth] A write as its click sees it: each neighbouring
 // layer read through the click, so a file the same click already changed or
 // created reads as the click left it, and one it holds no text for is no
 // layer. A click writes several files (a `do` across layers, an undo step), and
 // each write is proved against the chain the click leaves, never the disk's.
+// [LAW:effects-at-boundaries] Each held text keeps the definitions discovery
+// read for its layer, so the loader proves a write from what discovery handed
+// in, opening no file; a text listing one discovery did not read is refused
+// by the loader, naming it.
 interface Seen extends WriteLayer {
   readonly below: readonly HeldLayer[];
   readonly above: readonly HeldLayer[];
 }
-type HeldLayer = ConfigLayer & { readonly text: string };
+type HeldLayer = Layer & { readonly text: string };
+
+const rank = (role: LayerRole): number => LAYER_ROLES.indexOf(role);
 
 function seenBy(
   layer: WriteLayer,
   read: (file: string) => string | null,
 ): Seen {
-  const held = (layers: readonly ConfigLayer[]): HeldLayer[] =>
+  const held = (layers: readonly Layer[]): HeldLayer[] =>
     layers.flatMap((l) => {
       const text = read(l.path);
-      return text === null ? [] : [{ ...l, text }];
+      return text === null ? [] : [heldLayer(l, text)];
     });
-  return { ...layer, below: held(layer.below), above: held(layer.above) };
+  const { chain } = layer.snapshot;
+  return {
+    ...layer,
+    below: held(chain.filter((l) => rank(l.role) < rank(layer.role))),
+    above: held(chain.filter((l) => rank(l.role) > rank(layer.role))),
+  };
 }
 
-// The loader's read over a chain of held layers: every path it asks for is
-// one of theirs.
-function textsOf(layers: readonly HeldLayer[]): (path: string) => string {
-  const texts = new Map(layers.map((l) => [l.path, l.text]));
-  return (path) => texts.get(path)!;
+function heldLayer(layer: Layer, text: string): HeldLayer {
+  return {
+    role: layer.role,
+    path: layer.path,
+    content: { kind: "text", text },
+    listed: layer.listed,
+    text,
+  };
+}
+
+// The snapshot of a chain of held layers over the click's origin.
+function heldSnapshot(
+  into: Seen,
+  layers: readonly HeldLayer[],
+): ConfigSnapshot {
+  return { ...into.snapshot, chain: layers };
 }
 
 // [LAW:one-source-of-truth] Every tracked write lands here, once, as the
@@ -557,11 +615,9 @@ function loadedOrNull(into: Seen, text: string | null): LoadedChain | null {
 function inheritedOf(into: Seen): DslConfig {
   try {
     return inheritedConfig(
-      into.locs,
-      into.below,
+      heldSnapshot(into, into.below),
+      into.home,
       DEFAULT_DSL_CONFIG,
-      { repo: into.repo, cwd: into.cwd },
-      textsOf(into.below),
     );
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
@@ -572,21 +628,21 @@ function inheritedOf(into: Seen): DslConfig {
 }
 
 // The chain the written layer's text — or its absence — loads to, between
-// the layers the click holds, exactly as resolveDslConfig orders it: an
-// existing file is a layer whatever it holds.
+// the layers the click holds, exactly as discovery orders it: an existing
+// file is a layer whatever it holds. The written text keeps the definitions
+// discovery read for its layer, so a `plugins` entry discovery did not read
+// for it refuses the write, naming the entry, until discovery has read it.
 function chainOver(into: Seen, text: string | null): LoadedChain {
   const layers = [
     ...into.below,
-    ...(text !== null ? [{ path: into.path, role: into.role, text }] : []),
+    ...(text !== null ? [heldLayer(into, text)] : []),
     ...into.above,
   ];
-  return loadConfigChain(
-    into.locs,
-    layers,
+  return loadSnapshot(
+    heldSnapshot(into, layers),
+    into.home,
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
-    { repo: into.repo, cwd: into.cwd },
-    textsOf(layers),
   );
 }
 

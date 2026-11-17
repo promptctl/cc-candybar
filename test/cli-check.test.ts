@@ -290,7 +290,19 @@ describe("checkConfig — explicit target", () => {
 
   it("reports a directory target as unreadable (usage-shaped, exit 2), not invalid", async () => {
     const outcome = await checkConfig(world, daemonGates(), dir, dir);
-    expect(outcome.kind).toBe("unreadable");
+    expect(outcome).toEqual({ kind: "unreadable", path: dir, message: "not a file" });
+    expect(checkPlan(outcome).code).toBe(2);
+  });
+
+  // [LAW:no-silent-failure] A verdict is never clean about a file it did not
+  // read, though no target named it.
+  it("reports a searched layer it could not read as unreadable, never clean", async () => {
+    const xdg = path.join(dir, "xdg-unreadable");
+    const layer = path.join(xdg, "cc-candybar", "config.json5");
+    fs.mkdirSync(layer, { recursive: true });
+    runOn({ XDG_CONFIG_HOME: xdg });
+    const outcome = await checkConfig(world, daemonGates(), undefined, dir);
+    expect(outcome).toEqual({ kind: "unreadable", path: layer, message: "not a file" });
     expect(checkPlan(outcome).code).toBe(2);
   });
 

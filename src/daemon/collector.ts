@@ -8,7 +8,7 @@
 //
 // [LAW:no-ambient-temporal-coupling] The renderer receives each session's
 // documents in the order the collector made them: a request's document is the
-// one `requested` returns, which goes with the session's `config` ahead of the
+// one `requested` returns, which goes with the session's `context` ahead of the
 // request, and every later stamp that moved is handed in alone, from here.
 //
 // [LAW:no-ambient-temporal-coupling] The collector owns the session's
@@ -108,7 +108,7 @@ interface DeclaredFor {
   readonly subscriptions: Subscribed;
 }
 
-// The session's latest document, which its stamps replace and its `config`
+// The session's latest document, which its stamps replace and its `context`
 // carries, the read it was stamped from, and the settings files its latest
 // doctor reading named, which outlast the reading's subscription: a renderer
 // keeps a reading it took and stops asking for it.
@@ -241,7 +241,7 @@ export class Collector {
 
   // [LAW:single-enforcer] A request names the session's keys: they are
   // declared again and stamped in one action, and that stamp is returned to
-  // go with the session's `config`. The record's reaction runs when the action ends,
+  // go with the session's `context`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
   requested(req: ViewFacts): WorldState {

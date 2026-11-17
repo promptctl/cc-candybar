@@ -21,6 +21,7 @@ import { until } from "./helpers/until";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
+import { DiscoveringCache, originOf } from "./helpers/config-host";
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -77,7 +78,7 @@ function setUp() {
   const changed: string[] = [];
   // The sessions each reload said drew from its entry, in order.
   const reloads: Array<readonly string[]> = [];
-  const cache = new RenderCache(
+  const cache = new DiscoveringCache(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
@@ -101,12 +102,14 @@ function setUp() {
   cleanups.push(() => cache.close());
   // A session's request: its view, whose runs the host holds from here on.
   const open = (sid: string) => {
-    const held = cache.holdSession(dir, dir, configFile, viewFacts(dir, sid));
+    const held = cache.holdSession(
+      originOf(dir, dir, configFile),
+      viewFacts(dir, sid),
+    );
     runs.hold(held.view);
     return held;
   };
-  const reload = (): void =>
-    cache.reload(dir, dir, configFile, { kind: "write" });
+  const reload = (): void => cache.configs.again();
   return { status, changed, reloads, writeConfig, reload, open };
 }
 

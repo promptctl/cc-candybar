@@ -5,7 +5,10 @@
 
 import fs from "node:fs";
 import { hostOf } from "./host";
-import { recordAnswer, repoConfigs } from "../../src/config/repo-configs";
+import {
+  recordAnswer,
+  repoConfigs,
+} from "../../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../../src/daemon/paths";
 import type { RepoAnswer } from "../../src/config/loader/repo-gate";
 

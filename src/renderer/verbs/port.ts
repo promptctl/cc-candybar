@@ -47,6 +47,9 @@ export interface RendererVerbs {
   // A change's `effect-done`, in its turn, whose effects what its click's
   // consequence asks joins: false for an id no click's change holds.
   changeDone(id: EffectId, outcome: EffectOutcome, effects: Effect[]): boolean;
+  // The session whose click's changes are on their way: its consequence
+  // waits on its landing, over its origin's config as the landing left it.
+  landing(): SessionId | null;
 }
 
 // The main renderer's parts: the draw's, which the host's own frames share,
@@ -81,5 +84,6 @@ export function verbsOver(ctx: DaemonVerbContext): RendererVerbs {
     closeIdle: (sessionId, latest, idle, effects) =>
       closeIdleMenus(sessionId, latest, idle, ctx, effects),
     changeDone: (id, outcome, effects) => changeDone(ctx, id, outcome, effects),
+    landing: () => ctx.configWrites.landing(),
   };
 }

@@ -17,11 +17,13 @@ import { JSON5_DIALECT, JSON_DIALECT } from "../config/json5-edit.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type {
   Act,
+  ChangeTarget,
   ConfigChange,
   EffectOutcome,
 } from "../renderer-interface/interface.js";
-import { answeredBook } from "../config/repo-configs.js";
-import { isLocalConfigFile } from "../config/loader/discovery.js";
+import type { RenderOrigin } from "../config-hint.js";
+import { answeredBook } from "./config-discovery/repo-configs.js";
+import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
 import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import path from "node:path";
@@ -67,32 +69,84 @@ export interface TrustBook {
 // it holds no reading.
 export type WritableSettings = (session: SessionId) => readonly string[];
 
+// [LAW:single-enforcer] Where a change naming an origin's layer lands, and
+// which repository an answer may be given for: config discovery's, so a
+// renderer names a role and never a path.
+export type LayerPlaces = Pick<ConfigDiscovery, "path" | "repoDir">;
+
+const refused = (reason: string): EffectOutcome => ({
+  kind: "refused",
+  reason: `${reason} — nothing was written`,
+});
+
+// The file a change's target names, or why it names none.
+function landsIn(
+  target: ChangeTarget,
+  layers: LayerPlaces,
+):
+  | { readonly kind: "at"; readonly file: string }
+  | { readonly kind: "refused"; readonly reason: string } {
+  if (target.kind === "claude-settings")
+    return { kind: "at", file: target.file };
+  const file = layers.path(target.origin, target.role);
+  if (file === undefined)
+    return {
+      kind: "refused",
+      reason: `a change names an origin config discovery does not follow (${originText(target.origin)})`,
+    };
+  if (file === null)
+    return {
+      kind: "refused",
+      reason: `a change names the ${target.role} layer, and its origin's chain holds none (${originText(target.origin)})`,
+    };
+  return { kind: "at", file };
+}
+
+const originText = (origin: RenderOrigin): string =>
+  `projectDir=${origin.projectDir} cwd=${origin.cwd} configFile=${origin.target.path ?? "-"}`;
+
 // [LAW:no-silent-failure] Every way the turn's changes did not land is their
 // one outcome, naming the file, and the setting when one moved.
 export function performChanges(
   changes: readonly ConfigChange[],
   book: TrustBook | null,
   writable: WritableSettings,
+  layers: LayerPlaces,
 ): EffectOutcome {
   const rewrites = new Map<string, Rewrite>();
+  // The files a local layer's change lands in: the ones git never shows.
+  const local = new Set<string>();
   let answered: readonly string[] = [];
+  // [LAW:no-silent-failure] An answer is for the repository its origin asks
+  // about as discovery last found it, or none is recorded.
+  for (const { origin, dir } of book?.answers ?? []) {
+    const asked = layers.repoDir(origin);
+    if (asked === undefined)
+      return refused(
+        `the answer for ${dir} names an origin config discovery does not follow (${originText(origin)})`,
+      );
+    if (asked !== dir)
+      return refused(
+        `the answer for ${dir} is not for the repository its origin asks about (${asked ?? "none"})`,
+      );
+  }
   try {
     for (const { session, target, changes: list } of changes) {
+      const named = landsIn(target, layers);
+      if (named.kind === "refused") return refused(named.reason);
       // Keyed by the file a write lands in, so two paths to one file are one
       // rewrite of it.
-      const file = resolvedTarget(
-        target.kind === "layer" ? target.path : target.file,
-      );
+      const file = resolvedTarget(named.file);
       // [LAW:single-enforcer] A renderer names a settings file only among
       // those the host's own reading handed it.
       if (
         target.kind === "claude-settings" &&
         !writable(session).some((f) => resolvedTarget(f) === file)
       )
-        return {
-          kind: "refused",
-          reason: `${file} is not a settings file the session's doctor read — nothing was written`,
-        };
+        return refused(
+          `${file} is not a settings file the session's doctor read`,
+        );
+      if (target.kind === "layer" && target.role === "local") local.add(file);
       // A file an earlier change of the turn named, as that change left it,
       // an absent one included.
       const prior = rewrites.get(file);
@@ -104,17 +158,16 @@ export function performChanges(
         target.kind === "layer" ? JSON5_DIALECT : JSON_DIALECT,
       );
       if (applied.kind === "moved")
-        return {
-          kind: "refused",
-          reason: `${addressText(applied.at)} in ${file} changed since it was read (it was ${said(applied.read)}, it is ${said(applied.found)}) — nothing was written`,
-        };
+        return refused(
+          `${addressText(applied.at)} in ${file} changed since it was read (it was ${said(applied.read)}, it is ${said(applied.found)})`,
+        );
       rewrites.set(file, { file, was, will: applied.text });
     }
     // [LAW:single-enforcer] A local layer a change creates is one person's,
     // so git never shows it: its repository's shared exclude names it, in the
     // same write as the file, or neither is written.
     for (const { file, was, will } of [...rewrites.values()]) {
-      if (was !== null || will === null || !isLocalConfigFile(file)) continue;
+      if (was !== null || will === null || !local.has(file)) continue;
       const excluded = excludeRewrite(file, rewrites);
       if (excluded.kind === "failed")
         return {

@@ -25,13 +25,12 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
-import { FileEventDelivery } from "../src/daemon/cache/file-events";
+import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import {
   WatcherRegistry,
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import {
-  loadFromDisk,
   pluginLoadLine,
   RenderCache,
   type SessionView,
@@ -62,14 +61,19 @@ import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import type { Run } from "../src/facts/source-identity";
 import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
-import { REPO_PLUGIN_DIR } from "../src/config/loader/plugin-folders";
+import { REPO_PLUGIN_DIR } from "../src/daemon/config-discovery/plugin-folders";
 import { textOf, ansiOf, parseFrame } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
-import { ReloadSignal } from "./helpers/reload-signal";
+import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { until } from "./helpers/until";
 import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
+import {
+  configHost,
+  loadDiscovered,
+  type ConfigHost,
+} from "./helpers/config-host";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
@@ -155,8 +159,12 @@ function programWrites(storage: string, sid: string, doc: unknown): void {
 
 interface Rig {
   readonly cache: RenderCache<SessionSource>;
+  // The host's half: what discovery hands the cache at each origin.
+  readonly configs: ConfigHost;
   readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly counters: WatcherCounters;
+  // What the daemon's owner of file events says, by hand: its period too.
+  readonly fileEvents: HandDelivery;
   readonly sessionState: SessionState;
   // What the views' documents carry as the daemon's update.
   readonly updateFact: UpdateFact;
@@ -204,17 +212,14 @@ function rig(): Rig {
   // Every file here lives in one folder, so the sessions' transcript watches
   // would share it with the storage folders these cases count: the trigger
   // hears nothing here, as in every rig.
+  const fileEvents = handDelivery();
   const providers = withTranscriptLanes(
     createPayloadProviders({
       clock: systemTimekeeper,
       launcher: world.launcher,
       host,
       watchers,
-      fileEvents: new FileEventDelivery({
-        clock: systemTimekeeper,
-        watchers,
-        logger: log,
-      }),
+      fileEvents,
       logger: log,
       ledger: new RefreshLedger(log),
       sourceRuns: new SourceRuns({
@@ -239,11 +244,9 @@ function rig(): Rig {
   const cache = new RenderCache<SessionSource>(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,
       sessionState,
-      watchers,
       storage: {
         hold: (id, folders) => {
           storageCalls.push(`hold ${id}`);
@@ -268,8 +271,15 @@ function rig(): Rig {
     { budgetBytes: () => 1024 * 1024 * 1024, observers: reloads.observers },
   );
   served.serve(cache);
+  const configs = configHost(cache, {
+    locations: locations(host),
+    stateDir: stateDir(host),
+    watchers,
+    log,
+  });
   cleanups.push(() => {
     cache.close();
+    configs.close();
     // The watch-less trigger built over them, then every provider's own.
     providers.transcriptLanes.close();
     for (const [, close] of providers.closes) close();
@@ -277,8 +287,10 @@ function rig(): Rig {
   });
   return {
     cache,
+    configs,
     providers,
     counters,
+    fileEvents,
     sessionState,
     updateFact,
     reloads,
@@ -289,14 +301,17 @@ function rig(): Rig {
     hold: (configFile, sid = "s1") => {
       const facts = viewFacts(dir, sid);
       return served.config(facts, () =>
-        cache.holdSession(dir, dir, configFile, facts),
+        cache.holdSession(configs.at(dir, dir, configFile), facts),
       );
     },
     inTurn: (configFile, read) => {
       const facts = viewFacts(dir, "s1");
       let seen: ReturnType<typeof read> | undefined;
       const held = served.config(facts, () => {
-        const opened = cache.holdSession(dir, dir, configFile, facts);
+        const opened = cache.holdSession(
+          configs.at(dir, dir, configFile),
+          facts,
+        );
         seen = read(opened.view);
         return opened;
       });
@@ -393,7 +408,7 @@ describe("a source's declaration", () => {
   test("the built arm loads, lowered to a session document in the plugin folder's managed storage", () => {
     const r = rig();
     const p = listing(`{ status: ${SOURCE} }`);
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -414,7 +429,7 @@ describe("a source's declaration", () => {
       // A build holds no folder; the cache's hold on the state it serves
       // makes it, so the program has somewhere to write.
       expect(fs.existsSync(path.join(dir, "p", "session"))).toBe(false);
-      r.cache.getOrCreate(dir, dir, p);
+      r.cache.getOrCreate(r.configs.at(dir, dir, p));
       expect(fs.statSync(path.join(dir, "p", "session")).isDirectory()).toBe(
         true,
       );
@@ -490,7 +505,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -524,7 +539,7 @@ describe("a source's declaration", () => {
          segments: { mine: { template: "x{{ .plugins.p.status.home }}" } },
          root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -650,7 +665,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -855,7 +870,7 @@ function statusline(r: Rig, configFile: string) {
     ),
     () => {},
     unfollowedCollector(r.collector),
-    NO_ACTS,
+    { ...NO_ACTS, configs: r.configs.discovery },
   );
   // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
   // request delivered has settled, the present's `effect-done` among them, so
@@ -1207,9 +1222,10 @@ describe("a storage folder's watch", () => {
     const held = r.hold(file);
     await answered(held.view);
     held[Symbol.dispose]();
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
     expect(r.storageCalls).toEqual(["hold 1"]);
-    r.cache.reload(dir, dir, file, { kind: "doctor" });
+    fs.appendFileSync(file, "\n// a comment keeps the state\n");
+    r.configs.again();
     expect(r.storageCalls).toEqual(["hold 1", "hold 1"]);
     const edited = fs
       .readFileSync(file, "utf8")
@@ -1229,7 +1245,8 @@ describe("a storage folder's watch", () => {
     await answered(view);
     expect(r.providers.managedStorage.stats().faults.refused).toBe(1);
     jest.restoreAllMocks();
-    r.cache.reload(dir, dir, file, { kind: "doctor" });
+    fs.appendFileSync(file, "\n// a comment keeps the state\n");
+    r.configs.again();
     await writeUntilShown(
       () => programWrites(storage, "s1", { home: "/recovered" }),
       () => draw(view).text.includes("home=/recovered"),
@@ -1242,7 +1259,7 @@ describe("a storage folder's watch", () => {
     const file = config(["plugins.p.gated"]);
     const view = viewOf(r, file);
     await answered(view);
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
     const opened = r.counters.watchersOpened;
     const closed = r.counters.watchersClosed;
     // An edit that changes what the config loads, so the reload builds a
@@ -1259,18 +1276,30 @@ describe("a storage folder's watch", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
-  test("removing the session folder, and nothing else, reloads the config, recreates the folder, and the next write shows", async () => {
+  // The owner of a folder a load still holds opens its next generation the
+  // moment it finds the folder gone, so no config reload is what recovers it.
+  test("removing the session folder, and nothing else, has its owner make it again at the next period with no reload, and the next write shows", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
     const held = r.hold(file);
     await answered(held.view);
     held[Symbol.dispose]();
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
+    const state = entry.state;
     const storage = storageOf();
     const lost = r.providers.managedStorage.stats().lost;
-    await r.reloads.afterRemoving(entry, storage, () => fs.mkdirSync(storage));
+    await untilHeard(
+      () => {
+        if (fs.existsSync(storage))
+          fs.rmSync(storage, { recursive: true, maxRetries: 3 });
+      },
+      () => r.providers.managedStorage.stats().lost > lost,
+      "the loss of the removed folder",
+    );
+    expect(fs.existsSync(storage)).toBe(false);
+    r.fileEvents.notify({ kind: "period" });
     expect(fs.statSync(storage).isDirectory()).toBe(true);
-    expect(r.providers.managedStorage.stats().lost).toBe(lost + 1);
+    expect(entry.state).toBe(state);
     const view = viewOf(r, file);
     await answered(view);
     await writeUntilShown(
@@ -1292,7 +1321,9 @@ describe("a storage folder's watch", () => {
       "the first write",
     );
     const opened = r.counters.watchersOpened;
-    const key = r.cache.getOrCreate(dir, dir, file).state.sources.get(STATUS);
+    const key = r.cache
+      .getOrCreate(r.configs.at(dir, dir, file))
+      .state.sources.get(STATUS);
     const touches: Array<() => void> = [
       () => fs.chmodSync(storage, 0o700),
       () => fs.utimesSync(storage, new Date(), new Date()),
@@ -1318,7 +1349,9 @@ describe("a storage folder's watch", () => {
     );
     expect(r.counters.watchersOpened).toBe(opened);
     expect(
-      r.cache.getOrCreate(dir, dir, file).state.sources.get(STATUS),
+      r.cache
+        .getOrCreate(r.configs.at(dir, dir, file))
+        .state.sources.get(STATUS),
     ).toEqual(key);
     expect(r.providers.managedStorage.stats().lost).toBe(0);
     expect(draw(view).errors).toEqual([]);
@@ -1350,7 +1383,7 @@ describe("an installed plugin's storage", () => {
     held[Symbol.dispose]();
     // The state holds the folder its config declares, read by a view or not.
     expect(r.providers.managedStorage.stats().folders).toBe(1);
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
     const folder = path.join(root(), "p");
     await r.reloads.afterRemoving(entry, folder, () => plugin("", folder));
     expect(
@@ -1383,7 +1416,7 @@ describe("an installed plugin's storage", () => {
       path.join(dev, "plugin.json5"),
       path.join(repo, REPO_PLUGIN_DIR, "p", "plugin.json5"),
     );
-    const entry = r.cache.getOrCreate(dir, dir, file);
+    const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
     const installed = path.join(fs.realpathSync(root()), "p", "session");
     expect(installFromRepo(repo, root(), "repo", host.home)).toEqual([
       { path: path.join(root(), "p", "plugin.json5"), placed: "replaced" },

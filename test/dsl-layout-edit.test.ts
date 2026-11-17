@@ -63,8 +63,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/renderer/config-file-store";
-import { testVerbContext,
-  verbContextWith, effectsOf } from "./helpers/click";
+import { testVerbContext, verbContextWith, effectsOf } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import {
   encodeSegments,
@@ -114,6 +113,8 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { DiscoveringCache, originOf } from "./helpers/config-host";
+import { onLanded } from "./helpers/click";
 
 const S1 = sessionIdOf("s1");
 
@@ -567,26 +568,29 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
       instantOf(new Date()),
       opts(),
     ).frame;
-  const ctx: VerbContext = verbContextWith(testVerbContext(
+  const ctx: VerbContext = verbContextWith(
+    testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
       undefined,
       durable.host,
-    ), {
-    // The daemon's own lookup and reload: a click is gated by the config as
-    // the last click left it, and an insertion mints its id against it.
-    configFor: () => current,
-    // A file that no longer loads keeps the last config that did, as the
-    // render cache's reload does.
-    reloadConfig: () => {
-      try {
-        current = parseAndValidate("<test>", durable.text()!, ALLOWED);
-      } catch (err) {
-        if (!(err instanceof ConfigError)) throw err;
-      }
+    ),
+    {
+      // The daemon's own lookup and reload: a click is gated by the config as
+      // the last click left it, and an insertion mints its id against it.
+      configFor: () => current,
+      log: (_level, message) => log.push(message),
     },
-    log: (_level, message) => log.push(message)
-});
+  );
+  // A file that no longer loads keeps the last config that did, as the
+  // render cache's reload does.
+  onLanded(ctx, () => {
+    try {
+      current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+    } catch (err) {
+      if (!(err instanceof ConfigError)) throw err;
+    }
+  });
   const click = async (url: string): Promise<void> => {
     const { verb, value } = linkClick(url);
     const effects =
@@ -882,10 +886,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const registry = new SourceRegistry(store,
-      "",
-      sessionState,
-    );
+    const registry = new SourceRegistry(store, "", sessionState);
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
       compiled = registerDslConfig(config, registry, {
@@ -939,10 +940,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set(S1, EDIT_LIVE_KEY, "open");
-    const registry = new SourceRegistry(store,
-      "",
-      sessionState,
-    );
+    const registry = new SourceRegistry(store, "", sessionState);
     try {
       const compiled = registerDslConfig(config, registry, {
         signer: TEST_SIGNER,
@@ -988,7 +986,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
 // ─── RenderCache integration: the file's tree, reload, restart, reset ───────
 
 function makeCache(reloads?: ReloadSignal): {
-  cache: RenderCache;
+  cache: DiscoveringCache;
   sessionState: SessionState;
   cleanups: Array<() => void>;
 } {
@@ -1007,7 +1005,7 @@ function makeCache(reloads?: ReloadSignal): {
   });
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
-  const cache = new RenderCache(
+  const cache = new DiscoveringCache(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
@@ -1074,28 +1072,27 @@ async function fireVerb(
 // verb resolves the file from. The cache's own SessionState, so the click
 // reads the same store the render published into.
 function originCtx(
-  cache: RenderCache,
+  cache: DiscoveringCache,
   sessionState: SessionState,
   sessionId = S1,
 ): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
-  return verbContextWith(testVerbContext(
+  const ctx = verbContextWith(
+    testVerbContext(
       sessionState,
       durable.historyFor(sessionState),
       undefined,
       durable.host,
-    ), {
-    // The daemon's own wiring (daemon.ts): the config a session renders with
-    // is its cache entry's, and a click that must not act on the old config
-    // reloads that entry from the file it just wrote.
-    configFor: (origin) =>
-      cache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path).state
-        .config,
-    reloadConfig: (origin) =>
-      cache.reload(origin.projectDir, origin.cwd, origin.target.path, {
-        kind: "write",
-      })
-});
+    ),
+    {
+      // The daemon's own wiring (daemon.ts): the config a session renders with
+      // is its cache entry's, and a click that must not act on the old config
+      // reloads that entry from the file it just wrote.
+      configFor: (origin) => cache.getOrCreate(origin).state.config,
+    },
+  );
+  onLanded(ctx, () => cache.configs.again());
+  return ctx;
 }
 
 describe("RenderCache: authoredRoots — the file authors a root at the preset's path", () => {
@@ -1110,9 +1107,7 @@ describe("RenderCache: authoredRoots — the file authors a root at the preset's
     const { cache, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       return entry.state.authoredRoots;
@@ -1208,12 +1203,10 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // a retry (fs.watch has no ready signal — see reload-signal.ts) re-touches
   // the file with the bytes the click left, so every application ends in the
   // same on-disk state and emits an event.
-  // [LAW:verifiable-goals] A save reloads its config explicitly, and the
-  // config's watch then hears the same write. The watch's reload resolves
-  // the bytes the save loaded and keeps the state, so each session view
-  // drawing from the entry reopens exactly once. The retries rewrite the
-  // bytes the click left, so each is a kept reload too, and the count below
-  // covers them.
+  // [LAW:verifiable-goals] A save's landing hands in its origin's moved
+  // snapshot, and the config's watch then hears the same write: what
+  // discovery finds there digests as what the save loaded, so nothing loads
+  // again, and each session view drawing from the entry reopens exactly once.
   test("a save reopens each session view drawing from its entry exactly once", async () => {
     durable.write(userConfigBody);
     const loads: string[] = [];
@@ -1223,7 +1216,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       logger: () => {},
     });
     const sessionState = new SessionState();
-    const cache = new RenderCache(
+    const cache = new DiscoveringCache(
       {
         clock: systemTimekeeper,
         stateDir: stateDir(durable.host),
@@ -1249,31 +1242,18 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       const dir = durable.projectDir;
       for (const sid of ["s1", "s2"])
         cache
-          .holdSession(dir, dir, undefined, viewFacts(dir, sid))
+          .holdSession(originOf(dir, dir, undefined), viewFacts(dir, sid))
           [Symbol.dispose]();
       const ctx = originCtx(cache, sessionState);
-      let clicked = false;
-      await untilHeard(
-        async () => {
-          if (clicked) {
-            writeFileSync(durable.configPath, durable.text()!);
-            return;
-          }
-          clicked = true;
-          await fireVerb(
-            "apply-layout-op",
-            ctx,
-            "s1",
-            "user",
-            "presets.default.root",
-            REMOVE_DIRECTORY,
-          );
-        },
-        () => loads.includes("config-watch:kept"),
-        "the watch's reload of the saved bytes",
+      await fireVerb(
+        "apply-layout-op",
+        ctx,
+        "s1",
+        "user",
+        "presets.default.root",
+        REMOVE_DIRECTORY,
       );
-      expect(loads.slice(0, 2)).toEqual(["open:built", "write:built"]);
-      expect(loads.slice(2).filter((l) => !l.endsWith(":kept"))).toEqual([]);
+      expect(loads).toEqual(["open:built", "config:built"]);
       const reopened = lines
         .filter((l) => / by=reload /.test(l))
         .map((l) => /sid="(\w+)"/.exec(l)?.[1]);
@@ -1290,9 +1270,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache, sessionState, cleanups } = makeCache(reloads);
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "default")).toEqual(["directory", "git"]);
@@ -1350,9 +1328,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache, sessionState, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "compact")).toEqual(["sidebar"]);
@@ -1387,9 +1363,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
       const entry = restarted.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "compact")).toEqual([]);
@@ -1402,7 +1376,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     durable.write(userConfigBody);
     const { cache, sessionState, cleanups } = makeCache();
     try {
-      cache.getOrCreate(durable.projectDir, durable.projectDir, undefined);
+      cache.getOrCreate(
+        originOf(durable.projectDir, durable.projectDir, undefined),
+      );
       const ctx = originCtx(cache, sessionState);
       await fireVerb(
         "apply-layout-op",
@@ -1428,9 +1404,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
       const entry = restarted.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "default")).toEqual(["git", "gitPr"]);
@@ -1446,7 +1420,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     durable.write(userConfigBody);
     const { cache, sessionState, cleanups } = makeCache();
     try {
-      cache.getOrCreate(durable.projectDir, durable.projectDir, undefined);
+      cache.getOrCreate(
+        originOf(durable.projectDir, durable.projectDir, undefined),
+      );
       await fireVerb(
         "apply-layout-op",
         originCtx(cache, sessionState),
@@ -1462,9 +1438,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
       const entry = restarted.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "default")).toEqual(["git"]);
@@ -1485,9 +1459,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache, sessionState, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       await fireVerb(
@@ -1540,9 +1512,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache, sessionState, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(entry.state.authoredRoots.has("default")).toBe(false);
@@ -1582,9 +1552,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       // no root of its own, and the `+` picker's addable domain does NOT yet
       // offer gitaculous (it's already placed).
       const before = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(before.lastError).toBeNull();
       expect(presetNamesOf(before, "default")).toContain("gitaculous");
@@ -1624,9 +1592,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       } = makeCache();
       try {
         const afterRemove = cache2.getOrCreate(
-          durable.projectDir,
-          durable.projectDir,
-          undefined,
+          originOf(durable.projectDir, durable.projectDir, undefined),
         );
         expect(afterRemove.lastError).toBeNull();
         expect(presetNamesOf(afterRemove, "default")).not.toContain(
@@ -1674,9 +1640,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         const { cache: cache3, cleanups: cleanups3 } = makeCache();
         try {
           const restored = cache3.getOrCreate(
-            durable.projectDir,
-            durable.projectDir,
-            undefined,
+            originOf(durable.projectDir, durable.projectDir, undefined),
           );
           expect(restored.lastError).toBeNull();
           // Fully recovered — through clicks the bar itself offered, no
@@ -1709,9 +1673,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       // Before any edit: not customized — the file authors no root — and
       // the tree is the bundled default's own.
       const before = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(before.lastError).toBeNull();
       expect(before.state.authoredRoots.has("default")).toBe(false);
@@ -1734,9 +1696,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       } = makeCache();
       try {
         const customized = cache2.getOrCreate(
-          durable.projectDir,
-          durable.projectDir,
-          undefined,
+          originOf(durable.projectDir, durable.projectDir, undefined),
         );
         expect(customized.lastError).toBeNull();
         expect(customized.state.authoredRoots.has("default")).toBe(true);
@@ -1766,9 +1726,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         const { cache: cache3, cleanups: cleanups3 } = makeCache();
         try {
           const restored = cache3.getOrCreate(
-            durable.projectDir,
-            durable.projectDir,
-            undefined,
+            originOf(durable.projectDir, durable.projectDir, undefined),
           );
           expect(restored.lastError).toBeNull();
           expect(restored.state.authoredRoots.has("default")).toBe(false);
@@ -1808,9 +1766,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache, sessionState, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(presetNamesOf(entry, "compact")).toEqual([
@@ -1850,9 +1806,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     } = makeCache();
     try {
       const emptied = cache2.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(emptied.lastError).toBeNull();
       expect(emptied.state.authoredRoots.has("compact")).toBe(true);
@@ -1879,9 +1833,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     const { cache: cache3, cleanups: cleanups3 } = makeCache();
     try {
       const restored = cache3.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(restored.lastError).toBeNull();
       expect(restored.state.authoredRoots.has("compact")).toBe(false);

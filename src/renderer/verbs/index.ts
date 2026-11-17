@@ -18,12 +18,8 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import {
-  type Locations,
-  writeLayer,
-  writeLayers,
-  type WriteLayer,
-} from "../../config/loader/discovery";
+import type { Locations } from "../../config/loader/chain-places";
+import type { ConfigSnapshot } from "../../config/config-snapshot";
 import {
   LAYER_ROLES,
   layerRoleOf,
@@ -61,7 +57,9 @@ import {
   writeDrafts,
   writeThemeDefault,
   writeValues,
+  writeLayerOf,
   type EditStore,
+  type WriteLayer,
 } from "../config-file-store";
 import {
   describeStep,
@@ -140,7 +138,7 @@ import type {
   EffectId,
   EffectOutcome,
 } from "../../renderer-interface/interface";
-import { repoAnswerFields, repoConfigs } from "../../config/repo-configs";
+import { repoAnswerFields } from "../../config/repo-question";
 import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   CheckedRenderRequest,
@@ -181,6 +179,10 @@ export interface DaemonContext {
   // What this daemon's clicks may write: the gates its root built.
   readonly gates: Gates;
   readonly sessionState: SessionStateRW;
+  // [LAW:one-source-of-truth] The snapshot the host handed in for an origin:
+  // what a click reads and writes its layers from. One not held throws,
+  // naming the origin.
+  readonly snapshotFor: (origin: RenderOrigin) => ConfigSnapshot;
   // [LAW:effects-at-boundaries] The turn's wall instant, which the host read.
   readonly now: () => Instant;
   readonly log: (level: "info" | "warn" | "error", msg: string) => void;
@@ -188,8 +190,6 @@ export interface DaemonContext {
   // turn's effects, which the host performs once its changes have landed
   // (src/renderer/acts.ts).
   readonly acts: Pick<ActsOnTheirWay, "ask">;
-  // The state directory whose answers book a click reads and records in.
-  readonly stateDir: string;
   // Where the user's config and installed plugins live: a click's write
   // resolves its home under them.
   readonly locations: Locations;
@@ -214,10 +214,6 @@ export interface DaemonContext {
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
   readonly configFor: (origin: RenderOrigin) => DslConfig;
-  // Reload that config from disk now, so the next render reads what a click
-  // just wrote rather than waiting on the file watcher: in the turn a click's
-  // changes land (`changeLanded`).
-  readonly reloadConfig: (origin: RenderOrigin) => void;
   // [LAW:single-enforcer] Where every click's config writes go: changes its
   // turn returns, and its consequence held until they land
   // (src/renderer/config-writes.ts).
@@ -648,17 +644,26 @@ function recordedOrigin(
   ctx: DaemonContext,
   sid: SessionId,
 ): RenderOrigin | null {
-  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  return recordedOriginOf(ctx.sessionState, sid);
+}
+
+// [LAW:one-source-of-truth] The origin a session's last context recorded,
+// read back: what a click on it waits on the config of, and what the
+// renderer subscribes for a session it holds. Null for one never rendered.
+export function recordedOriginOf(
+  sessionState: Pick<SessionStateRW, "get">,
+  sid: SessionId,
+): RenderOrigin | null {
+  const raw = sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
 }
 
 // [LAW:single-enforcer] How a click's config changes landed, in the turn of
-// their last `effect-done`. [LAW:no-ambient-temporal-coupling] Landed, a
-// change to the file its session renders from reloads it, and then the click's
-// consequence applies, in the same turn, so no frame draws the reloaded file
-// without what the click did beside it, nor that without the file. A change to
-// another file rebuilds nothing here (a reload restarts every source) and
-// reaches the sessions that render it through the fs watcher.
+// their last `effect-done`. [LAW:no-ambient-temporal-coupling] Landed, the
+// host has already handed in, in the click's own slot, the `config` of every
+// origin the landing moved, so the click's consequence applies over the
+// config the landing left, and no frame draws the reloaded file without what
+// the click did beside it, nor that without the file.
 // [LAW:no-silent-failure] Not landed, the click's consequence is dropped: its
 // drafts, picks and history stay as they were, and the reason shows on its
 // session's ⚠. No click answers this turn, so whatever fails in it shows on
@@ -677,7 +682,7 @@ export function changeDone(
 
 function changeLanded(
   ctx: DaemonContext,
-  { session, files, answered, consequence, outcome }: Landed,
+  { session, consequence, outcome }: Landed,
   effects: Effect[],
 ): void {
   const failed: string[] = [];
@@ -688,21 +693,8 @@ function changeLanded(
       failed.push(failureOf(e).message);
     }
   };
-  if (outcome.kind === "ok") {
-    // A session with no recorded render has no cache entry to draw stale. An
-    // answer to the trust book can change which config it renders, so its
-    // session reloads before its lanes are measured.
-    step(() => {
-      const origin = recordedOrigin(ctx, session);
-      if (
-        origin !== null &&
-        (answered ||
-          originLayers(ctx, origin).some((l) => files.includes(l.path)))
-      )
-        ctx.reloadConfig(origin);
-    });
-    step(() => consequence(effects));
-  } else if (outcome.kind === "closing") return;
+  if (outcome.kind === "ok") step(() => consequence(effects));
+  else if (outcome.kind === "closing") return;
   else failed.push(outcome.reason);
   if (failed.length === 0) return;
   const reason = failed.join("\n");
@@ -725,12 +717,12 @@ function proveLoadsAsLayer(
   const layer =
     origin === null
       ? undefined
-      : originLayers(ctx, origin).find((l) => l.path === file);
-  if (layer === undefined)
+      : ctx.snapshotFor(origin).chain.find((l) => l.path === file);
+  if (origin === null || layer === undefined)
     throw new BadVerbArgs(
       `${file} is not a config file this session renders from — its step is not taken`,
     );
-  proveLoads(layer, text, read);
+  proveLoads(heldLayer(ctx, origin, layer.role), text, read);
 }
 
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
@@ -770,44 +762,20 @@ function nestOf(ctx: DaemonContext, sid: SessionId): DisclosureNest {
 }
 
 // [LAW:single-enforcer] The layer a config write names in the session's
-// chain, resolved as the render resolves it under the same answers: a click's
-// chain leaves out what the bar's leaves out. A layer the chain has no place
-// for is refused, never written somewhere else.
-function originLayer(
-  ctx: Pick<ClickContext, "stateDir" | "locations">,
+// chain, as the snapshot the host handed in for its origin holds it: a click's
+// chain is the bar's. A layer the chain has no place for is refused, never
+// written somewhere else.
+function heldLayer(
+  ctx: Pick<ClickContext, "snapshotFor" | "locations">,
   origin: RenderOrigin,
   role: LayerRole,
 ): WriteLayer {
-  const write = writeLayer(
-    ctx.locations,
-    repoConfigs(ctx.stateDir).read(),
-    {
-      projectDir: origin.projectDir,
-      configFile: origin.target.path,
-      cwd: origin.cwd,
-    },
+  return writeLayerOf(
+    ctx.snapshotFor(origin),
     role,
+    origin.target.path ?? null,
+    ctx.locations.home,
   );
-  if (write.kind === "refused")
-    throw new BadVerbArgs(`the ${role} layer is not writable: ${write.why}`);
-  return write;
-}
-
-// Every config layer this session's chain can write: what a landing in any
-// of them reloads, and what a history step may have written.
-function originLayers(
-  ctx: Pick<ClickContext, "stateDir" | "locations">,
-  origin: RenderOrigin,
-): readonly WriteLayer[] {
-  const writes = writeLayers(ctx.locations, repoConfigs(ctx.stateDir).read(), {
-    projectDir: origin.projectDir,
-    configFile: origin.target.path,
-    cwd: origin.cwd,
-  });
-  return LAYER_ROLES.flatMap((role) => {
-    const write = writes[role];
-    return write.kind === "layer" ? [write] : [];
-  });
 }
 
 // [LAW:parse-dont-validate] A config write's wire: the session, the layer of
@@ -859,7 +827,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = gate.validate(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
@@ -903,7 +871,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const landing = durableLanding(
     config,
     (k) => ctx.sessionState.get(sid, k),
@@ -964,7 +932,7 @@ const save: VerbHandler = (value, ctx) => {
     return [d.target, result.value];
   });
   gatePlacements("save", gate, placements);
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   writeDrafts(editStore(ctx, sid), into, pairs, placements);
   for (const key of [
     ...drafts.map((d) => d.sessionKey),
@@ -1021,7 +989,7 @@ const savePreset: VerbHandler = (value, ctx) => {
     return [d.configKey, result.value];
   });
   gatePlacements("save-preset", gate, snapshot.placements);
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const name = writePreset(
     editStore(ctx, sid),
     into,
@@ -1067,7 +1035,7 @@ const saveThemeDefault: VerbHandler = (value, ctx) => {
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default — pick one in the menu first",
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const written = writeThemeDefault(
     editStore(ctx, sid),
     into,
@@ -1103,7 +1071,7 @@ const deletePreset: VerbHandler = (value, ctx) => {
     );
   }
   const origin = sessionOrigin(ctx, sid);
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   deletePresetFromFile(editStore(ctx, sid), into, name);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
@@ -1132,7 +1100,7 @@ const resetConfig: VerbHandler = (value, ctx) => {
       `reset-config: unknown config key "${unknown.join('", "')}" (have: ${known.join(", ")})`,
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const layers = keys.map(resetLayers);
   const fileKeys = layers.flatMap((l) => l.fileKeys);
   const sessionKeys = layers.flatMap((l) => l.sessionKeys);
@@ -1219,7 +1187,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
       `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const into = originLayer(ctx, origin, role);
+  const into = heldLayer(ctx, origin, role);
   const { placed, config } = applyLayoutOpToFile(
     editStore(ctx, sid),
     into,
@@ -1330,11 +1298,11 @@ function sessionHints(
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
 
 // A run of the session's doctor, asked by this click (src/renderer/doctor.ts).
-// [LAW:no-ambient-temporal-coupling] Its config is reloaded first, as a save
-// does: a run is a verdict on the files as they are now, not on whether the fs
-// watcher has caught up with an edit made a moment ago. The host reads the
-// machine for it (src/daemon/cache/doctor.ts) once the turn's subscriptions
-// name it, after the turn's changes have landed.
+// [LAW:one-source-of-truth] It judges the load the session's bar is drawn
+// from: the config discovery last handed in, so the verdict is on the bar the
+// user sees, and a watch that cannot hear the files is the bar's own notice.
+// The host reads the machine for it (src/daemon/cache/doctor.ts) once the
+// turn's subscriptions name it, after the turn's changes have landed.
 function startRun(ctx: ClickContext, sid: SessionId): void {
   const origin = sessionOrigin(ctx, sid);
   ctx.doctorRuns.start(ctx.sessionState, sid, {
@@ -1581,9 +1549,10 @@ const run: VerbHandler = (value, ctx) =>
 // the question drew it, for this session, for this directory and this answer.
 // The link's own signature proves only that the bar drew the link, and a
 // config can draw any link, so the answer keeps a mac of its own. The book
-// lives beside the link key, and the render cache watches it, so every bar
-// reloads; the clicking session's reloads as the answer lands, before the
-// click answers. The answer lands with the click's changes or not at all.
+// lives beside the link key. The host lands the answer with the click's
+// changes or not at all, and its config discovery then hands in a new config
+// for every origin with a repository to ask about, the clicking session's
+// before the click answers.
 const repoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),
@@ -1751,7 +1720,14 @@ function journaled<C extends DaemonContext>(
   effects: Effect[],
   handler: (ctx: Journaled<C>) => void,
 ): void {
-  ctx.configWrites.begin(verb);
+  ctx.configWrites.begin(verb, () => {
+    const origin = sid === null ? null : recordedOrigin(ctx, sid);
+    if (origin === null)
+      throw new BadVerbArgs(
+        `${verb}: the click names no session that has rendered — no config to write`,
+      );
+    return { origin, chain: ctx.snapshotFor(origin).chain };
+  });
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),

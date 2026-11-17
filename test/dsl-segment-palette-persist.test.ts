@@ -72,7 +72,8 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { EDITS_IN_PLACE } from "./helpers/history-step";
+import { EDITS_IN_PLACE, soleLayer } from "./helpers/history-step";
+import { DiscoveringCache, originOf } from "./helpers/config-host";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -434,15 +435,7 @@ describe("config-file-store: segment-palette placement", () => {
     expect(() =>
       writeValues(
         store(),
-        {
-          path: durable.configPath,
-          role: "user",
-          below: [],
-          above: [],
-          repo: null,
-          cwd: null,
-          locs: locations(durable.host),
-        },
+        soleLayer(durable.configPath, locations(durable.host).home),
         [["segments.ghost.palette", "nord"]],
       ),
     ).toThrow(
@@ -475,7 +468,7 @@ function makeCache(): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
-  const cache = new RenderCache(
+  const cache = new DiscoveringCache(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
@@ -524,9 +517,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     const { cache, cleanups, reloads } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.segments.sidebar!.palette).toBeUndefined();
@@ -534,15 +525,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       await reloads.after(entry, () =>
         writeValues(
           store(),
-          {
-            path: durable.configPath,
-            role: "user",
-          below: [],
-          above: [],
-            repo: null,
-            cwd: null,
-            locs: locations(durable.host),
-          },
+          soleLayer(durable.configPath, locations(durable.host).home),
           [["segments.sidebar.palette", "nord"]],
         ),
       );
@@ -574,24 +557,14 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      {
-        path: durable.configPath,
-        role: "user",
-          below: [],
-          above: [],
-        repo: null,
-        cwd: null,
-        locs: locations(durable.host),
-      },
+      soleLayer(durable.configPath, locations(durable.host).home),
       [["segments.sidebar.palette", "gruvbox"]],
     );
 
     const { cache, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.state.config.segments.sidebar!.palette).toBe("gruvbox");
     } finally {
@@ -603,9 +576,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
       const entry = restarted.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.state.config.segments.sidebar!.palette).toBe("gruvbox");
     } finally {
@@ -621,24 +592,14 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
     }`);
     writeValues(
       store(),
-      {
-        path: durable.configPath,
-        role: "user",
-          below: [],
-          above: [],
-        repo: null,
-        cwd: null,
-        locs: locations(durable.host),
-      },
+      soleLayer(durable.configPath, locations(durable.host).home),
       [["segments.directory.palette", "nord"]],
     );
 
     const { cache, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       const directory = entry.state.config.segments.directory!;

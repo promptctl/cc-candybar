@@ -50,7 +50,10 @@ import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
-import { persistValueText, writeValues } from "../src/renderer/config-file-store";
+import {
+  persistValueText,
+  writeValues,
+} from "../src/renderer/config-file-store";
 import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -68,6 +71,7 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { DiscoveringCache, originOf } from "./helpers/config-host";
 
 const S1 = sessionIdOf("s1");
 const S2_NO_PICK = sessionIdOf("s2-no-pick");
@@ -543,10 +547,7 @@ describe("persist action click → the config file", () => {
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, S1);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
-      "",
-      sessionState,
-    );
+    const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -736,7 +737,8 @@ describe("persist action click → the config file", () => {
   // back to the bare key "colorCompatibility", which no variable projects, so readVar
   // would always see "".
   test("a persist-option action over a newly-exposed field (colorCompatibility) marks the matching link active via its *.effective projection", () => {
-    const { render } = buildPersistRuntime(`{
+    const { render } = buildPersistRuntime(
+      `{
       globals: {},
       actions: { applyDepth: { persist: 'colorCompatibility', from: 'colorCompatibilities' } },
       segments: {
@@ -746,7 +748,11 @@ describe("persist action click → the config file", () => {
         },
       },
       root: 'bar',
-    }`, S1, EMPTY_DEFAULT, { colorCompatibility: "256" });
+    }`,
+      S1,
+      EMPTY_DEFAULT,
+      { colorCompatibility: "256" },
+    );
     const active = boldUrls(render()).map(effectsOf);
     expect(active).toHaveLength(1);
     expect(active[0]![0]!.args[3]).toBe("256");
@@ -822,7 +828,7 @@ function makeCache(): {
   cleanups.push(() => watchers.closeAll());
   const sessionState = new SessionState();
   const reloads = new ReloadSignal();
-  const cache = new RenderCache(
+  const cache = new DiscoveringCache(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
@@ -948,9 +954,7 @@ describe("RenderCache: the config file is the durable store", () => {
     const { cache, sessionState, cleanups, reloads } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.globals.palette).toBe("textual-dark");
@@ -988,9 +992,7 @@ describe("RenderCache: the config file is the durable store", () => {
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
       const entry = restarted.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.globals.palette).toBe("nord");
@@ -1020,9 +1022,7 @@ describe("RenderCache: the config file is the durable store", () => {
     const { cache, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       expect(entry.lastError).toBeNull();
 
@@ -1053,9 +1053,7 @@ describe("RenderCache: the config file is the durable store", () => {
     const { cache, cleanups } = makeCache();
     try {
       const entry = cache.getOrCreate(
-        durable.projectDir,
-        durable.projectDir,
-        undefined,
+        originOf(durable.projectDir, durable.projectDir, undefined),
       );
       // The file's default is every session's starting point.
       expect(entry.state.config.globals.palette).toBe("nord");

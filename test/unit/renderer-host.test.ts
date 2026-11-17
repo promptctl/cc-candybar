@@ -24,7 +24,7 @@ import type { Renderer } from "../../src/renderer-interface/interface";
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
 
-const NONE: Subscriptions = { sources: {}, lanes: {}, wake: null };
+const NONE: Subscriptions = { sources: {}, lanes: {}, configs: [], wake: null };
 
 // A clock that reads `wall` and `mono` as they stand, and sets no timer: no
 // output here declares a wake.
@@ -77,18 +77,11 @@ function hostOver(output: Ended) {
 test("an ask is handed the reply of its push's own kind, and its subscriptions are taken", async () => {
   const { host, taken } = hostOver({
     kind: "replied",
-    reply: { kind: "reload-config" },
+    reply: { kind: "close-journal" },
   });
-  expect(
-    await host.ask({
-      kind: "reload-config",
-      origin: {
-        projectDir: "/p",
-        cwd: "/p",
-        target: { kind: "default" },
-      } as never,
-    }),
-  ).toEqual({ kind: "reload-config" });
+  expect(await host.ask({ kind: "close-journal" })).toEqual({
+    kind: "close-journal",
+  });
   expect(taken).toEqual([NONE]);
 });
 

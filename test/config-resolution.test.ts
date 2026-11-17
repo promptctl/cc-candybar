@@ -6,7 +6,7 @@
 //   - .json5 wins over .json at the same location (documented > legacy)
 //   - every location's file is a layer: XDG < cwd < project
 //   - detectConfigCollisions surfaces same-location duplicates
-//   - writeLayer names a role's file and the chain's layers either side of it
+//   - chainPlaces names the file each writable role of the chain lands in
 
 import {
   chmodSync,
@@ -17,19 +17,17 @@ import {
   mkdirSync,
 } from "node:fs";
 import { locations } from "../src/daemon/paths";
-import { type Locations } from "../src/config/loader/discovery";
+import { chainPlaces, type Locations } from "../src/config/loader/chain-places";
 import { hostOf } from "./helpers/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  resolveDslConfig,
   configResolutionNotice,
-  writeLayer,
-  writableRoles,
   dslConfigCandidatePaths,
-  detectConfigCollisions,
 } from "../src/config/dsl-loader";
+import { detectConfigCollisions } from "../src/daemon/config-discovery/config-search";
+import { resolutionOf } from "./helpers/config-search";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 
 // The answers with each of `dirs` approved: these cases are about how layers
@@ -152,7 +150,7 @@ describe("dslConfigCandidatePaths", () => {
   });
 });
 
-describe("resolveDslConfig", () => {
+describe("the config search", () => {
   test(".json at XDG resolves when no .json5 exists anywhere", () => {
     const { dir, cleanup } = mkdir();
     const L = isolated(dir);
@@ -163,7 +161,7 @@ describe("resolveDslConfig", () => {
       writeFileSync(jsonPath, VALID_CFG);
       // No project, no cwd files. The .json at XDG is the only existing
       // candidate; the resolver must find it despite the legacy extension.
-      const resolved = resolveDslConfig(L, approving(), {});
+      const resolved = resolutionOf(L, approving(), {});
       expect(resolved).toEqual({
         kind: "chain",
         layers: [{ path: jsonPath, role: "user" }],
@@ -186,7 +184,7 @@ describe("resolveDslConfig", () => {
       const jsonPath = join(xdgCfgDir, "config.json");
       writeFileSync(json5Path, VALID_CFG);
       writeFileSync(jsonPath, VALID_CFG);
-      const resolved = resolveDslConfig(L, approving(), {});
+      const resolved = resolutionOf(L, approving(), {});
       // Documented format outranks the legacy compatibility tail.
       expect(resolved).toEqual({
         kind: "chain",
@@ -215,7 +213,7 @@ describe("resolveDslConfig", () => {
       writeFileSync(xdgJson5, VALID_CFG);
 
       // Location orders the layers; the user's file stays the home.
-      const resolved = resolveDslConfig(L, approving(proj), {
+      const resolved = resolutionOf(L, approving(proj), {
         projectDir: proj,
       });
       // An approved project's plugin folder is listed, whatever it holds.
@@ -235,50 +233,20 @@ describe("resolveDslConfig", () => {
         },
       });
       const query = { projectDir: proj, cwd: dir };
-      expect(writeLayer(L, approving(proj), query, "user")).toEqual({
-        kind: "layer",
-        path: xdgJson5,
-        role: "user",
-        below: [],
-        above: [
-          { path: projJson, role: "project" },
-          { path: join(proj, ".cc-candybar.local.json5"), role: "local" },
-        ],
-        repo,
-        cwd: dir,
-        locs: L,
-      });
-      // The project's own file, under the user's; and the local file a first
-      // write there creates, beside it, over both.
-      expect(writeLayer(L, approving(proj), query, "project")).toEqual({
-        kind: "layer",
-        path: projJson,
-        role: "project",
-        below: [{ path: xdgJson5, role: "user" }],
-        above: [{ path: join(proj, ".cc-candybar.local.json5"), role: "local" }],
-        repo,
-        cwd: dir,
-        locs: L,
-      });
-      expect(writeLayer(L, approving(proj), query, "local")).toMatchObject({
-        kind: "layer",
-        path: join(proj, ".cc-candybar.local.json5"),
-        below: [
-          { path: xdgJson5, role: "user" },
-          { path: projJson, role: "project" },
-        ],
-        above: [],
-      });
-      expect(writableRoles(resolveDslConfig(L, approving(proj), query), query)).toEqual(
-        ["user", "project", "local"],
-      );
+      // The user's file, the project's own over it, and the local file a
+      // first write there creates, over both.
+      expect(
+        chainPlaces(resolutionOf(L, approving(proj), query), query),
+      ).toEqual([
+        { path: xdgJson5, role: "user" },
+        { path: projJson, role: "project" },
+        { path: join(proj, ".cc-candybar.local.json5"), role: "local" },
+      ]);
       // Unapproved, the project's layers are not the session's to write.
       const unanswered = { kind: "ok", value: {} } as const;
-      expect(writeLayer(L, unanswered, query, "project")).toEqual({
-        kind: "refused",
-        why: "the project layer is the project's, and this session has no approved project",
-      });
-      expect(writableRoles(resolveDslConfig(L, unanswered, query), query)).toEqual(["user"]);
+      expect(
+        chainPlaces(resolutionOf(L, unanswered, query), query),
+      ).toEqual([{ path: xdgJson5, role: "user" }]);
     } finally {
       cleanup();
     }
@@ -289,7 +257,7 @@ describe("resolveDslConfig", () => {
     const L = isolated(dir);
     try {
       // No files written anywhere — XDG dir doesn't even exist.
-      const resolved = resolveDslConfig(L, approving(), {});
+      const resolved = resolutionOf(L, approving(), {});
       const home = join(dir, "cc-candybar", "config.json5");
       expect(resolved).toEqual({
         kind: "chain",
@@ -300,16 +268,7 @@ describe("resolveDslConfig", () => {
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
-      expect(writeLayer(L, approving(), { cwd: dir }, "user")).toEqual({
-        kind: "layer",
-        path: home,
-        role: "user",
-        below: [],
-        above: [],
-        repo: null,
-        cwd: dir,
-        locs: L,
-      });
+      expect(chainPlaces(resolved, {})).toEqual([{ path: home, role: "user" }]);
     } finally {
       cleanup();
     }
@@ -323,10 +282,12 @@ describe("resolveDslConfig", () => {
       const local = join(dir, ".cc-candybar.json5");
       writeFileSync(named, VALID_CFG);
       writeFileSync(local, VALID_CFG);
-      expect(resolveDslConfig(L, approving(), {
-        projectDir: dir,
-        configFile: named,
-      })).toEqual({
+      expect(
+        resolutionOf(L, approving(), {
+          projectDir: dir,
+          configFile: named,
+        }),
+      ).toEqual({
         kind: "chain",
         layers: [{ path: named, role: "user" }],
         home: named,
@@ -334,18 +295,10 @@ describe("resolveDslConfig", () => {
         repos: NOTHING_GATED,
       });
       const query = { projectDir: dir, cwd: dir, configFile: named };
-      expect(writeLayer(L, approving(), query, "user")).toEqual({
-        kind: "layer",
-        path: named,
-        role: "user",
-        below: [],
-        above: [],
-        repo: null,
-        cwd: dir,
-        locs: L,
-      });
       // The named file is the chain's one layer: there is no other to write.
-      expect(writeLayer(L, approving(dir), query, "local").kind).toBe("refused");
+      expect(
+        chainPlaces(resolutionOf(L, approving(dir), query), query),
+      ).toEqual([{ path: named, role: "user" }]);
     } finally {
       cleanup();
     }
@@ -362,7 +315,7 @@ describe("resolveDslConfig", () => {
     try {
       const named = join(dir, "absent.json5");
       writeFileSync(join(dir, ".cc-candybar.json5"), VALID_CFG);
-      const resolved = resolveDslConfig(L, approving(), {
+      const resolved = resolutionOf(L, approving(), {
         projectDir: dir,
         configFile: named,
       });
@@ -377,18 +330,10 @@ describe("resolveDslConfig", () => {
       );
       // A durable write creates the file the bar is waiting for.
       const query = { projectDir: dir, cwd: dir, configFile: named };
-      expect(writeLayer(L, approving(), query, "user")).toEqual({
-        kind: "layer",
-        path: named,
-        role: "user",
-        below: [],
-        above: [],
-        repo: null,
-        cwd: dir,
-        locs: L,
-      });
       // The named file is the chain's one layer: there is no other to write.
-      expect(writeLayer(L, approving(dir), query, "local").kind).toBe("refused");
+      expect(
+        chainPlaces(resolutionOf(L, approving(dir), query), query),
+      ).toEqual([{ path: named, role: "user" }]);
     } finally {
       cleanup();
     }
@@ -410,10 +355,10 @@ describe("resolveDslConfig", () => {
       writeFileSync(named, VALID_CFG);
       chmodSync(locked, 0o000);
       try {
-        const resolved = resolveDslConfig(L, approving(), {
-        projectDir: dir,
-        configFile: named,
-      });
+        const resolved = resolutionOf(L, approving(), {
+          projectDir: dir,
+          configFile: named,
+        });
         expect(resolved).toEqual({
           kind: "unreadable",
           path: named,
@@ -421,10 +366,8 @@ describe("resolveDslConfig", () => {
           error: expect.stringContaining("EACCES"),
           repos: NOTHING_GATED,
         });
-        expect(configResolutionNotice(resolved)).toMatch(
-          /^Config file could not be read: /,
-        );
-        expect(configResolutionNotice(resolved)).toContain(named);
+        // The load names the file it could not read; the search adds none.
+        expect(configResolutionNotice(resolved)).toBeNull();
       } finally {
         chmodSync(locked, 0o755);
         cleanup();
@@ -451,7 +394,7 @@ describe("resolveDslConfig", () => {
       writeFileSync(userFile, VALID_CFG);
       chmodSync(locked, 0o000);
       try {
-        const resolved = resolveDslConfig(L, approving(), {
+        const resolved = resolutionOf(L, approving(), {
           projectDir: locked,
         });
         const skipped = [
@@ -610,7 +553,7 @@ describe("the layer chain", () => {
     configFile?: string,
     answers = approving(projectDir),
   ) => {
-    const r = resolveDslConfig(L, answers, { projectDir, configFile });
+    const r = resolutionOf(L, answers, { projectDir, configFile });
     return r.kind === "chain" ? r.layers.map((l) => l.path) : null;
   };
 

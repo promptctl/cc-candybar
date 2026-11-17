@@ -42,7 +42,7 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
         return {
           kind: "replied",
           reply: { kind: "close-journal" },
-          subscriptions: { sources: {}, lanes: {}, wake: null },
+          subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
         };
       },
     }),

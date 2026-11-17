@@ -39,9 +39,13 @@ import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 import { undoOf, WRITES_IN_PLACE } from "./helpers/history-step";
 import { lastClickError } from "../src/daemon/foundations/click-error";
+import { onLanded } from "./helpers/click";
 
 const S1 = sessionIdOf("s1");
 const SID_A = sessionIdOf("a");
@@ -166,10 +170,10 @@ function undoBar(
   const ctx: VerbContext = {
     ...rig.ctx,
     configFor: () => current,
-    reloadConfig: () => {
-      current = parseAndValidate("<test>", durable.text()!, ALLOWED);
-    },
   };
+  onLanded(ctx, () => {
+    current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+  });
   // The whole URL through the verb table, exactly as the daemon's handleClick
   // does — one click, one journal, one step.
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
@@ -216,7 +220,10 @@ const SRC = `{
 
 type UndoBar = ReturnType<typeof undoBar>;
 
-async function press(runtime: UndoBar, action: (typeof ACTION_ORDER)[number]): Promise<void> {
+async function press(
+  runtime: UndoBar,
+  action: (typeof ACTION_ORDER)[number],
+): Promise<void> {
   await runtime.click(ownUrls(runtime.render())[ACTION_ORDER.indexOf(action)]!);
 }
 
@@ -237,7 +244,9 @@ describe("undo/redo click → the session's settings history", () => {
     await press(runtime, "pinDracula");
     expect(globals().palette).toBe("dracula");
     const written = durable.text()!;
-    expect(durable.history().past).toEqual([durable.fileStep(original, written)]);
+    expect(durable.history().past).toEqual([
+      durable.fileStep(original, written),
+    ]);
 
     await press(runtime, "back");
     expect(durable.text()).toBe(original);
@@ -267,24 +276,60 @@ describe("undo/redo click → the session's settings history", () => {
     await press(runtime, "pinDracula"); // file
     const pinned = durable.text()!;
     await press(runtime, "pickPadding"); // session
-    expect([theme(), padding(), globals().palette]).toEqual(["nord", "3", "dracula"]);
-    expect(runtime.history.depth(S1)).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
+    expect([theme(), padding(), globals().palette]).toEqual([
+      "nord",
+      "3",
+      "dracula",
+    ]);
+    expect(runtime.history.depth(S1)).toEqual({
+      undo: 3,
+      redo: 0,
+      sinceEdit: 0,
+    });
 
     await press(runtime, "back");
-    expect([theme(), padding(), durable.text()]).toEqual(["nord", null, pinned]);
+    expect([theme(), padding(), durable.text()]).toEqual([
+      "nord",
+      null,
+      pinned,
+    ]);
     await press(runtime, "back");
-    expect([theme(), padding(), durable.text()]).toEqual(["nord", null, original]);
+    expect([theme(), padding(), durable.text()]).toEqual([
+      "nord",
+      null,
+      original,
+    ]);
     await press(runtime, "back");
-    expect([theme(), padding(), durable.text()]).toEqual([null, null, original]);
-    expect(runtime.history.depth(S1)).toEqual({ undo: 0, redo: 3, sinceEdit: 0 });
+    expect([theme(), padding(), durable.text()]).toEqual([
+      null,
+      null,
+      original,
+    ]);
+    expect(runtime.history.depth(S1)).toEqual({
+      undo: 0,
+      redo: 3,
+      sinceEdit: 0,
+    });
 
     await press(runtime, "fwd");
-    expect([theme(), padding(), durable.text()]).toEqual(["nord", null, original]);
+    expect([theme(), padding(), durable.text()]).toEqual([
+      "nord",
+      null,
+      original,
+    ]);
     await press(runtime, "fwd");
-    expect([theme(), padding(), durable.text()]).toEqual(["nord", null, pinned]);
+    expect([theme(), padding(), durable.text()]).toEqual([
+      "nord",
+      null,
+      pinned,
+    ]);
     await press(runtime, "fwd");
     expect([theme(), padding(), durable.text()]).toEqual(["nord", "3", pinned]);
-    expect(runtime.history.depth(S1)).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
+    expect(runtime.history.depth(S1)).toEqual({
+      undo: 3,
+      redo: 0,
+      sinceEdit: 0,
+    });
   });
 
   test("undo restores a session pick's PRIOR value, not just absence", async () => {
@@ -308,7 +353,11 @@ describe("undo/redo click → the session's settings history", () => {
     const runtime = undoBar(src);
     await press(runtime, "pickTheme"); // the slot now renders openMenu
     expect(runtime.sessionState.get(S1, "menus.x")).toBe("open");
-    expect(runtime.history.depth(S1)).toEqual({ undo: 0, redo: 0, sinceEdit: 0 });
+    expect(runtime.history.depth(S1)).toEqual({
+      undo: 0,
+      redo: 0,
+      sinceEdit: 0,
+    });
   });
 
   test("a click that changes nothing records no step", async () => {
@@ -387,7 +436,11 @@ describe("undo/redo click → the session's settings history", () => {
     // Nothing was overwritten, and the file step is gone: every change this
     // session made to that file chains through the state the hand edit replaced.
     expect(durable.text()).toBe(handEdited);
-    expect(runtime.history.depth(S1)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
+    expect(runtime.history.depth(S1)).toEqual({
+      undo: 1,
+      redo: 0,
+      sinceEdit: 0,
+    });
 
     await press(runtime, "back"); // the session pick is still undoable
     expect(runtime.sessionState.get(S1, "theme")).toBeNull();
@@ -431,7 +484,9 @@ describe("undo/redo click → the session's settings history", () => {
     expect(history.depth(SID_A)).toEqual({ undo: 0, redo: 1, sinceEdit: 0 });
 
     await press(b, "back"); // b's own step is intact
-    expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
+    expect(durable.parsed().root).toEqual({
+      v: [{ h: ["directory", "git"] }, "bar"],
+    });
     expect(globals().palette).not.toBe("dracula");
   });
 
@@ -504,7 +559,11 @@ describe("settings history: a step lands whole, and records only what landed", (
     );
     expect(runtime.sessionState.get(S1, "theme")).toBeNull();
     expect(durable.text()).toBe(saved);
-    expect(runtime.history.depth(S1)).toEqual({ undo: 3, redo: 0, sinceEdit: 0 });
+    expect(runtime.history.depth(S1)).toEqual({
+      undo: 3,
+      redo: 0,
+      sinceEdit: 0,
+    });
 
     chmodSync(dirname(durable.configPath), 0o700); // and once it can, the step is intact
     await press(runtime, "back");
@@ -521,7 +580,11 @@ describe("settings history: a step lands whole, and records only what landed", (
     runtime.sessionState.set(S1, "theme", "gruvbox");
     await press(runtime, "pickPadding"); // the slot now renders pickThenUndo
     expect(runtime.sessionState.get(S1, "theme")).toBe("gruvbox");
-    expect(runtime.history.depth(S1)).toEqual({ undo: 0, redo: 1, sinceEdit: 0 });
+    expect(runtime.history.depth(S1)).toEqual({
+      undo: 0,
+      redo: 1,
+      sinceEdit: 0,
+    });
     await press(runtime, "fwd");
     expect(runtime.sessionState.get(S1, "theme")).toBe("nord");
   });
@@ -529,7 +592,12 @@ describe("settings history: a step lands whole, and records only what landed", (
   test("history is bounded by bytes: the session that changed least recently goes first", () => {
     const history = new SettingsHistory(new SessionState(), () => {});
     const big = (c: string): string => c.repeat(2 * 1024 * 1024);
-    const step = (sid: SessionId, file: string, from: string, to: string): void => {
+    const step = (
+      sid: SessionId,
+      file: string,
+      from: string,
+      to: string,
+    ): void => {
       const journal = history.begin({
         read: () => null,
         land: () => {},

@@ -12,7 +12,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { SettingsHistory } from "../src/renderer/settings-history";
 import { fileHistoryStorage } from "../src/daemon/history-file";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
-import { readConfigText } from "../src/renderer/config-file-store";
+import { readConfigText } from "../src/utils/atomic-write";
 import {
   redoOf,
   rewindOf,

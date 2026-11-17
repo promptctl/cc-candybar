@@ -29,12 +29,20 @@ import { rangeOf } from "../../../src/tmux-status/frames";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
-import { click, clickAnswer, render, saidOf, toldOf, drawnLink } from "../../helpers/daemon-e2e";
-import { logLines, renderLines } from "../../helpers/daemon-log";
-import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  click,
+  clickAnswer,
+  render,
+  saidOf,
+  toldOf,
+  drawnLink,
+} from "../../helpers/daemon-e2e";
+import { logLines, renderLines } from "../../helpers/daemon-log";
+import {
+  startDaemon,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { untilHeard } from "../../helpers/reload-signal";
 import { writeAtomic } from "../../../src/utils/atomic-write";
 import { valueOf } from "../../../src/utils/logfmt";
@@ -95,19 +103,22 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   const switchLanes = async (sid: string, on: boolean, ...lanes: Lane[]) =>
     await click(
       daemon,
-      drawnLink(daemon, effectsUrl(
-        lanes.map((lane) => {
-          const { setting, on: value } = LANES[lane].switch;
-          return {
-            verb: VERB_SET_STATE,
-            args: [
-              sid,
-              setting,
-              on ? String(value) : String(GLOBAL_FIELDS[setting].floor),
-            ],
-          };
-        }),
-      )),
+      drawnLink(
+        daemon,
+        effectsUrl(
+          lanes.map((lane) => {
+            const { setting, on: value } = LANES[lane].switch;
+            return {
+              verb: VERB_SET_STATE,
+              args: [
+                sid,
+                setting,
+                on ? String(value) : String(GLOBAL_FIELDS[setting].floor),
+              ],
+            };
+          }),
+        ),
+      ),
     );
   const laneLines = (sid: string): string[] =>
     logLines(env).filter(
@@ -298,12 +309,12 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
   });
 
   // A click that writes no config file reloads no entry, however many
-  // directories render that config. Judged by what each load says caused it,
-  // on the event every load path emits. The directories are this test's own,
-  // so every load of their entries is here: each opens once, and after that
-  // only its config watch, hearing the config rewritten after the click,
-  // loads it again. A load the click caused would say another cause; a write
-  // of its own to the config would leave the file changed before the rewrite.
+  // directories render that config. The directories are this test's own, so
+  // every load of their entries is here: each opens once, and after that only
+  // the config its origin's watch moved, hearing the config rewritten after
+  // the click, loads it again. A click that landed a write would discover its
+  // origins again for its landing; a write of its own to the config would
+  // leave the file changed before the rewrite.
   test("a lane switch's click reloads no entry; the config's own rewrite reloads each one", async () => {
     const sid = "lane-no-reload";
     const root = realpathSync(
@@ -346,7 +357,6 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
           )
           // A logfmt value: bare, or a JSON string.
           .map((l) => / cause=("(?:[^"\\]|\\.)*"|\S+) /.exec(l)![1]!);
-      const rewrite = valueOf(`config-watch:${cfg}`);
       // The positive control: each entry draws the rewritten config, so its
       // watch delivered the rewrite, and an event the click caused would
       // have been delivered before it.
@@ -370,8 +380,11 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       for (const d of dirs) {
         const [opened, ...reloads] = causes(d);
         expect(opened).toBe("open");
-        expect(new Set(reloads)).toEqual(new Set([rewrite]));
+        expect(new Set(reloads)).toEqual(new Set(["config"]));
       }
+      expect(
+        logLines(env).filter((l) => l.includes("config discovery why=landed")),
+      ).toEqual([]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

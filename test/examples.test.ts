@@ -16,7 +16,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { validateConfig } from "./helpers/parse-and-validate";
-import { loadConfig } from "../src/config/dsl-loader";
+import { loadFile } from "./helpers/discovered-load";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -52,11 +52,11 @@ describe("shipped examples load and render through the real cascade", () => {
   test.each(exampleFiles)("%s validates and renders without errors", (file) => {
     const path = join(EXAMPLES_DIR, file);
 
-    // [LAW:single-enforcer] loadConfig is the production cascade: the file
+    // [LAW:single-enforcer] A file's load is the production cascade: the file
     // merges ON TOP of the bundled default, with the default's own segment
     // names as the delta-able set.
     const config = validateConfig(
-      loadConfig(path, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED),
+      loadFile(path, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED),
       path,
       ALLOWED,
     );
@@ -68,7 +68,10 @@ describe("shipped examples load and render through the real cascade", () => {
     const { launcher, spawner } = fakeLauncher(systemTimekeeper);
     spawner.program(() => true, hangs());
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
+      cwd: process.cwd(),
+    });
     // [LAW:no-silent-failure] A variable that fails to declare is collected, not
     // thrown — surface it here so a broken example var fails the test loudly.
     expect(compiled.loadWarnings).toEqual([]);
@@ -83,7 +86,9 @@ describe("shipped examples load and render through the real cascade", () => {
         instantOf(new Date()),
         {
           endcaps: "powerline",
-          colorCompatibility: "truecolor", wrap: true, padding: 0,
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 0,
           width: 200,
         },
       ).frame,

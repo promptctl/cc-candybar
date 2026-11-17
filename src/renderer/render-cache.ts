@@ -1,8 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { inspect } from "node:util";
-import { nearestWatchTarget } from "../utils/watch-target.js";
-import { chainName } from "../config-hint.js";
+import { chainName, originKey, type RenderOrigin } from "../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
 import { compareShallow, observable, reaction, runInAction } from "mobx";
 import type {
@@ -15,36 +11,19 @@ import type {
 } from "../renderer-interface/interface.js";
 import type {
   AdapterToHost,
-  EveryEntryLoad,
   StorageHoldId,
 } from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
-import type { Watches } from "./watches.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
-import {
-  repoConfigs,
-  repoConfigsDir,
-  repoConfigsPath,
-} from "../config/repo-configs.js";
-import { REPO_PLUGIN_DIR } from "../config/loader/plugin-folders.js";
+import { writable, type ConfigSnapshot } from "../config/config-snapshot.js";
 import type { Drawing } from "../config/lanes.js";
 import type { FrameRecord } from "../render/frame-memory.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import {
-  repoUnreadNotice,
-  type ApprovedRepo,
-  type RepoGate,
-} from "../config/loader/repo-gate.js";
-import {
-  loadConfigChain,
+  loadSnapshot,
   type LoadedChain,
   type LoadedFile,
-  resolveDslConfig,
-  writableRoles,
-  configResolutionNotice,
-  dslConfigCandidatePaths,
-  detectConfigCollisions,
   ConfigError,
   type DroppedFileError,
   type ConfigLayer,
@@ -79,16 +58,9 @@ import { SourceRegistry } from "../var-system/sources.js";
 import { UNREAD_RUN } from "../facts/world-state.js";
 import type { VarScope } from "../dsl/variable-scope.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
-import {
-  watchTargetsOf,
-  type WatcherHandle,
-  type BoundWatch,
-  type Invalidation,
-  type PathsWatch,
-} from "../daemon/foundations/watch-targets.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
-import type { Locations } from "../config/loader/discovery.js";
+import type { Locations } from "../config/loader/chain-places.js";
 import { digestOf, type Projection } from "../utils/plain.js";
 import { pendingOf } from "../utils/outcome.js";
 import {
@@ -155,31 +127,26 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 }
 
 // The count ceiling beside the byte budget: every entry holds a
-// SourceRegistry (fs watchers, TTL timers) and a config
-// watcher, a resource the byte budget does not see. At the default memory limit
+// SourceRegistry (fs watchers, TTL timers), a resource the byte budget does
+// not see. At the default memory limit
 // the bytes bind just short of it (~230 entries with no view); it is what
 // bounds watchers above it, when CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
 
 // [LAW:single-enforcer] These are the cache-and-registry deps — session state
-// (for declareState atoms) and the watcher registry (for hot-reload's config file watcher). Daemon-
+// (for declareState atoms) and the host's storage owner. Daemon-
 // owned data providers like the SessionUsageStore/git provider/etc. live in
 // the session source (src/renderer/session-source.ts) a view's payload is
 // derived through; they are not part of cache identity or lifecycle.
 export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The renderer's turn time (StateDeps).
   clock: TurnClock;
-  // The daemon's state directory, where the repositories' answers are kept
+  // Where the user's home is, which a `~` in a plugin's data path names
   // (StateDeps).
-  stateDir: string;
-  // Where the user's config and installed plugins live (StateDeps).
   locations: Locations;
   // What an `env` source reads (StateDeps).
   env: Readonly<Record<string, string | undefined>>;
   sessionState: SessionStateRW;
-  // The renderer's watches (src/renderer/watches.ts): the answers book's and
-  // each entry's config watch.
-  watchers: Pick<Watches, "acquire" | "follow">;
   // The host's storage owner, which holds the folders each served state's
   // latest load named (`holdFolders`), from its first load to its reclaim.
   storage: AdapterToHost["storage"];
@@ -201,10 +168,7 @@ export interface StateDeps {
   // The clock its variables' ages run on, and its sources' held work: the
   // renderer's turn time, or the clock of a command that draws once.
   readonly clock: TurnClock;
-  // The state directory whose answers book a load reads: which repositories'
-  // plugins it may run.
-  readonly stateDir: string;
-  // Where the user's config and installed plugins live.
+  // Where the user's home is: a `~` in a plugin's data path names it.
   readonly locations: Locations;
   // The environment an `env` source reads: the daemon's host.
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -214,10 +178,6 @@ export interface StateDeps {
   // The gates a config's sessions click through, which a load builds once so a
   // config that cannot gate fails there.
   readonly gates: Gates;
-  // The renderer's watches, each held by the host's one registry, which the
-  // cache's own watches (the answers book's) ride; a watch's deafness is the
-  // host's latest push of it. A build outside the daemon leaves it out.
-  readonly watchers?: Pick<Watches, "acquire" | "follow">;
   // The compile for a config's compile key. A cache shares one between every
   // entry whose config compiles alike (RenderCache's table); a one-shot load
   // has no other entry to share with and compiles its own.
@@ -226,7 +186,7 @@ export interface StateDeps {
 
 // [LAW:no-ambient-temporal-coupling] The cache's outward lifecycle signal. A
 // reload is the one event the cache alone knows the completion of — it runs
-// from a debounced fs watcher, on the cache's own schedule — so anything that
+// when a `config` turn hands in a moved snapshot — so anything that
 // must run AFTER a reload (an operator log of its outcome, a test asserting
 // on the state it wrote) needs the cache to say so, or it is left betting on
 // a clock. The same named-bag idiom as drawDsl's RenderObservers
@@ -235,9 +195,9 @@ export interface StateDeps {
 // re-counts.
 export interface RenderCacheObservers {
   // Fires once per completed reload of an entry — the initial population in
-  // getOrCreate and every watcher-driven reload alike, success (a fresh
+  // getOrCreate and every snapshot-driven reload alike, success (a fresh
   // `state`) and failure (`lastError` set, prior state preserved) alike —
-  // after the entry's fields and watcher are settled. The entry is handed
+  // after the entry's fields are settled. The entry is handed
   // over as ReloadedEntry so the observer reads the outcome from the one
   // place it lives and the type, not this comment, keeps it from writing
   // there. `sessions` are those whose views drew from the entry before it
@@ -258,8 +218,7 @@ export interface RenderCacheObservers {
 }
 
 // [LAW:types-are-the-program] The observer's view of an entry: an ALLOW-LIST
-// of the load's outcome. Nothing that owns a resource — the watcher handle,
-// the SourceRegistry, the validator disposers, the render-cell sink — crosses
+// of the load's outcome. Nothing that owns a resource — the SourceRegistry, the validator disposers, the render-cell sink — crosses
 // this seam, so a handle added to either type later is closed by
 // construction, not by remembering to omit it (`Readonly` alone would not:
 // it cannot stop a method call such as `dispose()`).
@@ -270,7 +229,7 @@ export type ReloadedEntry = Readonly<
     | "cwd"
     | "configFile"
     | "configLayers"
-    | "repos"
+    | "snapshot"
     | "lastError"
     | "lastWarning"
   >
@@ -334,22 +293,38 @@ export interface DslRenderState {
   readonly sources: DeclaredSources;
 }
 
-// The installed roots searched (every one watched), and the definitions —
-// installed and listed — merged and dropped.
+// The definitions — installed and listed — merged and dropped.
 type LoadedPlugins = LoadedChain["installed"];
 
 // The files a config is merged from, lowest first, and the one durable
-// clicks write — `resolveDslConfig`'s chain, or the bundled default's empty
-// one.
+// clicks write — discovery's chain, or the bundled default's empty one.
 export interface ConfigChain {
   readonly layers: readonly ConfigLayer[];
   readonly home: string;
   // The roles of the chain a click can write.
   readonly writable: readonly LayerRole[];
-  // The session's project, once approved: where the plugins it ships live.
-  readonly repo: ApprovedRepo | null;
-  // Where the installed plugins the chain loads over live.
+  // What discovery found, which the load reads every text from.
+  readonly snapshot: ConfigSnapshot;
+  // Where the user's home is, which a `~` in a plugin's data path names.
   readonly locs: Locations;
+}
+
+// [LAW:one-source-of-truth] The chain a snapshot names: the layers it holds a
+// file for, the user layer's file, and every role it can write.
+function chainOf(snapshot: ConfigSnapshot, locs: Locations): ConfigChain {
+  const { chain } = snapshot;
+  return {
+    // [LAW:one-source-of-truth] The files reported are the files merged: a
+    // layer not written or not read is no layer of the load.
+    layers: chain
+      .filter((l) => l.content.kind === "text")
+      .map((l) => ({ path: l.path, role: l.role })),
+    // Every chain holds the user layer: it is the one no answer gates.
+    home: chain.find((l) => l.role === "user")!.path,
+    writable: chain.filter((l) => writable(l.content)).map((l) => l.role),
+    snapshot,
+    locs,
+  };
 }
 
 // [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
@@ -410,60 +385,21 @@ export interface Teardown {
   readonly held: number;
 }
 
-export interface ExplicitLoad {
-  readonly kind: "write" | "doctor";
-}
-
-// [LAW:types-are-the-program] Why an entry loaded: its first load; a re-read
-// a caller asked for, after a click's durable write or before a doctor
-// verdict; a watch that heard something, the entry's own config watch or
-// the repo-config answers watch every entry shares, carrying what it heard;
-// or file events resuming after a span, starting `since`, in which an edit
-// may have gone unheard.
-export type LoadCause =
-  | { readonly kind: "open" }
-  | ExplicitLoad
-  | { readonly kind: "config-watch"; readonly heard: Invalidation }
-  | EveryEntryLoad;
-
-const heardField = (heard: Invalidation): string => {
-  switch (heard.kind) {
-    case "changed":
-      return heard.paths.join(",");
-    case "unknown":
-      return "unknown";
-    case "failed":
-      return `failed:${heard.reason}`;
-  }
-};
-
-const causeField = (cause: LoadCause): string => {
-  switch (cause.kind) {
-    case "open":
-    case "write":
-    case "doctor":
-      return cause.kind;
-    case "config-watch":
-    case "answers-watch":
-      return `${cause.kind}:${heardField(cause.heard)}`;
-    case "events-resumed":
-      return `${cause.kind}:${new Date(cause.since).toISOString()}`;
-  }
-};
+// [LAW:types-are-the-program] Why an entry loaded: its first load, or a
+// `config` turn that handed in a snapshot that moved.
+export type LoadCause = { readonly kind: "open" } | { readonly kind: "config" };
 
 // [LAW:nothing-unseen] Every (re)load's outcome, success and failure alike:
 // why it ran, whether it built a state or kept the one served, the files it
-// resolved, what failed or warned, which
-// repositories it left out awaiting the user's answer or declined by it, and
-// which directories claimed a worktree their repository does not vouch for,
-// and why.
+// resolved, what failed or warned, the repository the origin's directories
+// belong to and how it stands, and why its worktree link could not be proven.
 export function configLoadedLine(
   entry: ReloadedEntry,
   cause: LoadCause,
   settled: Settled,
 ): string {
-  const dirs = (ds: readonly string[]): string => valueOf(ds.join(",") || "-");
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${valueOf(causeField(cause))} state=${settled} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} awaiting=${dirs(entry.repos.awaiting)} declined=${dirs(entry.repos.declined)} unproven=${entry.repos.unproven.length === 0 ? "-" : JSON.stringify(entry.repos.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  const { repo } = entry.snapshot;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo === null ? "-" : valueOf(`${repo.standing}:${repo.dir}`)} unproven=${repo?.unproven == null ? "-" : JSON.stringify(repo.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
 }
 
 export function configDisposeLine(
@@ -471,6 +407,13 @@ export function configDisposeLine(
   released: number,
 ): string {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
+}
+
+// A snapshot the host handed in, digested once as it arrived: what an entry
+// loaded from it is compared by.
+interface HeldSnapshot {
+  readonly snapshot: ConfigSnapshot;
+  readonly digest: string;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -493,6 +436,9 @@ export function configDisposeLine(
 // `configEnv` hint; absolute) — present when
 // overriding the standard precedence chain, undefined otherwise.
 export interface CacheEntry {
+  // The origin the entry loads at, whose config the renderer subscribes for
+  // as long as the entry lives.
+  readonly origin: RenderOrigin;
   projectDir: string;
   cwd: string;
   configFile: string | undefined;
@@ -500,21 +446,15 @@ export interface CacheEntry {
   // resolved them (empty: the bundled default), and the one whose load
   // failed when the last load did.
   configLayers: readonly string[];
-  // The file durable clicks write (resolveDslConfig's home).
-  configHome: string;
-  // What the session's repositories contribute, as the last load's answers
-  // decided it: the bar asks for each one awaiting.
-  repos: RepoGate;
+  // [LAW:one-source-of-truth] The snapshot the last load read, and its
+  // digest: a `config` turn whose snapshot digests alike reloads nothing.
+  // The bar's repository question and what the config's watch cannot hear
+  // are read off it.
+  snapshot: ConfigSnapshot;
+  digest: string;
   lastError: string | null;
   lastWarning: string | null;
   state: DslRenderState;
-  // [LAW:one-source-of-truth] The entry's watch: where its config can change,
-  // as the last load derived it, and the watch the registry holds for it, set
-  // as one on every load. While a directory the derive names is briefly gone
-  // the held watch is the one bound before, and both still state what is so:
-  // the disk's chains, and the directories actually heard. Null until the
-  // first bind.
-  watch: BoundWatch | null;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -568,18 +508,6 @@ interface ViewHold {
   retired: { readonly reason: ViewClose; readonly held: number } | null;
 }
 
-// [LAW:one-source-of-truth] Cache key includes every input that affects DSL
-// resolution: projectDir, cwd, and the session's explicit config path (if any).
-// `projectDir`/`cwd` are real strings by construction (validated upstream);
-// `configFile` collapses absent → empty in the key, distinct from any real path.
-function cacheKey(
-  projectDir: string,
-  cwd: string,
-  configFile: string | undefined,
-): string {
-  return projectDir + "\0" + cwd + "\0" + (configFile ?? "");
-}
-
 // [LAW:one-source-of-truth] The preset names whose layout the raw file
 // authors — a root FRAGMENT (a whole tree or a `{ rows }` map, either is
 // authorship) at the path presetRoot() reports, the one decision of "where
@@ -603,58 +531,13 @@ function authoredRoots(
   );
 }
 
-// [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
-// covers the exact set of paths the next reload would consult — an explicit
-// `configFile` collapses to one candidate; absent, the precedence chain unfolds
-// in full. Where each of those paths can change is the watch rule every file
-// watcher shares (`watchTargetsOf`): a dotfiles-managed config is heard
-// wherever a link in its chain is re-pointed.
-//
-// [LAW:no-silent-failure] A candidate whose chain the kernel stopped walking
-// (a loop, an unreadable component) is watched as far as the walk got and
-// reported in `unresolved` with the reason, so the caller can say which path
-// hears less than it should.
-function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
-  // A plugin definition is part of the config it is listed in: installing,
-  // fixing or editing one reloads the config as an edit to the file would.
-  const { loaded, dropped, unreached } = entry.state.plugins;
-  // The project's plugin folder is consulted whatever its answer: a plugin
-  // dropped there is a question to ask. The answers are the cache's own watch.
-  const roots = [
-    ...new Set([
-      ...entry.state.plugins.roots,
-      path.join(entry.projectDir, REPO_PLUGIN_DIR),
-    ]),
-  ];
-  return watchTargetsOf({
-    named: [
-      ...dslConfigCandidatePaths(locs, {
-        projectDir: entry.projectDir,
-        configFile: entry.configFile,
-      }),
-      ...roots,
-      ...loaded.map((d) => d.path),
-      ...[...dropped, ...unreached].map((d) => d.path),
-      // [LAW:single-enforcer] A declared storage folder is watched by name in
-      // its plugin folder, by the follower that already watches the
-      // definition: its removal, recreation or replacement reloads the
-      // config, whose load's hold has the storage owner recreate the folder
-      // under a new generation — the owner never re-arms a watch itself.
-      ...new Set(entry.state.sources.values()),
-    ],
-    // An existing root is watched for every child: a folder created in it is
-    // a plugin installed.
-    whole: roots,
-  });
-}
-
 // The load's warning is ONE message (the bar's diagnostics show it whole);
 // absent advisories are nulls in the list, an empty list is null.
 function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
   return parts.filter(Boolean).join("\n") || null;
 }
 
-// [LAW:types-are-the-program] One attempt at loading a config from disk, and
+// [LAW:types-are-the-program] One attempt at loading a config's snapshot, and
 // what became of it: a state `built`, the served state `kept` because the
 // resolve named the inputs it was built from, or `failed`, with the error and
 // the file to blame. A state XOR an error, never both, never neither.
@@ -663,7 +546,6 @@ function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
 export type LoadOutcome = {
   readonly layers: readonly string[];
   readonly home: string;
-  readonly repos: RepoGate;
   readonly warning: string | null;
 } & (
   | {
@@ -693,8 +575,8 @@ interface Failed {
   readonly warnings: readonly string[];
 }
 
-// [LAW:types-are-the-program] What a build reads, all of it read from disk
-// before the build starts: the chain as it resolved, the loaded chain, and the
+// [LAW:types-are-the-program] What a build reads, all of it in the snapshot
+// the host handed in: the chain as it resolved, the loaded chain, and the
 // storage folder of every plugin source the config declares.
 interface LoadInputs {
   readonly cwd: string;
@@ -745,7 +627,10 @@ function loadKey(inputs: LoadInputs): string {
       layers: chain.layers,
       home: chain.home,
       writable: chain.writable,
-      repo: chain.repo,
+      // Not keyed: its texts reach the state only through `loaded`, keyed
+      // below, where a whitespace or comment edit moves nothing; its paths
+      // are `layers`.
+      snapshot: null,
       locs: chain.locs,
     } satisfies Projection<ConfigChain>,
     loaded: {
@@ -768,7 +653,6 @@ function loadKey(inputs: LoadInputs): string {
       installed: {
         ...plugins(loaded.installed),
         checkout: loaded.installed.checkout,
-        roots: loaded.installed.roots,
         unreached: loaded.installed.unreached,
       } satisfies Projection<LoadedChain["installed"]>,
       config: loaded.config,
@@ -796,23 +680,22 @@ function declaredSources(config: DslConfig): DeclaredSources {
   return sources;
 }
 
-// [LAW:single-enforcer] Read a chain from disk: each layer validated over the
-// layers it joins, so cross-ref diagnostics name the failing file's own paths
-// and lines, and every advisory a layer earns appended before its validation,
-// so a cross-ref failure still carries them (a duplicate key names its line
-// beside the error).
+// [LAW:single-enforcer] Load a chain from its snapshot: each layer validated
+// over the layers it joins, so cross-ref diagnostics name the failing file's
+// own paths and lines, and every advisory a layer earns appended before its
+// validation, so a cross-ref failure still carries them (a duplicate key
+// names its line beside the error).
 export function resolveLoad(
   cwd: string,
   chain: ConfigChain,
 ): ResolvedLoad | Failed {
   const warnings: string[] = [];
   try {
-    const loaded = loadConfigChain(
-      chain.locs,
-      chain.layers,
+    const loaded = loadSnapshot(
+      chain.snapshot,
+      chain.locs.home,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: chain.repo, cwd },
     );
     const inputs = {
       cwd,
@@ -941,7 +824,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       ],
       plugins: {
         checkout: installed.checkout,
-        roots: installed.roots,
         // What renders, as the loader decided it: a nearer layer's load or
         // drop replaces a farther one's of the same namespace.
         loaded: [...installed.rendering.values()],
@@ -958,21 +840,13 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   };
 }
 
-// What every load of one chain shares, whatever its attempt: the advisories
-// its resolution earned.
-export interface LoadFrame {
-  readonly repos: RepoGate;
-  readonly advisories: ReadonlyArray<string | null>;
-}
-
 // [LAW:single-enforcer] The one place a load's outcome is composed, for every
-// reader (the render cache, the doctor). The warning is the
-// resolution's advisories, the resolve's, then the attempt's: a built or kept
-// state's own build warnings, or what a failed attempt earned before it threw,
-// so warnings earned before a failure reach the bar beside the error, and a
-// kept state never drops a line its build earned.
+// reader (the render cache, the doctor). The warning is discovery's notices,
+// the resolve's advisories, then the attempt's: a built or kept state's own
+// build warnings, or what a failed attempt earned before it threw, so
+// warnings earned before a failure reach the bar beside the error, and a kept
+// state never drops a line its build earned.
 export function settle(
-  frame: LoadFrame,
   chain: ConfigChain,
   resolveWarnings: readonly string[],
   attempt: Attempt,
@@ -981,10 +855,15 @@ export function settle(
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain.layers.map((l) => l.path),
     home: chain.home,
-    repos: frame.repos,
   };
+  // [LAW:dataflow-not-control-flow] Discovery's notices run every load,
+  // independent of load success — even if the .json5 fails to parse, the user
+  // still wants to know they have a shadowed .json sibling; an explicit path
+  // to an absent file is named whatever the default then does. The host's
+  // discovery watches every candidate path, so creating/removing a duplicate
+  // — or the named file appearing — hands in a snapshot that moved.
   const warning = (own: readonly string[]): string | null =>
-    joinWarnings([...frame.advisories, ...resolveWarnings, ...own]);
+    joinWarnings([...chain.snapshot.notices, ...resolveWarnings, ...own]);
   switch (attempt.kind) {
     case "built":
     case "kept":
@@ -1013,7 +892,6 @@ export function settle(
 // from keep it, since rebuilding it would reopen every session view and
 // restart its sources for nothing.
 function loadChain(
-  frame: LoadFrame,
   cwd: string,
   chain: ConfigChain,
   deps: StateDeps,
@@ -1021,7 +899,7 @@ function loadChain(
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain);
   if (resolved.kind === "failed") {
-    return settle(frame, chain, [], resolved);
+    return settle(chain, [], resolved);
   }
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
@@ -1029,67 +907,38 @@ function loadChain(
     served?.loadKey === resolved.key
       ? { kind: "kept", state: served }
       : buildRenderState(resolved, deps);
-  return settle(frame, chain, resolved.warnings, attempt);
+  return settle(chain, resolved.warnings, attempt);
 }
 
-// [LAW:effects-at-boundaries] One attempt at the disk: read the user's
-// answers for repositories, resolve the path, detect collisions, resolve the
-// chain and attempt a state. It touches no entry — the cache folds the
-// outcome onto a new entry (getOrCreate) or an existing one (reloadInto), so
-// the state it built is never constructed-then-discarded and the no-file
-// default is built once, not twice; `cc-candybar doctor`, which has no cache,
-// reads the outcome and disposes the state it was handed.
-export function loadFromDisk(
-  projectDir: string,
+// [LAW:effects-at-boundaries] One attempt at a state from what discovery
+// found at an origin: the snapshot is read, never the disk. It touches no
+// entry — the cache folds the outcome onto a new entry (getOrCreate) or an
+// existing one (reloadInto), so the state it built is never
+// constructed-then-discarded and the no-file default is built once, not
+// twice; `cc-candybar doctor`, which has no cache, reads the outcome and
+// disposes the state it was handed.
+export function loadOrigin(
   cwd: string,
-  configFile: string | undefined,
+  snapshot: ConfigSnapshot,
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const resolution = resolveDslConfig(
-    deps.locations,
-    repoConfigs(deps.stateDir).read(),
-    { projectDir, configFile },
-  );
-  const { repos } = resolution;
-  // `chain` loads its layers; `missing`/`unreadable` build the bundled
-  // default — what distinguishes them is a notice, below, not a load path.
-  const chain: ConfigChain = {
-    layers: resolution.kind === "chain" ? resolution.layers : [],
-    home: resolution.home,
-    writable: writableRoles(resolution, { projectDir, configFile }),
-    repo: repos.plugins,
-    locs: deps.locations,
-  };
-  // [LAW:dataflow-not-control-flow] Advisories run every load, independent
-  // of load success — even if the .json5 fails to parse, the user still
-  // wants to know they have a shadowed .json sibling; an explicit path to
-  // an absent file is named whatever the default then does. Pure
-  // file-existence checks, so cheap. The watcher already monitors every
-  // candidate path, so creating/removing a duplicate — or the named file
-  // appearing — triggers reload and re-detection automatically; nothing
-  // else needs to invalidate this.
-  const advisories = [
-    detectConfigCollisions(deps.locations, projectDir),
-    configResolutionNotice(resolution),
-    repoUnreadNotice(repos),
-  ];
   // [LAW:dataflow-not-control-flow] A failure at any step — parse,
   // registration, palette resolution — is the `failed` arm; the caller's
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
   // and its diagnostics count `lastError` and `lastWarning`.
-  return loadChain({ repos, advisories }, cwd, chain, deps, served);
+  return loadChain(cwd, chainOf(snapshot, deps.locations), deps, served);
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
-// bundled default. The render cache seeds an entry with it, and
-// `cc-candybar doctor`, which has no cache, reads the same bar from it. The
-// seed's own advisories go nowhere: the bar already carries the failed
-// load's, and the default earns none by program invariant.
+// bundled default, over the plugins discovery found. The render cache seeds
+// an entry with it, and `cc-candybar doctor`, which has no cache, reads the
+// same bar from it. The seed's own advisories go nowhere: the bar already
+// carries the failed load's, and the default earns none by program invariant.
 export function fallbackState(
   cwd: string,
-  repo: ApprovedRepo | null,
+  snapshot: ConfigSnapshot,
   deps: StateDeps,
 ): DslRenderState {
   // The failed load's approved project: the seed draws the plugins it ships,
@@ -1100,7 +949,7 @@ export function fallbackState(
     // A failed load's writes are refused until its chain loads (the writer
     // proves the whole chain), so its bar offers the one layer every chain has.
     writable: ["user"],
-    repo,
+    snapshot: { ...snapshot, chain: [] },
     locs: deps.locations,
   });
   const built =
@@ -1310,12 +1159,12 @@ export class RenderCache<
   F extends ViewFacts = ViewFacts,
 > {
   private readonly entries = new Map<string, CacheEntry>();
-  // [LAW:one-source-of-truth] The user's answers for repositories are one
-  // fact for the whole daemon, so one watch follows them, never one per
-  // entry. The book has a folder of its own, made here so the watch never
-  // falls back to the state directory, where the daemon's log writes on every
-  // request.
-  private readonly answersWatch: WatcherHandle;
+  // [LAW:one-source-of-truth] What discovery found at each origin the
+  // renderer subscribes, by `originKey`, as the host's latest `config` handed
+  // it in: the one source every entry loads from. An origin the renderer stops
+  // naming is pruned, so an entry made after loads only a snapshot the host
+  // still follows.
+  private readonly snapshots = new Map<string, HeldSnapshot>();
   // [LAW:one-source-of-truth] Whether the cache has closed, and the signal a
   // wait over one of its views ends at: one fact, so a render waiting as the
   // close drops its view ends then, not at its deadline.
@@ -1324,14 +1173,6 @@ export class RenderCache<
   private get closed(): boolean {
     return this.closing.aborted;
   }
-  // [LAW:one-source-of-truth] The entries an every-entry reload asked for that
-  // have not re-read the disk since, each with the cause of the latest batch
-  // that asked. Keyed by the entry itself, so an entry evicted and opened
-  // again is a new one, whose own first load read the disk after the span.
-  private readonly due = new Map<CacheEntry, EveryEntryLoad>();
-  // What cancels the one turn armed to reload the next due entry, while one
-  // is.
-  private walk: (() => void) | null = null;
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
   // The last storage hold id minted.
@@ -1391,13 +1232,33 @@ export class RenderCache<
     this.budgetBytes = opts.budgetBytes;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
     this.observers = opts.observers ?? {};
-    fs.mkdirSync(repoConfigsDir(deps.stateDir), { recursive: true });
-    const { dir, name } = nearestWatchTarget(repoConfigsPath(deps.stateDir));
-    this.answersWatch = deps.watchers.acquire(
-      `repo-configs:${dir}/${name}`,
-      { dirs: [{ path: dir, filenames: [name] }] },
-      (heard) => this.reloadEvery({ kind: "answers-watch", heard }),
-    );
+  }
+
+  // [LAW:single-enforcer] A `config` turn: what discovery found at `origin`
+  // now. Its entry, when it has one, reloads from it unless it digests as the
+  // one the entry last loaded, and a reload whose load inputs did not move
+  // keeps the state it serves (`loadChain`).
+  configure(origin: RenderOrigin, snapshot: ConfigSnapshot): void {
+    if (this.closed) throw new Error("render cache used after close");
+    const key = originKey(origin);
+    const held = { snapshot, digest: digestOf(snapshot) };
+    this.snapshots.set(key, held);
+    const entry = this.entries.get(key);
+    if (entry !== undefined && entry.digest !== held.digest)
+      this.reloadInto(entry, held, { kind: "config" });
+  }
+
+  // Whether the host handed in `origin`'s config and the renderer still
+  // names it: what an event that needs it waits for.
+  holdsConfig(origin: RenderOrigin): boolean {
+    return this.snapshots.has(originKey(origin));
+  }
+
+  // [LAW:one-source-of-truth] The snapshots the renderer still names, by
+  // `originKey`: every other one goes, as the host lets its origin go.
+  prune(keep: ReadonlySet<string>): void {
+    for (const key of [...this.snapshots.keys()])
+      if (!keep.has(key)) this.snapshots.delete(key);
   }
 
   // The compile a served state carries for `key`, else a new one — which the
@@ -1424,12 +1285,8 @@ export class RenderCache<
   // same fields and a renderable state. The renderer reads the data; no
   // special-case branches between "first load", "reload",
   // "reload-after-error".
-  getOrCreate(
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-  ): CacheEntry {
-    const key = cacheKey(projectDir, cwd, configFile);
+  getOrCreate(origin: RenderOrigin): CacheEntry {
+    const key = originKey(origin);
     const existing = this.entries.get(key);
     if (existing) {
       // Move to end (most recently used) for LRU eviction.
@@ -1438,7 +1295,9 @@ export class RenderCache<
       return existing;
     }
 
-    const loaded = this.load(projectDir, cwd, configFile, null);
+    const { projectDir, cwd } = origin;
+    const { snapshot, digest } = this.held(origin);
+    const loaded = this.load(cwd, snapshot, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
@@ -1448,28 +1307,27 @@ export class RenderCache<
     // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
     // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
+      origin,
       projectDir,
       cwd,
-      configFile,
-      configLayers: [],
-      configHome: "",
-      repos: loaded.repos,
+      configFile: origin.target.path,
+      configLayers: loaded.layers,
+      snapshot,
+      digest,
       lastError: loaded.error,
       lastWarning: loaded.warning,
-      state:
-        loaded.state ?? fallbackState(cwd, loaded.repos.plugins, this.deps),
-      watch: null,
+      state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
     };
     this.serve(entry.state);
-    // [LAW:single-enforcer] Insert, hold, bound, watch, then notify — in that
-    // order. From the moment the entry is in the map it is reachable for
-    // eviction and dispose, so a throwing observer cannot strand a registry
-    // outside it, and a reentrant getOrCreate for this key finds the entry
-    // rather than building a duplicate. The hold precedes the bound: an
-    // eviction there releases another state's folders, which this one may
-    // name too. The bound runs before the watch because it is a fact about
-    // the MAP, complete at insertion: nothing later (including an observer
-    // throwing) can skip it. [LAW:dataflow-not-control-flow]
+    // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
+    // From the moment the entry is in the map it is reachable for eviction
+    // and dispose, so a throwing observer cannot strand a registry outside
+    // it, and a reentrant getOrCreate for this key finds the entry rather
+    // than building a duplicate. The hold precedes the bound: an eviction
+    // there releases another state's folders, which this one may name too.
+    // The bound is a fact about the MAP, complete at insertion: nothing later
+    // (including an observer throwing) can skip it.
+    // [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
     this.holdFolders(entry.state);
     this.fit(entry);
@@ -1477,7 +1335,6 @@ export class RenderCache<
       "info",
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
-    this.refreshWatcher(entry, loaded);
     // An entry just created was drawn by no session.
     this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
 
@@ -1491,8 +1348,8 @@ export class RenderCache<
   // released, so the render finishes on the state it resolved its payload
   // from (brandon-unfiled-3248.6rc). `using` at the call site releases on
   // every exit, a throw included.
-  hold(projectDir: string, cwd: string, configFile: string | undefined): Hold {
-    const entry = this.getOrCreate(projectDir, cwd, configFile);
+  hold(origin: RenderOrigin): Hold {
+    const entry = this.getOrCreate(origin);
     return this.holdState(entry, entry.state);
   }
 
@@ -1523,13 +1380,8 @@ export class RenderCache<
   // [LAW:single-enforcer] `facts` is the request the render is drawn for: the
   // view draws by it from here, opened (openView) or kept (`requested`), so
   // no view is drawn for another request.
-  holdSession(
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-    facts: F,
-  ): SessionHold<S, F> {
-    const held = this.hold(projectDir, cwd, configFile);
+  holdSession(origin: RenderOrigin, facts: F): SessionHold<S, F> {
+    const held = this.hold(origin);
     let view: SessionView<S, F>;
     let lease: ViewHold;
     try {
@@ -1716,6 +1568,13 @@ export class RenderCache<
   // the runs its `shell` and `file` sources name. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
+  // [LAW:one-source-of-truth] The origins the entries load from. An origin's
+  // config is held as long as an entry at it lives, not as long as a session:
+  // a session retires when idle while its entry stays to draw it again.
+  origins(): readonly RenderOrigin[] {
+    return [...this.entries.values()].map((e) => e.origin);
+  }
+
   subscriptions(): Pick<Subscriptions, "sources"> {
     return {
       sources: Object.fromEntries(
@@ -1728,16 +1587,13 @@ export class RenderCache<
   }
 
   // The cache's teardown: every entry is dropped, so its state is disposed now
-  // or when the render holding it returns. The entries' watchers would
+  // or when the render holding it returns. The entries' registries would
   // otherwise keep the cache, and every compile it serves, alive for as long
   // as the process runs.
   close(): void {
     if (this.closed) return;
     this.lifetime.abort(new Error("the render cache closed"));
-    // The drops below empty the due set, so no turn is armed again.
-    this.walk?.();
-    this.walk = null;
-    this.answersWatch.release();
+    this.snapshots.clear();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
     // [LAW:one-source-of-truth] Every state left in `holds` is retired and
@@ -1750,29 +1606,44 @@ export class RenderCache<
 
   // [LAW:single-enforcer] The one place the cache loads a state, so a closed
   // cache refuses every way one would be built — a new entry, a reload, a
-  // config watch firing after the close.
+  // `config` turn after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
   private load(
-    projectDir: string,
     cwd: string,
-    configFile: string | undefined,
+    snapshot: ConfigSnapshot,
     served: DslRenderState | null,
   ): LoadOutcome {
     if (this.closed) throw new Error("render cache used after close");
-    return loadFromDisk(projectDir, cwd, configFile, this.deps, served);
+    return loadOrigin(cwd, snapshot, this.deps, served);
   }
 
-  // [LAW:single-enforcer] The one way an entry leaves the map: its watcher
-  // goes, the map stops serving it, and its state is retired.
+  // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
+  // snapshot the host handed in for its origin. None is an event the renderer
+  // did not park until its origin's `config` came: a bug, said with the
+  // origin.
+  snapshotFor(origin: RenderOrigin): ConfigSnapshot {
+    return this.held(origin).snapshot;
+  }
+
+  private held(origin: RenderOrigin): HeldSnapshot {
+    if (this.closed) throw new Error("render cache used after close");
+    const held = this.snapshots.get(originKey(origin));
+    if (held === undefined)
+      throw new Error(
+        `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`,
+      );
+    return held;
+  }
+
+  // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
+  // serving it, and its state is retired.
   private drop(
     key: string,
     entry: CacheEntry,
     reason: Teardown["reason"],
   ): void {
-    entry.watch?.held.handle.release();
     this.entries.delete(key);
-    this.due.delete(entry);
     this.retire(entry.state, reason, null);
   }
 
@@ -1798,7 +1669,6 @@ export class RenderCache<
       compiles: this.compiles.size,
       views: this.views.size,
       pinned: this.pins.size,
-      due: this.due.size,
       retiredViews,
       passages,
       accountedBytes: this.accountedBytes(),
@@ -1938,20 +1808,7 @@ export class RenderCache<
       .map((view) => view.sessionId);
   }
 
-  // Re-read an entry from disk NOW, for a caller that must not act on the old
-  // config until the reload has landed (a save releasing the picks the file
-  // now holds, a doctor verdict on the files as they are). The watcher still
-  // fires after a write, and its reload of the same bytes keeps the state.
-  reload(
-    projectDir: string,
-    cwd: string,
-    configFile: string | undefined,
-    cause: ExplicitLoad,
-  ): void {
-    this.reloadInto(this.getOrCreate(projectDir, cwd, configFile), cause);
-  }
-
-  // Re-populate `entry` from the current state of disk, for `cause`.
+  // Re-populate `entry` from `snapshot`, for `cause`.
   //
   // - Load success: swap the fresh state in, retire the prior one.
   // - Load failure: keep the prior state (the bundled default before any
@@ -1966,23 +1823,21 @@ export class RenderCache<
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
-  private reloadInto(entry: CacheEntry, cause: LoadCause): void {
-    // [LAW:one-source-of-truth] Whatever caused it, this reload re-reads the
-    // disk, so the entry is no longer due. Before the load, so one that throws
-    // is not taken again by the next turn.
-    this.due.delete(entry);
+  private reloadInto(
+    entry: CacheEntry,
+    { snapshot, digest }: HeldSnapshot,
+    cause: LoadCause,
+  ): void {
     // Taken before the reload, so a session whose view fails to reopen over
     // the new state is still among those it changed.
     const sessions = this.sessionsOn(entry);
-    // A save's watch reload of the bytes the save just loaded keeps the
-    // state the entry serves, so it reopens no view and restarts no source.
+    // A reload whose load inputs did not move keeps the state the entry
+    // serves, so it reopens no view and restarts no source.
     const served = entry.state;
-    const loaded = this.load(
-      entry.projectDir,
-      entry.cwd,
-      entry.configFile,
-      served,
-    );
+    const loaded = this.load(entry.cwd, snapshot, served);
+    entry.snapshot = snapshot;
+    entry.digest = digest;
+    entry.configLayers = loaded.layers;
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null)
@@ -1991,130 +1846,16 @@ export class RenderCache<
       entry.state = loaded.state;
       this.serve(loaded.state);
     }
-    // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed:
-    // a kept or failed one keys again any folder whose generation ended, so a
-    // config reload is a lost or faulted folder's recovery even while the
-    // config is broken. The successor's hold precedes its predecessor's
-    // release, so a folder both name is never closed and reopened.
+    // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed.
+    // The successor's hold precedes its predecessor's release, so a folder
+    // both name is never closed and reopened.
     this.holdFolders(entry.state);
     if (loaded.kind === "built")
       this.retire(served, "reload", { entry, state: loaded.state });
     // A reload can move the entry onto a compile no other entry carries, and
     // charges the views it reopened, once their predecessors are retired.
     this.fit(entry);
-    // Rebinds to the broken file (and its sibling candidates) too, so an
-    // in-place save OR a higher-precedence file appearing recovers.
-    this.refreshWatcher(entry, loaded);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
-  }
-
-  // Every entry, re-read for `cause`: the answers on disk moved, and any
-  // entry may draw from a repository; or file events resumed, and an edit to
-  // any entry's files may have gone unheard. Each entry's load names the
-  // cause it ran for; whatever started the batch logs it at its source.
-  //
-  // [LAW:no-ambient-temporal-coupling] One entry per turn of the loop. A
-  // reload that keeps its state still resolves, validates and keys the whole
-  // chain, so a walk over every entry in one turn holds the loop for seconds,
-  // and every client waiting behind it hangs up. [LAW:one-source-of-truth] A
-  // later batch re-walks every entry for its own cause: one re-read of the
-  // disk as it is now answers both.
-  reloadEvery(cause: EveryEntryLoad): void {
-    for (const entry of this.entries.values()) this.due.set(entry, cause);
-    this.armWalk();
-  }
-
-  // [LAW:single-enforcer] The one place a walk turn is armed: none while one
-  // is armed, so a batch started from inside a turn leaves one walker, and
-  // one whenever an entry is due.
-  private armWalk(): void {
-    if (this.walk !== null || this.due.size === 0) return;
-    // [LAW:no-ambient-temporal-coupling] Held for the next `due` turn, so
-    // the inputs that came meanwhile are taken between two entries' loads.
-    this.walk = this.deps.clock.after(0, () => this.walkOne());
-  }
-
-  // The turn takes the most recently used due entry, read off the map as it
-  // is now, so a bar someone draws during the walk is re-read on the next
-  // turn, not where it stood when the batch began. Nothing is due when every
-  // entry left since the turn was armed: dropped, or re-read by its own
-  // reload.
-  // The turn runs outside any watcher's callback, so it is its own error
-  // boundary, as the watcher registry is for a reload a watch drives: a
-  // reload that throws is logged and ends only its own turn, where uncaught
-  // it would end the daemon. [LAW:no-silent-failure] exception: the throw
-  // reaches the log and not the bar's ⚠, as on the watch path; one fix at the
-  // reload itself answers both.
-  private walkOne(): void {
-    this.walk = null;
-    let next: readonly [CacheEntry, EveryEntryLoad] | null = null;
-    for (const entry of this.entries.values()) {
-      const cause = this.due.get(entry);
-      if (cause !== undefined) next = [entry, cause];
-    }
-    if (next === null) return;
-    const [entry, cause] = next;
-    try {
-      this.reloadInto(entry, cause);
-    } catch (e) {
-      this.log(
-        "error",
-        `every-entry reload threw projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} configFile=${valueOf(entry.configFile ?? "-")} cause=${valueOf(causeField(cause))}: ${inspect(e)}`,
-      );
-    } finally {
-      this.armWalk();
-    }
-  }
-
-  // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
-  // target set is DERIVED from disk (which candidate resolved, which
-  // ancestor directories exist right now), and the entry rebinds exactly when
-  // that derived set differs from the one it holds. A resolved-path change
-  // (including null↔non-null) is one way the set changes; a candidate's
-  // parent directory appearing is another — the same rule covers both, so
-  // there is no separate "did the path change" test to drift from it.
-  //
-  // A kept watch's deaf directories are the registry's period to retry,
-  // never a reload's: a reload that retried would answer the failed window
-  // its own handle's error told.
-  private refreshWatcher(entry: CacheEntry, loaded: LoadOutcome): void {
-    entry.configLayers = loaded.layers;
-    entry.configHome = loaded.home;
-    entry.repos = loaded.repos;
-    const paths = watchTargetsFor(entry, this.deps.locations);
-    const { targets, unresolved } = paths;
-    // [LAW:one-source-of-truth] The key names the target set and the folders
-    // it binds, so the registry's `follow` rebinds exactly when either moved.
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${paths.key}`;
-    // [LAW:single-enforcer] One reload dispatcher per cache entry: any
-    // change the entry's watch hears re-resolves its whole chain (so a
-    // higher-precedence file appearing supersedes a lower one) and reloads.
-    // It does not filter by which path changed, because the (projectDir,
-    // cwd) tuple already scopes the entry's watch set; what was heard rides
-    // on the reload's cause.
-    const { watch, move } = this.deps.watchers.follow(
-      entry.watch?.held ?? null,
-      { ...paths, key },
-      (heard) => this.reloadInto(entry, { kind: "config-watch", heard }),
-    );
-    // Re-derived on every load, kept or rebound, so what the bar says the
-    // watch cannot hear is what the disk says now.
-    entry.watch = { derived: { ...paths, key }, held: watch };
-    if (move === "kept") return;
-    // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
-    // candidate appeared, a link was re-pointed), and which directories the
-    // entry now hears: a change that fires nothing is read against this line.
-    // Which of them the OS refused is the host registry's line (`watch
-    // failed`), as the deafness reaches this renderer only after the acquire.
-    this.log(
-      "info",
-      `config watch bound projectDir=${entry.projectDir} cwd=${entry.cwd} dirs=${targets.dirs.map((d) => d.path).join(",")}`,
-    );
-    for (const { path: at, reason } of unresolved)
-      this.log(
-        "warn",
-        `config watch unresolved projectDir=${entry.projectDir} path=${at} reason=${reason}`,
-      );
   }
 
   get size(): number {

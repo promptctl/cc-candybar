@@ -4,7 +4,7 @@ import { NO_PROJECT } from "./helpers/no-project";
 import v8 from "node:v8";
 import vm from "node:vm";
 import { validateConfig } from "./helpers/parse-and-validate";
-import { loadConfig } from "../src/config/dsl-loader";
+import { loadFile } from "./helpers/discovered-load";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -35,12 +35,18 @@ function heapUsed(): number {
 
 function registerStdlib() {
   const config = validateConfig(
-    loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT),
+    loadFile(null, DEFAULT_DSL_CONFIG, NO_PROJECT),
     "<default>",
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
-  return { registry, compiled: registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" }) };
+  return {
+    registry,
+    compiled: registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
+      cwd: "/tmp",
+    }),
+  };
 }
 
 test("a registered stdlib config costs megabytes, not tens of them, helpers included", () => {
