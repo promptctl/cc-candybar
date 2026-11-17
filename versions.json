@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-779",
+      "ref": "refs/pull/779/merge",
+      "sha": "aa08fd43be4dbb36c6b88e72ea96d89ff11d6ad2",
+      "timestamp": "2026-11-17T00:55:33.429Z",
+      "commits": [
+        {
+          "sha": "aa08fd43be4dbb36c6b88e72ea96d89ff11d6ad2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T17:54:34-07:00",
+          "message": "Merge d9be0507f43c52179c5a5f584bb2f52a439db52e into cace2e3245afefd551669afd6dd6c7b7b35875ba\n"
+        },
+        {
+          "sha": "d9be0507f43c52179c5a5f584bb2f52a439db52e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T17:52:44-07:00",
+          "message": "feat(doctor): the host reads a doctor run, and a fix lands only on the settings it diagnosed (8ts)\n\nA doctor click asks; it no longer probes. The renderer's doctor runs\nsubscribe with what each run asks, the host reads the machine for it\n(a keyed source in the collector) and hands the reading back in the\nsession's world state, and the renderer writes the report from that\nreading, the run's config load and the doctor's stores. No renderer code\nreads Claude Code's settings or spawns a probe; the doctor's reaches,\nthe in-click gathers and their stats are gone.\n\nA settings fix is a change guarded by what the run read of that one\nsetting, targeted at a settings file the session's reading named, and\nwritten in strict JSON. The host refuses it when the setting moved since\nthe diagnosis, or when no reading named the file, with the reason on the\nbar; the run starts again either way.\n\nA request waits on the session's unread doctor reading as it waits on a\nnamed run, so the draw after the click shows the report. A probe the rate\nlimit refused fails the run's reading, shown on the bar. Settings\ndocuments are typed as JSON so a reading crosses the wire.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "cace2e3245afefd551669afd6dd6c7b7b35875ba",
