@@ -135,8 +135,8 @@ const current = (was: Watched, found: Found): boolean =>
 // replaced, or its watch faulted, ends its generation. While a hold still
 // names the folder its owner opens the next: for one lost, at the next period,
 // so a plugin folder being removed is gone, and its hold released, before the
-// folder is made in it again; and for every ended one when file events resume
-// or catch up, since a refusal or an error from the OS refuses an immediate
+// folder is made in it again; and for every ended one when file events
+// catch up, since a refusal or an error from the OS refuses an immediate
 // retry the same way.
 //
 // [LAW:one-source-of-truth] Whether the OS is delivering file events is the
@@ -406,7 +406,7 @@ export class ManagedStorage {
   // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
   // folder still there, is a standing fault: every source read from the
   // generation reads it, and the generation ends; its owner opens the next
-  // when file events resume or catch up (`noticed`). No retry here: the OS
+  // when file events catch up (`noticed`). No retry here: the OS
   // refusing a watch (limits, permissions) refuses an immediate retry the
   // same way.
   private faulted(watched: Watched, cause: FaultCause, reason: string): void {
@@ -456,7 +456,7 @@ export class ManagedStorage {
     const { health } = watched;
     switch (health.kind) {
       case "faulted":
-        return `cannot refresh: ${folder} ${health.reason}; reload the config or restart the daemon`;
+        return `cannot refresh: ${folder} ${health.reason}; retried when the config next loads or file events catch up`;
       // While file events are stalled a folder's sources read the stall,
       // never a file read once from the path and then left unrefreshed.
       // While delivery is unmeasured its files read as usual: the bar's row

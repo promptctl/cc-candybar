@@ -366,10 +366,8 @@ describe("the config search", () => {
           error: expect.stringContaining("EACCES"),
           repos: NOTHING_GATED,
         });
-        expect(configResolutionNotice(resolved)).toMatch(
-          /^Config file could not be read: /,
-        );
-        expect(configResolutionNotice(resolved)).toContain(named);
+        // The load names the file it could not read; the search adds none.
+        expect(configResolutionNotice(resolved)).toBeNull();
       } finally {
         chmodSync(locked, 0o755);
         cleanup();

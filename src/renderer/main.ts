@@ -304,9 +304,9 @@ export function mainRenderer(
       if (switches !== null) lanes[session] = switches;
     }
     // [LAW:one-source-of-truth] The origins whose config the renderer holds:
-    // each live session's, from its context until its retire, the one whose
-    // click's consequence waits on its landing, and each a parked event
-    // waits on, once each.
+    // each live session's, from its context until its retire, each a cache
+    // entry loads from until its eviction, the one whose click's consequence
+    // waits on its landing, and each a parked event waits on, once each.
     const configs = new Map<string, RenderOrigin>();
     const landing = parts.verbs.landing();
     for (const session of [
@@ -316,6 +316,8 @@ export function mainRenderer(
       const origin = recordedOriginOf(parts.sessionState, session);
       if (origin !== null) configs.set(originKey(origin), origin);
     }
+    for (const origin of parts.renderCache.origins())
+      configs.set(originKey(origin), origin);
     for (const { origin } of parked) configs.set(originKey(origin), origin);
     return {
       sources: Object.fromEntries(merged) as Subscriptions["sources"],

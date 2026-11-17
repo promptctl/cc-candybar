@@ -436,6 +436,9 @@ interface HeldSnapshot {
 // `configEnv` hint; absolute) — present when
 // overriding the standard precedence chain, undefined otherwise.
 export interface CacheEntry {
+  // The origin the entry loads at, whose config the renderer subscribes for
+  // as long as the entry lives.
+  readonly origin: RenderOrigin;
   projectDir: string;
   cwd: string;
   configFile: string | undefined;
@@ -1304,6 +1307,7 @@ export class RenderCache<
     // (test/default-dsl-config.test.ts); a throw is a daemon bug and surfaces
     // as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
+      origin,
       projectDir,
       cwd,
       configFile: origin.target.path,
@@ -1564,6 +1568,13 @@ export class RenderCache<
   // the runs its `shell` and `file` sources name. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
+  // [LAW:one-source-of-truth] The origins the entries load from. An origin's
+  // config is held as long as an entry at it lives, not as long as a session:
+  // a session retires when idle while its entry stays to draw it again.
+  origins(): readonly RenderOrigin[] {
+    return [...this.entries.values()].map((e) => e.origin);
+  }
+
   subscriptions(): Pick<Subscriptions, "sources"> {
     return {
       sources: Object.fromEntries(

@@ -257,4 +257,17 @@ describe("a turn settles as the config turns it named", () => {
       { kind: "failed", reason: "the waiting click broke" },
     ]);
   });
+
+  // The first origin's config turn lets the second go before its slot.
+  test("one whose origin was let go before its slot ran nothing, and is its failure", async () => {
+    const other: RenderOrigin = { ...ORIGIN, projectDir: "/q", cwd: "/q" };
+    const { host, heard } = hostOver((event) =>
+      output([], event.kind === "config" ? [ORIGIN] : [ORIGIN, other]),
+    );
+    const answered = await host.answer(() => ({ kind: "event", event: due }));
+    expect(heard).toEqual(["due", "config"]);
+    expect(answered.settled).toEqual([
+      { kind: "failed", reason: "the renderer let the origin go" },
+    ]);
+  });
 });

@@ -1,8 +1,8 @@
 // [LAW:verifiable-goals] A click on a bar whose session went idle lands: the
-// collector's sweep retired the session, so the renderer holds no context and
-// no config for it, and the click waits for the config of the origin the
-// session last rendered at, runs in that config's turn, and its write reaches
-// the file. Measured on the daemon's own request handling, the click a link the
+// collector's sweep retired the session, so the renderer holds no context for
+// it, and the cache entry the session last rendered at still holds its
+// origin's config, so the click runs in its own turn and its write reaches the
+// file. Measured on the daemon's own request handling, the click a link the
 // bar drew.
 
 import fs from "node:fs";
@@ -33,7 +33,7 @@ const linkTo = (frame: Frame, text: string): string => {
   return hit.url;
 };
 
-test("a click on a session the sweep retired waits for its origin's config and lands its write", async () => {
+test("a click on a session the sweep retired lands its write without waiting for a config", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-idle-click");
   const project = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "ccb-idle-click-")),
@@ -71,14 +71,14 @@ test("a click on a session the sweep retired waits for its origin's config and l
       }
     ).globals?.palette;
     expect(palette).toBe(PALETTE);
-    // The click waited: the renderer held no config for the retired session.
+    // The click did not wait: the entry kept its origin's config held.
     const lines = await loggedWhen(
       env,
       (all) => all.slice(from).some((l) => l.includes("] click ")),
       "the click's event",
     );
     const event = lines.slice(from).find((l) => l.includes("] click "))!;
-    expect(fieldsOf(event).get("parked")).toBe("click");
+    expect(fieldsOf(event).get("parked")).toBeUndefined();
   } finally {
     await daemon.stop();
     removeTmpDirs();

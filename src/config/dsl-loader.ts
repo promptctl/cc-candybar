@@ -425,12 +425,16 @@ function mergeChain(
   const layers: MergedLayers = [];
   for (const { path, content, listed } of snapshot.chain) {
     // [LAW:dataflow-not-control-flow] A layer not written yet is no layer of
-    // the merge; a write creates it. [LAW:no-silent-failure] A layer that
-    // could not be read is none either: discovery's notice names it on the
-    // bar, which renders the rest until it can be read — a long-running bar
-    // must not go dark over one file — and the snapshot keeps it
-    // `unreadable`, so no write creates a file where one may already be.
-    if (content.kind !== "text") continue;
+    // the merge; a write creates it.
+    if (content.kind === "absent") continue;
+    // [LAW:no-silent-failure] A layer that could not be read fails the load
+    // naming it, and the bar keeps its last good config: the chain without
+    // it is a config nobody wrote, which a read that fails for a moment
+    // would swap in under every setting the layer holds.
+    if (content.kind === "unreadable")
+      throw new ConfigError(path, [
+        { path: "", message: `could not be read: ${content.error}` },
+      ]);
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,

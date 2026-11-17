@@ -191,14 +191,14 @@ describe("RenderCache", () => {
   });
 
   // The resolver's presence predicate is not `existsSync`: a named file
-  // behind an unsearchable directory is `unreadable`, so the bundled default
-  // renders (liveness — the watcher recovers when the directory opens) under
-  // an advisory carrying the stat's own EACCES — never the `missing` notice
-  // claiming a correct path was not found, and never a load-fatal error
-  // about a file nothing read. Root bypasses directory permissions.
+  // behind an unsearchable directory is `unreadable`: the load fails naming
+  // the file and the stat's own EACCES, and the bar draws its last good
+  // config, the bundled default before any loaded (liveness — the watcher
+  // recovers when the directory opens). Never the `missing` notice claiming
+  // a correct path was not found. Root bypasses directory permissions.
   const asRoot = process.getuid?.() === 0;
   (asRoot ? test.skip : test)(
-    "an explicit path behind an unsearchable directory renders the default under a could-not-read advisory",
+    "an explicit path behind an unsearchable directory fails its load naming the file, over the default",
     () => {
       const { cache, originAt, cleanups } = makeCache();
       const { dir, cleanup } = mkConfigDir();
@@ -215,13 +215,11 @@ describe("RenderCache", () => {
       chmodSync(locked, 0o000);
       try {
         const entry = cache.getOrCreate(originAt(dir, dir, cfg));
-        expect(entry.lastError).toBeNull();
         expect(entry.configLayers).toEqual([]);
-        expect(entry.lastWarning).toContain(
-          `Config file could not be read: ${cfg}`,
-        );
-        expect(entry.lastWarning).toContain("EACCES");
-        expect(entry.lastWarning).not.toContain("Config file not found");
+        expect(entry.lastError).toContain(cfg);
+        expect(entry.lastError).toContain("could not be read");
+        expect(entry.lastError).toContain("EACCES");
+        expect(entry.lastWarning ?? "").not.toContain("Config file not found");
       } finally {
         chmodSync(locked, 0o755);
         for (const c of cleanups) c();

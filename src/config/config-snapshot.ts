@@ -35,7 +35,7 @@ export interface Layer {
   readonly content:
     | { readonly kind: "text"; readonly text: string }
     | { readonly kind: "absent" } // not written yet: a write creates it
-    | { readonly kind: "unreadable"; readonly error: string }; // maybe there, and not read: no layer of the merge, a notice, and no write
+    | { readonly kind: "unreadable"; readonly error: string }; // maybe there, and not read: a failed load naming it, and no write
   // The definitions the layer's `plugins` list names, by each entry as
   // written. Discovery reads that one key, as a preprocessor reads its
   // includes.

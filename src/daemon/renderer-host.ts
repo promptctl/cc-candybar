@@ -428,7 +428,12 @@ export function rendererHost(
     why: string,
   ): Promise<{ readonly settled: Promise<readonly EffectOutcome[]> }> => {
     const made = configMade(origin)();
-    if (made.kind !== "event") return { settled: Promise.resolve([]) };
+    // [LAW:no-silent-failure] An origin let go before its slot ran nothing
+    // that waited on it, so the turn that named it did not do what it asked.
+    if (made.kind !== "event")
+      return {
+        settled: Promise.resolve([{ kind: "failed", reason: made.message }]),
+      };
     const input = stamped(made);
     const { turn, settled } = await inSlot(input, 0);
     record(input.event, [["why", why]], turn);

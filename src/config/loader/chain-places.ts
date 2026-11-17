@@ -266,10 +266,9 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
       return [
         `Config file not found: ${resolution.path} — rendering the bundled default until it appears`,
       ];
+    // The file's layer fails the load, which names it.
     case "unreadable":
-      return [
-        `Config file could not be read: ${resolution.path} — ${resolution.error} — rendering the bundled default until it can be`,
-      ];
+      return [];
   }
 }
 

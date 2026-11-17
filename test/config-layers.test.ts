@@ -803,10 +803,9 @@ describe("a project layer inserting into the user's row", () => {
   });
 });
 
-// [LAW:single-enforcer] What the bar offers to save to is what a click may
-// write: a layer discovery could not read is never offered, as a write there
-// is refused.
-test("a layer that could not be read is no role the bar offers to save to", () => {
+// The chain without the layer is a config nobody wrote, so the load fails
+// naming the file, and the bar keeps its last good state.
+test("a layer that could not be read fails the load naming it", () => {
   fs.mkdirSync(projectFile);
   const loaded = loadDiscovered(project, project, undefined, {
     clock: systemTimekeeper,
@@ -825,7 +824,9 @@ test("a layer that could not be read is no role the bar offers to save to", () =
         ["local", "absent"],
       ],
     );
-    expect(loaded.state!.writable).toEqual(["user", "local"]);
+    expect(loaded.kind).toBe("failed");
+    expect(loaded.error).toContain(projectFile);
+    expect(loaded.error).toContain("not a file");
   } finally {
     loaded.state?.registry.dispose();
   }

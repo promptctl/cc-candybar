@@ -163,26 +163,32 @@ export class ConfigWrites {
     const settings = this.settings;
     this.answers = [];
     this.settings = [];
-    const written = [...this.open].flatMap(([path, { before, after }]) => {
-      const list = diffChanges(before, after);
-      return list.length === 0
-        ? []
-        : [
-            {
-              path,
-              origin: this.held().origin,
-              role: this.layerAt(path).role,
-              list,
-            },
-          ];
-    });
-    this.layers = null;
-    this.layersOf = noLayers;
+    // [LAW:no-ambient-temporal-coupling] The click is over even when reading
+    // its layers throws, so the next click opens on nothing of this one's.
+    let written;
+    try {
+      written = [...this.open].flatMap(([path, { before, after }]) => {
+        const list = diffChanges(before, after);
+        return list.length === 0
+          ? []
+          : [
+              {
+                path,
+                origin: this.held().origin,
+                role: this.layerAt(path).role,
+                list,
+              },
+            ];
+      });
+    } finally {
+      this.layers = null;
+      this.layersOf = noLayers;
+      this.open.clear();
+    }
     const files = [
       ...written.map(({ path }) => path),
       ...settings.map(({ file }) => file),
     ];
-    this.open.clear();
     if (files.length === 0 && answers.length === 0) return consequence(effects);
     // [LAW:no-silent-failure] A write is a session's: one with none is the
     // click's bug.

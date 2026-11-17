@@ -69,6 +69,7 @@ export function clickParts(
     // every origin is held here, and none is let go.
     renderCache: {
       subscriptions: () => ({ sources: {} }),
+      origins: () => [],
       holdView: () => null,
       holdsConfig: () => true,
       prune: () => {},

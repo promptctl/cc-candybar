@@ -184,6 +184,8 @@ export function sessionPlugins(
     plugins: [...byNs.values()],
     strays,
     notices,
+    // [LAW:single-enforcer] The one place a session's working directory
+    // becomes the checkout its plugins' data paths resolve against.
     checkout: checkoutOf(cwd),
   };
 }
@@ -316,7 +318,6 @@ export function discover(
   const notices = [
     detectConfigCollisions(locs, query.projectDir),
     configResolutionNotice(resolution),
-    ...places.map((at) => at.notice),
     repoUnreadNotice(repos),
     ...session.notices,
   ].filter((n): n is string => n !== null);
@@ -332,22 +333,17 @@ export function discover(
 
 // The file a chain role names, and what is there: the layer the search
 // found, read; the location stat could not see past; or nothing yet. The
-// resolution's own notice names a location stat could not see past; a file
-// the search found and could not then read earns its own here.
+// load fails naming a layer it could not read.
 function contentAt(
   locs: Locations,
   query: ConfigQuery,
   resolution: ConfigResolution,
   place: ConfigLayer,
-): ConfigLayer & {
-  readonly content: Layer["content"];
-  readonly notice: string | null;
-} {
+): ConfigLayer & { readonly content: Layer["content"] } {
   const at = (path: string, content: Layer["content"]) => ({
     role: place.role,
     path,
     content,
-    notice: null,
   });
   switch (resolution.kind) {
     case "missing":
@@ -356,16 +352,7 @@ function contentAt(
       return at(place.path, { kind: "unreadable", error: resolution.error });
     case "chain": {
       const found = resolution.layers.find((l) => l.role === place.role);
-      if (found !== undefined) {
-        const content = readLayer(found.path);
-        return {
-          ...at(found.path, content),
-          notice:
-            content.kind === "unreadable"
-              ? `Config file could not be read: ${found.path} — ${content.error} — rendering without it until it can be`
-              : null,
-        };
-      }
+      if (found !== undefined) return at(found.path, readLayer(found.path));
       const roles = new Map(
         configCandidates(locs, query).map((c) => [c.file, c.role]),
       );

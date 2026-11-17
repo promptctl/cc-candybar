@@ -68,7 +68,6 @@ import {
   unfollowedCollector,
 } from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
-import type { RenderCacheObservers } from "../src/renderer/render-cache";
 
 let dir: string;
 let cleanups: Array<() => void>;
@@ -84,11 +83,10 @@ afterEach(() => {
 // delivered frame recorded in that cache, in the order they were recorded,
 // every line the daemon's log was handed, and each pipe event an answer told
 // the host it carried. `daemon` is what every world state carries of the
-// daemon itself, and `onReload` hears each reload of the cache.
+// daemon itself.
 function renderer(
   verbs?: RendererVerbs,
   daemon?: () => DaemonFacts,
-  onReload?: RenderCacheObservers["onReload"],
 ): {
   readonly r: Renderer;
   readonly parts: MainRendererParts;
@@ -104,10 +102,7 @@ function renderer(
   const pipesAnswered: HeldEvent[] = [];
   const rig = sessionRig(dir, cleanups, {
     log: (level, message) => logged.push(`${level} ${message}`),
-    observers: {
-      onViewChanged: (sessionId) => changed.push(sessionId),
-      ...(onReload === undefined ? {} : { onReload }),
-    },
+    observers: { onViewChanged: (sessionId) => changed.push(sessionId) },
     ...(daemon === undefined ? {} : { daemon }),
   });
   const parts: MainRendererParts = {
@@ -808,45 +803,17 @@ describe("an event that waits for its origin's config", () => {
     expect(viewOf(t.rig)).toBeNull();
   });
 
-  // No later turn brings a parked event back, so one left parked would never
-  // open its view.
-  test("a config turn whose reload throws still runs what waited on it", async () => {
-    let armed = false;
-    const t = renderer(undefined, undefined, (_entry, _sessions, cause) => {
-      if (armed && cause.kind === "config") throw new Error("the reload broke");
-    });
-    const context = checked();
-    await configure(t, context);
-    // Retired, the origin's config is let go, and the entry it loaded stays.
-    answered(await handIn(t.r, { kind: "retire", session: SESSION }));
-    expect(t.rig.cache.holdsConfig(context.requested)).toBe(false);
-    const parked = answered(await contextTurn(t, context));
-    expect(new Map(parked.record).get("parked")).toBe("context");
-    armed = true;
-    const snapshot = t.rig.cache.configs.discovery.snapshotOf(
-      context.requested,
-    )!;
-    const configured = await t.r.answer({
-      kind: "event",
-      ...READ,
-      event: {
-        kind: "config",
-        origin: context.requested,
-        // Moved, so the entry reloads.
-        config: { ...snapshot, notices: [...snapshot.notices, "moved"] },
-      },
-    });
-    expect(configured.kind).toBe("threw");
-    expect(viewOf(t.rig)).not.toBeNull();
-  });
-
-  test("a config the renderer's output no longer names is pruned as the turn ends", async () => {
+  // A session retires when idle, and the entry stays to draw it again, so
+  // the config it loads from stays current.
+  test("a retired session's origin stays named while the cache entry it loaded lives", async () => {
     const t = renderer();
     const context = checked();
     await configure(t, context);
+    const retired = answered(
+      await handIn(t.r, { kind: "retire", session: SESSION }),
+    );
+    expect(retired.subscriptions.configs).toEqual([context.requested]);
     expect(t.rig.cache.holdsConfig(context.requested)).toBe(true);
-    await handIn(t.r, { kind: "retire", session: SESSION });
-    expect(t.rig.cache.holdsConfig(context.requested)).toBe(false);
   });
 });
 
@@ -994,10 +961,9 @@ describe("a click", () => {
     await request(t);
     await handIn(t.r, { kind: "retire", session: SESSION });
     const latest = checked("%3");
-    // The retire let its origin go, so the click waits for its config.
-    const clicked = answered(await handIn(t.r, click("act", latest)));
-    expect(seen).toBeUndefined();
-    answered(await configsNamed(t, clicked));
+    // The entry its request loaded still names the origin, so the click's
+    // config is held and it runs in its own turn.
+    answered(await handIn(t.r, click("act", latest)));
     expect(seen).toBe(latest);
   });
 
