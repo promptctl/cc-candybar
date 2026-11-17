@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-784",
+      "ref": "refs/pull/784/merge",
+      "sha": "0923481b09121c64ec0a206795f46b647bca91ab",
+      "timestamp": "2026-11-17T10:25:40.117Z",
+      "commits": [
+        {
+          "sha": "0923481b09121c64ec0a206795f46b647bca91ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T03:24:44-07:00",
+          "message": "Merge 820c40d616fc883070020001b610b755c0f016dd into 681357616352fb4f7476a7b1035b61a244971844\n"
+        },
+        {
+          "sha": "820c40d616fc883070020001b610b755c0f016dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T03:24:29-07:00",
+          "message": "feat(renderer): the draw returns its frame and the memory it made as values, and the turn that drew it stores them (0ol)\n\ndrawDsl and drawRender write nothing: the view's frame record, the\nsession's motion, the frame's warnings, what it showed of a menu and its\nper-segment cells come back as values, and keepDraw stores each in its\nowner in the turn that drew. A delivery is a value the effect-done turn\napplies. A test draws the same frame twice through drawRender and gets\nthe same frame and memory, with the renderer unchanged.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "681357616352fb4f7476a7b1035b61a244971844",
