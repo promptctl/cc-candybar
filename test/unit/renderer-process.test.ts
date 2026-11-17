@@ -262,6 +262,32 @@ describe("a renderer process's start", () => {
     ]);
   });
 
+  test("a start that fails ends its renderer with the reason, on the ⚠ as in the log, and the next start after the backoff is the retry", async () => {
+    const causes: string[] = [];
+    const { link, children, clock, ends, logs } = rig(async (cause) => {
+      causes.push(cause);
+      if (causes.length === 1)
+        throw new Error("the link key could not be read: EACCES");
+    });
+    link.arm();
+    children[0]!.say({ kind: "started", pid: 9001 });
+    await settled();
+    expect(children[0]!.opts.signal?.aborted).toBe(true);
+    expect(ends.map((e) => e.text)).toEqual([
+      "renderer main[1] failed its start: the link key could not be read: EACCES; it restarts, and unsaved state (open menus, armed confirms) is lost",
+    ]);
+    expect(logs).toContainEqual(
+      expect.stringMatching(
+        /^renderer main\[1\] start failed: .*the link key could not be read: EACCES/,
+      ),
+    );
+    clock.advance(BACKOFF_FIRST_MS);
+    children[1]!.say({ kind: "started", pid: 9002 });
+    await settled();
+    expect(causes).toEqual(["first", "crashed"]);
+    expect(children[1]!.opts.signal?.aborted).toBe(false);
+  });
+
   test("a booting renderer counts as its process, and writes no heap until it is live", async () => {
     const { link } = rig();
     link.arm();

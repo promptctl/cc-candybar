@@ -10,6 +10,7 @@
 // live → down → starting …`, and every input asks the state where it goes.
 
 import fs from "node:fs";
+import { finished } from "node:stream";
 import type { Timekeeper } from "../time.js";
 import type { Launcher, Channel } from "../proc/launcher.js";
 import { whyFailed } from "../proc/launcher.js";
@@ -227,10 +228,9 @@ interface Link {
   readonly lines: RendererOverLines;
   readonly kill: AbortController;
   readonly spawnedAt: number;
-  // That the supervisor ended it for not answering.
-  hung: boolean;
-  // Why it refused its boot, which its end says.
-  refusal: string | null;
+  // Why it ended before it served, which its end says: it refused its boot,
+  // failed its start, or stopped answering. Null for an end it came to itself.
+  stopped: string | null;
   // That it started and answered its start: from then the next renderer is
   // handed what it holds.
   tookOver: boolean;
@@ -371,8 +371,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       channel,
       kill,
       spawnedAt: clock.monotonic(),
-      hung: false,
-      refusal: null,
+      stopped: null,
       tookOver: false,
       held,
       usage: null,
@@ -389,30 +388,26 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after
     // this is queued behind the state it changes.
-    // [LAW:no-silent-failure] A start that throws is said, and the renderer
-    // serves what the inputs after it bring.
+    // [LAW:no-silent-failure] A start that throws is said, and ends the
+    // renderer: one that never took its start holds none of the state every
+    // input after it changes. The next start, after the backoff, is the
+    // retry, so a key the host could not read recovers once it can.
     const start = own
       .start(generationOf === 1 ? "first" : "crashed")
-      .catch((thrown: unknown) =>
+      .catch((thrown: unknown) => {
+        const failure = failureOf(thrown);
         log(
           "error",
-          `renderer ${name}[${generationOf}] start failed: ${failureOf(thrown).detail}`,
-        ),
-      );
+          `renderer ${name}[${generationOf}] start failed: ${failure.detail}`,
+        );
+        link.stopped ??= `failed its start: ${failure.message}`;
+        link.kill.abort(new Error("its start failed"));
+      });
     heardBy = (text) => heard(link, start, text);
     void channel.ended.then((result) => {
       stdout.end();
       stderr.end();
-      ended(
-        link,
-        link.hung
-          ? `stopped answering for ${HUNG_AFTER_MS / 1000} s`
-          : link.refusal !== null
-            ? `refused its boot: ${link.refusal}`
-            : result.ok
-              ? "exited"
-              : whyFailed(result),
-      );
+      ended(link, link.stopped ?? (result.ok ? "exited" : whyFailed(result)));
     });
   };
 
@@ -432,7 +427,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log;
       // the stack is the log's alone.
       case "refused":
-        link.refusal = line.failure.message;
+        link.stopped = `refused its boot: ${line.failure.message}`;
         log(
           "error",
           `renderer ${name}[${link.generation}] refused its boot: ${line.failure.detail}`,
@@ -525,7 +520,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     const owedSince =
       phase.kind === "starting" ? link.spawnedAt : link.pingSentAt;
     if (owedSince !== null && now - owedSince > HUNG_AFTER_MS) {
-      link.hung = true;
+      link.stopped = `stopped answering for ${HUNG_AFTER_MS / 1000} s`;
       link.kill.abort(new Error("the renderer stopped answering"));
       return;
     }
@@ -691,19 +686,30 @@ function hostIdOf<T>(name: RendererName, held: ReadonlyMap<T, T>, id: T): T {
 }
 
 // [LAW:effects-at-boundaries] A heap snapshot the renderer says in chunks,
-// written here: the renderer opens no file. One that fails part way leaves
-// no file, so no half snapshot reads as whole.
-async function writtenFrom(
+// written here: the renderer opens no file. One that fails part way, in the
+// renderer or on this disk, leaves no file, so no half snapshot reads as
+// whole.
+// [LAW:no-silent-failure] The stream is watched from its open, so a write
+// the disk refuses fails this snapshot rather than the line that carried it;
+// and it writes off the loop, so a snapshot of hundreds of megabytes holds no
+// bar while it lands. The renderer's failure is said over the stream's own,
+// which it caused.
+export async function writtenFrom(
   file: string,
   said: (chunk: (text: string) => void) => Promise<void>,
 ): Promise<void> {
-  const fd = fs.openSync(file, "w", 0o600);
-  try {
-    await said((text) => void fs.writeSync(fd, text));
-  } catch (thrown) {
-    fs.closeSync(fd);
-    fs.rmSync(file, { force: true });
-    throw thrown;
-  }
-  fs.closeSync(fd);
+  const out = fs.createWriteStream(file, { mode: 0o600 });
+  const landed = new Promise<Error | null>((resolve) =>
+    finished(out, (error) => resolve(error ?? null)),
+  );
+  const [told] = await Promise.allSettled([
+    said((text) => void out.write(text)),
+  ]);
+  if (told.status === "fulfilled") out.end();
+  else out.destroy();
+  const wrote = await landed;
+  const failure: unknown = told.status === "rejected" ? told.reason : wrote;
+  if (failure === null) return;
+  fs.rmSync(file, { force: true });
+  throw failure;
 }

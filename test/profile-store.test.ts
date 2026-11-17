@@ -149,6 +149,27 @@ describe("what a write moves", () => {
     });
   });
 
+  test("a document taken away reads back as no document after a restart", () => {
+    const first = opened();
+    first.apply({
+      kind: "store",
+      store: "doctor-marks",
+      key: DOCUMENT_KEY,
+      value: { marks: [] },
+    });
+    first.apply({
+      kind: "store",
+      store: "doctor-marks",
+      key: DOCUMENT_KEY,
+      value: null,
+    });
+    first.close();
+    expect(opened().stored()["doctor-marks"]).toEqual({
+      kind: "read",
+      entries: {},
+    });
+  });
+
   // [LAW:no-ambient-temporal-coupling] What lands after a daemon closed stays
   // in memory: a late write can't land over the files a next daemon took up.
   test("a write after the close reaches memory and not the file", () => {

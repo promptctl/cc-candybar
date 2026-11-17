@@ -4,7 +4,6 @@
 // none (eslint.config.mjs lets only this file construct each).
 
 import fs from "node:fs";
-import path from "node:path";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
 import { productionMachineEdge } from "../doctor/edge";
 import { systemLauncher } from "../proc/system-launcher";
@@ -16,7 +15,7 @@ import { linkKeyFile, linkKeyFromFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
 import { inProcessPort } from "./renderer-process.js";
 import type { DaemonLog } from "./log";
-import type { DaemonPaths } from "./paths";
+import { canonicalProfile, type DaemonPaths } from "./paths";
 import { profileStore } from "./profile-store.js";
 import { SessionContexts } from "./session-contexts.js";
 
@@ -33,14 +32,10 @@ export function productionAdapters(
   return {
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
+    profile: canonicalProfile,
     profileStore: (dir, failed, log) => profileStore(dir, machine, failed, log),
     sessionContexts: (failed, log) =>
-      new SessionContexts(
-        path.join(paths.state, "session-contexts.json"),
-        machine,
-        failed,
-        log,
-      ),
+      new SessionContexts(paths.sessionContexts, machine, failed, log),
     linkKey: linkKeyFromFile(linkKeyFile(paths.state)),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,

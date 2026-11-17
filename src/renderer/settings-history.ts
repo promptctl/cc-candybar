@@ -156,9 +156,10 @@ export class SettingsHistory {
 
   // [LAW:one-source-of-truth] Each history is immutable, so the value is its
   // own version: the stored state's token for its entry
-  // (src/renderer/stored-registry.ts).
+  // (src/renderer/stored-registry.ts). The map is replaced, never changed in
+  // place, so it is handed out as it is.
   versions(): ReadonlyMap<SessionId, SessionHistory> {
-    return new Map(this.state);
+    return this.state;
   }
 
   depth(sessionId: SessionId): HistoryDepth {

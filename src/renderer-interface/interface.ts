@@ -23,7 +23,6 @@ import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
 import type { StoredState, StoreWrite } from "./stored";
 import type { RendererName } from "./renderer-name";
-import type { Asked } from "../utils/outcome";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneSwitches } from "../config/lanes";
@@ -154,9 +153,9 @@ export type Event =
       // The renderer's first start in this daemon, or one after the last
       // ended.
       readonly cause: "first" | "crashed";
-      // [LAW:no-silent-failure] The key every link is signed with, base64, or
-      // why the host could not read it, which every link drawn says.
-      readonly linkKey: Asked<string>;
+      // [LAW:types-are-the-program] The key every link is signed with,
+      // base64: a host that cannot read it has no start to send.
+      readonly linkKey: string;
       // [LAW:one-source-of-truth] What the renderer keeps across its starts,
       // as the host holds it: the renderer's every `store` write so far.
       readonly stored: StoredState;

@@ -27,7 +27,7 @@ export const firstStart = (
   kind: "start",
   name: MAIN_RENDERER,
   cause: "first",
-  linkKey: { kind: "ok", value: TEST_LINK_KEY.toString("base64") },
+  linkKey: TEST_LINK_KEY.toString("base64"),
   stored: emptyStoredState(),
   viewers: {},
   sessions: [],

@@ -161,6 +161,7 @@ import {
   BadVerbArgs,
   decodeWire,
   failureOf,
+  throwAll,
 } from "../../daemon/foundations/verb-error";
 import type { ActsOnTheirWay } from "../acts";
 import {
@@ -1586,15 +1587,6 @@ function foldEffects(
       holdClickError(ctx.sessionState, sid, errors.join("\n"), ctx.now());
     const message = errors.join("; ");
     throw operational ? new Error(message) : new BadVerbArgs(message);
-  }
-}
-
-function throwAll(failures: readonly unknown[]): void {
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1) {
-    throw new Error(
-      failures.map((e) => String((e as Error).message ?? e)).join("; "),
-    );
   }
 }
 

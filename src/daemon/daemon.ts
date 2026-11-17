@@ -2,10 +2,10 @@
 
 import { Runs } from "./runs.js";
 import {
-  canonicalProfile,
   locationsFor,
   profileOf,
   type DaemonPaths,
+  type Profile,
 } from "./paths";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
@@ -115,6 +115,10 @@ export interface DaemonAdapters {
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
   readonly launcher: (own: LaunchOwner) => TestableLauncher;
+  // [LAW:effects-at-boundaries] A profile's directories made, and the profile
+  // spelled as the disk resolves them (main's user config is the user's, so
+  // its directory is not made).
+  readonly profile: (wanted: Profile, main: boolean) => Profile;
   // [LAW:one-source-of-truth] The renderer's stored state under the profile
   // directory its name derives, read once as the daemon is built, and each
   // session's context, which a click is handed. Built over the daemon's log:
@@ -253,7 +257,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   } = inputs;
   // [LAW:one-source-of-truth] The renderer's profile, canonical once, and
   // the places every config load resolves under, its user config among them.
-  const profile = canonicalProfile(
+  const profile = inputs.profile(
     profileOf(rendererName, host),
     rendererName === MAIN_RENDERER,
   );
@@ -685,17 +689,19 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
         // The key crosses in base64, so the start crosses as a line.
+        // [LAW:no-silent-failure] A key the host could not read fails the
+        // start with its reason, on the bar's ⚠; the next start reads it
+        // again.
         const key = inputs.linkKey();
+        if (key.kind === "failed")
+          throw new Error(`the link key could not be read: ${key.reason}`);
         return {
           kind: "event",
           event: {
             kind: "start",
             name: rendererName,
             cause,
-            linkKey:
-              key.kind === "ok"
-                ? { kind: "ok", value: key.value.toString("base64") }
-                : key,
+            linkKey: key.value.toString("base64"),
             stored: profileStore.stored(),
             viewers,
             sessions: [...collector.liveDocuments()].flatMap(

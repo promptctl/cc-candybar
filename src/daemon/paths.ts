@@ -272,6 +272,8 @@ export interface DaemonPaths {
   readonly log: string;
   readonly watchProbe: string;
   readonly spawnBackoff: string;
+  // What the host keeps of each session's last request.
+  readonly sessionContexts: string;
 }
 
 export function daemonPaths(host: Host): DaemonPaths {
@@ -283,6 +285,7 @@ export function daemonPaths(host: Host): DaemonPaths {
     log: logPath(host),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host),
+    sessionContexts: path.join(stateDir(host), "session-contexts.json"),
   };
 }
 

@@ -43,7 +43,7 @@ function configLocations(
         { role: "project", base: path.join(projectDir, PROJECT_BASES.project) },
       ]
     : [];
-  return [...project, { role: "user", base: xdgConfigBase(locs) }];
+  return [...project, { role: "user", base: locs.userConfig }];
 }
 
 // What a session's config search starts from: its project, and the explicit
@@ -101,14 +101,6 @@ const PROJECT_BASES: Readonly<Record<Exclude<LayerRole, "user">, string>> = {
   project: ".cc-candybar",
   local: ".cc-candybar.local",
 };
-
-// [LAW:one-source-of-truth] The extension-less base of the user's config, the
-// tail of the precedence chain: the renderer's profile names it
-// (src/daemon/paths.ts). The candidate enumerator appends each accepted
-// extension; `userHome` appends the documented one.
-function xdgConfigBase(locs: Locations): string {
-  return locs.userConfig;
-}
 
 /**
  * One chain layer: its file, and its role in the chain.
@@ -182,9 +174,7 @@ export type ConfigResolution = { readonly repos: RepoGate } & (
 // The user's own XDG file, at either extension: the one chain layer no
 // repository can supply.
 function isUserFile(locs: Locations, candidate: string): boolean {
-  return CONFIG_EXTENSIONS.some(
-    (e) => candidate === `${xdgConfigBase(locs)}.${e}`,
-  );
+  return CONFIG_EXTENSIONS.some((e) => candidate === `${locs.userConfig}.${e}`);
 }
 
 // The user's file: the XDG layer when the chain holds one, else the file a
@@ -196,7 +186,7 @@ export function userHome(
 ): string {
   return (
     layers.find((l) => isUserFile(locs, l.path))?.path ??
-    `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`
+    `${locs.userConfig}.${CONFIG_EXTENSIONS[0]}`
   );
 }
 

@@ -469,8 +469,11 @@ const importDirection = {
 // arrives in its inputs, so a renderer that opened one would read a disk its
 // host never chose and no snapshot recorded. Its process's entry is held to it
 // too: what the renderer keeps leaves as its turns' writes.
-const RENDERER_GLOB = "src/renderer/**/*.{ts,mts}";
-const RENDERER_FILES = [RENDERER_GLOB, "src/renderer-process.ts"];
+// [LAW:one-source-of-truth] The renderer's files, spelled once: the glob
+// its blocks name and the test an owner block's file is put to.
+const RENDERER_DIR = "src/renderer/";
+const RENDERER_ENTRY = "src/renderer-process.ts";
+const RENDERER_FILES = [`${RENDERER_DIR}**/*.{ts,mts}`, RENDERER_ENTRY];
 const RENDERER_FS_PATHS = [
   "fs",
   "node:fs",
@@ -482,7 +485,7 @@ const RENDERER_FS_PATHS = [
     "The renderer opens no file: what it reads is handed in (config snapshots, world state). [LAW:effects-at-boundaries]",
 }));
 const zonePathsOf = (file) =>
-  file.startsWith("src/renderer/") || file === "src/renderer-process.ts"
+  file.startsWith(RENDERER_DIR) || file === RENDERER_ENTRY
     ? RENDERER_FS_PATHS
     : [];
 

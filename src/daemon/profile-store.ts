@@ -52,11 +52,18 @@ const keyed = (file: string): Codec => ({
       : { kind: "unreadable", reason: `${file} is not an object` },
 });
 
+const NO_ENTRIES: Readonly<Record<string, JsonValue>> = {};
+
+// [LAW:one-source-of-truth] A document that went is written as `null`, and
+// `null` reads back as no document, so the file says what the store holds.
 const document = (file: string): Codec => ({
   file,
   text: (entries) =>
     `${JSON.stringify(entries.get(DOCUMENT_KEY) ?? null, null, 2)}\n`,
-  entries: (doc) => ({ kind: "read", entries: { [DOCUMENT_KEY]: doc } }),
+  entries: (doc) => ({
+    kind: "read",
+    entries: doc === null ? NO_ENTRIES : { [DOCUMENT_KEY]: doc },
+  }),
 });
 
 // [LAW:one-source-of-truth] Each store's file under a profile: the names an

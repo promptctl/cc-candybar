@@ -85,7 +85,11 @@ import {
   serializeSegmentCells,
 } from "./debug.js";
 import { earliestOf } from "../utils/instant.js";
-import { failureOf, type Failure } from "../daemon/foundations/verb-error.js";
+import {
+  failureOf,
+  throwAll,
+  type Failure,
+} from "../daemon/foundations/verb-error.js";
 import {
   rendererOf,
   type Effect,
@@ -375,13 +379,21 @@ export function mainRenderer(
         const effects: Effect[] = [];
         const frames: PushedFrame[] = [];
         // [LAW:single-enforcer] Every event turn ends with what it stored,
-        // however it ended.
+        // however it ended; a drain that throws joins the turn's failure
+        // rather than replacing it.
         const ended = ending(() => {
+          const failures: unknown[] = [];
           try {
             turn(input.event, record, effects, frames);
-          } finally {
-            parts.stored.drain(effects);
+          } catch (thrown) {
+            failures.push(thrown);
           }
+          try {
+            parts.stored.drain(effects);
+          } catch (thrown) {
+            failures.push(thrown);
+          }
+          throwAll(failures);
         });
         return {
           ...(ended.kind === "answered"
@@ -488,8 +500,7 @@ function startOver(inputs: MainRendererInputs, host: AdapterToHost): Renderer {
     doctorStores.postMortemsRead,
   ]);
   // [LAW:no-silent-failure] The key the start handed in, or why there is
-  // none, which every link drawn before a start, or after one that could not
-  // read it, says.
+  // none, which every link drawn before a start says.
   let linkKey: Asked<Buffer> = {
     kind: "failed",
     reason: "the renderer has not started",
@@ -708,10 +719,7 @@ function startOver(inputs: MainRendererInputs, host: AdapterToHost): Renderer {
       stored,
       started: (start) => {
         stored.restore(start.stored);
-        linkKey =
-          start.linkKey.kind === "ok"
-            ? { kind: "ok", value: Buffer.from(start.linkKey.value, "base64") }
-            : start.linkKey;
+        linkKey = { kind: "ok", value: Buffer.from(start.linkKey, "base64") };
         log("info", `renderer ${start.name} started cause=${start.cause}`);
       },
     },

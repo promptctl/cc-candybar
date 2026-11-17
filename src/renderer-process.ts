@@ -5,6 +5,7 @@
 // start and leaves as `store` writes, and a heap snapshot leaves in chunks
 // the host writes.
 
+import { once } from "node:events";
 import v8 from "node:v8";
 import process from "node:process";
 import { inspect } from "node:util";
@@ -77,10 +78,18 @@ export function runRenderer(world: World): void {
         const { rss, heapTotal } = process.memoryUsage();
         return { rss, heapTotal };
       },
+      // [LAW:no-ambient-temporal-coupling] Each chunk waits for the pipe to
+      // drain: a pipe is written asynchronously on macOS, so a snapshot read
+      // faster than the host takes it would pile up whole in this process,
+      // which is already over its limit.
       heapSnapshot: async (chunk) => {
         const snapshot = v8.getHeapSnapshot();
         snapshot.setEncoding("utf8");
-        for await (const text of snapshot) chunk(text as string);
+        for await (const text of snapshot) {
+          chunk(text as string);
+          if (process.stdout.writableNeedDrain)
+            await once(process.stdout, "drain");
+        }
       },
     });
     send({ kind: "started", pid: process.pid });
