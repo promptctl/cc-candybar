@@ -1,16 +1,22 @@
-// What a view's last drawn frame showed (brandon-unfiled-3248.8ro6): each
-// placement's drawing — or that it drew nothing — and the name each globals
-// rule settled on. A frame is otherwise a pure reading of the view's values;
-// this is the one thing a draw writes, and nothing reads it but the next draw.
+// What a surface's last drawn frame of a view showed
+// (brandon-unfiled-3248.8ro6): each placement's drawing — or that it drew
+// nothing — the name each globals rule settled on, and the transitions in
+// flight. A frame is otherwise a pure reading of the view's values; the draw
+// is handed this record and returns its successor, the turn that drew it keeps
+// that on the view, and nothing reads it but the surface's next draw.
 //
 // [LAW:one-source-of-truth] It is THE record of what a placement last drew. A
 // placement whose value is not answered yet draws its loading cell from it,
 // at the width it held; a placement that appears fades in, and one that leaves
 // dissolves out replaying its rows, by comparing against it
 // (`SessionEffects.motion`). It is kept whatever `globals.transitions` says,
-// and it is no observable: writing it wakes nothing.
+// and it is no observable: writing it wakes nothing. Each surface keeps its
+// own: a request's answer and a feed's frames draw at their own widths and
+// roots, so a frame compared against the other's would fade and dissolve
+// what only one of them draws.
 
-import type { ColorRgba } from "@promptctl/rich-js";
+import type { AnimationTime } from "../utils/instant.js";
+import type { ColorRgba, Effect, TransitionName } from "@promptctl/rich-js";
 import type { ExpressionSlot } from "../themes/policy.js";
 
 // What a frame is drawn from. A placement appears only between two frames
@@ -57,67 +63,82 @@ export type PlacementRecord<Line> =
   | { readonly kind: "drew"; readonly drawing: Drawing<Line> }
   | { readonly kind: "hidden" };
 
+// A placement passing through a transition: a `fade` in as it appears, a
+// `dissolve` out as it leaves. Since the instant it began, its own t = 0, made
+// once. [LAW:types-are-the-program] It keeps when the transition is over and
+// the one effect to draw, veiling toward the placement's ground; the
+// transition as made veils toward the terminal's, so it is not kept.
+export interface Passage {
+  readonly name: TransitionName;
+  readonly since: AnimationTime;
+  readonly done: (t: number) => boolean;
+  readonly effect: Effect;
+}
+
 export interface FrameRecord<Line> {
   readonly source: FrameSource;
   readonly placements: ReadonlyMap<string, PlacementRecord<Line>>;
   // Each globals rule's settled name, by slot.
   readonly rules: ReadonlyMap<ExpressionSlot, string>;
+  // [LAW:types-are-the-program] The transitions in flight at this frame, by
+  // placement — what a placement's appearing and leaving go on from when the
+  // next frame is drawn from the same source — or null: drawn with
+  // transitions off, which nothing compares against. Here, beside the
+  // placements they passed, because they go on only from this frame.
+  readonly passages: ReadonlyMap<string, Passage> | null;
 }
 
-// One draw's record as the walk writes it, kept only once the frame is drawn.
+// One draw's record as the walk writes it.
 export interface FrameWrite<Line> {
   // Records what the bar shows of the placement `id`, and returns it.
   readonly placed: (id: string, lines: readonly Line[]) => readonly Line[];
   readonly rule: (slot: ExpressionSlot, name: string) => void;
-  // [LAW:no-ambient-temporal-coupling] Called after the rows serialize: a
-  // row's fill grows its cells in place, so a drawing is the width it was
-  // drawn at only then, and a draw that throws part-way keeps the last.
-  readonly commit: () => void;
+  // [LAW:no-ambient-temporal-coupling] Read after the rows serialize: a row's
+  // fill grows its cells in place, so a drawing is the width it was drawn at
+  // only then.
+  readonly record: (
+    passages: ReadonlyMap<string, Passage> | null,
+  ) => FrameRecord<Line>;
 }
 
-// [LAW:no-shared-mutable-globals] One view's frame memory: one owner, the
-// view, and one writer, the draw.
-export class FrameMemory<Line> {
-  private last: FrameRecord<Line> | null = null;
+// [LAW:single-enforcer] The last frame's record if it was drawn from `source`,
+// or none. A frame drawn from another config, preset, state revision or width
+// says nothing of where a placement stands in this one — its ids may name
+// other placements, its rows were sized for another width, and a write to the
+// session's state shows what it reveals at once — so it is no frame to draw
+// from or compare against.
+export function recordFrom<Line>(
+  last: FrameRecord<Line> | null,
+  source: FrameSource,
+): FrameRecord<Line> | null {
+  return last !== null &&
+    last.source.config === source.config &&
+    last.source.preset === source.preset &&
+    last.source.revision === source.revision &&
+    last.source.width === source.width
+    ? last
+    : null;
+}
 
-  // [LAW:single-enforcer] The last frame drawn from `source`, or none. A frame
-  // drawn from another config, preset, state revision or width says nothing of
-  // where a placement stands in this one — its ids may name other placements,
-  // its rows were sized for another width, and a write to the session's state
-  // shows what it reveals at once — so it is no frame to draw from or compare
-  // against.
-  from(source: FrameSource): FrameRecord<Line> | null {
-    const { last } = this;
-    return last !== null &&
-      last.source.config === source.config &&
-      last.source.preset === source.preset &&
-      last.source.revision === source.revision &&
-      last.source.width === source.width
-      ? last
-      : null;
-  }
-
-  begin(
-    source: FrameSource,
-    returned: (id: string, lines: readonly Line[]) => Returned<Line>,
-  ): FrameWrite<Line> {
-    const placements = new Map<string, PlacementRecord<Line>>();
-    const rules = new Map<ExpressionSlot, string>();
-    return {
-      placed: (id, lines) => {
-        const { drawing } = returned(id, lines);
-        placements.set(
-          id,
-          drawing === null ? HIDDEN_RECORD : { kind: "drew", drawing },
-        );
-        return lines;
-      },
-      rule: (slot, name) => rules.set(slot, name),
-      commit: () => {
-        this.last = { source, placements, rules };
-      },
-    };
-  }
+// One draw's record, begun before its walk.
+export function beginRecord<Line>(
+  source: FrameSource,
+  returned: (id: string, lines: readonly Line[]) => Returned<Line>,
+): FrameWrite<Line> {
+  const placements = new Map<string, PlacementRecord<Line>>();
+  const rules = new Map<ExpressionSlot, string>();
+  return {
+    placed: (id, lines) => {
+      const { drawing } = returned(id, lines);
+      placements.set(
+        id,
+        drawing === null ? HIDDEN_RECORD : { kind: "drew", drawing },
+      );
+      return lines;
+    },
+    rule: (slot, name) => rules.set(slot, name),
+    record: (passages) => ({ source, placements, rules, passages }),
+  };
 }
 
 const HIDDEN_RECORD: PlacementRecord<never> = { kind: "hidden" };

@@ -224,7 +224,7 @@ The union is closed; adding a source of change adds an arm, and the exhaustive s
 
 **The ordering invariant,** stated so a test can hold it: a frame drawn for a session reflects every event for that session whose Apply turn completed before the draw began, and no part of an event whose turn has not completed. A click's reply is sent after its turn completes. The feed's wake stays a MobX reaction on the session's revision, which fires inside the turn's action and schedules the draw after it, as today; what changes is that nothing writes the revision outside a turn, so the reaction cannot see a half-applied event.
 
-**Draw writes nothing.** `FrameMemory`, the one thing a draw writes today, moves into Apply's state keyed by `(session, surface)`: the draw returns the frame and its memory as values, and the `request`/feed path stores them. Effect clocks (`SessionEffects`) are read by the draw and advanced by the same path. Then the draw is a function and the recording test in §1 can hold it to zero writes as well as zero I/O.
+**Draw writes nothing.** The draw returns the frame and its memory as values, and the `request`/feed path stores them: the frame record and the transitions in flight on the view, per surface, and the effect clock (`SessionEffects`) per session, since a request's answer and a feed's frames compare against their own last frames but animate in one phase. Then the draw is a function and the recording test in §1 can hold it to zero writes as well as zero I/O.
 
 ## 17. The home
 

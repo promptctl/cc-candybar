@@ -106,20 +106,10 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(a.rows).toEqual(b.rows);
   });
 
-  test("perSegmentSink receives one RichText[] per rendered (non-hidden) segment, cleared on each call", () => {
-    const { config, drawHook } = spineBar(HOOK_DATA.workspace.current_dir);
-    const sink = new Map<
-      string,
-      readonly import("@promptctl/rich-js").RichText[]
-    >();
-    // Pre-seed with a stale entry to verify drawDsl clears it.
-    sink.set("doesNotExist", []);
-
-    drawHook({ perSegmentSink: sink });
-
-    // Stale entry from a previous render must be gone.
-    expect(sink.has("doesNotExist")).toBe(false);
-    // Every layout entry that wasn't `when`-hidden appears in the sink.
+  test("a draw returns one RichText[] per rendered (non-hidden) segment", () => {
+    const { config, draw } = spineBar(HOOK_DATA.workspace.current_dir);
+    const sink = draw({ payload: HOOK_DATA }).segments;
+    // Every layout entry that wasn't `when`-hidden appears in what it returns.
     expect(sink.size).toBeGreaterThan(0);
     // [LAW:one-source-of-truth] The tree the render WALKED is the active
     // preset's resolved root, not `config.root` — the synthesis passes

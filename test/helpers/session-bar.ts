@@ -83,9 +83,7 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
         session_id: SID,
         term: { cols },
       };
-      const warnings: RenderWarning[] = [];
-      const segments = new Map<string, readonly RichText[]>();
-      const { frame } = drawPayload(
+      const { frame, warnings, segments } = drawPayload(
         config,
         compiled,
         store,
@@ -94,12 +92,10 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
         at,
         renderOptionsOf(effective, cols),
         {
-          perSegmentSink: segments,
           // [LAW:no-silent-failure] A ⚠ cell would be read as the bar it replaced.
           onSegmentError: (name, message) => {
             throw new Error(`${name}: ${message}`);
           },
-          onRenderWarning: (warning) => warnings.push(warning),
         },
         effective,
       );

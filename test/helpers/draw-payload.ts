@@ -1,6 +1,9 @@
-// One frame of a fixed payload: bound and drawn in one call, the seam a
-// session's view reads, given a constant. A test draws by this; the daemon and
-// check bind a view of their own and call `drawDsl`.
+// One frame of a fixed payload: bound, drawn and kept in one call, the seam a
+// session's view reads, given a constant. A test draws by this as a turn
+// draws: what the frame leaves is kept — its record by the store it was drawn
+// over, the motion in the selection's effects when it hands some — so the
+// next call draws on from it. The daemon and check bind a view of their own
+// and call `drawDsl`.
 import type { ValidatedConfig } from "../../src/config/dsl-types";
 import {
   bindPayload,
@@ -14,6 +17,8 @@ import type { BuildLineOptions } from "../../src/render/strip";
 import type { Instant } from "../../src/utils/instant";
 import type { SourceRegistry } from "../../src/var-system/sources";
 import type { VariableStore } from "../../src/var-system/store";
+import type { FrameRecord } from "../../src/render/frame-memory";
+import type { RenderedLine } from "../../src/dsl/node-registry";
 import { globalsFor } from "./selection";
 import { sessionOfPayload } from "./payload-session";
 import { UNREAD_RUN, type RunFact } from "../../src/facts/world-state";
@@ -44,7 +49,7 @@ export function drawPayload(
     sessionOfPayload(payload),
     run,
   );
-  return drawDsl(
+  const frame = drawDsl(
     config,
     compiled,
     store,
@@ -53,6 +58,13 @@ export function drawPayload(
     at,
     opts,
     observers,
-    selection,
+    { ...selection, record: selection.record ?? records.get(store) },
   );
+  records.set(store, frame.memory.record);
+  selection.effects?.keep(frame.memory.motion);
+  return frame;
 }
+
+// The record of the last frame drawn over each store, as a view keeps its
+// surface's.
+const records = new WeakMap<VariableStore, FrameRecord<RenderedLine>>();

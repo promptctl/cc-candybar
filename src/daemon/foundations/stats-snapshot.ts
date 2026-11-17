@@ -258,6 +258,10 @@ export interface RenderCacheStats {
   // `retired` is for states, climbing while `views` holds is a render that
   // never returned.
   readonly retiredViews: number;
+  // The transitions in flight on the views' surfaces, each a rich-js effect
+  // holding its settled shares: climbing while `views` holds is a surface
+  // whose passages never end.
+  readonly passages: number;
   // What the entries the map serves are charged against the budget.
   readonly accountedBytes: number;
   readonly budgetBytes: number;

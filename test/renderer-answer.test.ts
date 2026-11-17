@@ -27,9 +27,14 @@ import type {
   Subscription,
 } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
-import { renderFrame, type RendererParts } from "../src/renderer/draw-bar";
+import {
+  drawRender,
+  renderFrame,
+  setUpRender,
+  type RendererParts,
+} from "../src/renderer/draw-bar";
 import { renderFailedFrame } from "../src/render/frame";
-import { MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
+import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
@@ -365,6 +370,34 @@ describe("a statusline request", () => {
   });
 });
 
+describe("a draw", () => {
+  // [LAW:effects-at-boundaries] What a draw made comes back as values, and
+  // only the turn that drew it keeps them.
+  test("drawn twice from the same state and instant is the same frame and memory, and leaves the renderer as it found it", async () => {
+    const { r, parts, recorded, rig } = renderer();
+    answered(await request({ r, rig }));
+    const view = viewOf(rig)!;
+    const record = view.frames.get("request");
+    const cells = view.lastRenderCellsBySegment;
+    const motion = parts.effectSessions.of(SESSION).lastFrame();
+    const warned = parts.renderWarnings.of(SESSION, "request");
+    const draw = () => {
+      using setup = setUpRender(parts, checked(), READ, []);
+      const { drawn, kept } = drawRender(parts, setup, ANSWERING, UNFOLLOWED_FEEDS);
+      return { drawn, kept };
+    };
+    const first = draw();
+    const second = draw();
+    expect(second.drawn).toEqual(first.drawn);
+    expect(second.kept).toEqual(first.kept);
+    expect(view.frames.get("request")).toBe(record);
+    expect(view.lastRenderCellsBySegment).toBe(cells);
+    expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
+    expect(parts.renderWarnings.of(SESSION, "request")).toBe(warned);
+    expect(recorded).toEqual([]);
+  });
+});
+
 describe("a feed's frame", () => {
   // [LAW:no-silent-failure] A feed's render that threw reaches a lane as a
   // Frame saying so, with no failure branch in the lane.
@@ -413,6 +446,63 @@ describe("a feed's frame", () => {
     expect(frame?.failure).toBeNull();
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
     expect(by).toEqual(["feed"]);
+  });
+
+  // [LAW:effects-at-boundaries] The record and transitions are a surface's
+  // own; the animation clock is the session's, one for both.
+  test("leaves the request's record of the view as it was, beside its own, under the session's one clock", async () => {
+    const { r, parts, rig } = renderer();
+    answered(await request({ r, rig }));
+    const view = viewOf(rig)!;
+    const answeredRecord = view.frames.get("request");
+    expect(answeredRecord).toBeDefined();
+    renderFrame(parts, SESSION, MOVING_FPS, READ, new Set(), UNFOLLOWED_FEEDS);
+    expect(view.frames.get("request")).toBe(answeredRecord);
+    expect(view.frames.get("feed")).toBeDefined();
+    expect(view.frames.get("feed")).not.toBe(answeredRecord);
+    expect(parts.effectSessions.getStats().sessions).toBe(1);
+  });
+
+  // A frame that fails as it leaves the renderer reached no lane, so the
+  // next frame compares against the last one that did.
+  test("that fails after its draw keeps none of what the draw made", async () => {
+    const { r, parts, rig } = renderer();
+    answered(await request({ r, rig }));
+    const view = viewOf(rig)!;
+    const motion = parts.effectSessions.of(SESSION).lastFrame();
+    const failing: RendererParts = {
+      ...parts,
+      linkSigner: {
+        ...parts.linkSigner,
+        signLink: () => {
+          throw new Error("the signer is gone");
+        },
+      },
+    };
+    const frame = renderFrame(
+      failing,
+      SESSION,
+      MOVING_FPS,
+      READ,
+      new Set(),
+      UNFOLLOWED_FEEDS,
+    );
+    expect(frame?.failure).not.toBeNull();
+    expect(view.frames.get("feed")).toBeUndefined();
+    expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
+  });
+
+  // A feed that opens again draws its first frame, fading nothing in from
+  // what the closed one last showed.
+  test("whose feed closed leaves no record of it, and the request's stands", async () => {
+    const { r, parts, rig } = renderer();
+    answered(await request({ r, rig }));
+    const view = viewOf(rig)!;
+    renderFrame(parts, SESSION, MOVING_FPS, READ, new Set(), UNFOLLOWED_FEEDS);
+    expect(view.frames.get("feed")).toBeDefined();
+    parts.renderCache.stopDrawing(SESSION, "feed");
+    expect(view.frames.get("feed")).toBeUndefined();
+    expect(view.frames.get("request")).toBeDefined();
   });
 
   // A wake while a frame is out is owed a frame after it, so a draw that woke

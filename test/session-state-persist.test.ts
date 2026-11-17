@@ -102,8 +102,11 @@ describe("SessionState disk persistence", () => {
     );
   });
 
+  // The write syncs to the real disk, and a datasync on a busy CI runner has
+  // outlasted until's default 5 s: the budget is when a write that never
+  // lands fails, not how long one that does is waited on.
   const settled = (done: () => boolean): Promise<void> =>
-    until(done, "the write's landing");
+    until(done, "the write's landing", 20_000);
 
   // The debounced write reaches the disk off the daemon's thread: no flush is
   // called, and the file still lands whole, owner-only.

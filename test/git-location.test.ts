@@ -7,7 +7,6 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
@@ -68,10 +67,9 @@ function drawAll(
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
-  const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    drawPayload(
+    const { segments } = drawPayload(
       config,
       compiled,
       store,
@@ -79,17 +77,17 @@ function drawAll(
       { session_id: "s", home: "/home/me", ...payload },
       instantOf(new Date(0)),
       { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 0, width: Number.POSITIVE_INFINITY },
-      { perSegmentSink: sink },
-    ).frame;
+      undefined,
+    );
+    return new Map(
+      ["directory", "gitaculous"].map((name) => [
+        name,
+        (segments.get(name) ?? []).map((t) => t.plain).join("").trim(),
+      ]),
+    );
   } finally {
     registry.dispose();
   }
-  return new Map(
-    ["directory", "gitaculous"].map((name) => [
-      name,
-      (sink.get(name) ?? []).map((t) => t.plain).join("").trim(),
-    ]),
-  );
 }
 
 function draw(payload: Record<string, unknown>, variables: object = {}): string {

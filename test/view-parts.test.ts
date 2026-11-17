@@ -49,8 +49,8 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
     at: Instant,
     opts: typeof OPTS = OPTS,
     selection = resolveEffectiveGlobals(config, () => null, () => false),
-  ): DrawnFrame =>
-    drawPayload(
+  ): DrawnFrame => {
+    const drawn = drawPayload(
       config,
       compiled,
       store,
@@ -58,12 +58,12 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
       payload,
       at,
       opts,
-      {
-        onSegmentError: (id, message) => errors.push(`${id}: ${message}`),
-        onRenderWarning: (warning) => warnings.push(warning),
-      },
+      { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
       selection,
     );
+    warnings.push(...drawn.warnings);
+    return drawn;
+  };
   return { compiled, registry, errors, warnings, draw };
 }
 

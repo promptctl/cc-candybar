@@ -23,15 +23,20 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 
 function placementBar(src: string) {
   const rig = buildRig({ source: src });
-  const sink = new Map<string, readonly RichText[]>();
-  const render = (): Frame => rig.draw({ observers: { perSegmentSink: sink } }).frame;
-  // The text one placement drew, read off the sink by its id.
+  // The cells of the latest draw, read through `segments` after a render.
+  let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
+  const render = (): Frame => {
+    const drawn = rig.draw();
+    latest = drawn.segments;
+    return drawn.frame;
+  };
+  // The text one placement drew in the latest draw, by its id.
   const textOf = (id: string): string =>
-    (sink.get(id) ?? [])
+    (latest.get(id) ?? [])
       .map((t) => t.plain)
       .join("")
       .trim();
-  return { ...rig, sink, render, textOf };
+  return { ...rig, segments: () => latest, render, textOf };
 }
 
 // One definition, three placements: the bare one reads every default, the
@@ -84,10 +89,10 @@ describe("a placement renders with its own settings", () => {
     }`);
     rt.render();
     const bgOf = (id: string) =>
-      resolvedStyle(rt.sink.get(id)![0]!.style).bgcolor?.value?.hex;
+      resolvedStyle(rt.segments().get(id)![0]!.style).bgcolor?.value?.hex;
     expect(bgOf("quiet")).toBe("#000000");
     expect(bgOf("loud")).toBe("#ff0000");
-    expect(rt.sink.has("gone")).toBe(false);
+    expect(rt.segments().has("gone")).toBe(false);
   });
 });
 
@@ -134,8 +139,8 @@ describe("two placements of a menu-hosting segment open independently", () => {
     );
     rt.render();
     // The open copy drops its picker body; the other still draws its glyph only.
-    expect(rt.sink.get("second")!.length).toBeGreaterThan(
-      rt.sink.get("picker")!.length,
+    expect(rt.segments().get("second")!.length).toBeGreaterThan(
+      rt.segments().get("picker")!.length,
     );
     await open("menus.picker.applyTheme");
     expect(rt.sessionState.get(S1, "menus.picker.applyTheme")).toBe(

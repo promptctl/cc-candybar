@@ -15,10 +15,12 @@
 import {
   answerRequest,
   configureSession,
+  deliver,
   lanesAt,
   renderFrame,
   retireSession,
   viewLanes,
+  type Delivery,
   type RendererParts,
 } from "./draw-bar.js";
 import { TurnTime } from "./turn-time.js";
@@ -112,7 +114,7 @@ export function mainRenderer(
   // its client, held from the turn that returned it until its one
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
-  const deliveries = new Map<EffectId, () => void>();
+  const deliveries = new Map<EffectId, Delivery>();
   // The subscriptions this renderer last returned: none before its first turn.
   let subscriptions: Subscriptions = { sources: {}, lanes: {}, wake: null };
 
@@ -146,14 +148,14 @@ export function mainRenderer(
         configureSession(parts, event.context, event.worldState, record);
         return;
       case "request": {
-        const { frame, delivered } = answerRequest(
+        const { frame, delivery } = answerRequest(
           parts,
           event.context,
           record,
           effects,
         );
         const id = parts.mint();
-        deliveries.set(id, delivered);
+        deliveries.set(id, delivery);
         effects.push({
           kind: "present",
           id,
@@ -177,15 +179,15 @@ export function mainRenderer(
       case "effect-done": {
         if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
         if (parts.acts.done(event.of, event.session, event.outcome)) return;
-        const delivered = deliveries.get(event.of);
+        const delivery = deliveries.get(event.of);
         // [LAW:no-silent-failure] An effect this renderer never returned, or
         // one already settled, is the host's bug: said, never ignored.
-        if (delivered === undefined)
+        if (delivery === undefined)
           throw new Error(
             `effect-done for effect ${event.of}, which is no present, change or act on its way`,
           );
         deliveries.delete(event.of);
-        if (event.outcome.kind === "ok") delivered();
+        if (event.outcome.kind === "ok") deliver(parts, delivery);
         return;
       }
       case "click":
