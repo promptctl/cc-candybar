@@ -28425,14 +28425,6 @@ function decodeWire(decode) {
     throw err;
   }
 }
-function throwAll(failures) {
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1) {
-    throw new Error(
-      failures.map((e) => String(e.message ?? e)).join("; ")
-    );
-  }
-}
 
 // src/daemon/foundations/session-id.ts
 init_globals();
@@ -73306,9 +73298,9 @@ function bindingRestorePlan(prior, listKeys) {
   };
 }
 var DeclaredStatusLines = class {
-  constructor(lines2, paneOf) {
+  constructor(lines2, paneOf2) {
     this.lines = lines2;
-    this.paneOf = paneOf;
+    this.paneOf = paneOf2;
   }
   lines;
   paneOf;
@@ -74250,6 +74242,21 @@ function nameOf2(act2) {
   }
 }
 var paneKey = (pane) => `${pane.socket}\0${pane.pane}`;
+function paneOf(act2) {
+  switch (act2.kind) {
+    case "type-slash":
+    case "restart-claude":
+      return act2;
+    case "surface":
+      if (act2.surface === "pane") return act2;
+      return act2.pane.kind === "pane" ? { session: act2.session, pane: act2.pane.hint } : null;
+    case "copy":
+    case "open":
+    case "apply-update":
+    case "run":
+      return null;
+  }
+}
 var did = (said2) => ({ outcome: { kind: "ok" }, said: said2 });
 var not = (outcome) => ({
   outcome,
@@ -74370,6 +74377,15 @@ var Acts = class {
     return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act2)}: ${outcome.reason}` };
   }
   async performed(act2) {
+    const inPane2 = paneOf(act2);
+    if (inPane2 !== null) {
+      const heard = this.deps.paneHeard(inPane2.session);
+      if (heard === null || paneKey(heard) !== paneKey(inPane2.pane))
+        return not({
+          kind: "refused",
+          reason: `pane ${inPane2.pane.pane} is not one this session's requests since the daemon started have reported \u2014 click again once its bar has redrawn`
+        });
+    }
     try {
       return await this.performers[act2.kind](act2);
     } catch (thrown2) {
@@ -85879,9 +85895,15 @@ function runEach(steps2) {
       thrown2.push(error);
     }
   }
-  if (thrown2.length === 1) throw thrown2[0];
-  if (thrown2.length > 1)
-    throw new AggregateError(thrown2, `${thrown2.length} steps threw`);
+  throwAll(thrown2);
+}
+function throwAll(failures) {
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(
+      failures,
+      failures.map((e) => e instanceof Error ? e.message : String(e)).join("; ")
+    );
 }
 
 // src/renderer/turn-time.ts
@@ -87510,7 +87532,7 @@ var SettingsHistory = class {
   }
   // A start's histories, oldest first, in place of whatever was held.
   restore(loaded) {
-    this.state = new Map(loaded);
+    this.state = this.bounded(new Map(loaded));
   }
   // [LAW:one-source-of-truth] Each history is immutable, so the value is its
   // own version: the stored state's token for its entry
@@ -87743,6 +87765,11 @@ var SettingsHistory = class {
     if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
       next.set(sessionId2, history);
     }
+    this.state = this.bounded(next);
+  }
+  // [LAW:single-enforcer] The bounds, held however the history grew: a
+  // change, or a store written by a build with larger ones.
+  bounded(next) {
     while (next.size > MAX_SESSIONS4 || weight(next) > MAX_BYTES) {
       const [oldest, h] = next.entries().next().value;
       if (next.size > 1) next.delete(oldest);
@@ -87756,7 +87783,7 @@ var SettingsHistory = class {
         next.delete(oldest);
       }
     }
-    this.state = next;
+    return next;
   }
 };
 function weight(state) {
@@ -90937,19 +90964,23 @@ var StoredRegistry = class {
   // holds is what was handed in. An entry the owner did not keep as it was
   // handed in (dropped past a bound, refused, or rewritten as it was read)
   // is owed to the host, so its copy is never one the renderer has not got.
+  // [LAW:no-silent-failure] Each owner restores whatever another threw, so
+  // no store is left holding nothing over what the host holds.
   restore(stored) {
-    for (const owner of this.owners) {
-      const handed = stored[owner.store];
-      owner.restore(handed);
-      const entries = handed.kind === "read" ? handed.entries : {};
-      const versions = owner.versions();
-      const told = /* @__PURE__ */ new Map();
-      for (const [key, value] of Object.entries(entries)) {
-        const kept = versions.has(key) && JSON.stringify(owner.value(key)) === JSON.stringify(value);
-        told.set(key, kept ? versions.get(key) : RESTORED_APART);
-      }
-      this.told.set(owner.store, told);
-    }
+    runEach(
+      this.owners.map((owner) => () => {
+        const handed = stored[owner.store];
+        owner.restore(handed);
+        const entries = handed.kind === "read" ? handed.entries : {};
+        const versions = owner.versions();
+        const told = /* @__PURE__ */ new Map();
+        for (const [key, value] of Object.entries(entries)) {
+          const kept = versions.has(key) && JSON.stringify(owner.value(key)) === JSON.stringify(value);
+          told.set(key, kept ? versions.get(key) : RESTORED_APART);
+        }
+        this.told.set(owner.store, told);
+      })
+    );
   }
   // [LAW:no-ambient-temporal-coupling] The turn's end: a write for each entry
   // that moved, or that went, joins its effects, so the host holds what the
@@ -91119,10 +91150,7 @@ function historyOwner(history, log) {
   };
 }
 function storedDocument(store, empty2, parse4) {
-  let held = {
-    kind: "failed",
-    reason: `${store} was not handed in by the renderer's start`
-  };
+  let held = { kind: "ok", value: empty2 };
   let handed;
   return {
     store,
@@ -91338,20 +91366,12 @@ function mainRenderer(parts, pushed) {
       const record2 = [];
       const effects = [];
       const frames = [];
-      const ended = ending(() => {
-        const failures = [];
-        try {
-          turn(input.event, record2, effects, frames);
-        } catch (thrown2) {
-          failures.push(thrown2);
-        }
-        try {
-          parts.stored.drain(effects);
-        } catch (thrown2) {
-          failures.push(thrown2);
-        }
-        throwAll(failures);
-      });
+      const ended = ending(
+        () => runEach([
+          () => turn(input.event, record2, effects, frames),
+          () => parts.stored.drain(effects)
+        ])
+      );
       return {
         ...ended.kind === "answered" ? { kind: "answered" } : ended,
         effects,
@@ -94069,6 +94089,7 @@ function createDaemon(inputs) {
       }
     },
     closing: () => closing.signal.aborted,
+    paneHeard: (session) => sessionRequests.latest(session)?.hints.tmux ?? null,
     log
   });
   const tmuxStatusLines = new TmuxStatusLines({

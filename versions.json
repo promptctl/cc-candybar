@@ -4,15 +4,22 @@
     {
       "version": "pr-789",
       "ref": "refs/pull/789/merge",
-      "sha": "c044358ebf0d6377faf43df0a3c10a59c6c573cc",
-      "timestamp": "2026-11-17T21:59:23.697Z",
+      "sha": "c7950e2406eda195327395b20ea5ff02bed7b140",
+      "timestamp": "2026-11-17T22:20:03.424Z",
       "commits": [
         {
-          "sha": "c044358ebf0d6377faf43df0a3c10a59c6c573cc",
+          "sha": "c7950e2406eda195327395b20ea5ff02bed7b140",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T21:58:10Z",
-          "message": "Merge e895aae55d142491ee82ca92bed8e05747a15d0a into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+          "timestamp": "2026-11-17T22:19:12Z",
+          "message": "Merge e7c4324dd1d2ac6e7d82f5bbbc877f128741ce82 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "e7c4324dd1d2ac6e7d82f5bbbc877f128741ce82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T15:18:59-07:00",
+          "message": "fix(daemon): a pane is acted in only as this daemon's requests reported it, every store restores whatever another threw, and a restored history is bounded (uh4)\n\nFrom the medium review:\n- The host acts in a pane only when a request since it started reported\n  that pane for the session: a context read back from before names a pane\n  id tmux may since have given another program.\n- A store whose restore throws no longer leaves the stores after it\n  unrestored; a document no start handed in is again the empty one, which\n  the page's unarmed daemon serves with.\n- A history handed in over the bounds is held within them.\n- One run-each-throw-all, safe for a thrown non-Error.\n"
         },
         {
           "sha": "e895aae55d142491ee82ca92bed8e05747a15d0a",
