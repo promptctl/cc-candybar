@@ -47954,10 +47954,10 @@ function wheel(curve, z) {
     const { colors, fills, depth, theme: theme24 } = drawn;
     const own2 = (terminal, color) => !terminal && colors.has(color.hex);
     const boundWith = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
-    const keyOf2 = (color, bound) => `${color.hex} ${bound}`;
+    const keyOf3 = (color, bound) => `${color.hex} ${bound}`;
     const bounds = settled3.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
       const other = side === "fg" ? "bg" : "fg";
-      return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
+      return own2(pair.terminal[side], pair[side]) ? keyOf3(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
     const indexed = measuredIndexed(depth, theme24);
     const placeOf3 = segmentsOf(drawn);
@@ -47965,10 +47965,10 @@ function wheel(curve, z) {
       const written3 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
         const turn = hueTurned(color, turned(place, t2));
-        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf2(color, bound)) ?? UNBOUNDED);
+        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf3(color, bound)) ?? UNBOUNDED);
       };
       const write = (color, bound, place) => {
-        const key = `${keyOf2(color, bound)} ${place.row}:${place.centre}`;
+        const key = `${keyOf3(color, bound)} ${place.row}:${place.centre}`;
         const found2 = written3.get(key) ?? choose(color, bound, place);
         written3.set(key, found2);
         return found2;
@@ -50570,20 +50570,26 @@ var EffectSessions = class {
   // fresh one, held only once its frame is kept. Keyed for noise by session
   // alone, so both surfaces draw the same effect.
   of(sessionId2, surface) {
-    return this.memories.get(`${surface}:${sessionId2}`) ?? new SessionEffects(sessionId2);
+    return this.memories.get(keyOf(sessionId2, surface))?.effects ?? new SessionEffects(sessionId2);
   }
   // [LAW:single-enforcer] The one writer: the turn that drew the frame keeps
   // the memory it returned, as the most recently rendered.
   keep(sessionId2, surface, motion) {
-    const known = this.of(sessionId2, surface);
-    known.keep(motion);
-    const key = `${surface}:${sessionId2}`;
+    const effects = this.of(sessionId2, surface);
+    effects.keep(motion);
+    const key = keyOf(sessionId2, surface);
     this.memories.delete(key);
-    this.memories.set(key, known);
+    this.memories.set(key, { session: sessionId2, effects });
     for (const oldest of this.memories.keys()) {
       if (this.memories.size <= this.maxMemories) break;
       this.memories.delete(oldest);
     }
+  }
+  // A retired session's memory goes with it, on every surface: its rows are
+  // held nowhere else, and it will never be drawn again.
+  retire(sessionId2) {
+    for (const [key, { session }] of this.memories)
+      if (session === sessionId2) this.memories.delete(key);
   }
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
   // effect made for a row keeps rich-js's settled shares, so their count is the
@@ -50591,13 +50597,14 @@ var EffectSessions = class {
   getStats() {
     let effects = 0;
     const sessions = /* @__PURE__ */ new Set();
-    for (const [key, memory] of this.memories) {
-      effects += memory.heldCount;
-      sessions.add(key.slice(key.indexOf(":") + 1));
+    for (const memory of this.memories.values()) {
+      effects += memory.effects.heldCount;
+      sessions.add(memory.session);
     }
     return { sessions: sessions.size, effects };
   }
 };
+var keyOf = (sessionId2, surface) => `${surface}:${sessionId2}`;
 
 // src/render/strip.ts
 var UNBOUNDED_DRAW_WIDTH = 80;
@@ -85574,6 +85581,8 @@ function retireSession(parts, session) {
     parts.worldStates.drop(session);
     parts.renderCache.retireSession(session);
   });
+  parts.effectSessions.retire(session);
+  parts.renderWarnings.retire(session);
 }
 function holdSessionAt(parts, req) {
   const { projectDir, cwd: cwd2, target } = req.requested;
@@ -89192,7 +89201,7 @@ var RenderWarningRecords = class {
   records = /* @__PURE__ */ new Map();
   // The warnings `by` last recorded for `sessionId`; none before its first.
   of(sessionId2, by) {
-    return this.records.get(keyOf(sessionId2, by))?.warnings ?? [];
+    return this.records.get(keyOf2(sessionId2, by))?.warnings ?? [];
   }
   // The session's warnings as `by` draws them in `scope`: its own record, and
   // every other renderer's drawn from the same config, each warning once
@@ -89201,7 +89210,7 @@ var RenderWarningRecords = class {
     const generation = configGeneration(scope.config);
     const listed = [];
     for (const renderer of RENDERERS2) {
-      const held = this.records.get(keyOf(sessionId2, renderer));
+      const held = this.records.get(keyOf2(sessionId2, renderer));
       const own2 = renderer === by ? this.of(sessionId2, by) : held?.generation === generation ? held.warnings : [];
       const earlier = listed.map((w) => JSON.stringify(w));
       for (const w of own2) {
@@ -89220,7 +89229,7 @@ var RenderWarningRecords = class {
   // [LAW:single-enforcer] The one writer: the turn that drew a frame records
   // what it warned.
   keep(sessionId2, by, scope, warnings) {
-    const key = keyOf(sessionId2, by);
+    const key = keyOf2(sessionId2, by);
     this.records.delete(key);
     this.records.set(key, {
       generation: configGeneration(scope.config),
@@ -89231,8 +89240,13 @@ var RenderWarningRecords = class {
       this.records.delete(oldest);
     }
   }
+  // A retired session's records go with it: no renderer draws it again.
+  retire(sessionId2) {
+    for (const renderer of RENDERERS2)
+      this.records.delete(keyOf2(sessionId2, renderer));
+  }
 };
-var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
+var keyOf2 = (sessionId2, by) => `${by}\0${sessionId2}`;
 
 // src/renderer/acts.ts
 init_globals();
@@ -91670,8 +91684,8 @@ async function transcriptReads2(edge, said2) {
 }
 var readSettings = (at) => asked(() => readSettingsChain(at));
 function settingsChains(originAt, bars) {
-  const keyOf2 = (at) => JSON.stringify([at.managedDir, at.projectDir, at.userFile]);
-  const originKey = keyOf2(originAt);
+  const keyOf3 = (at) => JSON.stringify([at.managedDir, at.projectDir, at.userFile]);
+  const originKey = keyOf3(originAt);
   const atOrigin = [];
   const others = /* @__PURE__ */ new Map();
   for (const bar of bars) {
@@ -91680,7 +91694,7 @@ function settingsChains(originAt, bars) {
       projectDir: bar.projectDir,
       userFile: claudeSettingsPath(bar.claudeConfigDir)
     };
-    const key = keyOf2(at);
+    const key = keyOf3(at);
     if (key === originKey) {
       atOrigin.push(bar);
     } else {

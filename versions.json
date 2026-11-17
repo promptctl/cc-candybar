@@ -4,15 +4,22 @@
     {
       "version": "pr-784",
       "ref": "refs/pull/784/merge",
-      "sha": "1c83709d7a3cfdf999833d9fcabe30b120db39f1",
-      "timestamp": "2026-11-17T10:48:27.398Z",
+      "sha": "c6c4bc7354b34bcf7804573f53a471f92216e041",
+      "timestamp": "2026-11-17T10:56:47.351Z",
       "commits": [
         {
-          "sha": "1c83709d7a3cfdf999833d9fcabe30b120db39f1",
+          "sha": "c6c4bc7354b34bcf7804573f53a471f92216e041",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T10:47:26Z",
-          "message": "Merge e0865aeaacac33c22b2b9c791a265ae4fd3595ee into 681357616352fb4f7476a7b1035b61a244971844\n"
+          "timestamp": "2026-11-17T10:55:44Z",
+          "message": "Merge 5c0f07ed982f9630dd195b7aee08cf0659892c32 into 681357616352fb4f7476a7b1035b61a244971844\n"
+        },
+        {
+          "sha": "5c0f07ed982f9630dd195b7aee08cf0659892c32",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T03:55:33-07:00",
+          "message": "fix(renderer): a retired session's draw memory and warning records go with it (0ol)\n\nThe frame record used to die with the view. Kept per session and surface,\nit now outlived the session that drew it until the LRU cap pushed it out.\nThe retire turn drops each surface's memory and warning records, and the\neffect store holds each memory beside its session id, so stats count\nsessions without parsing keys.\n"
         },
         {
           "sha": "e0865aeaacac33c22b2b9c791a265ae4fd3595ee",
