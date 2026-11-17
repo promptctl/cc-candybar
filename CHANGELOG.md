@@ -1,3 +1,9 @@
+## [1.229.0](https://github.com/promptctl/cc-candybar/compare/v1.228.0...v1.229.0) (2026-11-17)
+
+### Features
+
+* **daemon:** config arrives as an origin's snapshot, and the renderer opens no config file (adf) ([#787](https://github.com/promptctl/cc-candybar/issues/787)) ([45cc4f8](https://github.com/promptctl/cc-candybar/commit/45cc4f8851226aaa029031cb25210d65fa4b0366))
+
 ## [1.228.0](https://github.com/promptctl/cc-candybar/compare/v1.227.0...v1.228.0) (2026-11-17)
 
 ### Features
