@@ -461,10 +461,13 @@ export function mainRendererOf(
   const documents = new HeldDocuments(inputs.stored.doctor);
   // [LAW:one-source-of-truth] What the turn moved of every store, in the
   // order each store's entries last moved.
+  // [LAW:no-silent-failure] The documents first: theirs is the drain that can
+  // throw, and a throw there leaves the other stores' writes undrained, told
+  // with the next turn's.
   const drained = (): StoreWrite[] => [
+    ...documents.drain(),
     ...sessionState.drain(),
     ...settingsHistory.drain(),
-    ...documents.drain(),
   ];
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;

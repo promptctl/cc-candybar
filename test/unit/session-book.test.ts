@@ -199,6 +199,14 @@ describe("the book", () => {
     expect(saves.at(-1)).toEqual({ [S1]: durable("/q") });
   });
 
+  test("the load saves the merged book, so a save made before it never lands alone", () => {
+    const { storage: kept, saves } = storage(new Map([[S2, durable("/q")]]));
+    const book = new SessionBook(kept);
+    book.heard(request("s1", "/p"));
+    book.load();
+    expect(saves.at(-1)).toEqual({ [S2]: durable("/q"), [S1]: durable("/p") });
+  });
+
   test("a request that moves only the Claude Code directory is saved again", () => {
     const { storage: kept, saves } = storage();
     const book = new SessionBook(kept);

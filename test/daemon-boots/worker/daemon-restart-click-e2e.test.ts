@@ -89,7 +89,7 @@ test("a click after a restart writes the session's own config, and types into no
 
     const refused = await clickAnswer(second, linkTo(bar, "COMPACT"));
     expect(saidOf(refused)).toMatch(
-      /has not been heard since the daemon started.*\(BAD_REQUEST\)$/,
+      /the daemon holds no request of session .*\(BAD_REQUEST\)$/,
     );
     expect(typed).toEqual(["%7"]);
 

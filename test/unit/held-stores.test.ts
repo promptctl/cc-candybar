@@ -38,7 +38,7 @@ test("a history its file refuses throws, and the step is still held", () => {
       { store: "settings-history", key: S1, value: STEP },
       { store: "session-state", key: S1, value: { pick: "a" } },
     ]),
-  ).toThrow("stored: ENOSPC: no space left on device");
+  ).toThrow("ENOSPC: no space left on device");
   expect(stores.current().history[S1]).toEqual(STEP);
   expect(stores.current().sessions[S1]).toEqual({ pick: "a" });
 });
@@ -55,7 +55,7 @@ test("a document its file refuses throws, and the copy is still held", () => {
     },
   });
   expect(() => stores.take([{ store: "clicked", value: ["Ghostty"] }])).toThrow(
-    "stored: clicked not filed: EROFS: read-only",
+    "clicked not filed: EROFS: read-only",
   );
   expect(stores.documents().clicked).toEqual({
     kind: "ok",
@@ -80,7 +80,7 @@ test("a document filed over one that did not read is refused, and nothing is wri
     },
   });
   expect(() => stores.take([{ store: "marks", value: {} }])).toThrow(
-    "stored: the renderer filed marks, which did not read; nothing was written",
+    "the renderer filed marks, which did not read; nothing was written",
   );
   expect(written).toBe(false);
 });

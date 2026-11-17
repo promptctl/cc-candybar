@@ -713,10 +713,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const serve = (): void => {
     closing.signal.throwIfAborted();
     if (served) return;
-    served = true;
     stores.load();
     sessionBook.load();
     link.serve();
+    // [LAW:no-silent-failure] Served once every step has: a step that threw
+    // is thrown to its caller, and the next ask serves again.
+    served = true;
   };
   const parts: DaemonParts = {
     closing: closing.signal,
@@ -825,7 +827,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       link.arm();
     },
     async close() {
-      // The renderer's three steps of the teardown, each awaited where it
+      // The renderer's steps of the teardown, each awaited where it
       // stands: the renderer takes them in the order they are sent.
       const rendererStep =
         (kind: "close-journal" | "close-views") => (): Promise<unknown> =>

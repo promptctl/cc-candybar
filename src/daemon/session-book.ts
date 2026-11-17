@@ -89,6 +89,9 @@ export class SessionBook {
     );
     for (const [session, durable] of heard) this.book.set(session, durable);
     this.bound();
+    // [LAW:one-source-of-truth] The merged book is what lands, so a save the
+    // sessions heard first made never lands over the file's sessions.
+    this.storage.save(Object.fromEntries(this.book));
   }
 
   // The session's newest request: what it says the session is, kept when it

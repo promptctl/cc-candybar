@@ -1390,12 +1390,13 @@ const slash: VerbHandler = (value, ctx) => {
     );
   }
   // [LAW:no-silent-failure] The pane the session's live request names: one
-  // read back after a restart may be another session's by now, so a session
-  // not heard since is typed into nowhere until its next request.
+  // read back from the book may be another session's by now, so a session
+  // whose request the daemon does not hold is typed into nowhere until its
+  // next request.
   const live = contextFor(ctx.context, sid)?.live ?? null;
   if (live === null)
     throw new BadVerbArgs(
-      `${line} was not typed: session ${sid} has not been heard since the daemon started, so its pane is not known until its next request`,
+      `${line} was not typed: the daemon holds no request of session ${sid}, so its pane is not known until its next request`,
     );
   const pane = tmuxPaneOf(live.hints.tmux);
   if (pane.kind === "refused")
