@@ -4,15 +4,22 @@
     {
       "version": "pr-781",
       "ref": "refs/pull/781/merge",
-      "sha": "6722fc7c5a18b7f6808d20df20a326b1874ef91d",
-      "timestamp": "2026-11-17T05:57:26.458Z",
+      "sha": "1c85b0599042474d1fe38d54c9b5f29fb268757b",
+      "timestamp": "2026-11-17T06:24:11.871Z",
       "commits": [
         {
-          "sha": "6722fc7c5a18b7f6808d20df20a326b1874ef91d",
+          "sha": "1c85b0599042474d1fe38d54c9b5f29fb268757b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T22:56:14-07:00",
-          "message": "Merge 01df73f0167ebae866ece54ffcaea7d80b61411e into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T06:23:04Z",
+          "message": "Merge 753cfa2afa44bef81fb190da291a97aa8aaa8897 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+        },
+        {
+          "sha": "753cfa2afa44bef81fb190da291a97aa8aaa8897",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T23:22:44-07:00",
+          "message": "fix(renderer): every turn is made at its slot's instant, a push's subscriptions are taken in its slot, and a deferral that throws leaves the rest due (883)\n\n- The host reads each input's instant as its slot comes up, so the renderer's\n  time never runs backwards between turns; ask and tell take no instant.\n- A push's subscriptions are taken inside its own slot, and none once the\n  daemon's close has begun.\n- TurnTime runs what fell due one at a time: a throw fails the turn and those\n  behind it stay due.\n- A start turn applies who follows before configuring sessions.\n- The render event's at= is the draw's instant; turn lines say took=, and the\n  render event says configured= beside drew=.\n- Stale pointers to the host's idle clock and an async admission removed.\n"
         },
         {
           "sha": "01df73f0167ebae866ece54ffcaea7d80b61411e",
