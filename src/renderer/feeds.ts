@@ -221,7 +221,8 @@ export class Feeds {
   // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each
   // drawn into `frames` and its next set, in the order the feeds opened. Each
   // feed is its own error boundary, so one that throws keeps no other's frame
-  // from going out.
+  // from going out, and it is due again a still period on: a feed that throws
+  // on every frame throws once a still period, never at every turn.
   drawDue(readings: Readings, frames: PushedFrame[]): void {
     const { tick } = readings;
     runEach(
@@ -233,10 +234,15 @@ export class Feeds {
         )
         .map(({ feed, next }) => () => {
           recordMs(feed.lateness, (tick - next) * 1000);
-          const frame = this.drawOne(feed, readings);
-          if (frame !== null) frames.push(frame);
-          if (tick - feed.summarizedAt >= SUMMARY_EVERY_S)
-            this.summarize(feed, "running", tick);
+          try {
+            const frame = this.drawOne(feed, readings);
+            if (frame !== null) frames.push(frame);
+            if (tick - feed.summarizedAt >= SUMMARY_EVERY_S)
+              this.summarize(feed, "running", tick);
+          } catch (thrown) {
+            feed.next = (tick + this.deps.periods.still / 1000) as Tick;
+            throw thrown;
+          }
         }),
     );
   }

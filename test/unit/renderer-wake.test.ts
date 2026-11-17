@@ -140,6 +140,32 @@ test("a failed `due` that waited past its tick is held a second from when it ans
   expect(r.live().map((t) => t.at)).toEqual([4000 + FAILED_DUE_HOLD_S * 1000]);
 });
 
+test("a failed `due` whose turn declares a later tick is armed for it unheld, and one declaring none later is held; the run is said once", async () => {
+  // Each turn declares tick 5, as the host takes a turn's wake before the
+  // `due` it answered resolves.
+  const r: ReturnType<typeof rig> = rig(() => {
+    r.wake.declare(tick(5));
+    return failure("threw");
+  });
+  r.wake.declare(tick(1));
+  await r.fire();
+  // Its owners moved on: armed for the tick it declared.
+  expect(r.live().map((t) => t.at)).toEqual([5000]);
+  await r.fire();
+  // The due at 5 declared 5 again: nothing moved on, so it is held.
+  expect(r.live().map((t) => t.at)).toEqual([5000 + FAILED_DUE_HOLD_S * 1000]);
+  expect(r.said).toHaveLength(1);
+});
+
+test("a tick further off than Node's longest timer arms the longest, which waits out the rest", async () => {
+  const r = rig();
+  r.wake.declare(tick(60 * 60 * 24 * 365));
+  expect(r.live().map((t) => t.at)).toEqual([2 ** 31 - 1]);
+  await r.fire();
+  expect(r.dues).toEqual([]);
+  expect(r.live()).toHaveLength(1);
+});
+
 test("a `due` no renderer was live to take leaves the wake idle for the next renderer's start", async () => {
   const r = rig(() => failure("down"));
   r.wake.declare(tick(1));

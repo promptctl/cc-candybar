@@ -345,6 +345,63 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
   expect(heard).toEqual(["retire", "due", "retire"]);
 });
 
+test("the wake arms its next `due` once the renderer answered, while an act its `due` returned is still on its way", async () => {
+  const fire: Array<() => void> = [];
+  const read = { wall: 0, mono: 0 };
+  let finish = (): void => {};
+  const acted = new Promise<void>((resolve) => (finish = resolve));
+  const host = rendererHost(
+    "main",
+    {
+      ...clockAt(read),
+      after: (_ms: number, run: () => void) => {
+        fire.push(run);
+        return () => {};
+      },
+    },
+    held(
+      rendererOf({
+        event: async (input) => ({
+          ...answered(),
+          effects:
+            input.event.kind === "due"
+              ? [{ kind: "copy", id: 1 as never, session: null, text: "x" }]
+              : [],
+          subscriptions: { ...NONE, wake: (read.mono / 1000 + 1) as Tick },
+        }),
+        adapter: async () => {
+          throw new Error("no push here");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    {
+      ...NO_ACTS,
+      perform: async () => {
+        await acted;
+        return { kind: "ok" };
+      },
+    },
+  );
+  await host.deliver(
+    () => ({ kind: "event", event: { kind: "retire", session: "s" as never } }),
+    [],
+  );
+  read.mono = 1000;
+  fire[0]!();
+  await settled();
+  // The copy has not ended, and the next `due` is armed all the same.
+  expect(fire).toHaveLength(2);
+  finish();
+  await settled();
+});
+
 test("a `due` waits behind every input that arrives while it waits, so a click that has arrived lands before an idle close", async () => {
   const fire: Array<() => void> = [];
   const heard: string[] = [];

@@ -148,6 +148,8 @@ describe("a feed's life", () => {
     const frames: PushedFrame[] = [];
     expect(() => r.feeds.drawDue(r.readings(0), frames)).toThrow("s broke");
     expect(frames.map((f) => f.session)).toEqual([T]);
+    // The feed that threw is due again a still period on, never at once.
+    expect(r.feeds.next()).toBe(PERIODS.still / 1000);
   });
 
   test("a frame is drawn with the lanes that follow the session, and its answers handed on as the session's frame", () => {

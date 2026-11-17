@@ -408,14 +408,13 @@ export function rendererHost(
     }
   };
 
-  // One input from its arrival to its settling: made in its slot, and its
-  // acts settled after it. `event` is null when its make failed, so no input
-  // was made.
-  const taken = async (
+  // One input through its slot: made there, and answered, its acts still
+  // settling. `event` is null when its make failed, so no input was made.
+  const throughSlot = (
     make: () => Made,
-    at: Place = "last",
-  ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
-    const { event, slotted } = await inMailbox(async (queuedMs, holds) => {
+    at: Place,
+  ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> =>
+    inMailbox(async (queuedMs, holds) => {
       // [LAW:no-silent-failure] A make that threw is the turn's failure.
       let made: Made;
       try {
@@ -431,6 +430,13 @@ export function rendererHost(
         slotted: await inSlot(stamped(made), queuedMs),
       };
     }, at);
+  // One input from its arrival to its settling: its acts settled after its
+  // slot.
+  const taken = async (
+    make: () => Made,
+    at: Place = "last",
+  ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
+    const { event, slotted } = await throughSlot(make, at);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled },
@@ -507,11 +513,16 @@ export function rendererHost(
   // once the wake has closed.
   // [LAW:no-ambient-temporal-coupling] A `due` is the renderer's idle work:
   // every input that arrives while it waits goes ahead of it, so a click that
-  // has arrived lands before an idle close reads its session idle.
+  // has arrived lands before an idle close reads its session idle. The wake
+  // hears the turn once the renderer has answered it: the acts it returned
+  // settle on their own, and hold back no later `due`.
   const wake: RendererWake = new RendererWake({
     clock,
     due: async () => {
-      const { event, turn } = await taken(
+      const {
+        event,
+        slotted: { turn },
+      } = await throughSlot(
         () =>
           wake.closed()
             ? {

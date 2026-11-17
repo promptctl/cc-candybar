@@ -18,9 +18,14 @@ import {
 } from "./foundations/durations.js";
 import type { Failure } from "./foundations/verb-error.js";
 
-// How long a `due` that failed holds every later wake off: a renderer whose
-// due turn throws, and declares the same tick, is not handed it again at once.
+// How long a `due` that failed holds every later wake off when its turn asks
+// for a tick no later than its own: a renderer whose due turn throws before
+// any owner of the tick moved on is not handed it again at once.
 export const FAILED_DUE_HOLD_S = 1;
+
+// The longest timer the wake arms: Node runs a longer one at once, and one
+// that fires early waits out the rest.
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
 
 // How often the wake writes its summary to the log.
 const SUMMARY_EVERY_S = 60;
@@ -58,9 +63,11 @@ export class RendererWake {
   private state: State = { kind: "idle" };
   // The tick the renderer last declared, whatever state the wake was in.
   private declared: Tick | null = null;
-  // The tick no wake is armed before, after a `due` failed; null while the
-  // dues answer.
+  // The tick no wake is armed before, after a `due` failed declaring no later
+  // tick; null otherwise.
   private heldUntil: Tick | null = null;
+  // Whether the last `due` failed: a run of failures is said once.
+  private failing = false;
   // [LAW:nothing-unseen] Every `due` turn the renderer answered, by how long
   // it took: what drawing the frames, closing idle menus and running held
   // work costs, read from the log.
@@ -109,7 +116,10 @@ export class RendererWake {
 
   private timer(tick: Tick): () => void {
     const { clock } = this.deps;
-    const ms = Math.max(0, (tick - tickAt(clock)) * 1000);
+    const ms = Math.min(
+      LONGEST_TIMER_MS,
+      Math.max(0, (tick - tickAt(clock)) * 1000),
+    );
     return clock.after(ms, () => {
       if (this.state.kind !== "armed" || this.state.tick !== tick) return;
       // Fired early: the rest is waited out.
@@ -118,11 +128,11 @@ export class RendererWake {
         return;
       }
       this.state = { kind: "queued" };
-      void this.deps.due().then((ended) => this.answered(ended));
+      void this.deps.due().then((ended) => this.answered(tick, ended));
     });
   }
 
-  private answered(ended: DueEnded): void {
+  private answered(tick: Tick, ended: DueEnded): void {
     if (this.state.kind === "closed") return;
     this.state = { kind: "idle" };
     if (ended.turnMs !== null) {
@@ -132,6 +142,7 @@ export class RendererWake {
     const now = tickAt(this.deps.clock);
     if (now - this.summarizedAt >= SUMMARY_EVERY_S) this.summarize("running");
     if (ended.kind === "answered") {
+      this.failing = false;
       this.heldUntil = null;
       this.arm();
       return;
@@ -140,13 +151,19 @@ export class RendererWake {
     // says so, and the next renderer's start declares its own wake.
     if (ended.failure.kind === "down") return;
     this.failed++;
-    if (this.heldUntil === null)
-      this.deps.said(
-        `the renderer's due turn failed, so what it holds for later waits ${FAILED_DUE_HOLD_S}s between tries: ${ended.failure.detail}`,
-      );
-    // [LAW:no-ambient-temporal-coupling] Held from when it answered: a `due`
-    // that waited in the mailbox past its tick is not tried again at once.
-    this.heldUntil = (now + FAILED_DUE_HOLD_S) as Tick;
+    if (!this.failing)
+      this.deps.said(`the renderer's due turn failed: ${ended.failure.detail}`);
+    this.failing = true;
+    // [LAW:no-ambient-temporal-coupling] Each owner of a tick moves its own
+    // work on when it fails, so a failed `due` whose turn declares a later
+    // tick is armed for it. One that declares no later tick failed before any
+    // owner moved on, and would be handed in again at once: it is held a
+    // second from when it answered, not from its tick, which a `due` that
+    // waited in the mailbox is already past.
+    this.heldUntil =
+      this.declared !== null && this.declared <= tick
+        ? ((now + FAILED_DUE_HOLD_S) as Tick)
+        : null;
     this.arm();
   }
 
