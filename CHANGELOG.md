@@ -1,3 +1,9 @@
+## [1.225.1](https://github.com/promptctl/cc-candybar/compare/v1.225.0...v1.225.1) (2026-11-17)
+
+### Bug Fixes
+
+* **daemon:** once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (w8l) ([#778](https://github.com/promptctl/cc-candybar/issues/778)) ([78cebd1](https://github.com/promptctl/cc-candybar/commit/78cebd1db6caad5c0c7815f4c9c14e0f86e76157))
+
 ## [1.225.0](https://github.com/promptctl/cc-candybar/compare/v1.224.0...v1.225.0) (2026-11-16)
 
 ### Features
