@@ -4,15 +4,22 @@
     {
       "version": "pr-781",
       "ref": "refs/pull/781/merge",
-      "sha": "1c85b0599042474d1fe38d54c9b5f29fb268757b",
-      "timestamp": "2026-11-17T06:24:11.871Z",
+      "sha": "1ed8de123ba17cb49b0dd0dba1f416d739af68c1",
+      "timestamp": "2026-11-17T06:36:35.462Z",
       "commits": [
         {
-          "sha": "1c85b0599042474d1fe38d54c9b5f29fb268757b",
+          "sha": "1ed8de123ba17cb49b0dd0dba1f416d739af68c1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T06:23:04Z",
-          "message": "Merge 753cfa2afa44bef81fb190da291a97aa8aaa8897 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T06:35:23Z",
+          "message": "Merge b3364b62e6d788eda7c63405b6f801d2ff9fd2ce into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+        },
+        {
+          "sha": "b3364b62e6d788eda7c63405b6f801d2ff9fd2ce",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T23:35:12-07:00",
+          "message": "fix(renderer): a due after the close is refused, a cancelled deferral never runs, and the idle close resolves by the session's own context (883)\n\n- The wake closes before any renderer step of the teardown, and a due queued\n  behind one is refused when its slot comes.\n- TurnTime takes each due deferral from what is still held, so one cancelled\n  in the same turn does not run.\n- MenuIdle keeps no draw instant: turns run one at a time, so the last draw is\n  the newest whatever the wall clock reads.\n- The idle close resolves by the newest context the session's config handed\n  in, kept until its retire, not by a view that may be evicted.\n- A pushed frame carries its answers as the renderer serialized them, so the\n  host sends them as they are; one Answers type for both.\n- viewersChanged takes no argument: the viewers are read as its turn comes.\n"
         },
         {
           "sha": "753cfa2afa44bef81fb190da291a97aa8aaa8897",
