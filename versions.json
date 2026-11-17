@@ -2,53 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-778",
-      "ref": "refs/pull/778/merge",
-      "sha": "bee88a1c1d26e35b73eebd0dc4892e5c8780a8ed",
-      "timestamp": "2026-11-17T00:05:01.518Z",
-      "commits": [
-        {
-          "sha": "bee88a1c1d26e35b73eebd0dc4892e5c8780a8ed",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T00:04:04Z",
-          "message": "Merge 0d0bfc43e4e45a0b1a10e360ca8e5ea127542068 into f7b534decc639ec52823196d83f2e7c8e3190c71\n"
-        },
-        {
-          "sha": "0d0bfc43e4e45a0b1a10e360ca8e5ea127542068",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T17:03:47-07:00",
-          "message": "fix(daemon): a renderer that ends in the close before the close ended it is a warning (candybar-host-renderer-x96a.w8l)\n"
-        },
-        {
-          "sha": "831737db7a15bcb9e45591aaae048031c508ec43",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T16:59:42-07:00",
-          "message": "fix(daemon): the closed phase holds the end its close awaits, and the close's beginning is named beginClose (candybar-host-renderer-x96a.w8l)\n\nHigh review of #778: the boot ended at the close's start is carried on the\nclosed phase rather than in a variable beside it; the link's method no longer\nshares the daemon's closing signal's name; the ping test answers the boot's\nping so only a ping sent in the close can judge the hang; the close test reads\nthe setting's value from the session file.\n"
-        },
-        {
-          "sha": "f4eb16c29cb62a325412d7c5bdc82c5503108f7e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T16:51:45-07:00",
-          "message": "fix(daemon): once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (candybar-host-renderer-x96a.w8l)\n\nThe teardown's first step tells the renderer link the close has begun: a live renderer stays to take the close's steps and is still pinged, a boot under way ends with the close grace, a down renderer's retry is cancelled, and an end in the close is logged and starts nothing. The session-state flush stays an ask the host judges.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "f7b534decc639ec52823196d83f2e7c8e3190c71",
-      "timestamp": "2026-11-16T23:33:59.170Z",
+      "sha": "78cebd1db6caad5c0c7815f4c9c14e0f86e76157",
+      "timestamp": "2026-11-17T00:11:26.714Z",
       "commits": [
         {
-          "sha": "f7b534decc639ec52823196d83f2e7c8e3190c71",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-16T23:33:02Z",
-          "message": "chore(release): set `package.json` to 1.225.0\n\n## [1.225.0](https://github.com/promptctl/cc-candybar/compare/v1.224.0...v1.225.0) (2026-11-16)\n\n### Features\n\n* **config:** every config write names its layer, and save offers each layer the session can write ([#776](https://github.com/promptctl/cc-candybar/issues/776)) ([b4de6bf](https://github.com/promptctl/cc-candybar/commit/b4de6bf0870b9a6462b1b7aa4c3469acf2415a29))\n"
+          "sha": "78cebd1db6caad5c0c7815f4c9c14e0f86e76157",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T17:10:28-07:00",
+          "message": "fix(daemon): once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (w8l) (#778)\n\n* fix(daemon): once the close begins no renderer starts, and the renderer's own flush reports a turn that threw (candybar-host-renderer-x96a.w8l)\n\nThe teardown's first step tells the renderer link the close has begun: a live renderer stays to take the close's steps and is still pinged, a boot under way ends with the close grace, a down renderer's retry is cancelled, and an end in the close is logged and starts nothing. The session-state flush stays an ask the host judges.\n\n* fix(daemon): the closed phase holds the end its close awaits, and the close's beginning is named beginClose (candybar-host-renderer-x96a.w8l)\n\nHigh review of #778: the boot ended at the close's start is carried on the\nclosed phase rather than in a variable beside it; the link's method no longer\nshares the daemon's closing signal's name; the ping test answers the boot's\nping so only a ping sent in the close can judge the hang; the close test reads\nthe setting's value from the session file.\n\n* fix(daemon): a renderer that ends in the close before the close ended it is a warning (candybar-host-renderer-x96a.w8l)"
         }
       ]
     }
