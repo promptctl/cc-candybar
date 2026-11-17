@@ -58248,6 +58248,8 @@ function setValue(text4, path44, valueText, dialect) {
 }
 function insertValue(text4, path44, valueText, dialect, precedes) {
   const parentPath = path44.slice(0, -1);
+  if (/^\s*$/.test(text4) && parentPath.length === 0)
+    return setValue(text4, path44, valueText, dialect);
   const leaf = path44[path44.length - 1];
   const parent = nodeAt(parseDocument(text4), parentPath);
   if (leaf === void 0 || parent?.kind !== "object")
@@ -59846,14 +59848,14 @@ function doctorFacts(machine, install2, load, target, stores, urlHandler2) {
     install: install2
   };
 }
-var writableSettingsFiles = (reading) => reading.kind === "failed" ? [] : [
-  reading.machine.claudeSettings.origin,
-  ...reading.machine.claudeSettings.elsewhere
-].flatMap(({ at }) => [
+var chainsOf = (settings) => [settings.origin, ...settings.elsewhere];
+var writableSettingsFiles = ({
+  machine
+}) => chainsOf(machine.claudeSettings).flatMap(({ at }) => [
   at.userFile,
   projectLocalSettingsFile(at.projectDir)
 ]);
-var readSources = (settings) => [settings.origin, ...settings.elsewhere].flatMap(
+var readSources = (settings) => chainsOf(settings).flatMap(
   ({ sources }) => sources.kind === "ok" ? sources.value : []
 );
 var readThrough = (through) => (current2) => current2.through === null || laterIdentity(through, current2.through) ? { through } : current2;
@@ -72079,6 +72081,7 @@ function capturing(pattern2) {
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
+var writableOf = ({ doctor }, kept) => doctor.kind === "ok" ? writableSettingsFiles(doctor.value) : kept;
 var locatorOf = (req) => ({
   hookData: req.hookData,
   cwd: req.cwd,
@@ -72210,12 +72213,11 @@ var Collector = class {
       record2.turns--;
     };
   }
-  // [LAW:single-enforcer] The settings files the session's doctor reading,
-  // as its latest document carries it, handed in: the only ones a
-  // `claude-settings` change of the session may write.
+  // [LAW:single-enforcer] The settings files the session's latest doctor
+  // reading handed in: the only ones a `claude-settings` change of the
+  // session may write.
   writableSettings(session) {
-    const doctor = this.records.get(session)?.stamped.document.doctor;
-    return doctor?.kind === "ok" ? writableSettingsFiles(doctor.value) : [];
+    return this.records.get(session)?.stamped.writable ?? [];
   }
   // Each session the collector reads now, with its latest stamp: what a
   // renderer's complete start configures again. Unlike a request, it marks no
@@ -72272,7 +72274,11 @@ var Collector = class {
       reader.holds.close();
       throw e;
     }
-    const stamped = { document, from: first2 };
+    const stamped = {
+      document,
+      from: first2,
+      writable: writableOf(document, [])
+    };
     return {
       session,
       stamped,
@@ -72400,6 +72406,7 @@ var Collector = class {
       );
     stamped.document = next;
     stamped.from = moved;
+    stamped.writable = writableOf(next, stamped.writable);
     return next !== prior;
   }
   assembled(prior, readings, daemon3, at) {
@@ -74540,8 +74547,10 @@ init_globals();
 init_globals();
 var import_json53 = __toESM(require_dist(), 1);
 var ABSENT3 = { kind: "absent" };
+var EMPTY_OBJECT2 = parseDocument("{}");
 function parse2(text4) {
-  if (text4 === null || /^\s*$/.test(text4)) return { kind: "none" };
+  if (text4 === null) return { kind: "none" };
+  if (/^\s*$/.test(text4)) return { kind: "document", root: EMPTY_OBJECT2 };
   try {
     return { kind: "document", root: parseDocument(text4) };
   } catch (e) {
@@ -84926,12 +84935,11 @@ function projectSpeedHistory(obs) {
 function renderWidth(hints) {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
-function awaitsReading({ builtins, sources, runs, doctor }, named3) {
+function awaitsReading({ builtins, sources, runs }, named3) {
   return [
     ...AWAITED_BUILTINS.map((name) => builtins[name]),
     ...Object.values(sources),
-    ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading),
-    doctor
+    ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading)
   ].some(awaitedReading);
 }
 var AWAITED = {
@@ -88226,6 +88234,7 @@ function sessionHints(ctx, sid) {
 function startRun(ctx, sid) {
   const origin = sessionOrigin(ctx, sid);
   ctx.doctorRuns.start(sid, {
+    at: ctx.now(),
     load: ctx.doctorLoad(origin),
     target: origin.target,
     origin: { cwd: origin.cwd, projectDir: origin.projectDir },
@@ -88280,7 +88289,7 @@ var doctorFix = async (value, ctx) => {
         throw new BadVerbArgs(`doctor-fix: ${check.label} \u2014 ${read2.reason}`);
       }
       asked2();
-      ctx.doctorRuns.report(sid, {
+      ctx.doctorRuns.report(ctx.sessionState, sid, {
         ...facts,
         daemon: { ...facts.daemon, read: read2 }
       });
@@ -88320,7 +88329,7 @@ var doctorMark = async (value, ctx) => {
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`
   );
-  ctx.doctorRuns.report(sid, { ...facts, marks });
+  ctx.doctorRuns.report(ctx.sessionState, sid, { ...facts, marks });
 };
 var slash = async (value, ctx) => {
   const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
@@ -89052,10 +89061,14 @@ var DoctorRuns = class {
   runs = /* @__PURE__ */ new Map();
   last = 0;
   // A new run of the session, replacing the one it held: a new ask, which the
-  // host reads afresh.
+  // host reads afresh. [LAW:one-source-of-truth] A run is named by the
+  // millisecond its click ran, kept rising, so a renderer that starts again
+  // names no run an earlier one asked: the host may still hold that run's
+  // reading, which would be taken for the new run's.
   start(session, request2) {
+    this.last = Math.max(Math.round(request2.at * 1e3), this.last + 1);
     this.runs.set(session, {
-      ask: doctorAsk(++this.last, request2.load, request2.pick, request2.origin, {
+      ask: doctorAsk(this.last, request2.load, request2.pick, request2.origin, {
         kind: "clicked",
         sessionId: session,
         via: request2.arrival.via
@@ -89070,32 +89083,34 @@ var DoctorRuns = class {
   running(session) {
     return this.runs.has(session);
   }
-  // [LAW:one-source-of-truth] What each session's run asks the host to read:
-  // held as long as the run, so its reading stays in the session's world
-  // state, which names the settings files a fix may write.
+  // [LAW:one-source-of-truth] What each session's unread run asks the host to
+  // read: held until its reading is in, which the run then keeps, so no world
+  // state after it carries the reading again.
   subscriptions() {
     return new Map(
-      [...this.runs].map(([session, { ask: ask2 }]) => [
-        session,
-        { kind: "doctor", ask: ask2 }
-      ])
+      [...this.runs].flatMap(
+        ([session, { ask: ask2, reading }]) => reading === null ? [[session, { kind: "doctor", ask: ask2 }]] : []
+      )
     );
   }
   // A world state taken: the first that carries the reading of its session's
-  // run writes the run's report, or shows why the reading failed.
+  // unread run writes the run's report. A failed fact is that run's: the
+  // session subscribes to no other.
   took({ session, doctor }) {
     const run3 = this.runs.get(session);
-    if (run3 === void 0 || run3.reading !== null || doctor.kind !== "ok" || doctor.value.run !== run3.ask.run)
-      return;
-    const reading = doctor.value;
-    if (reading.kind === "failed") {
+    if (run3 === void 0 || run3.reading !== null) return;
+    if (doctor.kind === "failed") {
       this.runs.delete(session);
-      this.deps.failed(session, `doctor: ${reading.reason}`);
+      this.deps.failed(session, `doctor: ${doctor.reason}`);
       return;
     }
-    run3.reading = reading;
-    const facts = this.composed(run3, reading);
-    this.report(session, { ...facts, clicked: this.filed(run3, facts) });
+    if (doctor.kind !== "ok" || doctor.value.run !== run3.ask.run) return;
+    run3.reading = doctor.value;
+    const facts = this.composed(run3, doctor.value);
+    this.report(this.deps.sessionState, session, {
+      ...facts,
+      clicked: this.filed(run3, facts)
+    });
   }
   // [LAW:single-enforcer] The session's run's facts as they stand: its
   // reading, its load, and the stores as they hold now. Null while no
@@ -89107,10 +89122,11 @@ var DoctorRuns = class {
   }
   // [LAW:single-enforcer] One write of the whole report, through setBatch —
   // the row cap flips, the reason and fixable land, in one reactive
-  // transaction.
-  report(session, facts) {
+  // transaction — into `store`: a click's journaled view, so the report is
+  // one with the rest of its click, or the session state a reading lands in.
+  report(store, session, facts) {
     const reports = runDoctor(facts);
-    this.deps.sessionState.setBatch(session, doctorReportPairs(reports));
+    store.setBatch(session, doctorReportPairs(reports));
     this.deps.log(
       "info",
       `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${session})`
@@ -92744,9 +92760,12 @@ function forgeLoginOf(cli, host, nonZero, run3) {
 }
 
 // src/daemon/cache/doctor.ts
-var MAX_ENTRIES4 = 16;
 var DoctorSource = class {
   readings;
+  // [LAW:single-enforcer] One read at a time, daemon-wide: the probes of two
+  // runs share the launcher's rate-limit windows, so two at once would have
+  // one refused. A read abandoned while it waits never starts.
+  queue = Promise.resolve();
   constructor(deps) {
     this.readings = new KeyedSource({
       name: "doctor",
@@ -92756,10 +92775,15 @@ var DoctorSource = class {
       keyOf: ({ session, ask: ask2 }) => `${session}
 ${JSON.stringify(ask2)}`,
       fields: ({ session, ask: ask2 }) => `sid=${valueOf(session)} run=${ask2.run}`,
-      read: (input) => readDoctorRun(deps, input),
+      read: (input, signal) => {
+        const start = () => signal.aborted ? Promise.resolve(failed("doctor read abandoned", "read")) : readDoctorRun({ ...deps, edge: deps.edge(signal) }, input);
+        const read2 = this.queue.then(start, start);
+        this.queue = read2;
+        return read2;
+      },
       every: () => null,
       watch: NO_WATCH,
-      maxEntries: MAX_ENTRIES4,
+      maxEntries: 0,
       lines: REFRESH_TRIGGERS,
       logger: deps.logger,
       ledger: deps.ledger,
@@ -92785,7 +92809,6 @@ async function readDoctorRun(deps, { session, hints, ask: ask2 }) {
     });
     return ok({
       run: ask2.run,
-      kind: "read",
       machine,
       // The clients that drew the session's bars, and the daemon the run
       // reached — this process.
@@ -92796,11 +92819,7 @@ async function readDoctorRun(deps, { session, hints, ask: ask2 }) {
       )
     });
   } catch (e) {
-    return ok({
-      run: ask2.run,
-      kind: "failed",
-      reason: e instanceof Error ? e.message : String(e)
-    });
+    return failed(e instanceof Error ? e.message : String(e), "read");
   }
 }
 
@@ -93098,9 +93117,13 @@ function createDaemon(inputs) {
     watchers: watcherRegistry,
     fileEvents
   });
-  const doctorEdge = inputs.doctorEdge(launcher, host);
   const doctorSource = new DoctorSource({
-    edge: doctorEdge,
+    // The doctor's edge sets no signal of its own, so each read's launches
+    // carry the read's.
+    edge: (signal) => inputs.doctorEdge(
+      { ...launcher, launch: (opts) => launcher.launch({ ...opts, signal }) },
+      host
+    ),
     sightings: (sessionId2, now2) => renderSightings.ofSession(sessionId2, now2),
     serving: () => limits.serving(),
     bundle: bundle.path,

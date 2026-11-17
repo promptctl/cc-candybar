@@ -4,15 +4,22 @@
     {
       "version": "pr-779",
       "ref": "refs/pull/779/merge",
-      "sha": "aa08fd43be4dbb36c6b88e72ea96d89ff11d6ad2",
-      "timestamp": "2026-11-17T00:55:33.429Z",
+      "sha": "a7ef8eb6509199f43651f207f593f27109d23e2e",
+      "timestamp": "2026-11-17T01:17:02.129Z",
       "commits": [
         {
-          "sha": "aa08fd43be4dbb36c6b88e72ea96d89ff11d6ad2",
+          "sha": "a7ef8eb6509199f43651f207f593f27109d23e2e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T17:54:34-07:00",
-          "message": "Merge d9be0507f43c52179c5a5f584bb2f52a439db52e into cace2e3245afefd551669afd6dd6c7b7b35875ba\n"
+          "timestamp": "2026-11-17T01:16:09Z",
+          "message": "Merge bac1370b0e5e521f30c840ece7b465e39a09c47d into cace2e3245afefd551669afd6dd6c7b7b35875ba\n"
+        },
+        {
+          "sha": "bac1370b0e5e521f30c840ece7b465e39a09c47d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T18:15:52-07:00",
+          "message": "fix(doctor): a run asks for its reading until it lands, and the host reads one run at a time (8ts)\n\nThe high review's findings on the doctor's subscription, answered by holding it\nonly as long as it is needed:\n\n- A run is named by when its click ran, kept rising, so a renderer that starts\n  again never names a run the host still holds an earlier reading for.\n- The renderer stops asking once a reading lands, so later world states no\n  longer carry the whole machine; the collector keeps the settings files the\n  latest reading named, which is what a fix may write.\n- The doctor source keeps no unheld reading, reads one run at a time (two\n  runs' probes share the rate limit's windows), and scopes each read's\n  launches to its signal, so an abandoned read leaves no probe running.\n- A failed read is the fact's own failure, the one channel, so a failure from\n  the lane's declaration ends the run instead of leaving it \"being read\".\n- No draw waits on the doctor: its read probes fonts, the terminal and the\n  forge, so the report lands in a later world state, as the PR does.\n- A mark's or a post-mortems fix's report is written through the click's\n  journaled view, one with the rest of its click.\n- A settings file holding only whitespace is an empty object to the splice,\n  as it is to every reader, so a fix inserts into it instead of refusing.\n"
         },
         {
           "sha": "d9be0507f43c52179c5a5f584bb2f52a439db52e",
