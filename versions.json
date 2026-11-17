@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-785",
-      "ref": "refs/pull/785/merge",
-      "sha": "f2865a3dd47c5959d28a7eeeff1651cad1893dd6",
-      "timestamp": "2026-11-17T11:42:40.220Z",
-      "commits": [
-        {
-          "sha": "f2865a3dd47c5959d28a7eeeff1651cad1893dd6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T11:41:45Z",
-          "message": "Merge 12c5feab2f130b990b3d77eb2b7a216fbbebf6e0 into 681357616352fb4f7476a7b1035b61a244971844\n"
-        },
-        {
-          "sha": "12c5feab2f130b990b3d77eb2b7a216fbbebf6e0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T04:41:35-07:00",
-          "message": "test(session-state): a write's landing waits as long as a CI runner's disk sync takes\n"
-        },
-        {
-          "sha": "1b9d4d88f1dd97e37cb75b685c1d2b108b744425",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T04:34:10-07:00",
-          "message": "refactor(renderer): passages counted under the render cache's stats, and tests read a draw's segments as its value (0ol)\n"
-        },
-        {
-          "sha": "1f9be9e0bdf759084213ebc1bd9252c17bcbf524",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T04:25:14-07:00",
-          "message": "fix(renderer): a frame keeps its memory once nothing of its turn can throw, and a closed feed's record goes with it (0ol)\n"
-        },
-        {
-          "sha": "bbaa3387f092c53ec522b58fe7c603e45b11fd20",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T04:14:43-07:00",
-          "message": "refactor(renderer): a draw returns the memory it made, and the turn that drew it keeps it (0ol)\n\ndrawDsl writes nothing: the frame record, the session's motion, the\nwarnings and the per-segment cells come back on DrawnFrame, and\ndrawRender returns them with the menu it showed as one DrawMemory.\nkeepDraw, called by the turn right after the draw, stores each piece with\nits one owner: the record on the view per surface (request or feed), the\nmotion per session, so both surfaces compare against their own last frame\nand animate under one clock. A delivery is a value the main renderer\nholds until its effect-done, not a closure over the draw.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "681357616352fb4f7476a7b1035b61a244971844",
-      "timestamp": "2026-11-17T10:11:14.753Z",
+      "sha": "d42539d504b3234e85ad99939c61f18a7fd7712d",
+      "timestamp": "2026-11-17T11:48:47.775Z",
       "commits": [
         {
-          "sha": "681357616352fb4f7476a7b1035b61a244971844",
+          "sha": "d42539d504b3234e85ad99939c61f18a7fd7712d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T03:10:11-07:00",
-          "message": "feat(renderer): time is handed in as two readings, and the renderer owns its schedules (883) (#783)\n\n* feat(renderer): time is handed in as two readings, and the renderer owns its schedules (883)\n\nEvery input carries the wall instant a frame shows and a monotonic tick that\neverything scheduled is measured on, so a stepped wall moves no schedule.\nThe renderer reads no clock and sets no timer: each output declares the one\ntick it next wants a turn at, and the host keeps one timer per renderer and\nhands in a `due`. Feeds, the menu idle close and held work are the\nrenderer's owners of ticks; the host keeps who watches and what each\nsubscriber was sent, and hands the viewers in whole.\n\nThe in-process link hands an input over once the sender's stack unwinds, as\na process's lines do, so a turn never runs inside the host's MobX action.\n\n* fix(renderer): a due waits behind arriving input, each owner of a due turn is its own error boundary, and the wake summarizes what its dues took (883)\n\nHigh review of #783: a click arriving while a due waited could land on menus its idle close had shut; a failed due that waited past its tick was retried at once; one throwing deferral or feed skipped every other owner's work; a start that threw left its viewers marked handed; the lane edge rebuilt every session's viewers to read one; frame cost had no log line once feeds left the host.\n\n* fix(renderer): each owner of a due turn moves its own work on when it fails, and the wake holds only a due that moved nothing (883)\n\nMedium review of #783: a feed that threw stayed due, so the wake-wide hold slowed every session's frames for good; a due whose turn returned a slow act kept the next wake waiting on it; a tick past Node's longest timer re-armed every millisecond.\n\n* fix(renderer): every scheduling promise has a failure path, a start and a viewers change fail per feed and per session, and one fold reads the earliest tick (883)\n\nSecond high review of #783: a due or a viewers delivery that rejected stopped its scheduling for good; a due's unawaited act settling could reject unhandled; one feed's pin throwing in a start configured no session. The dead refused-before-its-slot branch goes, and two memory lines that described the turns before this change are corrected."
+          "timestamp": "2026-11-17T04:47:55-07:00",
+          "message": "refactor(renderer): a draw returns the memory it made, and the turn that drew it keeps it (0ol) (#785)\n\n* refactor(renderer): a draw returns the memory it made, and the turn that drew it keeps it (0ol)\n\ndrawDsl writes nothing: the frame record, the session's motion, the\nwarnings and the per-segment cells come back on DrawnFrame, and\ndrawRender returns them with the menu it showed as one DrawMemory.\nkeepDraw, called by the turn right after the draw, stores each piece with\nits one owner: the record on the view per surface (request or feed), the\nmotion per session, so both surfaces compare against their own last frame\nand animate under one clock. A delivery is a value the main renderer\nholds until its effect-done, not a closure over the draw.\n\n* fix(renderer): a frame keeps its memory once nothing of its turn can throw, and a closed feed's record goes with it (0ol)\n\n* refactor(renderer): passages counted under the render cache's stats, and tests read a draw's segments as its value (0ol)\n\n* test(session-state): a write's landing waits as long as a CI runner's disk sync takes"
         }
       ]
     }

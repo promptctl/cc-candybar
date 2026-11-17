@@ -29215,7 +29215,7 @@ async function launchPiped(state, opts, pipes) {
       opts.signal?.removeEventListener("abort", onAbort);
       state.inFlight.delete(onAbort);
     };
-    const finish = (deliver) => {
+    const finish = (deliver2) => {
       if (settled3) return;
       settled3 = true;
       timer?.();
@@ -29230,7 +29230,7 @@ async function launchPiped(state, opts, pipes) {
       stderr2.drain();
       if (input !== null && !input.destroyed && !input.writableFinished)
         hold(state, opts.category, input, inputEnd);
-      deliver();
+      deliver2();
     };
     const settle3 = (r) => finish(() => resolve(r));
     const signal = (pid2, sig) => {
@@ -50258,41 +50258,12 @@ function closingFlash(fill, text4, begins) {
   const idle = Animation.sequence(Animation.constant(dark), begins, holds2);
   return () => idle;
 }
-var SessionEffects = class {
-  constructor(key) {
-    this.key = key;
-  }
-  key;
-  // [LAW:no-ambient-temporal-coupling] The instant the resolved effect last
-  // changed to its current value: the effect's own t = 0 is a recorded fact,
-  // never inferred from when renders happened to arrive.
-  inForce = null;
-  // [LAW:no-ambient-temporal-coupling] The session's animation timeline as
-  // its last drawn frame left it — where the clock stood and the speed it ran
-  // at from there: the anchor every later reading is measured from, so a
-  // change of speed changes the clock's slope from the frame it lands in and
-  // never its reading, so no loop jumps phase. The host clock itself before
-  // the session's first frame.
-  anchor = Timeline.play(0);
-  // The same fact for each placement wearing its own effect, by placement id,
-  // kept for the placements the latest render drew: one that stopped being
-  // drawn starts its effect again at t = 0 when it is drawn again, as the
-  // effect comes into force for it again.
-  placements = /* @__PURE__ */ new Map();
-  // The effects made for the rows the latest render drew, by row and scope (the
-  // bar's, or one placement's), with the name each was made for. Each render
-  // starts an empty map and keeps only what it draws, so a row that stopped
-  // being drawn (a menu closed) takes its effects and their settled shares with
-  // it.
-  made = /* @__PURE__ */ new Map();
-  // The transitions in flight at the last frame drawn, by placement — what a
-  // placement's appearing and leaving go on from when the next frame is drawn
-  // from the same source as the view's record of it (`FrameRecord`) — or
-  // null: no frame drawn, or the last drawn with transitions off, which
-  // nothing compares against.
-  passages = null;
-  // [LAW:nothing-unseen] What the latest render wore, for the render's event.
-  frame = {
+var NO_MOTION = {
+  inForce: null,
+  anchor: Timeline.play(0),
+  placements: /* @__PURE__ */ new Map(),
+  made: /* @__PURE__ */ new Map(),
+  frame: {
     effect: EFFECT_FLOOR,
     t: 0,
     speed: 1,
@@ -50303,18 +50274,28 @@ var SessionEffects = class {
     revision: 0,
     fades: [],
     leaves: []
-  };
-  // The latest render's effects: the bar's, at what t, how many of its rows'
+  }
+};
+var SessionEffects = class {
+  constructor(key) {
+    this.key = key;
+  }
+  key;
+  kept = NO_MOTION;
+  // The latest frame's effects: the bar's, at what t, how many of its rows'
   // effects were made fresh rather than reused — one made every frame pays
   // rich-js's share settling every frame — and each placement's own.
   lastFrame() {
-    return this.frame;
+    return this.kept.frame;
   }
-  // The effects this session holds: the ones its latest render drew, and the
-  // transitions still in flight.
+  // The effects this session holds: the ones its latest frame drew.
   get heldCount() {
-    const passing = this.passages?.size ?? 0;
-    return [...this.made.values()].reduce((n, row2) => n + row2.size, passing);
+    return [...this.kept.made.values()].reduce((n, row2) => n + row2.size, 0);
+  }
+  // [LAW:single-enforcer] The one writer: the turn that drew a frame keeps
+  // the motion it returned.
+  keep(motion) {
+    this.kept = motion;
   }
   /**
    * The session's animation clock read at the wall instant `at`, running at
@@ -50322,10 +50303,13 @@ var SessionEffects = class {
    * the last drawn frame passed at the speed in force then; before the first
    * frame the timeline is the host clock itself, so a session that has only
    * ever run at 1x reads the wall instant at every frame. Reads only: the frame
-   * that draws keeps it as the anchor (`drawn`).
+   * that draws returns it as the anchor (`memory`).
    */
   clockAt(at, speed2) {
-    return { wall: at, timeline: Timeline.withRate(this.anchor, at, speed2) };
+    return {
+      wall: at,
+      timeline: Timeline.withRate(this.kept.anchor, at, speed2)
+    };
   }
   /**
    * The motion of each row of a render drawn at `clock` whose bar wears `name`,
@@ -50334,25 +50318,26 @@ var SessionEffects = class {
    * catalogue effect starts calm at its t = 0: pulse at rest, shimmer entering
    * from off the row, wheel at the theme's own hues. Records every placement
    * the render draws, fades in each one the last frame did not, and dissolves
-   * out each one the last frame drew and this one does not. All of it is kept
-   * once the frame is `drawn`.
+   * out each one the last frame drew and this one does not. All of it comes
+   * back as the frame's `memory`, which the turn that drew it keeps.
    */
   motion(name, clock, given2, flash = null) {
     const at = animationAt(clock);
     const onSession = (t2) => Timeline.seek(clock.timeline, clock.wall, t2);
-    const inForce = this.inForce?.name === name ? this.inForce : { name, since: at };
+    const { kept } = this;
+    const inForce = kept.inForce?.name === name ? kept.inForce : { name, since: at };
     const bar = {
       scope: BAR_SCOPE,
       name,
       t: at - inForce.since
     };
-    const knownPlacements = this.placements;
+    const knownPlacements = kept.placements;
     const placements = /* @__PURE__ */ new Map();
-    const known = this.made;
+    const known = kept.made;
     const made = /* @__PURE__ */ new Map();
     const own2 = [];
     const { last: last2 } = given2;
-    const inFlight = this.passages;
+    const inFlight = last2?.passages ?? null;
     const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
     const before = basis === "compared" ? (id2) => {
       const record2 = last2.placements.get(id2);
@@ -50519,14 +50504,12 @@ var SessionEffects = class {
       // compared or kept, so every placement draws exactly what it returned.
       placed: basis === "off" ? (_id, lines2) => lines2 : reached,
       row: row2,
-      drawn: () => {
-        this.anchor = clock.timeline;
-        this.inForce = inForce;
-        this.placements = placements;
-        this.made = made;
-        this.passages = basis === "off" ? null : passages;
-        this.frame = frame2;
-      }
+      memory: () => ({
+        motion: { anchor: clock.timeline, inForce, placements, made, frame: frame2 },
+        // A frame drawn with transitions off is kept as no frame at all:
+        // nothing can be compared against it.
+        passages: basis === "off" ? null : passages
+      })
     };
   }
 };
@@ -50537,15 +50520,22 @@ var EffectSessions = class {
   }
   maxSessions;
   sessions = /* @__PURE__ */ new Map();
+  // The session's memory as a draw reads it: a session with none kept yet
+  // draws from a fresh one, held only once its frame is kept.
   of(sessionId2) {
-    const known = this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
+    return this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
+  }
+  // [LAW:single-enforcer] The one writer: the turn that drew the session's
+  // frame keeps the motion it returned, as the most recently rendered.
+  keep(sessionId2, motion) {
+    const known = this.of(sessionId2);
+    known.keep(motion);
     this.sessions.delete(sessionId2);
     this.sessions.set(sessionId2, known);
     for (const oldest of this.sessions.keys()) {
       if (this.sessions.size <= this.maxSessions) break;
       this.sessions.delete(oldest);
     }
-    return known;
   }
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
   // effect made for a row keeps rich-js's settled shares, so their count is the
@@ -71798,6 +71788,7 @@ var RuntimeStats = class _RuntimeStats {
         pinned: 0,
         due: 0,
         retiredViews: 0,
+        passages: 0,
         accountedBytes: 0,
         budgetBytes: 0
       },
@@ -75386,7 +75377,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   const settle3 = async (effect, outcome) => {
     const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
     if (failed3 !== null && effect.session === null) world.unheard(failed3);
-    const delivered = await deliver(
+    const delivered = await deliver2(
       () => doneOf(effect, outcome),
       [["effect", String(effect.id)]]
     );
@@ -75454,7 +75445,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     record2(event, about, turn);
     return turn;
   };
-  const deliver = recorded2("last");
+  const deliver2 = recorded2("last");
   const ask2 = async (push) => {
     const output = await inMailbox(async (_queuedMs, holds2) => {
       holds2(`push:${push.kind}`);
@@ -75527,7 +75518,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   return {
     name,
     answer: answer2,
-    deliver,
+    deliver: deliver2,
     start: recorded2("first"),
     ask: ask2,
     tell,
@@ -77370,6 +77361,29 @@ function filled(row2, options) {
   });
   return items();
 }
+
+// src/render/frame-memory.ts
+init_globals();
+function recordFrom(last2, source) {
+  return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
+}
+function beginRecord(source, returned2) {
+  const placements = /* @__PURE__ */ new Map();
+  const rules = /* @__PURE__ */ new Map();
+  return {
+    placed: (id2, lines2) => {
+      const { drawing: drawing2 } = returned2(id2, lines2);
+      placements.set(
+        id2,
+        drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
+      );
+      return lines2;
+    },
+    rule: (slot, name) => rules.set(slot, name),
+    record: (passages) => ({ source, placements, rules, passages })
+  };
+}
+var HIDDEN_RECORD = { kind: "hidden" };
 
 // src/themes/index.ts
 init_globals();
@@ -79517,15 +79531,13 @@ function drawSegment(node, ctx) {
       place: line.place
     }));
     const laidLines = [...stays, ...dropLines];
-    if (ctx.perSegmentSink !== void 0) {
-      ctx.perSegmentSink.set(
-        node.id,
-        [
-          ...laidLines.flatMap((line) => line.cells),
-          ...bodyLines.flatMap(leadOf)
-        ].flatMap(cellParts)
-      );
-    }
+    ctx.segments.set(
+      node.id,
+      [
+        ...laidLines.flatMap((line) => line.cells),
+        ...bodyLines.flatMap(leadOf)
+      ].flatMap(cellParts)
+    );
     return [...laidLines, ...ledBody];
   } catch (err) {
     return brokenSegment(
@@ -79666,41 +79678,6 @@ function nodeType(kind) {
   return REGISTRY[kind];
 }
 
-// src/render/frame-memory.ts
-init_globals();
-var FrameMemory = class {
-  last = null;
-  // [LAW:single-enforcer] The last frame drawn from `source`, or none. A frame
-  // drawn from another config, preset, state revision or width says nothing of
-  // where a placement stands in this one — its ids may name other placements,
-  // its rows were sized for another width, and a write to the session's state
-  // shows what it reveals at once — so it is no frame to draw from or compare
-  // against.
-  from(source) {
-    const { last: last2 } = this;
-    return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
-  }
-  begin(source, returned2) {
-    const placements = /* @__PURE__ */ new Map();
-    const rules = /* @__PURE__ */ new Map();
-    return {
-      placed: (id2, lines2) => {
-        const { drawing: drawing2 } = returned2(id2, lines2);
-        placements.set(
-          id2,
-          drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
-        );
-        return lines2;
-      },
-      rule: (slot, name) => rules.set(slot, name),
-      commit: () => {
-        this.last = { source, placements, rules };
-      }
-    };
-  }
-};
-var HIDDEN_RECORD = { kind: "hidden" };
-
 // src/dsl/parts.ts
 var SELECTION_OF = {
   palette: "theme",
@@ -79800,8 +79777,6 @@ var ViewParts = class {
   // How many parts have derived since the view's first draw: what one draw
   // adds is how many of its parts it evaluated.
   evaluated = 0;
-  // What the view's last drawn frame showed: the one thing a draw writes.
-  memory = new FrameMemory();
   // [LAW:one-source-of-truth] The view's one scope. Its names are the
   // store's when it is built, at the view's first draw: a view declares
   // every variable before it is drawn.
@@ -80845,8 +80820,10 @@ function segmentsUnder(node) {
 function drawDsl(config2, compiled, store, registry, projected, at, opts, observers, selection2) {
   var _stack = [];
   try {
-    const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
-    const warn = (warning) => onRenderWarning?.(warning);
+    const { onSegmentError } = observers ?? {};
+    const warnings = [];
+    const warn = (warning) => void warnings.push(warning);
+    const segments = /* @__PURE__ */ new Map();
     const effects = selection2.effects ?? new SessionEffects("");
     const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
     const drawClock = __using(_stack, bindClock(at, clock.timeline));
@@ -80878,8 +80855,8 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       revision: registry.stateRevision(),
       width: drawOpts.width
     };
-    const record2 = parts.memory.begin(source, returnedBy);
-    const last2 = parts.memory.from(source);
+    const record2 = beginRecord(source, returnedBy);
+    const last2 = recordFrom(selection2.record ?? null, source);
     const waited = /* @__PURE__ */ new Set();
     const ruleFrame = {
       held: (slot) => last2?.rules.get(slot),
@@ -80936,7 +80913,6 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       },
       flash
     );
-    perSegmentSink?.clear();
     const lookupSegment = (name) => config2.segments[name];
     const renderNode = (node, parent, region) => {
       const evaluated2 = parent.kind === "hidden" ? parent : within3(parent, parts.gate(node));
@@ -80958,7 +80934,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         gate: gate2,
         padding: drawOpts.padding,
         region,
-        perSegmentSink,
+        segments,
         onSegmentError,
         placement: (node2) => parts.placement(node2),
         evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
@@ -81012,8 +80988,8 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         )
       };
     });
-    motion.drawn();
-    record2.commit();
+    const left = motion.memory();
+    const memory = { record: record2.record(left.passages), motion: left.motion };
     const armed = () => rendered.some((row2) => row2.kind === "menu") || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
       ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
     );
@@ -81039,6 +81015,9 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         motion: frameMotion,
         pending: [...waited].sort()
       },
+      memory,
+      warnings,
+      segments,
       evaluated: parts.evaluated - evaluatedBefore,
       cellBreaks: rendered.reduce((sum2, row2) => sum2 + row2.cellBreaks, 0),
       rules
@@ -85442,7 +85421,7 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, readings, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, cellBreaks, delivered, lanes } = drawRender(
+      const { drawn, evaluated: evaluated2, cellBreaks, copies, lanes, kept } = drawRender(
         parts,
         setup,
         { by: "feed", fps },
@@ -85457,15 +85436,19 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
         drawn,
         handedOffTo(lanes, following)
       );
-      delivered();
       const resp = JSON.stringify(answer2);
+      const statuslineResp = statusline === drawn.body ? resp : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)));
+      keepDraw(parts, setup, kept);
+      deliver(parts, {
+        session: sessionId2,
+        by: "feed",
+        copies,
+        clickShown: null,
+        eventsShown: []
+      });
       return {
         bar,
-        answers: {
-          resp,
-          // Mostly the bar itself, and one frame encodes once.
-          statusline: statusline === drawn.body ? resp : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)))
-        },
+        answers: { resp, statusline: statuslineResp },
         evaluated: evaluated2,
         cellBreaks,
         failure: null
@@ -85612,14 +85595,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts) {
   }
 }
 function drawRender(parts, setup, drawing2, feeds) {
-  const {
-    sessionState,
-    renderCache,
-    linkSigner: linkSigner2,
-    renderWarnings,
-    effectSessions,
-    menuIdle
-  } = parts;
+  const { sessionState, linkSigner: linkSigner2, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
   const idleSince = menuIdle.since(sessionId2, readings);
@@ -85738,10 +85714,17 @@ function drawRender(parts, setup, drawing2, feeds) {
     pr: prFactOf(payload.git),
     feeds: feedsFact(projected.feeds)
   });
-  const drawnWarnings = [];
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId2);
-  const { frame: frame2, evaluated: evaluated2, cellBreaks, rules } = drawDsl(
+  const {
+    frame: frame2,
+    memory,
+    warnings: drawnWarnings,
+    segments,
+    evaluated: evaluated2,
+    cellBreaks,
+    rules
+  } = drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -85749,40 +85732,25 @@ function drawRender(parts, setup, drawing2, feeds) {
     projected,
     at,
     renderOpts,
-    // [LAW:single-enforcer] The per-segment StripCell sink for the
-    // `debug segments` projection. Its identity stays stable for the
-    // view's lifetime; drawDsl clears + repopulates it
-    // in place. Cells are cheap (already computed during the render);
-    // the per-segment ANSI serialization happens lazily inside the
-    // debug handler so normal renders pay no extra serializer cost.
+    void 0,
+    // [LAW:one-source-of-truth] The draw's own settings, the session's
+    // effect memory and the record of the surface's last frame of the view.
+    // The theme, style and effect are not among them: the view's slots settle
+    // those names (src/dsl/parts.ts), the same ones its payload's `.effective`
+    // fields read.
     {
-      perSegmentSink: view.lastRenderCellsBySegment,
-      onRenderWarning: (warning) => drawnWarnings.push(warning)
-    },
-    // [LAW:one-source-of-truth] The draw's own settings and the session's
-    // effect memory. The theme, style and effect are not among them: the
-    // view's slots settle those names (src/dsl/parts.ts), the same ones its
-    // payload's `.effective` fields read.
-    { ...effective, effects, idleSince: idleSince ?? void 0 }
+      ...effective,
+      effects,
+      record: view.frames.get(drawing2.by),
+      idleSince: idleSince ?? void 0
+    }
   );
   const keys2 = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i2) => [keys2[i2], m.copy]));
-  const delivered = () => renderCache.delivered(sessionId2, drawing2.by, copies);
-  menuIdle.drew(
-    sessionId2,
-    readings.tick,
-    frame2.rows.some((row2) => row2.kind === "menu"),
-    effective.menuTimeout
-  );
   noteFacts(facts, {
     menuIdle: idleSince === null ? "-" : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`
   });
-  const recorded2 = renderWarnings.drawn(
-    sessionId2,
-    drawing2.by,
-    scope,
-    drawnWarnings
-  );
+  const recorded2 = renderWarnings.moves(sessionId2, drawing2.by, drawnWarnings);
   const geometry = {
     width,
     // A feed's one frame is shown by every lane switched on, so it pages
@@ -85806,7 +85774,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     frame2,
     viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry)
   );
-  const fx = effects.lastFrame();
+  const fx = memory.motion.frame;
   const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
   const passages = (frames) => frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
   const tagOf = (w) => {
@@ -85881,9 +85849,32 @@ function drawRender(parts, setup, drawing2, feeds) {
     cellBreaks,
     clickShown,
     eventsShown,
-    delivered,
-    lanes
+    copies,
+    lanes,
+    kept: {
+      session: sessionId2,
+      by: drawing2.by,
+      record: memory.record,
+      motion: memory.motion,
+      warnings: { scope, list: drawnWarnings },
+      // What this frame drew is what the session's idle close follows.
+      menu: {
+        tick: readings.tick,
+        shown: frame2.rows.some((row2) => row2.kind === "menu"),
+        timeoutS: effective.menuTimeout
+      },
+      segments
+    }
   };
+}
+function keepDraw(parts, setup, kept) {
+  const { session, by, record: record2, motion, warnings, menu, segments } = kept;
+  const { view } = setup;
+  view.frames.set(by, record2);
+  view.lastRenderCellsBySegment = segments;
+  parts.effectSessions.keep(session, motion);
+  parts.renderWarnings.keep(session, by, warnings.scope, warnings.list);
+  parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
 }
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
@@ -85917,7 +85908,7 @@ function answerRequest(parts, req, facts, effects) {
       effects
     );
     const sessionId2 = req.hookData.session_id;
-    const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
+    const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
       parts,
       setup,
       ANSWERING,
@@ -85928,18 +85919,19 @@ function answerRequest(parts, req, facts, effects) {
     const frame2 = signingFrames(parts.linkSigner)(
       toStatusline ? statuslineOf(sessionId2, setup.state.writable, drawn, elsewhere) : drawn.body
     );
+    keepDraw(parts, setup, kept);
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-"
     });
     return {
       frame: frame2,
-      delivered: answerDelivered(
-        parts,
-        sessionId2,
-        delivered,
+      delivery: {
+        session: sessionId2,
+        by: ANSWERING.by,
+        copies,
         clickShown,
         eventsShown
-      )
+      }
     };
   } catch (_) {
     var _error = _, _hasError = true;
@@ -85947,13 +85939,12 @@ function answerRequest(parts, req, facts, effects) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function answerDelivered(parts, sessionId2, copied, clickShown, eventsShown) {
-  return () => {
-    copied();
-    if (clickShown !== null)
-      answeredClickError(parts.sessionState, sessionId2, clickShown);
-    for (const event of eventsShown) parts.eventAnswered(event);
-  };
+function deliver(parts, delivery) {
+  const { session, by, copies, clickShown, eventsShown } = delivery;
+  parts.renderCache.delivered(session, by, copies);
+  if (clickShown !== null)
+    answeredClickError(parts.sessionState, session, clickShown);
+  for (const event of eventsShown) parts.eventAnswered(event);
 }
 function statuslineOf(sessionId2, writable, drawn, elsewhere) {
   const [first2, ...rest2] = elsewhere;
@@ -89210,10 +89201,14 @@ var RenderWarningRecords = class {
     }
     return listed;
   }
-  // Records what a frame warned. Says whether that changed what the
-  // renderer's next frame shows.
-  drawn(sessionId2, by, scope, warnings) {
-    const held = this.of(sessionId2, by);
+  // Whether a frame that warned `warnings` changes what the renderer's next
+  // frame shows.
+  moves(sessionId2, by, warnings) {
+    return JSON.stringify(this.of(sessionId2, by)) !== JSON.stringify(warnings);
+  }
+  // [LAW:single-enforcer] The one writer: the turn that drew a frame records
+  // what it warned.
+  keep(sessionId2, by, scope, warnings) {
     const key = keyOf(sessionId2, by);
     this.records.delete(key);
     this.records.set(key, {
@@ -89224,7 +89219,6 @@ var RenderWarningRecords = class {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
     }
-    return JSON.stringify(held) !== JSON.stringify(warnings);
   }
 };
 var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
@@ -90244,6 +90238,7 @@ function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
       if (next !== requested.get()) runInAction(() => requested.set(next));
     },
     facts: () => requested.get(),
+    frames: /* @__PURE__ */ new Map(),
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
     retire: stopChanged,
     dispose: () => {
@@ -90628,6 +90623,10 @@ var RenderCache = class {
     for (const lease of this.viewHolds.values()) {
       if (lease.retired !== null) retiredViews++;
     }
+    let passages = 0;
+    for (const view of this.views.values())
+      for (const record2 of view.frames.values())
+        passages += record2.passages?.size ?? 0;
     return {
       size: this.entries.size,
       held,
@@ -90637,6 +90636,7 @@ var RenderCache = class {
       pinned: this.pins.size,
       due: this.due.size,
       retiredViews,
+      passages,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes()
     };
@@ -90897,9 +90897,11 @@ var RenderCache = class {
   }
   // The renderer no longer draws the session's bar (its feed closed): what
   // its last frame listed is on no surface now, so a click naming it is
-  // refused rather than copying a list gone stale.
+  // refused rather than copying a list gone stale, and the surface's next
+  // frame, if it opens again, is a first frame that fades nothing in.
   stopDrawing(sessionId2, by) {
     this.copies.get(sessionId2)?.delete(by);
+    this.views.get(sessionId2)?.frames.delete(by);
   }
 };
 
@@ -91224,14 +91226,14 @@ function mainRenderer(parts, pushed) {
         configureSession(parts, event.context, event.worldState, record2);
         return;
       case "request": {
-        const { frame: frame2, delivered } = answerRequest(
+        const { frame: frame2, delivery } = answerRequest(
           parts,
           event.context,
           record2,
           effects
         );
         const id2 = parts.mint();
-        deliveries.set(id2, delivered);
+        deliveries.set(id2, delivery);
         effects.push({
           kind: "present",
           id: id2,
@@ -91253,13 +91255,13 @@ function mainRenderer(parts, pushed) {
       case "effect-done": {
         if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
         if (parts.acts.done(event.of, event.session, event.outcome)) return;
-        const delivered = deliveries.get(event.of);
-        if (delivered === void 0)
+        const delivery = deliveries.get(event.of);
+        if (delivery === void 0)
           throw new Error(
             `effect-done for effect ${event.of}, which is no present, change or act on its way`
           );
         deliveries.delete(event.of);
-        if (event.outcome.kind === "ok") delivered();
+        if (event.outcome.kind === "ok") deliver(parts, delivery);
         return;
       }
       case "click":
