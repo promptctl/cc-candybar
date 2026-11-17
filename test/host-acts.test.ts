@@ -23,6 +23,7 @@ import type {
 } from "../src/renderer-interface/interface";
 import type { Monotonic } from "../src/time";
 import { eventRenderer, hostHeld } from "./helpers/renderers";
+import { NO_CONFIGS } from "./helpers/renderers";
 
 const S = sessionIdOf("s");
 // No wake is declared, so no timer is set.
@@ -47,7 +48,7 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 const output = (effects: readonly Effect[]): RendererOutput => ({
   kind: "answered",
   effects,
-  subscriptions: { sources: {}, lanes: {}, wake: null },
+  subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
   record: [],
   frames: [],
 });
@@ -96,6 +97,7 @@ function hostOver(
       return { kind: "ok" };
     },
     stateDir: path.join(dir, "state"),
+    configs: NO_CONFIGS,
     closing: () => false,
     unheard: (text) => void unheard.push(text),
     ...over,
@@ -103,13 +105,15 @@ function hostOver(
   const host = rendererHost(
     "main",
     CLOCK,
-    hostHeld(eventRenderer(async (input) => {
-      if (input.event.kind === "effect-done") {
-        did.push(`done ${input.event.of} ${input.event.outcome.kind}`);
-        return done(input);
-      }
-      return output(effects);
-    })),
+    hostHeld(
+      eventRenderer(async (input) => {
+        if (input.event.kind === "effect-done") {
+          did.push(`done ${input.event.of} ${input.event.outcome.kind}`);
+          return done(input);
+        }
+        return output(effects);
+      }),
+    ),
     () => {},
     {
       subscribed: () => {},

@@ -60,7 +60,7 @@ export function bootEnv(
   );
 }
 
-// A reach's path in `AdapterToHost`, dotted: `watches.watch`, `storage.hold`.
+// A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.
 export type ReachPath = string;
 
 export type HostLine =
@@ -125,7 +125,6 @@ type ReachKinds<T> = {
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   log: "notice",
   eventAnswered: "notice",
-  watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" },
 };
 

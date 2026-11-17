@@ -395,6 +395,19 @@ describe("ManagedStorage watches", () => {
     expect(r.counters.watchersClosed).toBe(1);
   });
 
+  // [LAW:no-ambient-temporal-coupling] A config load no longer follows a
+  // folder's loss, so its owner is the one that recovers it.
+  test("a folder removed under its watch is made again by its owner at once, as a new generation, with no load's hold", async () => {
+    const watches = fakeWatches();
+    const r = rig();
+    r.hold();
+    fs.rmSync(r.folder, { recursive: true });
+    watches[0]!.listener("rename", path.basename(r.folder));
+    await until(() => r.storage.stats().lost === 1, "the loss");
+    expect(r.generation()).toBe(1);
+    expect(fs.statSync(r.folder).isDirectory()).toBe(true);
+  });
+
   test("a held file whose folder is removed reads what the path holds now, not its last value", async () => {
     const watches = fakeWatches();
     const r = rig();
@@ -735,6 +748,17 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     r.fileEvents.set(delivering, { kind: "caught-up", since: STALLED_AT });
     await until(() => lane.current().kind === "ok", "the re-read");
     expect(lane.current()).toEqual(ok("in the new folder"));
+  });
+
+  test("a refused watch's generation opens again once file events catch up, with no load's hold", async () => {
+    const r = rig();
+    fakeWatches(new Set([r.folder]));
+    r.hold();
+    expect(r.storage.stats().faults).toMatchObject({ refused: 1 });
+    jest.restoreAllMocks();
+    fakeWatches();
+    r.fileEvents.set(delivering, { kind: "caught-up", since: STALLED_AT });
+    expect(r.generation()).toBe(1);
   });
 
   test("a period with delivery unchanged re-reads nothing", async () => {

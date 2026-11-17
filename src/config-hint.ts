@@ -94,6 +94,14 @@ export interface RenderOrigin {
   readonly target: ConfigTarget;
 }
 
+// [LAW:one-source-of-truth] THE identity of an origin, in both runtimes: the
+// render cache's entry and the host's discovery are keyed by it, so a
+// snapshot discovered for an origin is the one its entry loads. A search has
+// no path, so it spells as the empty name, distinct from any real path.
+export function originKey(origin: RenderOrigin): string {
+  return `${origin.projectDir}\0${origin.cwd}\0${origin.target.path ?? ""}`;
+}
+
 // The origin a request names: what a session records. A record read back may
 // name a path whose source this build cannot read, so a session's origin is
 // the wider RenderOrigin.

@@ -47,8 +47,12 @@ import {
 import { chmodSync } from "node:fs";
 import { dirname } from "node:path";
 import { linkClick } from "./helpers/click";
-import { testVerbContext,
-  verbContextWith, effectsOf, recordRender } from "./helpers/click";
+import {
+  testVerbContext,
+  verbContextWith,
+  effectsOf,
+  recordRender,
+} from "./helpers/click";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { instantOf, type Instant } from "../src/utils/instant";
@@ -67,6 +71,7 @@ import { DOOR_GLYPH } from "../src/config/disclosure";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { lastClickError } from "../src/daemon/foundations/click-error";
+import { onLanded } from "./helpers/click";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("settings-ui-aok-3");
@@ -114,7 +119,11 @@ function rig(
   if (durable === undefined) recordRender(sessionState, SID);
   else durable.seedOrigin(sessionState, SID);
   // What a render records of the session's client: here, not in tmux.
-  sessionState.set(SID, SESSION_CLIENT_HINTS_KEY, JSON.stringify({ tmux: null }));
+  sessionState.set(
+    SID,
+    SESSION_CLIENT_HINTS_KEY,
+    JSON.stringify({ tmux: null }),
+  );
   // Everything the daemon's cache entry holds for one config — rebuilt whole
   // on a reload, the old registry disposed once the new one is built.
   const load = (text: string) => {
@@ -126,10 +135,14 @@ function rig(
     );
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
+      cwd: "/tmp",
+    });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(
-      loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED).raw,
+      loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED)
+        .raw,
     );
     return { config, store, registry, compiled, fileHeld };
   };
@@ -137,21 +150,29 @@ function rig(
   let tmuxPane = "";
   const logs: string[] = [];
   const reloads: { text: string; picks: Record<string, string | null> }[] = [];
-  const ctx: VerbContext = verbContextWith(testVerbContext(sessionState, durable?.historyFor(sessionState), undefined, durable?.host), {
-    log: (_level, msg) => logs.push(msg),
-    configFor: () => entry.config,
-    reloadConfig: () => {
-      reloads.push({
-        text: durable!.text()!,
-        picks: Object.fromEntries(
-          ["theme", "style", "padding"].map((k) => [k, sessionState.get(SID, k)]),
-        ),
-      });
-      const next = load(durable!.text()!);
-      entry.registry.dispose();
-      entry = next;
-    }
-});
+  const ctx: VerbContext = verbContextWith(
+    testVerbContext(
+      sessionState,
+      durable?.historyFor(sessionState),
+      undefined,
+      durable?.host,
+    ),
+    {
+      log: (_level, msg) => logs.push(msg),
+      configFor: () => entry.config,
+    },
+  );
+  onLanded(ctx, () => {
+    reloads.push({
+      text: durable!.text()!,
+      picks: Object.fromEntries(
+        ["theme", "style", "padding"].map((k) => [k, sessionState.get(SID, k)]),
+      ),
+    });
+    const next = load(durable!.text()!);
+    entry.registry.dispose();
+    entry = next;
+  });
   return {
     get config() {
       return entry.config;
@@ -181,7 +202,11 @@ function rig(
       // assertion here reads it.
       const sessionPick = (key: string): string | null =>
         sessionState.get(SID, key);
-      const effective = resolveEffectiveGlobals(config, sessionPick, () => false);
+      const effective = resolveEffectiveGlobals(
+        config,
+        sessionPick,
+        () => false,
+      );
       return drawPayload(
         config,
         compiled,
@@ -256,7 +281,11 @@ function writesTo(rendered: Frame, key: string): string[] {
 // unless it already is.
 const TAB_KEY = "candybar.tab";
 async function showTab(
-  r: { render: () => Frame; click: (url: string) => Promise<void>; sessionState: SessionState },
+  r: {
+    render: () => Frame;
+    click: (url: string) => Promise<void>;
+    sessionState: SessionState;
+  },
   tab: string,
 ): Promise<void> {
   if (r.sessionState.get(SID, TAB_KEY) === tab) return;
@@ -269,20 +298,25 @@ async function showTab(
 
 // The theme picker's gear (brandon-theme-swatch-8v9r): the style, variation
 // and shade controls are behind it, beside the theme on the door's first line.
-async function showGear(
-  r: { render: () => Frame; click: (url: string) => Promise<void>; sessionState: SessionState },
-): Promise<void> {
+async function showGear(r: {
+  render: () => Frame;
+  click: (url: string) => Promise<void>;
+  sessionState: SessionState;
+}): Promise<void> {
   if (r.sessionState.get(SID, PICKERS_KEY) === "gear") return;
   const url = urlsOf(r.render()).find((u) =>
     effectsOf(u).some((e) => e.args[1] === PICKERS_KEY && e.args[2] === "gear"),
   );
-  if (url === undefined) throw new Error("no link opens the theme picker's gear");
+  if (url === undefined)
+    throw new Error("no link opens the theme picker's gear");
   await r.click(url);
 }
 // The theme picker, open: its label shows the theme in force beside its swatch.
-async function showThemePicker(
-  r: { render: () => Frame; click: (url: string) => Promise<void>; sessionState: SessionState },
-): Promise<void> {
+async function showThemePicker(r: {
+  render: () => Frame;
+  click: (url: string) => Promise<void>;
+  sessionState: SessionState;
+}): Promise<void> {
   if (r.sessionState.get(SID, PICKERS_KEY) === "candybar.apply.theme") return;
   const url = urlsOf(r.render()).find((u) =>
     effectsOf(u).some(
@@ -373,8 +407,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     await showTab(r, "config");
     return linksOf(r.render()).find(
       (l) =>
-        l.text === "▶" &&
-        effectsOf(l.url).some((e) => e.args[1] === "padding"),
+        l.text === "▶" && effectsOf(l.url).some((e) => e.args[1] === "padding"),
     )!.url;
   };
   const saveUrl = (): string | undefined =>
@@ -414,7 +447,10 @@ describe("the config menu, reached from a user config whose root is one row", ()
     for (const cell of ["🎨 theme ▀▀▀", "⚙", "◀ ▦ preset ▶", "✎ arrange"]) {
       expect(firstLine).toContain(cell);
     }
-    const tab = async (name: string): Promise<string> => (await showTab(r, name), textOf(r.render()));
+    const tab = async (name: string): Promise<string> => (
+      await showTab(r, name),
+      textOf(r.render())
+    );
     expect(await tab("config")).toMatch(/☑ wrap[\s\S]*padding 1/);
     for (const name of ["look", "layout"]) {
       const body = (await tab(name)).split("\n").slice(2).join("\n");
@@ -580,7 +616,9 @@ describe("save under a preset that pins the setting", () => {
 
   // Pick `plain` from the style carousel, save, and return the bar after the
   // save released the pick — what the file alone renders.
-  const pickPlainAndSave = async (r: ReturnType<typeof rig>): Promise<string> => {
+  const pickPlainAndSave = async (
+    r: ReturnType<typeof rig>,
+  ): Promise<string> => {
     await showTab(r, "look");
     await r.click(
       writesTo(r.render(), "menus.candybar_pickers").find((u) =>
@@ -591,7 +629,9 @@ describe("save under a preset that pins the setting", () => {
     expect(capsule).toContain("◀ ✦ endcaps ▶");
     expect(capsule).not.toContain(PLAIN_SEAM);
     const pickPlain = writesTo(r.render(), "endcaps").find((u) =>
-      effectsOf(u).some((e) => e.args[1] === "endcaps" && e.args[2] === "plain"),
+      effectsOf(u).some(
+        (e) => e.args[1] === "endcaps" && e.args[2] === "plain",
+      ),
     );
     await r.click(pickPlain!);
     const save = linksOf(r.render()).find((l) =>
@@ -735,7 +775,10 @@ describe("reset returns settings to the bundled default", () => {
     expect(textOf(r.render())).toContain("dracula ▀▀▀");
     await r.click(await resetOf("palette"));
     expect(r.reloads).toEqual([
-      { text: durable.text(), picks: { theme: "dracula", style: null, padding: null } },
+      {
+        text: durable.text(),
+        picks: { theme: "dracula", style: null, padding: null },
+      },
     ]);
     expect(r.sessionState.get(SID, "theme")).toBeNull();
     expect(durable.parsed().globals).not.toHaveProperty("palette");
@@ -826,7 +869,10 @@ describe("reset returns settings to the bundled default", () => {
     // Every setting's reset in one click is ONE write and ONE reload, made
     // while the session still held its picks — released only after.
     expect(r.reloads).toEqual([
-      { text: durable.text(), picks: { theme: null, style: "dim", padding: "5" } },
+      {
+        text: durable.text(),
+        picks: { theme: null, style: "dim", padding: "5" },
+      },
     ]);
 
     const parsed = durable.parsed() as {
@@ -1009,7 +1055,9 @@ describe("a pick leaves the picker open", () => {
     const hit = linksOf(rendered).find(
       (l) =>
         l.text === "▀▀▀" &&
-        effectsOf(l.url).some((e) => e.verb === "set-state" && e.args[1] === "theme"),
+        effectsOf(l.url).some(
+          (e) => e.verb === "set-state" && e.args[1] === "theme",
+        ),
     )!;
     const write = effectsOf(hit.url).find((e) => e.args[1] === "theme")!;
     return { url: hit.url, theme: write.args[2]! };
@@ -1109,7 +1157,10 @@ describe("save as preset", () => {
     );
   };
 
-  async function start(source: string, picks: Record<string, string> = {}): Promise<void> {
+  async function start(
+    source: string,
+    picks: Record<string, string> = {},
+  ): Promise<void> {
     durable = durableConfig("cc-candybar-save-preset-");
     r = rig(source, durable);
     for (const [k, v] of Object.entries(picks)) r.sessionState.set(SID, k, v);
@@ -1121,13 +1172,21 @@ describe("save as preset", () => {
   });
 
   test("keeps the bar as custom-1 — the arrangement and only what differs — and switches to it", async () => {
-    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim", padding: "2" });
+    await start(USER_PRESETS, {
+      preset: "narrow",
+      theme: "dracula",
+      style: "dim",
+      padding: "2",
+    });
     await r.click(await savePreset());
 
     expect(durable.text()).toBe(SAVED_CUSTOM_1);
     // Reloaded once, while the session still held its picks.
     expect(r.reloads).toEqual([
-      { text: SAVED_CUSTOM_1, picks: { theme: "dracula", style: "dim", padding: "2" } },
+      {
+        text: SAVED_CUSTOM_1,
+        picks: { theme: "dracula", style: "dim", padding: "2" },
+      },
     ]);
     // The preset renders what the picks did, so they are released.
     for (const key of ["theme", "style", "padding"]) {
@@ -1135,11 +1194,11 @@ describe("save as preset", () => {
     }
     expect(r.sessionState.get(SID, "preset")).toBe("custom-1");
     const e = effective();
-    expect([e.preset, e.theme.kind === "decided" && e.theme.name, e.padding]).toEqual([
-      "custom-1",
-      "dracula",
-      2,
-    ]);
+    expect([
+      e.preset,
+      e.theme.kind === "decided" && e.theme.name,
+      e.padding,
+    ]).toEqual(["custom-1", "dracula", 2]);
     // The one draft left is the switch.
     const out = textOf(r.render());
     expect(out).toContain("💾 save 1");
@@ -1149,7 +1208,11 @@ describe("save as preset", () => {
   });
 
   test("switching away and back changes no byte, and the preset still renders what was saved", async () => {
-    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
+    await start(USER_PRESETS, {
+      preset: "narrow",
+      theme: "dracula",
+      style: "dim",
+    });
     await r.click(await savePreset());
     await r.click(link("default")!);
     expect(effective().preset).toBe("default");
@@ -1161,7 +1224,11 @@ describe("save as preset", () => {
   });
 
   test("a second save takes the next free name", async () => {
-    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
+    await start(USER_PRESETS, {
+      preset: "narrow",
+      theme: "dracula",
+      style: "dim",
+    });
     await r.click(await savePreset());
     await r.click(await savePreset());
     const presets = durable.parsed().presets as Record<string, unknown>;
@@ -1172,8 +1239,14 @@ describe("save as preset", () => {
   });
 
   test(`${PRESET_DELETE_GLYPH} deletes the preset it names, returning the file byte for byte, and only a user preset offers it`, async () => {
-    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
-    expect(textOf(r.render())).toContain(`${PRESET_DELETE_GLYPH} delete narrow`);
+    await start(USER_PRESETS, {
+      preset: "narrow",
+      theme: "dracula",
+      style: "dim",
+    });
+    expect(textOf(r.render())).toContain(
+      `${PRESET_DELETE_GLYPH} delete narrow`,
+    );
     await r.click(await savePreset());
     await r.click(link(`${PRESET_DELETE_GLYPH} delete custom-1`)!);
 
@@ -1188,7 +1261,11 @@ describe("save as preset", () => {
   });
 
   test("save and delete are one undo step each, restoring the exact bytes and picks", async () => {
-    await start(USER_PRESETS, { preset: "narrow", theme: "dracula", style: "dim" });
+    await start(USER_PRESETS, {
+      preset: "narrow",
+      theme: "dracula",
+      style: "dim",
+    });
     await r.click(await savePreset());
     await r.click(link(`${PRESET_DELETE_GLYPH} delete custom-1`)!);
 
@@ -1210,7 +1287,8 @@ describe("save as preset", () => {
     await start(source, { preset: "compact" });
     expect(textOf(r.render())).not.toContain(PRESET_DELETE_GLYPH);
     // The click a stale or hand-built URL could still carry.
-    await expect(r.click(`cc-candybar://delete-preset/${SID}/user/compact`),
+    await expect(
+      r.click(`cc-candybar://delete-preset/${SID}/user/compact`),
     ).rejects.toThrow('cannot delete preset "compact": a layer beneath');
     expect(durable.text()).toBe(source);
   });
@@ -1254,9 +1332,9 @@ describe("save as preset", () => {
   presets: { mine: { globals: { padding: 4 } } },
 }`;
     await start(source, { preset: "mine" });
-    await expect(r.click(link(`${PRESET_DELETE_GLYPH} delete mine`)!)).rejects.toThrow(
-      /would not load after this click[\s\S]*resetMine/,
-    );
+    await expect(
+      r.click(link(`${PRESET_DELETE_GLYPH} delete mine`)!),
+    ).rejects.toThrow(/would not load after this click[\s\S]*resetMine/);
     expect(durable.text()).toBe(source);
     expect(r.sessionState.get(SID, "preset")).toBe("mine");
   });
@@ -1291,7 +1369,10 @@ describe("the preset action", () => {
   test.each([
     [{ preset: "rename" }, 'preset must be "save" or "delete", got "rename"'],
     [{ preset: "delete" }, "actions.a.name must be a string"],
-    [{ preset: "save", name: "x" }, 'Unknown key "name" on a preset action. Expected only: preset'],
+    [
+      { preset: "save", name: "x" },
+      'Unknown key "name" on a preset action. Expected only: preset',
+    ],
   ])("%j is refused at load", (action, message) => {
     expect(() =>
       parseAndValidate(
@@ -1328,10 +1409,22 @@ describe("an action's layer", () => {
   });
 
   test.each([
-    [{ copy: "x", layer: "user" }, "a copy action writes no config, so it names no layer"],
-    [{ set: "wrap", to: "true", layer: "user" }, "a set action writes no config, so it names no layer"],
-    [{ persist: "padding", to: "2", layer: "ask" }, 'layer must be one of user, project, local, got "ask"'],
-    [{ save: true, layer: "repo" }, 'layer must be one of user, project, local, ask, got "repo"'],
+    [
+      { copy: "x", layer: "user" },
+      "a copy action writes no config, so it names no layer",
+    ],
+    [
+      { set: "wrap", to: "true", layer: "user" },
+      "a set action writes no config, so it names no layer",
+    ],
+    [
+      { persist: "padding", to: "2", layer: "ask" },
+      'layer must be one of user, project, local, got "ask"',
+    ],
+    [
+      { save: true, layer: "repo" },
+      'layer must be one of user, project, local, ask, got "repo"',
+    ],
   ])("%j is refused at load", (action, message) => {
     expect(() => load(action)).toThrow(message);
   });
@@ -1377,7 +1470,11 @@ describe("a theme's default look, set from the bar", () => {
       (key) => r.sessionState.get(SID, key),
       () => false,
     );
-    return [e.shade, e.variation, e.style.kind === "decided" ? e.style.name : "(rule)"];
+    return [
+      e.shade,
+      e.variation,
+      e.style.kind === "decided" ? e.style.name : "(rule)",
+    ];
   };
   // The door, then the theme's ⚙ gear, where the cell sits beside the
   // settings it saves.
@@ -1428,7 +1525,10 @@ describe("a theme's default look, set from the bar", () => {
     expect(durable.text()).toBe(THEMED_SAVED);
     // Reloaded once, while the session still held its picks.
     expect(r.reloads).toEqual([
-      { text: THEMED_SAVED, picks: { theme: null, style: "dim", padding: null } },
+      {
+        text: THEMED_SAVED,
+        picks: { theme: null, style: "dim", padding: null },
+      },
     ]);
     for (const key of ["shade", "variation", "style"]) {
       expect(r.sessionState.get(SID, key)).toBeNull();
@@ -1527,7 +1627,9 @@ describe("a theme's default look, set from the bar", () => {
     pick({ shade: "deepest" });
     expect(textOf(r.render())).not.toContain("⤓ default");
     // The click a stale or hand-built URL could still carry.
-    await expect(r.click(`cc-candybar://save-theme-default/${SID}/user`)).rejects.toThrow(
+    await expect(
+      r.click(`cc-candybar://save-theme-default/${SID}/user`),
+    ).rejects.toThrow(
       "save-theme-default: the theme is chosen by a rule (globals.palette), so there is no name to save as a theme's default",
     );
     expect(durable.text()).toBe(source);
@@ -1581,7 +1683,10 @@ describe("the animation lanes' toggles", () => {
     async (lane) => {
       const { r } = await openToggles();
       try {
-        const [url, ...others] = writesTo(r.render(), LANES[lane].switch.setting);
+        const [url, ...others] = writesTo(
+          r.render(),
+          LANES[lane].switch.setting,
+        );
         expect(others).toEqual([]);
         expect(effectsOf(url!).map((e) => [e.verb, ...e.args])).toEqual([
           ["set-state", SID, LANES[lane].switch.setting, "true"],
@@ -1626,7 +1731,11 @@ describe("the renderer menu", () => {
   const RENDERER_APPLY = "candybar.apply.renderer";
   // The settings menu open on ⚙ config, the session in tmux pane %7 or in no
   // pane at all.
-  const openConfig = async (pane: string, source = TWO_SEGMENT_ROOT, durable?: DurableConfig) => {
+  const openConfig = async (
+    pane: string,
+    source = TWO_SEGMENT_ROOT,
+    durable?: DurableConfig,
+  ) => {
     const r = rig(source, durable);
     r.tmuxPane = pane;
     await r.click(writesTo(r.render(), "candybar.menu")[0]!);
@@ -1661,8 +1770,12 @@ describe("the renderer menu", () => {
       await openList(r);
       const lines = textOf(r.render()).split("\n");
       expect(lines.some((l) => l.includes("draw the bar in"))).toBe(true);
-      const claude = lines.find((l) => l.includes("Claude Code's status line"))!;
-      const tmux = lines.find((l) => l.includes("the tmux status line, while"))!;
+      const claude = lines.find((l) =>
+        l.includes("Claude Code's status line"),
+      )!;
+      const tmux = lines.find((l) =>
+        l.includes("the tmux status line, while"),
+      )!;
       expect(claude).toMatch(/claude\s+Claude Code's status line/u);
       expect(tmux).toMatch(/tmux\s+the tmux status line/u);
       expect(claude.indexOf("Claude Code's")).toBe(tmux.indexOf("the tmux"));
@@ -1842,13 +1955,20 @@ describe("a lane toggle's readout", () => {
       const t0 = 1_792_573_980;
       const glyphs = [0, 1, 2].map(
         (n) =>
-          lineOf(r.render(following({}), instantOf(new Date((t0 + n / MOVING_FPS + 0.001) * 1000)))).match(SPINNER)![0],
+          lineOf(
+            r.render(
+              following({}),
+              instantOf(new Date((t0 + n / MOVING_FPS + 0.001) * 1000)),
+            ),
+          ).match(SPINNER)![0],
       );
       expect(new Set(glyphs).size).toBe(3);
       expect(lineOf(r.render(following({ fps: 29 })))).toMatch(
         new RegExp(`statusline \\(B\\) ${SPINNER.source} 29 fps`, "u"),
       );
-      expect(lineOf(r.render(following({}))).includes("off screen")).toBe(false);
+      expect(lineOf(r.render(following({}))).includes("off screen")).toBe(
+        false,
+      );
     } finally {
       r.dispose();
     }
@@ -1871,7 +1991,8 @@ describe("a lane toggle's readout", () => {
 // at (not a count of pushes, which is the lane toggle's); a bar answering
 // Claude Code's request shows that it is polled. Every form is one width.
 describe("the frame rate beside the door", () => {
-  const doorLine = (rendered: Frame): string => textOf(rendered).split("\n")[0]!;
+  const doorLine = (rendered: Frame): string =>
+    textOf(rendered).split("\n")[0]!;
   // The readout is the next text after the door: only padding and chrome
   // between them.
   const afterDoor = (readout: string): RegExp =>
@@ -1880,7 +2001,9 @@ describe("the frame rate beside the door", () => {
   test("a frame the feed drew shows the rate the feed draws at, after the door", () => {
     const r = rig(TWO_SEGMENT_ROOT);
     try {
-      const line = doorLine(r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }));
+      const line = doorLine(
+        r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }),
+      );
       expect(line).toMatch(afterDoor(`${MOVING_FPS} fps`));
     } finally {
       r.dispose();
@@ -1901,8 +2024,12 @@ describe("the frame rate beside the door", () => {
   test("the still pace and polled take the moving pace's width, so nothing after the door moves", () => {
     const r = rig(TWO_SEGMENT_ROOT);
     try {
-      const still = doorLine(r.render(undefined, undefined, { by: "feed", fps: 1 }));
-      const moving = doorLine(r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }));
+      const still = doorLine(
+        r.render(undefined, undefined, { by: "feed", fps: 1 }),
+      );
+      const moving = doorLine(
+        r.render(undefined, undefined, { by: "feed", fps: MOVING_FPS }),
+      );
       const polled = doorLine(r.render());
       // The equal lengths are the padding: an unpadded form would be shorter.
       expect(still).toMatch(afterDoor("1 fps"));

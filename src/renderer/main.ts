@@ -1,22 +1,26 @@
 // The main renderer, in process: today's request answer behind the renderer
-// interface (src/renderer-interface/interface.ts). A `config` turn records the
-// session's context and opens its view there, so its output names what the
-// view reads before the request after it waits. A request's turn holds that
-// view at its own context, draws the bar and returns it as a `present`; that
-// present's `effect-done` records what the frame showed, once the host says
-// whether its client took it. A world state the host hands in, with a
-// `config` or alone, is what the session's views draw from, and a retire ends
-// what the renderer holds of the session. A click acts in its turn, and a
-// `due` runs what the renderer held for its tick: work deferred, the close of
-// a session's idle menus, and its feeds' frames. Every output says what the
-// open views need read and when the renderer next wants a turn, as they stand
-// once the turn's act has landed.
+// interface (src/renderer-interface/interface.ts). A `context` turn records
+// the session's context and opens its view there, so its output names what
+// the view reads before the request after it waits. A `config` turn hands in
+// what discovery found at an origin the renderer names, and runs every event
+// that waited for it. A request's turn holds the session's view at its own
+// context, draws the bar and returns it as a `present`; that present's
+// `effect-done` records what the frame showed, once the host says whether its
+// client took it. A world state the host hands in, with a `context` or alone,
+// is what the session's views draw from, and a retire ends what the renderer
+// holds of the session. A click acts in its turn, and a `due` runs what the
+// renderer held for its tick: work deferred, the close of a session's idle
+// menus, and its feeds' frames. Every output says what the open views need
+// read, which origins' config the renderer holds, and when it next wants a
+// turn, as they stand once the turn's act has landed.
 
 import {
   answerRequest,
   configureSession,
   deliver,
   lanesAt,
+  openSession,
+  takeContext,
   renderFrame,
   retireSession,
   viewLanes,
@@ -44,7 +48,7 @@ import type { DoctorStores } from "../doctor/ports.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { Locations } from "../config/loader/discovery.js";
 import type { Gates } from "../daemon/foundations/gates.js";
-import type { RenderOrigin } from "../config-hint.js";
+import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type {
   AdapterPush,
@@ -68,7 +72,6 @@ import { LaneActs } from "./lane-acts.js";
 import { WorldStates } from "./world-states.js";
 import { DoctorRuns } from "./doctor.js";
 import { UpdateGate } from "./update-gate.js";
-import { Watches } from "./watches.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import {
   configLoadedLine,
@@ -95,6 +98,7 @@ import {
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
 import { readConfigText } from "./config-file-store.js";
+import { recordedOriginOf } from "./verbs/index.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
@@ -116,7 +120,33 @@ export function mainRenderer(
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, Delivery>();
   // The subscriptions this renderer last returned: none before its first turn.
-  let subscriptions: Subscriptions = { sources: {}, lanes: {}, wake: null };
+  let subscriptions: Subscriptions = {
+    sources: {},
+    lanes: {},
+    configs: [],
+    wake: null,
+  };
+  // [LAW:no-ambient-temporal-coupling] Each event that needs its origin's
+  // config and arrived before the renderer held it, in arrival order, under
+  // that origin: the `config` turn that brings it runs what is left of it, as
+  // part of itself. Plain data, the events themselves.
+  let parked: ReadonlyArray<{
+    readonly origin: RenderOrigin;
+    readonly event: Extract<Event, { kind: "context" | "click" }>;
+  }> = [];
+  // [LAW:single-enforcer] Whether `event` waits for `origin`'s config: it
+  // does while the renderer holds none, and its output then names the origin
+  // (`subscribed`). An event with no origin to wait on runs.
+  const waits = (
+    origin: RenderOrigin | null,
+    event: (typeof parked)[number]["event"],
+    record: RequestFacts,
+  ): boolean => {
+    if (origin === null || parts.renderCache.holdsConfig(origin)) return false;
+    parked = [...parked, { origin, event }];
+    record.push(["parked", event.kind]);
+    return true;
+  };
 
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
@@ -133,20 +163,51 @@ export function mainRenderer(
     switch (event.kind) {
       case "start":
         // The feeds first: a watched session's feed pins its view before
-        // the view opens. Each session is configured whatever another's
-        // configuring, or a feed, threw.
+        // the view opens. Each session opens as its `context` would, so one
+        // at an origin the renderer holds no config for waits for it, and
+        // each whatever another's opening, or a feed, threw.
         runEach([
           () => feeds.view(event.viewers, time.tick),
           ...event.sessions.map(
             ({ context, worldState }) =>
               () =>
-                configureSession(parts, context, worldState, record),
+                turn(
+                  { kind: "context", context, worldState },
+                  record,
+                  effects,
+                  frames,
+                ),
           ),
         ]);
         return;
-      case "config":
-        configureSession(parts, event.context, event.worldState, record);
+      case "context":
+        // [LAW:no-ambient-temporal-coupling] What needs no config lands now,
+        // so the session's world states are taken in the order they came;
+        // only the view's opening waits.
+        if (parts.renderCache.holdsConfig(event.context.requested))
+          configureSession(parts, event.context, event.worldState, record);
+        else {
+          takeContext(parts, event.context, event.worldState, record);
+          waits(event.context.requested, event, record);
+        }
         return;
+      case "config": {
+        parts.renderCache.configure(event.origin, event.config);
+        // [LAW:no-ambient-temporal-coupling] Every event that waited for this
+        // origin runs now, in arrival order, its effects and frames this
+        // turn's, so they land in the slot it arrived in. Each runs whatever
+        // another threw.
+        const key = originKey(event.origin);
+        const ready = parked.filter((p) => originKey(p.origin) === key);
+        parked = parked.filter((p) => originKey(p.origin) !== key);
+        runEach(
+          ready.map(({ event: waited }) => () => {
+            if (waited.kind === "context") openSession(parts, waited.context);
+            else turn(waited, record, effects, frames);
+          }),
+        );
+        return;
+      }
       case "request": {
         const { frame, delivery } = answerRequest(
           parts,
@@ -170,6 +231,12 @@ export function mainRenderer(
         parts.worldStates.take(event.worldState);
         return;
       case "retire":
+        // A context the session parked opens nothing once it is retired.
+        parked = parked.filter(
+          (p) =>
+            p.event.kind !== "context" ||
+            p.event.context.hookData.session_id !== event.session,
+        );
         // The run first: a teardown that throws leaves no run asking for a
         // session the host has discarded.
         parts.doctorRuns.retire(event.session);
@@ -190,9 +257,16 @@ export function mainRenderer(
         if (event.outcome.kind === "ok") deliver(parts, delivery);
         return;
       }
-      case "click":
+      case "click": {
+        // A click on a session no live context names (one idle past its
+        // retire) waits for the config of the origin it last rendered at.
+        const sid = event.session?.ok ? event.session.id : null;
+        const origin =
+          sid === null ? null : recordedOriginOf(parts.sessionState, sid);
+        if (waits(origin, event, record)) return;
         clickTurn(parts, event, effects);
         return;
+      }
       case "viewers":
         feeds.view(event.viewers, time.tick);
         return;
@@ -229,9 +303,24 @@ export function mainRenderer(
       const switches = viewLanes(parts, session);
       if (switches !== null) lanes[session] = switches;
     }
+    // [LAW:one-source-of-truth] The origins whose config the renderer holds:
+    // each live session's, from its context until its retire, the one whose
+    // click's consequence waits on its landing, and each a parked event
+    // waits on, once each.
+    const configs = new Map<string, RenderOrigin>();
+    const landing = parts.verbs.landing();
+    for (const session of [
+      ...parts.worldStates.sessions(),
+      ...(landing === null ? [] : [landing]),
+    ]) {
+      const origin = recordedOriginOf(parts.sessionState, session);
+      if (origin !== null) configs.set(originKey(origin), origin);
+    }
+    for (const { origin } of parked) configs.set(originKey(origin), origin);
     return {
       sources: Object.fromEntries(merged) as Subscriptions["sources"],
       lanes,
+      configs: [...configs.values()],
       // [LAW:one-source-of-truth] The tick the renderer next wants a turn
       // at: the earliest any owner of a tick holds.
       wake: earliestOf([time.next(), menuIdle.next(), feeds.next()]),
@@ -249,6 +338,11 @@ export function mainRenderer(
         value = run();
       } finally {
         subscriptions = subscribed();
+        // [LAW:one-source-of-truth] The snapshots held are exactly the
+        // origins the output names, as the host follows exactly those.
+        parts.renderCache.prune(
+          new Set(subscriptions.configs.map((o) => originKey(o))),
+        );
       }
       return { kind: "answered", value };
     } catch (thrown) {
@@ -427,17 +521,12 @@ function startOver(
     updateGate.took(document.daemon.update.newer);
     doctorRuns.took(document);
   });
-  // [LAW:single-enforcer] Every watch this renderer holds, each held by the
-  // host's registry under an id minted here.
-  const watches = new Watches(host.watches);
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock: time.clock,
-      stateDir: inputs.stateDir,
       locations: inputs.locations,
       env: inputs.env,
       sessionState,
-      watchers: watches,
       log,
       storage: host.storage,
       signer: linkSigner,
@@ -519,10 +608,6 @@ function startOver(
     menuIdle,
     feeds,
   };
-  const reloadConfig = (origin: RenderOrigin): void =>
-    renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
-      kind: "write",
-    });
   const verbCtx: DaemonVerbContext = {
     gates,
     sessionState,
@@ -535,12 +620,10 @@ function startOver(
     now,
     doctorRuns,
     // The load the session's bar is drawn from: its cache entry's load
-    // outcome, and what the config that entry renders left unused, reloaded
-    // first (`startRun`).
+    // outcome, and what the config that entry renders left unused, over the
+    // snapshot the host follows (`startRun`).
     doctorLoad: (origin) => {
-      const at = [origin.projectDir, origin.cwd, origin.target.path] as const;
-      renderCache.reload(...at, { kind: "doctor" });
-      const entry = renderCache.getOrCreate(...at);
+      const entry = renderCache.getOrCreate(origin);
       return {
         layers: entry.configLayers,
         error: entry.lastError,
@@ -554,14 +637,9 @@ function startOver(
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin) =>
-      renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
-        .state.config,
-    reloadConfig,
+    configFor: (origin) => renderCache.getOrCreate(origin).state.config,
     // The storage folders of the same entry `configFor` reads the config of.
-    sourcesFor: (origin) =>
-      renderCache.getOrCreate(origin.projectDir, origin.cwd, origin.target.path)
-        .state.sources,
+    sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
     links: linkSigner,
     lanes: {
       of: (origin, sessionId, latest) =>
@@ -596,15 +674,6 @@ function startOver(
           kind: "debug",
           snapshot: debugOf(renderCache.latestView(), push.what),
         };
-      case "watch":
-        watches.pushed(push.id, push.heard, push.deaf);
-        return { kind: "watch" };
-      case "reload-every":
-        renderCache.reloadEvery({ kind: "events-resumed", since: push.since });
-        return { kind: "reload-every" };
-      case "reload-config":
-        reloadConfig(push.origin);
-        return { kind: "reload-config" };
       // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
       // runs whole, so none is in flight.
       case "close-journal":

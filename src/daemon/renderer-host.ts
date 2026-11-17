@@ -17,6 +17,13 @@
 // `effect-done` turns, so the next input finds them landed: the renderer
 // never waits for a landing. Its acts go on after the slot, and each one's
 // `effect-done` joins the mailbox when it ends.
+//
+// [LAW:one-source-of-truth] The origins a turn's output names are the ones
+// config discovery follows. Each one the renderer was not yet served gets
+// its `config` turn in the same slot, as does each one a turn's landing
+// moved, ahead of the landing's `effect-done` turns, so the turn after finds
+// the config it needs held, and a click's consequence reads the config its
+// landing left.
 
 import {
   type ConfigChange,
@@ -51,6 +58,8 @@ import {
 } from "./effect-interpreter.js";
 import { outlives, type HostAct } from "./acts.js";
 import { RendererWake } from "./renderer-wake.js";
+import { originKey, type RenderOrigin } from "../config-hint.js";
+import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 
 // The only renderer there is yet: the main one, in process.
 export type RendererName = "main";
@@ -79,11 +88,13 @@ interface MadeEvent {
 export type Made = MadeEvent | Failure;
 
 // What the host's turns act in: the performer of acts, the trust book's
-// directory, whether the daemon's close has begun, and where an act's failure
-// goes that no session's bar can hold.
+// directory, what config discovery found at each origin it follows, whether
+// the daemon's close has begun, and where an act's failure goes that no
+// session's bar can hold.
 export interface HostWorld {
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
+  readonly configs: Pick<ConfigDiscovery, "follow" | "snapshotOf" | "landed">;
   readonly closing: () => boolean;
   readonly unheard: (text: string) => void;
 }
@@ -108,6 +119,9 @@ export interface RendererHost {
   ask<P extends AdapterPush>(push: P): Promise<ReplyTo<P["kind"]>>;
   // One push nobody awaits: its failure is logged here.
   tell(push: AdapterPush): void;
+  // What discovery found at each of `origins` moved: each gets its `config`
+  // turn, made from what discovery holds as its slot comes up.
+  moved(origins: readonly RenderOrigin[]): void;
   // [LAW:no-ambient-temporal-coupling] The wake's end, first in the
   // daemon's teardown: no `due` is made after it.
   closeWake(): void;
@@ -153,6 +167,10 @@ export function rendererHost(
   // when: its answer, its changes landing and their `effect-done` turns.
   let holder: { input: string; readonly since: Monotonic } | null = null;
   let queued = 0;
+  // [LAW:one-source-of-truth] The origins, by `originKey`, whose config the
+  // live renderer was served: what its last output named. A `start` is a
+  // renderer that holds none.
+  let served = new Set<string>();
 
   // [LAW:single-enforcer] The one way into the renderer's turn: `slot` once
   // every slot asked for before it has ended, handed how long it waited and
@@ -248,7 +266,27 @@ export function rendererHost(
               },
               collector.writableSettings,
             );
-      took(subscriptions, frames);
+      if (input.event.kind === "start") served = new Set();
+      const named = took(subscriptions, frames);
+      // [LAW:no-ambient-temporal-coupling] Every origin the output newly
+      // names, and every one the landing moved, gets its `config` turn here,
+      // ahead of the landing's `effect-done` turns.
+      const configured: Array<Promise<unknown>> = [];
+      for (const origin of named)
+        configured.push(
+          (await configInSlot(origin, "config-subscribed")).settled,
+        );
+      const moved =
+        landed.kind === "ok" && changes.length + answers.length > 0
+          ? world.configs.landed(
+              changes.map(({ target }) =>
+                target.kind === "layer" ? target.path : target.file,
+              ),
+              answers.length > 0,
+            )
+          : [];
+      for (const origin of moved)
+        configured.push((await configInSlot(origin, "config-landed")).settled);
       // An act no landing let go: the close is its own cause, and any other
       // is its changes', whose own outcome says why.
       const unperformed: EffectOutcome =
@@ -289,7 +327,9 @@ export function rendererHost(
           before = acted;
         }
       }
-      const settled = Promise.all(owed).finally(release);
+      const settled = Promise.all(configured)
+        .then(() => Promise.all(owed))
+        .finally(release);
       return { turn, settled };
     } catch (thrown) {
       release();
@@ -300,16 +340,28 @@ export function rendererHost(
   // [LAW:single-enforcer] Every output is taken here, the wake first, so a
   // taker that throws leaves the renderer's next turn armed. Taking never
   // fails a turn that answered: its effects are still owed their
-  // `effect-done`.
+  // `effect-done`. Answers the origins the output names that the renderer
+  // was not served, which discovery now follows.
   // [LAW:no-silent-failure] A taker's throw is the daemon's, on every bar.
   const took = (
     subscriptions: Subscriptions,
     frames: readonly PushedFrame[],
-  ): void => {
+  ): readonly RenderOrigin[] => {
     wake.declare(subscriptions.wake);
+    let named: readonly RenderOrigin[] = [];
     for (const [what, take] of [
       ["subscriptions", () => collector.subscribed(subscriptions)],
       ["frames", () => collector.frames(frames)],
+      [
+        "configs",
+        () => {
+          world.configs.follow(subscriptions.configs);
+          named = subscriptions.configs.filter(
+            (o) => !served.has(originKey(o)),
+          );
+          served = new Set(subscriptions.configs.map((o) => originKey(o)));
+        },
+      ],
     ] as const) {
       try {
         take();
@@ -319,6 +371,35 @@ export function rendererHost(
         world.unheard(text);
       }
     }
+    return named;
+  };
+
+  // [LAW:one-source-of-truth] An origin's `config`, made from what discovery
+  // holds as its slot comes up. One discovery no longer follows (the
+  // renderer let it go before the slot) has nothing to hand in: its reason
+  // left first.
+  const configMade = (origin: RenderOrigin) => (): Made => {
+    const config = world.configs.snapshotOf(origin);
+    return config === null
+      ? {
+          kind: "abandoned",
+          message: "the renderer let the origin go",
+          detail: `origin ${JSON.stringify(originKey(origin))} is no longer followed`,
+        }
+      : { kind: "event", event: { kind: "config", origin, config } };
+  };
+  // An origin's `config` turn in the slot of the turn that named it or moved
+  // it: settled once that turn's own acts have.
+  const configInSlot = async (
+    origin: RenderOrigin,
+    why: string,
+  ): Promise<{ readonly settled: Promise<unknown> }> => {
+    const made = configMade(origin)();
+    if (made.kind !== "event") return { settled: Promise.resolve() };
+    const input = stamped(made);
+    const { turn, settled } = await inSlot(input, 0);
+    record(input.event, [["why", why]], turn);
+    return { settled };
   };
 
   // [LAW:no-silent-failure] Each effect's outcome goes back to the renderer
@@ -469,7 +550,10 @@ export function rendererHost(
           push,
           ...readingsAt(clock),
         });
-        took(subscriptions, []);
+        // A push answers in no slot of a turn: each origin it newly names
+        // gets its `config` turn behind it.
+        for (const origin of took(subscriptions, []))
+          void deliver(configMade(origin), [["why", "config-subscribed"]]);
         return answered;
       } catch (thrown) {
         return {
@@ -503,6 +587,10 @@ export function rendererHost(
       // supervisor's to say.
       if (failure.kind !== "down") log("error", failure.detail);
     });
+  const moved = (origins: readonly RenderOrigin[]): void => {
+    for (const origin of origins)
+      void deliver(configMade(origin), [["why", "config-moved"]]);
+  };
   const stats = (): MailboxStats => ({
     holder: holder?.input ?? null,
     heldMs: holder === null ? 0 : elapsedMs(clock, holder.since),
@@ -555,6 +643,7 @@ export function rendererHost(
     start: recorded("first"),
     ask,
     tell,
+    moved,
     stats,
     closeWake: () => wake.close(),
   };
@@ -579,9 +668,12 @@ function sessionOf(event: Event): SessionId | null {
     // A start is every session's: it holds none of them alone.
     case "start":
       return null;
-    case "config":
+    case "context":
     case "request":
       return event.context.hookData.session_id;
+    // An origin's config is every session's there.
+    case "config":
+      return null;
     case "world-state":
       return event.worldState.session;
     case "click":

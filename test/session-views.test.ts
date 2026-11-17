@@ -27,6 +27,7 @@ import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { DiscoveringCache, originOf } from "./helpers/config-host";
 const S_A = sessionIdOf("s-a");
 const S_COPY = sessionIdOf("s-copy");
 
@@ -90,7 +91,7 @@ function makeCache(
     logger: () => {},
   });
   cleanups.push(() => watchers.closeAll());
-  const cache = new RenderCache(
+  const cache = new DiscoveringCache(
     {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
@@ -198,7 +199,10 @@ async function render(
   at = new Date(),
 ): Promise<{ text: string; view: SessionView }> {
   const { text, view } = (() => {
-    using held = cache.holdSession(cwd, cwd, undefined, viewFacts(cwd, sid));
+    using held = cache.holdSession(
+      originOf(cwd, cwd, undefined),
+      viewFacts(cwd, sid),
+    );
     return { text: drawn(held.view, sid, at), view: held.view };
   })();
   expect(await runsOf(view).settled(AbortSignal.timeout(5000))).toEqual([]);
@@ -254,7 +258,7 @@ test("a reload opens each of the entry's views anew on the new state, and retire
   const { cache, lines } = makeCache();
   const before = await render(cache, "s-a");
   configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.configs.again();
   // The successor is open before any render, so the next frame draws a view
   // (brandon-unfiled-3248.8ro6, 4a).
   expect(cache.stats.views).toBe(1);
@@ -288,10 +292,10 @@ test("a kept view draws by each request holdSession is given, inside a batch too
   configure(dir);
   const { cache } = makeCache();
   const first = viewFacts(dir, "s-a");
-  cache.holdSession(dir, dir, undefined, first)[Symbol.dispose]();
+  cache.holdSession(originOf(dir, dir, undefined), first)[Symbol.dispose]();
   const next = viewFacts(dir, "s-a");
   runInAction(() => {
-    using held = cache.holdSession(dir, dir, undefined, next);
+    using held = cache.holdSession(originOf(dir, dir, undefined), next);
     expect(held.view.facts()).toBe(next);
   });
 });
@@ -299,9 +303,12 @@ test("a kept view draws by each request holdSession is given, inside a batch too
 test("a view held by a render in flight is disposed only when the render returns", () => {
   configure(dir);
   const { cache, lines } = makeCache();
-  const held = cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a"));
+  const held = cache.holdSession(
+    originOf(dir, dir, undefined),
+    viewFacts(dir, "s-a"),
+  );
   configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.configs.again();
   expect(cache.stats).toMatchObject({ views: 1, retiredViews: 1 });
   // Retired, not disposed: the render still draws through it.
   expect(lines.some((l) => l.startsWith("session view closed"))).toBe(false);
@@ -334,7 +341,7 @@ test("a source keyed on the instant is refused at load, naming the period that r
     }),
   );
   const { cache } = makeCache();
-  const entry = cache.getOrCreate(dir, dir, undefined);
+  const entry = cache.getOrCreate(originOf(dir, dir, undefined));
   expect(entry.lastError).toContain('cache.key calls "now"');
   expect(entry.lastError).toContain('cache: { ttl: "<duration>" }');
 });
@@ -390,10 +397,13 @@ test("a move whose new view fails to open still retires the view it replaces", (
     },
   });
   cache
-    .holdSession(dir, dir, undefined, viewFacts(dir, "s-a"))
+    .holdSession(originOf(dir, dir, undefined), viewFacts(dir, "s-a"))
     [Symbol.dispose]();
   expect(() =>
-    cache.holdSession(other, other, undefined, viewFacts(other, "s-a")),
+    cache.holdSession(
+      originOf(other, other, undefined),
+      viewFacts(other, "s-a"),
+    ),
   ).toThrow("log boom");
   expect(lines).toContainEqual(
     expect.stringMatching(/^session view closed sid="s-a" reason=moved /),
@@ -413,11 +423,11 @@ test("a view that fails to open releases the state hold it was opened under", ()
     },
   });
   expect(() =>
-    cache.holdSession(dir, dir, undefined, viewFacts(dir, "s-a")),
+    cache.holdSession(originOf(dir, dir, undefined), viewFacts(dir, "s-a")),
   ).toThrow("log boom");
   // Retired by the reload and held by nothing, the state is reclaimed now.
   configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.configs.again();
   expect(cache.stats.retired).toBe(0);
 });
 
@@ -485,7 +495,7 @@ test("a config load starts no view's source, and still names a session value tha
   );
   const { cache } = makeCache({}, launcher);
 
-  const entry = cache.getOrCreate(dir, dir, undefined);
+  const entry = cache.getOrCreate(originOf(dir, dir, undefined));
   expect(entry.lastError).toBeNull();
   // The one value that cannot declare, and no view source faulted for want of
   // a session.
@@ -529,7 +539,7 @@ test("a frame on screen stays copyable across a reload's successor view, and goe
   await render(cache, "s-copy");
   cache.delivered(S_COPY, "request", new Map([["7", "the message"]]));
   configure(dir, 1);
-  cache.reload(dir, dir, undefined, { kind: "write" });
+  cache.configs.again();
   expect(cache.drawnCopy(S_COPY, "request", "7")).toBe("the message");
   // The host retires the session: its view closes, and its frames.
   cache.retireSession(S_COPY);

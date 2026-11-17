@@ -26,7 +26,6 @@ import { newUpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { stableAttachPreload } from "../install/index.js";
-import { type RenderOrigin } from "../config-hint";
 import { createPayloadProviders } from "./payload-providers";
 import { runTeardown, type TeardownStep } from "../utils/teardown";
 import { FileEventDelivery } from "./cache/file-events";
@@ -73,11 +72,7 @@ import { DoctorSource } from "./cache/doctor.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
-import type { WatchId } from "../renderer-interface/adapter.js";
-import type {
-  Invalidation,
-  WatcherHandle,
-} from "./foundations/watch-targets.js";
+import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 import { followingOf } from "../renderer-interface/interface.js";
 import type { SessionId } from "./foundations/session-id.js";
 
@@ -215,10 +210,10 @@ export interface Daemon {
     clientLeft: () => boolean,
   ) => Promise<Reply>;
   readonly subscribe: FrameFeeds<CheckedRenderRequest>["subscribe"];
-  // Re-read the config a render origin resolves to, now: what a durable click
-  // does after it writes. The page in site/ calls it after it resets its
-  // simulated machine's config file.
-  readonly reloadConfig: (origin: RenderOrigin) => void;
+  // Discover every followed origin's config again, now: the page in site/
+  // calls it after it resets its simulated machine's config file, which no
+  // watch hears.
+  readonly rediscover: () => void;
   // What a daemon that won the socket starts: only it counts its memory or
   // watches its bundle.
   arm(): void;
@@ -554,8 +549,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // before either.
   const updateFact = newUpdateFact();
   // [LAW:no-silent-failure] An edit made while file events went unheard is
-  // re-read when they resume, in every entry, one entry per turn, each
-  // waking its own sessions as its reload lands. Every feed redraws when
+  // found when they resume: every followed origin is discovered again, and
+  // each one that moved gets its `config` turn. Every feed redraws when
   // delivery moves, so its row comes and goes on frames too.
   // [LAW:no-ambient-temporal-coupling] Every directory watch is judged against
   // the disk on the one period the daemon keeps time by: a folder replaced
@@ -568,7 +563,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         return;
       case "caught-up":
         restateFaults();
-        parts.renderer.tell({ kind: "reload-every", since: notice.since });
+        configDiscovery.again("events-resumed");
         return;
       case "moved":
         restateFaults();
@@ -636,9 +631,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
   });
 
-  // [LAW:single-enforcer] Each watch the renderer holds, by the id it minted,
-  // from its `watch` to its `unwatch`.
-  const rendererWatches = new Map<WatchId, WatcherHandle>();
   // [LAW:one-way-deps] The host's parts the main renderer reaches: the
   // compiler checks each against its entry in `AdapterToHost` here, so no
   // renderer file names a host type.
@@ -654,27 +646,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         actFailed = { ...actFailed, answered: true };
       restateFaults();
     },
-    watches: {
-      watch: (id, key, targets) => {
-        // Each window the registry hears goes back to the renderer with
-        // the watch's deafness as it stands then.
-        const told = (heard: Invalidation | null): void =>
-          parts.renderer.tell({ kind: "watch", id, heard, deaf: handle.deaf });
-        const handle = watcherRegistry.acquire(key, targets, told);
-        rendererWatches.set(id, handle);
-        // [LAW:no-ambient-temporal-coupling] The acquire's own push goes
-        // after the notice that asked for it, as it would from another
-        // process: a renderer's start acquires watches before the host holds
-        // the renderer it builds.
-        void clock.defer(() => {
-          if (rendererWatches.get(id) === handle) told(null);
-        });
-      },
-      unwatch: (id) => {
-        rendererWatches.get(id)?.release();
-        rendererWatches.delete(id);
-      },
-    },
     storage: {
       hold: (id, folders) => managedStorage.hold(id, folders),
       release: (id) => managedStorage.release(id),
@@ -686,7 +657,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
     // request would: every live session whose newest request the host holds
-    // gets its config with its latest stamp, all in the one `start` turn, so
+    // gets its context with its latest stamp, all in the one `start` turn, so
     // its output names every session it serves; and who watches each, so its
     // feeds open. All through the host's one path to the renderer, each turn
     // recorded there.
@@ -720,6 +691,17 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       rendererEnded = event;
       restateFaults();
     },
+  });
+  // [LAW:single-enforcer] What discovery found at each origin the renderer
+  // names, and the watches that say when it moved: each origin it moved gets
+  // its `config` turn. Made once the renderer is, whose making can throw, so
+  // a build that throws leaves no watch open.
+  const configDiscovery = new ConfigDiscovery({
+    locations: locs,
+    stateDir: paths.state,
+    watchers: watcherRegistry,
+    log,
+    moved: (origins) => parts.renderer.moved(origins),
   });
   const parts: DaemonParts = {
     closing: closing.signal,
@@ -775,6 +757,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       {
         perform: (act) => acts.perform(act),
         stateDir: paths.state,
+        configs: configDiscovery,
         closing: () => closing.signal.aborted,
         // [LAW:no-silent-failure] Joined to the last while it is owed, by the
         // one rule for events that follow each other.
@@ -810,9 +793,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       closing.signal.throwIfAborted();
       return frameFeeds.subscribe(sessionId, subscriber);
     },
-    reloadConfig: (origin) => {
+    rediscover: () => {
       closing.signal.throwIfAborted();
-      parts.renderer.tell({ kind: "reload-config", origin });
+      configDiscovery.again("asked");
     },
     arm() {
       closing.signal.throwIfAborted();
@@ -857,6 +840,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
         ["collector close", () => collector.close()],
+        // Before the views close: a `config` made after it finds its origin
+        // let go, and hands the closed cache nothing.
+        ["configDiscovery close", () => configDiscovery.close()],
         ["renderer views close", rendererStep("close-views")],
         ...payloadProviders.closes,
         ["runs close", () => runs.close()],

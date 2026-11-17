@@ -1,5 +1,5 @@
 // A render request answered by its renderer: the host delivers the session's
-// config, waits on its world state, then delivers the request, performs the
+// context, waits on its world state, then delivers the request, performs the
 // effects the request's turn returned, and answers the client with the one
 // frame presented for it, in the encoding the client asked for.
 
@@ -132,28 +132,28 @@ export async function answerStatusline(
       : { kind: "event", event };
   const worldState = collector.requested(req);
   // [LAW:no-ambient-temporal-coupling] The request holds its session from its
-  // config to its answer, wait included, so no sweep retires it between.
+  // context to its answer, wait included, so no sweep retires it between.
   const release = collector.holding(session);
   let configured: HostTurn;
   let delivered: HostTurn;
   try {
     // [LAW:no-ambient-temporal-coupling] The host owns the order: the
-    // session's config goes first, with the world state read at the
+    // session's context goes first, with the world state read at the
     // request's keys, and its output's subscriptions reach the collector as
     // the turn answers, so the wait covers every run the view names. The
     // wait is the host's, between the two turns, and holds no place in the
     // mailbox: another input's turn that lands meanwhile, one that evicts
     // the session's view included, moves what the wait covers.
     configured = await host.answer(
-      unlessClosing({ kind: "config", context: req, worldState }),
+      unlessClosing({ kind: "context", context: req, worldState }),
     );
-    // [LAW:nothing-unseen] The config turn's record leads: it opens with the
+    // [LAW:nothing-unseen] The context turn's record leads: it opens with the
     // session, which the event's readers key on (`render sid=`), and says
     // what the context was, whether or not a request turn runs after it.
     recorded(facts, configured);
     if (configured.kind === "threw") {
       noteFacts(facts, { renderer: host.name });
-      return failed(host, configured.failure, "its config turn: ");
+      return failed(host, configured.failure, "its context turn: ");
     }
     // Rules 1 and 2 of the model: the answer shows what this request
     // carried, so it waits for the first value of every fact of its world

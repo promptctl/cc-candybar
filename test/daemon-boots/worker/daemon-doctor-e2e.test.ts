@@ -39,10 +39,7 @@ import {
 } from "../../../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { SETTINGS_NS } from "../../../src/config/reserved-names";
-import {
-  VERB_DOCTOR_PROBE,
-  VERB_DOCTOR_RUN,
-} from "../../../src/click/wire";
+import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../../../src/click/wire";
 import {
   URL_FRAME_KIND,
   URL_FRAME_VERSION,
@@ -55,7 +52,7 @@ import {
 } from "../../../src/doctor/handler-probe";
 import { DEFAULT_TERMINAL_WIDTH } from "../../../src/render/strip";
 import { applyClaudeCodeReserve } from "../../../src/utils/terminal-width";
-import { loggedLines, renderLines } from "../../helpers/daemon-log";
+import { loggedLines, logLines, renderLines } from "../../helpers/daemon-log";
 import { crateDigest } from "../../../src/source-digest";
 import { productionInstallEdge } from "../../../src/doctor/edge";
 import { installOf, rateLimitsOf } from "../../../src/doctor/cli";
@@ -138,10 +135,20 @@ test("the doctor's config row reports the session's own config load", async () =
       `✗ config — ${userConfig} < ${projectConfig} (searched): helper "idle" is never called`,
     );
 
-    // Fixing it turns the row over on the very next run: the click reloads
-    // the entry, so it never reports the load from before the edit while
-    // the fs watcher catches up.
+    // Fixing it turns the row over on the next run once the origin's watch
+    // has moved its config: a run reads the load the config turn made.
+    const loads = (lines: readonly string[]): string[] =>
+      lines.filter(
+        (l) => l.includes(" config loaded ") && l.includes(" cause=config "),
+      );
+    const before = loads(logLines(env)).length;
     writeFileSync(projectConfig, `{}`);
+    await loggedLines(
+      env,
+      loads,
+      (picked) => picked.length > before,
+      "the config turn of the edited project layer",
+    );
     await click(daemon, run!);
     await reported(draw, "✓ config");
   } finally {
@@ -275,7 +282,9 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     );
     expect(events[0]).toMatch(/ via=cli verb=doctor-probe .* outcome=ok/);
     expect(events[1]).toMatch(
-      new RegExp(` via=forwarder urlV=${URL_FRAME_VERSION} verb=doctor-probe .* outcome=ok`),
+      new RegExp(
+        ` via=forwarder urlV=${URL_FRAME_VERSION} verb=doctor-probe .* outcome=ok`,
+      ),
     );
     expect(events[2]).toMatch(
       / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1, 2\)"/,
@@ -289,7 +298,10 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
 
     const SID = "doctor-e2e-2";
     await render(daemon, SID, projectDir);
-    await click(daemon, drawnLink(daemon, `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`));
+    await click(
+      daemon,
+      drawnLink(daemon, `cc-candybar://${VERB_DOCTOR_RUN}/${SID}`),
+    );
     await click(
       daemon,
       urlWriting(

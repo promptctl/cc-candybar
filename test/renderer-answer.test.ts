@@ -10,7 +10,10 @@
 // parts its side still reaches; no daemon is built.
 
 import { daemonFactsOf } from "./helpers/daemon-facts";
-import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 import type { DoctorAsk } from "../src/doctor/gather";
 import fs from "node:fs";
 import os from "node:os";
@@ -161,25 +164,52 @@ const REQUEST = 7 as RequestId;
 // The readings every input here carries: the rig's instant, at the first tick.
 const READ = { at: AT, tick: 0 as Tick };
 
-// The session's config as the host delivers one ahead of a request: with the
-// world state its collector read at the request's keys, and its output's
-// subscriptions handed back to the collector.
-const configure = async (
+// The session's context as the host delivers one ahead of a request: with the
+// world state its collector read at the request's keys.
+const contextTurn = (
   { r, rig }: { r: Renderer; rig: SessionRig },
   context: CheckedRenderRequest,
-) => {
-  const output = await r.answer({
+) =>
+  r.answer({
     kind: "event",
     ...READ,
     event: {
-      kind: "config",
+      kind: "context",
       context,
       worldState: rig.served.collector.requested(context),
     },
   });
-  rig.served.collector.subscribed(output.subscriptions);
-  return output;
+
+// What the host's slot does after `output`: the config of each origin it
+// names that the renderer holds none of, each its own turn, and the last
+// output's subscriptions handed back to the collector. Answers that output.
+const configsNamed = async (
+  { r, rig }: { r: Renderer; rig: SessionRig },
+  output: RendererOutput,
+): Promise<RendererOutput> => {
+  let last = output;
+  for (const origin of output.subscriptions.configs) {
+    if (rig.cache.holdsConfig(origin)) continue;
+    rig.cache.configs.follow(origin);
+    last = await r.answer({
+      kind: "event",
+      ...READ,
+      event: {
+        kind: "config",
+        origin,
+        config: rig.cache.configs.discovery.snapshotOf(origin)!,
+      },
+    });
+  }
+  rig.served.collector.subscribed(last.subscriptions);
+  return last;
 };
+
+// The session's context, and the config it waits for.
+const configure = async (
+  t: { r: Renderer; rig: SessionRig },
+  context: CheckedRenderRequest,
+) => configsNamed(t, await contextTurn(t, context));
 
 // The request as the host delivers one: after the session's config.
 const request = async (t: { r: Renderer; rig: SessionRig }) => {
@@ -233,7 +263,8 @@ const threw = (output: RendererOutput) => {
 const presentOf = (effects: readonly Effect[]): Present => {
   expect(effects).toHaveLength(1);
   const [present] = effects;
-  if (present?.kind !== "present") throw new Error("the turn presented nothing");
+  if (present?.kind !== "present")
+    throw new Error("the turn presented nothing");
   return present;
 };
 
@@ -254,8 +285,9 @@ describe("a statusline request", () => {
 
   // A restarted renderer: the host releases whatever its first output does
   // not name, a tmux status row included.
-  test("of each live session is configured by a start's one turn, whose output names them all", async () => {
-    const { r, rig } = renderer();
+  test("of each live session is configured by a start's one turn and the config it names, whose output names them all", async () => {
+    const t = renderer();
+    const { r, rig } = t;
     const mine = checked();
     const other = sessionIdOf("other-session");
     const theirs: CheckedRenderRequest = {
@@ -275,13 +307,17 @@ describe("a statusline request", () => {
       },
     });
     expect(output.kind).toBe("answered");
-    expect(Object.keys(output.subscriptions.sources).sort()).toEqual(
+    // Both wait for the one origin they share.
+    expect(output.subscriptions.configs).toEqual([mine.requested]);
+    const configured = await configsNamed(t, output);
+    expect(configured.kind).toBe("answered");
+    expect(Object.keys(configured.subscriptions.sources).sort()).toEqual(
       [SESSION, other].sort(),
     );
   });
 
-  test("has its context's facts on its config turn's record, which opens with the session", async () => {
-    const { record } = await configure(renderer(), checked());
+  test("has its context's facts on its context turn's record, which opens with the session", async () => {
+    const { record } = await contextTurn(renderer(), checked());
     expect(record[0]).toEqual(["sid", SESSION]);
     expect(new Map(record).get("badArgs")).toMatch(/--bogus/);
     expect(new Map(record).get("encoding")).toBe("frame");
@@ -383,7 +419,12 @@ describe("a draw", () => {
     const warned = parts.renderWarnings.of(SESSION, "request");
     const draw = () => {
       using setup = setUpRender(parts, checked(), READ, []);
-      const { drawn, kept } = drawRender(parts, setup, ANSWERING, UNFOLLOWED_FEEDS);
+      const { drawn, kept } = drawRender(
+        parts,
+        setup,
+        ANSWERING,
+        UNFOLLOWED_FEEDS,
+      );
       return { drawn, kept };
     };
     const first = draw();
@@ -650,6 +691,8 @@ describe("the session's config, ahead of its request", () => {
 
   test("one that throws answers its request with a failure naming the renderer, and the request is not delivered", async () => {
     const t = renderer();
+    // Its origin's config is held, so the context opens the view itself.
+    await configure(t, checked());
     t.rig.cache.holdSession = (() => {
       throw new Error("the opening broke");
     }) as never;
@@ -660,7 +703,7 @@ describe("the session's config, ahead of its request", () => {
       hostHeld(hearingEvents(t.r, (input) => kinds.push(input.event.kind))),
       () => {},
       unfollowedCollector(t.rig.served.collector),
-      NO_ACTS,
+      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
     );
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
@@ -674,11 +717,11 @@ describe("the session's config, ahead of its request", () => {
       systemTimekeeper.monotonic() + 5000,
       facts as never,
     );
-    expect(kinds).toEqual(["config"]);
+    expect(kinds).toEqual(["context", "config"]);
     expect(answered.resp).toMatchObject({
       ok: false,
       error: expect.stringMatching(
-        /^renderer main: its config turn: the opening broke/,
+        /^renderer main: its context turn: the opening broke/,
       ),
     });
     // The render event still opens with the session, and says what the
@@ -717,6 +760,59 @@ describe("the session's config, ahead of its request", () => {
   });
 });
 
+describe("an event that waits for its origin's config", () => {
+  test("a context at an origin the renderer holds no config for parks, its output names the origin, and the config turn opens its view", async () => {
+    const t = renderer();
+    const context = checked();
+    const parked = answered(await contextTurn(t, context));
+    expect(parked.subscriptions.configs).toEqual([context.requested]);
+    expect(parked.subscriptions.sources).toEqual({});
+    expect(new Map(parked.record).get("parked")).toBe("context");
+    expect(viewOf(t.rig)).toBeNull();
+    const configured = answered(await configsNamed(t, parked));
+    expect(viewOf(t.rig)).not.toBeNull();
+    expect(Object.keys(configured.subscriptions.sources)).toEqual([SESSION]);
+  });
+
+  test("a world state handed in while its context is parked is taken in its order, and the config turn opens the view at it", async () => {
+    const t = renderer();
+    const parked = answered(await contextTurn(t, checked()));
+    const held = t.rig.served.worldStates.of(SESSION);
+    const next = { ...held, seq: held.seq + 1 };
+    answered(await handIn(t.r, { kind: "world-state", worldState: next }));
+    answered(await configsNamed(t, parked));
+    expect(viewOf(t.rig)?.source.facts()).toBe(next);
+  });
+
+  test("a parked context its session retired before the config came opens nothing, and the origin is let go", async () => {
+    const t = renderer();
+    const context = checked();
+    answered(await contextTurn(t, context));
+    const retired = answered(
+      await handIn(t.r, { kind: "retire", session: SESSION }),
+    );
+    expect(retired.subscriptions.configs).toEqual([]);
+    t.rig.cache.configs.follow(context.requested);
+    answered(
+      await handIn(t.r, {
+        kind: "config",
+        origin: context.requested,
+        config: t.rig.cache.configs.discovery.snapshotOf(context.requested)!,
+      }),
+    );
+    expect(viewOf(t.rig)).toBeNull();
+  });
+
+  test("a config the renderer's output no longer names is pruned as the turn ends", async () => {
+    const t = renderer();
+    const context = checked();
+    await configure(t, context);
+    expect(t.rig.cache.holdsConfig(context.requested)).toBe(true);
+    await handIn(t.r, { kind: "retire", session: SESSION });
+    expect(t.rig.cache.holdsConfig(context.requested)).toBe(false);
+  });
+});
+
 describe("two requests of one session at different keys", () => {
   test("each reaches the renderer with the world state read at its own keys, and both answers draw the newest request's", async () => {
     const t = renderer();
@@ -735,13 +831,13 @@ describe("two requests of one session at different keys", () => {
       systemTimekeeper,
       hostHeld(
         hearingEvents(t.r, (input) => {
-          if (input.event.kind === "config")
+          if (input.event.kind === "context")
             requests.push(input.event.worldState);
         }),
       ),
       () => {},
       unfollowedCollector(t.rig.served.collector),
-      NO_ACTS,
+      { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
     );
     t.rig.served.route(host);
     const ask = (pane: string, id: number) =>
@@ -861,7 +957,10 @@ describe("a click", () => {
     await request(t);
     await handIn(t.r, { kind: "retire", session: SESSION });
     const latest = checked("%3");
-    answered(await handIn(t.r, click("act", latest)));
+    // The retire let its origin go, so the click waits for its config.
+    const clicked = answered(await handIn(t.r, click("act", latest)));
+    expect(seen).toBeUndefined();
+    answered(await configsNamed(t, clicked));
     expect(seen).toBe(latest);
   });
 

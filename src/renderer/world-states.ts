@@ -1,5 +1,5 @@
 // The world state of every session a renderer holds, as the host handed it in
-// (src/renderer-interface/interface.ts): written only by a `config`, which carries the
+// (src/renderer-interface/interface.ts): written only by a `context`, which carries the
 // document read at its request's keys, and by a `world-state`, and dropped by
 // a `retire`. A view's source reads its session's document here
 // (src/renderer/session-source.ts), so the renderer stamps nothing.
@@ -38,7 +38,7 @@ export class WorldStates {
     this.took(document);
   }
 
-  // [LAW:no-defensive-null-guards] The host delivers a session's `config`,
+  // [LAW:no-defensive-null-guards] The host delivers a session's `context`,
   // which carries its document, ahead of each of its requests, and a `retire`
   // drops the document with the view: a session with none here is the host's
   // bug, so the read throws, naming it.
@@ -46,9 +46,15 @@ export class WorldStates {
     const document = this.documents.get(session);
     if (document === undefined)
       throw new Error(
-        `no world state for session ${JSON.stringify(session)}: the host hands one in with the config ahead of every request`,
+        `no world state for session ${JSON.stringify(session)}: the host hands one in with the context ahead of every request`,
       );
     return document;
+  }
+
+  // [LAW:one-source-of-truth] Every session the renderer holds a document
+  // of: from its context until its retire.
+  sessions(): readonly SessionId[] {
+    return [...this.documents.keys()];
   }
 
   drop(session: SessionId): void {

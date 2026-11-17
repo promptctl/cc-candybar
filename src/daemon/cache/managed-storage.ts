@@ -131,9 +131,11 @@ const current = (was: Watched, found: Found): boolean =>
 //
 // [LAW:no-ambient-temporal-coupling] A folder's watch lives as long as a
 // render state declaring it holds it (`hold` to `release`), never as long as a
-// view: opening or closing a directory watch leaks on macOS. The owner never
-// re-arms a watch: a folder gone or replaced, or its watch faulted, ends its
-// generation, and the next hold (every config load sends one) opens the next.
+// view: opening or closing a directory watch leaks on macOS. A folder gone or
+// replaced, or its watch faulted, ends its generation. While a hold still
+// names the folder its owner opens the next: at once for one lost, and for
+// every ended one when file events resume or catch up, since a refusal or an
+// error from the OS refuses an immediate retry the same way.
 //
 // [LAW:one-source-of-truth] Whether the OS is delivering file events is the
 // daemon's one fact, not a folder's (file-events.ts): a stall is every
@@ -201,29 +203,33 @@ export class ManagedStorage {
   }
 
   // A render state's load names its folders: held under its id until the next
-  // load replaces the list or its `release`. Each named folder is keyed: one
-  // not yet watched, or whose generation ended, opens its new generation's
-  // watch before any old one closes, and its held files are re-read, since
-  // what they read before came from the path unwatched. So every load is a
-  // lost or faulted folder's recovery, and a folder two states name is never
-  // closed between them.
+  // load replaces the list or its `release`. Each named folder is kept
+  // current (`kept`), so a folder two states name is never closed between
+  // them.
   hold(id: StorageHoldId, folders: readonly string[]): void {
     this.holds.set(id, folders);
-    for (const folder of new Set(folders)) {
-      const was = this.watched.get(folder);
-      const found = this.found(folder);
-      if (was !== undefined && current(was, found)) continue;
-      const generation = this.generations++;
-      if (was !== undefined)
-        this.logger(
-          "info",
-          `plugin storage generation folder=${valueOf(folder)} generation=${generation}`,
-        );
-      this.opened({ folder, generation }, found);
-      if (was !== undefined) this.closed(was);
-      this.sessions.changed((f) => f.folder === folder);
-    }
+    for (const folder of new Set(folders)) this.kept(folder);
     this.closeUnheld();
+  }
+
+  // [LAW:single-enforcer] The one way a held folder's generation moves on:
+  // one not yet watched, or whose generation ended, or whose path holds
+  // another folder now, opens its new generation's watch before any old one
+  // closes, and its held files are re-read, since what they read before came
+  // from the path unwatched.
+  private kept(folder: string): void {
+    const was = this.watched.get(folder);
+    const found = this.found(folder);
+    if (was !== undefined && current(was, found)) return;
+    const generation = this.generations++;
+    if (was !== undefined)
+      this.logger(
+        "info",
+        `plugin storage generation folder=${valueOf(folder)} generation=${generation}`,
+      );
+    this.opened({ folder, generation }, found);
+    if (was !== undefined) this.closed(was);
+    this.sessions.changed((f) => f.folder === folder);
   }
 
   // A render state reclaimed: the folders only it named close.
@@ -366,10 +372,10 @@ export class ManagedStorage {
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
   // as a removal does. Lost only if the path is gone or holds another folder;
-  // otherwise `present` runs. A lost folder's held files are re-read from the
-  // path, so no draw shows a value from a folder no longer there while the
-  // next load opens the next generation. A generation already ended has
-  // nothing left to judge.
+  // otherwise `present` runs. A lost folder its holds still name opens its
+  // next generation at once (`kept`), which makes the folder again and
+  // re-reads its held files, so no draw shows a value from a folder no longer
+  // there. A generation already ended has nothing left to judge.
   private judged(watched: Watched, present: () => void): void {
     const { health } = watched;
     if (health.kind !== "watching") return;
@@ -392,14 +398,15 @@ export class ManagedStorage {
       "info",
       `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${now === "gone" ? "gone" : "replaced"}`,
     );
-    this.sessions.changed((f) => f.folder === key.folder);
+    this.kept(key.folder);
   }
 
   // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
   // folder still there, is a standing fault: every source read from the
-  // generation reads it, and the generation ends, so the next load's
-  // hold opens a fresh generation. No retry here: the OS refusing a watch
-  // (limits, permissions) refuses an immediate retry the same way.
+  // generation reads it, and the generation ends; its owner opens the next
+  // when file events resume or catch up (`noticed`). No retry here: the OS
+  // refusing a watch (limits, permissions) refuses an immediate retry the
+  // same way.
   private faulted(watched: Watched, cause: FaultCause, reason: string): void {
     const { key } = watched;
     if (watched.health.kind !== "watching") return;
@@ -414,18 +421,23 @@ export class ManagedStorage {
 
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
   // folder. Each period judges every folder against the disk: the event naming
-  // a removed folder and the follower's event that reloads its config ride one
-  // stream, which can drop both at once without a stall. Every change of
-  // delivery and every catch-up re-reads every held file, so no lane keeps a
-  // stall after delivery moves on, and a file written during a span lands.
+  // a removed folder can drop without a stall. Every change of delivery and
+  // every catch-up re-reads every held file, so no lane keeps a stall after
+  // delivery moves on, and a file written during a span lands; a catch-up
+  // also opens the next generation of every held folder whose generation
+  // ended, as the span may have held what ended it.
   private noticed(notice: DeliveryNotice): void {
     switch (notice.kind) {
       case "period":
         for (const watched of [...this.watched.values()])
           this.judged(watched, () => {});
         return;
-      case "moved":
       case "caught-up":
+        for (const watched of [...this.watched.values()])
+          if (watched.health.kind !== "watching") this.kept(watched.key.folder);
+        this.sessions.changed(() => true);
+        return;
+      case "moved":
         this.sessions.changed(() => true);
         return;
     }
@@ -441,11 +453,10 @@ export class ManagedStorage {
     switch (health.kind) {
       case "faulted":
         return `cannot refresh: ${folder} ${health.reason}; reload the config or restart the daemon`;
-      // A lost folder's watch is still open, and the reload that would move
-      // it on rides the same file events, so while they are stalled its
-      // sources read the stall, never a file read once from the path and then
-      // left unrefreshed. While delivery is unmeasured its files read as
-      // usual: the bar's row already says it cannot be checked.
+      // While file events are stalled a folder's sources read the stall,
+      // never a file read once from the path and then left unrefreshed.
+      // While delivery is unmeasured its files read as usual: the bar's row
+      // already says it cannot be checked.
       case "watching":
       case "lost": {
         const stall = stallReason(this.fileEvents.delivery());

@@ -214,10 +214,6 @@ export interface DaemonContext {
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
   readonly configFor: (origin: RenderOrigin) => DslConfig;
-  // Reload that config from disk now, so the next render reads what a click
-  // just wrote rather than waiting on the file watcher: in the turn a click's
-  // changes land (`changeLanded`).
-  readonly reloadConfig: (origin: RenderOrigin) => void;
   // [LAW:single-enforcer] Where every click's config writes go: changes its
   // turn returns, and its consequence held until they land
   // (src/renderer/config-writes.ts).
@@ -648,17 +644,26 @@ function recordedOrigin(
   ctx: DaemonContext,
   sid: SessionId,
 ): RenderOrigin | null {
-  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  return recordedOriginOf(ctx.sessionState, sid);
+}
+
+// [LAW:one-source-of-truth] The origin a session's last context recorded,
+// read back: what a click on it waits on the config of, and what the
+// renderer subscribes for a session it holds. Null for one never rendered.
+export function recordedOriginOf(
+  sessionState: Pick<SessionStateRW, "get">,
+  sid: SessionId,
+): RenderOrigin | null {
+  const raw = sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
   return raw === null ? null : parseRenderOrigin(raw);
 }
 
 // [LAW:single-enforcer] How a click's config changes landed, in the turn of
-// their last `effect-done`. [LAW:no-ambient-temporal-coupling] Landed, a
-// change to the file its session renders from reloads it, and then the click's
-// consequence applies, in the same turn, so no frame draws the reloaded file
-// without what the click did beside it, nor that without the file. A change to
-// another file rebuilds nothing here (a reload restarts every source) and
-// reaches the sessions that render it through the fs watcher.
+// their last `effect-done`. [LAW:no-ambient-temporal-coupling] Landed, the
+// host has already handed in, in the click's own slot, the `config` of every
+// origin the landing moved, so the click's consequence applies over the
+// config the landing left, and no frame draws the reloaded file without what
+// the click did beside it, nor that without the file.
 // [LAW:no-silent-failure] Not landed, the click's consequence is dropped: its
 // drafts, picks and history stay as they were, and the reason shows on its
 // session's ⚠. No click answers this turn, so whatever fails in it shows on
@@ -677,7 +682,7 @@ export function changeDone(
 
 function changeLanded(
   ctx: DaemonContext,
-  { session, files, answered, consequence, outcome }: Landed,
+  { session, consequence, outcome }: Landed,
   effects: Effect[],
 ): void {
   const failed: string[] = [];
@@ -688,21 +693,8 @@ function changeLanded(
       failed.push(failureOf(e).message);
     }
   };
-  if (outcome.kind === "ok") {
-    // A session with no recorded render has no cache entry to draw stale. An
-    // answer to the trust book can change which config it renders, so its
-    // session reloads before its lanes are measured.
-    step(() => {
-      const origin = recordedOrigin(ctx, session);
-      if (
-        origin !== null &&
-        (answered ||
-          originLayers(ctx, origin).some((l) => files.includes(l.path)))
-      )
-        ctx.reloadConfig(origin);
-    });
-    step(() => consequence(effects));
-  } else if (outcome.kind === "closing") return;
+  if (outcome.kind === "ok") step(() => consequence(effects));
+  else if (outcome.kind === "closing") return;
   else failed.push(outcome.reason);
   if (failed.length === 0) return;
   const reason = failed.join("\n");

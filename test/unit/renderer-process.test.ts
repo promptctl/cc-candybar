@@ -22,10 +22,7 @@ import type {
   LaunchResult,
 } from "../../src/proc/launcher";
 import type { HostLine, RendererLine } from "../../src/renderer-interface/wire";
-import type {
-  StorageHoldId,
-  WatchId,
-} from "../../src/renderer-interface/adapter";
+import type { StorageHoldId } from "../../src/renderer-interface/adapter";
 import type {
   AdapterInput,
   AdapterOutput,
@@ -71,7 +68,6 @@ function rig(start: () => Promise<void> = async () => {}) {
   const logs: string[] = [];
   const levels: string[] = [];
   const ends: HeldEvent[] = [];
-  const watched: Array<["watch" | "unwatch", WatchId]> = [];
   const held: Array<["hold" | "release", StorageHoldId]> = [];
   // The key as the host reads it now: what each boot carries.
   const key = { read: { kind: "ok", value: "a2V5" } as Asked<string> };
@@ -107,10 +103,6 @@ function rig(start: () => Promise<void> = async () => {}) {
   const link = processRenderer({
     reaches: {
       ...inertHost(),
-      watches: {
-        watch: (id) => watched.push(["watch", id]),
-        unwatch: (id) => watched.push(["unwatch", id]),
-      },
       storage: {
         hold: (id) => held.push(["hold", id]),
         release: (id) => held.push(["release", id]),
@@ -150,7 +142,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     logs,
     levels,
     ends,
-    watched,
     held,
     link,
     inputs,
@@ -173,7 +164,7 @@ const pin: AdapterInput = {
 const PINNED: Timed<AdapterOutput> = {
   kind: "replied",
   reply: { kind: "close-journal" },
-  subscriptions: { sources: {}, lanes: {}, wake: null },
+  subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
   turnMs: 0,
 };
 
@@ -393,13 +384,12 @@ describe("a renderer process's end", () => {
 describe("ids a renderer mints", () => {
   test("cross as the host's own, never repeated across renderers, and a gone renderer's holds go once the next has started", async () => {
     let started: () => void = () => {};
-    const { link, children, clock, watched, held, inputs } = rig(
+    const { link, children, clock, held } = rig(
       () => new Promise<void>((resolve) => (started = resolve)),
     );
     link.arm();
     const first = children[0]!;
     first.say({ kind: "started", pid: 9001 });
-    first.say({ kind: "notice", reach: "watches.watch", args: [1, "k", []] });
     first.say({ kind: "notice", reach: "storage.hold", args: [1, ["/f"]] });
     first.say({
       kind: "notice",
@@ -413,45 +403,18 @@ describe("ids a renderer mints", () => {
     clock.advance(BACKOFF_FIRST_MS);
     const second = children[1]!;
     second.say({ kind: "started", pid: 9002 });
-    second.say({ kind: "notice", reach: "watches.watch", args: [1, "k", []] });
+    second.say({ kind: "notice", reach: "storage.hold", args: [1, ["/g"]] });
     await settled();
-    // The first renderer's watch and hold stand until the second has started.
-    expect(watched).toEqual([
-      ["watch", 1],
-      ["watch", 3],
-    ]);
+    // The first renderer's hold stands until the second has started; the
+    // second's own id 1 is a new host id.
     expect(held).toEqual([
-      ["hold", 2],
+      ["hold", 1],
+      ["hold", 1],
       ["hold", 2],
     ]);
     started();
     await settled();
-    expect(watched).toEqual([
-      ["watch", 1],
-      ["watch", 3],
-      ["unwatch", 1],
-    ]);
-    expect(held.at(-1)).toEqual(["release", 2]);
-    // A push for the first renderer's watch fails as down; the second's goes
-    // to it by its own id.
-    await expect(
-      link.renderer.answer({
-        kind: "adapter",
-        push: { kind: "watch", id: 1 as WatchId, heard: null, deaf: [] },
-        at: 0 as Instant,
-        tick: 0 as Tick,
-      }),
-    ).rejects.toThrow(RendererDown);
-    void link.renderer.answer({
-      kind: "adapter",
-      push: { kind: "watch", id: 3 as WatchId, heard: null, deaf: [] },
-      at: 0 as Instant,
-      tick: 0 as Tick,
-    });
-    await settled();
-    expect(inputs(second).at(-1)!.input).toMatchObject({
-      push: { kind: "watch", id: 1 },
-    });
+    expect(held.at(-1)).toEqual(["release", 1]);
   });
 
   test("a gone renderer's holds stand while the next ends before its start answers, and go once one answers", async () => {
@@ -551,7 +514,7 @@ describe("ids a renderer mints", () => {
       kind: "answered",
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, lanes: {}, wake: null },
+      subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
       frames: [],
       turnMs: 0,
     };
@@ -601,7 +564,7 @@ describe("ids a renderer mints", () => {
         effects: [
           { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
         ],
-        subscriptions: { sources: {}, lanes: {}, wake: null },
+        subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
         frames: [],
         turnMs: 0,
       },

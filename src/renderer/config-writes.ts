@@ -26,11 +26,10 @@ import type {
 export type Consequence = (effects: Effect[]) => void;
 
 // A click whose changes are on their way: the session it clicked, the files
-// they change, whether it answered the trust book, and its consequence.
+// they change, and its consequence.
 export interface Landing {
   readonly session: SessionId;
   readonly files: readonly string[];
-  readonly answered: boolean;
   readonly consequence: Consequence;
 }
 
@@ -44,7 +43,7 @@ export class ConfigWrites {
     string,
     { readonly before: string | null; readonly after: string | null }
   >();
-  private landing: {
+  private inFlight: {
     readonly of: Landing;
     readonly owed: Set<EffectId>;
     missed: Exclude<EffectOutcome, { kind: "ok" }> | null;
@@ -72,9 +71,9 @@ export class ConfigWrites {
   // before the next input.
   begin(verb: string): void {
     if (this.closed) throw new DaemonClosing(verb);
-    if (this.landing !== null)
+    if (this.inFlight !== null)
       throw new Error(
-        `${verb} began while a click's changes to ${this.landing.of.files.join(", ")} were still landing`,
+        `${verb} began while a click's changes to ${this.inFlight.of.files.join(", ")} were still landing`,
       );
   }
 
@@ -166,8 +165,8 @@ export class ConfigWrites {
         answer,
       })),
     ];
-    this.landing = {
-      of: { session, files, answered: answers.length > 0, consequence },
+    this.inFlight = {
+      of: { session, files, consequence },
       owed: new Set(landing.map((c) => c.id)),
       missed: null,
     };
@@ -178,12 +177,17 @@ export class ConfigWrites {
   // `owed` while others are still on their way, or undefined for an id no
   // change of this renderer's holds.
   settled(id: EffectId, outcome: EffectOutcome): Landed | "owed" | undefined {
-    const landing = this.landing;
+    const landing = this.inFlight;
     if (landing === null || !landing.owed.delete(id)) return undefined;
     if (outcome.kind !== "ok") landing.missed ??= outcome;
     if (landing.owed.size > 0) return "owed";
-    this.landing = null;
+    this.inFlight = null;
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
+  }
+
+  // The session whose click's changes are on their way, if one's are.
+  landing(): SessionId | null {
+    return this.inFlight?.of.session ?? null;
   }
 
   // No click begins after this: the daemon is closing.

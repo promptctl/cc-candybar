@@ -63,7 +63,8 @@ import {
   type HandlerProbeEdge,
 } from "./handler-probe.js";
 import { cliConfigTarget, type RenderOrigin } from "../config-hint.js";
-import { fallbackState, loadFromDisk } from "../renderer/render-cache.js";
+import { fallbackState, loadOrigin } from "../renderer/render-cache.js";
+import { discover, readShared } from "../config/loader/discover.js";
 import { SessionState } from "../renderer/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {
@@ -93,10 +94,10 @@ function reportLine({ check, verdict }: CheckReport): string {
           : `    look: ${verdict.sighting.glyphs} — ${MARK_HINT}\n`);
 }
 
-// [LAW:single-enforcer] The CLI's config load is the daemon's own
-// `loadFromDisk`, run once: it has no cache entry to read, so it builds the
-// state, keeps the outcome, and releases the sources the state started. A
-// load that failed reads the bar a fresh daemon would draw under the error.
+// [LAW:single-enforcer] The CLI's config load is the daemon's own discovery
+// and load, run once: it has no cache entry to read, so it builds the state,
+// keeps the outcome, and releases the sources the state started. A load that
+// failed reads the bar a fresh daemon would draw under the error.
 export function loadConfigOnce(
   { host, clock }: World,
   origin: RenderOrigin,
@@ -108,15 +109,17 @@ export function loadConfigOnce(
     sessionState: new SessionState(),
     signer: previewSigner(),
     gates: daemonGates(),
-    stateDir: stateDir(host),
   };
-  const loaded = loadFromDisk(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-    deps,
+  const { snapshot } = discover(
+    {
+      projectDir: origin.projectDir,
+      configFile: origin.target.path,
+      cwd: origin.cwd,
+    },
+    readShared({ locations: deps.locations, stateDir: stateDir(host) }),
   );
-  const state = loaded.state ?? fallbackState(origin.cwd, loaded.found, deps);
+  const loaded = loadOrigin(origin.cwd, snapshot, deps);
+  const state = loaded.state ?? fallbackState(origin.cwd, snapshot, deps);
   state.registry.dispose();
   return {
     layers: loaded.layers,

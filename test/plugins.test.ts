@@ -22,7 +22,6 @@ import { until } from "./helpers/until";
 import { instantOf } from "../src/utils/instant";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
-  loadFromDisk,
   pluginLoadLine,
   RenderCache,
   renderCacheBudget,
@@ -48,6 +47,12 @@ import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
+import {
+  DiscoveringCache,
+  loadDiscovered,
+  originOf,
+} from "./helpers/config-host";
+import { ReloadSignal } from "./helpers/reload-signal";
 
 let dir: string;
 // The machine a test runs on: this worker's own unless its describe states another.
@@ -588,7 +593,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     good,
     `{ plugins: ["./deploy/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
   );
-  const loaded = loadFromDisk(dir, dir, good, {
+  const loaded = loadDiscovered(dir, dir, good, {
     clock: systemTimekeeper,
     stateDir: stateDir(host),
     locations: locations(host),
@@ -648,7 +653,7 @@ describe("a plugin's own variables", () => {
     );
     expect(rendered).toContain("no data here");
     expect(warnings).toEqual([]);
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -696,7 +701,7 @@ describe("a plugin's own variables", () => {
     );
     expect(warnings).toEqual([]);
     expect(rendered).toContain("hello, world 7 ran open=no");
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -754,7 +759,7 @@ describe("a plugin's own variables", () => {
       p,
       `{ plugins: ["./hello/plugin.json5", "./d/plugin.json5", "./q/plugin.json5"], root: { h: ["plugins.hello.s"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -773,7 +778,7 @@ describe("a plugin's own variables", () => {
   });
 
   test("none declared counts zero", () => {
-    const loaded = loadFromDisk(dir, dir, config(), {
+    const loaded = loadDiscovered(dir, dir, config(), {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -927,7 +932,7 @@ describe("an installed plugin", () => {
       "main/.claude/worktrees/w/.git",
       "gitdir: ../../../.git/worktrees/w\n",
     );
-    const loaded = loadFromDisk(
+    const loaded = loadDiscovered(
       path.join(dir, "main"),
       path.join(dir, "main/.claude/worktrees/w"),
       placing("plugins.lit.ticket"),
@@ -989,7 +994,7 @@ describe("an installed plugin", () => {
       },
       logger: () => {},
     });
-    const cache = new RenderCache(
+    const cache = new DiscoveringCache(
       {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
@@ -1016,7 +1021,9 @@ describe("an installed plugin", () => {
         path.join(main, ".claude/worktrees/w"),
         path.join(main, "src"),
       ];
-      const states = cwds.map((cwd) => cache.getOrCreate(main, cwd, p).state);
+      const states = cwds.map(
+        (cwd) => cache.getOrCreate(originOf(main, cwd, p)).state,
+      );
       expect(
         states.map((s) => s.config.variables["plugins.lit.data"]),
       ).toMatchObject([
@@ -1028,7 +1035,10 @@ describe("an installed plugin", () => {
       const drawn = await Promise.all(
         cwds.map(async (cwd, i) => {
           // Each through a session's view of its entry, as the daemon draws.
-          using held = cache.holdSession(main, cwd, p, viewFacts(cwd, `s${i}`));
+          using held = cache.holdSession(
+            originOf(main, cwd, p),
+            viewFacts(cwd, `s${i}`),
+          );
           const s = held.state;
           expect(s).toBe(states[i]);
           const runs = new CheckRuns(
@@ -1090,7 +1100,7 @@ describe("an installed plugin", () => {
     fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
     const p = placing("plugins.lit.ticket");
     const load = (): string => {
-      const loaded = loadFromDisk(dir, path.join(dir, "outer/inner"), p, {
+      const loaded = loadDiscovered(dir, path.join(dir, "outer/inner"), p, {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
@@ -1634,7 +1644,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -1658,7 +1668,8 @@ describe("an installed plugin", () => {
 
   // A config that fails its first load still renders the seeded default; the
   // seed searches the entry's repo, so the plugin that would fix it reloads.
-  test("a failed first load still watches the repo's plugin root", () => {
+  test("a failed first load still watches the repo's plugin root", async () => {
+    const reloads = new ReloadSignal();
     const watchers = new WatcherRegistry({
       clock: systemTimekeeper,
       counters: {
@@ -1671,7 +1682,7 @@ describe("an installed plugin", () => {
       },
       logger: () => {},
     });
-    const cache = new RenderCache(
+    const cache = new DiscoveringCache(
       {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
@@ -1684,7 +1695,10 @@ describe("an installed plugin", () => {
         watchers,
         source: SOURCES_NOTHING,
       },
-      { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
+      {
+        budgetBytes: () => renderCacheBudget(memoryLimitBytes({})),
+        observers: reloads.observers,
+      },
     );
     try {
       const repo = path.join(dir, "repo");
@@ -1694,11 +1708,19 @@ describe("an installed plugin", () => {
         "config.json5",
         `{ segments: { s: { template: "{{ .plugins.lit.nope }}" } }, root: { h: ["s"] } }`,
       );
-      const entry = cache.getOrCreate(repo, repo, p);
+      const entry = cache.getOrCreate(originOf(repo, repo, p));
       expect(entry.lastError).not.toBeNull();
-      expect(entry.state.plugins.roots).toContain(
-        path.join(repo, ".cc-candybar", "plugins"),
-      );
+      // A plugin dropped in the repo's root moves the origin's config.
+      const dropped = path.join(repo, ".cc-candybar/plugins/lit/plugin.json5");
+      await reloads.after(entry, () => {
+        fs.mkdirSync(path.dirname(dropped), { recursive: true });
+        fs.writeFileSync(dropped, `{ segments: { nope: { template: "x" } } }`);
+      });
+      expect(
+        cache
+          .getOrCreate(originOf(repo, repo, p))
+          .snapshot.plugins.map((d) => d.path),
+      ).toContain(dropped);
     } finally {
       cache.close();
       watchers.closeAll();
@@ -1777,7 +1799,7 @@ describe("an installed plugin", () => {
       "config.json5",
       `{ plugins: ["./deploy/plugin.json5"], root: { h: ["plugins.deploy.status"] } }`,
     );
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -1858,7 +1880,7 @@ describe("an installed plugin", () => {
       `{ data: "./d.json", segments: { s: { template: "{{ if }}" } } }`,
     );
     const p = placing("plugins.lit.s");
-    const loaded = loadFromDisk(dir, dir, p, {
+    const loaded = loadDiscovered(dir, dir, p, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
@@ -2020,7 +2042,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
     expect(rendered.indexOf("user-phase")).toBeLessThan(
       rendered.indexOf("repo-ticket"),
     );
-    const loaded = loadFromDisk(repo, repo, undefined, {
+    const loaded = loadDiscovered(repo, repo, undefined, {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),

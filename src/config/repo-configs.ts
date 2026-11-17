@@ -15,8 +15,8 @@ import {
   withAnswer,
   type RepoAnswer,
   type RepoConfigBook,
-  type RepoGate,
 } from "./loader/repo-gate.js";
+import type { RepoQuestion } from "./config-snapshot.js";
 import { worktreeLink } from "../utils/git-root.js";
 import { ok } from "../utils/outcome.js";
 import { presence, type Unchecked } from "../utils/presence.js";
@@ -181,16 +181,17 @@ export function repoAnswerFields(
   };
 }
 
-// [LAW:dataflow-not-control-flow] One channel per directory awaiting an
-// answer — the list is the answer, so the diagnostics fold it beside the
-// update notice with no "is there a question" branch. The sentence is plain
-// text (the viewer's ⧉ copies it); each answer is its own signed click.
+// [LAW:dataflow-not-control-flow] One channel while the origin's repository
+// awaits an answer — the list is the answer, so the diagnostics fold it beside
+// the update notice with no "is there a question" branch. The sentence is
+// plain text (the viewer's ⧉ copies it); each answer is its own signed click.
 export function repoQuestions(
-  gate: RepoGate,
+  question: RepoQuestion | null,
   sessionId: SessionId,
   signer: LinkSigner,
 ): DiagnosticMessage[] {
-  return gate.awaiting.map((dir) => {
+  const awaiting = question?.standing === "awaiting" ? [question.dir] : [];
+  return awaiting.map((dir) => {
     const message = `a cc-candybar config for ${dir} — run it?`;
     const answers = REPO_ANSWERS.map((answer) =>
       diagnosticSpan(

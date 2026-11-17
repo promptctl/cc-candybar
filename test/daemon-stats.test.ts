@@ -137,7 +137,6 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
     compiles: 1,
     views: 0,
     pinned: 0,
-    due: 0,
     retiredViews: 0,
     passages: 0,
     accountedBytes: 3,
@@ -324,9 +323,12 @@ describe("RuntimeStats.snapshot", () => {
       stats.launchStats.onStart("git");
       stats.launchStats.onEnd("git", 9999);
     }
-    expect(stats.snapshot(EXTRAS).subprocesses.durations["git"]).toMatchObject(
-      { p50Ms: 9999, p99Ms: 9999, p999Ms: 9999, maxMs: 9999 },
-    );
+    expect(stats.snapshot(EXTRAS).subprocesses.durations["git"]).toMatchObject({
+      p50Ms: 9999,
+      p99Ms: 9999,
+      p999Ms: 9999,
+      maxMs: 9999,
+    });
   });
 });
 
@@ -441,7 +443,6 @@ describe("formatStats", () => {
         compiles: 2,
         views: 0,
         pinned: 0,
-        due: 0,
         retiredViews: 0,
         passages: 0,
         accountedBytes: 32 * 1024 * 1024,
@@ -600,7 +601,6 @@ describe("formatStats", () => {
         compiles: 0,
         views: 0,
         pinned: 0,
-        due: 0,
         retiredViews: 0,
         passages: 0,
         accountedBytes: 0,

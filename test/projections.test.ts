@@ -19,13 +19,14 @@ import { drawingAt } from "./helpers/test-engine";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadFromDisk, pluginLoadLine } from "../src/renderer/render-cache";
+import { pluginLoadLine } from "../src/renderer/render-cache";
 import { SessionState } from "../src/renderer/session-state";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
+import { loadDiscovered } from "./helpers/config-host";
 
 const config = (variables: string, helpers = "{}") =>
   parseAndValidate(
@@ -207,7 +208,7 @@ test("the config load line names the load's projections", () => {
       file,
       `{ variables: ${variables}, segments: ${segments} }`,
     );
-    const loaded = loadFromDisk(dir, dir, file, {
+    const loaded = loadDiscovered(dir, dir, file, {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),

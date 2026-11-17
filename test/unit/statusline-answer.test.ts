@@ -50,7 +50,12 @@ const REQ = {
 } as unknown as CheckedRenderRequest;
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
-const NO_SUBSCRIPTIONS: Subscriptions = { sources: {}, lanes: {}, wake: null };
+const NO_SUBSCRIPTIONS: Subscriptions = {
+  sources: {},
+  lanes: {},
+  configs: [],
+  wake: null,
+};
 // The request's deadline is a timer the case fires itself (`deadlines`).
 const deadlines = new Set<() => void>();
 const CLOCK = {
@@ -98,7 +103,7 @@ const threwWith = (
   frames: [],
 });
 
-// A renderer whose request turn answers `request`, whose config
+// A renderer whose request turn answers `request`, whose context
 // turn answers `configured`, and which keeps every event it hears.
 function scripted(
   request: RendererOutput,
@@ -106,20 +111,20 @@ function scripted(
 ): {
   readonly renderer: Renderer;
   readonly heard: Event[];
-  readonly configs: Event[];
+  readonly contexts: Event[];
   readonly requests: Event[];
 } {
   const heard: Event[] = [];
-  const configs: Event[] = [];
+  const contexts: Event[] = [];
   const requests: Event[] = [];
   return {
     heard,
-    configs,
+    contexts,
     requests,
     renderer: eventRenderer(async ({ event }) => {
       switch (event.kind) {
-        case "config":
-          configs.push(event);
+        case "context":
+          contexts.push(event);
           return configured;
         case "request":
           requests.push(event);
@@ -275,7 +280,7 @@ test("a second frame for the request is refused, and the first answers it", asyn
   ]);
 });
 
-test("a config turn's effects are refused, each owed its effect-done, and the request's present still answers it", async () => {
+test("a context turn's effects are refused, each owed its effect-done, and the request's present still answers it", async () => {
   const { renderer, heard } = scripted(
     output([present(1)]),
     output([present(2)]),
@@ -288,7 +293,7 @@ test("a config turn's effects are refused, each owed its effect-done, and the re
     {
       kind: "effect-done",
       of: 2,
-      outcome: { kind: "failed", reason: "a config turn answers no request" },
+      outcome: { kind: "failed", reason: "a context turn answers no request" },
     },
   ]);
 });
@@ -326,7 +331,7 @@ test("a renderer that rejects is the turn's failure, said on its line, and the s
   const logged: string[] = [];
   const subscribed: Subscriptions[] = [];
   const renderer = eventRenderer(async ({ event }) => {
-    if (event.kind === "config") return output([]);
+    if (event.kind === "context") return output([]);
     if (event.kind === "request") return output([present(1)]);
     throw new Error("the renderer went away");
   });
@@ -345,6 +350,7 @@ test("a turn that throws still hands the host what its open views read", async (
   const left: Subscriptions = {
     sources: { [SESSION]: [] },
     lanes: {},
+    configs: [],
     wake: null,
   };
   const subscribed: Subscriptions[] = [];
@@ -356,7 +362,7 @@ test("a turn that throws still hands the host what its open views read", async (
 test("a failed effect-done turn is said on a turn line naming the renderer and the session", async () => {
   const logged: string[] = [];
   const renderer = eventRenderer(async ({ event }) => {
-    if (event.kind === "config") return output([]);
+    if (event.kind === "context") return output([]);
     if (event.kind === "request") return output([present(1)]);
     return threwWith([], "no such present");
   });
@@ -370,15 +376,21 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
   ]);
 });
 
-test("the session's config reaches the renderer first, with the world state read at the request's keys, and its subscriptions reach the host before the request does", async () => {
+test("the session's context reaches the renderer first, with the world state read at the request's keys, and its subscriptions reach the host before the request does", async () => {
   const opened: Subscriptions = {
     sources: { [SESSION]: [] },
     lanes: {},
+    configs: [],
     wake: null,
   };
-  const drawn: Subscriptions = { sources: {}, lanes: {}, wake: null };
+  const drawn: Subscriptions = {
+    sources: {},
+    lanes: {},
+    configs: [],
+    wake: null,
+  };
   const subscribed: Subscriptions[] = [];
-  const { renderer, configs, requests } = scripted(
+  const { renderer, contexts, requests } = scripted(
     { ...output([present(1)]), subscriptions: drawn },
     { ...output([]), subscriptions: opened },
   );
@@ -390,14 +402,14 @@ test("the session's config reaches the renderer first, with the world state read
     [],
     subscribed,
   );
-  expect(configs).toEqual([
-    { kind: "config", context: REQ, worldState: WORLD },
+  expect(contexts).toEqual([
+    { kind: "context", context: REQ, worldState: WORLD },
   ]);
   expect(requests).toEqual([{ kind: "request", id: REQUEST, context: REQ }]);
   expect(subscribed).toEqual([opened, drawn]);
 });
 
-test("the request holds its session from its config to its answer, wait included, the host holds it through each turn, and every hold is let go once each answers or throws", async () => {
+test("the request holds its session from its context to its answer, wait included, the host holds it through each turn, and every hold is let go once each answers or throws", async () => {
   const threw = () => threwWith([], "x");
   for (const [config, request] of [
     [output([]), output([present(1)])],
@@ -407,13 +419,13 @@ test("the request holds its session from its config to its answer, wait included
     const holds = { count: 0, sessions: [] as string[] };
     const heldDuring: string[] = [];
     const renderer = eventRenderer(async ({ event }) => {
-      const turn = event.kind === "config" ? config : request;
+      const turn = event.kind === "context" ? config : request;
       heldDuring.push(`${event.kind}:${holds.count}`);
       return turn;
     });
     await answer(renderer, [], [], holds);
     expect(heldDuring).toEqual(
-      config.kind === "threw" ? ["config:2"] : ["config:2", "request:2"],
+      config.kind === "threw" ? ["context:2"] : ["context:2", "request:2"],
     );
     // Each turn's hold names the session the request's document was read for.
     expect(new Set(holds.sessions)).toEqual(new Set([REQ.hookData.session_id]));
@@ -421,7 +433,7 @@ test("the request holds its session from its config to its answer, wait included
   }
 });
 
-describe("the request's wait, between its config and its request", () => {
+describe("the request's wait, between its context and its request", () => {
   // A wait the case ends: `end` settles the session's world state.
   const held = () => {
     let end = (): void => {};
@@ -459,7 +471,7 @@ describe("the request's wait, between its config and its request", () => {
 
   test("the daemon's close ends the wait, and the request draws nothing into the closing views", async () => {
     const closing = new AbortController();
-    const { renderer, configs, requests } = scripted(output([present(1)]));
+    const { renderer, contexts, requests } = scripted(output([present(1)]));
     const { answered, facts } = await answer(renderer, [], [], undefined, {
       // The close begins while the request waits.
       settled: () => {
@@ -470,7 +482,7 @@ describe("the request's wait, between its config and its request", () => {
       closing: closing.signal,
     });
     expect(facts.get("ended")).toBe("closed");
-    expect(configs).toHaveLength(1);
+    expect(contexts).toHaveLength(1);
     expect(requests).toHaveLength(0);
     expect(answered.resp).toMatchObject({
       ok: false,
@@ -478,14 +490,14 @@ describe("the request's wait, between its config and its request", () => {
     });
   });
 
-  test("a request whose config turn comes up once the close has begun opens no view", async () => {
+  test("a request whose context turn comes up once the close has begun opens no view", async () => {
     const closing = new AbortController();
     closing.abort();
-    const { renderer, configs, requests } = scripted(output([present(1)]));
+    const { renderer, contexts, requests } = scripted(output([present(1)]));
     const { answered } = await answer(renderer, [], [], undefined, {
       closing: closing.signal,
     });
-    expect(configs).toHaveLength(0);
+    expect(contexts).toHaveLength(0);
     expect(requests).toHaveLength(0);
     expect(answered.resp).toMatchObject({
       ok: false,
@@ -537,6 +549,6 @@ describe("the request's wait, between its config and its request", () => {
     );
     wait.end();
     await answering;
-    expect(order).toEqual(["config", "retire", "request"]);
+    expect(order).toEqual(["context", "retire", "request"]);
   });
 });

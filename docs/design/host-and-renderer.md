@@ -217,7 +217,7 @@ interface ConfigSnapshot {
   readonly chain: readonly Layer[];          // lowest precedence first; every layer in it is writable
   readonly repo: RepoQuestion | null;        // null: the origin's directories hold nothing to ask about
   readonly plugins: readonly PluginFile[];   // installed and the approved repository's, one per scope and name
-  readonly strays: readonly string[];        // loose files in a plugin root, each dropped naming where it belongs
+  readonly strays: readonly Stray[];         // loose files in a plugin root, each dropped naming where it belongs
   readonly checkout: Checkout;               // the root a plugin's `data.checkout` resolves against
   readonly notices: readonly string[];       // what discovery found wrong: a shadowed file, an unlistable root
   readonly watch: string | null;             // what the config's watch cannot hear, or null
@@ -237,7 +237,7 @@ interface Layer {
   readonly content:
     | { readonly kind: "text"; readonly text: string }
     | { readonly kind: "absent" }                               // not written yet: a write creates it
-    | { readonly kind: "unreadable"; readonly error: string };  // there, and not read: a load error
+    | { readonly kind: "unreadable"; readonly error: string };  // maybe there, and not read: no layer of the merge, a notice, and no write
   // The definitions the layer's `plugins` list names, by each entry as written.
   // Discovery reads that one key, as a preprocessor reads its includes.
   readonly listed: Readonly<Record<string, PluginFile>>;
@@ -260,6 +260,10 @@ interface PluginFile {
 }
 
 interface Checkout { readonly root: string; readonly git: boolean }
+
+// A loose file carries the scope of the root it sits in, so an unnamed drop
+// answers only for names in its own scope.
+interface Stray { readonly path: string; readonly scope: PluginFile["scope"] }
 
 // Scope and name name a plugin within its origin's snapshot.
 type PluginRef = { readonly scope: PluginFile["scope"]; readonly name: string };

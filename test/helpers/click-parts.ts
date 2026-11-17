@@ -20,6 +20,7 @@ import {
   type DaemonVerbContext,
   type MainRendererParts,
 } from "../../src/renderer/verbs/port";
+import { NO_CONFIGS } from "./renderers";
 
 export function clickParts(
   verbCtx: DaemonVerbContext,
@@ -35,6 +36,7 @@ export function clickParts(
       reason: `${act.kind}: no host part in this rig`,
     }),
     stateDir: verbCtx.stateDir,
+    configs: NO_CONFIGS,
     closing: () => false,
     unheard: () => {},
   },
@@ -60,7 +62,18 @@ export function clickParts(
         menuIdle.clicked(sessionId, time.tick);
       },
     }),
-    renderCache: { subscriptions: () => ({ sources: {} }), holdView: () => null },
+    // Its clicks read the config the verb context hands in, so the config of
+    // every origin is held here, and none is let go.
+    renderCache: {
+      subscriptions: () => ({ sources: {} }),
+      holdView: () => null,
+      holdsConfig: () => true,
+      prune: () => {},
+    },
+    // No session renders here: no world state is held, and an origin a click
+    // reads is the one the verb context recorded.
+    worldStates: { sessions: () => [] },
+    sessionState: verbCtx.sessionState,
     // The renderer says what it does on the log its verbs write to.
     log: verbCtx.log,
     // No view is open, so no lane is read.

@@ -239,9 +239,11 @@ describe("the daemon is a value", () => {
     await expect(
       clickLink(
         daemon,
-        drawnHere(effectsUrl([
-          { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
-        ])),
+        drawnHere(
+          effectsUrl([
+            { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
+          ]),
+        ),
       ),
     ).rejects.toThrow(closed);
     expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
@@ -255,7 +257,7 @@ describe("the daemon is a value", () => {
       }),
     ).toThrow(closed);
     expect(() => daemon.arm()).toThrow(closed);
-    expect(() => daemon.reloadConfig({} as RenderOrigin)).toThrow(closed);
+    expect(() => daemon.rediscover()).toThrow(closed);
   });
 
   // [LAW:no-shared-mutable-globals] What a daemon's loads accept is its own
@@ -371,17 +373,23 @@ describe("the daemon is a value", () => {
     // and the pane the band's setup is asked for.
     await answer(daemon, {
       ...renderRequest("value-close", 1),
-      tmux: { socket: `/tmp/value-close-${process.pid}`, pane: "%7", truecolor: null },
+      tmux: {
+        socket: `/tmp/value-close-${process.pid}`,
+        pane: "%7",
+        truecolor: null,
+      },
     });
     const { setting, on } = LANES.band.switch;
     await clickLink(
       daemon,
-      drawnHere(effectsUrl([
-        {
-          verb: VERB_SET_STATE,
-          args: ["value-close", setting, String(on)],
-        },
-      ])),
+      drawnHere(
+        effectsUrl([
+          {
+            verb: VERB_SET_STATE,
+            args: ["value-close", setting, String(on)],
+          },
+        ]),
+      ),
     );
     // A feed on the lane the click turned on: a refused subscription is no
     // feed, and would leave nothing here for the close to end.

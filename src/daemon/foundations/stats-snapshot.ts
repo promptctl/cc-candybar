@@ -251,9 +251,6 @@ export interface RenderCacheStats {
   readonly views: number;
   // Sessions an open feed pins (`pin`).
   readonly pinned: number;
-  // Entries an every-entry reload has yet to reach: above 0 while a catch-up
-  // walks the map, one entry a turn; holding above 0 is a walk that stopped.
-  readonly due: number;
   // Views retired but not yet disposed because a render still holds one: as
   // `retired` is for states, climbing while `views` holds is a render that
   // never returned.

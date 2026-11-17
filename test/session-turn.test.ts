@@ -45,6 +45,7 @@ import { fakeLauncher } from "./helpers/fake-launcher";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { exits, runsFor, shell } from "../src/proc/spawner-fake";
 import { systemTimekeeper } from "../src/time";
+import { originOf } from "./helpers/config-host";
 
 const SID = sessionIdOf(SESSION);
 
@@ -229,7 +230,7 @@ describe("what wakes a view", () => {
     const settled = changed.length;
     const request = requestOf(dir);
     rig.cache
-      .holdSession(dir, dir, path.join(dir, "config.json5"), {
+      .holdSession(originOf(dir, dir, path.join(dir, "config.json5")), {
         ...request,
         hints: { ...request.hints, termCols: 77 },
       })

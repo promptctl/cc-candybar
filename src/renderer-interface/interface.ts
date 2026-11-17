@@ -30,6 +30,8 @@ import type { SlashLine } from "../claude-input/slash-line";
 import type { SessionPane } from "../claude-input/typing";
 import type { RepoAnswer } from "../config/loader/repo-gate";
 import type { Answered } from "../daemon/foundations/sighting-roles";
+import type { RenderOrigin } from "../config-hint";
+import type { ConfigSnapshot } from "../config/config-snapshot";
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -106,7 +108,7 @@ export interface EventInput extends Readings {
   readonly event: Event;
 }
 
-// A session's config as its newest request names it, and the world state read
+// A session's context as its newest request names it, and the world state read
 // at that request's keys.
 export interface SessionConfig {
   readonly context: CheckedRenderRequest;
@@ -126,7 +128,7 @@ export interface AdapterInput extends Readings {
 // [LAW:no-silent-failure] A push's turn answers its reply, of its push's own
 // kind, or how it threw, as data; and either way what the renderer needs read
 // and when it next wants a turn, as they stand after it: a push moves state
-// too (a reload of every entry starts a walk that wants turns).
+// too (a close ends the views).
 export type AdapterOutput = (
   | { readonly kind: "replied"; readonly reply: AdapterReply }
   | { readonly kind: "threw"; readonly failure: Failure }
@@ -139,23 +141,23 @@ export const OUTPUTS_CROSS: Crosses<RendererOutput | AdapterOutput> = true;
 
 export type Event =
   | {
-      // A renderer's start: every live session's config, as `config` hands
+      // A renderer's start: every live session's context, as `context` hands
       // one in, in one turn, so the start's output names everything the
       // renderer serves and the host releases nothing it still holds for one.
       readonly kind: "start";
       // Who watches each session's frames as the start is made, taken
-      // before the sessions are configured: a watched session's feed holds
-      // its view before the view opens.
+      // before the sessions are opened: a watched session's feed holds its
+      // view before the view opens.
       readonly viewers: Viewers;
       readonly sessions: readonly SessionConfig[];
     }
   | {
-      // What the session's config is made of, as its newest request names
-      // it, delivered ahead of that request: its turn opens the session's
+      // A request's opening turn, delivered ahead of it: the session's
+      // context as its newest request names it. Its turn opens the session's
       // view, so the output names what the view reads before the request
-      // waits on it. Until config discovery is the host's, it carries the
-      // request's context, from which the renderer finds the config itself.
-      readonly kind: "config";
+      // waits on it. It carries no config: that is its origin's, which the
+      // renderer subscribes (`Subscriptions.configs`).
+      readonly kind: "context";
       readonly context: CheckedRenderRequest;
       // [LAW:one-source-of-truth] The world state read at this context's own
       // keys: a session's context and its world state reach the renderer as
@@ -164,7 +166,16 @@ export type Event =
       readonly worldState: WorldState;
     }
   | {
-      // A request of a session whose `config` came before it, delivered once
+      // [LAW:one-source-of-truth] What discovery found at `origin`, which the
+      // renderer's subscriptions name: a fact about the origin, shared by
+      // every session there. Handed in when the origin is first named, in the
+      // slot of the turn that named it, and again whenever it moves.
+      readonly kind: "config";
+      readonly origin: RenderOrigin;
+      readonly config: ConfigSnapshot;
+    }
+  | {
+      // A request of a session whose `context` came before it, delivered once
       // its wait on the session's world state has ended in the host: the
       // turn draws at once, from the world state the renderer holds.
       readonly kind: "request";
@@ -173,7 +184,7 @@ export type Event =
     }
   | {
       // A session's world state moved since the one the renderer holds: read
-      // at the keys of the newest `config` the host delivered for it.
+      // at the keys of the newest `context` the host delivered for it.
       readonly kind: "world-state";
       readonly worldState: WorldState;
     }
@@ -445,6 +456,11 @@ export interface Subscriptions {
   // line row of each session whose switch is on, in the pane its newest
   // request reports. A session with no view has no switch to read.
   readonly lanes: Readonly<Record<SessionId, LaneSwitches>>;
+  // The origins whose config the renderer holds: each live session's, and
+  // each a parked event waits on. The host discovers an origin as it is
+  // first named, follows its files while it is named, and lets it go when it
+  // is not.
+  readonly configs: readonly RenderOrigin[];
   // [LAW:no-ambient-temporal-coupling] The tick the renderer next wants a
   // turn at, derived from its own state as each turn ends: the host keeps one
   // timer to it and hands it in as a `due`. Null while nothing is due.

@@ -4,7 +4,6 @@
 // a host type. The host reaches the renderer only by an `AdapterPush`, plain
 // data a process can carry, answered by its `AdapterReply`.
 
-import type { RenderOrigin } from "../config-hint.js";
 import type { Crosses, Reaches } from "./crosses.js";
 import type {
   MenuIdleStats,
@@ -15,16 +14,7 @@ import type {
   DebugSnapshot,
   DebugWhat,
 } from "../daemon/foundations/debug-types.js";
-import type {
-  Deafness,
-  Invalidation,
-  WatchTargets,
-} from "../daemon/foundations/watch-targets.js";
 import type { HeldEvent } from "../utils/event-hold.js";
-
-// A watch the renderer holds, named by the id it minted.
-declare const WATCH_ID: unique symbol;
-export type WatchId = number & { readonly [WATCH_ID]: true };
 
 // A render state's hold on its storage folders, named by the id the renderer
 // minted.
@@ -43,19 +33,12 @@ export interface AdapterToHost {
   // An answer carrying a daemon-wide held event (the launcher's pipe event,
   // the last renderer's end) reached its client.
   readonly eventAnswered: (event: HeldEvent) => void;
-  // The renderer's watches, each held by the host's one registry under the
-  // id the renderer minted, from its `watch` to its `unwatch`: every window
-  // it hears comes back as a `watch` push.
-  readonly watches: {
-    readonly watch: (id: WatchId, key: string, targets: WatchTargets) => void;
-    readonly unwatch: (id: WatchId) => void;
-  };
   // [LAW:no-ambient-temporal-coupling] The storage folders each render state's
   // latest load named, held by the host's storage owner under the id the
   // renderer minted, from the state's first load to its reclaim: a folder's
   // watch lives as long as a build names it, never as long as a view. Every
-  // load holds again, so a folder whose generation ended is keyed again at
-  // the next load.
+  // load holds again; a folder whose generation ended its owner opens again
+  // itself.
   readonly storage: {
     readonly hold: (id: StorageHoldId, folders: readonly string[]) => void;
     readonly release: (id: StorageHoldId) => void;
@@ -66,12 +49,6 @@ export interface AdapterToHost {
 // process could not carry, naming it.
 export const REACHES_CROSS: Reaches<AdapterToHost> = true;
 
-// What reloads every entry at once: the answers on disk moved, or file events
-// resumed after a span in which an edit may have gone unheard.
-export type EveryEntryLoad =
-  | { readonly kind: "answers-watch"; readonly heard: Invalidation }
-  | { readonly kind: "events-resumed"; readonly since: number };
-
 // [LAW:effects-at-boundaries] exception: what the host reaches in the
 // renderer, each a push it hands in as an `adapter` input
 // (src/renderer-interface/interface.ts), answered by a reply of its own kind.
@@ -81,19 +58,6 @@ export type AdapterPush =
   | { readonly kind: "stats" }
   // The debug reply's projection of the most recently drawn view.
   | { readonly kind: "debug"; readonly what: DebugWhat }
-  // Every entry's reload, when file events resume after `since`.
-  | { readonly kind: "reload-every"; readonly since: number }
-  // The reload of the config `origin` resolves to, after a write.
-  | { readonly kind: "reload-config"; readonly origin: RenderOrigin }
-  // What one of the renderer's watches heard: once as the host acquires it
-  // (`heard` null), then for every window; and what of its targets the OS is
-  // not listening to, as of the push.
-  | {
-      readonly kind: "watch";
-      readonly id: WatchId;
-      readonly heard: Invalidation | null;
-      readonly deaf: readonly Deafness[];
-    }
   // The daemon's teardown, in its three renderer steps: no click begins
   // after the first, the views close, and the session state flushes, last.
   | { readonly kind: "close-journal" }

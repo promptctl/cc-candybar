@@ -49,6 +49,7 @@ import {
 import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
+import { NO_CONFIGS } from "./renderers";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -83,6 +84,10 @@ class LandingAtOnce extends ConfigWrites {
   // The settings files a doctor's reading named; none until a test's doctor
   // host hands its readings in (`landsSettingsOf`).
   writable: WritableSettings = () => [];
+  // What the host does once a landing's changes are on disk and before their
+  // `effect-done`s: hand the renderer each moved origin's `config`. A test
+  // with a config to re-read hands in its own (`onLanded`).
+  landed: () => void = () => {};
 
   constructor(
     mint: () => EffectId,
@@ -118,6 +123,7 @@ class LandingAtOnce extends ConfigWrites {
       },
       this.writable,
     );
+    if (outcome.kind === "ok") this.landed();
     for (const { id } of landing)
       changeDone(this.context!, id, outcome, effects);
   }
@@ -130,6 +136,16 @@ export function landsSettingsOf(
   writable: WritableSettings,
 ): void {
   (ctx.configWrites as LandingAtOnce).writable = writable;
+}
+
+// A test's landings re-read its config with `landed`, as the host hands the
+// renderer the `config` of each origin a landing moved before its
+// `effect-done`s.
+export function onLanded(
+  ctx: Pick<VerbContext, "configWrites">,
+  landed: () => void,
+): void {
+  (ctx.configWrites as LandingAtOnce).landed = landed;
 }
 
 // The acts a click asked of the host, in the order it asked them.
@@ -246,12 +262,6 @@ export function testVerbContext(
       }
       return config;
     },
-    // A reload rebuilds the render cache's entry from the file. This context
-    // holds no render cache, so there is nothing to rebuild: the file a click
-    // wrote is the whole outcome, and it is what these tests read. A rig with a
-    // cache hands in its own — test/settings-config-menu.test.ts records each
-    // reload to pin that a landing reloads before it releases.
-    reloadConfig: () => {},
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.
     sourcesFor: () => {
@@ -336,6 +346,7 @@ export function actingWorld(
   return {
     perform: (act) => acts.perform(act),
     stateDir: ctx.stateDir,
+    configs: NO_CONFIGS,
     closing: () => false,
     unheard,
   };

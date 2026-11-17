@@ -26,8 +26,10 @@ export const NO_VERBS: RendererVerbs = {
   closeIdle: () => {
     throw new Error("this rig closes no menus");
   },
-  // A rig's verbs write no config, so no `effect-done` is a change's.
+  // A rig's verbs write no config, so no `effect-done` is a change's, and no
+  // click's landing is on its way.
   changeDone: () => false,
+  landing: () => null,
 };
 
 // Feeds no session is watched in: none draws.
@@ -57,7 +59,6 @@ export function inertHost(): AdapterToHost {
   return {
     log: () => {},
     eventAnswered: () => {},
-    watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
     storage: { hold: unhosted("storage"), release: unhosted("storage") },
   };
 }

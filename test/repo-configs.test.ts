@@ -21,7 +21,6 @@ import {
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 import {
   configLoadedLine,
-  loadFromDisk,
   type LoadCause,
   type ReloadedEntry,
 } from "../src/renderer/render-cache";
@@ -43,6 +42,8 @@ import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { loadDiscovered } from "./helpers/config-host";
+import type { ConfigSnapshot } from "../src/config/config-snapshot";
 
 const SID_1 = sessionIdOf("sid-1");
 
@@ -85,11 +86,9 @@ const layersOf = (answers: RepoAnswers) => {
 describe("the gate over a project's config file", () => {
   test("unanswered, it is no layer, and the gate names the directory awaiting", () => {
     const file = write(".cc-candybar.json5", "{}");
-    const resolved = resolveDslConfig(
-      locations(host),
-      book({}),
-      { projectDir: project },
-    );
+    const resolved = resolveDslConfig(locations(host), book({}), {
+      projectDir: project,
+    });
     expect(layersOf(book({}))).toEqual([]);
     expect(resolved.repos).toEqual({
       plugins: null,
@@ -121,11 +120,10 @@ describe("the gate over a project's config file", () => {
     expect(layersOf(book({}))).toEqual([user]);
     const named = write("named.json5", "{}");
     write(".cc-candybar.json5", "{}");
-    const explicit = resolveDslConfig(
-      locations(host),
-      book({}),
-      { projectDir: project, configFile: named },
-    );
+    const explicit = resolveDslConfig(locations(host), book({}), {
+      projectDir: project,
+      configFile: named,
+    });
     // An explicit file is the user's, whatever repository it sits in.
     expect(explicit.kind === "chain" && explicit.layers).toEqual([
       { path: named, role: "user" },
@@ -176,15 +174,22 @@ describe("the gate over a project's plugins", () => {
       locations: locations(host),
       env: host.env,
     };
-    const waiting = loadFromDisk(project, project, undefined, deps);
-    expect(waiting.repos.awaiting).toEqual([project]);
+    const waiting = loadDiscovered(project, project, undefined, deps);
+    expect(waiting.snapshot.repo).toEqual({
+      dir: project,
+      standing: "awaiting",
+      unproven: null,
+    });
     expect(waiting.state!.plugins.loaded).toEqual([]);
     waiting.state!.registry.dispose();
 
     answerRepo(project);
-    const approved = loadFromDisk(project, project, undefined, deps);
-    expect(approved.repos.awaiting).toEqual([]);
-    expect(approved.repos.plugins).toBe(project);
+    const approved = loadDiscovered(project, project, undefined, deps);
+    expect(approved.snapshot.repo).toEqual({
+      dir: project,
+      standing: "approved",
+      unproven: null,
+    });
     expect(approved.state!.plugins.loaded).toEqual([
       {
         path: path.join(project, ".cc-candybar/plugins/deploy/plugin.json5"),
@@ -260,19 +265,22 @@ describe("check", () => {
   });
 });
 
+const NO_SNAPSHOT: ConfigSnapshot = {
+  chain: [],
+  repo: null,
+  plugins: [],
+  strays: [],
+  checkout: null,
+  notices: [],
+  watch: null,
+};
+
 const loadedEntry: ReloadedEntry = {
   projectDir: "/p",
   cwd: "/p",
   configFile: undefined,
   configLayers: [],
-  repos: {
-    plugins: null,
-    approved: [],
-    awaiting: [],
-    declined: [],
-    unproven: [],
-    unread: null,
-  },
+  snapshot: NO_SNAPSHOT,
   lastError: null,
   lastWarning: null,
   state: undefined as never,
@@ -280,74 +288,31 @@ const loadedEntry: ReloadedEntry = {
 
 test.each<[LoadCause, string]>([
   [{ kind: "open" }, "open"],
-  [{ kind: "write" }, "write"],
-  [{ kind: "doctor" }, "doctor"],
-  [
-    {
-      kind: "config-watch",
-      heard: {
-        kind: "changed",
-        paths: ["/p/config.json5", "/u/a.json"],
-      },
-    },
-    "config-watch:/p/config.json5,/u/a.json",
-  ],
-  [
-    { kind: "answers-watch", heard: { kind: "unknown" } },
-    "answers-watch:unknown",
-  ],
-  [
-    { kind: "config-watch", heard: { kind: "failed", reason: "/d: EPERM" } },
-    '"config-watch:failed:/d: EPERM"',
-  ],
-  [
-    {
-      kind: "events-resumed",
-      since: Date.parse("2026-10-27T04:00:00.000Z"),
-    },
-    "events-resumed:2026-10-27T04:00:00.000Z",
-  ],
+  [{ kind: "config" }, "config"],
 ])("the config loaded event says why the load ran: %j", (cause, field) => {
   expect(configLoadedLine(loadedEntry, cause, "built")).toContain(
     ` cwd=/p cause=${field} state=built files=`,
   );
 });
 
-test("the config loaded event names the repositories left waiting and declined, and the unproven worktrees", () => {
+test("the config loaded event names the repository's standing, and why its worktree is unproven", () => {
   const entry: ReloadedEntry = {
+    ...loadedEntry,
     projectDir: project,
     cwd: project,
-    configFile: undefined,
-    configLayers: [],
-    repos: {
-      plugins: null,
-      approved: [],
-      awaiting: ["/a", "/b"],
-      declined: [],
-      unproven: [{ dir: "/c", reason: "/x is not there" }],
-      unread: null,
+    snapshot: {
+      ...NO_SNAPSHOT,
+      repo: { dir: "/a", standing: "awaiting", unproven: "/x is not there" },
     },
-    lastError: null,
-    lastWarning: null,
-    state: undefined as never,
   };
   const line = configLoadedLine(entry, { kind: "open" }, "built");
-  expect(line).toContain(
-    ` awaiting=/a,/b declined=- unproven=[{"dir":"/c","reason":"/x is not there"}] `,
-  );
+  expect(line).toContain(` repo=awaiting:/a unproven="/x is not there" `);
 });
 
 test("the question offers each answer as a link signed for its session, directory and answer", () => {
   const signer = linkSigner(Buffer.alloc(32, 7));
   const [channel, ...rest] = repoQuestions(
-    {
-      plugins: null,
-      approved: [],
-      awaiting: [project],
-      declined: [],
-      unproven: [],
-      unread: null,
-    },
+    { dir: project, standing: "awaiting", unproven: null },
     SID_1,
     signer,
   );

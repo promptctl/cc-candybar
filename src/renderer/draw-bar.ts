@@ -27,7 +27,6 @@ import {
   type SessionHold,
   type SessionView,
 } from "./render-cache";
-import { watchFault } from "../daemon/foundations/watch-targets";
 import { encodeRenderOrigin } from "../daemon/foundations/render-origin";
 import {
   SESSION_CLIENT_HINTS_KEY,
@@ -277,11 +276,7 @@ export function lanesAt(
   latest: CheckedRenderRequest | null,
 ): LaneSwitches {
   const { renderCache } = parts;
-  using hold = renderCache.hold(
-    origin.projectDir,
-    origin.cwd,
-    origin.target.path,
-  );
+  using hold = renderCache.hold(origin);
   // [LAW:dataflow-not-control-flow] exception: a click with no request on
   // record (none since a restart, or its last one evicted) has no hint, and is measured as if in
   // tmux so a tmux session's click owes its setup; the owed setup is settled
@@ -344,11 +339,11 @@ function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
 const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
   refusedHintsError(refusedHints(req, req.hints));
 
-// [LAW:single-enforcer] A `config` turn: the facts of the context it carries
+// [LAW:single-enforcer] A `context` turn: the facts of the context it carries
 // noted, what the context says recorded, its world state taken, and the
 // session's view opened at it and let go, so the turn's output names what the
 // view reads before the request after it waits. The record goes first, so a
-// durable click on a session whose opening threw still resolves the chain
+// durable click on a session whose opening threw still resolves the origin
 // that opening was for, and the facts before it, so the request's event says
 // what a failed opening was for.
 //
@@ -361,13 +356,37 @@ export function configureSession(
   worldState: WorldState,
   facts: RequestFacts,
 ): void {
+  runInAction(() => {
+    takeContext(parts, req, worldState, facts);
+    openSession(parts, req);
+  });
+}
+
+// What a `context` does whether or not its origin's config is held: its
+// facts noted, what it says recorded, and its world state taken, so the
+// session's documents are taken in the order the host hands them in, and the
+// origin it renders from is the session's.
+export function takeContext(
+  parts: RendererParts,
+  req: CheckedRenderRequest,
+  worldState: WorldState,
+  facts: RequestFacts,
+): void {
   contextFacts(req, facts);
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
     recordRequest(parts, req);
     parts.worldStates.take(worldState);
-    holdSessionAt(parts, req)[Symbol.dispose]();
   });
+}
+
+// The session's view opened at the context, and let go: what a `context`
+// waits for its origin's config to do.
+export function openSession(
+  parts: RendererParts,
+  req: CheckedRenderRequest,
+): void {
+  holdSessionAt(parts, req)[Symbol.dispose]();
 }
 
 // [LAW:single-enforcer] A `retire` turn: the session's world state goes, and
@@ -388,8 +407,8 @@ export function retireSession(
 }
 
 // [LAW:single-enforcer] The one way a session's view is held at a context:
-// opened, or kept and refreshed, at the config inputs the context names. A
-// `config` turn opens it ahead of the request, and the request holds it again
+// opened, or kept and refreshed, at the origin the context names. A
+// `context` turn opens it ahead of the request, and the request holds it again
 // at its own context, so it draws by the context it carries and needs nothing
 // to outlive the turn before it: a view closed between the two opens again.
 function holdSessionAt(
@@ -400,8 +419,7 @@ function holdSessionAt(
   // ONE precedence: the `--config` flag over the client's `CC_CANDYBAR_CONFIG`
   // hint (checkRenderRequest). Both are client facts; the daemon's own env is
   // never consulted (brandon-config-5g8).
-  const { projectDir, cwd, target } = req.requested;
-  return parts.renderCache.holdSession(projectDir, cwd, target.path, req);
+  return parts.renderCache.holdSession(req.requested, req);
 }
 
 export function setUpRender(
@@ -418,7 +436,7 @@ export function setUpRender(
   // (brandon-unfiled-3248.6rc). The setup owns the hold from here: a throw
   // before it is returned releases it, and the setup releases it on every exit
   // of the render that disposes it. Its facts and its world state came with
-  // its `config`.
+  // its `context`.
   const hintsError = hintsErrorOf(req);
   const hold = holdSessionAt(parts, req);
   return setUpDraw(parts, hold, req, hintsError, readings, facts);
@@ -466,7 +484,7 @@ function setUpDraw(
 ): RenderSetup {
   try {
     const { entry, state, view } = hold;
-    // The instant the bar is drawn for, which a `config` turn, made before
+    // The instant the bar is drawn for, which a `context` turn, made before
     // the request waited, cannot say.
     noteFacts(facts, { at: readings.at.toFixed(3) });
     // [LAW:dataflow-not-control-flow] One composition every render: the
@@ -580,7 +598,7 @@ export function drawRender(
   );
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
-  const questions = repoQuestions(entry.repos, sessionId, linkSigner);
+  const questions = repoQuestions(entry.snapshot.repo, sessionId, linkSigner);
   // What a load or a request could not honour: each its own message, named by
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open
@@ -610,11 +628,11 @@ export function drawRender(
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, what this config's
   // watch cannot hear, and the warning this config's load carried.
-  // [LAW:no-silent-failure] A config whose link chain the watch cannot walk,
-  // or whose folder the OS will not watch, may miss an edit: the bar says so.
-  // A stall is no reason of this watch's: it has the bar's own row.
-  const configWatch =
-    entry.watch === null ? null : watchFault("config watch", entry.watch, null);
+  // [LAW:no-silent-failure] A config whose link chain the host's watch cannot
+  // walk, or whose folder the OS will not watch, may miss an edit: the bar
+  // says so, as discovery found it. A stall is no reason of this watch's: it
+  // has the bar's own row.
+  const configWatch = entry.snapshot.watch;
   // [LAW:no-ambient-temporal-coupling] The launcher's warnings at this draw's
   // instant and for whom it draws, by the same event hold as the click error.
   const { daemon } = document;
@@ -1005,7 +1023,7 @@ interface DrawnBar {
 }
 
 // [LAW:effects-at-boundaries] What a render request said, recorded where its
-// context arrives, its session's `config` turn — never by a frame, which only
+// context arrives, its session's `context` turn — never by a frame, which only
 // draws, and which would wake its own feed by writing the session's state.
 // Compared before writing: every set() persists and fires the session's MobX
 // atom, so an unconditional per-request write would invalidate every
