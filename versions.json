@@ -4,15 +4,22 @@
     {
       "version": "pr-784",
       "ref": "refs/pull/784/merge",
-      "sha": "0923481b09121c64ec0a206795f46b647bca91ab",
-      "timestamp": "2026-11-17T10:25:40.117Z",
+      "sha": "1c83709d7a3cfdf999833d9fcabe30b120db39f1",
+      "timestamp": "2026-11-17T10:48:27.398Z",
       "commits": [
         {
-          "sha": "0923481b09121c64ec0a206795f46b647bca91ab",
+          "sha": "1c83709d7a3cfdf999833d9fcabe30b120db39f1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T03:24:44-07:00",
-          "message": "Merge 820c40d616fc883070020001b610b755c0f016dd into 681357616352fb4f7476a7b1035b61a244971844\n"
+          "timestamp": "2026-11-17T10:47:26Z",
+          "message": "Merge e0865aeaacac33c22b2b9c791a265ae4fd3595ee into 681357616352fb4f7476a7b1035b61a244971844\n"
+        },
+        {
+          "sha": "e0865aeaacac33c22b2b9c791a265ae4fd3595ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T03:47:08-07:00",
+          "message": "fix(renderer): a draw's record and motion are one memory, kept per session and surface (0ol)\n\nA request's answer and a feed's frames drew against one frame record per\nview and one motion per session, so each surface compared against the\nother's frame and reset its passages. The record joins the motion as one\nvalue the draw reads and returns, kept by the turn per session and\nsurface. The view's parts no longer hold a frame memory, and a record\nnames its config by generation, shared with the warning records.\n"
         },
         {
           "sha": "820c40d616fc883070020001b610b755c0f016dd",

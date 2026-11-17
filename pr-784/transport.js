@@ -50205,10 +50205,43 @@ var MENU_TIMEOUT_DEFAULT = 120;
 var closesAt = (since, timeoutS) => since + timeoutS;
 var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
 
+// src/render/frame-memory.ts
+init_globals();
+function recordFrom(last2, source) {
+  return last2 !== null && last2.source.generation === source.generation && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
+}
+function beginRecord(source, returned2) {
+  const placements = /* @__PURE__ */ new Map();
+  const rules = /* @__PURE__ */ new Map();
+  return {
+    placed: (id2, lines2) => {
+      const { drawing: drawing2 } = returned2(id2, lines2);
+      placements.set(
+        id2,
+        drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
+      );
+      return lines2;
+    },
+    rule: (slot, name) => rules.set(slot, name),
+    record: () => ({ source, placements, rules })
+  };
+}
+var generations = /* @__PURE__ */ new WeakMap();
+var nextGeneration = 0;
+function configGeneration(config2) {
+  const held = generations.get(config2);
+  if (held !== void 0) return held;
+  const minted = nextGeneration++;
+  generations.set(config2, minted);
+  return minted;
+}
+var HIDDEN_RECORD = { kind: "hidden" };
+
 // src/render/effect.ts
 var STILL3 = { kind: "still" };
 var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
 var NO_MOTION = {
+  record: null,
   inForce: null,
   anchor: Timeline.play(0),
   placements: /* @__PURE__ */ new Map(),
@@ -50301,6 +50334,10 @@ var SessionEffects = class {
   keep(motion) {
     this.kept = motion;
   }
+  // The last kept frame's record if it was drawn from `source`, or none.
+  recordFrom(source) {
+    return recordFrom(this.kept.record, source);
+  }
   /**
    * The session's animation clock read at the wall instant `at`, running at
    * `speed` from it on (`Timeline.withRate`: no jump at `at`). The time since
@@ -50340,7 +50377,7 @@ var SessionEffects = class {
     const known = kept.made;
     const made = /* @__PURE__ */ new Map();
     const own2 = [];
-    const { last: last2 } = given2;
+    const last2 = this.recordFrom(given2.source);
     const inFlight = kept.passages;
     const basis = !given2.transitions ? "off" : inFlight !== null && last2 !== null ? "compared" : "fresh";
     const before = basis === "compared" ? (id2) => {
@@ -50508,7 +50545,8 @@ var SessionEffects = class {
       // compared or kept, so every placement draws exactly what it returned.
       placed: basis === "off" ? (_id, lines2) => lines2 : reached,
       row: row2,
-      memory: () => ({
+      memory: (record2) => ({
+        record: record2,
         anchor: clock.timeline,
         inForce,
         placements,
@@ -50521,28 +50559,30 @@ var SessionEffects = class {
     };
   }
 };
-var MAX_SESSIONS = 256;
+var MAX_MEMORIES = 512;
 var EffectSessions = class {
-  constructor(maxSessions = MAX_SESSIONS) {
-    this.maxSessions = maxSessions;
+  constructor(maxMemories = MAX_MEMORIES) {
+    this.maxMemories = maxMemories;
   }
-  maxSessions;
-  sessions = /* @__PURE__ */ new Map();
-  // The session's memory as a draw reads it: a session with none kept yet
-  // draws from a fresh one, held only once its frame is kept.
-  of(sessionId2) {
-    return this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
+  maxMemories;
+  memories = /* @__PURE__ */ new Map();
+  // The memory as a draw reads it: one with nothing kept yet draws from a
+  // fresh one, held only once its frame is kept. Keyed for noise by session
+  // alone, so both surfaces draw the same effect.
+  of(sessionId2, surface) {
+    return this.memories.get(`${surface}:${sessionId2}`) ?? new SessionEffects(sessionId2);
   }
-  // [LAW:single-enforcer] The one writer: the turn that drew the session's
-  // frame keeps the memory it returned, as the most recently rendered.
-  keep(sessionId2, motion) {
-    const known = this.of(sessionId2);
+  // [LAW:single-enforcer] The one writer: the turn that drew the frame keeps
+  // the memory it returned, as the most recently rendered.
+  keep(sessionId2, surface, motion) {
+    const known = this.of(sessionId2, surface);
     known.keep(motion);
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, known);
-    for (const oldest of this.sessions.keys()) {
-      if (this.sessions.size <= this.maxSessions) break;
-      this.sessions.delete(oldest);
+    const key = `${surface}:${sessionId2}`;
+    this.memories.delete(key);
+    this.memories.set(key, known);
+    for (const oldest of this.memories.keys()) {
+      if (this.memories.size <= this.maxMemories) break;
+      this.memories.delete(oldest);
     }
   }
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
@@ -50550,8 +50590,12 @@ var EffectSessions = class {
   // size that grows.
   getStats() {
     let effects = 0;
-    for (const session of this.sessions.values()) effects += session.heldCount;
-    return { sessions: this.sessions.size, effects };
+    const sessions = /* @__PURE__ */ new Set();
+    for (const [key, memory] of this.memories) {
+      effects += memory.heldCount;
+      sessions.add(key.slice(key.indexOf(":") + 1));
+    }
+    return { sessions: sessions.size, effects };
   }
 };
 
@@ -67855,9 +67899,9 @@ var ObservableLru = class {
 };
 
 // src/utils/transcript-fold.ts
-var MAX_SESSIONS2 = 256;
+var MAX_SESSIONS = 256;
 var TranscriptFold = class {
-  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS2) {
+  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS) {
     this.empty = empty2;
     this.step = step4;
     this.refreshes = refreshes;
@@ -68439,7 +68483,7 @@ function cacheActivityTs(line) {
   const ms = parsed2.timestamp != null ? Date.parse(parsed2.timestamp) : NaN;
   return Number.isNaN(ms) ? null : ms;
 }
-var MAX_SESSIONS3 = 256;
+var MAX_SESSIONS2 = 256;
 var CacheExpiryProvider = class {
   constructor(clock, logger = quietLogger, ledger = new RefreshLedger(logger)) {
     this.clock = clock;
@@ -68453,7 +68497,7 @@ var CacheExpiryProvider = class {
   clock;
   // Observable, so a view's payload over an expiry is recomputed in the turn
   // a new one is stored.
-  known = new ObservableLru(MAX_SESSIONS3);
+  known = new ObservableLru(MAX_SESSIONS2);
   // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
   // warn; an answer believed under its stamp reads nothing, and logs nothing.
   refreshes;
@@ -79662,42 +79706,6 @@ function nodeType(kind) {
   return REGISTRY[kind];
 }
 
-// src/render/frame-memory.ts
-init_globals();
-var FrameMemory = class {
-  last = null;
-  // [LAW:single-enforcer] The last frame drawn from `source`, or none. A frame
-  // drawn from another config, preset, state revision or width says nothing of
-  // where a placement stands in this one — its ids may name other placements,
-  // its rows were sized for another width, and a write to the session's state
-  // shows what it reveals at once — so it is no frame to draw from or compare
-  // against.
-  from(source) {
-    const { last: last2 } = this;
-    return last2 !== null && last2.source.config === source.config && last2.source.preset === source.preset && last2.source.revision === source.revision && last2.source.width === source.width ? last2 : null;
-  }
-  begin(source, returned2) {
-    const placements = /* @__PURE__ */ new Map();
-    const rules = /* @__PURE__ */ new Map();
-    return {
-      placed: (id2, lines2) => {
-        const { drawing: drawing2 } = returned2(id2, lines2);
-        placements.set(
-          id2,
-          drawing2 === null ? HIDDEN_RECORD : { kind: "drew", drawing: drawing2 }
-        );
-        return lines2;
-      },
-      rule: (slot, name) => rules.set(slot, name),
-      record: () => ({ source, placements, rules })
-    };
-  }
-  keep(record2) {
-    this.last = record2;
-  }
-};
-var HIDDEN_RECORD = { kind: "hidden" };
-
 // src/dsl/parts.ts
 var SELECTION_OF = {
   palette: "theme",
@@ -79797,8 +79805,6 @@ var ViewParts = class {
   // How many parts have derived since the view's first draw: what one draw
   // adds is how many of its parts it evaluated.
   evaluated = 0;
-  // What the view's last drawn frame showed: the one thing a draw writes.
-  memory = new FrameMemory();
   // [LAW:one-source-of-truth] The view's one scope. Its names are the
   // store's when it is built, at the view's first draw: a view declares
   // every variable before it is drawn.
@@ -80839,9 +80845,6 @@ function segmentsUnder(node) {
     ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
   ];
 }
-function keepFrame(compiled, store, record2) {
-  partsOf(compiled, store).memory.keep(record2);
-}
 function drawDsl(config2, compiled, store, registry, projected, at, opts, observers, selection2) {
   var _stack = [];
   try {
@@ -80875,13 +80878,13 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       shade: SHADES[selection2.shade]
     };
     const source = {
-      config: config2,
+      generation: configGeneration(config2),
       preset,
       revision: registry.stateRevision(),
       width: drawOpts.width
     };
-    const record2 = parts.memory.begin(source, returnedBy);
-    const last2 = parts.memory.from(source);
+    const record2 = beginRecord(source, returnedBy);
+    const last2 = effects.recordFrom(source);
     const waited = /* @__PURE__ */ new Set();
     const ruleFrame = {
       held: (slot) => last2?.rules.get(slot),
@@ -80932,7 +80935,6 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
       {
         transitions,
         source,
-        last: last2,
         returned: returnedBy,
         hold: heldLine
       },
@@ -81013,7 +81015,7 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, observ
         )
       };
     });
-    const memory = { record: record2.record(), motion: motion.memory() };
+    const memory = motion.memory(record2.record());
     const armed = () => rendered.some((row2) => row2.kind === "menu") || parts.selections().effect.kind === "expression" || transitions || segmentsUnder(root).some(
       ({ settings }) => settings.effect !== FOLLOW_BAR && settings.effect !== EFFECT_FLOOR
     );
@@ -85742,7 +85744,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     feeds: feedsFact(projected.feeds)
   });
   const renderOpts = renderOptionsOf(effective, width);
-  const effects = effectSessions.of(sessionId2);
+  const effects = effectSessions.of(sessionId2, drawing2.by);
   const {
     frame: frame2,
     memory,
@@ -85795,7 +85797,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     frame2,
     viewerRows(diagnostics, viewing, sessionId2, drawing2.by, geometry)
   );
-  const fx = memory.motion.frame;
+  const fx = memory.frame;
   const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
   const passages = (frames) => frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
   const tagOf = (w) => {
@@ -85875,7 +85877,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     kept: {
       session: sessionId2,
       by: drawing2.by,
-      frame: memory,
+      motion: memory,
       warnings: { scope, list: drawnWarnings },
       // What this frame drew is what the session's idle close follows.
       menu: {
@@ -85888,9 +85890,8 @@ function drawRender(parts, setup, drawing2, feeds) {
   };
 }
 function keepDraw(parts, view, kept) {
-  const { session, by, frame: frame2, warnings, menu, segments } = kept;
-  keepFrame(view.state.compiled, view.store, frame2.record);
-  parts.effectSessions.keep(session, frame2.motion);
+  const { session, by, motion, warnings, menu, segments } = kept;
+  parts.effectSessions.keep(session, by, motion);
   parts.renderWarnings.keep(session, by, warnings.scope, warnings.list);
   parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
   view.lastRenderCellsBySegment = segments;
@@ -87593,7 +87594,7 @@ var EPHEMERAL_HISTORY_STORAGE = {
   }
 };
 var MAX_STEPS = 50;
-var MAX_SESSIONS4 = 32;
+var MAX_SESSIONS3 = 32;
 var MAX_BYTES = 8 * 1024 * 1024;
 var EMPTY3 = { past: [], future: [] };
 var identity = (c) => c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
@@ -87842,7 +87843,7 @@ var SettingsHistory = class {
     if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
       next.set(sessionId2, history);
     }
-    while (next.size > MAX_SESSIONS4 || weight(next) > MAX_BYTES) {
+    while (next.size > MAX_SESSIONS3 || weight(next) > MAX_BYTES) {
       const [oldest, h] = next.entries().next().value;
       if (next.size > 1) next.delete(oldest);
       else if (h.past.length + h.future.length > 0) {
@@ -89072,7 +89073,7 @@ function verbsOver(ctx) {
 // src/renderer/navigation-history.ts
 init_globals();
 var MAX_STEPS2 = 20;
-var MAX_SESSIONS5 = 32;
+var MAX_SESSIONS4 = 32;
 var isNavigationKey = (key) => !isSettingKey(key) && !isConfirmKey(key) && key !== UPDATE_DISMISSED_KEY && key !== DIAGNOSTICS_VIEWING;
 var NavigationHistory = class {
   // Observable, so a view's payload over a session's depth (`◁`) is
@@ -89172,7 +89173,7 @@ var NavigationHistory = class {
     runInAction(() => {
       this.past.delete(sessionId2);
       if (steps2.length > 0) this.past.set(sessionId2, steps2);
-      while (this.past.size > MAX_SESSIONS5) {
+      while (this.past.size > MAX_SESSIONS4) {
         this.past.delete(this.past.keys().next().value);
       }
     });
@@ -89183,15 +89184,6 @@ var NavigationHistory = class {
 init_globals();
 var MAX_RECORDS = 512;
 var RENDERERS2 = ["request", "feed"];
-var generations = /* @__PURE__ */ new WeakMap();
-var nextGeneration = 0;
-var generationOf = (config2) => {
-  const held = generations.get(config2);
-  if (held !== void 0) return held;
-  const minted = nextGeneration++;
-  generations.set(config2, minted);
-  return minted;
-};
 var RenderWarningRecords = class {
   constructor(maxRecords = MAX_RECORDS) {
     this.maxRecords = maxRecords;
@@ -89206,7 +89198,7 @@ var RenderWarningRecords = class {
   // every other renderer's drawn from the same config, each warning once
   // across renderers (a warning two renderers met is one fact).
   ofSession(sessionId2, by, scope) {
-    const generation = generationOf(scope.config);
+    const generation = configGeneration(scope.config);
     const listed = [];
     for (const renderer of RENDERERS2) {
       const held = this.records.get(keyOf(sessionId2, renderer));
@@ -89231,7 +89223,7 @@ var RenderWarningRecords = class {
     const key = keyOf(sessionId2, by);
     this.records.delete(key);
     this.records.set(key, {
-      generation: generationOf(scope.config),
+      generation: configGeneration(scope.config),
       warnings
     });
     for (const oldest of this.records.keys()) {
