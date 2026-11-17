@@ -52172,7 +52172,6 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     if (checked.ok) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
-      parts.sessionContexts.note(checked.req);
       parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
     const recorded2 = (rendered) => {
@@ -52425,7 +52424,7 @@ async function handleClick(parts, verb, value, arrival, facts, click3) {
         value,
         session,
         arrival,
-        latest: session?.ok ? parts.sessionContexts.of(session.id) : null
+        latest: session?.ok ? parts.sessionRequests.of(session.id) : null
       }
     }
   );
@@ -52585,7 +52584,7 @@ function readRecord(actDir) {
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
-  async function factsOf2(act2) {
+  async function factsOf(act2) {
     const actDir = import_node_path14.default.join(dir, String(act2));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
@@ -52617,7 +52616,7 @@ function makeActReader(dir, read2, jobs, clock) {
             `${import_node_path14.default.join(dir, String(act2))}: an act with no record`
           );
         }
-        const facts = await factsOf2(act2);
+        const facts = await factsOf(act2);
         if (facts !== null) return facts;
         vanished = act2;
       }
@@ -72603,13 +72602,11 @@ var Collector = class {
 
 // src/daemon/frame-feed.ts
 init_globals();
-var MAX_REQUESTS = 256;
 var FrameFeeds = class {
   constructor(deps) {
     this.deps = deps;
   }
   deps;
-  requests = /* @__PURE__ */ new Map();
   watched = /* @__PURE__ */ new Map();
   // The lanes each session with a view switches on, as the renderer's last
   // output said: a subscriber is gated by its lane.
@@ -72627,20 +72624,11 @@ var FrameFeeds = class {
   lookups = 0;
   found = 0;
   // A valid render request the daemon accepted `order`-th, among requests of
-  // every kind. The latest request a session sent is where the host finds the
-  // session: whether its pane is shown, and which session a lookup matches.
-  // One that arrived before it — a slow render finishing late — is not the
-  // session's latest.
+  // every kind, noted in the host's book. A request whose pane is another, on
+  // or off a screen, moves the rate its bar is drawn at.
   note(sessionId2, req, order2) {
-    const held = this.requests.get(sessionId2);
-    if (held !== void 0 && held.order > order2) return;
     const before = this.watched.has(sessionId2) ? this.shown(sessionId2) : null;
-    this.requests.delete(sessionId2);
-    this.requests.set(sessionId2, { req, order: order2 });
-    for (const oldest of this.requests.keys()) {
-      if (this.requests.size <= MAX_REQUESTS) break;
-      if (!this.watched.has(oldest)) this.requests.delete(oldest);
-    }
+    if (!this.deps.requests.note(req, order2)) return;
     if (before !== null && before !== this.shown(sessionId2)) this.announce();
   }
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
@@ -72685,8 +72673,8 @@ var FrameFeeds = class {
   // The latest request of every session someone watches.
   watchedRequests() {
     return [...this.watched.keys()].flatMap((sessionId2) => {
-      const noted = this.requests.get(sessionId2);
-      return noted === void 0 ? [] : [noted.req];
+      const req = this.deps.requests.latest(sessionId2);
+      return req === null ? [] : [req];
     });
   }
   // [LAW:one-source-of-truth] Who watches each session now, whole, as the
@@ -72777,18 +72765,10 @@ var FrameFeeds = class {
   // The session of the newest request `match` accepts, among the latest
   // request of each session the daemon holds, or null when none does.
   newestWhere(match) {
-    let newest = null;
-    for (const [sessionId2, { req, order: order2 }] of this.requests)
-      if (match(req) && (newest === null || order2 > newest.order))
-        newest = { sessionId: sessionId2, order: order2 };
+    const newest = this.deps.requests.newestWhere(match);
     this.lookups++;
     if (newest !== null) this.found++;
-    return newest?.sessionId ?? null;
-  }
-  // The latest request the daemon holds of `sessionId`, or null when it
-  // holds none.
-  latest(sessionId2) {
-    return this.requests.get(sessionId2)?.req ?? null;
+    return newest;
   }
   // The frames the renderer drew are its own count (`RendererStats`).
   getStats() {
@@ -72828,8 +72808,8 @@ var FrameFeeds = class {
     this.announce();
   }
   shown(sessionId2) {
-    const noted = this.requests.get(sessionId2);
-    return noted === void 0 || this.deps.shown(noted.req);
+    const req = this.deps.requests.latest(sessionId2);
+    return req === null || this.deps.shown(req);
   }
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
   send(watched, sub2) {
@@ -87505,7 +87485,7 @@ var MAX_STEPS = 50;
 var MAX_SESSIONS4 = 32;
 var MAX_BYTES = 8 * 1024 * 1024;
 var EMPTY3 = { past: [], future: [] };
-var identity = (c) => c.kind === "session" ? `session:${c.key}` : `layer:${c.role}`;
+var identity = (c) => c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.file}`;
 var SettingsHistory = class {
   constructor(sessionState, logger) {
     this.sessionState = sessionState;
@@ -87615,6 +87595,7 @@ var SettingsHistory = class {
         note(sessionId2, {
           kind: "layer",
           role: files.roleOf(file),
+          file: digestOf2(file),
           before,
           after
         });
@@ -87895,6 +87876,12 @@ function stepOf(click3, sessionId2, change, to) {
       what: `session setting "${change.key}"`
     };
   const file = click3.files.pathOf(change.role);
+  if (digestOf2(file) !== change.file)
+    return {
+      kind: "moved",
+      target: identity(change),
+      what: `the ${change.role} layer, now ${file}, not the file this step wrote`
+    };
   const applied3 = applyChanges(
     click3.files.read(file),
     diffChanges(change[from], change[to])
@@ -91060,9 +91047,12 @@ function readChange(v) {
   const { before, after } = v;
   if (v.kind === "session" && typeof v.key === "string")
     return isSettingKey(v.key) ? { kind: "kept", change: { kind: "session", key: v.key, before, after } } : { kind: "dropped", why: `"${v.key}" (no longer a setting)` };
-  if (v.kind === "layer") {
+  if (v.kind === "layer" && typeof v.file === "string") {
     const role = layerRoleOf(v.role);
-    return role === null ? null : { kind: "kept", change: { kind: "layer", role, before, after } };
+    return role === null ? null : {
+      kind: "kept",
+      change: { kind: "layer", role, file: v.file, before, after }
+    };
   }
   if (v.kind === "file" && typeof v.file === "string")
     return { kind: "dropped", why: "a file an older build named by its path" };
@@ -91175,7 +91165,7 @@ function parsePostMortemsRead(doc) {
 // src/renderer/main.ts
 function mainRenderer(parts, pushed) {
   const { time, feeds, menuIdle } = parts;
-  const origins = /* @__PURE__ */ new Map();
+  const contexts = /* @__PURE__ */ new Map();
   const deliveries = /* @__PURE__ */ new Map();
   let subscriptions = {
     sources: {},
@@ -91193,8 +91183,8 @@ function mainRenderer(parts, pushed) {
   const turn = (event, record2, effects, frames) => {
     switch (event.kind) {
       case "start":
-        parts.started(event);
         runEach([
+          () => parts.started(event),
           () => feeds.view(event.viewers, time.tick),
           ...event.sessions.map(
             ({ context, worldState }) => () => turn(
@@ -91207,7 +91197,10 @@ function mainRenderer(parts, pushed) {
         ]);
         return;
       case "context":
-        origins.set(event.context.hookData.session_id, event.context.requested);
+        contexts.set(
+          event.context.hookData.session_id,
+          contextOf(event.context)
+        );
         if (parts.renderCache.holdsConfig(event.context.requested))
           configureSession(parts, event.context, event.worldState, record2);
         else {
@@ -91251,7 +91244,7 @@ function mainRenderer(parts, pushed) {
         );
         parts.doctorRuns.retire(event.session);
         menuIdle.retire(event.session);
-        origins.delete(event.session);
+        contexts.delete(event.session);
         retireSession(parts, event.session);
         return;
       case "effect-done": {
@@ -91267,8 +91260,12 @@ function mainRenderer(parts, pushed) {
         return;
       }
       case "click": {
-        if (waits(event.latest?.requested ?? null, event, record2)) return;
-        clickTurn(parts, event, effects);
+        const session = event.session?.ok === true ? event.session.id : null;
+        const latest = event.latest ?? (session === null ? null : contexts.get(session) ?? null);
+        if (latest !== null) contexts.set(latest.session, latest);
+        const click3 = { ...event, latest };
+        if (waits(latest?.requested ?? null, click3, record2)) return;
+        clickTurn(parts, click3, effects);
         return;
       }
       case "viewers":
@@ -91277,7 +91274,7 @@ function mainRenderer(parts, pushed) {
       case "due":
         runEach([
           () => time.runDue(),
-          () => closeIdleMenus2(parts, effects),
+          () => closeIdleMenus2(parts, contexts, effects),
           () => feeds.drawDue({ at: time.at, tick: time.tick }, frames)
         ]);
         return;
@@ -91298,7 +91295,7 @@ function mainRenderer(parts, pushed) {
     const configs = /* @__PURE__ */ new Map();
     const landing = parts.verbs.landing();
     for (const origin of [
-      ...origins.values(),
+      ...[...contexts.values()].map((c) => c.requested),
       ...landing === null ? [] : [landing]
     ])
       configs.set(originKey(origin), origin);
@@ -91368,13 +91365,12 @@ function mainRenderer(parts, pushed) {
     })
   });
 }
-function closeIdleMenus2(parts, effects) {
+function closeIdleMenus2(parts, contexts, effects) {
   for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
     try {
-      const facts = factsOf(parts, session);
       parts.verbs.closeIdle(
         session,
-        facts === null ? null : contextOf(facts),
+        contexts.get(session) ?? null,
         idle,
         effects
       );
@@ -91387,19 +91383,8 @@ function closeIdleMenus2(parts, effects) {
     }
   }
 }
-function factsOf(parts, session) {
-  var _stack = [];
-  try {
-    const hold2 = __using(_stack, parts.renderCache.holdView(session));
-    return hold2?.view.facts() ?? null;
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
-  }
-}
 function startMainRenderer(inputs, host) {
-  const { gates } = inputs;
+  const { gates, linkSigner: linkSigner2 } = inputs;
   const time = new TurnTime();
   const now2 = () => time.at;
   const menuIdle = new MenuIdle();
@@ -91422,11 +91407,6 @@ function startMainRenderer(inputs, host) {
     doctorStores.clicked,
     doctorStores.postMortemsRead
   ]);
-  let linkKey = {
-    kind: "failed",
-    reason: "the renderer has not started"
-  };
-  const linkSigner2 = linkSignerOver(() => linkKey);
   let minted = 0;
   const mint = () => ++minted;
   const configWrites = new ConfigWrites(mint);
@@ -91613,7 +91593,6 @@ function startMainRenderer(inputs, host) {
       stored,
       started: (start) => {
         stored.restore(start.stored);
-        linkKey = { kind: "ok", value: import_buffer.Buffer.from(start.linkKey, "base64") };
         log("info", `renderer ${start.name} started cause=${start.cause}`);
       }
     },
@@ -91634,6 +91613,169 @@ function debugOf(view, what) {
       ) : EMPTY_RENDER_MAP
     }
   );
+}
+
+// src/daemon/session-requests.ts
+init_globals();
+var import_node_path41 = __toESM(require_path_browserify(), 1);
+var MAX_SESSIONS6 = 256;
+var SessionRequests = class {
+  constructor(file, logger, kept) {
+    this.logger = logger;
+    this.kept = kept;
+    this.file = file(() => this.text());
+  }
+  logger;
+  kept;
+  // [LAW:types-are-the-program] Insertion order is recency: the book holds
+  // at most its bound, structurally.
+  held = /* @__PURE__ */ new Map();
+  file;
+  // [LAW:no-ambient-temporal-coupling] Read once this daemon has won the
+  // socket: a daemon still in its close writes the file until it exits, so a
+  // read made before then could hold contexts its flush then replaces. A
+  // session noted already keeps what it was noted with.
+  load() {
+    if (this.file === null) return;
+    for (const context of this.read(this.file))
+      if (!this.held.has(context.session))
+        this.held.set(context.session, { context, request: null });
+    this.evictOldest();
+  }
+  // A request past the checkpoint, received `order`-th among requests of
+  // every kind: its session's newest from now on, unless a later one came
+  // first (a slow render finishing late). Saved only when its context moved,
+  // so a session's every tick writes nothing.
+  note(req, order2) {
+    const context = contextOf(req);
+    const before = this.held.get(context.session);
+    if (before?.request != null && before.request.order > order2) return false;
+    this.held.delete(context.session);
+    this.held.set(context.session, { context, request: { req, order: order2 } });
+    this.evictOldest();
+    if (before === void 0 || !sameContext(before.context, context))
+      this.file?.save();
+    return true;
+  }
+  // The newest request of `session` since the daemon started.
+  latest(session) {
+    return this.held.get(session)?.request?.req ?? null;
+  }
+  // The context of `session` as its newest request named it, from before
+  // the daemon started too.
+  of(session) {
+    return this.held.get(session)?.context ?? null;
+  }
+  // The session of the newest request `match` accepts, among the newest of
+  // each session, or null when none does.
+  newestWhere(match) {
+    let newest = null;
+    for (const [session, { request: request2 }] of this.held)
+      if (request2 !== null && match(request2.req) && (newest === null || request2.order > newest.order))
+        newest = { session, order: request2.order };
+    return newest?.session ?? null;
+  }
+  // [LAW:no-ambient-temporal-coupling] The daemon's close: the owed write
+  // lands, and anything noted later stays in memory, so it never lands over
+  // the file a next daemon has taken up.
+  close() {
+    this.file?.flush();
+    this.file = null;
+  }
+  // [LAW:single-enforcer] The bound, kept however the book grew: a note, or
+  // a file written by a build with a larger one.
+  evictOldest() {
+    for (const oldest of this.held.keys()) {
+      if (this.held.size <= MAX_SESSIONS6) break;
+      if (!this.kept(oldest)) this.held.delete(oldest);
+    }
+  }
+  text() {
+    const record2 = /* @__PURE__ */ Object.create(null);
+    for (const {
+      context: { session, ...rest2 }
+    } of this.held.values())
+      record2[session] = rest2;
+    return JSON.stringify(record2);
+  }
+  // [LAW:no-silent-failure] A file that does not read, or an entry that does
+  // not, is said and left out: that session's click waits for its next
+  // request, as one never rendered does.
+  read(file) {
+    const text4 = file.read();
+    if (text4.kind === "failed") {
+      this.logger("warn", `session contexts: ${text4.reason}; starting empty`);
+      return [];
+    }
+    if (text4.value === null) return [];
+    let doc;
+    try {
+      doc = JSON.parse(text4.value);
+    } catch (e) {
+      this.logger(
+        "warn",
+        `session contexts: not JSON (${e.message}); starting empty`
+      );
+      return [];
+    }
+    if (doc === null || typeof doc !== "object" || Array.isArray(doc)) {
+      this.logger("warn", "session contexts: not an object; starting empty");
+      return [];
+    }
+    const keyed2 = sessionKeyed(
+      doc,
+      (key, problem) => this.logger(
+        "warn",
+        `session contexts: dropped ${JSON.stringify(key)}: session id ${problem}`
+      )
+    );
+    const read2 = [];
+    for (const [session, raw] of keyed2) {
+      const context = parseRecorded(session, raw);
+      if (context === null)
+        this.logger(
+          "warn",
+          `session contexts: dropped session ${session}: not a context`
+        );
+      else read2.push(context);
+    }
+    return read2;
+  }
+};
+function sameContext(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+var isAbsolute3 = (v) => typeof v === "string" && import_node_path41.default.isAbsolute(v);
+function parseRecorded(session, raw) {
+  if (raw === null || typeof raw !== "object") return null;
+  const { requested, hints, transcript: transcript2, answered } = raw;
+  if (typeof transcript2 !== "string" || !isAnswered(answered)) return null;
+  if (requested === null || typeof requested !== "object") return null;
+  if (hints === null || typeof hints !== "object") return null;
+  const { projectDir, cwd: cwd2, target } = requested;
+  const parsedTarget = parseTarget(target);
+  if (!isAbsolute3(projectDir) || !isAbsolute3(cwd2) || parsedTarget === null)
+    return null;
+  const origin = { projectDir, cwd: cwd2, target: parsedTarget };
+  const { client: _client, ...sessionHints2 } = parseClientHints(
+    hints
+  );
+  return {
+    session,
+    requested: origin,
+    hints: sessionHints2,
+    transcript: transcript2,
+    answered
+  };
+}
+var isAnswered = (v) => v === "yes" || v === "no" || v === "unknown";
+function parseTarget(raw) {
+  if (raw === null || typeof raw !== "object") return null;
+  const { source, path: file } = raw;
+  if (source === "search" && file === void 0) return { source };
+  if ((source === "argument" || source === "environment") && isAbsolute3(file))
+    return { source, path: file };
+  return null;
 }
 
 // src/renderer-interface/wire.ts
@@ -91836,7 +91978,7 @@ async function readDoctor(edge, hints, ask2, origin, sighted) {
 // src/doctor/edge.ts
 init_globals();
 init_os();
-var import_node_path42 = __toESM(require_path_browserify(), 1);
+var import_node_path43 = __toESM(require_path_browserify(), 1);
 
 // src/proc/process-table.ts
 init_globals();
@@ -91861,7 +92003,7 @@ function* lineage(procs, pid2) {
 
 // src/doctor/font-edge.ts
 init_globals();
-var import_node_path41 = __toESM(require_path_browserify(), 1);
+var import_node_path42 = __toESM(require_path_browserify(), 1);
 
 // node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/index.js
 init_globals();
@@ -92834,12 +92976,12 @@ function coverage(launcher, ref, glyphs) {
   return process.platform === "darwin" ? macCoverage(launcher, ref, glyphs) : fcCoverage(launcher, ref.name, glyphs);
 }
 function alacrittyConfigPaths(home, xdgConfigHome) {
-  const xdg = xdgConfigHome || import_node_path41.default.join(home, ".config");
+  const xdg = xdgConfigHome || import_node_path42.default.join(home, ".config");
   return [
-    import_node_path41.default.join(xdg, "alacritty", "alacritty.toml"),
-    import_node_path41.default.join(xdg, "alacritty.toml"),
-    import_node_path41.default.join(home, ".config", "alacritty", "alacritty.toml"),
-    import_node_path41.default.join(home, ".alacritty.toml")
+    import_node_path42.default.join(xdg, "alacritty", "alacritty.toml"),
+    import_node_path42.default.join(xdg, "alacritty.toml"),
+    import_node_path42.default.join(home, ".config", "alacritty", "alacritty.toml"),
+    import_node_path42.default.join(home, ".alacritty.toml")
   ];
 }
 function alacrittyDefaultFamily(platform3) {
@@ -92881,7 +93023,7 @@ function alacrittyFamilyIn(file, home, depth) {
   if (depth === 5) return { kind: "ok", value: null };
   let found2 = null;
   for (const imported of own2.imports) {
-    const target = imported.startsWith("~/") ? import_node_path41.default.join(home, imported.slice(2)) : import_node_path41.default.resolve(import_node_path41.default.dirname(file), imported);
+    const target = imported.startsWith("~/") ? import_node_path42.default.join(home, imported.slice(2)) : import_node_path42.default.resolve(import_node_path42.default.dirname(file), imported);
     if (!fs_default.existsSync(target)) continue;
     const inner = alacrittyFamilyIn(target, home, depth + 1);
     if (inner.kind === "failed") return inner;
@@ -92945,7 +93087,7 @@ function installFacts(edge, daemonBundle, clients) {
         bundle: bundle.value,
         checkout: root === null ? null : {
           root,
-          rustSource: edge.digest(import_node_path42.default.join(root, "rust-client"))
+          rustSource: edge.digest(import_node_path43.default.join(root, "rust-client"))
         }
       },
       nativeShipped: edge.nativeShipped(),
@@ -93037,7 +93179,7 @@ function ownsEntry(entry) {
     return false;
   }
   const root = DAEMON_ENTRY.exec(real)?.[1];
-  return root !== void 0 && fs_default.existsSync(import_node_path42.default.join(root, "bin", "cc-candybar"));
+  return root !== void 0 && fs_default.existsSync(import_node_path43.default.join(root, "bin", "cc-candybar"));
 }
 async function daemons(launcher) {
   const run3 = await launcher.launch({
@@ -93217,34 +93359,34 @@ async function readDoctorRun(deps, { session, hints, origin, ask: ask2 }) {
 
 // src/daemon/config-discovery/config-discovery.ts
 init_globals();
-var import_node_path46 = __toESM(require_path_browserify(), 1);
+var import_node_path47 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/discover.ts
 init_globals();
-var import_node_path45 = __toESM(require_path_browserify(), 1);
+var import_node_path46 = __toESM(require_path_browserify(), 1);
 var import_json56 = __toESM(require_dist(), 1);
 
 // src/daemon/config-discovery/config-search.ts
 init_globals();
-var import_node_path44 = __toESM(require_path_browserify(), 1);
+var import_node_path45 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
-var import_node_path43 = __toESM(require_path_browserify(), 1);
+var import_node_path44 = __toESM(require_path_browserify(), 1);
 function pluginRoots(locs, repo2) {
   const installed = [
-    ...[...locs.dataDirs].reverse().map((d) => import_node_path43.default.join(d, "cc-candybar", "plugins")),
+    ...[...locs.dataDirs].reverse().map((d) => import_node_path44.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
   return [
     ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path43.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
+    ...repo2 === null ? [] : [{ dir: import_node_path44.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
   ];
 }
 function userPluginRoot(locs) {
-  return import_node_path43.default.join(locs.dataHome, "cc-candybar", "plugins");
+  return import_node_path44.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
-var REPO_PLUGIN_DIR = import_node_path43.default.join(".cc-candybar", "plugins");
+var REPO_PLUGIN_DIR = import_node_path44.default.join(".cc-candybar", "plugins");
 function listFolders(root) {
   try {
     const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -93260,7 +93402,7 @@ function listFolders(root) {
 function isDirectoryLink(root, e) {
   if (!e.isSymbolicLink()) return false;
   try {
-    return fs_default.statSync(import_node_path43.default.join(root, e.name)).isDirectory();
+    return fs_default.statSync(import_node_path44.default.join(root, e.name)).isDirectory();
   } catch {
     return true;
   }
@@ -93278,14 +93420,14 @@ function searchConfig(locs, answers, query) {
       unchecked.push(p2);
       continue;
     }
-    const dir = realDirOf(import_node_path44.default.dirname(candidate));
+    const dir = realDirOf(import_node_path45.default.dirname(candidate));
     if (typeof dir !== "string") {
       unchecked.push({ path: candidate, error: dir.error });
       continue;
     }
-    const location = import_node_path44.default.join(
+    const location = import_node_path45.default.join(
       dir,
-      import_node_path44.default.basename(candidate).replace(/\.(json5|json)$/, "")
+      import_node_path45.default.basename(candidate).replace(/\.(json5|json)$/, "")
     );
     if (!atLocation.has(location)) {
       atLocation.set(location, {
@@ -93342,7 +93484,7 @@ function repoProject(projectDir, unseen = []) {
   if (projectDir === void 0 || presence(projectDir) !== "present") {
     return null;
   }
-  const listed = listFolders(import_node_path44.default.join(projectDir, REPO_PLUGIN_DIR));
+  const listed = listFolders(import_node_path45.default.join(projectDir, REPO_PLUGIN_DIR));
   const dir = realDirOf(projectDir);
   if (typeof dir !== "string") {
     unseen.push(dir);
@@ -93361,9 +93503,9 @@ function detectConfigCollisions(locs, projectDir) {
   );
   const groups = /* @__PURE__ */ new Map();
   for (const candidate of existing) {
-    const dir = import_node_path44.default.dirname(candidate);
-    const base = import_node_path44.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path44.default.join(dir, base);
+    const dir = import_node_path45.default.dirname(candidate);
+    const base = import_node_path45.default.basename(candidate).replace(/\.(json5|json)$/, "");
+    const key = import_node_path45.default.join(dir, base);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(candidate);
   }
@@ -93394,14 +93536,14 @@ function listRoot({ dir, scope }) {
     scope,
     listed: "error" in listed ? listed : {
       folders: listed.folders.map(
-        (name) => readDefinition(import_node_path45.default.join(dir, name, DEFINITION_FILE), scope)
+        (name) => readDefinition(import_node_path46.default.join(dir, name, DEFINITION_FILE), scope)
       ),
       files: listed.files
     }
   };
 }
 function readDefinition(file, scope) {
-  if (import_node_path45.default.basename(file) !== DEFINITION_FILE) {
+  if (import_node_path46.default.basename(file) !== DEFINITION_FILE) {
     return {
       scope,
       path: file,
@@ -93413,7 +93555,7 @@ function readDefinition(file, scope) {
   }
   try {
     const text4 = fs_default.readFileSync(file, "utf-8");
-    const dir = fs_default.realpathSync(import_node_path45.default.dirname(file));
+    const dir = fs_default.realpathSync(import_node_path46.default.dirname(file));
     return { scope, path: file, definition: { kind: "text", text: text4, dir } };
   } catch (e) {
     return {
@@ -93436,12 +93578,12 @@ function sessionPlugins(locs, installed, repo2, cwd2) {
       continue;
     }
     for (const file of listed.folders) {
-      const key = `${scope}\0${import_node_path45.default.basename(import_node_path45.default.dirname(file.path))}`;
+      const key = `${scope}\0${import_node_path46.default.basename(import_node_path46.default.dirname(file.path))}`;
       byNs.delete(key);
       byNs.set(key, file);
     }
     for (const name of listed.files)
-      strays.push({ path: import_node_path45.default.join(root, name), scope });
+      strays.push({ path: import_node_path46.default.join(root, name), scope });
   }
   return {
     plugins: [...byNs.values()],
@@ -93721,7 +93863,7 @@ function watchTargetsFor(origin, found2) {
   const roots = [
     .../* @__PURE__ */ new Set([
       ...targets.roots,
-      import_node_path46.default.join(origin.projectDir, REPO_PLUGIN_DIR)
+      import_node_path47.default.join(origin.projectDir, REPO_PLUGIN_DIR)
     ])
   ];
   return watchTargetsOf({
@@ -93810,10 +93952,18 @@ function createDaemon(inputs) {
     restateFaults();
   };
   const profileStore2 = inputs.profileStore(profile.state, storeFailed, log);
-  const sessionContexts = inputs.sessionContexts(storeFailed, log);
+  const sessionRequests = new SessionRequests(
+    (body) => inputs.sessionContextsFile(body, storeFailed, log),
+    log,
+    (sessionId2) => frameFeeds.isWatched(sessionId2)
+  );
   const preparedRenderer = inputs.renderer({
     renderer: (reaches2) => startMainRenderer(
       {
+        // [LAW:one-source-of-truth] In process the renderer signs over the
+        // host's own lazy read of the key, so a key file repaired on disk is
+        // taken up at the next link drawn.
+        linkSigner: linkSigner2,
         locations: locs,
         env: host.env,
         home: host.home,
@@ -93822,12 +93972,18 @@ function createDaemon(inputs) {
       },
       reaches2
     ),
-    boot: () => ({
-      digest: bundle.digest,
-      host: { ...host, env: bootEnv(host.env) },
-      memoryLimitBytes: memoryLimitBytes2,
-      locations: locs
-    }),
+    // Read for each spawn: a boot carries the link key as it reads then, in
+    // base64, so the boot crosses as a line.
+    boot: () => {
+      const key = inputs.linkKey();
+      return {
+        digest: bundle.digest,
+        host: { ...host, env: bootEnv(host.env) },
+        memoryLimitBytes: memoryLimitBytes2,
+        locations: locs,
+        linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
+      };
+    },
     node: bundle.node
   });
   const limits = makeLimits({
@@ -93930,9 +94086,10 @@ function createDaemon(inputs) {
   });
   const declaredStatusLines = new DeclaredStatusLines(
     tmuxStatusLines,
-    (sessionId2) => sessionContexts.of(sessionId2)?.hints.tmux
+    (sessionId2) => sessionRequests.of(sessionId2)?.hints.tmux
   );
   const frameFeeds = new FrameFeeds({
+    requests: sessionRequests,
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: (make) => parts.renderer.deliver(
@@ -94061,21 +94218,17 @@ function createDaemon(inputs) {
       const turn = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
-        const key = inputs.linkKey();
-        if (key.kind === "failed")
-          throw new Error(`the link key could not be read: ${key.reason}`);
         return {
           kind: "event",
           event: {
             kind: "start",
             name: rendererName,
             cause,
-            linkKey: key.value.toString("base64"),
             stored: profileStore2.stored(),
             viewers,
             sessions: [...collector.liveDocuments()].flatMap(
               ([sessionId2, worldState]) => {
-                const req = frameFeeds.latest(sessionId2);
+                const req = sessionRequests.latest(sessionId2);
                 return req === null ? [] : [{ context: located(req), worldState }];
               }
             )
@@ -94107,7 +94260,7 @@ function createDaemon(inputs) {
     clock,
     bundle: bundle.path,
     sourceDigest: bundle.digest,
-    sessionContexts,
+    sessionRequests,
     stats,
     handlerProbes,
     linkSigner: linkSigner2,
@@ -94158,7 +94311,6 @@ function createDaemon(inputs) {
       }
     )
   };
-  link.open();
   return {
     stats,
     launcher,
@@ -94193,6 +94345,8 @@ function createDaemon(inputs) {
       binaryWatch.arm();
       updateWatch.arm();
       limits.arm();
+      profileStore2.load();
+      sessionRequests.load();
       link.arm();
     },
     async close() {
@@ -94242,7 +94396,7 @@ function createDaemon(inputs) {
         // Last: every write a turn returned, a run's that ended in the
         // teardown included, lands, and none after it.
         ["profile close", () => profileStore2.close()],
-        ["session contexts close", () => sessionContexts.close()]
+        ["session requests close", () => sessionRequests.close()]
       ];
       await runTeardown(teardown, log);
       closed = true;
@@ -94253,7 +94407,7 @@ function createDaemon(inputs) {
 
 // src/daemon/log.ts
 init_globals();
-var import_node_path47 = __toESM(require_path_browserify(), 1);
+var import_node_path48 = __toESM(require_path_browserify(), 1);
 var MAX_BYTES2 = 5 * 1024 * 1024;
 var KEEP_GENERATIONS = 3;
 var MAX_WAITING_BYTES = 4 * 1024 * 1024;
@@ -94404,7 +94558,7 @@ var DaemonLog = class {
       return { held: this.sink, size: st.size };
     }
     this.closeSink();
-    await fs_default.promises.mkdir(import_node_path47.default.dirname(this.filePath), { recursive: true });
+    await fs_default.promises.mkdir(import_node_path48.default.dirname(this.filePath), { recursive: true });
     const fd = await new Promise(
       (resolve, reject2) => fs_default.open(
         this.filePath,
@@ -94521,7 +94675,7 @@ var DaemonLog = class {
     if (first2.length === 0 && this.waiting.length === 0) return;
     const lines2 = import_buffer.Buffer.concat([first2, import_buffer.Buffer.from(this.take())]);
     try {
-      fs_default.mkdirSync(import_node_path47.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path48.default.dirname(this.filePath), { recursive: true });
       fs_default.appendFileSync(this.filePath, lines2);
       if (stillOut !== null && out !== null && idOf3(fs_default.fstatSync(stillOut.fd)) === idOf3(fs_default.statSync(this.filePath))) {
         out.state = {
@@ -94649,11 +94803,11 @@ init_globals();
 
 // src/path-search.ts
 init_globals();
-var import_node_path48 = __toESM(require_path_browserify(), 1);
+var import_node_path49 = __toESM(require_path_browserify(), 1);
 function executableOn(name, pathVariable, isExecutable) {
-  for (const dir of (pathVariable ?? "").split(import_node_path48.default.delimiter)) {
-    if (!import_node_path48.default.isAbsolute(dir)) continue;
-    const file = import_node_path48.default.join(dir, name);
+  for (const dir of (pathVariable ?? "").split(import_node_path49.default.delimiter)) {
+    if (!import_node_path49.default.isAbsolute(dir)) continue;
+    const file = import_node_path49.default.join(dir, name);
     if (isExecutable(file)) return file;
   }
   return null;
@@ -94670,13 +94824,13 @@ function canonical2(file) {
   try {
     return fs_default.realpathSync(file);
   } catch {
-    return import_node_path48.default.resolve(file);
+    return import_node_path49.default.resolve(file);
   }
 }
 
 // src/attach-preload.ts
 init_globals();
-var import_node_path49 = __toESM(require_path_browserify(), 1);
+var import_node_path50 = __toESM(require_path_browserify(), 1);
 function launcherNode(pathVariable, isExecutable, canonical3) {
   const node = executableOn("node", pathVariable, isExecutable);
   if (node === null) {
@@ -94685,7 +94839,7 @@ function launcherNode(pathVariable, isExecutable, canonical3) {
       why: "no `node` on PATH to run the attach launcher"
     };
   }
-  return import_node_path49.default.basename(canonical3(node)) === "bun" ? {
+  return import_node_path50.default.basename(canonical3(node)) === "bun" ? {
     kind: "refused",
     why: `the \`node\` on PATH (${node}) is Bun; the attach launcher runs under Node`
   } : { kind: "node", file: node };
@@ -94971,9 +95125,9 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
 
 // src/daemon/link-key.ts
 init_globals();
-var import_node_path50 = __toESM(require_path_browserify(), 1);
+var import_node_path51 = __toESM(require_path_browserify(), 1);
 function linkKeyFile(dir) {
-  return import_node_path50.default.join(dir, "link.key");
+  return import_node_path51.default.join(dir, "link.key");
 }
 function linkKeyFromFile(file) {
   let key;
@@ -95003,7 +95157,7 @@ function readOrCreate(file) {
   return key;
 }
 function create(file) {
-  fs_default.mkdirSync(import_node_path50.default.dirname(file), { recursive: true });
+  fs_default.mkdirSync(import_node_path51.default.dirname(file), { recursive: true });
   const written3 = `${file}.${process.pid}.${randomBytes(6).toString("hex")}`;
   fs_default.writeFileSync(written3, randomBytes(LINK_KEY_BYTES), {
     mode: 384,
@@ -95041,16 +95195,17 @@ function inProcessRenderer(make, own2) {
   });
   return {
     renderer,
+    // [LAW:no-ambient-temporal-coupling] The one start, once the daemon has
+    // won the socket and read what the renderer keeps: an unarmed daemon (the
+    // page) serves with nothing kept.
     // [LAW:no-silent-failure] A start that throws is said, and the renderer
     // serves what the inputs after it bring.
-    open: () => void own2.start("first").catch(
+    arm: () => void own2.start("first").catch(
       (thrown2) => own2.log(
         "error",
         `renderer ${own2.name} start failed: ${failureOf(thrown2).detail}`
       )
     ),
-    arm: () => {
-    },
     // Nothing restarts in process.
     beginClose: () => {
     },
@@ -95062,11 +95217,11 @@ function inProcessRenderer(make, own2) {
 
 // src/daemon/profile-store.ts
 init_globals();
-var import_node_path52 = __toESM(require_path_browserify(), 1);
+var import_node_path53 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/store-file.ts
 init_globals();
-var import_node_path51 = __toESM(require_path_browserify(), 1);
+var import_node_path52 = __toESM(require_path_browserify(), 1);
 var DebouncedStoreFile = class {
   constructor(filePath2, body, clock, failed3, logger = quietLogger, debounceMs = 500) {
     this.filePath = filePath2;
@@ -95076,7 +95231,7 @@ var DebouncedStoreFile = class {
     this.logger = logger;
     this.debounceMs = debounceMs;
     this.writingPath = `${filePath2}.writing`;
-    this.name = import_node_path51.default.basename(filePath2);
+    this.name = import_node_path52.default.basename(filePath2);
   }
   filePath;
   body;
@@ -95144,7 +95299,7 @@ var DebouncedStoreFile = class {
     this.writing = true;
     const heldMs = elapsedMs(this.clock, started2);
     try {
-      await fs_default.promises.mkdir(import_node_path51.default.dirname(this.filePath), { recursive: true });
+      await fs_default.promises.mkdir(import_node_path52.default.dirname(this.filePath), { recursive: true });
       const file = await fs_default.promises.open(tmp, "w", 384);
       try {
         await file.writeFile(body);
@@ -95188,7 +95343,7 @@ var DebouncedStoreFile = class {
     if (upTo === this.written) return;
     const started2 = this.clock.monotonic();
     try {
-      fs_default.mkdirSync(import_node_path51.default.dirname(this.filePath), { recursive: true });
+      fs_default.mkdirSync(import_node_path52.default.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
       const body = this.body();
       fs_default.writeFileSync(tmp, body, { mode: 384 });
@@ -95241,7 +95396,7 @@ var CODECS = {
   "doctor-clicked": document("doctor-clicked-terminals.json"),
   "doctor-post-mortems-read": document("doctor-post-mortems-read.json")
 };
-var storePath = (dir, name) => import_node_path52.default.join(dir, CODECS[name].file);
+var storePath = (dir, name) => import_node_path53.default.join(dir, CODECS[name].file);
 function readStore(file, codec) {
   const text4 = file.read();
   if (text4.kind === "failed")
@@ -95268,18 +95423,21 @@ function profileStore(dir, clock, failed3, logger) {
       failed3,
       logger
     );
-    const read2 = readStore(file, codec);
-    if (read2.kind === "read")
-      for (const [key, value] of Object.entries(read2.entries))
-        entries.set(key, value);
-    held.set(name, {
-      unreadable: read2.kind === "unreadable" ? read2.reason : null,
-      entries,
-      file
-    });
+    held.set(name, { unreadable: null, entries, file });
   }
   const of = (name) => held.get(name);
   return {
+    load: () => {
+      for (const name of STORE_NAMES) {
+        const store = of(name);
+        if (store.file === null) continue;
+        const read2 = readStore(store.file, CODECS[name]);
+        if (read2.kind === "unreadable") store.unreadable = read2.reason;
+        else
+          for (const [key, value] of Object.entries(read2.entries))
+            store.entries.set(key, value);
+      }
+    },
     stored: () => Object.fromEntries(
       STORE_NAMES.map((name) => {
         const store = of(name);
@@ -95308,140 +95466,6 @@ function profileStore(dir, clock, failed3, logger) {
   };
 }
 
-// src/daemon/session-contexts.ts
-init_globals();
-var import_node_path53 = __toESM(require_path_browserify(), 1);
-var MAX_SESSIONS6 = 256;
-var SessionContexts = class {
-  constructor(filePath2, clock, failed3, logger) {
-    this.logger = logger;
-    this.file = new DebouncedStoreFile(
-      filePath2,
-      () => this.text(),
-      clock,
-      failed3,
-      logger
-    );
-    this.load(this.file);
-  }
-  logger;
-  // [LAW:types-are-the-program] Insertion order is recency: the book holds
-  // at most its bound, structurally.
-  held = /* @__PURE__ */ new Map();
-  file;
-  // A request past the checkpoint: its session's context from now on. Saved
-  // only when it moved, so a session's every tick writes nothing.
-  note(req) {
-    const context = contextOf(req);
-    const before = this.held.get(context.session);
-    this.held.delete(context.session);
-    this.held.set(context.session, context);
-    if (before !== void 0 && sameContext(before, context)) return;
-    this.evictOldest();
-    this.file?.save();
-  }
-  // [LAW:single-enforcer] The bound, kept however the book grew: a note, or
-  // a file written by a build with a larger one.
-  evictOldest() {
-    for (const oldest of this.held.keys()) {
-      if (this.held.size <= MAX_SESSIONS6) break;
-      this.held.delete(oldest);
-    }
-  }
-  of(session) {
-    return this.held.get(session) ?? null;
-  }
-  // [LAW:no-ambient-temporal-coupling] The daemon's close: the owed write
-  // lands, and anything noted later stays in memory.
-  close() {
-    this.file?.flush();
-    this.file = null;
-  }
-  text() {
-    const record2 = {};
-    for (const { session, ...rest2 } of this.held.values())
-      record2[session] = rest2;
-    return JSON.stringify(record2);
-  }
-  // [LAW:no-silent-failure] A file that does not read, or an entry that does
-  // not, is said and left out: that session's click waits for its next
-  // request, as one never rendered does.
-  load(file) {
-    const text4 = file.read();
-    if (text4.kind === "failed") {
-      this.logger("warn", `session contexts: ${text4.reason}; starting empty`);
-      return;
-    }
-    if (text4.value === null) return;
-    let doc;
-    try {
-      doc = JSON.parse(text4.value);
-    } catch (e) {
-      this.logger(
-        "warn",
-        `session contexts: not JSON (${e.message}); starting empty`
-      );
-      return;
-    }
-    if (doc === null || typeof doc !== "object" || Array.isArray(doc)) {
-      this.logger("warn", "session contexts: not an object; starting empty");
-      return;
-    }
-    const keyed2 = sessionKeyed(
-      doc,
-      (key, problem) => this.logger(
-        "warn",
-        `session contexts: dropped ${JSON.stringify(key)}: session id ${problem}`
-      )
-    );
-    for (const [session, raw] of keyed2) {
-      const context = parseRecorded(session, raw);
-      if (context === null)
-        this.logger(
-          "warn",
-          `session contexts: dropped session ${session}: not a context`
-        );
-      else this.held.set(session, context);
-    }
-    this.evictOldest();
-  }
-};
-function sameContext(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-var isAbsolute3 = (v) => typeof v === "string" && import_node_path53.default.isAbsolute(v);
-function parseRecorded(session, raw) {
-  if (raw === null || typeof raw !== "object") return null;
-  const { requested, hints, transcript: transcript2, answered } = raw;
-  if (typeof transcript2 !== "string" || !isAnswered(answered)) return null;
-  if (requested === null || typeof requested !== "object") return null;
-  if (hints === null || typeof hints !== "object") return null;
-  const { projectDir, cwd: cwd2, target } = requested;
-  const parsedTarget = parseTarget(target);
-  if (!isAbsolute3(projectDir) || !isAbsolute3(cwd2) || parsedTarget === null)
-    return null;
-  const origin = { projectDir, cwd: cwd2, target: parsedTarget };
-  const { client: _client, ...sessionHints2 } = parseClientHints(
-    hints
-  );
-  return {
-    session,
-    requested: origin,
-    hints: sessionHints2,
-    transcript: transcript2,
-    answered
-  };
-}
-var isAnswered = (v) => v === "yes" || v === "no" || v === "unknown";
-function parseTarget(raw) {
-  if (raw === null || typeof raw !== "object") return null;
-  const { source, path: file } = raw;
-  if (source === "search" && file === void 0) return { source };
-  if ((source === "argument" || source === "environment") && isAbsolute3(file))
-    return { source, path: file };
-  return null;
-}
-
 // src/daemon/production-adapters.ts
 function productionAdapters(paths2, daemonLog, machine) {
   return {
@@ -95449,7 +95473,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     launcher: (own2) => systemLauncher(own2, machine),
     profile: (name, host) => canonicalProfile(profileOf(name, host), name === MAIN_RENDERER),
     profileStore: (dir, failed3, log) => profileStore(dir, machine, failed3, log),
-    sessionContexts: (failed3, log) => new SessionContexts(paths2.sessionContexts, machine, failed3, log),
+    sessionContextsFile: (body, failed3, log) => new DebouncedStoreFile(paths2.sessionContexts, body, machine, failed3, log),
     linkKey: linkKeyFromFile(linkKeyFile(paths2.state)),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
@@ -95786,20 +95810,13 @@ var endedAt = null;
 var nowSec = () => Date.now() / 1e3;
 var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
-var onClock = ({
-  headAt,
-  ...rest2
-}) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
+var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
 var WORLD = processWorld();
 var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var pageDaemon = createDaemon({
-  ...productionAdapters(
-    paths,
-    new DaemonLog(paths.log, WORLD.clock),
-    WORLD.clock
-  ),
+  ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
   gates: daemonGates(),
   paths,
   host: HOST,
@@ -95819,13 +95836,7 @@ var pageDaemon = createDaemon({
   }
 });
 function lines(entry, at) {
-  const base = {
-    timestamp: new Date(clockAt(at) * 1e3).toISOString(),
-    sessionId,
-    cwd: REPO,
-    isSidechain: false,
-    uuid: id("u")
-  };
+  const base = { timestamp: new Date(clockAt(at) * 1e3).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
   const usage = (output) => ({
     input_tokens: 4,
     output_tokens: output,
@@ -95836,77 +95847,33 @@ function lines(entry, at) {
     ...base,
     type: "assistant",
     requestId: id("req"),
-    message: {
-      id: id("msg"),
-      model: "claude-opus-4-8",
-      role: "assistant",
-      type: "message",
-      content,
-      usage: usage(output)
-    }
+    message: { id: id("msg"), model: "claude-opus-4-8", role: "assistant", type: "message", content, usage: usage(output) }
   });
   switch (entry.kind) {
     case "user":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: { role: "user", content: entry.text }
-        }
-      ];
+      return [{ ...base, type: "user", message: { role: "user", content: entry.text } }];
     case "command":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: {
-            role: "user",
-            content: `<command-name>${entry.name}</command-name>
+      return [{ ...base, type: "user", message: {
+        role: "user",
+        content: `<command-name>${entry.name}</command-name>
 <command-message>${entry.name.slice(1)}</command-message>
 <command-args></command-args>`
-          }
-        }
-      ];
+      } }];
     case "tools":
-      return [
-        assistant(
-          entry.calls.map((c) => ({
-            type: "tool_use",
-            id: c.id,
-            name: c.name,
-            input: c.input ?? {}
-          })),
-          entry.output ?? 100
-        )
-      ];
+      return [assistant(entry.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: c.input ?? {} })), entry.output ?? 100)];
     case "results":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: {
-            role: "user",
-            content: entry.ids.map((tool_use_id) => ({
-              type: "tool_result",
-              tool_use_id,
-              content: "ok"
-            }))
-          }
-        }
-      ];
+      return [{ ...base, type: "user", message: {
+        role: "user",
+        content: entry.ids.map((tool_use_id) => ({ type: "tool_result", tool_use_id, content: "ok" }))
+      } }];
     case "reply":
-      return [
-        assistant([{ type: "text", text: entry.text }], entry.output ?? 200)
-      ];
+      return [assistant([{ type: "text", text: entry.text }], entry.output ?? 200)];
   }
 }
 function happen(step4) {
   moment = { ...moment, ...step4.hook };
   if (step4.repo) updateRepo(onClock(step4.repo));
-  appendTranscript(
-    transcript,
-    (step4.transcript ?? []).flatMap((e) => lines(e, step4.at))
-  );
+  appendTranscript(transcript, (step4.transcript ?? []).flatMap((e) => lines(e, step4.at)));
 }
 function startAt(seconds) {
   endedAt = null;
@@ -95915,8 +95882,7 @@ function startAt(seconds) {
   applied2 = 0;
   t = seconds;
   updateRepo(onClock(INITIAL_REPO));
-  while (applied2 < STEPS.length && STEPS[applied2].at <= t)
-    happen(STEPS[applied2++]);
+  while (applied2 < STEPS.length && STEPS[applied2].at <= t) happen(STEPS[applied2++]);
 }
 function hookData() {
   const now2 = Math.floor(nowSec());
@@ -95942,32 +95908,16 @@ function hookData() {
       context_window_size: CONTEXT_WINDOW,
       used_percentage: used,
       remaining_percentage: 100 - used,
-      current_usage: {
-        input_tokens: 2e3,
-        output_tokens: 400,
-        cache_creation_input_tokens: 4e3,
-        cache_read_input_tokens: moment.context - 6e3
-      }
+      current_usage: { input_tokens: 2e3, output_tokens: 400, cache_creation_input_tokens: 4e3, cache_read_input_tokens: moment.context - 6e3 }
     },
     rate_limits: {
-      five_hour: {
-        used_percentage: moment.fiveHour,
-        resets_at: now2 + 2 * 3600 + 17 * 60
-      },
-      seven_day: {
-        used_percentage: moment.sevenDay,
-        resets_at: now2 + 4 * 86400
-      }
+      five_hour: { used_percentage: moment.fiveHour, resets_at: now2 + 2 * 3600 + 17 * 60 },
+      seven_day: { used_percentage: moment.sevenDay, resets_at: now2 + 4 * 86400 }
     }
   };
 }
 async function daemon2(request2) {
-  const { resp, settled: settled3 } = await pageDaemon.reply(
-    request2,
-    () => false,
-    pageDaemon.stats.accept(),
-    () => false
-  );
+  const { resp, settled: settled3 } = await pageDaemon.reply(request2, () => false, pageDaemon.stats.accept(), () => false);
   settled3(true);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return resp;
@@ -95985,20 +95935,12 @@ async function frame(size) {
     ssh: false,
     claudeConfigDir: CLAUDE_DIR
   });
-  if (!("frame" in resp))
-    throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
+  if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
   return parseFrame(resp.frame);
 }
 async function render2(size) {
   const drawn = await frame(size);
-  return {
-    ansi: composeBar(drawn),
-    links: linksOf(drawn).map((l) => ({
-      ...l,
-      does: describeLink(l, sessionId)
-    })),
-    refused: null
-  };
+  return { ansi: composeBar(drawn), links: linksOf(drawn).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
 function copy2(text4) {
   let writing;
@@ -96030,11 +95972,7 @@ async function click2(url, size) {
 }
 var listeners = [];
 var notify = () => {
-  const state = {
-    index: Math.max(0, applied2 - 1),
-    playing,
-    progress: Math.min(1, t / DURATION)
-  };
+  const state = { index: Math.max(0, applied2 - 1), playing, progress: Math.min(1, t / DURATION) };
   for (const l of listeners) l(state);
 };
 var lastNotified = 0;
@@ -96049,8 +95987,7 @@ function advance(elapsed) {
   }
   t = Math.min(DURATION, t + elapsed * speed);
   const before = applied2;
-  while (applied2 < STEPS.length && STEPS[applied2].at <= t)
-    happen(STEPS[applied2++]);
+  while (applied2 < STEPS.length && STEPS[applied2].at <= t) happen(STEPS[applied2++]);
   return applied2 !== before;
 }
 setInterval(() => {
@@ -96080,11 +96017,7 @@ var transport = {
     return render2(size);
   },
   scenario: {
-    steps: STEPS.map((s) => ({
-      turn: s.turn,
-      caption: s.caption,
-      at: s.at / DURATION
-    })),
+    steps: STEPS.map((s) => ({ turn: s.turn, caption: s.caption, at: s.at / DURATION })),
     subscribe: (l) => {
       listeners.push(l);
       notify();
