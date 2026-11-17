@@ -4,15 +4,22 @@
     {
       "version": "pr-783",
       "ref": "refs/pull/783/merge",
-      "sha": "d6d0195f2625e156ae93538ce9dcb61a51f6de0b",
-      "timestamp": "2026-11-17T09:19:17.897Z",
+      "sha": "9f0b282802765d9cf2e4b1981dbdde123318d1a1",
+      "timestamp": "2026-11-17T09:37:56.877Z",
       "commits": [
         {
-          "sha": "d6d0195f2625e156ae93538ce9dcb61a51f6de0b",
+          "sha": "9f0b282802765d9cf2e4b1981dbdde123318d1a1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T02:18:13-07:00",
-          "message": "Merge 33934029de08fafe0e0ff1905ab91c8fa7920cd8 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T09:36:58Z",
+          "message": "Merge 8f5ad025f6f2b4b5d8405956819b9351db9dc5b7 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+        },
+        {
+          "sha": "8f5ad025f6f2b4b5d8405956819b9351db9dc5b7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T02:36:48-07:00",
+          "message": "fix(renderer): a due waits behind arriving input, each owner of a due turn is its own error boundary, and the wake summarizes what its dues took (883)\n\nHigh review of #783: a click arriving while a due waited could land on menus its idle close had shut; a failed due that waited past its tick was retried at once; one throwing deferral or feed skipped every other owner's work; a start that threw left its viewers marked handed; the lane edge rebuilt every session's viewers to read one; frame cost had no log line once feeds left the host.\n"
         },
         {
           "sha": "33934029de08fafe0e0ff1905ab91c8fa7920cd8",

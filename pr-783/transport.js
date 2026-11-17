@@ -8986,7 +8986,7 @@ var require_primordials2 = __commonJS({
   "node_modules/.pnpm/readable-stream@4.7.0/node_modules/readable-stream/lib/ours/primordials.js"(exports2, module2) {
     "use strict";
     init_globals();
-    var AggregateError = class extends Error {
+    var AggregateError2 = class extends Error {
       constructor(errors2) {
         if (!Array.isArray(errors2)) {
           throw new TypeError(`Expected input to be an Array, got ${typeof errors2}`);
@@ -9002,7 +9002,7 @@ var require_primordials2 = __commonJS({
       }
     };
     module2.exports = {
-      AggregateError,
+      AggregateError: AggregateError2,
       ArrayIsArray(self2) {
         return Array.isArray(self2);
       },
@@ -9162,7 +9162,7 @@ var require_errors3 = __commonJS({
     init_globals();
     var { format, inspect: inspect2 } = require_inspect2();
     var { AggregateError: CustomAggregateError } = require_primordials2();
-    var AggregateError = globalThis.AggregateError || CustomAggregateError;
+    var AggregateError2 = globalThis.AggregateError || CustomAggregateError;
     var kIsNodeError = /* @__PURE__ */ Symbol("kIsNodeError");
     var kTypes = [
       "string",
@@ -9257,7 +9257,7 @@ var require_errors3 = __commonJS({
           outerError.errors.push(innerError);
           return outerError;
         }
-        const err = new AggregateError([outerError, innerError], outerError.message);
+        const err = new AggregateError2([outerError, innerError], outerError.message);
         err.code = outerError.code;
         return err;
       }
@@ -9499,7 +9499,7 @@ var require_util4 = __commonJS({
     var {
       codes: { ERR_INVALID_ARG_TYPE }
     } = require_errors3();
-    var { kResistStopPropagation, AggregateError, SymbolDispose } = require_primordials2();
+    var { kResistStopPropagation, AggregateError: AggregateError2, SymbolDispose } = require_primordials2();
     var AbortSignal = globalThis.AbortSignal || require_browser().AbortSignal;
     var AbortController2 = globalThis.AbortController || require_browser().AbortController;
     var AsyncFunction = Object.getPrototypeOf(async function() {
@@ -9521,7 +9521,7 @@ var require_util4 = __commonJS({
       }
     };
     module2.exports = {
-      AggregateError,
+      AggregateError: AggregateError2,
       kEmptyObject: Object.freeze({}),
       once(callback) {
         let called = false;
@@ -60875,7 +60875,8 @@ function restamp(prior, next, at) {
 // src/utils/keyed-serial-queue.ts
 init_globals();
 var KeyedSerialQueue = class {
-  // Each key's tasks still to run, while one runs.
+  // Each key's tasks still to run, while one runs: those placed `idle` apart,
+  // since every other waits ahead of them.
   waiting = /* @__PURE__ */ new Map();
   run(key, task, at = "last") {
     return new Promise((resolve, reject2) => {
@@ -60888,14 +60889,15 @@ var KeyedSerialQueue = class {
       };
       const behind = this.waiting.get(key);
       if (behind !== void 0) {
-        if (at === "first") behind.unshift(entry);
-        else behind.push(entry);
+        if (at === "first") behind.tasks.unshift(entry);
+        else if (at === "last") behind.tasks.push(entry);
+        else behind.idle.push(entry);
         return;
       }
-      const tasks = [];
-      this.waiting.set(key, tasks);
+      const waiting = { tasks: [], idle: [] };
+      this.waiting.set(key, waiting);
       const drain = (next) => void next().then(() => {
-        const after = tasks.shift();
+        const after = waiting.tasks.shift() ?? waiting.idle.shift();
         if (after === void 0) this.waiting.delete(key);
         else drain(after);
       });
@@ -71565,6 +71567,11 @@ var durationsOf = (h) => {
     stddevMs: msOf2(h.stdDeviation)
   };
 };
+var distributionOf = (h) => {
+  const d = durationsOf(h);
+  const ms = (v) => v.toFixed(2);
+  return d.count === 0 ? "-" : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
+};
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -72632,20 +72639,28 @@ var FrameFeeds = class {
   // draws the bar now, and whether the session's pane is on a screen.
   viewers() {
     const viewers = {};
-    for (const [sessionId2, { followers }] of this.watched) {
-      const lanes = {};
-      let joined = 0;
-      for (const [sub2, follower] of followers) {
-        const seen2 = lanes[sub2.lane];
-        lanes[sub2.lane] = {
-          subscribers: (seen2?.subscribers ?? 0) + 1,
-          drawing: (seen2?.drawing ?? false) || sub2.drawing()
-        };
-        joined = Math.max(joined, follower.joined);
-      }
-      viewers[sessionId2] = { lanes, shown: this.shown(sessionId2), joined };
-    }
+    for (const [sessionId2, watched] of this.watched)
+      viewers[sessionId2] = this.seen(sessionId2, watched);
     return viewers;
+  }
+  // Who watches the session now, as `viewers` reads it: undefined while
+  // nobody does.
+  viewersOf(sessionId2) {
+    const watched = this.watched.get(sessionId2);
+    return watched === void 0 ? void 0 : this.seen(sessionId2, watched);
+  }
+  seen(sessionId2, watched) {
+    const lanes = {};
+    let joined = 0;
+    for (const [sub2, follower] of watched.followers) {
+      const seen2 = lanes[sub2.lane];
+      lanes[sub2.lane] = {
+        subscribers: (seen2?.subscribers ?? 0) + 1,
+        drawing: (seen2?.drawing ?? false) || sub2.drawing()
+      };
+      joined = Math.max(joined, follower.joined);
+    }
+    return { lanes, shown: this.shown(sessionId2), joined };
   }
   // [LAW:single-enforcer] Who watches may have changed, or how: the renderer
   // is handed the viewers whole, once for every announcement made before its
@@ -72668,9 +72683,10 @@ var FrameFeeds = class {
       if (!made && this.delivery === "owed") this.delivery = "current";
     });
   }
-  // The renderer was handed the viewers some other way: a start's.
+  // The renderer was handed the viewers some other way, a start's: null once
+  // that turn failed, so what it holds is unknown, as after a failed delivery.
   handedIn(viewers) {
-    this.handed = JSON.stringify(viewers);
+    this.handed = viewers === null ? null : JSON.stringify(viewers);
   }
   // [LAW:one-source-of-truth] The lanes each session's view switches on, as
   // a renderer's output declared them: every subscriber whose lane is now
@@ -75122,9 +75138,11 @@ var message = (e) => e instanceof Error ? e.message : String(e);
 // src/daemon/renderer-wake.ts
 init_globals();
 var FAILED_DUE_HOLD_S = 1;
+var SUMMARY_EVERY_S = 60;
 var RendererWake = class {
   constructor(deps) {
     this.deps = deps;
+    this.opened = this.summarizedAt = tickAt(deps.clock);
   }
   deps;
   state = { kind: "idle" };
@@ -75133,6 +75151,14 @@ var RendererWake = class {
   // The tick no wake is armed before, after a `due` failed; null while the
   // dues answer.
   heldUntil = null;
+  // [LAW:nothing-unseen] Every `due` turn the renderer answered, by how long
+  // it took: what drawing the frames, closing idle menus and running held
+  // work costs, read from the log.
+  took = durationHistogram();
+  dues = 0;
+  failed = 0;
+  opened;
+  summarizedAt;
   // [LAW:one-source-of-truth] The renderer's wake, whole, as an output
   // declared it: re-declaring the armed tick keeps its timer.
   declare(tick) {
@@ -75143,6 +75169,7 @@ var RendererWake = class {
   close() {
     if (this.state.kind === "armed") this.state.cancel();
     this.state = { kind: "closed" };
+    this.summarize("closed");
   }
   closed() {
     return this.state.kind === "closed";
@@ -75165,24 +75192,41 @@ var RendererWake = class {
         return;
       }
       this.state = { kind: "queued" };
-      void this.deps.due().then((ended) => this.answered(tick, ended));
+      void this.deps.due().then((ended) => this.answered(ended));
     });
   }
-  answered(tick, ended) {
+  answered(ended) {
     if (this.state.kind === "closed") return;
     this.state = { kind: "idle" };
+    if (ended.turnMs !== null) {
+      this.dues++;
+      recordMs(this.took, ended.turnMs);
+    }
+    const now2 = tickAt(this.deps.clock);
+    if (now2 - this.summarizedAt >= SUMMARY_EVERY_S) this.summarize("running");
     if (ended.kind === "answered") {
       this.heldUntil = null;
       this.arm();
       return;
     }
     if (ended.failure.kind === "down") return;
+    this.failed++;
     if (this.heldUntil === null)
       this.deps.said(
         `the renderer's due turn failed, so what it holds for later waits ${FAILED_DUE_HOLD_S}s between tries: ${ended.failure.detail}`
       );
-    this.heldUntil = tick + FAILED_DUE_HOLD_S;
+    this.heldUntil = now2 + FAILED_DUE_HOLD_S;
     this.arm();
+  }
+  // [LAW:one-source-of-truth] The closing summary alone writes the whole
+  // histogram: it holds every `due` turn of the wake's life once.
+  summarize(state) {
+    const now2 = tickAt(this.deps.clock);
+    const histogram = state === "running" ? "" : ` tookHistogram=${encodedOf(this.took)}`;
+    this.deps.log(
+      `wake ${state} for=${Math.round(now2 - this.opened)}s dues=${this.dues} failed=${this.failed} took=${distributionOf(this.took)}${histogram}`
+    );
+    this.summarizedAt = now2;
   }
 };
 
@@ -75425,18 +75469,22 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   });
   const wake = new RendererWake({
     clock,
-    due: () => deliver(
-      () => wake.closed() ? {
-        kind: "closing",
-        message: "the daemon is closing",
-        detail: "a due made after the renderer's wake closed"
-      } : { kind: "event", event: { kind: "due" } },
-      []
-    ),
-    said: (text4) => {
-      log("error", text4);
-      world.unheard(text4);
-    }
+    due: async () => {
+      const { event, turn } = await taken(
+        () => wake.closed() ? {
+          kind: "closing",
+          message: "the daemon is closing",
+          detail: "a due made after the renderer's wake closed"
+        } : { kind: "event", event: { kind: "due" } },
+        "idle"
+      );
+      record2(event, [], turn);
+      return turn;
+    },
+    // Each failed `due` is its own turn's line: the run is said once, on
+    // every bar.
+    said: (text4) => world.unheard(text4),
+    log: (text4) => log("info", text4)
   });
   return {
     name,
@@ -85392,9 +85440,10 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
   } catch (error) {
     const outcome = renderFailure(failureOf(error));
     const { level, line } = drawEvent("render", facts, outcome);
-    const failed3 = JSON.stringify(failedWith(outcome.message));
+    const answer2 = failedWith(outcome.message);
+    const failed3 = JSON.stringify(answer2);
     return {
-      bar: renderFailedFrame(failedWith(outcome.message).error),
+      bar: renderFailedFrame(answer2.error),
       answers: { resp: failed3, statusline: failed3 },
       evaluated: 0,
       cellBreaks: 0,
@@ -85883,6 +85932,24 @@ function statuslineOf(sessionId2, writable, drawn, elsewhere) {
 
 // src/renderer/turn-time.ts
 init_globals();
+
+// src/utils/run-each.ts
+init_globals();
+function runEach(steps2) {
+  const thrown2 = [];
+  for (const step4 of steps2) {
+    try {
+      step4();
+    } catch (error) {
+      thrown2.push(error);
+    }
+  }
+  if (thrown2.length === 1) throw thrown2[0];
+  if (thrown2.length > 1)
+    throw new AggregateError(thrown2, `${thrown2.length} steps threw`);
+}
+
+// src/renderer/turn-time.ts
 var TurnTime = class {
   readings = null;
   // In the order they were held, so two due at one tick run in that order.
@@ -85926,16 +85993,17 @@ var TurnTime = class {
   }
   // The work due by this turn's tick, earliest first. Each is taken from what
   // is still held as it runs, so one let go by work before it never runs, and
-  // one that throws is not held again. Work held while these run waits for
-  // the next due turn, so a chain of work spreads over turns, and inputs
-  // between them are taken.
+  // one that throws is not held again, nor keeps the work after it from
+  // running. Work held while these run waits for the next due turn, so a
+  // chain of work spreads over turns, and inputs between them are taken.
   runDue() {
     const { tick } = this;
     const due = [...this.held].filter(({ until: until2 }) => until2 <= tick).sort((a, b) => a.until - b.until);
-    for (const deferral of due) {
-      if (!this.held.delete(deferral)) continue;
-      deferral.run();
-    }
+    runEach(
+      due.map((deferral) => () => {
+        if (this.held.delete(deferral)) deferral.run();
+      })
+    );
   }
   // [LAW:one-source-of-truth] The store's face: the turn's wall instant, in
   // epoch milliseconds, and its held work.
@@ -86060,7 +86128,7 @@ var WAKE_CAUSES = [
 ];
 var RATE_WINDOW_S = 1;
 var TIMER_RESOLUTION_S = 2e-3;
-var SUMMARY_EVERY_S = 60;
+var SUMMARY_EVERY_S2 = 60;
 var paceOf = (period) => Math.round(1e3 / period);
 var Feeds = class {
   constructor(deps) {
@@ -86115,19 +86183,22 @@ var Feeds = class {
     return next;
   }
   // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each
-  // drawn and its next set, in the order the feeds opened.
-  drawDue(readings) {
+  // drawn into `frames` and its next set, in the order the feeds opened. Each
+  // feed is its own error boundary, so one that throws keeps no other's frame
+  // from going out.
+  drawDue(readings, frames) {
     const { tick } = readings;
-    const frames = [];
-    for (const feed2 of this.feeds.values()) {
-      if (feed2.next === null || feed2.next > tick) continue;
-      recordMs(feed2.lateness, (tick - feed2.next) * 1e3);
-      const frame2 = this.drawOne(feed2, readings);
-      if (frame2 !== null) frames.push(frame2);
-      if (tick - feed2.summarizedAt >= SUMMARY_EVERY_S)
-        this.summarize(feed2, "running", tick);
-    }
-    return frames;
+    runEach(
+      [...this.feeds.values()].flatMap(
+        (feed2) => feed2.next !== null && feed2.next <= tick ? [{ feed: feed2, next: feed2.next }] : []
+      ).map(({ feed: feed2, next }) => () => {
+        recordMs(feed2.lateness, (tick - next) * 1e3);
+        const frame2 = this.drawOne(feed2, readings);
+        if (frame2 !== null) frames.push(frame2);
+        if (tick - feed2.summarizedAt >= SUMMARY_EVERY_S2)
+          this.summarize(feed2, "running", tick);
+      })
+    );
   }
   // The lanes that follow the session and draw it now.
   following(sessionId2) {
@@ -86139,7 +86210,7 @@ var Feeds = class {
   // relative to now it is the draw's, and it changes nothing a feed wakes on.
   feedsOf(sessionId2, tick) {
     const feed2 = this.feeds.get(sessionId2);
-    if (feed2 === void 0) return perLane(() => UNFOLLOWED);
+    if (feed2 === void 0) return UNFOLLOWED_FEEDS;
     const since = tick - RATE_WINDOW_S;
     const { shown, lanes } = feed2.viewers;
     return perLane((lane) => {
@@ -86286,11 +86357,6 @@ function noteSent(rate, tick) {
   rate.splice(0, rate.length, ...kept, tick);
 }
 var lanesOf = (viewers) => Object.entries(viewers.lanes).map(([lane, seen2]) => `${lane}:${seen2.subscribers}`).join(",") || "-";
-var distributionOf = (h) => {
-  const d = durationsOf(h);
-  const ms = (v) => v.toFixed(2);
-  return d.count === 0 ? "-" : `n:${d.count},p50:${ms(d.p50Ms)},p90:${ms(d.p90Ms)},p99:${ms(d.p99Ms)},p99.9:${ms(d.p999Ms)},max:${ms(d.maxMs)},mean:${ms(d.meanMs)},stddev:${ms(d.stddevMs)}`;
-};
 
 // src/renderer/click.ts
 init_globals();
@@ -91159,9 +91225,11 @@ function mainRenderer(parts, pushed) {
         feeds.view(event.viewers, time.tick);
         return;
       case "due":
-        time.runDue();
-        closeIdleMenus2(parts, effects);
-        frames.push(...feeds.drawDue({ at: time.at, tick: time.tick }));
+        runEach([
+          () => time.runDue(),
+          () => closeIdleMenus2(parts, effects),
+          () => feeds.drawDue({ at: time.at, tick: time.tick }, frames)
+        ]);
         return;
     }
   };
@@ -93248,9 +93316,9 @@ function createDaemon(inputs) {
     lanes: {
       edge: inputs.laneEdge(
         launcher,
-        // [LAW:one-source-of-truth] The lanes following a session as the
-        // renderer is handed them.
-        (sessionId2) => followingOf(frameFeeds.viewers()[sessionId2]),
+        // [LAW:one-source-of-truth] The lanes following a session, read as the
+        // viewers the renderer is handed are.
+        (sessionId2) => followingOf(frameFeeds.viewersOf(sessionId2)),
         closing.signal,
         probe2
       ),
@@ -93426,7 +93494,7 @@ function createDaemon(inputs) {
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async () => {
-      await parts.renderer.start(() => {
+      const { kind } = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
         return {
@@ -93443,6 +93511,7 @@ function createDaemon(inputs) {
           }
         };
       }, [["why", "renderer-start"]]);
+      if (kind !== "answered") frameFeeds.handedIn(null);
     },
     ended: (event) => {
       rendererEnded = event;
