@@ -16,7 +16,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SessionEffects, type RowItem } from "../src/render/effect";
-import { FrameMemory } from "../src/render/frame-memory";
 import { framed } from "./helpers/frames";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import {
@@ -35,8 +34,7 @@ const at = (seconds: number): Instant => (START + seconds) as Instant;
 
 const STILL_FRAME = {
   transitions: false,
-  source: { config: {}, preset: "default", revision: 0, width: 80 },
-  last: null,
+  source: { generation: 0, preset: "default", revision: 0, width: 80 },
   returned: () => ({ drawing: null, deeper: [] }),
   hold: (line: string) => line,
 };
@@ -47,12 +45,12 @@ const loopT = (
   when: Instant,
   speed: AnimationSpeedName,
 ): number => {
-  const motion = fx.motion(
+  framed(
+    fx,
     "shimmer",
     fx.clockAt(when, ANIMATION_SPEEDS[speed]),
     STILL_FRAME,
-  );
-  fx.keep(motion.memory());
+  ).drawn();
   return fx.lastFrame().t;
 };
 
@@ -109,7 +107,7 @@ describe("a fade runs at the session's animation speed", () => {
   });
   const fades = {
     transitions: true,
-    source: { config: {}, preset: "default", revision: 0, width: 80 },
+    source: { generation: 0, preset: "default", revision: 0, width: 80 },
     returned: (id: string, lines: readonly string[]) => ({
       drawing: lines.includes(id)
         ? {
@@ -126,14 +124,12 @@ describe("a fade runs at the session's animation speed", () => {
   // in it; what is fading in after it.
   const frame = (
     fx: SessionEffects<string>,
-    memory: FrameMemory<string>,
     when: Instant,
     speed: AnimationSpeedName,
     shown: boolean,
   ): ReadonlyArray<{ placement: string; t: number }> => {
     const motion = framed(
       fx,
-      memory,
       "none",
       fx.clockAt(when, ANIMATION_SPEEDS[speed]),
       fades,
@@ -155,16 +151,15 @@ describe("a fade runs at the session's animation speed", () => {
     }),
   )("at %s, a twenty-second fade %s s in is %j", (speed, later, fading) => {
     const fx = new SessionEffects<string>("s");
-    const memory = new FrameMemory<string>();
-    frame(fx, memory, at(0), speed, false);
-    expect(frame(fx, memory, at(1), speed, true)).toEqual([
+    frame(fx, at(0), speed, false);
+    expect(frame(fx, at(1), speed, true)).toEqual([
       { placement: "left", t: 0 },
     ]);
-    expect(frame(fx, memory, at(1 + later / 2), speed, true)[0]!.t).toBeCloseTo(
+    expect(frame(fx, at(1 + later / 2), speed, true)[0]!.t).toBeCloseTo(
       (later / 2) * ANIMATION_SPEEDS[speed],
       9,
     );
-    expect(frame(fx, memory, at(1 + later), speed, true)).toEqual(fading);
+    expect(frame(fx, at(1 + later), speed, true)).toEqual(fading);
   });
 });
 

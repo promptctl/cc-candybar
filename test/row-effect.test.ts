@@ -42,10 +42,14 @@ import { systemTimekeeper } from "../src/time";
 // A frame that fades nothing in: what the effects under test here draw alone.
 const STILL_FRAME = {
   transitions: false,
-  source: { config: {}, preset: "default", revision: 0, width: 80 },
-  last: null,
+  source: { generation: 0, preset: "default", revision: 0, width: 80 },
   returned: () => ({ drawing: null, deeper: [] }),
   hold: (line: RenderedLine) => line,
+};
+const NO_RECORD = {
+  source: STILL_FRAME.source,
+  placements: new Map(),
+  rules: new Map(),
 };
 
 const LOOPS = Object.keys(EFFECT_CATALOGUE.loops) as EffectName[];
@@ -231,24 +235,47 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     const sessions = new EffectSessions<RenderedLine>();
     const session = sessionIdOf("s");
     const draw = (when: Instant, rows: number): void => {
-      const effects = sessions.of(session);
+      const effects = sessions.of(session, "request");
       const motion = effects.motion("shimmer", effects.clockAt(when, 1), STILL_FRAME);
       for (let row = 0; row < rows; row++) {
         const moving = motion.row(`flow.own#${row}`, "bar", []);
         if (moving.kind !== "moving") throw new Error("shimmer is still");
         moving.wrap(new RichText("x"));
       }
-      sessions.keep(session, motion.memory());
+      sessions.keep(session, "request", motion.memory(NO_RECORD));
     };
     // A menu opens: five rows. It closes: one row, whose effect is reused.
     draw(at(0), 5);
     expect(sessions.getStats()).toEqual({ sessions: 1, effects: 5 });
     draw(at(1), 1);
     expect(sessions.getStats()).toEqual({ sessions: 1, effects: 1 });
-    expect(sessions.of(session).lastFrame()).toMatchObject({ made: 0, reused: 1 });
+    expect(sessions.of(session, "request").lastFrame()).toMatchObject({ made: 0, reused: 1 });
     // The menu opens again: the rows it released are made afresh.
     draw(at(2), 5);
-    expect(sessions.of(session).lastFrame()).toMatchObject({ made: 4, reused: 1 });
+    expect(sessions.of(session, "request").lastFrame()).toMatchObject({ made: 4, reused: 1 });
+  });
+
+  test("a request's answer and a feed's frames each keep their own memory of a session", () => {
+    const sessions = new EffectSessions<RenderedLine>();
+    const session = sessionIdOf("s");
+    const draw = (surface: "request" | "feed", when: Instant, rows: number): void => {
+      const effects = sessions.of(session, surface);
+      const motion = effects.motion("shimmer", effects.clockAt(when, 1), STILL_FRAME);
+      for (let row = 0; row < rows; row++) {
+        const moving = motion.row(`flow.own#${row}`, "bar", []);
+        if (moving.kind !== "moving") throw new Error("shimmer is still");
+        moving.wrap(new RichText("x"));
+      }
+      sessions.keep(session, surface, motion.memory(NO_RECORD));
+    };
+    draw("request", at(0), 2);
+    draw("feed", at(1), 5);
+    // The feed's frame left the request's memory as the request kept it: its
+    // next answer reuses both its rows' effects and makes none afresh.
+    draw("request", at(2), 2);
+    expect(sessions.of(session, "request").lastFrame()).toMatchObject({ made: 0, reused: 2 });
+    expect(sessions.of(session, "feed").lastFrame()).toMatchObject({ made: 5, reused: 0 });
+    expect(sessions.getStats()).toEqual({ sessions: 1, effects: 7 });
   });
 
   test("a row says when it next changes: now while its loop moves, never while every part holds still", () => {

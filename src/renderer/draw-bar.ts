@@ -34,12 +34,7 @@ import {
   SESSION_RENDER_ORIGIN_KEY,
 } from "../daemon/foundations/session-keys";
 import { roleOf } from "../daemon/foundations/sighting-roles";
-import {
-  drawDsl,
-  keepFrame,
-  type DrawnMemory,
-  type RenderWarning,
-} from "../dsl/render.js";
+import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
 import {
   renderOptionsOf,
@@ -58,7 +53,11 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
-import { type PassageFrame, type EffectSessions } from "../render/effect.js";
+import {
+  type PassageFrame,
+  type EffectSessions,
+  type SessionMotion,
+} from "../render/effect.js";
 import {
   feedsFact,
   LANE_NAMES,
@@ -704,7 +703,7 @@ export function drawRender(
   // `renderOptionsOf` every renderer shares — no second `?? DEFAULT_X`
   // computation to drift from it.
   const renderOpts = renderOptionsOf(effective, width);
-  const effects = effectSessions.of(sessionId);
+  const effects = effectSessions.of(sessionId, drawing.by);
   // [LAW:single-enforcer] The view's inputs read its source (`bindView`, at
   // its opening): the draw hands only its own instant's facts.
   // [LAW:no-silent-failure] What the walk had to settle for itself and could
@@ -783,7 +782,7 @@ export function drawRender(
           frame,
           viewerRows(diagnostics, viewing, sessionId, drawing.by, geometry),
         );
-  const fx = memory.motion.frame;
+  const fx = memory.frame;
   // Each placement wearing its own effect, on its own clock; `-` for none.
   const own =
     fx.own
@@ -881,7 +880,7 @@ export function drawRender(
     kept: {
       session: sessionId,
       by: drawing.by,
-      frame: memory,
+      motion: memory,
       warnings: { scope, list: drawnWarnings },
       // What this frame drew is what the session's idle close follows.
       menu: {
@@ -900,8 +899,8 @@ export function drawRender(
 export interface DrawMemory {
   readonly session: SessionId;
   readonly by: Drawing["by"];
-  // The view's record of what the frame drew, and the session's motion.
-  readonly frame: DrawnMemory;
+  // The surface's record of what the frame drew, and its motion.
+  readonly motion: SessionMotion<RenderedLine>;
   // What the frame warned, in the scope its renderer's record is kept in.
   readonly warnings: {
     readonly scope: RecordScope;
@@ -926,9 +925,8 @@ function keepDraw(
   view: SessionView<SessionSource>,
   kept: DrawMemory,
 ): void {
-  const { session, by, frame, warnings, menu, segments } = kept;
-  keepFrame(view.state.compiled, view.store, frame.record);
-  parts.effectSessions.keep(session, frame.motion);
+  const { session, by, motion, warnings, menu, segments } = kept;
+  parts.effectSessions.keep(session, by, motion);
   parts.renderWarnings.keep(session, by, warnings.scope, warnings.list);
   parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
   view.lastRenderCellsBySegment = segments;

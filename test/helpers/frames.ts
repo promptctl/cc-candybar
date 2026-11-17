@@ -1,38 +1,29 @@
-// One frame of a session's motion drawn over a view's frame memory, composed as
-// `drawDsl` composes them (src/dsl/render.ts): the walk reports each placement
-// to the motion, the view records what comes back, and `drawn` keeps both
-// memories, as the turn that drew a frame does.
+// One frame of a session's motion, composed as `drawDsl` composes it
+// (src/dsl/render.ts): the walk reports each placement to the motion, the
+// record keeps what comes back, and `drawn` keeps the memory the frame left,
+// as the turn that drew a frame does.
 import type {
   FrameClock,
   FrameTransitions,
   MenuFlash,
   SessionEffects,
 } from "../../src/render/effect.js";
-import type { FrameMemory } from "../../src/render/frame-memory.js";
+import { beginRecord } from "../../src/render/frame-memory.js";
 import type { EffectName } from "../../src/themes/policy.js";
 
 export function framed<Line>(
   fx: SessionEffects<Line>,
-  memory: FrameMemory<Line>,
   name: EffectName,
   clock: FrameClock,
-  given: Omit<FrameTransitions<Line>, "last">,
+  given: FrameTransitions<Line>,
   flash: MenuFlash = null,
 ) {
-  const record = memory.begin(given.source, given.returned);
-  const motion = fx.motion(
-    name,
-    clock,
-    { ...given, last: memory.from(given.source) },
-    flash,
-  );
+  const record = beginRecord(given.source, given.returned);
+  const motion = fx.motion(name, clock, given, flash);
   return {
     placed: (id: string, lines: readonly Line[]) =>
       record.placed(id, motion.placed(id, lines)),
     row: motion.row,
-    drawn: () => {
-      fx.keep(motion.memory());
-      memory.keep(record.record());
-    },
+    drawn: () => fx.keep(motion.memory(record.record())),
   };
 }

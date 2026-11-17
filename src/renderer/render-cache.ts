@@ -1129,7 +1129,7 @@ const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
 //
 // `lastRenderCellsBySegment` is the per-segment cells the view's last kept
 // frame drew (`DrawnFrame.segments`), replaced by the turn that keeps a frame
-// — pre-layout cells, NOT serialized ANSI. Storing cells (not strings) keeps
+// — cells, NOT serialized ANSI. Storing cells (not strings) keeps
 // the hot path free of the per-segment renderStripCells call: the debug
 // projection serializes on demand only when a `debug segments` request
 // actually arrives. A segment hidden by `when` is absent from the map — its

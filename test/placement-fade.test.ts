@@ -25,7 +25,6 @@ import { lastBinding } from "./helpers/render-binding";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects, type RowItem } from "../src/render/effect";
-import { FrameMemory } from "../src/render/frame-memory";
 import { framed } from "./helpers/frames";
 import { drawnChars, shown } from "./helpers/seams";
 import type { RenderedLine } from "../src/dsl/node-registry";
@@ -401,7 +400,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
   });
   const fades = {
     transitions: true,
-    source: { config: ROW, preset: "default", revision: 0, width: 80 },
+    source: { generation: 0, preset: "default", revision: 0, width: 80 },
     // A line names the placement that drew it; a line naming another hangs
     // under it.
     returned: (id: string, lines: readonly string[]) => ({
@@ -420,15 +419,14 @@ describe("a render that throws leaves the last drawn frame to compare against", 
 
   test("a frame never drawn is never compared against", () => {
     const fx = new SessionEffects<string>("s");
-    const memory = new FrameMemory<string>();
-    const first = framed(fx, memory, "none", fx.clockAt(at(0), 1), fades);
+    const first = framed(fx, "none", fx.clockAt(at(0), 1), fades);
     first.placed("left", left);
     first.row("r", "bar", [item("left")]);
     first.drawn();
     // The next render's walk finds `left` gone, then it throws before its
     // first row: it is never drawn, so `left` never began leaving.
-    framed(fx, memory, "none", fx.clockAt(at(1), 1), fades).placed("left", []);
-    const after = framed(fx, memory, "none", fx.clockAt(at(2), 1), fades);
+    framed(fx, "none", fx.clockAt(at(1), 1), fades).placed("left", []);
+    const after = framed(fx, "none", fx.clockAt(at(2), 1), fades);
     after.placed("left", left);
     after.row("r", "bar", [item("left")]);
     after.drawn();
@@ -440,9 +438,8 @@ describe("a render that throws leaves the last drawn frame to compare against", 
   });
   test("a placement that laid no cell of its own draws what it returned, and is kept as nothing", () => {
     const fx = new SessionEffects<string>("s");
-    const memory = new FrameMemory<string>();
-    framed(fx, memory, "none", fx.clockAt(at(0), 1), fades).drawn();
-    const motion = framed(fx, memory, "none", fx.clockAt(at(1), 1), fades);
+    framed(fx, "none", fx.clockAt(at(0), 1), fades).drawn();
+    const motion = framed(fx, "none", fx.clockAt(at(1), 1), fades);
     expect(motion.placed("left", ["right"])).toEqual(["right"]);
     motion.drawn();
     expect(fx.heldCount).toBe(0);
@@ -450,8 +447,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
 
   test("a placement reached twice in one frame is a loud error", () => {
     const fx = new SessionEffects<string>("s");
-    const memory = new FrameMemory<string>();
-    const motion = framed(fx, memory, "none", fx.clockAt(at(0), 1), fades);
+    const motion = framed(fx, "none", fx.clockAt(at(0), 1), fades);
     motion.placed("left", left);
     expect(() => motion.placed("left", left)).toThrow(
       'placement "left" was reached twice in one frame',

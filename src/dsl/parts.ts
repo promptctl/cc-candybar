@@ -84,10 +84,8 @@ import {
   type CompiledSegments,
   type EvaluatedSegment,
   type PlacementParts,
-  type RenderedLine,
   type SegmentStyles,
 } from "./node-registry.js";
-import { FrameMemory } from "../render/frame-memory.js";
 import { readPending } from "../var-system/types.js";
 
 // A globals rule as the compile parsed it: the paths it was written at, and
@@ -206,8 +204,6 @@ export class ViewParts {
   // How many parts have derived since the view's first draw: what one draw
   // adds is how many of its parts it evaluated.
   evaluated = 0;
-  // What the view's last drawn frame showed: the one thing a draw writes.
-  readonly memory = new FrameMemory<RenderedLine>();
   // [LAW:one-source-of-truth] The view's one scope. Its names are the
   // store's when it is built, at the view's first draw: a view declares
   // every variable before it is drawn.

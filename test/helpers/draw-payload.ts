@@ -1,20 +1,21 @@
 // One frame of a fixed payload: bound, drawn and kept in one call, the seam a
 // session's view reads, given a constant. A test draws by this as a turn
-// draws: what the frame leaves — the view's record of it, and the motion of
-// the session's effects when the selection hands some — is kept, so the next
+// draws: what the frame leaves — its record and its motion — is kept in the
+// selection's effects, or the store's own when it hands none, so the next
 // call draws on from it. The daemon and check bind a view of their own and
 // call `drawDsl`.
 import type { ValidatedConfig } from "../../src/config/dsl-types";
 import {
   bindPayload,
   drawDsl,
-  keepFrame,
   type CompiledConfig,
   type DrawnFrame,
   type RenderObservers,
   type RenderSelection,
 } from "../../src/dsl/render";
 import type { BuildLineOptions } from "../../src/render/strip";
+import { SessionEffects } from "../../src/render/effect";
+import type { RenderedLine } from "../../src/dsl/node-registry";
 import type { Instant } from "../../src/utils/instant";
 import type { SourceRegistry } from "../../src/var-system/sources";
 import type { VariableStore } from "../../src/var-system/store";
@@ -38,6 +39,7 @@ export function drawPayload(
   selection: RenderSelection = globalsFor(config),
   run: (digest: string) => RunFact = () => UNREAD_RUN,
 ): DrawnFrame {
+  const effects = selection.effects ?? effectsOf(store);
   const drawn = bindPayload(
     compiled,
     store,
@@ -57,9 +59,19 @@ export function drawPayload(
     at,
     opts,
     observers,
-    selection,
+    { ...selection, effects },
   );
-  keepFrame(compiled, store, frame.memory.record);
-  selection.effects?.keep(frame.memory.motion);
+  effects.keep(frame.memory);
   return frame;
 }
+
+// A store's own memory, for a caller whose selection hands none: a view
+// drawn again draws on from its last frame, as a session's does.
+const storeEffects = new WeakMap<VariableStore, SessionEffects<RenderedLine>>();
+const effectsOf = (store: VariableStore): SessionEffects<RenderedLine> => {
+  const held = storeEffects.get(store);
+  if (held !== undefined) return held;
+  const made = new SessionEffects<RenderedLine>("");
+  storeEffects.set(store, made);
+  return made;
+};

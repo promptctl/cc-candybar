@@ -56,7 +56,7 @@ import {
   type RowKind,
   type SessionMotion,
 } from "../render/effect.js";
-import type { FrameRecord } from "../render/frame-memory.js";
+import { beginRecord, configGeneration } from "../render/frame-memory.js";
 import {
   decideEffectName,
   decideStyleName,
@@ -1184,11 +1184,11 @@ export interface RenderObservers {
 // and what the walk that drew it reports of itself.
 export interface DrawnFrame {
   readonly frame: Frame;
-  // [LAW:effects-at-boundaries] What the frame leaves for the next one, which
-  // the draw writes nowhere: the view's record of what it drew, kept by
-  // `keepFrame`, and the session's motion, kept by the session's effects
-  // (`SessionEffects.keep`). A caller drawing one frame keeps neither.
-  readonly memory: DrawnMemory;
+  // [LAW:effects-at-boundaries] What the frame leaves for the surface's next
+  // one, which the draw writes nowhere: the record of what it drew and the
+  // motion it left, kept by the session's effects (`SessionEffects.keep`). A
+  // caller drawing one frame keeps none.
+  readonly memory: SessionMotion<RenderedLine>;
   // [LAW:no-silent-failure] What the render had to settle for itself and
   // could not honour (`RenderWarning`). The render goes on — a throw would
   // take the whole statusline away — but nothing else on the bar says why it
@@ -1211,22 +1211,6 @@ export interface DrawnFrame {
   // turn what it reads moved (outside any draw), or `per-draw`, a rule that
   // reads the instant, evaluated by this frame. A decided slot is absent.
   readonly rules: ReadonlyMap<ExpressionSlot, "kept" | "per-draw">;
-}
-
-export interface DrawnMemory {
-  readonly record: FrameRecord<RenderedLine>;
-  readonly motion: SessionMotion;
-}
-
-// [LAW:single-enforcer] The one writer of a view's frame record: the turn that
-// drew the frame keeps the record its draw returned, so a draw that throws
-// leaves the last.
-export function keepFrame(
-  compiled: CompiledConfig,
-  store: VariableStore,
-  record: FrameRecord<RenderedLine>,
-): void {
-  partsOf(compiled, store).memory.keep(record);
 }
 
 // [LAW:types-are-the-program] What a render could not honour, by what failed:
@@ -1397,17 +1381,17 @@ export function drawDsl(
     variation: VARIATIONS[selection.variation],
     shade: SHADES[selection.shade],
   };
-  // The view's record of this frame, kept once its rows serialize, and the
-  // sources whose values it drew as not answered yet. The session's state
-  // revision is read through the session the view draws for.
+  // The record of this frame, read once its rows serialize, and the sources
+  // whose values it drew as not answered yet. The session's state revision is
+  // read through the session the view draws for.
   const source = {
-    config,
+    generation: configGeneration(config),
     preset,
     revision: registry.stateRevision(),
     width: drawOpts.width,
   };
-  const record = parts.memory.begin(source, returnedBy);
-  const last = parts.memory.from(source);
+  const record = beginRecord(source, returnedBy);
+  const last = effects.recordFrom(source);
   const waited = new Set<string>();
   const ruleFrame: RuleFrame = {
     held: (slot) => last?.rules.get(slot),
@@ -1498,7 +1482,6 @@ export function drawDsl(
     {
       transitions,
       source,
-      last,
       returned: returnedBy,
       hold: heldLine,
     },
@@ -1628,7 +1611,7 @@ export function drawDsl(
         ),
       };
     });
-  const memory = { record: record.record(), motion: motion.memory() };
+  const memory = motion.memory(record.record());
   // What the frame arms under the settings in force, drawn or not: a menu this
   // frame is the first to draw, whose idle period — and the flash before it
   // closes on its own — begins with it, an effect rule, fades, or a placement

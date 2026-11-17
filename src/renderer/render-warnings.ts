@@ -24,6 +24,7 @@
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { Drawing } from "../config/lanes.js";
 import type { RenderWarning } from "../dsl/render.js";
+import { configGeneration } from "../render/frame-memory.js";
 
 // The same bound session state and effect memory keep, so an idle session's
 // record goes when they would.
@@ -41,16 +42,6 @@ interface WarningRecord {
 
 // Every renderer, in the order the session's list takes them.
 const RENDERERS: ReadonlyArray<Drawing["by"]> = ["request", "feed"];
-
-const generations = new WeakMap<object, number>();
-let nextGeneration = 0;
-const generationOf = (config: object): number => {
-  const held = generations.get(config);
-  if (held !== undefined) return held;
-  const minted = nextGeneration++;
-  generations.set(config, minted);
-  return minted;
-};
 
 // [LAW:no-shared-mutable-globals] Single owner, hard cap, least recently drawn
 // evicted first.
@@ -72,7 +63,7 @@ export class RenderWarningRecords {
     by: Drawing["by"],
     scope: RecordScope,
   ): readonly RenderWarning[] {
-    const generation = generationOf(scope.config);
+    const generation = configGeneration(scope.config);
     const listed: RenderWarning[] = [];
     for (const renderer of RENDERERS) {
       const held = this.records.get(keyOf(sessionId, renderer));
@@ -114,7 +105,7 @@ export class RenderWarningRecords {
     const key = keyOf(sessionId, by);
     this.records.delete(key);
     this.records.set(key, {
-      generation: generationOf(scope.config),
+      generation: configGeneration(scope.config),
       warnings,
     });
     for (const oldest of this.records.keys()) {

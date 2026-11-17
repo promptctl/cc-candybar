@@ -33,7 +33,6 @@ import {
   setUpRender,
   type RendererParts,
 } from "../src/renderer/draw-bar";
-import { partsOf } from "../src/dsl/parts";
 import { renderFailedFrame } from "../src/render/frame";
 import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
@@ -473,28 +472,28 @@ describe("a draw", () => {
       return { ...drawRender(parts, setup, ANSWERING, UNFOLLOWED_FEEDS), setup };
     };
     const view = viewOf(t.rig)!;
-    const frameMemory = partsOf(view.state.compiled, view.store).memory;
-    const motion = parts.effectSessions.of(SESSION).lastFrame();
+    const effects = () => parts.effectSessions.of(SESSION, "request");
+    const motion = effects().lastFrame();
     const warned = parts.renderWarnings.of(SESSION, "request");
     const idle = parts.menuIdle.stats();
     const segments = view.lastRenderCellsBySegment;
 
     const first = draw();
-    const { source } = first.kept.frame.record;
-    const record = frameMemory.from(source);
+    const { source } = first.kept.motion.record!;
+    const record = effects().recordFrom(source);
     const second = draw();
 
     expect(second.drawn.body).toEqual(first.drawn.body);
     expect(second.kept).toEqual(first.kept);
-    expect(first.kept.frame.motion.frame).toMatchObject({
+    expect(first.kept.motion.frame).toMatchObject({
       effect: "wheel",
       basis: "compared",
     });
     // What the request's turn kept is what both draws read, and still stands.
     expect(record).not.toBeNull();
-    expect(record).not.toBe(first.kept.frame.record);
-    expect(frameMemory.from(source)).toBe(record);
-    expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
+    expect(record).not.toBe(first.kept.motion.record);
+    expect(effects().recordFrom(source)).toBe(record);
+    expect(effects().lastFrame()).toBe(motion);
     expect(parts.renderWarnings.of(SESSION, "request")).toBe(warned);
     expect(parts.menuIdle.stats()).toEqual(idle);
     expect(view.lastRenderCellsBySegment).toBe(segments);

@@ -7,8 +7,8 @@
 // reading `.theme.effective` agrees with it — one producer, so a label cannot
 // name a theme the bar is not wearing. And when the rule names a theme nothing
 // installs, the bar STILL RENDERS (in the floor theme) with the reason on the
-// bar's diagnostics: the daemon's own warning channel, which is the half
-// `onRenderWarning` exists for and which no unit test of drawDsl can observe.
+// bar's diagnostics: the daemon's own warning channel, which records the
+// warnings a draw returns and which no unit test of drawDsl can observe.
 //
 // The value is data-driven, so a throw would take the statusline away the moment
 // live data reached a branch with a typo. That is why this is a warning over a

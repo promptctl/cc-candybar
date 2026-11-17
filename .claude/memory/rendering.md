@@ -62,7 +62,8 @@ The indicator and viewer depend on the `cc-candybar://` handler, and that is acc
 
 - A placement that stops drawing is never evaluated again, because the payload that hides it is often one its template fails on. While it dissolves, it replays its own last rows with links removed.
 - Two frames are compared only when they were drawn from the same source: the same loaded config object, preset, width and session-state revision. So a first render, a resize, any state write (a menu opening, say) and a reload fade nothing in.
-- A draw writes none of what it made: the frame's record, the session's animation clock, its warnings and what it showed of a menu come back as values, and the turn that drew it keeps them. So a render that throws leaves the last good frame to compare against, and a recorded input stream replays the same memory.
+- A draw keeps none of what it made: the frame's record, the animation clock, its warnings and what it showed of a menu come back as values, and the turn that drew it keeps them. So a render that throws leaves the last good frame to compare against, and a recorded input stream replays the same memory. What a draw does write into the view's parts is its own inputs (draw facts, the look, per-draw rule names), set before anything reads them.
+- The record and the animation clock are kept per session and surface. A request's answer and a feed's frames draw at their own widths and roots, so a frame compared against the other surface's would fade and dissolve what only one of them draws.
 
 ## Motion
 

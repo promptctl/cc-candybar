@@ -1,8 +1,9 @@
-// What a view's last drawn frame showed (brandon-unfiled-3248.8ro6): each
-// placement's drawing — or that it drew nothing — and the name each globals
-// rule settled on. A frame is otherwise a pure reading of the view's values;
-// this is the one thing a draw makes beside its frame, returned with it and
-// kept by the turn that drew it, and nothing reads it but the next draw.
+// What a surface's last drawn frame of a session showed
+// (brandon-unfiled-3248.8ro6): each placement's drawing — or that it drew
+// nothing — and the name each globals rule settled on. A frame is otherwise a
+// pure reading of the view's values; this record is part of the motion memory
+// a draw returns beside its frame (`SessionMotion`), kept by the turn that
+// drew it, and nothing reads it but that surface's next draw.
 //
 // [LAW:one-source-of-truth] It is THE record of what a placement last drew. A
 // placement whose value is not answered yet draws its loading cell from it,
@@ -15,15 +16,15 @@ import type { ColorRgba } from "@promptctl/rich-js";
 import type { ExpressionSlot } from "../themes/policy.js";
 
 // What a frame is drawn from. A placement appears only between two frames
-// drawn from the same config — one object per load, so a reload is another —
-// the same preset, the same revision of the session's state
+// drawn from the same config — one object per load, so a reload is another,
+// named by its generation (`configGeneration`) — the same preset, the same revision of the session's state
 // (`SessionStateReader.revision`), so whatever a write to it reveals — a
 // click opening a menu, leaving arrange mode, an undo — shows at once, and the
 // same width, which a row held from the last frame was sized for. Not the
 // palette: a rule-chosen theme or style moves on the very payload that hides a
 // placement, and a held row keeps the colours it was drawn in as it dissolves.
 export interface FrameSource {
-  readonly config: object;
+  readonly generation: number;
   readonly preset: string;
   readonly revision: number;
   readonly width: number;
@@ -76,52 +77,57 @@ export interface FrameWrite<Line> {
   readonly record: () => FrameRecord<Line>;
 }
 
-// [LAW:no-shared-mutable-globals] One view's frame memory: one owner, the
-// view, and one writer, the turn that keeps what a draw returned (`keep`), so
-// a draw that throws leaves the last.
-export class FrameMemory<Line> {
-  private last: FrameRecord<Line> | null = null;
+// [LAW:single-enforcer] The last frame's record if it was drawn from `source`,
+// or none. A frame drawn from another config, preset, state revision or width
+// says nothing of where a placement stands in this one — its ids may name
+// other placements, its rows were sized for another width, and a write to the
+// session's state shows what it reveals at once — so it is no frame to draw
+// from or compare against.
+export function recordFrom<Line>(
+  last: FrameRecord<Line> | null,
+  source: FrameSource,
+): FrameRecord<Line> | null {
+  return last !== null &&
+    last.source.generation === source.generation &&
+    last.source.preset === source.preset &&
+    last.source.revision === source.revision &&
+    last.source.width === source.width
+    ? last
+    : null;
+}
 
-  // [LAW:single-enforcer] The last frame drawn from `source`, or none. A frame
-  // drawn from another config, preset, state revision or width says nothing of
-  // where a placement stands in this one — its ids may name other placements,
-  // its rows were sized for another width, and a write to the session's state
-  // shows what it reveals at once — so it is no frame to draw from or compare
-  // against.
-  from(source: FrameSource): FrameRecord<Line> | null {
-    const { last } = this;
-    return last !== null &&
-      last.source.config === source.config &&
-      last.source.preset === source.preset &&
-      last.source.revision === source.revision &&
-      last.source.width === source.width
-      ? last
-      : null;
-  }
+// One draw's record as its walk writes it.
+export function beginRecord<Line>(
+  source: FrameSource,
+  returned: (id: string, lines: readonly Line[]) => Returned<Line>,
+): FrameWrite<Line> {
+  const placements = new Map<string, PlacementRecord<Line>>();
+  const rules = new Map<ExpressionSlot, string>();
+  return {
+    placed: (id, lines) => {
+      const { drawing } = returned(id, lines);
+      placements.set(
+        id,
+        drawing === null ? HIDDEN_RECORD : { kind: "drew", drawing },
+      );
+      return lines;
+    },
+    rule: (slot, name) => rules.set(slot, name),
+    record: () => ({ source, placements, rules }),
+  };
+}
 
-  begin(
-    source: FrameSource,
-    returned: (id: string, lines: readonly Line[]) => Returned<Line>,
-  ): FrameWrite<Line> {
-    const placements = new Map<string, PlacementRecord<Line>>();
-    const rules = new Map<ExpressionSlot, string>();
-    return {
-      placed: (id, lines) => {
-        const { drawing } = returned(id, lines);
-        placements.set(
-          id,
-          drawing === null ? HIDDEN_RECORD : { kind: "drew", drawing },
-        );
-        return lines;
-      },
-      rule: (slot, name) => rules.set(slot, name),
-      record: () => ({ source, placements, rules }),
-    };
-  }
-
-  keep(record: FrameRecord<Line>): void {
-    this.last = record;
-  }
+// [LAW:one-source-of-truth] A loaded config's generation, one number per
+// config object: what a kept record names its config by, so it never holds a
+// retired config alive.
+const generations = new WeakMap<object, number>();
+let nextGeneration = 0;
+export function configGeneration(config: object): number {
+  const held = generations.get(config);
+  if (held !== undefined) return held;
+  const minted = nextGeneration++;
+  generations.set(config, minted);
+  return minted;
 }
 
 const HIDDEN_RECORD: PlacementRecord<never> = { kind: "hidden" };
