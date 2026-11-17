@@ -2,38 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-781",
-      "ref": "refs/pull/781/merge",
-      "sha": "1ed8de123ba17cb49b0dd0dba1f416d739af68c1",
-      "timestamp": "2026-11-17T06:36:35.462Z",
+      "version": "pr-782",
+      "ref": "refs/pull/782/merge",
+      "sha": "77c3e36d59809ef99bec8fd66d41b906620a3d75",
+      "timestamp": "2026-11-17T07:45:05.324Z",
       "commits": [
         {
-          "sha": "1ed8de123ba17cb49b0dd0dba1f416d739af68c1",
+          "sha": "77c3e36d59809ef99bec8fd66d41b906620a3d75",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T06:35:23Z",
-          "message": "Merge b3364b62e6d788eda7c63405b6f801d2ff9fd2ce into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T00:44:03-07:00",
+          "message": "Merge aa681eb314cd45cd7a1f3c7f027bda3b77e3d90d into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
         },
         {
-          "sha": "b3364b62e6d788eda7c63405b6f801d2ff9fd2ce",
+          "sha": "aa681eb314cd45cd7a1f3c7f027bda3b77e3d90d",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T23:35:12-07:00",
-          "message": "fix(renderer): a due after the close is refused, a cancelled deferral never runs, and the idle close resolves by the session's own context (883)\n\n- The wake closes before any renderer step of the teardown, and a due queued\n  behind one is refused when its slot comes.\n- TurnTime takes each due deferral from what is still held, so one cancelled\n  in the same turn does not run.\n- MenuIdle keeps no draw instant: turns run one at a time, so the last draw is\n  the newest whatever the wall clock reads.\n- The idle close resolves by the newest context the session's config handed\n  in, kept until its retire, not by a view that may be evicted.\n- A pushed frame carries its answers as the renderer serialized them, so the\n  host sends them as they are; one Answers type for both.\n- viewersChanged takes no argument: the viewers are read as its turn comes.\n"
-        },
-        {
-          "sha": "753cfa2afa44bef81fb190da291a97aa8aaa8897",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T23:22:44-07:00",
-          "message": "fix(renderer): every turn is made at its slot's instant, a push's subscriptions are taken in its slot, and a deferral that throws leaves the rest due (883)\n\n- The host reads each input's instant as its slot comes up, so the renderer's\n  time never runs backwards between turns; ask and tell take no instant.\n- A push's subscriptions are taken inside its own slot, and none once the\n  daemon's close has begun.\n- TurnTime runs what fell due one at a time: a throw fails the turn and those\n  behind it stay due.\n- A start turn applies who follows before configuring sessions.\n- The render event's at= is the draw's instant; turn lines say took=, and the\n  render event says configured= beside drew=.\n- Stale pointers to the host's idle clock and an async admission removed.\n"
-        },
-        {
-          "sha": "01df73f0167ebae866ece54ffcaea7d80b61411e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T22:55:41-07:00",
-          "message": "feat(renderer): time is handed in: the renderer declares its wake, and animation and the idle close are its schedules (883)\n\nThe renderer reads no clock and sets no timer. Every output declares\n`wake`, the one instant it next needs a turn, derived from its state; the\nhost keeps one timer to it and hands in a `due` turn. The menu idle close,\npushed-frame cadence, the reload walk and the torn-write settle each derive\ntheir next instant, and a due turn runs them in order.\n\n- Feeds and MenuIdle move into the renderer; viewers are handed in whole,\n  and pushed frames leave in the output's `frames`.\n- The host's frame feeds keep only the subscriber book; the host idle\n  clock, its `menu-idle` input and the feeds' pin/frame pushes are gone.\n- turnMs is timed by the transport; the variable store and the verbs\n  read the turn's instant; the doctor's native check is read when asked.\n- The in-process link starts each input on a stack of its own, so a turn's\n  reactions run inside it before its wake is declared.\n- The daemon takes declared lanes before the status lines they gate.\n- Spec and memory updated.\n"
+          "timestamp": "2026-11-17T00:43:45-07:00",
+          "message": "feat(renderer): time is handed in: the renderer owns animation, the menu idle close and pushed frames, and the draw writes nothing (883)\n\nThe renderer reads no clock. Each turn carries its instant, and every output\ndeclares the earliest instant the renderer wants a turn at; the host keeps one\ntimer to that declaration and hands in a `due` through the mailbox, ordered\nagainst every other input. Feeds' cadence, the menu idle close and the\ncatch-up reload walk all run as due turns. The host keeps who watches and\nwhat each subscriber was sent, and announces a change to its viewers only once\nthe change is whole.\n"
         }
       ]
     },
