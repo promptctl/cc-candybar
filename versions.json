@@ -4,15 +4,22 @@
     {
       "version": "pr-782",
       "ref": "refs/pull/782/merge",
-      "sha": "b86f0874dd5802c9a764b480cf361ad203e5677c",
-      "timestamp": "2026-11-17T08:04:05.810Z",
+      "sha": "c5635e83f6700d74954a2fe2a2347cb014807c9f",
+      "timestamp": "2026-11-17T08:21:05.794Z",
       "commits": [
         {
-          "sha": "b86f0874dd5802c9a764b480cf361ad203e5677c",
+          "sha": "c5635e83f6700d74954a2fe2a2347cb014807c9f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T08:03:10Z",
-          "message": "Merge 36ff0c538f4c7b84d9ba2d08b51382dfd6f9d6f4 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T08:20:03Z",
+          "message": "Merge d20136180f8b5a5df4e001227295bd916fd63c80 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+        },
+        {
+          "sha": "d20136180f8b5a5df4e001227295bd916fd63c80",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T01:19:52-07:00",
+          "message": "fix(renderer): a wall stepped back moves every held instant back with it, and the wake is declared first and decided in its slot (883)\n\n- The renderer sees a step back as a turn's instant earlier than the last,\n  and its held deferrals, menu idle periods and feed instants all move back\n  by it; feeds lose their own step-back branches. A wall gone forward moves\n  nothing: it is what a machine that slept looks like.\n- The wake takes each declaration before any other taker, so a throw there\n  cannot leave the renderer's one timer unarmed.\n- A due's declaration carries its failure: the hold-off and its line are\n  decided in the due's slot, and the wake's own path handles only a due no\n  renderer answered.\n- A watched session's request from a pane shown otherwise announces its\n  viewers, and every join is stamped on them, so a subscriber that takes\n  another's place is owed a frame.\n- A stale comment on how a tmux subscription is admitted is corrected.\n"
         },
         {
           "sha": "36ff0c538f4c7b84d9ba2d08b51382dfd6f9d6f4",

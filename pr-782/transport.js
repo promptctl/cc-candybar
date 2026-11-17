@@ -72558,6 +72558,7 @@ var FrameFeeds = class {
   stopWatching = null;
   // The daemon's close: no subscriber is taken after it.
   closed = false;
+  joins = 0;
   framed = 0;
   pushed = 0;
   refused = 0;
@@ -72573,11 +72574,19 @@ var FrameFeeds = class {
     const held = this.requests.get(sessionId2);
     if (held !== void 0 && held.order > order2) return;
     this.requests.delete(sessionId2);
-    this.requests.set(sessionId2, { req, order: order2 });
+    const noted = { req, order: order2 };
+    this.requests.set(sessionId2, noted);
     for (const oldest of this.requests.keys()) {
       if (this.requests.size <= MAX_REQUESTS) break;
       if (!this.watches.has(oldest)) this.requests.delete(oldest);
     }
+    if (this.watches.has(sessionId2) && this.shown(held) !== this.shown(noted))
+      this.deps.changed();
+  }
+  // Whether the session's bar is on a screen, by its latest request: one
+  // with none yet is taken as shown, so a frame is never held back on a guess.
+  shown(noted) {
+    return noted === void 0 || this.deps.shown(noted.req);
   }
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
   // lane the session's settings switch off is refused here, and one whose
@@ -72601,6 +72610,7 @@ var FrameFeeds = class {
     }
     const watch2 = this.watches.get(sessionId2) ?? this.open(sessionId2);
     watch2.subscribers.set(sub2, null);
+    watch2.joined = ++this.joins;
     this.send(watch2, sub2);
     this.deps.changed();
     this.deps.log(
@@ -72652,7 +72662,8 @@ var FrameFeeds = class {
             drawing: ofLane.some((sub2) => sub2.drawing())
           };
         }),
-        shown: noted === void 0 || this.deps.shown(noted.req)
+        shown: this.shown(noted),
+        joined: watch2.joined
       };
     }
     return viewers;
@@ -72721,6 +72732,7 @@ var FrameFeeds = class {
       sessionId: sessionId2,
       subscribers: /* @__PURE__ */ new Map(),
       last: null,
+      joined: 0,
       since: this.deps.clock.monotonic(),
       pushed: 0,
       sent: 0,
@@ -72820,9 +72832,10 @@ var RendererWake = class {
   summarizedAt;
   // [LAW:single-enforcer] Every output's wake lands here, in the order the
   // turns answered: the latest declaration is the one timer.
-  declare({ subscriptions: { wake }, turn }) {
-    if (turn.due !== null)
-      this.heldUntil = turn.threw ? heldOff(turn.due) : null;
+  // [LAW:single-enforcer] A due's own declaration says how it ended, so the
+  // hold-off and its line are decided here, in the due's slot.
+  declare({ subscriptions: { wake }, due }) {
+    if (due !== null) this.ended(due.at, due.failure);
     this.wake = wake;
     this.rearm();
   }
@@ -72874,16 +72887,8 @@ var RendererWake = class {
       lateMs = Math.max(0, (slotAt2 - at) * 1e3);
       return { kind: "event", at: slotAt2, event: { kind: "due" } };
     });
-    if (turn.kind === "answered") this.throwSaid = false;
-    else if (turn.failure.kind !== "down" && turn.failure.kind !== "closing") {
-      if (!this.throwSaid) {
-        this.throwSaid = true;
-        this.deps.log(
-          "error",
-          `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${turn.failure.detail}`
-        );
-      }
-      this.heldUntil = heldOff(handedAt);
+    if (turn.kind === "threw" && turn.turnMs === null && turn.failure.kind !== "down" && turn.failure.kind !== "closing") {
+      this.ended(handedAt, turn.failure);
       this.rearm();
     }
     this.costs.dues++;
@@ -72893,6 +72898,19 @@ var RendererWake = class {
     this.costs.turnMaxMs = Math.max(this.costs.turnMaxMs, turn.turnMs ?? 0);
     if (this.deps.clock.monotonic() - this.summarizedAt >= SUMMARY_EVERY_MS)
       this.summarize();
+  }
+  // How the due handed in at `at` ended: one that failed holds the next off
+  // and is said, once for a run of failures; one that answered clears both.
+  ended(at, failure) {
+    this.heldUntil = failure === null ? null : heldOff(at);
+    if (failure === null) this.throwSaid = false;
+    else if (!this.throwSaid) {
+      this.throwSaid = true;
+      this.deps.log(
+        "error",
+        `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${failure.detail}`
+      );
+    }
   }
   // [LAW:nothing-unseen] Due turns write no line each: the wake says what
   // they cost once a minute, and at its close.
@@ -75338,10 +75356,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         try {
           collector.declared({
             subscriptions,
-            turn: {
-              due: input.event.kind === "due" ? input.at : null,
-              threw: output.kind === "threw"
-            }
+            due: input.event.kind === "due" ? {
+              at: input.at,
+              failure: output.kind === "threw" ? output.failure : null
+            } : null
           });
           collector.framed(frames);
         } catch (thrown2) {
@@ -75472,7 +75490,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         if (!world.closing())
           collector.declared({
             subscriptions,
-            turn: { due: null, threw: answered.kind === "threw" }
+            due: null
           });
         return answered;
       } catch (thrown2) {
@@ -85939,10 +85957,10 @@ var SUMMARY_EVERY_S = 60;
 var WAKE_CAUSES = ["data", "state", "reload", "visibility"];
 var paceOf = (period) => Math.round(1e3 / period);
 function noteSent(rate, at) {
-  const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S && sent <= at);
+  const kept = rate.filter((sent) => sent > at - RATE_WINDOW_S);
   rate.splice(0, rate.length, ...kept, at);
 }
-var sameViewers = (a, b) => a.shown === b.shown && LANE_NAMES.every(
+var sameViewers = (a, b) => a.shown === b.shown && a.joined === b.joined && LANE_NAMES.every(
   (lane) => a.lanes[lane].subscribers === b.lanes[lane].subscribers && a.lanes[lane].drawing === b.lanes[lane].drawing
 );
 var Feeds = class {
@@ -86004,7 +86022,7 @@ var Feeds = class {
       const rate = feed2.rates.get(lane);
       if (rate === void 0) return UNFOLLOWED;
       let fps = 0;
-      for (const sent of rate) if (sent > since && sent <= at) fps++;
+      for (const sent of rate) if (sent > since) fps++;
       return { subscribers: feed2.viewers.lanes[lane].subscribers, fps, shown };
     });
   }
@@ -86018,18 +86036,30 @@ var Feeds = class {
     return next;
   }
   // Draws every feed due by `at`, in the order the feeds opened, and returns
-  // each frame drawn. [LAW:no-ambient-temporal-coupling] A feed whose last
-  // frame is later than `at` saw the wall clock step back: it is drawn now,
-  // so nothing carries from one frame's instant to the next.
+  // each frame drawn.
   due(at) {
     const drawn = [];
     for (const feed2 of this.feeds.values()) {
-      if (feed2.next === null) continue;
-      if (feed2.next > at && (feed2.last === null || feed2.last <= at)) continue;
+      if (feed2.next === null || feed2.next > at) continue;
       const frame2 = this.draw(feed2, at);
       if (frame2 !== null) drawn.push({ sessionId: feed2.sessionId, frame: frame2 });
     }
     return drawn;
+  }
+  // [LAW:no-ambient-temporal-coupling] The wall stepped back `seconds`
+  // (src/renderer/turn-time.ts): every instant a feed holds moves back with
+  // it, so its next frame keeps its spacing and nothing carries from an
+  // instant read before the step.
+  steppedBack(seconds) {
+    const back2 = (at) => at - seconds;
+    for (const feed2 of this.feeds.values()) {
+      feed2.next = feed2.next === null ? null : back2(feed2.next);
+      feed2.last = feed2.last === null ? null : back2(feed2.last);
+      for (const rate of feed2.rates.values())
+        rate.splice(0, rate.length, ...rate.map(back2));
+      feed2.since = back2(feed2.since);
+      feed2.summarizedAt = back2(feed2.summarizedAt);
+    }
   }
   // The renderer's close: every feed ends, its pin released.
   close(at) {
@@ -86093,10 +86123,9 @@ var Feeds = class {
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
   // to the earliest its spacing allows after its last frame, never later
   // than it already falls due. Answers whether it moved anything: a wake that
-  // did not was coalesced into a frame already due. A last frame later than
-  // `at` saw the wall step back, and spaces nothing, as in `due`.
+  // did not was coalesced into a frame already due.
   hasten(feed2, at) {
-    const spaced = feed2.last === null || feed2.last > at ? at : Math.max(at, feed2.last + this.spacingOf(feed2) / 1e3);
+    const spaced = feed2.last === null ? at : Math.max(at, feed2.last + this.spacingOf(feed2) / 1e3);
     if (feed2.next !== null && feed2.next <= spaced) return false;
     feed2.next = spaced;
     return true;
@@ -86203,6 +86232,12 @@ var MenuIdle = class {
     idle.since = at;
     idle.shown = false;
   }
+  // The wall stepped back `seconds` (src/renderer/turn-time.ts): each idle
+  // period began that much earlier on the wall now read.
+  steppedBack(seconds) {
+    for (const idle of this.sessions.values())
+      idle.since = idle.since - seconds;
+  }
   retire(sessionId2) {
     this.sessions.delete(sessionId2);
   }
@@ -86225,11 +86260,23 @@ var MenuIdle = class {
 init_globals();
 var TurnTime = class {
   current = null;
+  // The instant of the last turn begun: what a step back is measured from.
+  last = null;
   held = /* @__PURE__ */ new Set();
   // [LAW:no-ambient-temporal-coupling] Set for exactly one input's turn, so a
   // read outside any turn fails loudly rather than reading a stale instant.
+  // Answers how far, in seconds, the wall stepped back since the last turn,
+  // or 0: every instant held in the renderer was read on the wall before the
+  // step, and moves back with it, its deferrals here among them. A wall that
+  // went forward is time passing, as a machine asleep sees it, and moves
+  // nothing.
   begin(at) {
+    const stepped2 = this.last === null ? 0 : Math.max(0, this.last - at);
     this.current = at;
+    this.last = at;
+    for (const deferral of this.held)
+      deferral.until = deferral.until - stepped2;
+    return stepped2;
   }
   end() {
     this.current = null;
@@ -91256,7 +91303,11 @@ function mainRenderer(parts, { turnTime, feeds, menuIdle }, pushed) {
     null
   );
   const atTurn = (at, run3) => {
-    turnTime.begin(at);
+    const stepped2 = turnTime.begin(at);
+    if (stepped2 > 0) {
+      menuIdle.steppedBack(stepped2);
+      feeds.steppedBack(stepped2);
+    }
     try {
       return run3();
     } finally {
@@ -93523,6 +93574,7 @@ function createDaemon(inputs) {
       log,
       {
         declared: (declared) => {
+          rendererWake.declare(declared);
           const { subscriptions } = declared;
           collector.subscribed(subscriptions);
           frameFeeds.declared(subscriptions.lanes);
@@ -93531,7 +93583,6 @@ function createDaemon(inputs) {
               (session) => subscriptions.lanes[session].tmuxStatus
             )
           );
-          rendererWake.declare(declared);
         },
         framed: (frames) => {
           for (const frame2 of frames) frameFeeds.frame(frame2);
