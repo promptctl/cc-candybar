@@ -46,7 +46,7 @@ import type {
 } from "../renderer-interface/history-storage.js";
 import type { DoctorStores } from "../doctor/ports.js";
 import type { LinkSigner } from "../click/link-signer.js";
-import type { Locations } from "../config/loader/discovery.js";
+import type { Locations } from "../config/loader/chain-places.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";

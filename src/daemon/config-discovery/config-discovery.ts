@@ -21,9 +21,9 @@ import {
   type Discovered,
   type DiscoveryWorld,
   type SharedFacts,
-} from "../../config/loader/discover.js";
-import { REPO_PLUGIN_DIR } from "../../config/loader/plugin-folders.js";
-import { repoConfigsDir, repoConfigsPath } from "../../config/repo-configs.js";
+} from "./discover.js";
+import { REPO_PLUGIN_DIR } from "./plugin-folders.js";
+import { repoConfigsDir, repoConfigsPath } from "./repo-configs.js";
 import { nearestWatchTarget } from "../../utils/watch-target.js";
 import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";

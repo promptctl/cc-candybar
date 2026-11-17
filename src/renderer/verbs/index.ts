@@ -18,7 +18,7 @@
 // into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
-import type { Locations } from "../../config/loader/discovery";
+import type { Locations } from "../../config/loader/chain-places";
 import type { ConfigSnapshot } from "../../config/config-snapshot";
 import {
   LAYER_ROLES,
@@ -138,7 +138,7 @@ import type {
   EffectId,
   EffectOutcome,
 } from "../../renderer-interface/interface";
-import { repoAnswerFields } from "../../config/repo-configs";
+import { repoAnswerFields } from "../../config/repo-question";
 import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   CheckedRenderRequest,

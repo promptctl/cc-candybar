@@ -28,16 +28,16 @@ import {
   SOURCES_NOTHING,
 } from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { pluginRoots } from "../src/config/loader/plugin-folders";
+import { pluginRoots } from "../src/daemon/config-discovery/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
 import { textOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoConfigs } from "../src/config/repo-configs";
+import { repoConfigs } from "../src/daemon/config-discovery/repo-configs";
 import { gateRepos } from "../src/config/loader/repo-gate";
-import { repoProject } from "../src/config/loader/discovery";
+import { repoProject } from "../src/daemon/config-discovery/config-search";
 import { installFromRepo } from "../src/plugin-install";
 import { bindSelf } from "../src/config/loader/refs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";

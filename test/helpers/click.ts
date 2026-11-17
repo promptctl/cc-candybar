@@ -22,7 +22,10 @@ import {
   type LayerPlaces,
   type WritableSettings,
 } from "../../src/daemon/effect-interpreter";
-import { discover, readShared } from "../../src/config/loader/discover";
+import {
+  discover,
+  readShared,
+} from "../../src/daemon/config-discovery/discover";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { RenderOrigin } from "../../src/config-hint";
 import type {

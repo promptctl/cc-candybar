@@ -12,9 +12,9 @@ import {
   listFolders,
   REPO_PLUGIN_DIR,
   userPluginRoot,
-} from "./config/loader/plugin-folders.js";
+} from "./daemon/config-discovery/plugin-folders.js";
 import { DEFINITION_FILE } from "./config/loader/plugins.js";
-import { readDefinition } from "./config/loader/discover.js";
+import { readDefinition } from "./daemon/config-discovery/discover.js";
 import { locations } from "./daemon/paths.js";
 import type { World } from "./host.js";
 import { type OneShotLauncher } from "./proc/launch.js";

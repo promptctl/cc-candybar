@@ -11,7 +11,7 @@ import {
 } from "../../src/config-hint";
 import { ConfigDiscovery } from "../../src/daemon/config-discovery/config-discovery";
 import type { WatcherRegistry } from "../../src/daemon/cache/watchers";
-import type { Locations } from "../../src/config/loader/discovery";
+import type { Locations } from "../../src/config/loader/chain-places";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { DaemonLogger } from "../../src/utils/logger";
 import {
@@ -24,7 +24,10 @@ import {
 } from "../../src/renderer/render-cache";
 import type { ViewFacts } from "../../src/renderer-interface/request-context";
 import type { ViewSource } from "../../src/dsl/view-source";
-import { discover, readShared } from "../../src/config/loader/discover";
+import {
+  discover,
+  readShared,
+} from "../../src/daemon/config-discovery/discover";
 
 // The origin a context names: its project, its working directory, and the
 // file `--config` names, or the search where none is named.

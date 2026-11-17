@@ -37,7 +37,7 @@ import {
   readShared,
   sessionPlugins,
   snapshotOf,
-} from "./config/loader/discover.js";
+} from "./daemon/config-discovery/discover.js";
 import type { ConfigSnapshot } from "./config/config-snapshot.js";
 import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";

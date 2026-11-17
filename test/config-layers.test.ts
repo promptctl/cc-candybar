@@ -25,9 +25,9 @@ import {
   writePreset,
   writeValues,
 } from "../src/renderer/config-file-store";
-import { resolveDslConfig } from "../src/config/loader/discovery";
+import { resolveDslConfig } from "../src/daemon/config-discovery/config-search";
 import { instantOf } from "../src/utils/instant";
-import { repoConfigs } from "../src/config/repo-configs";
+import { repoConfigs } from "../src/daemon/config-discovery/repo-configs";
 import { stateDir } from "../src/daemon/paths";
 import { answerRepo } from "./helpers/repo-approval";
 import { applyLayoutOp } from "../src/renderer/config-file-store";

@@ -22,7 +22,7 @@ import type {
   EffectOutcome,
 } from "../renderer-interface/interface.js";
 import type { RenderOrigin } from "../config-hint.js";
-import { answeredBook } from "../config/repo-configs.js";
+import { answeredBook } from "./config-discovery/repo-configs.js";
 import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
 import { ABSENT, ok, type Outcome } from "../utils/outcome.js";

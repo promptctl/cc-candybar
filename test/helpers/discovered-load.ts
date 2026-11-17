@@ -18,10 +18,10 @@ import {
   readLayer,
   sessionPlugins,
   snapshotOf,
-} from "../../src/config/loader/discover";
+} from "../../src/daemon/config-discovery/discover";
 import type { Layer } from "../../src/config/config-snapshot";
 import type { DslConfig } from "../../src/config/dsl-types";
-import type { Locations } from "../../src/config/loader/discovery";
+import type { Locations } from "../../src/config/loader/chain-places";
 
 // One file as the user layer, over `ctx`'s beneath; null is no file — the
 // bundled default, under nothing.

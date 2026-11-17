@@ -1,38 +1,28 @@
 // [LAW:effects-at-boundaries] The user's answers to "run this repository's
-// cc-candybar config?" on disk, and the question the bar asks for each
-// repository awaiting one. The gate itself is pure
-// (src/config/loader/repo-gate.ts); this is where its answers are kept.
+// cc-candybar config?" on disk. The gate itself is pure (repo-gate.ts), and so
+// is the question the bar asks (repo-question.ts); this is where the answers
+// are kept, and it is the host's, because it opens the book.
 
-import type { SessionId } from "../daemon/foundations/session-id.js";
+import type { SessionId } from "../foundations/session-id.js";
 import fs from "node:fs";
 import path from "node:path";
-import type { LinkSigner, SignedFields } from "../click/link-signer.js";
-import { effectsUrl, VERB_REPO_CONFIG } from "../click/wire.js";
 import {
   answerDir,
   parseRepoConfigBook,
-  REPO_ANSWERS,
   withAnswer,
   type RepoAnswer,
   type RepoConfigBook,
-} from "./loader/repo-gate.js";
-import type { RepoQuestion } from "./config-snapshot.js";
-import { worktreeLink } from "../utils/git-root.js";
-import { ok } from "../utils/outcome.js";
-import { presence, type Unchecked } from "../utils/presence.js";
-import type { Asked } from "../doctor/checks.js";
+} from "../../config/loader/repo-gate.js";
+import { worktreeLink } from "../../utils/git-root.js";
+import { ok } from "../../utils/outcome.js";
+import { presence, type Unchecked } from "../../utils/presence.js";
+import type { Asked } from "../../doctor/checks.js";
 import {
   stateFile,
   written,
   type Planned,
   type StateFile,
-} from "../doctor/state-file.js";
-import {
-  APPROVAL_SEVERITY,
-  diagnosticSpan,
-  type DiagnosticMessage,
-  type DiagnosticLine,
-} from "../render/diagnostics.js";
+} from "../../doctor/state-file.js";
 
 const REPO_CONFIGS_FILE = "repo-configs.json";
 // The book's own folder: the daemon watches it so a hand edit (removing an
@@ -161,61 +151,4 @@ export function answeredBook(
     }, current),
   );
   return planned.kind === "failed" ? planned : ok({ ...planned.value, said });
-}
-
-// [LAW:single-enforcer] What an answer link signs: the session it was drawn
-// for, the directory and the answer. Any web page can open a
-// `cc-candybar://` link, so only an answer the bar drew is recorded. A `run`
-// link's declaration is a JSON array and an answer's a directory, so neither
-// verifies as the other under the one key.
-export function repoAnswerFields(
-  sessionId: SessionId,
-  dir: string,
-  answer: RepoAnswer,
-): SignedFields {
-  return {
-    sessionId,
-    action: VERB_REPO_CONFIG,
-    declaration: dir,
-    evaluated: answer,
-  };
-}
-
-// [LAW:dataflow-not-control-flow] One channel while the origin's repository
-// awaits an answer — the list is the answer, so the diagnostics fold it beside
-// the update notice with no "is there a question" branch. The sentence is
-// plain text (the viewer's ⧉ copies it); each answer is its own signed click.
-export function repoQuestions(
-  question: RepoQuestion | null,
-  sessionId: SessionId,
-  signer: LinkSigner,
-): DiagnosticMessage[] {
-  const awaiting = question?.standing === "awaiting" ? [question.dir] : [];
-  return awaiting.map((dir) => {
-    const message = `a cc-candybar config for ${dir} — run it?`;
-    const answers = REPO_ANSWERS.map((answer) =>
-      diagnosticSpan(
-        `[${answer === "approved" ? "approve" : "decline"}]`,
-        effectsUrl([
-          {
-            verb: VERB_REPO_CONFIG,
-            args: [
-              sessionId,
-              dir,
-              answer,
-              signer.sign(repoAnswerFields(sessionId, dir, answer)),
-            ],
-          },
-        ]),
-      ),
-    );
-    const line: DiagnosticLine = [diagnosticSpan(message, null), ...answers];
-    return {
-      severity: APPROVAL_SEVERITY,
-      about: `repo-question\0${dir}`,
-      message,
-      copy: message,
-      lines: [line],
-    };
-  });
 }

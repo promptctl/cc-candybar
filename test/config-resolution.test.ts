@@ -17,18 +17,20 @@ import {
   mkdirSync,
 } from "node:fs";
 import { locations } from "../src/daemon/paths";
-import { chainPlaces, type Locations } from "../src/config/loader/discovery";
+import { chainPlaces, type Locations } from "../src/config/loader/chain-places";
 import { hostOf } from "./helpers/host";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  resolveDslConfig,
   configResolutionNotice,
   writableRoles,
   dslConfigCandidatePaths,
-  detectConfigCollisions,
 } from "../src/config/dsl-loader";
+import {
+  detectConfigCollisions,
+  resolveDslConfig,
+} from "../src/daemon/config-discovery/config-search";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 
 // The answers with each of `dirs` approved: these cases are about how layers

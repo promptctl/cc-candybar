@@ -139,13 +139,11 @@ export {
 export type { ConfigIssue, DroppedFileError } from "./loader/diagnostics.js";
 export {
   dslConfigCandidatePaths,
-  resolveDslConfig,
   configResolutionNotice,
   writableRoles,
-  detectConfigCollisions,
   homeLayer,
-} from "./loader/discovery.js";
-export type { ConfigLayer, ConfigResolution } from "./loader/discovery.js";
+} from "./loader/chain-places.js";
+export type { ConfigLayer, ConfigResolution } from "./loader/chain-places.js";
 export type { Unchecked } from "../utils/presence.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export { inheritableSegmentNames } from "./loader/segments.js";

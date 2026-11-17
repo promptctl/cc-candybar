@@ -61,7 +61,7 @@ import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import type { Run } from "../src/facts/source-identity";
 import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
-import { REPO_PLUGIN_DIR } from "../src/config/loader/plugin-folders";
+import { REPO_PLUGIN_DIR } from "../src/daemon/config-discovery/plugin-folders";
 import { textOf, ansiOf, parseFrame } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal, untilHeard } from "./helpers/reload-signal";

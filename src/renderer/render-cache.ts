@@ -60,7 +60,7 @@ import type { VarScope } from "../dsl/variable-scope.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
-import type { Locations } from "../config/loader/discovery.js";
+import type { Locations } from "../config/loader/chain-places.js";
 import { digestOf, type Projection } from "../utils/plain.js";
 import { pendingOf } from "../utils/outcome.js";
 import {

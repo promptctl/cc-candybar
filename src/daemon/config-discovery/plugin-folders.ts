@@ -5,10 +5,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { PluginScope } from "./plugin-scope.js";
-import type { Locations } from "./discovery.js";
+import type { PluginScope } from "../../config/loader/plugin-scope.js";
+import type { Locations } from "../../config/loader/chain-places.js";
 import type { Unchecked } from "../../utils/presence.js";
-import type { ApprovedRepo } from "./repo-gate.js";
+import type { ApprovedRepo } from "../../config/loader/repo-gate.js";
 
 /**
  * The plugin roots, lowest precedence first: each `$XDG_DATA_DIRS` entry

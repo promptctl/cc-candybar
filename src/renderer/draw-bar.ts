@@ -19,7 +19,7 @@ import {
 } from "../daemon/foundations/protocol";
 import { type SessionId } from "../daemon/foundations/session-id";
 import type { LayerRole } from "../config/layer-role";
-import { repoQuestions } from "../config/repo-configs";
+import { repoQuestions } from "../config/repo-question";
 import {
   type CacheEntry,
   type RenderCache,

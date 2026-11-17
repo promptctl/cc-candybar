@@ -24,7 +24,7 @@ import {
   installedRoots,
   sessionPlugins,
   snapshotOf,
-} from "../../../src/config/loader/discover.js";
+} from "../../../src/daemon/config-discovery/discover.js";
 import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.js";
 import { presetNames } from "../../../src/config/presets.js";
 import { ansiOf } from "../../../src/render/frame.js";

@@ -3,6 +3,8 @@
 // value (config-snapshot.ts). The loader opens no file; its disk reads are
 // here. Discovery is total: whatever it cannot read is a notice, an
 // `unreadable` layer or an `unreadable` definition, never a throw.
+// [LAW:one-way-deps] It is the host's, so the zone rule refuses the renderer
+// any import of it: the renderer loads what it is handed and reads no disk.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -12,33 +14,36 @@ import type {
   Layer,
   PluginFile,
   Stray,
-} from "../config-snapshot.js";
+} from "../../config/config-snapshot.js";
 import { checkoutOf, type Checkout } from "../../utils/git-root.js";
 import type { Unchecked } from "../../utils/presence.js";
-import { repoConfigs } from "../repo-configs.js";
-import type { LayerRole } from "../layer-role.js";
+import { repoConfigs } from "./repo-configs.js";
+import type { LayerRole } from "../../config/layer-role.js";
 import {
   chainPlaces,
   configCandidates,
   configResolutionNotice,
-  detectConfigCollisions,
   dslConfigCandidatePaths,
   scopeOf,
-  searchConfig,
   type ConfigLayer,
   type ConfigQuery,
   type ConfigResolution,
   type Locations,
-} from "./discovery.js";
+} from "../../config/loader/chain-places.js";
+import { detectConfigCollisions, searchConfig } from "./config-search.js";
 import { listFolders, pluginRoots, type PluginRoot } from "./plugin-folders.js";
-import { DEFINITION_FILE, listedPath, pluginList } from "./plugins.js";
-import type { PluginScope } from "./plugin-scope.js";
+import {
+  DEFINITION_FILE,
+  listedPath,
+  pluginList,
+} from "../../config/loader/plugins.js";
+import type { PluginScope } from "../../config/loader/plugin-scope.js";
 import {
   repoUnreadNotice,
   type ApprovedRepo,
   type RepoAnswers,
   type RepoGate,
-} from "./repo-gate.js";
+} from "../../config/loader/repo-gate.js";
 
 // One plugin root as discovery listed it: each folder's definition, read, and
 // each loose file, or why the root could not be listed.

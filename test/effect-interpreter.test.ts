@@ -17,7 +17,10 @@ import {
 } from "../src/daemon/effect-interpreter.js";
 import type { RenderOrigin } from "../src/config-hint.js";
 import type { LayerRole } from "../src/config/layer-role.js";
-import { repoConfigs, repoConfigsPath } from "../src/config/repo-configs.js";
+import {
+  repoConfigs,
+  repoConfigsPath,
+} from "../src/daemon/config-discovery/repo-configs.js";
 import type { SessionId } from "../src/daemon/foundations/session-id.js";
 import type {
   ConfigChange,

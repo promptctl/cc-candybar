@@ -64,7 +64,7 @@ import {
 } from "./handler-probe.js";
 import { cliConfigTarget, type RenderOrigin } from "../config-hint.js";
 import { fallbackState, loadOrigin } from "../renderer/render-cache.js";
-import { discover, readShared } from "../config/loader/discover.js";
+import { discover, readShared } from "../daemon/config-discovery/discover.js";
 import { SessionState } from "../renderer/session-state.js";
 import { claudeConfigDir } from "../claude-settings.js";
 import type {

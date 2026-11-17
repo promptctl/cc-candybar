@@ -13,12 +13,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { checkConfig } from "../src/check";
-import {
-  configResolutionNotice,
-  resolveDslConfig,
-} from "../src/config/dsl-loader";
+import { configResolutionNotice } from "../src/config/dsl-loader";
+import { resolveDslConfig } from "../src/daemon/config-discovery/config-search";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
-import { chainPlaces } from "../src/config/loader/discovery";
+import { chainPlaces } from "../src/config/loader/chain-places";
 import {
   configLoadedLine,
   type LoadCause,
@@ -26,11 +24,10 @@ import {
 } from "../src/renderer/render-cache";
 import {
   recordAnswer,
-  repoAnswerFields,
   repoConfigs,
   repoConfigsPath,
-  repoQuestions,
-} from "../src/config/repo-configs";
+} from "../src/daemon/config-discovery/repo-configs";
+import { repoAnswerFields, repoQuestions } from "../src/config/repo-question";
 import { SessionState } from "../src/renderer/session-state";
 import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
