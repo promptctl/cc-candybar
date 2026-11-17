@@ -821,7 +821,10 @@ type Surface = Surfaced["by"];
  * them draws, and each would reset the other's passages.
  */
 export class EffectSessions<Line> {
-  private readonly memories = new Map<string, SessionEffects<Line>>();
+  private readonly memories = new Map<
+    string,
+    { readonly session: SessionId; readonly effects: SessionEffects<Line> }
+  >();
 
   constructor(private readonly maxMemories: number = MAX_MEMORIES) {}
 
@@ -830,7 +833,7 @@ export class EffectSessions<Line> {
   // alone, so both surfaces draw the same effect.
   of(sessionId: SessionId, surface: Surface): SessionEffects<Line> {
     return (
-      this.memories.get(`${surface}:${sessionId}`) ??
+      this.memories.get(keyOf(sessionId, surface))?.effects ??
       new SessionEffects<Line>(sessionId)
     );
   }
@@ -842,15 +845,22 @@ export class EffectSessions<Line> {
     surface: Surface,
     motion: SessionMotion<Line>,
   ): void {
-    const known = this.of(sessionId, surface);
-    known.keep(motion);
-    const key = `${surface}:${sessionId}`;
+    const effects = this.of(sessionId, surface);
+    effects.keep(motion);
+    const key = keyOf(sessionId, surface);
     this.memories.delete(key);
-    this.memories.set(key, known);
+    this.memories.set(key, { session: sessionId, effects });
     for (const oldest of this.memories.keys()) {
       if (this.memories.size <= this.maxMemories) break;
       this.memories.delete(oldest);
     }
+  }
+
+  // A retired session's memory goes with it, on every surface: its rows are
+  // held nowhere else, and it will never be drawn again.
+  retire(sessionId: SessionId): void {
+    for (const [key, { session }] of this.memories)
+      if (session === sessionId) this.memories.delete(key);
   }
 
   // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
@@ -858,11 +868,14 @@ export class EffectSessions<Line> {
   // size that grows.
   getStats(): { sessions: number; effects: number } {
     let effects = 0;
-    const sessions = new Set<string>();
-    for (const [key, memory] of this.memories) {
-      effects += memory.heldCount;
-      sessions.add(key.slice(key.indexOf(":") + 1));
+    const sessions = new Set<SessionId>();
+    for (const memory of this.memories.values()) {
+      effects += memory.effects.heldCount;
+      sessions.add(memory.session);
     }
     return { sessions: sessions.size, effects };
   }
 }
+
+const keyOf = (sessionId: SessionId, surface: Surface): string =>
+  `${surface}:${sessionId}`;

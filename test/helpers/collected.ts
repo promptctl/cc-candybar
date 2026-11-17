@@ -14,6 +14,9 @@ import type { ViewFacts } from "../../src/renderer-interface/request-context";
 import { WorldStates } from "../../src/renderer/world-states";
 import { systemTimekeeper } from "../../src/time";
 import { daemonFactsOf } from "./daemon-facts";
+import { EffectSessions } from "../../src/render/effect";
+import { RenderWarningRecords } from "../../src/renderer/render-warnings";
+import type { RenderedLine } from "../../src/dsl/node-registry";
 
 // What the renderer's turns read of the cache: what a retire closes, and what
 // every output says the open views need read.
@@ -68,7 +71,16 @@ export function collected(
           [],
         );
       if (event.kind === "world-state") worldStates.take(event.worldState);
-      else retireSession({ renderCache: cache(), worldStates }, event.session);
+      else
+        retireSession(
+          {
+            renderCache: cache(),
+            worldStates,
+            effectSessions: new EffectSessions<RenderedLine>(),
+            renderWarnings: new RenderWarningRecords(),
+          },
+          event.session,
+        );
       await Promise.resolve();
       collector.subscribed(cache().subscriptions());
       return { kind: "answered" };

@@ -113,6 +113,12 @@ export class RenderWarningRecords {
       this.records.delete(oldest);
     }
   }
+
+  // A retired session's records go with it: no renderer draws it again.
+  retire(sessionId: SessionId): void {
+    for (const renderer of RENDERERS)
+      this.records.delete(keyOf(sessionId, renderer));
+  }
 }
 
 const keyOf = (sessionId: SessionId, by: Drawing["by"]): string =>

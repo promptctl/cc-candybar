@@ -276,6 +276,12 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
     expect(sessions.of(session, "request").lastFrame()).toMatchObject({ made: 0, reused: 2 });
     expect(sessions.of(session, "feed").lastFrame()).toMatchObject({ made: 5, reused: 0 });
     expect(sessions.getStats()).toEqual({ sessions: 1, effects: 7 });
+    // Retired, the session's memory goes on both surfaces, and another's stays.
+    const other = sessionIdOf("t");
+    sessions.keep(other, "feed", sessions.of(session, "feed").motion("shimmer", sessions.of(other, "feed").clockAt(at(3), 1), STILL_FRAME).memory(NO_RECORD));
+    sessions.retire(session);
+    expect(sessions.getStats()).toEqual({ sessions: 1, effects: 0 });
+    expect(sessions.of(session, "request").lastFrame()).toMatchObject({ made: 0, reused: 0 });
   });
 
   test("a row says when it next changes: now while its loop moves, never while every part holds still", () => {

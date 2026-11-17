@@ -86,6 +86,17 @@ describe("a renderer's warning record", () => {
     expect(records.of(T, "request")).toEqual([]);
   });
 
+  test("a retired session's records go on every renderer, and another's stay", () => {
+    const records = new RenderWarningRecords();
+    drawn(records, S_2, "request", S, [warning("statusline")]);
+    drawn(records, S_2, "feed", S, [warning("lane")]);
+    drawn(records, T, "request", S, [warning("other")]);
+    records.retire(S_2);
+    expect(records.of(S_2, "request")).toEqual([]);
+    expect(records.of(S_2, "feed")).toEqual([]);
+    expect(records.of(T, "request")).toEqual([warning("other")]);
+  });
+
   test("bounded: the least recently drawn record goes first", () => {
     const records = new RenderWarningRecords(2);
     drawn(records, A_2, "request", S, [warning("a")]);

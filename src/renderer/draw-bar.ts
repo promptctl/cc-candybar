@@ -373,9 +373,13 @@ export function configureSession(
 // its view closes. The document goes first, before anything can throw, so the
 // turn keeps the retire's contract (src/renderer-interface/interface.ts) however it
 // ends; one action holds both, so the view's change reaction, stopped by the
-// closing, never runs over the document gone.
+// closing, never runs over the document gone. What its draws left goes with
+// it: the memory each surface kept, and what each warned.
 export function retireSession(
-  parts: Pick<RendererParts, "worldStates"> & {
+  parts: Pick<
+    RendererParts,
+    "worldStates" | "effectSessions" | "renderWarnings"
+  > & {
     readonly renderCache: Pick<RendererParts["renderCache"], "retireSession">;
   },
   session: SessionId,
@@ -384,6 +388,8 @@ export function retireSession(
     parts.worldStates.drop(session);
     parts.renderCache.retireSession(session);
   });
+  parts.effectSessions.retire(session);
+  parts.renderWarnings.retire(session);
 }
 
 // [LAW:single-enforcer] The one way a session's view is held at a context:
