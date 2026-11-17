@@ -36038,6 +36038,12 @@ function settledLanes(outcome, { plugins: plugins2, runs, doctor }) {
     doctor: doctorLane(doctor, () => lane)
   };
 }
+function originOf({ cwd: cwd2, hookData: hookData2 }) {
+  return {
+    cwd: cwd2 ?? hookData2.workspace.current_dir,
+    projectDir: hookData2.workspace.project_dir
+  };
+}
 function gitAt({
   cwd: cwd2,
   hookData: hookData2
@@ -36112,6 +36118,7 @@ function declareLanes(owners, holds2, facts, sources) {
         () => owners.doctor.declare(holds2, {
           session: facts.hookData.session_id,
           hints: facts.hints,
+          origin: originOf(facts),
           ask: ask2
         })
       )
@@ -59811,7 +59818,7 @@ var readStores = (stores) => ({
   clicked: stores.clicked.read(),
   postMortemsRead: stores.postMortemsRead.read()
 });
-function doctorAsk(run3, load, sessionPick, origin, sighted) {
+function doctorAsk(run3, load, sessionPick, sighted) {
   const globals = resolveEffectiveGlobals(
     load.config,
     sessionPick,
@@ -59826,7 +59833,6 @@ function doctorAsk(run3, load, sessionPick, origin, sighted) {
       ])
     ].join(""),
     needs: dataNeeds(load.config, globals.preset),
-    origin,
     sighted
   };
 }
@@ -88244,24 +88250,26 @@ function sessionHints(ctx, sid) {
 }
 function startRun(ctx, sid) {
   const origin = sessionOrigin(ctx, sid);
-  ctx.doctorRuns.start(sid, {
+  ctx.doctorRuns.start(ctx.sessionState, sid, {
     at: ctx.now(),
     load: ctx.doctorLoad(origin),
     target: origin.target,
-    origin: { cwd: origin.cwd, projectDir: origin.projectDir },
     pick: (key) => ctx.sessionState.get(sid, key),
     arrival: ctx.arrival
   });
 }
 function reportedFacts(ctx, sid, verb) {
-  const facts = ctx.doctorRuns.facts(sid, ctx.arrival);
+  const facts = ctx.doctorRuns.facts(sid, ctx.arrival, ctx.now());
   if (facts !== null) return facts;
-  if (!ctx.doctorRuns.running(sid)) startRun(ctx, sid);
+  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
   throw new BadVerbArgs(
     `${verb}: the doctor's report is being read \u2014 click again once it is in`
   );
 }
-var doctorRun = async (value, ctx) => startRun(ctx, requireSessionId(oneArg(value)));
+var doctorRun = async (value, ctx) => {
+  const sid = requireSessionId(oneArg(value));
+  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
+};
 var doctorFix = async (value, ctx) => {
   const [sessionId2 = "", checkName = ""] = decodeWire(
     () => decodeSegments(value)
@@ -89064,6 +89072,11 @@ var withClicked = (clicked, sighting) => clicked.includes(sighting) ? clicked : 
 var fileClickedTerminals = (dir) => stateFile(dir, "doctor-clicked-terminals.json", [], parseClickedTerminals);
 
 // src/renderer/doctor.ts
+var FRESH_FOR = 120;
+var UNRUN = CHECKS.map((check) => ({
+  key: doctorReportKeys(check.name).verdict,
+  value: VERDICT_UNRUN
+}));
 var DoctorRuns = class {
   constructor(deps) {
     this.deps = deps;
@@ -89075,11 +89088,14 @@ var DoctorRuns = class {
   // host reads afresh. [LAW:one-source-of-truth] A run is named by the
   // millisecond its click ran, kept rising, so a renderer that starts again
   // names no run an earlier one asked: the host may still hold that run's
-  // reading, which would be taken for the new run's.
-  start(session, request2) {
+  // reading, which would be taken for the new run's. The report the run
+  // replaces goes from `store`, the click's view, with it: no verdict or
+  // [fix] stands for a run no longer the session's.
+  start(store, session, request2) {
+    store.setBatch(session, UNRUN);
     this.last = Math.max(Math.round(request2.at * 1e3), this.last + 1);
     this.runs.set(session, {
-      ask: doctorAsk(this.last, request2.load, request2.pick, request2.origin, {
+      ask: doctorAsk(this.last, request2.load, request2.pick, {
         kind: "clicked",
         sessionId: session,
         via: request2.arrival.via
@@ -89090,9 +89106,9 @@ var DoctorRuns = class {
       reading: null
     });
   }
-  // Whether the session has a run, read or still on its way.
-  running(session) {
-    return this.runs.has(session);
+  // Whether the session's run is on its way: asked, its reading not in.
+  awaiting(session) {
+    return this.runs.get(session)?.reading === null;
   }
   // [LAW:one-source-of-truth] What each session's unread run asks the host to
   // read: held until its reading is in, which the run then keeps, so no world
@@ -89120,19 +89136,19 @@ var DoctorRuns = class {
         session,
         this.judged(run3, reading, run3.arrival)
       );
-      run3.reading = reading;
+      run3.reading = { read: reading, at: doctor.at };
     } catch (e) {
       this.fail(session, e instanceof Error ? e.message : String(e));
     }
   }
   // [LAW:single-enforcer] The session's run's facts as they stand for a click
-  // that arrived as `arrival`: its reading, its load, the stores as they hold
-  // now, and what the click proves of the URL handler. Null while no reading
-  // is in.
-  facts(session, arrival) {
+  // at `now` that arrived as `arrival`: its reading, its load, the stores as
+  // they hold now, and what the click proves of the URL handler. Null while
+  // no reading is in, or none read in the last FRESH_FOR seconds.
+  facts(session, arrival, now2) {
     const run3 = this.runs.get(session);
     const reading = run3?.reading ?? null;
-    return run3 === void 0 || reading === null ? null : this.judged(run3, reading, arrival);
+    return run3 === void 0 || reading === null || now2 - reading.at > FRESH_FOR ? null : this.judged(run3, reading.read, arrival);
   }
   // [LAW:single-enforcer] One write of the whole report, through setBatch —
   // the row cap flips, the reason and fixable land, in one reactive
@@ -90888,8 +90904,8 @@ function mainRenderer(parts, pushed) {
         parts.worldStates.take(event.worldState);
         return;
       case "retire":
-        retireSession(parts, event.session);
         parts.doctorRuns.retire(event.session);
+        retireSession(parts, event.session);
         return;
       case "effect-done": {
         if (parts.verbs.changeDone(event.of, event.outcome, effects)) return;
@@ -91397,7 +91413,7 @@ async function segmentDataFacts(edge, needs, cwd2, rateLimits) {
     rateLimits: await need(needs.rateLimits, () => rateLimits)
   };
 }
-async function readDoctor(edge, hints, ask2, sighted) {
+async function readDoctor(edge, hints, ask2, origin, sighted) {
   const tmux3 = await tmuxFacts(edge, hints.tmux);
   const terminal = terminalIdentity(tmux3, hints.terminalEnv);
   const [nerdFont2, processes, data] = await Promise.all([
@@ -91409,7 +91425,7 @@ async function readDoctor(edge, hints, ask2, sighted) {
       terminal: read2
     })),
     edge.daemons(),
-    segmentDataFacts(edge, ask2.needs, ask2.origin.cwd, sighted.rateLimits)
+    segmentDataFacts(edge, ask2.needs, origin.cwd, sighted.rateLimits)
   ]);
   const { bars } = sighted;
   return {
@@ -91425,7 +91441,7 @@ async function readDoctor(edge, hints, ask2, sighted) {
     claudeSettings: settingsChains(
       {
         managedDir: edge.managedSettingsDir,
-        projectDir: ask2.origin.projectDir,
+        projectDir: origin.projectDir,
         userFile: claudeSettingsPath(
           claudeConfigDir(hints.claudeConfigDir, edge.home)
         )
@@ -92780,25 +92796,17 @@ function forgeLoginOf(cli, host, nonZero, run3) {
 // src/daemon/cache/doctor.ts
 var DoctorSource = class {
   readings;
-  // [LAW:single-enforcer] One read at a time, daemon-wide: the probes of two
-  // runs share the launcher's rate-limit windows, so two at once would have
-  // one refused. A read abandoned while it waits never starts.
-  queue = Promise.resolve();
   constructor(deps) {
     this.readings = new KeyedSource({
       name: "doctor",
       scope: "session",
-      // The session and its ask: the hints are what the first declaration
-      // of a run reported, so a request that moves them reads no run again.
+      // The session and its ask: the hints and origin are what the first
+      // declaration of a run reported, so a request that moves them reads no
+      // run again.
       keyOf: ({ session, ask: ask2 }) => `${session}
 ${JSON.stringify(ask2)}`,
       fields: ({ session, ask: ask2 }) => `sid=${valueOf(session)} run=${ask2.run}`,
-      read: (input, signal) => {
-        const start = () => signal.aborted ? Promise.resolve(failed("doctor read abandoned", "read")) : readDoctorRun({ ...deps, edge: deps.edge(signal) }, input);
-        const read2 = this.queue.then(start, start);
-        this.queue = read2;
-        return read2;
-      },
+      read: (input, signal) => readDoctorRun({ ...deps, edge: deps.edge(signal) }, input),
       every: () => null,
       watch: NO_WATCH,
       maxEntries: 0,
@@ -92815,10 +92823,10 @@ ${JSON.stringify(ask2)}`,
     this.readings.close();
   }
 };
-async function readDoctorRun(deps, { session, hints, ask: ask2 }) {
+async function readDoctorRun(deps, { session, hints, origin, ask: ask2 }) {
   try {
     const said2 = deps.sightings(session, instantAt(deps.clock));
-    const machine = await readDoctor(deps.edge, hints, ask2, {
+    const machine = await readDoctor(deps.edge, hints, ask2, origin, {
       serving: { kind: "ok", value: deps.serving() },
       rateLimits: { kind: "ok", value: said2.map((s) => s.rateLimits) },
       transcripts: { kind: "ok", value: said2.map((s) => s.transcript) },

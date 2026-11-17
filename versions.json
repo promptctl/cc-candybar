@@ -4,15 +4,22 @@
     {
       "version": "pr-779",
       "ref": "refs/pull/779/merge",
-      "sha": "2826ce8641b37bb1782be22f252365f3a3c4e685",
-      "timestamp": "2026-11-17T01:30:05.040Z",
+      "sha": "7b3ecc710765cae52338e117c9cd8f55580ed4be",
+      "timestamp": "2026-11-17T01:48:04.412Z",
       "commits": [
         {
-          "sha": "2826ce8641b37bb1782be22f252365f3a3c4e685",
+          "sha": "7b3ecc710765cae52338e117c9cd8f55580ed4be",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T01:29:10Z",
-          "message": "Merge 6fa438cfb60b9dd4f8fed78b317a673290b43a21 into cace2e3245afefd551669afd6dd6c7b7b35875ba\n"
+          "timestamp": "2026-11-17T01:46:59Z",
+          "message": "Merge e019fc4bc3b112f07458288e46e10b67da23d487 into cace2e3245afefd551669afd6dd6c7b7b35875ba\n"
+        },
+        {
+          "sha": "e019fc4bc3b112f07458288e46e10b67da23d487",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T18:46:45-07:00",
+          "message": "fix(doctor): the host names where a run's session runs, and a click judges only a fresh reading (8ts)\n\nThe extra high review's findings:\n\n- The settings files a fix may write come from the session's own request:\n  the ask no longer carries an origin, so no renderer names its own write\n  allow-list.\n- The daemon-wide read queue is gone. The launcher's limit is per probe\n  kind and counts from the last launch, so serializing reads never kept a\n  run clear of it; a doctor-run click while a run is on its way starts none.\n- A fix or a mark judges a reading at most two minutes old. A reading names\n  the terminal that drew the bar when it was read, and a mark or a link\n  click is filed under it for good; an older one is read again first.\n- A new run takes the last report's rows off the bar until its own reading\n  lands, so no verdict or [fix] stands for a run no longer the session's.\n- A retire drops the session's doctor run before its view, so a teardown\n  that throws leaves no run asking for a discarded session.\n- The read's input is DoctorReadInput, apart from the reading's read arm.\n"
         },
         {
           "sha": "6fa438cfb60b9dd4f8fed78b317a673290b43a21",
