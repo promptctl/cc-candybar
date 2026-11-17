@@ -15,8 +15,10 @@
 //     Cross-references + cycle detection on the merged shape. Sole producer
 //     of ValidatedConfig. Throws ConfigError on cross-ref / cycle problems.
 //
-// loadConfig (path|null → DslConfig) wires parse+merge for the daemon's
-// production path. validateRenderable finishes the chain.
+// loadSnapshot (ConfigSnapshot → LoadedChain) wires parse+merge over every
+// layer of what discovery found, and validateRenderable finishes the chain.
+// [LAW:effects-at-boundaries] The loader opens no file: every text and every
+// fact about the disk arrives in the snapshot (config-snapshot.ts).
 //
 // [LAW:dataflow-not-control-flow] Validation passes accumulate issues into
 // a list; consumers see every problem at once (compiler-style).
@@ -25,13 +27,10 @@
 // concern lives in its own `loader/` module (split by change-reason); the
 // re-exports below keep the import surface stable for every consumer.
 
-import fs from "node:fs";
+import nodePath from "node:path";
 import JSON5 from "json5";
-import {
-  scopeOf,
-  type Locations,
-  type ConfigLayer,
-} from "./loader/discovery.js";
+import type { ConfigSnapshot, PluginFile, Stray } from "./config-snapshot.js";
+import { digestOf } from "../utils/plain.js";
 import {
   type DslConfig,
   type InsertCell,
@@ -111,22 +110,21 @@ import {
   type DroppedPlugin,
   type PluginDefinition,
   type PluginLayer,
+  DEFINITION_FILE,
+  pluginList,
 } from "./loader/plugins.js";
 import {
   ownedBy,
   type NamedDefinition,
-  type PluginScope,
   type SegmentPresence,
 } from "./loader/plugin-scope.js";
-import { installedPlugins } from "./loader/plugin-folders.js";
 import {
   presenceOf,
   reportable,
   absentPlacement,
   withoutUnplaced,
 } from "./loader/unplaced.js";
-import type { ApprovedRepo } from "./loader/repo-gate.js";
-import { type Checkout, checkoutOf } from "../utils/git-root.js";
+import type { Checkout } from "../utils/git-root.js";
 
 // ─── Public barrel ───────────────────────────────────────────────────────────
 // [LAW:locality-or-seam] Consumers import from `dsl-loader`; the internal split
@@ -164,14 +162,44 @@ export type { DroppedPlugin } from "./loader/plugins.js";
 
 // ─── Three-stage pipeline ────────────────────────────────────────────────────
 
+// No file: the bundled default, under nothing — what an empty chain
+// validates, through the same merge every layer takes.
+function noFile(dflt: DslConfig): LoadedFile & { config: DslConfig } {
+  return { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) };
+}
+
+// What one file's load needs from beyond the file: the session's checkout,
+// the definitions its `plugins` list names as discovery read them, and the
+// plugins of the layers beneath it — every drop (a name under a plugin scope
+// that no plugin owns stands in naming the unnamed ones), and which definition
+// renders each plugin name.
+export interface LoadContext extends PluginContext {
+  // [LAW:one-source-of-truth] Keyed by each entry as the file writes it; each
+  // carries the scope discovery found the file under.
+  readonly listed: Readonly<Record<string, PluginFile>>;
+  readonly beneath: {
+    readonly dropped: readonly DroppedPlugin[];
+    readonly rendering: ReadonlyMap<string, NamedDefinition>;
+  };
+}
+
+// A load with no session and nothing beneath the bundled default: a
+// `data: { checkout }` plugin drops, naming why.
+export function noProject(home: string): LoadContext {
+  return {
+    checkout: null,
+    home,
+    listed: {},
+    beneath: { dropped: [], rendering: new Map() },
+  };
+}
+
 /**
- * Load a JSON5 DSL config file from disk and merge it with the given
- * default. Returns the effective DslConfig AND the raw source text.
- *
- * `path = null` means "no user file exists" — returns `dflt` unchanged
- * (uniform merge against an empty raw, which is deep-equal to `dflt`) and
- * an empty source. No consumer branches on file presence; that branch lives
- * inside loadConfig exactly once.
+ * Parse one file's text and merge it over `dflt`. Returns the effective
+ * DslConfig AND the raw source text. `path` names the text in diagnostics and
+ * is the base its `run` actions start in; the text is the file as it reads —
+ * or as it WOULD read, for a writer that must know its text loads before it
+ * lands (config-file-store's commit).
  *
  * [LAW:one-way-deps] `dflt` is a required parameter, not a default pointing at
  * DEFAULT_DSL_CONFIG: this module is generic merge/parse machinery, and
@@ -197,63 +225,6 @@ export type { DroppedPlugin } from "./loader/plugins.js";
  *
  * Throws ConfigError on JSON5 syntax / structural / per-record validation
  * failures. Cross-references and cycles are validateRenderable()'s job.
- *
- * [LAW:dataflow-not-control-flow] One function, one branch, same operations
- * each call.
- */
-// No file: the bundled default, under nothing.
-function noFile(dflt: DslConfig): LoadedFile & { config: DslConfig } {
-  return { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) };
-}
-
-export function loadConfig(
-  path: string | null,
-  dflt: DslConfig,
-  ctx: LoadContext,
-  allowedPalettes?: ReadonlySet<string>,
-): LoadedFile & { config: DslConfig } {
-  return path === null
-    ? noFile(dflt)
-    : loadConfigSource(
-        path,
-        fs.readFileSync(path, "utf-8"),
-        dflt,
-        ctx,
-        allowedPalettes,
-      );
-}
-
-// What one file's load needs from beyond the file: the session's project, and
-// the plugins of the layers beneath it — every drop (a name under a plugin scope
-// that no plugin owns stands in naming the unnamed ones), and which definition
-// renders each plugin name.
-export interface LoadContext extends PluginContext {
-  // [LAW:one-source-of-truth] The scope of the plugins the file lists, as
-  // discovery found the file: `repo` for a repository's own config, `plugins`
-  // for every other.
-  readonly scope: PluginScope;
-  readonly beneath: {
-    readonly dropped: readonly DroppedPlugin[];
-    readonly rendering: ReadonlyMap<string, NamedDefinition>;
-  };
-}
-
-// A load with no session and nothing beneath the bundled default: a
-// `data: { checkout }` plugin drops, naming why.
-export function noProject(home: string): LoadContext {
-  return {
-    scope: "plugins",
-    repo: null,
-    checkout: null,
-    home,
-    beneath: { dropped: [], rendering: new Map() },
-  };
-}
-
-/**
- * loadConfig over text already in hand — the file as it WOULD read, for a
- * writer that must know its text loads before it lands (config-file-store's
- * commit). `path` names the text in diagnostics only.
  */
 export function loadConfigSource(
   path: string,
@@ -270,9 +241,7 @@ export function loadConfigSource(
   // A name a dropped plugin owns is a delta too: its stand-in is the base.
   const parsed = parseDslFile(path, source, allowedPalettes, (refs, names) => {
     const layer = applyPlugins(
-      // [LAW:one-source-of-truth] The layer's scope, decided where the
-      // layer was discovered, rides on every definition it lists.
-      listedPlugins(refs, path, ctx.scope, ctx.home),
+      listedPlugins(refs, path, ctx.listed),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       (c, plugin, replaces) =>
@@ -308,36 +277,40 @@ export function loadConfigSource(
 }
 
 // [LAW:one-source-of-truth] The installed layer is a function of the
-// definitions' bytes, the project, the checkout, the base and the palettes,
-// so it is memoised on exactly those: a load with nothing installed changed
-// pays one stat per definition, not one reference check per plugin.
-// Per-plugin validation stays — it is what lets one plugin drop alone.
+// definitions' bytes and folders, the checkout, the home, the base and the
+// palettes, so it is memoised on exactly those: a load with nothing installed
+// changed pays one digest of the definitions, not one reference check per
+// plugin. Per-plugin validation stays — it is what lets one plugin drop alone.
 const installedMemo = new WeakMap<
   DslConfig,
   Map<string, { readonly key: string; readonly layer: PluginLayer }>
 >();
 
 function installedLayer(
-  definitions: readonly PluginDefinition[],
+  files: readonly PluginFile[],
   ctx: PluginContext,
   dflt: DslConfig,
   allowedPalettes: ReadonlySet<string> | undefined,
 ): PluginLayer {
-  const key = JSON.stringify([
-    [...(allowedPalettes ?? [])].sort(),
-    definitions.map((d) => [d.path, d.scope, statKey(d.path)]),
-  ]);
+  const key = digestOf({
+    palettes: [...(allowedPalettes ?? [])].sort(),
+    files: files.map((f) => ({
+      path: f.path,
+      scope: f.scope,
+      definition: f.definition,
+    })),
+  });
   const byProject = installedMemo.get(dflt) ?? new Map();
   installedMemo.set(dflt, byProject);
   // Keyed on the checkout, not the working directory: every directory of one
   // checkout reads the same data, and the next load after a `.git` appears
   // above a directory reads the new checkout's. Nothing watches for that
   // `.git`: an ancestor watch per session is the cost, a reload the remedy.
-  const slot = JSON.stringify([ctx.repo, ctx.checkout?.root ?? null]);
+  const slot = JSON.stringify([ctx.checkout?.root ?? null, ctx.home]);
   const hit = byProject.get(slot);
   if (hit?.key === key) return hit.layer;
   const layer = applyPlugins(
-    definitions,
+    files,
     ctx,
     { config: dflt, rendering: new Map() },
     (c, plugin, replaces) =>
@@ -356,35 +329,35 @@ function installedLayer(
 // [LAW:single-enforcer] The install's verdict is the loader's own, so a
 // definition the bar would drop is never installed.
 export function definitionProblems(
-  definitions: readonly PluginDefinition[],
+  definitions: readonly PluginFile[],
   dflt: DslConfig,
   checkout: Checkout,
   home: string,
 ): readonly DroppedPlugin[] {
   return applyPlugins(
     definitions,
-    { repo: null, checkout, home },
+    { checkout, home },
     { config: dflt, rendering: new Map() },
     (c, plugin, replaces) =>
       checkPlugin(c, plugin, replaces, "<plugin install>", undefined),
   ).dropped;
 }
 
-// What a definition's bytes are, as cheaply as a stat says: a rewrite moves
-// its mtime, size or inode; one that cannot be seen is its own state.
-function statKey(file: string): string {
-  try {
-    const st = fs.statSync(file);
-    return `${st.ino}:${st.size}:${st.mtimeMs}`;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code ?? "unreadable";
-  }
+// The drop a loose file in a plugin root is: a plugin is a folder.
+function strayDrop({ path: file, scope }: Stray): DroppedPlugin {
+  const root = nodePath.dirname(file);
+  return {
+    path: file,
+    scope,
+    name: undefined,
+    reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${nodePath.join(root, "<name>", DEFINITION_FILE)}`,
+  };
 }
 
 /**
- * Load a resolution's chain of config files, lowest precedence first: each
- * layer merges over the config the layers below it built (the bundled
- * default at the bottom), through the very merge the bundled default takes —
+ * Load a snapshot's chain, lowest precedence first: each layer merges over
+ * the config the layers below it built (the bundled default and the installed
+ * plugins at the bottom), through the very merge the bundled default takes —
  * so a layer may declare only what differs, a segment the user declared
  * included (brandon-plugins-ktag.8th). The top layer's validation is the
  * config that renders, and the only one a good chain pays for; when it fails,
@@ -392,117 +365,92 @@ function statKey(file: string): string {
  * the first that fails is the error — so a broken file fails naming ITS path
  * and line, never the file above it.
  *
- * `read` is the one content read of each file — a writer proving the text it
- * is about to write passes that text for its own layer. `trace` hears each
- * layer's advisories before its validation runs, so a caller still holds them
- * when a layer throws; the throw itself names the file it is blamed on.
+ * [LAW:effects-at-boundaries] Every text and every fact about the disk is the
+ * snapshot's: the load opens no file, so a writer proves the text it is about
+ * to write by handing in a snapshot that holds it. `home` is what a `~` in a
+ * plugin's data path expands to. `trace` hears each layer's advisories before
+ * its validation runs, so a caller still holds them when a layer throws; the
+ * throw itself names the file it is blamed on. The snapshot's own notices are
+ * the caller's to show: the load reads none.
  *
  * [LAW:dataflow-not-control-flow] One fold; an empty chain validates the
- * bundled default through the same `loadConfig(null)` every no-file load
- * takes.
+ * bundled default through the same no-file load.
  */
-export function loadConfigChain(
-  locs: Locations,
-  chain: readonly ConfigLayer[],
+export function loadSnapshot(
+  snapshot: ConfigSnapshot,
+  home: string,
   dflt: DslConfig,
   trace: ChainTrace,
-  session: SessionDirs,
-  read: (path: string) => string = (p) => fs.readFileSync(p, "utf-8"),
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
-  const { ctx, found, plugins, base, layers } = mergeChain(
-    locs,
-    chain,
+  const { ctx, plugins, base, layers } = mergeChain(
+    snapshot,
+    home,
     dflt,
     trace,
-    session,
-    read,
     allowedPalettes,
   );
-  return validateChain(
-    ctx,
-    found,
-    plugins,
-    base,
-    layers,
-    trace,
-    allowedPalettes,
-  );
+  return validateChain(ctx, plugins, base, layers, trace, allowedPalettes);
 }
 
 /**
- * What a file over `chain` inherits: the bundled default, the installed
- * plugins and every file of `chain` merged in order — the config the next
- * layer up merges over. [LAW:one-source-of-truth] The very merge the chain
- * load runs, stopped before its validation: a lower layer merges to the same
- * config whatever sits above it, so a prefix of a real chain is never judged
- * as if it were the chain that renders.
+ * What a file over `snapshot`'s chain inherits: the bundled default, the
+ * installed plugins and every layer of the chain merged in order — the config
+ * the next layer up merges over. [LAW:one-source-of-truth] The very merge the
+ * chain load runs, stopped before its validation: a lower layer merges to the
+ * same config whatever sits above it, so a prefix of a real chain is never
+ * judged as if it were the chain that renders.
  */
 export function inheritedConfig(
-  locs: Locations,
-  chain: readonly ConfigLayer[],
+  snapshot: ConfigSnapshot,
+  home: string,
   dflt: DslConfig,
-  session: SessionDirs,
-  read: (path: string) => string,
 ): DslConfig {
-  const { base, layers } = mergeChain(
-    locs,
-    chain,
-    dflt,
-    { warned: () => {} },
-    session,
-    read,
-  );
+  const { base, layers } = mergeChain(snapshot, home, dflt, {
+    warned: () => {},
+  });
   return layers.at(-1)?.config ?? base;
 }
 
 type MergedLayers = Array<LoadedFile & { path: string; config: DslConfig }>;
 
 function mergeChain(
-  locs: Locations,
-  chain: readonly ConfigLayer[],
+  snapshot: ConfigSnapshot,
+  home: string,
   dflt: DslConfig,
   trace: ChainTrace,
-  session: SessionDirs,
-  read: (path: string) => string,
   allowedPalettes?: ReadonlySet<string>,
 ) {
-  // [LAW:single-enforcer] The one place a session's working directory
-  // becomes the checkout its plugins' data paths resolve against.
-  const ctx: PluginContext = {
-    repo: session.repo,
-    checkout: session.cwd === null ? null : checkoutOf(session.cwd),
-    home: locs.home,
-  };
+  const ctx: PluginContext = { checkout: snapshot.checkout, home };
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
   // bundled one.
-  const found = installedPlugins(locs, ctx.repo);
-  const merged = installedLayer(found.definitions, ctx, dflt, allowedPalettes);
+  const merged = installedLayer(snapshot.plugins, ctx, dflt, allowedPalettes);
   const plugins = {
     ...merged,
-    dropped: [...merged.dropped, ...found.strays],
+    dropped: [...merged.dropped, ...snapshot.strays.map(strayDrop)],
   };
-  trace.warned(
-    found.unchecked.map(
-      (u) => `Plugin folder could not be listed: ${u.path} — ${u.error}`,
-    ),
-  );
   const base = plugins.config;
   const layers: MergedLayers = [];
-  for (const { path, role } of chain) {
-    const scope = scopeOf(role);
+  for (const { path, content, listed } of snapshot.chain) {
+    // [LAW:dataflow-not-control-flow] A layer not written yet is no layer of
+    // the merge; a write creates it. [LAW:no-silent-failure] A layer that
+    // could not be read is none either: discovery's notice names it on the
+    // bar, which renders the rest until it can be read — a long-running bar
+    // must not go dark over one file — and the snapshot keeps it
+    // `unreadable`, so no write creates a file where one may already be.
+    if (content.kind !== "text") continue;
     const below = layers.at(-1)?.plugins;
     const loaded = loadConfigSource(
       path,
-      read(path),
+      content.text,
       layers.at(-1)?.config ?? base,
       {
         ...ctx,
-        // [LAW:one-source-of-truth] A layer's scope is where discovery found
-        // it, carried here as data — never read off the file's name.
-        scope,
+        // [LAW:one-source-of-truth] Each listed definition carries the scope
+        // discovery found its layer under — never read off the file's name.
+        listed,
         beneath: {
           dropped: [
             ...plugins.dropped,
@@ -516,12 +464,11 @@ function mergeChain(
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path });
   }
-  return { ctx, found, plugins, base, layers };
+  return { ctx, plugins, base, layers };
 }
 
 function validateChain(
   ctx: PluginContext,
-  found: ReturnType<typeof installedPlugins>,
   plugins: ReturnType<typeof mergeChain>["plugins"],
   base: DslConfig,
   layers: MergedLayers,
@@ -544,7 +491,6 @@ function validateChain(
   const rendering = layers.at(-1)?.plugins.rendering ?? plugins.rendering;
   const installed = {
     checkout: ctx.checkout,
-    roots: found.roots,
     loaded: plugins.loaded,
     dropped: surfaced,
     unreached,
@@ -610,13 +556,6 @@ function validateChain(
   }
 }
 
-// The session a chain loads for: its approved project, and the directory it
-// works in.
-export interface SessionDirs {
-  readonly repo: ApprovedRepo | null;
-  readonly cwd: string | null;
-}
-
 export interface ChainTrace {
   readonly warned: (warnings: readonly string[]) => void;
 }
@@ -627,15 +566,14 @@ export interface LoadedChain {
   readonly layers: ReadonlyArray<
     LoadedFile & { readonly path: string; readonly config: DslConfig }
   >;
-  // The installed plugins under every layer: the roots searched (each is
-  // watched), the definitions merged, and those dropped (also `warned`).
   // What the first file merges over: the bundled default and the installed
   // plugins — the config an absent file reads as.
   readonly base: DslConfig;
+  // The installed plugins under every layer: the definitions merged, and
+  // those dropped (also `warned`).
   readonly installed: LoadedFile["plugins"] & {
     // What a `data: { checkout }` path resolved against.
     readonly checkout: Checkout | null;
-    readonly roots: readonly string[];
     // Installed drops no layer reaches: logged, never a warning.
     readonly unreached: readonly DroppedPlugin[];
   };
@@ -669,7 +607,7 @@ export interface LoadedFile {
 // [LAW:one-source-of-truth] What validation needs from one read: the merged
 // config it promotes, and the file it was merged FROM — the raw fragments the
 // author wrote and the text they wrote them in — so a diagnostic names the
-// author's own path and line. loadConfig's result is one.
+// author's own path and line. loadConfigSource's result is one.
 export interface AuthoredConfig {
   readonly config: DslConfig;
   readonly raw: RawDslConfig;
@@ -1356,12 +1294,8 @@ function validatePluginRefs(
   ctx: ValidateCtx,
   raw: unknown,
 ): readonly string[] | undefined {
-  if (
-    Array.isArray(raw) &&
-    raw.every((p) => typeof p === "string" && p !== "")
-  ) {
-    return raw as string[];
-  }
+  const list = pluginList(raw);
+  if (list !== undefined) return list;
   ctx.issues.push({
     path: "plugins",
     message: `"plugins" must be a list of plugin definition paths, got ${describeType(raw)}`,

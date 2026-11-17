@@ -116,8 +116,7 @@ export function loadConfigOnce(
     origin.target.path,
     deps,
   );
-  const state =
-    loaded.state ?? fallbackState(origin.cwd, loaded.repos.plugins, deps);
+  const state = loaded.state ?? fallbackState(origin.cwd, loaded.found, deps);
   state.registry.dispose();
   return {
     layers: loaded.layers,

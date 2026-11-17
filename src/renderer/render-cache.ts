@@ -22,29 +22,23 @@ import type { LinkSigner } from "../click/link-signer.js";
 import type { Watches } from "./watches.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
-import {
-  repoConfigs,
-  repoConfigsDir,
-  repoConfigsPath,
-} from "../config/repo-configs.js";
+import { repoConfigsDir, repoConfigsPath } from "../config/repo-configs.js";
 import { REPO_PLUGIN_DIR } from "../config/loader/plugin-folders.js";
+import {
+  discover,
+  readShared,
+  type ConfigTargets,
+  type Discovered,
+} from "../config/loader/discover.js";
+import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { Drawing } from "../config/lanes.js";
 import type { FrameRecord } from "../render/frame-memory.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
+import type { RepoGate } from "../config/loader/repo-gate.js";
 import {
-  repoUnreadNotice,
-  type ApprovedRepo,
-  type RepoGate,
-} from "../config/loader/repo-gate.js";
-import {
-  loadConfigChain,
+  loadSnapshot,
   type LoadedChain,
   type LoadedFile,
-  resolveDslConfig,
-  writableRoles,
-  configResolutionNotice,
-  dslConfigCandidatePaths,
-  detectConfigCollisions,
   ConfigError,
   type DroppedFileError,
   type ConfigLayer,
@@ -336,20 +330,42 @@ export interface DslRenderState {
 
 // The installed roots searched (every one watched), and the definitions —
 // installed and listed — merged and dropped.
-type LoadedPlugins = LoadedChain["installed"];
+type LoadedPlugins = LoadedChain["installed"] & {
+  readonly roots: readonly string[];
+};
 
 // The files a config is merged from, lowest first, and the one durable
-// clicks write — `resolveDslConfig`'s chain, or the bundled default's empty
-// one.
+// clicks write — discovery's chain, or the bundled default's empty one.
 export interface ConfigChain {
   readonly layers: readonly ConfigLayer[];
   readonly home: string;
   // The roles of the chain a click can write.
   readonly writable: readonly LayerRole[];
-  // The session's project, once approved: where the plugins it ships live.
-  readonly repo: ApprovedRepo | null;
-  // Where the installed plugins the chain loads over live.
+  // What discovery found, which the load reads every text from.
+  readonly snapshot: ConfigSnapshot;
+  // The plugin roots discovery searched.
+  readonly roots: readonly string[];
+  // Where the user's home is, which a `~` in a plugin's data path names.
   readonly locs: Locations;
+}
+
+// [LAW:one-source-of-truth] The chain a snapshot names: the layers it holds a
+// file for, the user layer's file, and every role it can write.
+function chainOf(found: Discovered, locs: Locations): ConfigChain {
+  const { chain } = found.snapshot;
+  return {
+    // [LAW:one-source-of-truth] The files reported are the files merged: a
+    // layer not written or not read is no layer of the load.
+    layers: chain
+      .filter((l) => l.content.kind === "text")
+      .map((l) => ({ path: l.path, role: l.role })),
+    // Every chain holds the user layer: it is the one no answer gates.
+    home: chain.find((l) => l.role === "user")!.path,
+    writable: chain.map((l) => l.role),
+    snapshot: found.snapshot,
+    roots: found.targets.roots,
+    locs,
+  };
 }
 
 // [LAW:nothing-unseen] Which plugins a daemon load merged, how many variables
@@ -603,8 +619,8 @@ function authoredRoots(
   );
 }
 
-// [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
-// covers the exact set of paths the next reload would consult — an explicit
+// [LAW:single-enforcer] Discovery's own candidates, so the watcher covers the
+// exact set of paths the next reload would consult — an explicit
 // `configFile` collapses to one candidate; absent, the precedence chain unfolds
 // in full. Where each of those paths can change is the watch rule every file
 // watcher shares (`watchTargetsOf`): a dotfiles-managed config is heard
@@ -614,7 +630,10 @@ function authoredRoots(
 // (a loop, an unreadable component) is watched as far as the walk got and
 // reported in `unresolved` with the reason, so the caller can say which path
 // hears less than it should.
-function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
+function watchTargetsFor(
+  entry: CacheEntry,
+  targets: ConfigTargets,
+): PathsWatch {
   // A plugin definition is part of the config it is listed in: installing,
   // fixing or editing one reloads the config as an edit to the file would.
   const { loaded, dropped, unreached } = entry.state.plugins;
@@ -628,10 +647,7 @@ function watchTargetsFor(entry: CacheEntry, locs: Locations): PathsWatch {
   ];
   return watchTargetsOf({
     named: [
-      ...dslConfigCandidatePaths(locs, {
-        projectDir: entry.projectDir,
-        configFile: entry.configFile,
-      }),
+      ...targets.candidates,
       ...roots,
       ...loaded.map((d) => d.path),
       ...[...dropped, ...unreached].map((d) => d.path),
@@ -665,6 +681,9 @@ export type LoadOutcome = {
   readonly home: string;
   readonly repos: RepoGate;
   readonly warning: string | null;
+  // What discovery found: the snapshot a fallback draws over, and where the
+  // config can change.
+  readonly found: Discovered;
 } & (
   | {
       readonly kind: "built" | "kept";
@@ -745,7 +764,11 @@ function loadKey(inputs: LoadInputs): string {
       layers: chain.layers,
       home: chain.home,
       writable: chain.writable,
-      repo: chain.repo,
+      // Not keyed: its texts reach the state only through `loaded`, keyed
+      // below, where a whitespace or comment edit moves nothing; its paths
+      // are `layers` and `roots`.
+      snapshot: null,
+      roots: chain.roots,
       locs: chain.locs,
     } satisfies Projection<ConfigChain>,
     loaded: {
@@ -768,7 +791,6 @@ function loadKey(inputs: LoadInputs): string {
       installed: {
         ...plugins(loaded.installed),
         checkout: loaded.installed.checkout,
-        roots: loaded.installed.roots,
         unreached: loaded.installed.unreached,
       } satisfies Projection<LoadedChain["installed"]>,
       config: loaded.config,
@@ -796,23 +818,22 @@ function declaredSources(config: DslConfig): DeclaredSources {
   return sources;
 }
 
-// [LAW:single-enforcer] Read a chain from disk: each layer validated over the
-// layers it joins, so cross-ref diagnostics name the failing file's own paths
-// and lines, and every advisory a layer earns appended before its validation,
-// so a cross-ref failure still carries them (a duplicate key names its line
-// beside the error).
+// [LAW:single-enforcer] Load a chain from its snapshot: each layer validated
+// over the layers it joins, so cross-ref diagnostics name the failing file's
+// own paths and lines, and every advisory a layer earns appended before its
+// validation, so a cross-ref failure still carries them (a duplicate key
+// names its line beside the error).
 export function resolveLoad(
   cwd: string,
   chain: ConfigChain,
 ): ResolvedLoad | Failed {
   const warnings: string[] = [];
   try {
-    const loaded = loadConfigChain(
-      chain.locs,
-      chain.layers,
+    const loaded = loadSnapshot(
+      chain.snapshot,
+      chain.locs.home,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: chain.repo, cwd },
     );
     const inputs = {
       cwd,
@@ -941,7 +962,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
       ],
       plugins: {
         checkout: installed.checkout,
-        roots: installed.roots,
+        roots: chain.roots,
         // What renders, as the loader decided it: a nearer layer's load or
         // drop replaces a farther one's of the same namespace.
         loaded: [...installed.rendering.values()],
@@ -958,21 +979,14 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   };
 }
 
-// What every load of one chain shares, whatever its attempt: the advisories
-// its resolution earned.
-export interface LoadFrame {
-  readonly repos: RepoGate;
-  readonly advisories: ReadonlyArray<string | null>;
-}
-
 // [LAW:single-enforcer] The one place a load's outcome is composed, for every
-// reader (the render cache, the doctor). The warning is the
-// resolution's advisories, the resolve's, then the attempt's: a built or kept
-// state's own build warnings, or what a failed attempt earned before it threw,
-// so warnings earned before a failure reach the bar beside the error, and a
-// kept state never drops a line its build earned.
+// reader (the render cache, the doctor). The warning is discovery's notices,
+// the resolve's advisories, then the attempt's: a built or kept state's own
+// build warnings, or what a failed attempt earned before it threw, so
+// warnings earned before a failure reach the bar beside the error, and a kept
+// state never drops a line its build earned.
 export function settle(
-  frame: LoadFrame,
+  found: Discovered,
   chain: ConfigChain,
   resolveWarnings: readonly string[],
   attempt: Attempt,
@@ -981,10 +995,17 @@ export function settle(
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain.layers.map((l) => l.path),
     home: chain.home,
-    repos: frame.repos,
+    repos: found.repos,
+    found,
   };
+  // [LAW:dataflow-not-control-flow] Discovery's notices run every load,
+  // independent of load success — even if the .json5 fails to parse, the user
+  // still wants to know they have a shadowed .json sibling; an explicit path
+  // to an absent file is named whatever the default then does. The watcher
+  // already monitors every candidate path, so creating/removing a duplicate —
+  // or the named file appearing — triggers reload and re-discovery.
   const warning = (own: readonly string[]): string | null =>
-    joinWarnings([...frame.advisories, ...resolveWarnings, ...own]);
+    joinWarnings([...found.snapshot.notices, ...resolveWarnings, ...own]);
   switch (attempt.kind) {
     case "built":
     case "kept":
@@ -1013,7 +1034,7 @@ export function settle(
 // from keep it, since rebuilding it would reopen every session view and
 // restart its sources for nothing.
 function loadChain(
-  frame: LoadFrame,
+  found: Discovered,
   cwd: string,
   chain: ConfigChain,
   deps: StateDeps,
@@ -1021,7 +1042,7 @@ function loadChain(
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain);
   if (resolved.kind === "failed") {
-    return settle(frame, chain, [], resolved);
+    return settle(found, chain, [], resolved);
   }
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
@@ -1029,16 +1050,17 @@ function loadChain(
     served?.loadKey === resolved.key
       ? { kind: "kept", state: served }
       : buildRenderState(resolved, deps);
-  return settle(frame, chain, resolved.warnings, attempt);
+  return settle(found, chain, resolved.warnings, attempt);
 }
 
-// [LAW:effects-at-boundaries] One attempt at the disk: read the user's
-// answers for repositories, resolve the path, detect collisions, resolve the
-// chain and attempt a state. It touches no entry — the cache folds the
-// outcome onto a new entry (getOrCreate) or an existing one (reloadInto), so
-// the state it built is never constructed-then-discarded and the no-file
-// default is built once, not twice; `cc-candybar doctor`, which has no cache,
-// reads the outcome and disposes the state it was handed.
+// [LAW:effects-at-boundaries] One attempt at the disk: discover the origin's
+// config — the user's answers for repositories, the chain, its plugins and
+// what could not be read — then load and attempt a state from what was found.
+// It touches no entry — the cache folds the outcome onto a new entry
+// (getOrCreate) or an existing one (reloadInto), so the state it built is
+// never constructed-then-discarded and the no-file default is built once, not
+// twice; `cc-candybar doctor`, which has no cache, reads the outcome and
+// disposes the state it was handed.
 export function loadFromDisk(
   projectDir: string,
   cwd: string,
@@ -1046,50 +1068,23 @@ export function loadFromDisk(
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const resolution = resolveDslConfig(
-    deps.locations,
-    repoConfigs(deps.stateDir).read(),
-    { projectDir, configFile },
-  );
-  const { repos } = resolution;
-  // `chain` loads its layers; `missing`/`unreadable` build the bundled
-  // default — what distinguishes them is a notice, below, not a load path.
-  const chain: ConfigChain = {
-    layers: resolution.kind === "chain" ? resolution.layers : [],
-    home: resolution.home,
-    writable: writableRoles(resolution, { projectDir, configFile }),
-    repo: repos.plugins,
-    locs: deps.locations,
-  };
-  // [LAW:dataflow-not-control-flow] Advisories run every load, independent
-  // of load success — even if the .json5 fails to parse, the user still
-  // wants to know they have a shadowed .json sibling; an explicit path to
-  // an absent file is named whatever the default then does. Pure
-  // file-existence checks, so cheap. The watcher already monitors every
-  // candidate path, so creating/removing a duplicate — or the named file
-  // appearing — triggers reload and re-detection automatically; nothing
-  // else needs to invalidate this.
-  const advisories = [
-    detectConfigCollisions(deps.locations, projectDir),
-    configResolutionNotice(resolution),
-    repoUnreadNotice(repos),
-  ];
+  const found = discover({ projectDir, configFile, cwd }, readShared(deps));
   // [LAW:dataflow-not-control-flow] A failure at any step — parse,
   // registration, palette resolution — is the `failed` arm; the caller's
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
   // and its diagnostics count `lastError` and `lastWarning`.
-  return loadChain({ repos, advisories }, cwd, chain, deps, served);
+  return loadChain(found, cwd, chainOf(found, deps.locations), deps, served);
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
-// bundled default. The render cache seeds an entry with it, and
-// `cc-candybar doctor`, which has no cache, reads the same bar from it. The
-// seed's own advisories go nowhere: the bar already carries the failed
-// load's, and the default earns none by program invariant.
+// bundled default, over the plugins discovery found. The render cache seeds
+// an entry with it, and `cc-candybar doctor`, which has no cache, reads the
+// same bar from it. The seed's own advisories go nowhere: the bar already
+// carries the failed load's, and the default earns none by program invariant.
 export function fallbackState(
   cwd: string,
-  repo: ApprovedRepo | null,
+  found: Discovered,
   deps: StateDeps,
 ): DslRenderState {
   // The failed load's approved project: the seed draws the plugins it ships,
@@ -1100,7 +1095,8 @@ export function fallbackState(
     // A failed load's writes are refused until its chain loads (the writer
     // proves the whole chain), so its bar offers the one layer every chain has.
     writable: ["user"],
-    repo,
+    snapshot: { ...found.snapshot, chain: [] },
+    roots: found.targets.roots,
     locs: deps.locations,
   });
   const built =
@@ -1456,8 +1452,7 @@ export class RenderCache<
       repos: loaded.repos,
       lastError: loaded.error,
       lastWarning: loaded.warning,
-      state:
-        loaded.state ?? fallbackState(cwd, loaded.repos.plugins, this.deps),
+      state: loaded.state ?? fallbackState(cwd, loaded.found, this.deps),
       watch: null,
     };
     this.serve(entry.state);
@@ -2081,7 +2076,7 @@ export class RenderCache<
     entry.configLayers = loaded.layers;
     entry.configHome = loaded.home;
     entry.repos = loaded.repos;
-    const paths = watchTargetsFor(entry, this.deps.locations);
+    const paths = watchTargetsFor(entry, loaded.found.targets);
     const { targets, unresolved } = paths;
     // [LAW:one-source-of-truth] The key names the target set and the folders
     // it binds, so the registry's `follow` rebinds exactly when either moved.

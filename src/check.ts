@@ -28,23 +28,25 @@
 
 import { previewSigner } from "./click/link-signer.js";
 import { locations, stateDir } from "./daemon/paths.js";
-import { repoConfigs } from "./config/repo-configs.js";
-import { repoGateLines } from "./config/loader/repo-gate.js";
-import type { ConfigResolution } from "./config/loader/discovery.js";
-import fs from "node:fs";
+import { repoGateLines, type ApprovedRepo } from "./config/loader/repo-gate.js";
+import {
+  discover,
+  installedRoots,
+  layerOf,
+  readLayer,
+  readShared,
+  sessionPlugins,
+  snapshotOf,
+} from "./config/loader/discover.js";
+import type { ConfigSnapshot } from "./config/config-snapshot.js";
 import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";
 import {
-  loadConfigChain,
-  resolveDslConfig,
-  configResolutionNotice,
-  detectConfigCollisions,
+  loadSnapshot,
   ConfigError,
   refuseDrops,
   type DroppedPlugin,
-  type SessionDirs,
   type ConfigLayer,
-  homeLayer,
 } from "./config/dsl-loader.js";
 import { chainName, cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
@@ -436,31 +438,17 @@ export type CheckOutcome =
       readonly message: string;
     };
 
-// The no-target search: the daemon's own resolver over (cwd, cwd), so the
-// file this checks IS the file the daemon would load from this directory.
-// It names no explicit file, so `missing`/`unreadable` are unreachable and
-// the projection is the chain's layers — which may carry locations the
-// search could not check, and that advisory is the SAME
-// notice RenderCache renders ([LAW:one-source-of-truth]): `check` reports
-// what the bar would, never a re-derivation of it.
-function searchedLayers(
-  resolution: ConfigResolution,
-  warnings: string[],
-): readonly ConfigLayer[] {
-  const notice = configResolutionNotice(resolution);
-  if (notice !== null) warnings.push(notice);
-  return resolution.kind === "chain" ? resolution.layers : [];
-}
-
 // Run the daemon's load-and-render pipeline against one config target.
 //
-// With no target, the path resolves exactly as the daemon resolves it for a
-// client with no override (resolveDslConfig: project/cwd → XDG), so the file
-// this checks IS the file the daemon would load from this directory. The
-// CLI's own `$CC_CANDYBAR_CONFIG` enters as the target (checkCommandPlan), the way
-// the statusline client sends it as a hint — a set override always names
-// the file, so an absent one is `unreadable` here, never a clean verdict
-// about the bundled default.
+// With no target, the chain is discovered exactly as the daemon discovers it
+// for a client with no override (project/cwd → XDG), so the file this checks
+// IS the file the daemon would load from this directory, and the advisories
+// are discovery's own notices, the SAME the bar renders
+// ([LAW:one-source-of-truth]): `check` reports what the bar would, never a
+// re-derivation of it. The CLI's own `$CC_CANDYBAR_CONFIG` enters as the
+// target (checkCommandPlan), the way the statusline client sends it as a
+// hint — a set override always names the file, so an absent one is
+// `unreadable` here, never a clean verdict about the bundled default.
 //
 // [LAW:no-silent-failure] With an explicit target, the named file must exist
 // and be readable — a missing file is `unreadable`, never a fall-through to the
@@ -480,93 +468,49 @@ export async function checkConfig(
   // budget of its own instead of waiting out the command's.
   settleMs: number = SOURCE_SETTLE_MS,
 ): Promise<CheckOutcome> {
-  // Advisories accumulate from the search onward, independent of load
-  // success — mirror of RenderCache.reloadInto.
+  // Advisories accumulate from discovery onward, independent of load
+  // success — mirror of the render cache's settle.
   const warnings: string[] = [];
 
-  // [LAW:one-source-of-truth] No pre-read: the ONE content read of the config
-  // file is the readFileSync inside loadConfig. Readability is established by
-  // the same read that parses (no double I/O); the catch below classifies its
-  // errno failure as `unreadable`. The explicit-target statSync is a metadata
-  // probe at the argv trust boundary, not a second read: a directory target
-  // (`check .`) fails read() with a path-less EISDIR the catch could not
-  // attribute, so the not-a-file usage error is decided here.
-  const configPath = explicitConfigPath(cwd, target, world.host.home) ?? null;
-  // [LAW:single-enforcer] The daemon's gate, under the same answers: a
+  // [LAW:single-enforcer] The daemon's discovery, under the same answers: a
   // repository the bar would not run, `check` names and runs nothing of.
-  const locs = locations(world.host);
-  const resolution = resolveDslConfig(
-    locs,
-    repoConfigs(stateDir(world.host)).read(),
-    { projectDir: cwd, configFile: configPath ?? undefined },
+  const configPath = explicitConfigPath(cwd, target, world.host.home);
+  const { snapshot, repos } = discover(
+    { projectDir: cwd, configFile: configPath, cwd },
+    readShared({
+      locations: locations(world.host),
+      stateDir: stateDir(world.host),
+    }),
   );
-  warnings.push(...repoGateLines(resolution.repos));
-  // An explicit file that is absent or unreadable is still the chain: its
-  // read is what names the failure.
-  const layers =
-    configPath === null
-      ? searchedLayers(resolution, warnings)
-      : [homeLayer(configPath)];
-  if (configPath !== null) {
-    // throwIfNoEntry suppresses only ENOENT (left for the content read to
-    // classify); EACCES/EPERM on the probe itself is equally "could not read
-    // the named file" — same outcome, not an uncaught stack.
-    let st: fs.Stats | undefined;
-    try {
-      st = fs.statSync(configPath, { throwIfNoEntry: false });
-    } catch (e) {
-      return {
-        kind: "unreadable",
-        path: configPath,
-        message: e instanceof Error ? e.message : String(e),
-      };
-    }
-    if (st !== undefined && !st.isFile()) {
-      return {
-        kind: "unreadable",
-        path: configPath,
-        message: "not a file",
-      };
-    }
-  }
-
-  // [LAW:dataflow-not-control-flow] Collision detection runs independent of
-  // load success: even if the .json5 fails to parse, the author still wants
-  // to know a shadowed .json sibling exists.
-  const collision = detectConfigCollisions(locs, cwd);
-  if (collision !== null) warnings.push(collision);
+  // [LAW:one-source-of-truth] Readability is the one read discovery made: the
+  // named file not read — not there, a directory, behind a directory stat
+  // cannot see past — is the `unreadable` outcome, distinct from a file that
+  // read but is invalid. A searched layer not read is the bar's notice, as
+  // the daemon renders it.
+  const named = snapshot.chain.find((l) => l.path === configPath)?.content;
+  if (configPath !== undefined && named !== undefined && named.kind !== "text")
+    return {
+      kind: "unreadable",
+      path: configPath,
+      message: named.kind === "absent" ? "not found" : named.error,
+    };
+  warnings.push(...snapshot.notices, ...repoGateLines(repos));
+  const layers = snapshot.chain
+    .filter((l) => l.content.kind === "text")
+    .map((l): ConfigLayer => ({ path: l.path, role: l.role }));
 
   try {
     const rendered = await loadRegisterRender(
       world,
       gates,
-      layers,
-      { repo: resolution.repos.plugins },
+      snapshot,
       cwd,
       warnings,
       settleMs,
     );
     return { kind: "clean", layers, warnings, rendered };
   } catch (e) {
-    // A filesystem error on the config file itself (ENOENT/EACCES from
-    // loadConfig's read — errno errors carry the failing `.path`, which is the
-    // discriminator against deeper fs failures) is the `unreadable` outcome:
-    // the named file could not be read at all, distinct from a file that read
-    // but is invalid. [LAW:no-silent-failure] — never a fall-through to the
-    // bundled default. Duck-typed, not `instanceof Error`: fs errors can cross
-    // a realm boundary (jest/graceful-fs), where instanceof lies.
-    const errno = e as Partial<NodeJS.ErrnoException> | null;
-    if (
-      typeof errno === "object" &&
-      errno !== null &&
-      typeof errno.code === "string" &&
-      typeof errno.path === "string" &&
-      layers.some((l) => l.path === errno.path) &&
-      typeof errno.message === "string"
-    ) {
-      return { kind: "unreadable", path: errno.path, message: errno.message };
-    }
-    // Same classification RenderCache.reloadInto applies: ConfigError and
+    // Same classification the render cache's load applies: ConfigError and
     // register/render throws (template parse, MissingFieldError, action arity)
     // are all author-facing diagnostics — the daemon would surface each as
     // the bar's error, so check surfaces each as fatal text.
@@ -609,15 +553,21 @@ export interface PreparedConfig {
 }
 
 // The repository a chain loads with: its approved project.
-export type RepoSession = Omit<SessionDirs, "cwd">;
+export interface RepoSession {
+  readonly repo: ApprovedRepo | null;
+}
 
 // No approved project.
 export const NO_REPO: RepoSession = { repo: null };
 
+// A chain named outright, discovered as the daemon discovers one — each file
+// read, the definitions it lists, the plugins of `repo` and the checkout of
+// `cwd` — then prepared. Discovery's notices (a plugin root that cannot be
+// listed) land in `warnings` first.
 export async function prepareConfig(
   world: World,
   chain: readonly ConfigLayer[],
-  repo: RepoSession,
+  { repo }: RepoSession,
   cwd: string,
   warnings: string[],
   // The instant the view's first payload is stamped at: the one its renders
@@ -625,16 +575,33 @@ export async function prepareConfig(
   at: Instant,
   settleMs: number = SOURCE_SETTLE_MS,
 ): Promise<PreparedConfig> {
+  const locs = locations(world.host);
+  const snapshot = snapshotOf(
+    sessionPlugins(locs, installedRoots(locs), repo, cwd),
+    chain.map((l) => layerOf(l.role, l.path, readLayer(l.path), locs.home)),
+  );
+  warnings.push(...snapshot.notices);
+  return prepareSnapshot(world, snapshot, cwd, warnings, at, settleMs);
+}
+
+// [LAW:effects-at-boundaries] What discovery found, loaded and prepared: the
+// load reads every text from the snapshot.
+export async function prepareSnapshot(
+  world: World,
+  snapshot: ConfigSnapshot,
+  cwd: string,
+  warnings: string[],
+  at: Instant,
+  settleMs: number = SOURCE_SETTLE_MS,
+): Promise<PreparedConfig> {
   // Each file's own advisories (an editability notice naming a duplicate key)
   // land before its validation, so a fatal outcome still carries them.
-  const layers = chain.map((l) => l.path);
-  const loaded = loadConfigChain(
-    locations(world.host),
-    chain,
-    DEFAULT_DSL_CONFIG,
-    { warned: (w) => warnings.push(...w) },
-    { ...repo, cwd },
-  );
+  const layers = snapshot.chain
+    .filter((l) => l.content.kind === "text")
+    .map((l) => l.path);
+  const loaded = loadSnapshot(snapshot, world.host.home, DEFAULT_DSL_CONFIG, {
+    warned: (w) => warnings.push(...w),
+  });
   // [LAW:no-silent-failure] The bar draws past a placement of an undeclared
   // segment; a check refuses it, as the file's author has to fix it.
   refuseDrops(loaded.dropped);
@@ -808,8 +775,7 @@ export async function renderEffective(
 async function loadRegisterRender(
   world: World,
   gates: Gates,
-  chain: readonly ConfigLayer[],
-  repo: RepoSession,
+  snapshot: ConfigSnapshot,
   cwd: string,
   warnings: string[],
   settleMs: number,
@@ -817,10 +783,9 @@ async function loadRegisterRender(
   // [LAW:effects-at-boundaries] One instant for every pass, so the passes
   // differ only in the preset they render; one settle window for every wait.
   const at = instantOf(new Date(world.clock.now()));
-  const prepared = await prepareConfig(
+  const prepared = await prepareSnapshot(
     world,
-    chain,
-    repo,
+    snapshot,
     cwd,
     warnings,
     at,

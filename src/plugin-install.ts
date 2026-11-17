@@ -13,7 +13,8 @@ import {
   REPO_PLUGIN_DIR,
   userPluginRoot,
 } from "./config/loader/plugin-folders.js";
-import { DEFINITION_FILE, pluginDefinition } from "./config/loader/plugins.js";
+import { DEFINITION_FILE } from "./config/loader/plugins.js";
+import { readDefinition } from "./config/loader/discover.js";
 import { locations } from "./daemon/paths.js";
 import type { World } from "./host.js";
 import { type OneShotLauncher } from "./proc/launch.js";
@@ -246,7 +247,7 @@ export function installFromRepo(
     const problems = definitionProblems(
       // Installed into the user's root, where it becomes `plugins.<name>`.
       staged.map((f) =>
-        pluginDefinition(path.join(f, DEFINITION_FILE), "plugins"),
+        readDefinition(path.join(f, DEFINITION_FILE), "plugins"),
       ),
       DEFAULT_DSL_CONFIG,
       { root: repo, git: false },

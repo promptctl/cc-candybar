@@ -8,8 +8,10 @@ import path from "node:path";
 import { presence, type Unchecked } from "../../utils/presence.js";
 import { listFolders, REPO_PLUGIN_DIR } from "./plugin-folders.js";
 import { worktreeLink } from "../../utils/git-root.js";
+import type { RepoQuestion } from "../config-snapshot.js";
 import {
   gateRepos,
+  repoQuestion,
   type ApprovedRepo,
   type RepoAnswers,
   type RepoDir,
@@ -59,7 +61,7 @@ export interface ConfigQuery {
 
 // Each candidate file and the role its location gives it, highest precedence
 // first. An explicit `configFile` is the user layer and the only candidate.
-function configCandidates(
+export function configCandidates(
   locs: Locations,
   { projectDir, configFile }: ConfigQuery,
 ): ReadonlyArray<{ readonly file: string; readonly role: LayerRole }> {
@@ -220,6 +222,20 @@ export function resolveDslConfig(
   answers: RepoAnswers,
   query: ConfigQuery,
 ): ConfigResolution {
+  return searchConfig(locs, answers, query).resolution;
+}
+
+// The search, and the one repository question its directories ask.
+// [LAW:one-source-of-truth] The question is ruled from the same directories
+// and answers the gate is, in the same pass, so the two cannot disagree.
+export function searchConfig(
+  locs: Locations,
+  answers: RepoAnswers,
+  query: ConfigQuery,
+): {
+  readonly resolution: ConfigResolution;
+  readonly question: RepoQuestion | null;
+} {
   const { projectDir, configFile } = query;
   const unchecked: Unchecked[] = [];
   // Each location's file, its role, and the repository directory that
@@ -244,7 +260,11 @@ export function resolveDslConfig(
     // at one location are one, the first enumerated winning.
     // [LAW:one-source-of-truth] The on-disk spelling: on a case-insensitive
     // volume one directory reached as `Code` and `code` is one answer's key.
-    const dir = fs.realpathSync.native(path.dirname(candidate));
+    const dir = realDirOf(path.dirname(candidate));
+    if (typeof dir !== "string") {
+      unchecked.push({ path: candidate, error: dir.error });
+      continue;
+    }
     const location = path.join(
       dir,
       path.basename(candidate).replace(/\.(json5|json)$/, ""),
@@ -262,33 +282,53 @@ export function resolveDslConfig(
   const repoDirs = new Map(
     found.flatMap((f) => (f.repo === null ? [] : [[f.repo.dir, f.repo]])),
   );
-  const repos = gateRepos(
-    answers,
-    [...repoDirs.values()],
-    repoProject(projectDir),
-  );
+  const unseen: Unchecked[] = [];
+  const project = repoProject(projectDir, unseen);
+  const dirs = [...repoDirs.values()];
+  const repos = gateRepos(answers, dirs, project);
+  const question = repoQuestion(answers, dirs, project);
   const kept = found
     .filter((f) => f.repo === null || repos.approved.includes(f.repo.dir))
     .reverse();
   const layers = kept.map((f): ConfigLayer => ({ path: f.file, role: f.role }));
+  const resolved = (resolution: ConfigResolution) => ({ resolution, question });
   if (configFile === undefined) {
-    return {
+    return resolved({
       kind: "chain",
       layers,
       home: userHome(locs, layers),
-      unchecked,
+      unchecked: [...unchecked, ...unseen],
       repos,
-    };
+    });
   }
   // An explicit path is the sole candidate: its one probe is the verdict.
   const [own] = unchecked;
   const home = configFile;
   if (layers.length > 0) {
-    return { kind: "chain", layers, home, unchecked, repos };
+    return resolved({
+      kind: "chain",
+      layers,
+      home,
+      unchecked: [...unchecked, ...unseen],
+      repos,
+    });
   }
-  return own === undefined
-    ? { kind: "missing", path: configFile, home, repos }
-    : { kind: "unreadable", ...own, home, repos };
+  return resolved(
+    own === undefined
+      ? { kind: "missing", path: configFile, home, repos }
+      : { kind: "unreadable", ...own, home, repos },
+  );
+}
+
+// [LAW:no-silent-failure] A directory's real path, or why it could not be
+// had: a directory removed between its stat and this call is a location the
+// search could not check, never a throw out of discovery.
+function realDirOf(dir: string): string | Unchecked {
+  try {
+    return fs.realpathSync.native(dir);
+  } catch (e) {
+    return { path: dir, error: (e as Error).message };
+  }
 }
 
 // The user's own XDG file, at either extension: the one chain layer no
@@ -299,15 +339,22 @@ function isUserFile(locs: Locations, candidate: string): boolean {
   );
 }
 
-// The session's project, or null for none, or one that is not there.
+// The session's project, or null for none, or one that is not there. One
+// whose real path could not be had is none, and goes to `unseen`, so the
+// search's notice names it.
 export function repoProject(
   projectDir: string | undefined,
+  unseen: Unchecked[] = [],
 ): RepoProject | null {
   if (projectDir === undefined || presence(projectDir) !== "present") {
     return null;
   }
   const listed = listFolders(path.join(projectDir, REPO_PLUGIN_DIR));
-  const dir = fs.realpathSync.native(projectDir);
+  const dir = realDirOf(projectDir);
+  if (typeof dir !== "string") {
+    unseen.push(dir);
+    return null;
+  }
   return {
     dir,
     link: worktreeLink(dir),
@@ -385,10 +432,7 @@ export function writeLayers(
 ): Readonly<Record<LayerRole, LayerWrite>> {
   const resolved = resolveDslConfig(locs, answers, query);
   const layers = resolved.kind === "chain" ? resolved.layers : [];
-  const places = LAYER_ROLES.flatMap((role): ConfigLayer[] => {
-    const place = placeOf(resolved, layers, query, role);
-    return place.kind === "at" ? [{ path: place.path, role }] : [];
-  });
+  const places = chainPlaces(resolved, query);
   const writeOf = (role: LayerRole): LayerWrite => {
     const place = placeOf(resolved, layers, query, role);
     if (place.kind === "refused") return place;
@@ -442,10 +486,21 @@ export function writableRoles(
   resolved: ConfigResolution,
   query: ConfigQuery,
 ): readonly LayerRole[] {
+  return chainPlaces(resolved, query).map((l) => l.role);
+}
+
+// [LAW:one-source-of-truth] Each role the session's chain can write, lowest
+// first, at the file a write there lands in: the placement every write
+// resolves, so discovery's chain holds exactly the layers a click can write.
+export function chainPlaces(
+  resolved: ConfigResolution,
+  query: ConfigQuery,
+): readonly ConfigLayer[] {
   const layers = resolved.kind === "chain" ? resolved.layers : [];
-  return LAYER_ROLES.filter(
-    (role) => placeOf(resolved, layers, query, role).kind === "at",
-  );
+  return LAYER_ROLES.flatMap((role): ConfigLayer[] => {
+    const place = placeOf(resolved, layers, query, role);
+    return place.kind === "at" ? [{ path: place.path, role }] : [];
+  });
 }
 
 /**

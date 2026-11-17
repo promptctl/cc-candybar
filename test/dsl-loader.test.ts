@@ -13,11 +13,13 @@ import {
   ConfigError,
   templateReads,
   findKeyLine,
-  loadConfig,
   parseDslConfig,
   mergeWithDefault,
   validateRenderable,
+  loadSnapshot,
 } from "../src/config/dsl-loader";
+import type { ConfigSnapshot } from "../src/config/config-snapshot";
+import { loadFile } from "./helpers/discovered-load";
 import { presenceOf } from "../src/config/loader/unplaced";
 import { SETTINGS_ANCHOR } from "../src/config/door";
 import {
@@ -2461,7 +2463,7 @@ describe("findKeyLine", () => {
 // before any click — and the two cannot disagree, because the editor's scanner
 // is the one detector.
 
-describe("loadConfig — editability advisory", () => {
+describe("a file's load — editability advisory", () => {
   let dir: string;
   beforeAll(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-loader-dup-"));
@@ -2485,11 +2487,7 @@ describe("loadConfig — editability advisory", () => {
 
   test("a duplicate key loads with the last value and earns one advisory naming the file, key and line", () => {
     const file = write("dup.json5", DUPLICATE);
-    const { config, warnings } = loadConfig(
-      file,
-      DEFAULT_DSL_CONFIG,
-      NO_PROJECT,
-    );
+    const { config, warnings } = loadFile(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
     expect(config.globals.padding).toBe(2);
     expect(warnings).toEqual([
       `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
@@ -2509,22 +2507,18 @@ describe("loadConfig — editability advisory", () => {
   test("a document the editor accepts earns no advisory", () => {
     const clean = `{ globals: { padding: 1 } }`;
     const file = write("clean.json5", clean);
-    expect(loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual(
-      [],
-    );
+    expect(loadFile(file, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual([]);
     expect(setValue(clean, ["globals", "padding"], "3", JSON5_DIALECT)).toBe(
       `{ globals: { padding: 3 } }`,
     );
   });
 
   test("no file earns no advisory", () => {
-    expect(loadConfig(null, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual(
-      [],
-    );
+    expect(loadFile(null, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual([]);
   });
 });
 
-describe("loadConfig — the advisory survives a structural failure", () => {
+describe("a file's load — the advisory survives a structural failure", () => {
   let dir: string;
   beforeAll(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-loader-dup-fatal-"));
@@ -2552,7 +2546,7 @@ describe("loadConfig — the advisory survives a structural failure", () => {
     );
     let caught: unknown;
     try {
-      loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
+      loadFile(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
     } catch (e) {
       caught = e;
     }
@@ -2568,7 +2562,7 @@ describe("loadConfig — the advisory survives a structural failure", () => {
     const file = write("syntax.json5", `{ globals: { padding: 1, padding: `);
     let caught: unknown;
     try {
-      loadConfig(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
+      loadFile(file, DEFAULT_DSL_CONFIG, NO_PROJECT);
     } catch (e) {
       caught = e;
     }
@@ -2691,5 +2685,43 @@ describe("a dropped placement's prompt", () => {
     expect(prompt).toContain(message);
     expect(prompt).toContain("/r/lit/plugin.json5");
     expect(prompt).toContain("Edit only the config file");
+  });
+});
+
+describe("a snapshot's listed definitions", () => {
+  // [LAW:no-silent-failure] The loader reads a plugin only from what discovery
+  // handed it: an entry the layer lists that discovery did not read is the
+  // load's error, naming the entry and the file that lists it.
+  test("an entry missing from the layer's listed definitions is a ConfigError naming it and the layer", () => {
+    const file = "/home/u/.config/cc-candybar/config.json5";
+    const snapshot: ConfigSnapshot = {
+      chain: [
+        {
+          role: "user",
+          path: file,
+          content: { kind: "text", text: `{ plugins: ["./p/plugin.json5"] }` },
+          listed: {},
+        },
+      ],
+      repo: null,
+      plugins: [],
+      strays: [],
+      checkout: null,
+      notices: [],
+      watch: null,
+    };
+    let caught: unknown;
+    try {
+      loadSnapshot(snapshot, "/home/u", DEFAULT_DSL_CONFIG, {
+        warned: () => {},
+      });
+    } catch (e) {
+      caught = e;
+    }
+    if (!(caught instanceof ConfigError))
+      throw new Error("expected ConfigError");
+    expect(caught.file).toBe(file);
+    expect(caught.message).toContain(`"./p/plugin.json5"`);
+    expect(caught.message).toContain(file);
   });
 });

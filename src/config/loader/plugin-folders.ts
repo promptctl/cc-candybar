@@ -5,12 +5,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import {
-  DEFINITION_FILE,
-  pluginDefinition,
-  type DroppedPlugin,
-  type PluginDefinition,
-} from "./plugins.js";
 import type { PluginScope } from "./plugin-scope.js";
 import type { Locations } from "./discovery.js";
 import type { Unchecked } from "../../utils/presence.js";
@@ -66,65 +60,9 @@ export function userPluginRoot(locs: Locations): string {
 // `cc-candybar plugin install` installs from.
 export const REPO_PLUGIN_DIR = path.join(".cc-candybar", "plugins");
 
-export interface InstalledPlugins {
-  // The roots searched, lowest first — every one is watched, so a plugin
-  // installed into any of them, or a root created, reloads.
-  readonly roots: readonly string[];
-  // One definition per plugin namespace, the nearest root's, in root order.
-  readonly definitions: readonly PluginDefinition[];
-  // Roots a listing could not see into (anything but absence).
-  readonly unchecked: readonly Unchecked[];
-  // Files sitting directly in a root: a plugin is a folder, so each is a drop
-  // naming where it belongs.
-  readonly strays: readonly DroppedPlugin[];
-}
-
-// [LAW:types-are-the-program] A root that does not exist holds no plugins;
-// one that cannot be listed is a fact the caller reports, never absence.
-export function installedPlugins(
-  locs: Locations,
-  repo: ApprovedRepo | null,
-): InstalledPlugins {
-  const roots = pluginRoots(locs, repo);
-  // [LAW:single-enforcer] The one place same-scope precedence applies: keyed
-  // by namespace, so a repo's `lit` and an installed `lit` both survive.
-  const byNs = new Map<string, PluginDefinition>();
-  const unchecked: Unchecked[] = [];
-  const strays: DroppedPlugin[] = [];
-  for (const { dir: root, scope } of roots) {
-    const listed = listFolders(root);
-    if ("error" in listed) {
-      unchecked.push(listed);
-      continue;
-    }
-    for (const name of listed.folders) {
-      const definition = pluginDefinition(
-        path.join(root, name, DEFINITION_FILE),
-        scope,
-      );
-      // Keyed by scope and folder alike for a folder whose name is no
-      // plugin's: it still loads, once, and drops naming why.
-      const key = `${scope}\0${name}`;
-      byNs.delete(key);
-      byNs.set(key, definition);
-    }
-    for (const file of listed.files) {
-      strays.push({
-        path: path.join(root, file),
-        scope,
-        name: undefined,
-        reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${path.join(root, "<name>", DEFINITION_FILE)}`,
-      });
-    }
-  }
-  return {
-    roots: roots.map((r) => r.dir),
-    definitions: [...byNs.values()],
-    unchecked,
-    strays,
-  };
-}
-
+// A root's entries: the folders in it, each a plugin's, and the loose files,
+// each a drop naming where it belongs. A root that is not there holds
+// nothing; one that cannot be listed is the `Unchecked` it is, never absence.
 export function listFolders(
   root: string,
 ):

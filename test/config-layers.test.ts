@@ -9,8 +9,14 @@ import type { Host, World } from "../src/host";
 import { locations } from "../src/daemon/paths";
 import os from "node:os";
 import path from "node:path";
-import { checkConfig, NO_REPO, prepareConfig, type CheckOutcome } from "../src/check";
-import { homeLayer, loadConfigChain, writeLayer } from "../src/config/dsl-loader";
+import {
+  checkConfig,
+  NO_REPO,
+  prepareConfig,
+  type CheckOutcome,
+} from "../src/check";
+import { homeLayer, writeLayer } from "../src/config/dsl-loader";
+import { loadChain } from "./helpers/discovered-load";
 import type { LayerRole } from "../src/config/layer-role";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
@@ -66,7 +72,6 @@ function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
   return o;
 }
 
-
 // The layer of `role` a click in the project writes, under the answers the
 // bar reads.
 const projectLayer = (role: LayerRole = "user") => {
@@ -87,14 +92,23 @@ test("a project file that places one segment renders over the user's whole confi
     projectFile,
     `{ segments: { proj: { template: "PROJSEG" } }, root: { h: ["mine", "proj"] } }`,
   );
-  const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+  const outcome = clean(
+    await checkConfig(world, daemonGates(), undefined, project),
+  );
   expect(outcome.layers).toEqual([
     { path: userFile, role: "user" },
     { path: projectFile, role: "project" },
   ]);
   expect(textOf(outcome.rendered)).toContain("USERSEG");
   expect(textOf(outcome.rendered)).toContain("PROJSEG");
-  const prepared = await prepareConfig(world, outcome.layers, NO_REPO, project, [], instantOf(new Date()));
+  const prepared = await prepareConfig(
+    world,
+    outcome.layers,
+    NO_REPO,
+    project,
+    [],
+    instantOf(new Date()),
+  );
   try {
     expect(prepared.config.globals.menuGlyph).toBe("U");
   } finally {
@@ -112,7 +126,19 @@ test("a layer that does not load fails naming its own file", async () => {
 test("a durable click writes the user's file, never the project's", () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["mine"] } }`);
   const home = projectLayer();
-  expect(home).toEqual({ kind: "layer", path: userFile, role: "user", below: [], above: [{ path: projectFile, role: "project" }, { path: path.join(project, ".cc-candybar.local.json5"), role: "local" }], repo: project, cwd: project, locs: locations(host) });
+  expect(home).toEqual({
+    kind: "layer",
+    path: userFile,
+    role: "user",
+    below: [],
+    above: [
+      { path: projectFile, role: "project" },
+      { path: path.join(project, ".cc-candybar.local.json5"), role: "local" },
+    ],
+    repo: project,
+    cwd: project,
+    locs: locations(host),
+  });
   writeValues(EDITS_IN_PLACE, home, [["palette", "nord"]]);
   expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
   expect(fs.readFileSync(projectFile, "utf8")).not.toContain("nord");
@@ -164,12 +190,17 @@ describe("a write to a layer above the user's", () => {
   const localFile = () => path.join(project, ".cc-candybar.local.json5");
 
   test("a layout edit finds the user's row and copies it, not the bundled one", () => {
-    applyLayoutOp(EDITS_IN_PLACE, projectLayer("project"), "presets.default.root", {
-      op: "insert",
-      segment: "model",
-      anchor: "mine",
-      relation: "after",
-    });
+    applyLayoutOp(
+      EDITS_IN_PLACE,
+      projectLayer("project"),
+      "presets.default.root",
+      {
+        op: "insert",
+        segment: "model",
+        anchor: "mine",
+        relation: "after",
+      },
+    );
     const written = fs.readFileSync(projectFile, "utf8");
     expect(written).toContain("mine");
     expect(written).toContain("model");
@@ -181,7 +212,14 @@ describe("a write to a layer above the user's", () => {
       userFile,
       `{ segments: { mine: { template: "USERSEG" } }, presets: { own: { root: { h: ["mine"] } } } }`,
     );
-    const name = writePreset(EDITS_IN_PLACE, projectLayer("local"), "own", {}, [], []);
+    const name = writePreset(
+      EDITS_IN_PLACE,
+      projectLayer("local"),
+      "own",
+      {},
+      [],
+      [],
+    );
     const written = fs.readFileSync(localFile(), "utf8");
     expect(written).toContain(name);
     expect(written).toContain("mine");
@@ -190,7 +228,14 @@ describe("a write to a layer above the user's", () => {
   test("save-as-preset never mints a name the user's file declares", () => {
     fs.writeFileSync(userFile, `{ presets: { "custom-1": {} } }`);
     expect(
-      writePreset(EDITS_IN_PLACE, projectLayer("project"), "default", {}, [], []),
+      writePreset(
+        EDITS_IN_PLACE,
+        projectLayer("project"),
+        "default",
+        {},
+        [],
+        [],
+      ),
     ).toBe("custom-2");
   });
 
@@ -217,7 +262,9 @@ describe("a write to a layer above the user's", () => {
   test("a write over a layer beneath that does not load is refused, naming why", () => {
     fs.writeFileSync(userFile, `{ globals: { menuGlyph: `);
     expect(() =>
-      writeValues(EDITS_IN_PLACE, projectLayer("project"), [["menuGlyph", "P"]]),
+      writeValues(EDITS_IN_PLACE, projectLayer("project"), [
+        ["menuGlyph", "P"],
+      ]),
     ).toThrow(/^refused: a layer beneath .* does not load/);
   });
 
@@ -240,7 +287,11 @@ test("the user's file is a layer even when the session's project is its director
   const local = path.join(xdgDir, ".cc-candybar.json5");
   fs.writeFileSync(local, `{}`);
   answerRepo(xdgDir);
-  const resolved = resolveDslConfig(locations(host), repoConfigs(stateDir(host)).read(), { projectDir: xdgDir });
+  const resolved = resolveDslConfig(
+    locations(host),
+    repoConfigs(stateDir(host)).read(),
+    { projectDir: xdgDir },
+  );
   expect(resolved.kind === "chain" && resolved.layers).toEqual([
     { path: userFile, role: "user" },
     { path: local, role: "project" },
@@ -266,7 +317,10 @@ test("a first durable write with no user file succeeds beside an installed plugi
     fs.rmSync(userFile);
     const def = path.join(dir, "data/cc-candybar/plugins/deploy/plugin.json5");
     fs.mkdirSync(path.dirname(def), { recursive: true });
-    fs.writeFileSync(def, `{ data: "./d.json", segments: { status: { template: "x" } } }`);
+    fs.writeFileSync(
+      def,
+      `{ data: "./d.json", segments: { status: { template: "x" } } }`,
+    );
     fs.writeFileSync(projectFile, `{ root: { h: ["plugins.deploy.status"] } }`);
     writeValues(EDITS_IN_PLACE, projectLayer(), [["palette", "nord"]]);
     expect(fs.readFileSync(userFile, "utf8")).toContain("nord");
@@ -301,8 +355,11 @@ describe("a project layer inserting into the user's row", () => {
   const presetWarnings = (warnings: readonly string[], preset: string) =>
     warnings.filter((w) => missedTrees(w).includes(`preset "${preset}"`));
   const presetTree = async (preset: string) => {
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
-    const prepared = await prepareConfig(world, 
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
+    const prepared = await prepareConfig(
+      world,
       outcome.layers,
       NO_REPO,
       project,
@@ -310,8 +367,9 @@ describe("a project layer inserting into the user's row", () => {
       instantOf(new Date()),
     );
     try {
-      return [...walkNodes(fragmentNode(prepared.config.presets[preset]!.root!))]
-        .flatMap((n) => (n.kind === "segment" ? [n.name] : []));
+      return [
+        ...walkNodes(fragmentNode(prepared.config.presets[preset]!.root!)),
+      ].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
     } finally {
       prepared.registry.dispose();
     }
@@ -323,7 +381,9 @@ describe("a project layer inserting into the user's row", () => {
       `, theirs: { template: "THEIRSEG" } }, presets: { mine2: { root: { h: ["mine", "theirs"] } }`,
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(presetWarnings(outcome.warnings, "mine2")).toEqual([]);
     expect(
       (await presetTree("mine2")).filter((n) => n === "theirs"),
@@ -333,35 +393,48 @@ describe("a project layer inserting into the user's row", () => {
   test("an anchor only a preset holds is placed in that preset, with no warning for it", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "burnrate" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(presetWarnings(outcome.warnings, "verbose")).toEqual([]);
     const verbose = await presetTree("verbose");
-    expect(verbose.indexOf("theirs")).toBeGreaterThan(verbose.indexOf("burnrate"));
+    expect(verbose.indexOf("theirs")).toBeGreaterThan(
+      verbose.indexOf("burnrate"),
+    );
     expect(verbose.indexOf("burnrate")).toBeGreaterThanOrEqual(0);
   });
 
   test("a whole-tree preset draws the cell when it holds the anchor, and warns naming itself when it does not", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", before: "directory" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(presetWarnings(outcome.warnings, "compact")).toEqual([]);
     const compact = await presetTree("compact");
     expect(compact.indexOf("theirs")).toBeGreaterThanOrEqual(0);
-    expect(compact.indexOf("theirs")).toBeLessThan(compact.indexOf("directory"));
+    expect(compact.indexOf("theirs")).toBeLessThan(
+      compact.indexOf("directory"),
+    );
   });
 
   test("a bundled-only preset that lacks the anchor does not warn; one the user authors does", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
-    const bundled = clean(await checkConfig(world, daemonGates(), undefined, project)).warnings;
-    expect(bundled.filter((w) => missedTrees(w).includes("preset "))).toEqual([]);
+    const bundled = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    ).warnings;
+    expect(bundled.filter((w) => missedTrees(w).includes("preset "))).toEqual(
+      [],
+    );
     expect(warnedFor(bundled, "insert.0")).toEqual([]);
     userRow(
       `{ rows: { status: { h: ["mine", "other"] } } }`,
       ` }, presets: { compact: { root: { h: ["other"] } }`,
     );
     const missed = presetWarnings(
-      clean(await checkConfig(world, daemonGates(), undefined, project)).warnings,
+      clean(await checkConfig(world, daemonGates(), undefined, project))
+        .warnings,
       "compact",
     );
     expect(missed).toHaveLength(1);
@@ -373,8 +446,15 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     const before = fs.readFileSync(userFile, "utf8");
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
-    const [u, t, o] = order(outcome.rendered, "USERSEG", "THEIRSEG", "OTHERSEG");
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
+    const [u, t, o] = order(
+      outcome.rendered,
+      "USERSEG",
+      "THEIRSEG",
+      "OTHERSEG",
+    );
     expect(u).toBeGreaterThanOrEqual(0);
     expect(u).toBeLessThan(t!);
     expect(t).toBeLessThan(o!);
@@ -386,7 +466,9 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     answerRepo(project, "declined");
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(textOf(outcome.rendered)).toContain("USERSEG");
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
     expect(warnedFor(outcome.warnings, projectFile)).toEqual([]);
@@ -395,7 +477,9 @@ describe("a project layer inserting into the user's row", () => {
   test("an anchor the bar does not have is a warning naming the file, the cell and the anchor", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "nope" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(textOf(outcome.rendered)).toContain("USERSEG");
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
     const warned = warnedFor(outcome.warnings, "insert.0");
@@ -411,7 +495,9 @@ describe("a project layer inserting into the user's row", () => {
       `, theirs: { template: "THEIRSEG" }`,
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(2);
     expect(warnedFor(outcome.warnings, "insert.0")).toEqual([]);
   });
@@ -421,7 +507,9 @@ describe("a project layer inserting into the user's row", () => {
       `{ rows: { status: { h: ["mine", { seg: "other", id: "theirs" }] } } }`,
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(textOf(outcome.rendered)).toContain("OTHERSEG");
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
     const warned = warnedFor(outcome.warnings, "insert.0");
@@ -434,8 +522,15 @@ describe("a project layer inserting into the user's row", () => {
   test("a whole-tree user root is addressed by placement id the same way", async () => {
     userRow(`{ h: ["mine", "other"] }`);
     writeProject(`[{ seg: "theirs", before: "other" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
-    const [u, t, o] = order(outcome.rendered, "USERSEG", "THEIRSEG", "OTHERSEG");
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
+    const [u, t, o] = order(
+      outcome.rendered,
+      "USERSEG",
+      "THEIRSEG",
+      "OTHERSEG",
+    );
     expect(u).toBeGreaterThanOrEqual(0);
     expect(u).toBeLessThan(t!);
     expect(t).toBeLessThan(o!);
@@ -447,8 +542,15 @@ describe("a project layer inserting into the user's row", () => {
       `[{ seg: "theirs", before: "mine" }, { seg: "second", after: "theirs" }]`,
       `theirs: { template: "THEIRSEG" }, second: { template: "SECONDSEG" }`,
     );
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
-    const [t, s, u] = order(outcome.rendered, "THEIRSEG", "SECONDSEG", "USERSEG");
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
+    const [t, s, u] = order(
+      outcome.rendered,
+      "THEIRSEG",
+      "SECONDSEG",
+      "USERSEG",
+    );
     expect(t).toBeGreaterThanOrEqual(0);
     expect(t).toBeLessThan(s!);
     expect(s).toBeLessThan(u!);
@@ -457,8 +559,11 @@ describe("a project layer inserting into the user's row", () => {
   test("edit mode offers no edit on an inserted cell and labels it with the file that placed it", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", before: "mine" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
-    const prepared = await prepareConfig(world, 
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
+    const prepared = await prepareConfig(
+      world,
       outcome.layers,
       NO_REPO,
       project,
@@ -509,21 +614,24 @@ describe("a project layer inserting into the user's row", () => {
   // The bar's own load of the chain: what it draws, and what it dropped.
   const barLoad = () => {
     const warnings: string[] = [];
-    const loaded = loadConfigChain(locations(host), 
+    const loaded = loadChain(
       [homeLayer(userFile), { path: projectFile, role: "project" }],
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
-      { repo: null, cwd: project },
+      { locs: locations(host), cwd: project },
     );
     const drawn = (preset: string) =>
-      [...walkNodes(fragmentNode(loaded.config.presets[preset]!.root!))]
-        .flatMap((n) => (n.kind === "segment" ? [n.name] : []));
+      [
+        ...walkNodes(fragmentNode(loaded.config.presets[preset]!.root!)),
+      ].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
     return { ...loaded, warnings, drawn };
   };
 
   test("a repo's cell naming no declared segment is dropped and blamed on the repo's entry; the rest draws", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
-    writeProject(`[{ seg: "ghost", after: "mine" }, { seg: "theirs", after: "other" }]`);
+    writeProject(
+      `[{ seg: "ghost", after: "mine" }, { seg: "theirs", after: "other" }]`,
+    );
     const { dropped, drawn } = barLoad();
     expect(dropped.map((e) => [e.file, e.issues.map((i) => i.path)])).toEqual([
       [projectFile, ["insert.0"]],
@@ -571,12 +679,15 @@ describe("a project layer inserting into the user's row", () => {
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const { config } = barLoad();
     const labels = (preset: string) =>
-      [...walkNodes(fragmentNode(config.presets[preset]!.root!))].flatMap((n) =>
-        n.kind === "segment" && n.name.startsWith("edit.label:theirs")
-          ? [config.segments[n.name]!.template]
-          : [],
+      [...walkNodes(fragmentNode(config.presets[preset]!.root!))].flatMap(
+        (n) =>
+          n.kind === "segment" && n.name.startsWith("edit.label:theirs")
+            ? [config.segments[n.name]!.template]
+            : [],
       );
-    expect(labels("default")).toEqual([`{{ "theirs · ${path.basename(project)}/.cc-candybar.json5 insert.0" }}`]);
+    expect(labels("default")).toEqual([
+      `{{ "theirs · ${path.basename(project)}/.cc-candybar.json5 insert.0" }}`,
+    ]);
     expect(labels("mine2")).toEqual([`{{ "theirs" }}`]);
     // The label names the file by its directory and name, never the whole
     // path, which would outrun the bar.
@@ -607,9 +718,9 @@ describe("a project layer inserting into the user's row", () => {
       ` }, presets: { compact: { root: { h: ["other"] } }, wide: { root: { h: ["mine"] } }`,
     );
     writeProject(`[{ seg: "theirs", after: "nope" }]`);
-    const warned = clean(await checkConfig(world, daemonGates(), undefined, project)).warnings.filter(
-      (w) => w.includes("insert.0"),
-    );
+    const warned = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    ).warnings.filter((w) => w.includes("insert.0"));
     expect(warned).toHaveLength(1);
     expect(missedTrees(warned[0]!)).toBe(
       'the root, preset "compact", preset "wide"',
@@ -634,7 +745,9 @@ describe("a project layer inserting into the user's row", () => {
       `, theirs: { template: "THEIRSEG" }`,
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(2);
     expect(outcome.warnings.filter((w) => w.includes("insert.0"))).toEqual([]);
   });
@@ -645,7 +758,9 @@ describe("a project layer inserting into the user's row", () => {
       `, theirs: { template: "THEIRSEG" }`,
     );
     writeProject(`[{ seg: "theirs", id: "t2", after: "mine" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(3);
   });
 
@@ -655,7 +770,9 @@ describe("a project layer inserting into the user's row", () => {
       `{ segments: { mine: { template: "USERSEG" } } }`,
     );
     writeProject(`[{ seg: "theirs", after: "nope" }]`);
-    const outcome = clean(await checkConfig(world, daemonGates(), undefined, project));
+    const outcome = clean(
+      await checkConfig(world, daemonGates(), undefined, project),
+    );
     expect(warnedFor(outcome.warnings, "insert.0")).toEqual([]);
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
   });
@@ -674,7 +791,10 @@ describe("a project layer inserting into the user's row", () => {
         root: { rows: { status: { h: ["mine", { seg: "m", id: "p-q" }] } } },
       }`,
     );
-    writeProject(`[{ seg: "m", id: "p_q", after: "mine" }]`, `x: { template: "X" }`);
+    writeProject(
+      `[{ seg: "m", id: "p_q", after: "mine" }]`,
+      `x: { template: "X" }`,
+    );
     const { drawn, warnings } = barLoad();
     expect(drawn("default").filter((n) => n === "m")).toHaveLength(1);
     expect(drawn("default")).toContain("mine");

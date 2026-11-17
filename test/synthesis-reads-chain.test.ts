@@ -8,11 +8,11 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { homeLayer, loadConfigChain } from "../src/config/dsl-loader";
+import { homeLayer } from "../src/config/dsl-loader";
+import { loadChain } from "./helpers/discovered-load";
 import { placementIds } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
 import { rootNode } from "../src/config/root";
-import { locs } from "./helpers/host";
 import { jestTmpDir } from "./helpers/jest-tmp";
 import { synthesisReads, unresolvedReads } from "./helpers/synthesis-reads";
 
@@ -30,12 +30,10 @@ describe("unresolvedReads over the loader's own chain", () => {
       writeFileSync(join(tmp, name), text);
     }
     const warnings: string[] = [];
-    const loaded = loadConfigChain(
-      locs(),
+    const loaded = loadChain(
       layers.map((name) => homeLayer(join(tmp, name))),
       DEFAULT_DSL_CONFIG,
       { warned: (ws) => warnings.push(...ws) },
-      { repo: null, cwd: null },
     );
     return { ...loaded, warnings };
   };

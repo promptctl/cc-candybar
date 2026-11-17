@@ -29,11 +29,19 @@ import JSON5 from "json5";
 import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import {
   inheritedConfig,
-  loadConfigChain,
+  loadSnapshot,
   type ConfigLayer,
   type WriteLayer,
   type LoadedChain,
 } from "../config/dsl-loader.js";
+import {
+  installedRoots,
+  layerOf,
+  sessionPlugins,
+  snapshotOf,
+  type SessionPlugins,
+} from "../config/loader/discover.js";
+import type { ConfigSnapshot, Layer } from "../config/config-snapshot.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
   DslConfig,
@@ -436,11 +444,16 @@ export interface EditStore {
 // created reads as the click left it, and one it holds no text for is no
 // layer. A click writes several files (a `do` across layers, an undo step), and
 // each write is proved against the chain the click leaves, never the disk's.
+// [LAW:effects-at-boundaries] Each held text is discovered as the render
+// discovers its file — the definitions it lists read, the session's plugins
+// listed once per write — so the loader proves a write from what discovery
+// handed it, opening no file.
 interface Seen extends WriteLayer {
   readonly below: readonly HeldLayer[];
   readonly above: readonly HeldLayer[];
+  readonly session: SessionPlugins;
 }
-type HeldLayer = ConfigLayer & { readonly text: string };
+type HeldLayer = Layer & { readonly text: string };
 
 function seenBy(
   layer: WriteLayer,
@@ -449,16 +462,38 @@ function seenBy(
   const held = (layers: readonly ConfigLayer[]): HeldLayer[] =>
     layers.flatMap((l) => {
       const text = read(l.path);
-      return text === null ? [] : [{ ...l, text }];
+      return text === null ? [] : [heldLayer(layer, l, text)];
     });
-  return { ...layer, below: held(layer.below), above: held(layer.above) };
+  return {
+    ...layer,
+    below: held(layer.below),
+    above: held(layer.above),
+    session: sessionPlugins(
+      layer.locs,
+      installedRoots(layer.locs),
+      layer.repo,
+      layer.cwd,
+    ),
+  };
 }
 
-// The loader's read over a chain of held layers: every path it asks for is
-// one of theirs.
-function textsOf(layers: readonly HeldLayer[]): (path: string) => string {
-  const texts = new Map(layers.map((l) => [l.path, l.text]));
-  return (path) => texts.get(path)!;
+function heldLayer(
+  { locs }: WriteLayer,
+  { role, path }: ConfigLayer,
+  text: string,
+): HeldLayer {
+  return {
+    ...layerOf(role, path, { kind: "text", text }, locs.home),
+    text,
+  };
+}
+
+// The snapshot of a chain of held layers over the click's session.
+function heldSnapshot(
+  into: Seen,
+  layers: readonly HeldLayer[],
+): ConfigSnapshot {
+  return snapshotOf(into.session, layers);
 }
 
 // [LAW:one-source-of-truth] Every tracked write lands here, once, as the
@@ -557,11 +592,9 @@ function loadedOrNull(into: Seen, text: string | null): LoadedChain | null {
 function inheritedOf(into: Seen): DslConfig {
   try {
     return inheritedConfig(
-      into.locs,
-      into.below,
+      heldSnapshot(into, into.below),
+      into.locs.home,
       DEFAULT_DSL_CONFIG,
-      { repo: into.repo, cwd: into.cwd },
-      textsOf(into.below),
     );
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
@@ -572,21 +605,20 @@ function inheritedOf(into: Seen): DslConfig {
 }
 
 // The chain the written layer's text — or its absence — loads to, between
-// the layers the click holds, exactly as resolveDslConfig orders it: an
-// existing file is a layer whatever it holds.
+// the layers the click holds, exactly as discovery orders it: an existing
+// file is a layer whatever it holds. The written text is discovered as it
+// would read, so the definitions its own list names are the ones it proves.
 function chainOver(into: Seen, text: string | null): LoadedChain {
   const layers = [
     ...into.below,
-    ...(text !== null ? [{ path: into.path, role: into.role, text }] : []),
+    ...(text !== null ? [heldLayer(into, into, text)] : []),
     ...into.above,
   ];
-  return loadConfigChain(
-    into.locs,
-    layers,
+  return loadSnapshot(
+    heldSnapshot(into, layers),
+    into.locs.home,
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
-    { repo: into.repo, cwd: into.cwd },
-    textsOf(layers),
   );
 }
 
