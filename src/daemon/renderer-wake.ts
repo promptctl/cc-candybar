@@ -23,7 +23,7 @@ import { instantAt } from "../utils/instant.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { eventLine } from "../utils/logfmt.js";
 import { LEVEL } from "./foundations/request-event.js";
-import type { RendererHost } from "./renderer-host.js";
+import { tookOf, type RendererHost } from "./renderer-host.js";
 
 // [LAW:no-ambient-temporal-coupling] How far the wall clock read as a due is
 // made may fall short of the instant its timer was set for when nothing is
@@ -148,14 +148,13 @@ export class RendererWake {
 
   private async due(at: Instant, moment: number): Promise<void> {
     const { clock, host, log } = this.deps;
-    const turn = await host.answer(() => {
+    const turn = await host.answer((wall) => {
       // Made as its slot comes: declarations are taken again from here, so
       // the due's own output declares what follows it.
       this.phase = { kind: "idle" };
       // [LAW:single-enforcer] exception: kept to the microsecond, since a due
       // is read against a frame period of a few ms.
       recordMs(this.lateness, clock.monotonic() - moment);
-      const wall = instantAt(clock);
       return {
         kind: "event",
         at: Math.min(Math.max(at, wall), wall + TIMER_RESOLUTION_S) as Instant,
@@ -166,6 +165,7 @@ export class RendererWake {
     const head = [
       ["renderer", host.name],
       ["input", "due"],
+      ["took", tookOf(turn.turnMs)],
     ] as const;
     if (turn.kind === "answered") {
       if (turn.record.length > 0)

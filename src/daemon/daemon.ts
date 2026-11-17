@@ -510,9 +510,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // in who follows as of then, whatever moved while it waited.
     viewersChanged: () =>
       void parts.renderer.deliver(
-        () => ({
+        (at) => ({
           kind: "event",
-          at: instant(),
+          at,
           event: { kind: "viewers", viewers: frameFeeds.viewers() },
         }),
         [],
@@ -579,10 +579,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         return;
       case "caught-up":
         restateFaults();
-        parts.renderer.tell(
-          { kind: "reload-every", since: notice.since },
-          instant(),
-        );
+        parts.renderer.tell({ kind: "reload-every", since: notice.since });
         return;
       case "moved":
         restateFaults();
@@ -646,10 +643,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     watched: (sessionId) => frameFeeds.feedOpen(sessionId),
     deliver: (event) =>
-      parts.renderer.deliver(
-        () => ({ kind: "event", event, at: instant() }),
-        [],
-      ),
+      parts.renderer.deliver((at) => ({ kind: "event", event, at }), []),
     log,
   });
 
@@ -676,10 +670,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // Each window the registry hears goes back to the renderer with
         // the watch's deafness as it stands then.
         const told = (heard: Invalidation | null): void =>
-          parts.renderer.tell(
-            { kind: "watch", id, heard, deaf: handle.deaf },
-            instant(),
-          );
+          parts.renderer.tell({ kind: "watch", id, heard, deaf: handle.deaf });
         const handle = watcherRegistry.acquire(key, targets, told);
         rendererWatches.set(id, handle);
         // [LAW:no-ambient-temporal-coupling] The acquire's own push goes
@@ -713,9 +704,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async () => {
-      const at = instant();
       await parts.renderer.start(
-        () => ({
+        (at) => ({
           kind: "event",
           at,
           event: {
@@ -826,7 +816,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     reloadConfig: (origin) => {
       closing.signal.throwIfAborted();
-      parts.renderer.tell({ kind: "reload-config", origin }, instant());
+      parts.renderer.tell({ kind: "reload-config", origin });
     },
     arm() {
       closing.signal.throwIfAborted();
@@ -842,7 +832,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       const rendererStep =
         (kind: "close-journal" | "close-views" | "close-session-state") =>
         (): Promise<unknown> =>
-          parts.renderer.ask({ kind }, instant());
+          parts.renderer.ask({ kind });
       // The session state still flushes after a close failed (runTeardown).
       const teardown: readonly TeardownStep[] = [
         // [LAW:no-ambient-temporal-coupling] First: from here a renderer that

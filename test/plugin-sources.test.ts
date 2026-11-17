@@ -7,7 +7,12 @@
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { timed } from "../src/renderer-interface/wire";
 import { NO_DOCTOR } from "./helpers/payload-owners";
-import { eventRenderer, NO_ACTS, NO_PUSHES, unframed } from "./helpers/renderers";
+import {
+  eventRenderer,
+  NO_ACTS,
+  NO_PUSHES,
+  unframed,
+} from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { withTranscriptLanes } from "./helpers/payload-owners";
 import { reaction, runInAction } from "mobx";
@@ -892,7 +897,6 @@ function statusline(r: Rig, configFile: string) {
       () => {},
       checked.req,
       ++id as RequestId,
-      instantOf(new Date()),
       (instantAt(systemTimekeeper) + 5) as Instant,
       facts,
     );

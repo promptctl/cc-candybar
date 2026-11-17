@@ -582,11 +582,10 @@ export class TmuxStatusLines {
       `tmux-status: holding sid=${JSON.stringify(sessionId)} pane=${where.pane} socket=${JSON.stringify(where.socket)}`,
     );
     // [LAW:effects-at-boundaries] Subscribed in the caller's turn: a
-    // subscribe draws nothing there, since it is admitted once the renderer
-    // answers its lanes and its first frame falls due in a turn of the
-    // renderer's own (src/renderer/feeds.ts). A feed already open hands over its frame as
-    // it is admitted, and the reconcile that starts then runs tmux started
-    // in its turn and awaited in none.
+    // subscribe draws nothing there, since its first frame falls due in a
+    // turn of the renderer's own (src/renderer/feeds.ts). A feed already
+    // open hands over its frame as it subscribes, and the reconcile that
+    // starts then runs tmux started in its turn and awaited in none.
     entry.unsubscribe = this.deps.subscribe(sessionId, {
       lane: "tmuxStatus",
       frame: (bar) => {

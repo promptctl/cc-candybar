@@ -82,22 +82,28 @@ export interface RendererHost {
   readonly name: RendererName;
   // One turn, recorded by the caller: a request's answer writes both its
   // turns on the request's render event. `make` is called as the input's
-  // slot comes up, and answers the input, or why there is none to send,
-  // which is the turn's failure.
-  answer(make: () => EventInput | Failure): Promise<HostTurn>;
+  // slot comes up, handed that instant, and answers the input, or why there
+  // is none to send, which is the turn's failure.
+  answer(make: (at: Instant) => EventInput | Failure): Promise<HostTurn>;
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
-  deliver(make: () => EventInput, about: TurnRecord): Promise<TurnOutcome>;
+  deliver(
+    make: (at: Instant) => EventInput,
+    about: TurnRecord,
+  ): Promise<TurnOutcome>;
   // A fresh renderer's start, recorded on its own line: it heads the
   // mailbox, behind only the slot in progress, since every input after it is
   // about the sessions it hands in.
-  start(make: () => EventInput, about: TurnRecord): Promise<TurnOutcome>;
-  // One push, at `at`, answered by its reply. A push that threw or rejected,
+  start(
+    make: (at: Instant) => EventInput,
+    about: TurnRecord,
+  ): Promise<TurnOutcome>;
+  // One push, at the instant its slot comes up, answered by its reply. A push that threw or rejected,
   // or one answered by another push's reply, rejects with an Error naming the
   // renderer and the push: the caller that awaits it owns the failure.
-  ask<P extends AdapterPush>(push: P, at: Instant): Promise<ReplyTo<P["kind"]>>;
+  ask<P extends AdapterPush>(push: P): Promise<ReplyTo<P["kind"]>>;
   // One push nobody awaits: its failure is logged here.
-  tell(push: AdapterPush, at: Instant): void;
+  tell(push: AdapterPush): void;
   // [LAW:nothing-unseen] The input in the renderer's turn now, and how many
   // wait behind it.
   stats(): MailboxStats;
@@ -165,6 +171,14 @@ export function rendererHost(
       },
       at,
     );
+  };
+
+  // [LAW:single-enforcer] [LAW:no-ambient-temporal-coupling] Where an
+  // output's subscriptions are taken. From the daemon's close on, none is:
+  // what they name (the collector, the wake, the status lines) closes in its
+  // teardown, as no change lands once it has begun.
+  const subscribed = (subscriptions: Subscriptions): void => {
+    if (!world.closing()) collector.subscribed(subscriptions);
   };
 
   // A turn no renderer answered: nothing of it was taken, so the
@@ -235,7 +249,7 @@ export function rendererHost(
               },
               collector.writableSettings,
             );
-      collector.subscribed(subscriptions);
+      subscribed(subscriptions);
       collector.framed(frames);
       // An act no landing let go: the close is its own cause, and any other
       // is its changes', whose own outcome says why.
@@ -290,9 +304,13 @@ export function rendererHost(
   // session's bar can hold — one with no session, or one whose renderer has
   // ended — is the daemon's, on every bar. The trust book's answer lands with
   // the turn's changes, and its failure is theirs.
-  const doneOf = (effect: Effect, outcome: EffectOutcome): EventInput => ({
+  const doneOf = (
+    effect: Effect,
+    outcome: EffectOutcome,
+    at: Instant,
+  ): EventInput => ({
     kind: "event",
-    at: instantAt(clock),
+    at,
     event: {
       kind: "effect-done",
       session: effect.session,
@@ -311,7 +329,7 @@ export function rendererHost(
         : null;
     if (failed !== null && effect.session === null) world.unheard(failed);
     const delivered = await deliver(
-      () => doneOf(effect, outcome),
+      (at) => doneOf(effect, outcome, at),
       [["effect", String(effect.id)]],
     );
     if (
@@ -329,7 +347,7 @@ export function rendererHost(
     effect: Effect,
     outcome: EffectOutcome,
   ): Promise<{ readonly settled: Promise<EffectOutcome> }> => {
-    const input = doneOf(effect, outcome);
+    const input = doneOf(effect, outcome, instantAt(clock));
     const { turn, settled } = await inSlot(input, 0);
     record(input.event, [["effect", String(effect.id)]], turn);
     return { settled: settled.then(() => outcome) };
@@ -340,14 +358,18 @@ export function rendererHost(
   const record = (
     event: Event | null,
     about: TurnRecord,
-    delivered: TurnOutcome,
+    delivered: TakenTurn,
   ): void => {
     const session = event === null ? null : sessionOf(event);
+    // [LAW:nothing-unseen] The turn's own time, read by the transport around
+    // it: the renderer reads no clock, so what a config load in the turn cost
+    // is said here.
     const head: TurnRecord = [
       ["renderer", name],
       ["input", event?.kind ?? "-"],
       ...(session === null ? [] : ([["sid", session]] as const)),
       ...about,
+      ["took", tookOf(delivered.turnMs)],
     ];
     switch (delivered.kind) {
       case "answered":
@@ -374,14 +396,17 @@ export function rendererHost(
   // acts settled after it. `event` is null when its make failed, so no input
   // was made.
   const taken = async (
-    make: () => EventInput | Failure,
+    make: (at: Instant) => EventInput | Failure,
     at: Place = "last",
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
     const { event, slotted } = await inMailbox(async (queuedMs, holds) => {
       // [LAW:no-silent-failure] A make that threw is the turn's failure.
       let made: EventInput | Failure;
       try {
-        made = make();
+        // [LAW:single-enforcer] Every turn's instant is read here, as its
+        // slot comes up, so the renderer's time never runs backwards between
+        // turns whatever an input waited on before its slot.
+        made = make(instantAt(clock));
       } catch (thrown) {
         made = failureOf(thrown);
       }
@@ -395,13 +420,17 @@ export function rendererHost(
       turn: { ...slotted.turn, settled: await slotted.settled },
     };
   };
-  const answer = async (make: () => EventInput | Failure): Promise<HostTurn> =>
-    (await taken(make)).turn;
+  const answer = async (
+    make: (at: Instant) => EventInput | Failure,
+  ): Promise<HostTurn> => (await taken(make)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.
   const recorded =
     (at: Place) =>
-    async (make: () => EventInput, about: TurnRecord): Promise<TurnOutcome> => {
+    async (
+      make: (at: Instant) => EventInput,
+      about: TurnRecord,
+    ): Promise<TurnOutcome> => {
       const { event, turn } = await taken(make, at);
       record(event, about, turn);
       return turn;
@@ -411,18 +440,21 @@ export function rendererHost(
   // answered by the reply of its own kind, or it failed.
   const ask = async <P extends AdapterPush>(
     push: P,
-    at: Instant,
   ): Promise<ReplyTo<P["kind"]>> => {
     // A renderer that rejected fails the push as one whose turn threw, so
     // every failure is said with the renderer and the push it failed.
-    const output = await inMailbox((_queuedMs, holds) => {
+    const output = await inMailbox(async (_queuedMs, holds) => {
       holds(`push:${push.kind}`);
-      return renderer
-        .answer({ kind: "adapter", push, at })
+      const answered = await renderer
+        .answer({ kind: "adapter", push, at: instantAt(clock) })
         .catch(
           (thrown: unknown) =>
             ({ kind: "threw", failure: failureOf(thrown) }) as const,
         );
+      // [LAW:one-source-of-truth] What the renderer's state needs, as the
+      // push left it, taken in the push's own slot, before the next turn's.
+      if (answered.kind !== "threw") subscribed(answered.subscriptions);
+      return answered;
     });
     // The failure keeps its kind, so a push no renderer took reads as one.
     if (output.kind === "threw")
@@ -431,9 +463,6 @@ export function rendererHost(
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
         detail: `renderer ${name} push ${push.kind} threw: ${output.failure.detail}`,
       });
-    // [LAW:one-source-of-truth] What the renderer's state needs, as the push
-    // left it, taken in the push's own slot.
-    collector.subscribed(output.subscriptions);
     if (output.reply.kind !== push.kind)
       throw new Error(
         `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`,
@@ -442,8 +471,8 @@ export function rendererHost(
     // which the compiler cannot carry from the reply's kind to its type.
     return output.reply as ReplyTo<P["kind"]>;
   };
-  const tell = (push: AdapterPush, at: Instant): void =>
-    void ask(push, at).catch((thrown: unknown) => {
+  const tell = (push: AdapterPush): void =>
+    void ask(push).catch((thrown: unknown) => {
       const failure = failureOf(thrown);
       // [LAW:single-enforcer] A push no renderer was live to take is the
       // supervisor's to say.
@@ -456,6 +485,10 @@ export function rendererHost(
   });
   return { name, answer, deliver, start: recorded("first"), ask, tell, stats };
 }
+
+// A turn's time as its line says it: `-` for one no renderer answered.
+export const tookOf = (turnMs: number | null): string =>
+  turnMs === null ? "-" : `${turnMs}ms`;
 
 // [LAW:one-source-of-truth] The session an event names: what a turn holds,
 // and what its line's `sid` says. A click naming none, or one whose id failed

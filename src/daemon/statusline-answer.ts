@@ -17,7 +17,7 @@ import { elapsedMs, type Timekeeper } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { checkoutLocation } from "../utils/git-root.js";
-import { instantAt, type Instant } from "../utils/instant.js";
+import type { Instant } from "../utils/instant.js";
 import {
   failedWith,
   RENDER_ANSWERS,
@@ -32,7 +32,7 @@ import type { Response } from "./foundations/protocol";
 import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
-import type { HostTurn, RendererHost } from "./renderer-host.js";
+import { tookOf, type HostTurn, type RendererHost } from "./renderer-host.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -99,7 +99,6 @@ export async function answerStatusline(
   log: DaemonLogger,
   arrived: CheckedRenderRequest,
   id: RequestId,
-  at: Instant,
   // The monotonic moment the request's wait ends, the host's own reading.
   waitEndsAt: number,
   facts: RequestFacts,
@@ -110,9 +109,9 @@ export async function answerStatusline(
   // the host's one path to the renderer.
   const done = (effect: Effect, reason: string | null): void =>
     void host.deliver(
-      () => ({
+      (at) => ({
         kind: "event",
-        at: instantAt(clock),
+        at,
         event: {
           kind: "effect-done",
           session: effect.session,
@@ -126,8 +125,10 @@ export async function answerStatusline(
   // [LAW:single-enforcer] Each of the request's turns is made as its slot
   // comes, and none once the daemon's close has begun: the teardown is
   // closing the views it would open or draw into.
-  const unlessClosing = (make: () => EventInput) => (): EventInput | Failure =>
-    closing.aborted ? failureOf(new DaemonClosing("render")) : make();
+  const unlessClosing =
+    (make: (at: Instant) => EventInput) =>
+    (at: Instant): EventInput | Failure =>
+      closing.aborted ? failureOf(new DaemonClosing("render")) : make(at);
   const worldState = collector.requested(req);
   // [LAW:no-ambient-temporal-coupling] The request holds its session from its
   // config to its answer, wait included, so no sweep retires it between.
@@ -143,7 +144,7 @@ export async function answerStatusline(
     // mailbox: another input's turn that lands meanwhile, one that evicts
     // the session's view included, moves what the wait covers.
     configured = await host.answer(
-      unlessClosing(() => ({
+      unlessClosing((at) => ({
         kind: "event",
         at,
         event: { kind: "config", context: req, worldState },
@@ -188,7 +189,7 @@ export async function answerStatusline(
     // [LAW:no-ambient-temporal-coupling] Made as its turn comes, so a close
     // begun during the wait refuses it.
     delivered = await host.answer(
-      unlessClosing(() => ({
+      unlessClosing((at) => ({
         kind: "event",
         at,
         event: { kind: "request", id, context: req },
@@ -199,11 +200,13 @@ export async function answerStatusline(
   }
   recorded(facts, delivered);
   // [LAW:nothing-unseen] Both turns' waits in the mailbox and hops, beside
-  // `took`: what reaching the renderer cost this request. And how long the
-  // request's own turn took to make the frame: with `encoded=` for its bytes,
-  // what the draw's reserve is held to (DRAW_RESERVE_MS).
+  // `took`: what reaching the renderer cost this request. And each turn's
+  // own time: the config turn's, where a config load is paid, and the
+  // request turn's, which makes the frame and, with `encoded=` for its bytes,
+  // is what the draw's reserve is held to (DRAW_RESERVE_MS).
   noteFacts(facts, {
-    drew: delivered.turnMs === null ? "-" : `${delivered.turnMs}ms`,
+    configured: tookOf(configured.turnMs),
+    drew: tookOf(delivered.turnMs),
     mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
     hop:
       configured.hopMs === null || delivered.hopMs === null

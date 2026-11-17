@@ -149,7 +149,7 @@ Other points:
 
 - `src/renderer/verbs/index.ts`
 - `src/daemon/server.ts`
-- `src/daemon/menu-idle.ts`
+- `src/renderer/menu-idle.ts`
 - `src/daemon/lane-setup.ts`
 - `src/daemon/lane-edge.ts`
 - `src/renderer/settings-history.ts`

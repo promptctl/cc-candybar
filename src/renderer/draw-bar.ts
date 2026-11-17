@@ -300,15 +300,8 @@ interface RenderSetup extends Disposable {
 }
 
 // What a render notes of the context it draws by.
-function contextFacts(
-  req: CheckedRenderRequest,
-  at: Instant,
-  facts: RequestFacts,
-): void {
-  noteFacts(facts, {
-    sid: req.hookData.session_id,
-    at: at.toFixed(3),
-  });
+function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
+  noteFacts(facts, { sid: req.hookData.session_id });
   const { hints } = req;
   noteFacts(facts, {
     termCols: String(hints.termCols ?? "?"),
@@ -359,7 +352,7 @@ export function configureSession(
   at: Instant,
   facts: RequestFacts,
 ): void {
-  contextFacts(req, at, facts);
+  contextFacts(req, facts);
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
     recordRequest(parts, req);
@@ -443,7 +436,7 @@ function setUpFrame(
   const req = hold.view.facts();
   let hintsError: string | null;
   try {
-    contextFacts(req, at, facts);
+    contextFacts(req, facts);
     hintsError = hintsErrorOf(req);
   } catch (e) {
     hold[Symbol.dispose]();
@@ -462,6 +455,9 @@ function setUpDraw(
   at: Instant,
   facts: RequestFacts,
 ): RenderSetup {
+  // [LAW:one-source-of-truth] The instant the bar is drawn at, noted by the
+  // draw: every time read in it reads this one.
+  noteFacts(facts, { at: at.toFixed(3) });
   try {
     const { entry, state, view } = hold;
     // [LAW:dataflow-not-control-flow] One composition every render: the

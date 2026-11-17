@@ -55,13 +55,16 @@ export class TurnTime implements StoreTime {
     return soonest;
   }
 
-  // Runs what fell due by `at`, earliest first, each taken before it runs,
-  // so a throw leaves none of those behind it run twice.
+  // Runs what fell due by `at`, earliest first, each taken as it runs: one
+  // that throws fails the turn and is not run again, and those behind it
+  // stay due, run by the next `due`.
   due(at: Instant): void {
     const due = [...this.later]
       .filter(({ until }) => until <= at)
       .sort((a, b) => a.until - b.until);
-    for (const later of due) this.later.delete(later);
-    for (const { fire } of due) fire();
+    for (const later of due) {
+      this.later.delete(later);
+      later.fire();
+    }
   }
 }

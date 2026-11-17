@@ -287,7 +287,7 @@ export async function replyTo(
     const mailbox = parts.renderer.stats();
     const {
       stats: { framesDrawn, ...drawn },
-    } = await renderer.ask({ kind: "stats" }, instantAt(clock));
+    } = await renderer.ask({ kind: "stats" });
     return stay({
       ok: true,
       stats: stats.snapshot({
@@ -417,7 +417,6 @@ export async function replyTo(
       parts.log,
       checked.req,
       order,
-      at,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
       // draw (src/daemon/foundations/request-deadline.ts).
@@ -479,10 +478,7 @@ export async function replyTo(
         daemonV: PROTOCOL_VERSION,
       });
     }
-    const { snapshot } = await renderer.ask(
-      { kind: "debug", what: req.what },
-      instantAt(clock),
-    );
+    const { snapshot } = await renderer.ask({ kind: "debug", what: req.what });
     return stay({ ok: true, debug: snapshot });
   }
 
@@ -740,12 +736,12 @@ async function handleClick(
   // client took a TIMEOUT or left while it waited never lands, so clicking
   // again cannot revert a toggle. An idle close that fell due while it waited
   // closes in its own turn, ahead of it, as the renderer's record holds it.
-  const delivered: HostTurn = await parts.renderer.answer(() =>
+  const delivered: HostTurn = await parts.renderer.answer((at) =>
     click.gone()
       ? failureOf(new ClickAbandoned(verb))
       : {
           kind: "event",
-          at: instantAt(parts.clock),
+          at,
           event: {
             kind: "click",
             verb,

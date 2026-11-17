@@ -1280,7 +1280,7 @@ export type DrawSelection = Pick<
   // frame and nothing in it fades in or dissolves out.
   readonly effects?: SessionEffects<RenderedLine>;
   // When the session's idle period began — its last click, or its first
-  // render by this daemon (src/daemon/menu-idle.ts) — which the flash its open
+  // render by this renderer (src/renderer/menu-idle.ts) — which the flash its open
   // menus wear before they close counts from. A caller with no such clock
   // (check) never flashes.
   readonly idleSince?: Instant;

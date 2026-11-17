@@ -145,9 +145,12 @@ export function mainRenderer(
   ): void => {
     switch (event.kind) {
       case "start":
+        // [LAW:one-source-of-truth] Who follows first: the host counts them
+        // told once this turn is sent, so a session whose config throws
+        // below leaves no feed unopened until a pane next moves.
+        feeds.viewersAre(event.viewers, at);
         for (const { context, worldState } of event.sessions)
           configureSession(parts, context, worldState, at, record);
-        feeds.viewersAre(event.viewers, at);
         return;
       case "config":
         configureSession(parts, event.context, event.worldState, at, record);

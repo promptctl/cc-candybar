@@ -137,7 +137,7 @@ function setup(
     park: host.park,
     // The teardown's first renderer step, as the daemon sends it: it takes
     // its place in the mailbox behind every input that arrived before it.
-    closeJournal: () => host.renderer.ask({ kind: "close-journal" }, at()),
+    closeJournal: () => host.renderer.ask({ kind: "close-journal" }),
     renderer: host.renderer,
     send,
     dispatch,
@@ -210,8 +210,7 @@ describe("a doctor click", () => {
 
 describe("the mailbox's order", () => {
   test("two clicks sent together land in order, one undo step each", async () => {
-    const { ctx, sessionState, park, dispatch, theme, undoDepth } =
-      setup();
+    const { ctx, sessionState, park, dispatch, theme, undoDepth } = setup();
     const parked = park();
     const first = dispatch("nord", "plain");
     const second = dispatch("dracula", "powerline");
@@ -228,8 +227,7 @@ describe("the mailbox's order", () => {
   });
 
   test("a due turn sent behind a click finds the deadline the click moved, and closes nothing", async () => {
-    const { park, write, due, menusDrawn, idleClock, logged, theme } =
-      setup();
+    const { park, write, due, menusDrawn, idleClock, logged, theme } = setup();
     const deadline = menusDrawn(30);
     const parked = park();
     const clicked = write("nord");
@@ -318,7 +316,9 @@ describe("close", () => {
     expect(undoDepth()).toBe(0);
     expect(logged).toContainEqual(
       expect.stringMatching(
-        new RegExp(`^menu-idle: close failed \\(session=${A}\\): .*the daemon closed`),
+        new RegExp(
+          `^menu-idle: close failed \\(session=${A}\\): .*the daemon closed`,
+        ),
       ),
     );
   });

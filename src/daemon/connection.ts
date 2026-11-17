@@ -234,9 +234,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       drawing: () => true,
     });
     // Answered only once the subscription stands: a subscribe that threw is
-    // the connection's `handler threw`, and an admission that threw later is
-    // refused by the feed, each answered RENDER_FAILED and ended, never an
-    // open socket nothing feeds.
+    // the connection's `handler threw`, answered RENDER_FAILED and ended,
+    // never an open socket nothing feeds.
     responded = true;
     sock.on("close", unsubscribe);
   };

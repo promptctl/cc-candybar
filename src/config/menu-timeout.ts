@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] When a menu nobody is using closes on its own, and
 // the flash it wears first (brandon-menus-sjhy.my3): `menuTimeout` seconds after
 // the session's last click, the flash ending at exactly that instant. The
-// daemon's close timer (src/daemon/menu-idle.ts) and the render's flash
+// renderer's idle close (src/renderer/menu-idle.ts) and the render's flash
 // (`SessionEffects.motion`) both read the deadline from here, so the flash
 // cannot end anywhere but where the menu closes.
 //

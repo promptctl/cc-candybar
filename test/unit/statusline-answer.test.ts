@@ -188,7 +188,6 @@ async function answer(
     (_level, line) => logged.push(line),
     REQ,
     REQUEST,
-    AT,
     meets.waitEndsAt ?? 0,
     facts,
   );
@@ -338,7 +337,7 @@ test("a renderer that rejects is the turn's failure, said on its line, and the s
   await drained();
   expect(logged).toEqual([
     expect.stringMatching(
-      /^turn renderer=main input=effect-done sid=a-session effect=1 error=.*the renderer went away/,
+      /^turn renderer=main input=effect-done sid=a-session effect=1 took=\S+ error=.*the renderer went away/,
     ),
   ]);
   expect(subscribed).toEqual([NO_SUBSCRIPTIONS, NO_SUBSCRIPTIONS]);
@@ -364,7 +363,7 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
   await drained();
   expect(logged).toEqual([
     expect.stringMatching(
-      /^turn renderer=main input=effect-done sid=a-session effect=1 error=.*no such present/,
+      /^turn renderer=main input=effect-done sid=a-session effect=1 took=\S+ error=.*no such present/,
     ),
   ]);
 });
@@ -519,7 +518,6 @@ describe("the request's wait, between its config and its request", () => {
       () => {},
       REQ,
       REQUEST,
-      AT,
       5000,
       [],
     );

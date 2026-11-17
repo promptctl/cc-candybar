@@ -10,7 +10,10 @@
 // parts its side still reaches; no daemon is built.
 
 import { daemonFactsOf } from "./helpers/daemon-facts";
-import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 import type { DoctorAsk } from "../src/doctor/gather";
 import fs from "node:fs";
 import os from "node:os";
@@ -232,7 +235,8 @@ const threw = (output: RendererOutput) => {
 const presentOf = (effects: readonly Effect[]): Present => {
   expect(effects).toHaveLength(1);
   const [present] = effects;
-  if (present?.kind !== "present") throw new Error("the turn presented nothing");
+  if (present?.kind !== "present")
+    throw new Error("the turn presented nothing");
   return present;
 };
 
@@ -554,7 +558,6 @@ describe("the session's config, ahead of its request", () => {
       () => {},
       checked(),
       REQUEST,
-      AT,
       (instantAt(systemTimekeeper) + 5) as Instant,
       facts as never,
     );
@@ -635,7 +638,6 @@ describe("two requests of one session at different keys", () => {
         () => {},
         checked(pane),
         id as RequestId,
-        AT,
         (instantAt(systemTimekeeper) + 10) as Instant,
         [],
       );
@@ -801,7 +803,9 @@ describe("the idle close", () => {
     );
     expect(t.logged).toContainEqual(
       expect.stringMatching(
-        new RegExp(`^error menu-idle: close failed \\(session=${SESSION}\\): .*would not shut`),
+        new RegExp(
+          `^error menu-idle: close failed \\(session=${SESSION}\\): .*would not shut`,
+        ),
       ),
     );
     // Shut as it was handed out: it falls due again only once a frame draws a

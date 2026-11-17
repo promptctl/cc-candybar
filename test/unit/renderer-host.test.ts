@@ -51,7 +51,7 @@ test("an ask is handed the reply of its push's own kind", async () => {
     reply: { kind: "reload-every" },
     subscriptions: QUIET,
   });
-  expect(await host.ask({ kind: "reload-every", since: 0 }, AT)).toEqual({
+  expect(await host.ask({ kind: "reload-every", since: 0 })).toEqual({
     kind: "reload-every",
   });
 });
@@ -63,7 +63,7 @@ test("a push's subscriptions are taken as its turn's, so what it moved (a reload
     reply: { kind: "reload-every" },
     subscriptions: { ...QUIET, wake },
   });
-  await host.ask({ kind: "reload-every", since: 0 }, AT);
+  await host.ask({ kind: "reload-every", since: 0 });
   expect(subscribed).toEqual([{ ...QUIET, wake }]);
 });
 
@@ -73,7 +73,7 @@ test("an ask answered with another push's reply rejects, naming both", async () 
     reply: { kind: "close-views" },
     subscriptions: QUIET,
   });
-  await expect(host.ask({ kind: "reload-every", since: 0 }, AT)).rejects.toThrow(
+  await expect(host.ask({ kind: "reload-every", since: 0 })).rejects.toThrow(
     "renderer main answered push reload-every with a close-views reply",
   );
 });
@@ -83,7 +83,7 @@ test("an ask whose push threw rejects with the renderer's failure", async () => 
     kind: "threw",
     failure: failureOf(new Error("the view broke")),
   });
-  await expect(host.ask({ kind: "stats" }, AT)).rejects.toThrow(
+  await expect(host.ask({ kind: "stats" })).rejects.toThrow(
     /renderer main push stats threw: .*the view broke/,
   );
 });
@@ -93,7 +93,7 @@ test("a tell that fails is said on the log, and nothing rejects", async () => {
     kind: "threw",
     failure: failureOf(new Error("no such entry")),
   });
-  expect(host.tell({ kind: "reload-every", since: 0 }, AT)).toBe(undefined);
+  expect(host.tell({ kind: "reload-every", since: 0 })).toBe(undefined);
   expect(await said).toMatch(
     /^error renderer main push reload-every threw: .*no such entry/,
   );
@@ -137,7 +137,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     },
     NO_ACTS,
   );
-  const held = host.ask({ kind: "reload-every", since: 0 }, AT);
+  const held = host.ask({ kind: "reload-every", since: 0 });
   const waiting = host.deliver(
     () => ({
       kind: "event",
@@ -157,4 +157,38 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   open();
   await Promise.all([held, waiting, started]);
   expect(heard).toEqual(["push:reload-every", "start", "retire"]);
+});
+
+test("an input is made at the instant its slot comes up, not when it was asked, so the renderer's time never runs back", async () => {
+  let wall = 0;
+  let open = (): void => {};
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const made: number[] = [];
+  const host = rendererHost(
+    "main",
+    { now: () => wall, monotonic: () => 0 as Monotonic },
+    pushRenderer(async (input) => {
+      made.push(input.at);
+      if (made.length === 1) await opened;
+      return {
+        kind: "replied",
+        reply: { kind: "reload-every" },
+        subscriptions: QUIET,
+      };
+    }),
+    () => {},
+    {
+      subscribed: () => {},
+      framed: () => {},
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  const first = host.ask({ kind: "reload-every", since: 0 });
+  const second = host.ask({ kind: "reload-every", since: 0 });
+  wall = 5000;
+  open();
+  await Promise.all([first, second]);
+  expect(made).toEqual([0, 5]);
 });

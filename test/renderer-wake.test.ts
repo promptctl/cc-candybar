@@ -52,10 +52,10 @@ function rig(
   let next = opts.next ?? (() => null);
   let wake: RendererWake;
   const answer = async (
-    make: () => EventInput | Failure,
+    make: (at: Instant) => EventInput | Failure,
   ): Promise<HostTurn> => {
     if (state.gate !== null) await state.gate;
-    const input = make();
+    const input = make(instantAt(clock));
     if (input.kind !== "event") throw new Error("a due is always made");
     made.push(input.at);
     wake.declared(next(input.at));
@@ -167,7 +167,7 @@ test("a due that throws is said once while it keeps throwing, made again no soon
   expect(r.madeAt()).toEqual([0, 1, 2, 3]);
   expect(r.log.filter((l) => l.startsWith("error "))).toEqual([
     expect.stringMatching(
-      /^error turn renderer=main input=due error=.*the walk broke/,
+      /^error turn renderer=main input=due took=\S+ error=.*the walk broke/,
     ),
   ]);
   r.state.outcome = null;
