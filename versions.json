@@ -4,15 +4,22 @@
     {
       "version": "pr-788",
       "ref": "refs/pull/788/merge",
-      "sha": "858b3a29f92fa4932fa2d396bf796678334013ee",
-      "timestamp": "2026-11-17T20:18:59.862Z",
+      "sha": "c3ed2f8756803cde5a4c22c4703e0e4c978f7046",
+      "timestamp": "2026-11-17T20:34:07.093Z",
       "commits": [
         {
-          "sha": "858b3a29f92fa4932fa2d396bf796678334013ee",
+          "sha": "c3ed2f8756803cde5a4c22c4703e0e4c978f7046",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T13:10:01-07:00",
-          "message": "Merge a90e11d39f7674df2b9a050c32540c03c4c1ec20 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+          "timestamp": "2026-11-17T20:33:11Z",
+          "message": "Merge 1b432b69231dc78868df4c2ca75158c6777022c0 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "1b432b69231dc78868df4c2ca75158c6777022c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T13:32:59-07:00",
+          "message": "fix(daemon): a failed start restarts its renderer, and a heap snapshot the disk refuses fails alone (uh4)\n\nHigh review of the uh4 change:\n- A start carries a key, as the spec's Start does: a host that cannot read\n  it fails the start, and a renderer whose start failed is ended and\n  restarted after its backoff, so a repaired key recovers with no daemon\n  restart.\n- The host writes a renderer's heap snapshot through a watched stream: a\n  disk refusal fails the snapshot (no file) instead of throwing out of the\n  stdout handler, and the write is off the loop. The renderer waits for its\n  pipe to drain between chunks.\n- The profile's directories are made by an adapter, not by createDaemon;\n  the session-contexts file is spelled in paths.\n- A drain that throws joins the turn's failure instead of replacing it.\n- A document store's absent document reads back as absent.\n- The renderer's lint file set is spelled once; the wrapper over the user\n  config base is gone.\n"
         },
         {
           "sha": "a90e11d39f7674df2b9a050c32540c03c4c1ec20",
