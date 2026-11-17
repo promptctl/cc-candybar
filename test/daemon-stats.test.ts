@@ -144,7 +144,7 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
   },
   collector: { sessions: 1, retiring: 0 },
   effectCache: { sessions: 2, effects: 5 },
-  menuIdle: { sessions: 2, armed: 1, pending: 0 },
+  menuIdle: { sessions: 2, armed: 1 },
   mailbox: { holder: null, heldMs: 0, queued: 0 },
   runs: { started: 3, failed: 1, timedOut: 1, running: 0 },
   sessionState: { sessions: 2, observers: 11, revision: 7 },
@@ -232,7 +232,7 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.usageCache.size).toBe(10);
     expect(snap.sources).toEqual(SOURCES);
     expect(snap.effectCache).toEqual({ sessions: 2, effects: 5 });
-    expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1, pending: 0 });
+    expect(snap.menuIdle).toEqual({ sessions: 2, armed: 1 });
     expect(snap.runs).toEqual({
       started: 3,
       failed: 1,
@@ -447,7 +447,7 @@ describe("formatStats", () => {
       },
       collector: { sessions: 1, retiring: 0 },
       effectCache: { sessions: 2, effects: 3 },
-      menuIdle: { sessions: 2, armed: 1, pending: 0 },
+      menuIdle: { sessions: 2, armed: 1 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 3, failed: 1, timedOut: 1, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
@@ -605,7 +605,7 @@ describe("formatStats", () => {
       },
       collector: { sessions: 1, retiring: 0 },
       effectCache: { sessions: 0, effects: 0 },
-      menuIdle: { sessions: 0, armed: 0, pending: 0 },
+      menuIdle: { sessions: 0, armed: 0 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },

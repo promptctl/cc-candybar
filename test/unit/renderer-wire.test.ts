@@ -12,34 +12,43 @@ import {
 } from "../../src/renderer-interface/wire";
 import {
   rendererOf,
+  timed,
   type AdapterInput,
-  type Renderer,
+  type TimedRenderer,
 } from "../../src/renderer-interface/interface";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
-import type { SessionId } from "../../src/daemon/foundations/session-id";
-import type { Instant } from "../../src/utils/instant";
+import type { Instant, Tick } from "../../src/utils/instant";
+import type { HeldEvent } from "../../src/utils/event-hold";
 import {
   CrossedFailure,
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
 import { inertHost } from "../helpers/renderer-parts";
 
-const SESSION = "s1" as SessionId;
+const EVENT: HeldEvent = { text: "e", at: 7 as Instant, answered: false };
 
 // A renderer that tells the host two notices and answers; and one push that
-// throws.
-function talkingRenderer(host: AdapterToHost): Renderer {
-  return rendererOf({
-    event: async () => {
-      throw new Error("no events here");
-    },
-    adapter: async (input) => {
-      if (input.push.kind === "lanes") throw new Error("lanes refused");
-      host.log("info", "pinned");
-      host.menuIdle.clicked(SESSION, 7 as Instant);
-      return { kind: "replied", reply: { kind: "pin" } };
-    },
-  });
+// throws. Its turns take no time, so both ends time them alike.
+function talkingRenderer(host: AdapterToHost): TimedRenderer {
+  return timed(
+    rendererOf({
+      event: async () => {
+        throw new Error("no events here");
+      },
+      adapter: async (input) => {
+        if (input.push.kind === "close-views")
+          throw new Error("close refused");
+        host.log("info", "closed");
+        host.eventAnswered(EVENT);
+        return {
+          kind: "replied",
+          reply: { kind: "close-journal" },
+          subscriptions: { sources: {}, lanes: {}, wake: null },
+        };
+      },
+    }),
+    () => 0,
+  );
 }
 
 // What the host saw of the renderer, whichever way it ran.
@@ -50,16 +59,13 @@ function recordingHost(): { host: AdapterToHost; saw: string[] } {
     host: {
       ...inertHost(),
       log: (_level, msg) => saw.push(`log ${msg}`),
-      menuIdle: {
-        ...inertHost().menuIdle,
-        clicked: (session, at) => saw.push(`clicked ${session} ${at}`),
-      },
+      eventAnswered: (event) => saw.push(`answered ${event.text} ${event.at}`),
     },
   };
 }
 
 // Each line crosses as JSON does, and on a later turn, as a pipe carries it.
-function overLines(host: AdapterToHost): Renderer {
+function overLines(host: AdapterToHost): TimedRenderer {
   const crossed = <T>(line: T): T => JSON.parse(JSON.stringify(line)) as T;
   let toRenderer: (line: HostLine) => void = () => {};
   const lines = rendererOverLines({
@@ -81,21 +87,24 @@ function overLines(host: AdapterToHost): Renderer {
   return lines.renderer;
 }
 
-const push = (kind: "pin" | "lanes"): AdapterInput => ({
+const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   kind: "adapter",
-  push: { kind, session: SESSION },
+  push: { kind },
   at: 0 as Instant,
+  tick: 0 as Tick,
 });
 
 describe("the renderer over lines", () => {
   test("answers as it does in this process, reaching the host in the same order", async () => {
     const here = recordingHost();
     const there = recordingHost();
-    const inProcess = await talkingRenderer(here.host).answer(push("pin"));
-    const crossed = await overLines(there.host).answer(push("pin"));
+    const inProcess = await talkingRenderer(here.host).answer(
+      push("close-journal"),
+    );
+    const crossed = await overLines(there.host).answer(push("close-journal"));
     expect(crossed).toEqual(inProcess);
     expect(there.saw).toEqual(here.saw);
-    expect(there.saw).toEqual(["log pinned", `clicked ${SESSION} 7`]);
+    expect(there.saw).toEqual(["log closed", "answered e 7"]);
   });
 
   test("two notices heard in one chunk reach the host in the order sent", () => {
@@ -107,9 +116,9 @@ describe("the renderer over lines", () => {
         throw new Error(message);
       },
     });
-    lines.heard({ kind: "notice", reach: "menuIdle.clicked", args: [SESSION, 7] });
+    lines.heard({ kind: "notice", reach: "eventAnswered", args: [EVENT] });
     lines.heard({ kind: "notice", reach: "log", args: ["info", "after"] });
-    expect(saw).toEqual([`clicked ${SESSION} 7`, "log after"]);
+    expect(saw).toEqual(["answered e 7", "log after"]);
   });
 
   test("a line heard after the renderer's end reaches nothing, and is said", () => {
@@ -129,8 +138,10 @@ describe("the renderer over lines", () => {
   });
 
   test("a push that threw fails as it does in this process, its failure kept", async () => {
-    const here = talkingRenderer(recordingHost().host).answer(push("lanes"));
-    const there = overLines(recordingHost().host).answer(push("lanes"));
+    const here = talkingRenderer(recordingHost().host).answer(
+      push("close-views"),
+    );
+    const there = overLines(recordingHost().host).answer(push("close-views"));
     const thrownHere = failureOf(await here.catch((e: unknown) => e));
     const thrownThere = await there.catch((e: unknown) => e);
     expect(thrownThere).toBeInstanceOf(CrossedFailure);

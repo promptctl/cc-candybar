@@ -141,6 +141,14 @@ export function perLane<T>(
 // A session no lane follows, on every lane.
 export const UNFOLLOWED_FEEDS: LaneFeeds = perLane(() => UNFOLLOWED);
 
+// [LAW:one-source-of-truth] What a lane is sent of a frame's two answers: a
+// lane drawing the bar elsewhere draws the bar, and the one drawing it in the
+// statusline draws what the statusline shows.
+export const answerOf = (
+  answers: { readonly resp: string; readonly statusline: string },
+  lane: Lane,
+): string => (LANES[lane].handsOff ? answers.resp : answers.statusline);
+
 // [LAW:parse-dont-validate] The one crossing from a wire string to a Lane.
 export function parseLane(raw: unknown): Lane | null {
   return typeof raw === "string" && Object.hasOwn(LANES, raw)

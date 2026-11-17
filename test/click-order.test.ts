@@ -4,7 +4,7 @@
 // `replyTo`, the daemon's real click arm.
 
 import { RuntimeStats } from "../src/daemon/stats";
-import { closeByTurn, MenuIdle } from "../src/daemon/menu-idle";
+import type { MenuIdle } from "../src/renderer/menu-idle";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { clickParts } from "./helpers/click-parts";
 import { signedClick } from "./helpers/link-signer";
@@ -28,7 +28,7 @@ import {
 } from "../src/click/wire";
 import type { Failure } from "../src/daemon/foundations/verb-error";
 import type { ConfigLoad } from "../src/doctor/ports";
-import { instantOf } from "../src/utils/instant";
+import { tickAt, type Tick } from "../src/utils/instant";
 import { fieldOf, fieldsOf } from "../src/utils/logfmt";
 import { emptyStores } from "./helpers/doctor-facts";
 import {
@@ -55,7 +55,10 @@ const LOAD: ConfigLoad = {
   unused: [],
   config: EMPTY_DEFAULT,
 };
-const IDLE = { firedAt: instantOf(new Date(0)), idleS: 30, timeoutS: 30 };
+
+// A's menu, shown a whole timeout ago: its close is due now.
+const shownLongAgo = (menuIdle: MenuIdle) =>
+  menuIdle.drew(A, (tickAt(systemTimekeeper) - 30) as Tick, true, 30);
 
 // A click reaches its turn some microtasks after it is sent, under real timers
 // and fake ones alike.
@@ -63,8 +66,8 @@ async function drain(): Promise<void> {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 }
 
-// The daemon's click arm over one session's verbs: its idle clock closes
-// through the same mailbox, on a clock the case moves.
+// The daemon's click arm over one session's verbs: its idle closes are `due`
+// turns in the same mailbox.
 function setup(
   over: {
     readonly collector?: Parameters<typeof clickParts>[1];
@@ -83,27 +86,9 @@ function setup(
   );
   const { arrival: _a, latest: _l, effects: _e, ...verbCtx } = ctx;
   const host = clickParts(verbCtx, over.collector);
-  let now = 1000;
-  const at = () => instantOf(new Date(now * 1000));
-  const failures: Failure[] = [];
-  const idle: MenuIdle = new MenuIdle({
-    clock: systemTimekeeper,
-    now: at,
-    close: (sid, span) =>
-      closeByTurn(
-        host.renderer,
-        at,
-        sid,
-        span,
-        () => null,
-        () => idle.confirmClose(sid, span.firedAt),
-      ),
-    failed: (_sid, failure) => failures.push(failure),
-  });
   const events: string[] = [];
   const parts = {
     clock: { monotonic: () => performance.now(), now: () => Date.now() },
-    menuIdle: idle,
     payloadProviders: {},
     frameFeeds: { latest: () => null },
     log: (_level: string, line: string) => events.push(line),
@@ -131,37 +116,24 @@ function setup(
   };
   const write = (theme: string, gone?: () => boolean) =>
     send(VERB_SET_STATE, encodeSegments([A, "theme", theme]), gone);
-  // An idle close of A's menus, as the clock fires one.
-  const closeIdle = () =>
-    closeByTurn(
-      host.renderer,
-      at,
-      A,
-      IDLE,
-      () => null,
-      () => true,
-    );
+  // A wake of the renderer's: the idle closes due as its turn comes.
+  const due = () =>
+    host.renderer.deliver(() => ({ kind: "event", event: { kind: "due" } }), []);
   return {
     sessionState,
     ctx,
     logged,
     events,
-    idle,
-    failures,
-    at,
-    advance: (s: number) => {
-      now += s;
-      jest.advanceTimersByTime(s * 1000);
-    },
+    menuIdle: host.menuIdle,
     park: host.park,
     // The teardown's first renderer step, as the daemon sends it: it takes
     // its place in the mailbox behind every input that arrived before it.
-    closeJournal: () => host.renderer.ask({ kind: "close-journal" }, at()),
+    closeJournal: () => host.renderer.ask({ kind: "close-journal" }),
     renderer: host.renderer,
     send,
     dispatch,
     write,
-    closeIdle,
+    due,
     theme: () => sessionState.get(A, "theme"),
     undoDepth: () => ctx.history.depth(A).undo,
   };
@@ -228,7 +200,7 @@ describe("a doctor click", () => {
 
 describe("the mailbox's order", () => {
   test("two clicks sent together land in order, one undo step each", async () => {
-    const { ctx, sessionState, park, dispatch, theme, undoDepth, idle } =
+    const { ctx, sessionState, park, dispatch, theme, undoDepth } =
       setup();
     const parked = park();
     const first = dispatch("nord", "plain");
@@ -243,28 +215,25 @@ describe("the mailbox's order", () => {
     undoOf(ctx.history, A);
     expect(theme()).toBe("nord");
     expect(sessionState.get(A, "endcaps")).toBe("plain");
-    idle.dispose();
   });
 
-  test("an idle close sent behind a click is a turn of its own, after it", async () => {
-    const { sessionState, park, dispatch, closeIdle, undoDepth, idle } =
-      setup();
+  test("a due sent behind a click is a turn of its own, after it", async () => {
+    const { sessionState, park, dispatch, due, undoDepth } = setup();
     const parked = park();
     const slow = dispatch("nord", "plain");
     await drain();
     let closed = false;
-    const closing = closeIdle().then(() => (closed = true));
+    const closing = due().then(() => (closed = true));
     await drain();
     expect(closed).toBe(false);
     parked.open();
     await Promise.all([parked.holding, slow, closing]);
     expect(sessionState.get(A, "endcaps")).toBe("plain");
     expect(undoDepth()).toBe(1);
-    idle.dispose();
   });
 
   test("a click whose client left while it waited never lands, so it reverts no toggle", async () => {
-    const { park, write, theme, events, idle } = setup();
+    const { park, write, theme, events } = setup();
     const parked = park();
     const first = write("nord");
     const left = write("dracula", () => true);
@@ -275,11 +244,10 @@ describe("the mailbox's order", () => {
       undefined,
       "1",
     ]);
-    idle.dispose();
   });
 
   test("a click's event says how long it waited in the mailbox", async () => {
-    const { park, write, events, idle } = setup();
+    const { park, write, events } = setup();
     const parked = park();
     const sent = write("nord");
     await new Promise((r) => setTimeout(r, 20));
@@ -288,11 +256,10 @@ describe("the mailbox's order", () => {
     expect(
       Number(fieldOf(events[0]!, "mailbox")!.replace("ms", "")),
     ).toBeGreaterThan(0);
-    idle.dispose();
   });
 
   test("stats name the input in the renderer's turn and what waits behind it", async () => {
-    const { park, write, renderer, theme, idle } = setup();
+    const { park, write, renderer, theme } = setup();
     const parked = park();
     await drain();
     const queued = write("nord");
@@ -302,96 +269,72 @@ describe("the mailbox's order", () => {
     await Promise.all([parked.holding, queued]);
     expect(theme()).toBe("nord");
     expect(renderer.stats()).toEqual({ holder: null, heldMs: 0, queued: 0 });
-    idle.dispose();
   });
 });
 
 describe("the idle close decides as its turn comes", () => {
-  beforeEach(() => jest.useFakeTimers());
-  afterEach(() => jest.useRealTimers());
+  const closes = (logged: readonly string[]) =>
+    logged.filter((line) => line.startsWith("menu-idle:"));
 
-  test("a close waiting behind another turn keeps what a click arriving behind it opens", async () => {
-    const { idle, at, advance, park, logged } = setup();
-    idle.observe(A, at(), true, 30);
-    const parked = park();
-    await drain();
-    advance(30);
-    idle.clickArrived(A);
-    parked.open();
-    await jest.advanceTimersByTimeAsync(0);
-    await parked.holding;
-    await drain();
-    idle.clickSettled(A);
-    expect(logged).toContain(`menu-idle: no longer idle, kept (session=${A})`);
-    expect(logged.filter((l) => l.startsWith("menu-idle: closed="))).toEqual(
-      [],
-    );
-    idle.dispose();
+  test("a due closes the menus of a session idle past its timeout", async () => {
+    const { menuIdle, due, logged } = setup();
+    shownLongAgo(menuIdle);
+    expect(await due()).toMatchObject({ kind: "answered" });
+    expect(closes(logged)).toEqual([
+      expect.stringMatching(
+        new RegExp(`^menu-idle: closed=.* timeout=30s \\(session=${A}\\)$`),
+      ),
+    ]);
   });
 
-  test("a close whose session was evicted while it waited keeps what its click opened", async () => {
-    const { idle, at, advance, park, logged } = setup();
-    idle.observe(A, at(), true, 30);
+  test("a due waiting behind a click finds the period the click restarted, and closes nothing", async () => {
+    const { menuIdle, due, park, write, logged } = setup();
+    shownLongAgo(menuIdle);
     const parked = park();
+    const clicked = write("nord");
+    const closing = due();
     await drain();
-    advance(30);
-    for (let i = 0; i < 256; i++) idle.clicked(sessionIdOf(`other${i}`), at());
-    idle.clicked(A, at());
     parked.open();
-    await jest.advanceTimersByTimeAsync(0);
-    await parked.holding;
-    await drain();
-    expect(logged).toContain(`menu-idle: no longer idle, kept (session=${A})`);
-    idle.dispose();
-  });
-
-  test("a close the renderer refuses goes to failed, and is no unhandled rejection", async () => {
-    const { idle, at, advance, closeJournal, failures } = setup();
-    const unhandled: unknown[] = [];
-    const heard = (e: unknown): void => void unhandled.push(e);
-    process.on("unhandledRejection", heard);
-    await closeJournal();
-    idle.observe(A, at(), true, 30);
-    advance(30);
-    await jest.advanceTimersByTimeAsync(0);
-    await drain();
-    process.off("unhandledRejection", heard);
-    expect(failures).toHaveLength(1);
-    expect(failures[0]!.message).toContain("the daemon closed");
-    expect(unhandled).toEqual([]);
-    idle.dispose();
+    await Promise.all([parked.holding, clicked, closing]);
+    expect(closes(logged)).toEqual([]);
+    expect(menuIdle.next()).not.toBeNull();
   });
 });
 
 // The close takes its place in the mailbox in arrival order: what arrived
 // before it runs whole, and what arrived after it is refused.
 describe("close", () => {
-  test("an idle close behind the close in the mailbox lands nothing", async () => {
-    const { closeJournal, sessionState, park, closeIdle, undoDepth, idle } =
+  test("a due behind the close in the mailbox lands nothing", async () => {
+    const { closeJournal, sessionState, park, due, undoDepth, menuIdle, logged } =
       setup();
+    shownLongAgo(menuIdle);
     const before = sessionState.revision(A);
     const parked = park();
     const closed = closeJournal();
-    const closing = closeIdle();
+    const closing = due();
     await drain();
     parked.open();
     await closed;
-    expect((await closing)?.message).toContain("the daemon closed");
+    // The turn answers: its close was refused, as a click's is.
+    expect(await closing).toMatchObject({ kind: "answered" });
+    expect(logged).toEqual([
+      expect.stringMatching(
+        new RegExp(`^menu-idle: close failed \\(session=${A}\\): .*the daemon closed`),
+      ),
+    ]);
     expect(sessionState.revision(A)).toBe(before);
     expect(undoDepth()).toBe(0);
-    idle.dispose();
   });
 
   test("a click that landed before the close stays one step", async () => {
-    const { closeJournal, dispatch, undoDepth, idle } = setup();
+    const { closeJournal, dispatch, undoDepth } = setup();
     await dispatch("nord", "plain");
     await closeJournal();
     expect(undoDepth()).toBe(1);
-    idle.dispose();
   });
 
   test("a click waiting in the mailbox ahead of the close lands whole", async () => {
-    const { closeJournal, park, write, theme, undoDepth, idle } = setup();
+    const { closeJournal, park, write, theme, undoDepth } = setup();
     const parked = park();
     const queued = write("dracula");
     await drain();
@@ -401,11 +344,10 @@ describe("close", () => {
     await closed;
     expect(theme()).toBe("dracula");
     expect(undoDepth()).toBe(1);
-    idle.dispose();
   });
 
   test("a click behind the close in the mailbox is refused, as a `closing` outcome at info", async () => {
-    const { closeJournal, park, write, events, undoDepth, idle } = setup();
+    const { closeJournal, park, write, events, undoDepth } = setup();
     const parked = park();
     const closed = closeJournal();
     const queued = write("dracula");
@@ -419,13 +361,12 @@ describe("close", () => {
     });
     expect(events[0]).toContain("closing=");
     expect(undoDepth()).toBe(0);
-    idle.dispose();
   });
 });
 
 describe("the mailbox's stats", () => {
   test("name the input holding the mailbox for its whole slot, and how many wait behind it", async () => {
-    const { renderer, park, write, idle } = setup();
+    const { renderer, park, write } = setup();
     const parked = park();
     const queued = write("nord");
     await drain();
@@ -433,13 +374,12 @@ describe("the mailbox's stats", () => {
     parked.open();
     await queued;
     expect(renderer.stats()).toEqual({ holder: null, heldMs: 0, queued: 0 });
-    idle.dispose();
   });
 });
 
 describe("the click path", () => {
   test("a BadVerbArgs thrown in the handler reaches the client", async () => {
-    const { send, events, idle } = setup();
+    const { send, events } = setup();
     const { resp } = await send(VERB_UNDO, encodeSegments([A]));
     expect(resp).toMatchObject({
       ok: false,
@@ -447,27 +387,24 @@ describe("the click path", () => {
       error: expect.stringContaining("nothing to undo"),
     });
     expect(events[0]).toMatch(/ mailbox=\d+ms /);
-    idle.dispose();
   });
 
   test("a click's event names the request it was accepted as", async () => {
-    const { send, events, idle } = setup();
+    const { send, events } = setup();
     await send(VERB_UNDO, encodeSegments([A]));
     await send(VERB_UNDO, encodeSegments([A]));
     expect(events.map((e) => fieldOf(e, "req"))).toEqual(["1", "2"]);
-    idle.dispose();
   });
 
   test("a status-line link naming a verb re-enters without deadlock", async () => {
     const url = `cc-candybar://${VERB_UNDO}/${encodeSegments([A])}`;
-    const { send, idle } = setup({ linkAt: () => ({ kind: "link", url }) });
+    const { send } = setup({ linkAt: () => ({ kind: "link", url }) });
     const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
     expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
-    idle.dispose();
   });
 
   test("a status-line click that throws is its outcome, and writes its event", async () => {
-    const { send, events, idle } = setup({
+    const { send, events } = setup({
       linkAt: () => {
         throw new Error("the opener failed");
       },
@@ -479,21 +416,6 @@ describe("the click path", () => {
     });
     expect(events).toHaveLength(1);
     expect(fieldOf(events[0]!, "verb")).toBe(VERB_TMUX_STATUS_CLICK);
-    idle.dispose();
-  });
-
-  test("a click counts as pending from its arrival, through a refusal", async () => {
-    const { park, write, idle } = setup();
-    const parked = park();
-    const sent = write("nord");
-    await drain();
-    expect(idle.getStats().pending).toBe(1);
-    parked.open();
-    await sent;
-    expect(idle.getStats().pending).toBe(0);
-    await write("nord", () => true);
-    expect(idle.getStats().pending).toBe(0);
-    idle.dispose();
   });
 
   test("a click's turn holds its session in the collector while it runs and not while it waits; a refused click holds nothing", async () => {
@@ -506,7 +428,7 @@ describe("the click path", () => {
       holds.set(session, (holds.get(session) ?? 0) + 1);
       return () => void holds.set(session, holds.get(session)! - 1);
     };
-    const { park, write, idle } = setup({
+    const { park, write } = setup({
       collector: { holding, clicked: () => {} },
     });
     const parked = park();
@@ -519,11 +441,10 @@ describe("the click path", () => {
     expect(holds.get(A)).toBe(0);
     await write("nord", () => true);
     expect(taken).toBe(1);
-    idle.dispose();
   });
 
   test("a click whose session will not decode is a bad request whose event still names its verb", async () => {
-    const { send, events, idle } = setup();
+    const { send, events } = setup();
     // An escape that is no UTF-8: the one malformed segment a signed link,
     // whose bare `%` is escaped, can still carry.
     const { resp } = await send(VERB_DOCTOR_RUN, "%C0");
@@ -531,12 +452,11 @@ describe("the click path", () => {
     expect(events).toEqual([
       expect.stringMatching(new RegExp(` verb=${VERB_DOCTOR_RUN} `)),
     ]);
-    idle.dispose();
   });
 });
 
 test("a navigation commit that throws leaves the settings journal committed", () => {
-  const { ctx, theme, undoDepth, idle } = setup();
+  const { ctx, theme, undoDepth } = setup();
   const begin = ctx.navigation.begin.bind(ctx.navigation);
   jest.spyOn(ctx.navigation, "begin").mockImplementation((store) => ({
     ...begin(store),
@@ -550,11 +470,10 @@ test("a navigation commit that throws leaves the settings journal committed", ()
   expect(undoDepth()).toBe(1);
   undoOf(ctx.history, A);
   expect(theme()).toBeNull();
-  idle.dispose();
 });
 
 test("a verb stamps its session's landing, though its handler threw", () => {
-  const { ctx, idle } = setup();
+  const { ctx } = setup();
   const landed: string[] = [];
   expect(() =>
     VERBS.get(VERB_UNDO)!(encodeSegments([A]), {
@@ -563,88 +482,6 @@ test("a verb stamps its session's landing, though its handler threw", () => {
     }),
   ).toThrow("nothing to undo");
   expect(landed).toEqual([A]);
-  idle.dispose();
-});
-
-describe("the idle clock", () => {
-  function clock() {
-    let now = 1000;
-    const closes: string[] = [];
-    const idle = new MenuIdle({
-      clock: systemTimekeeper,
-      now: () => instantOf(new Date(now * 1000)),
-      close: async (sid, { firedAt }) => {
-        idle.confirmClose(sid, firedAt);
-        closes.push(sid);
-        return null;
-      },
-      failed: () => {},
-    });
-    const at = () => instantOf(new Date(now * 1000));
-    return {
-      idle,
-      closes,
-      at,
-      advance: async (s: number) => {
-        now += s;
-        await jest.advanceTimersByTimeAsync(s * 1000);
-      },
-    };
-  }
-  beforeEach(() => jest.useFakeTimers());
-  afterEach(() => jest.useRealTimers());
-
-  test("a menu with a click in flight draws no countdown", () => {
-    const c = clock();
-    c.idle.observe(A, c.at(), true, 30);
-    expect(c.idle.since(A, c.at())).toBeDefined();
-    c.idle.clickArrived(A);
-    expect(c.idle.since(A, c.at())).toBeUndefined();
-    c.idle.clickSettled(A);
-    expect(c.idle.since(A, c.at())).toBeDefined();
-    c.idle.dispose();
-  });
-
-  test("past the deadline no timer is armed and no close runs; the deadline returns as the click settles", async () => {
-    const c = clock();
-    c.idle.observe(S, c.at(), true, 30);
-    c.idle.clickArrived(S);
-    expect(c.idle.getStats()).toMatchObject({ armed: 0, pending: 1 });
-    await c.advance(60);
-    expect(c.closes).toEqual([]);
-    expect(c.idle.getStats().armed).toBe(0);
-    c.idle.clicked(S, c.at());
-    c.idle.clickSettled(S);
-    expect(c.idle.getStats()).toMatchObject({ armed: 1, pending: 0 });
-    await c.advance(30);
-    expect(c.closes).toEqual(["s"]);
-    c.idle.dispose();
-  });
-
-  test("an abandoned click does not move the clock", async () => {
-    const c = clock();
-    c.idle.observe(S, c.at(), true, 30);
-    await c.advance(20);
-    c.idle.clickArrived(S);
-    await c.advance(5);
-    c.idle.clickSettled(S);
-    expect(c.idle.since(S, c.at())).toBe(1000);
-    await c.advance(5);
-    expect(c.closes).toEqual(["s"]);
-    c.idle.dispose();
-  });
-
-  test("eviction of an abandoned click's record leaves pending intact, and settling throws nothing", () => {
-    const c = clock();
-    c.idle.clicked(S, c.at());
-    c.idle.clickArrived(S);
-    for (let i = 0; i < 256; i++)
-      c.idle.clicked(sessionIdOf(`other${i}`), c.at());
-    expect(c.idle.getStats().pending).toBe(1);
-    expect(() => c.idle.clickSettled(S)).not.toThrow();
-    expect(c.idle.getStats().pending).toBe(0);
-    c.idle.dispose();
-  });
 });
 
 test("tsc refuses the host's edges in a VerbHandler", () => {

@@ -26,7 +26,7 @@ export interface InstallEdge {
   readonly realpath: (p: string) => Asked<string>;
   readonly checkoutOf: (bundle: string) => string | null;
   readonly digest: (dir: string) => Asked<string>;
-  readonly nativeShipped: boolean;
+  readonly nativeShipped: () => boolean;
 }
 
 // The documents the doctor keeps under the daemon's state directory

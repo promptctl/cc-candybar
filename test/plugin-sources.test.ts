@@ -4,9 +4,15 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
-import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
+import { daemonFactsOf } from "./helpers/daemon-facts";
 import { NO_DOCTOR } from "./helpers/payload-owners";
-import { eventRenderer, NO_ACTS, NO_PUSHES } from "./helpers/renderers";
+import {
+  eventRenderer,
+  hostHeld,
+  NO_ACTS,
+  NO_PUSHES,
+  unfollowedCollector,
+} from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { withTranscriptLanes } from "./helpers/payload-owners";
 import { reaction, runInAction } from "mobx";
@@ -51,7 +57,7 @@ import { VariableStore } from "../src/var-system/store";
 import { resolvePath, SourceRegistry } from "../src/var-system/sources";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { checkConfig, type CheckOutcome } from "../src/check";
-import { instantAt, instantOf, type Instant } from "../src/utils/instant";
+import { instantOf } from "../src/utils/instant";
 import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import type { Run } from "../src/facts/source-identity";
 import { settledLane } from "../src/utils/reading";
@@ -654,7 +660,7 @@ describe("a source's declaration", () => {
       gates: bareGates(),
     });
     try {
-      expect(pluginLoadLine(loaded.layers, loaded.state!, loaded.ms)).toContain(
+      expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(
         " plugins loaded=2 sources=2 pluginVariables=1 dropped=0 ",
       );
     } finally {
@@ -837,16 +843,19 @@ function statusline(r: Rig, configFile: string) {
   const rendered = rendererHost(
     "main",
     systemTimekeeper,
-    eventRenderer(async (input) => {
-      const output = await renderer.answer(input);
-      if (output.kind === "answered")
-        for (const effect of output.effects)
-          if (effect.kind === "present")
-            presented.push(parseFrame(effect.frame));
-      return output;
-    }),
+    hostHeld(
+      eventRenderer(async (input) => {
+        const output = await renderer.answer(input);
+        if (output.kind === "answered")
+          for (const effect of output.effects)
+            if (effect.kind === "present")
+              presented.push(parseFrame(effect.frame));
+        return output;
+      }),
+    ),
     () => {},
-    r.collector, NO_ACTS,
+    unfollowedCollector(r.collector),
+    NO_ACTS,
   );
   // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
   // request delivered has settled, the present's `effect-done` among them, so
@@ -881,15 +890,12 @@ function statusline(r: Rig, configFile: string) {
     const answered = await answerStatusline(
       host,
       r.collector,
-      { since: () => undefined },
-      UNFOLLOWED,
       systemTimekeeper,
       new AbortController().signal,
       () => {},
       checked.req,
       ++id as RequestId,
-      instantOf(new Date()),
-      (instantAt(systemTimekeeper) + 5) as Instant,
+      systemTimekeeper.monotonic() + 5000,
       facts,
     );
     answered.settled(true);

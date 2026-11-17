@@ -429,7 +429,7 @@ export class VariableStore {
   // [LAW:one-source-of-truth] `clock` stamps when each box and document last
   // changed; a child store reads the same one as its parent.
   constructor(
-    readonly clock: Timekeeper,
+    readonly clock: Pick<Timekeeper, "now" | "after">,
     private readonly parent: VariableStore | null = null,
   ) {}
 

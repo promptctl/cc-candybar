@@ -670,9 +670,9 @@ export class SessionEffects<Line> {
     // [LAW:dataflow-not-control-flow] A menu row wears the flash for the whole
     // of an idle period, dark until it begins, so the row says when it starts;
     // every other row, and every row while no idle period runs, wears nothing
-    // more. The flash counts down to the moment the daemon's timer closes the
-    // menus (src/daemon/menu-idle.ts), a moment on the host clock, so it runs
-    // there at rate 1 whatever the animation speed.
+    // more. The flash counts down to the moment the renderer's due turn closes
+    // the menus (src/renderer/menu-idle.ts), a moment on the host clock, so it
+    // runs there at rate 1 whatever the animation speed.
     const flashPart: RowPart[] =
       flash === null
         ? []

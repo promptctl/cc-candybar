@@ -21,13 +21,18 @@ import type {
   EventInput,
   RendererOutput,
 } from "../src/renderer-interface/interface";
-import { instantOf } from "../src/utils/instant";
 import type { Monotonic } from "../src/time";
-import { eventRenderer } from "./helpers/renderers";
+import { eventRenderer, hostHeld } from "./helpers/renderers";
 
 const S = sessionIdOf("s");
-const AT = instantOf(new Date(0));
-const CLOCK = { now: () => 0, monotonic: () => 0 as Monotonic };
+// No wake is declared, so no timer is set.
+const CLOCK = {
+  now: () => 0,
+  monotonic: () => 0 as Monotonic,
+  after: (): (() => void) => {
+    throw new Error("this rig sets no timer");
+  },
+};
 const FILE = `{ globals: { theme: "dusk" } }\n`;
 
 let dir: string;
@@ -42,9 +47,9 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 const output = (effects: readonly Effect[]): RendererOutput => ({
   kind: "answered",
   effects,
-  subscriptions: { sources: {}, tmuxStatus: [] },
+  subscriptions: { sources: {}, lanes: {}, wake: null },
   record: [],
-  turnMs: 0,
+  frames: [],
 });
 
 let ids = 0;
@@ -98,33 +103,24 @@ function hostOver(
   const host = rendererHost(
     "main",
     CLOCK,
-    eventRenderer(async (input) => {
+    hostHeld(eventRenderer(async (input) => {
       if (input.event.kind === "effect-done") {
         did.push(`done ${input.event.of} ${input.event.outcome.kind}`);
         return done(input);
       }
       return output(effects);
-    }),
+    })),
     () => {},
     {
       subscribed: () => {},
+      frames: () => {},
       holding: () => () => {},
       writableSettings: () => [],
     },
     world,
   );
   const turn = () =>
-    host.answer(() => ({
-      kind: "event",
-      at: AT,
-      event: {
-        kind: "menu-idle",
-        session: S,
-        idle: { firedAt: AT, idleS: 30, timeoutS: 30 },
-        latest: null,
-        stillIdle: true,
-      },
-    }));
+    host.answer(() => ({ kind: "event", event: { kind: "due" } }));
   return { turn, did, unheard };
 }
 

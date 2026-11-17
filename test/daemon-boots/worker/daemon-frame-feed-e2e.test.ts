@@ -29,7 +29,7 @@ import {
   type FrameStream,
   type StreamEnd,
 } from "../../../src/daemon/client-frames";
-import { FEED_PERIODS } from "../../../src/daemon/frame-feed";
+import { FEED_PERIODS } from "../../../src/renderer/feeds";
 import {
   followFrames,
   SWITCHED_OFF_RETRY_MS,

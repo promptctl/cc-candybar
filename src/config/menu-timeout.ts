@@ -1,13 +1,13 @@
 // [LAW:one-source-of-truth] When a menu nobody is using closes on its own, and
 // the flash it wears first (brandon-menus-sjhy.my3): `menuTimeout` seconds after
 // the session's last click, the flash ending at exactly that instant. The
-// daemon's close timer (src/daemon/menu-idle.ts) and the render's flash
+// renderer's idle close (src/renderer/menu-idle.ts) and the render's flash
 // (`SessionEffects.motion`) both read the deadline from here, so the flash
 // cannot end anywhere but where the menu closes.
 //
 // [LAW:effects-at-boundaries] Pure: instants in, a time or a hold out.
 
-import type { Instant } from "../utils/instant.js";
+import type { Instant, Tick } from "../utils/instant.js";
 
 // One hold of the flash: lit, or dark, for so long.
 export interface FlashHold {
@@ -37,9 +37,13 @@ export const CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
 export const MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 } as const;
 export const MENU_TIMEOUT_DEFAULT = 120;
 
-// The instant a session's menus close, its idle period having begun at `since`.
-export const closesAt = (since: Instant, timeoutS: number): Instant =>
-  (since + timeoutS) as Instant;
+// When a session's menus close, its idle period having begun at `since`: on
+// the renderer's ticks, which its close is scheduled on, or the wall, which
+// its flash is drawn on.
+export const closesAt = <T extends Instant | Tick>(
+  since: T,
+  timeoutS: number,
+): T => (since + timeoutS) as T;
 
 // How far into a session's idle period its flash begins: the flash ends at
 // exactly the close. [LAW:one-source-of-truth] The render's flash is one

@@ -21,7 +21,9 @@ import {
   type AdapterOutput,
   type EffectId,
   type EventInput,
-  type Renderer,
+  type Timed,
+  type TimedRenderer,
+  timed,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
 import type {
@@ -43,7 +45,7 @@ import { RendererDown, failureOf } from "./foundations/verb-error.js";
 
 // What the host holds of its renderer, whichever link it runs over.
 export interface RendererLink {
-  readonly renderer: Renderer;
+  readonly renderer: TimedRenderer;
   // Starts the renderer's process: nothing in process, where it started as
   // it was built.
   arm(): void;
@@ -83,7 +85,9 @@ export type RendererPort = (prepared: {
 // daemon and the page run. It loads as the daemon's build begins.
 export const inProcessPort: RendererPort = ({ load }) => {
   const loaded = load();
-  return { start: (own) => inProcessRenderer(loaded, own.reaches) };
+  return {
+    start: (own) => inProcessRenderer(loaded, own.reaches, own.clock),
+  };
 };
 
 // The renderer in a process of its own, which loads there, so the host never
@@ -99,8 +103,27 @@ export function processPort(
 function inProcessRenderer(
   loaded: LoadedMainRenderer,
   reaches: AdapterToHost,
+  clock: Pick<Timekeeper, "monotonic">,
 ): RendererLink {
-  const renderer = loaded.start(reaches);
+  // [LAW:single-enforcer] Each turn timed around its answer, on the host's
+  // clock, which the renderer's process is.
+  const timedRenderer = timed(loaded.start(reaches), () => clock.monotonic());
+  // [LAW:no-ambient-temporal-coupling] An input reaches the renderer once
+  // the stack that sent it has unwound, as it does over a process's lines.
+  // The host hands some in from inside its own MobX action, and one store
+  // runs both: a turn begun there would leave its views' reactions to run as
+  // the host's action ends, after the turn, with no time to read.
+  const crossed = async (): Promise<void> => {};
+  const renderer: TimedRenderer = rendererOf({
+    event: async (input) => {
+      await crossed();
+      return timedRenderer.answer(input);
+    },
+    adapter: async (input) => {
+      await crossed();
+      return timedRenderer.answer(input);
+    },
+  });
   return {
     renderer,
     arm: () => {},
@@ -112,9 +135,9 @@ function inProcessRenderer(
 }
 
 // What the daemon hands a link as it starts it: the host's reaches; the
-// host's complete start, which delivers each live session's `config` and each
-// open feed's `pin` through the host's one path to the renderer, resolving
-// once every `config` turn has answered; and who holds each end as an event,
+// host's complete start, which delivers each live session's `config` and who
+// watches each session through the host's one path to the renderer,
+// resolving once its turn has answered; and who holds each end as an event,
 // which every session's world state carries for the bar's ⚠.
 // [LAW:no-ambient-temporal-coupling] The start is the host's state as one
 // renderer spawns, so it is sent ahead of every input after it: each of those
@@ -595,7 +618,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // The ids an input names are the renderer's own again; the ids its output
   // names are the host's.
-  const event = (input: EventInput): Promise<RendererOutput> =>
+  const event = (input: EventInput): Promise<Timed<RendererOutput>> =>
     sent(async (link) => {
       const { event: e } = input;
       let toSend: EventInput = input;
@@ -621,7 +644,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         }),
       };
     });
-  const adapter = (input: AdapterInput): Promise<AdapterOutput> =>
+  const adapter = (input: AdapterInput): Promise<Timed<AdapterOutput>> =>
     sent(async (link) => {
       const { push } = input;
       if (push.kind !== "watch") return link.lines.renderer.answer(input);

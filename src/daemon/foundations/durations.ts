@@ -8,7 +8,7 @@ import {
   encodeIntoCompressedBase64,
   type Histogram,
 } from "hdr-histogram-js";
-import type { Durations } from "./foundations/stats-snapshot.js";
+import type { Durations } from "./stats-snapshot.js";
 
 export type { Histogram };
 

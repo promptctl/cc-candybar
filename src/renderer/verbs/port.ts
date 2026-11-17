@@ -9,8 +9,9 @@ import type {
   Effect,
   EffectId,
   EffectOutcome,
-  IdleSpan,
 } from "../../renderer-interface/interface.js";
+import type { IdleSpan, MenuIdle } from "../menu-idle.js";
+import type { Feeds } from "../feeds.js";
 import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
 import type { ActsOnTheirWay } from "../acts.js";
 import type { DoctorRuns } from "../doctor.js";
@@ -35,13 +36,12 @@ export interface RendererVerbs {
   handler(
     verb: string,
   ): ((value: string, click: ClickFacts) => void) | undefined;
-  // The idle clock's close of the session's menus: the journaled write a ✕
-  // makes, when the session is still idle since the firing.
+  // The close of the session's menus when its idle period runs out: the
+  // journaled write a ✕ makes.
   closeIdle(
     sessionId: SessionId,
     latest: CheckedRenderRequest | null,
     idle: IdleSpan,
-    stillIdle: boolean,
     effects: Effect[],
   ): void;
   // A change's `effect-done`, in its turn, whose effects what its click's
@@ -52,6 +52,9 @@ export interface RendererVerbs {
 // The main renderer's parts: the draw's, which the host's own frames share,
 // and the verbs its click and menu-idle turns act through.
 export type MainRendererParts = RendererParts & {
+  // The owners of a tick a `due` runs: the draw reads only part of each.
+  readonly menuIdle: MenuIdle;
+  readonly feeds: Feeds;
   readonly verbs: RendererVerbs;
   // [LAW:one-source-of-truth] The one minter of this renderer's effect ids,
   // a present's, a change's and an act's alike.
@@ -75,8 +78,8 @@ export function verbsOver(ctx: DaemonVerbContext): RendererVerbs {
         handler && ((value, facts) => handler(value, { ...ctx, ...facts }))
       );
     },
-    closeIdle: (sessionId, latest, idle, stillIdle, effects) =>
-      closeIdleMenus(sessionId, latest, idle, stillIdle, ctx, effects),
+    closeIdle: (sessionId, latest, idle, effects) =>
+      closeIdleMenus(sessionId, latest, idle, ctx, effects),
     changeDone: (id, outcome, effects) => changeDone(ctx, id, outcome, effects),
   };
 }

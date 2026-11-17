@@ -520,7 +520,7 @@ export const GLOBAL_FIELDS = {
   // here; a per-session, per-version dismissal lives in SessionState instead.
   updateNotice: boolSetting(true, control("update notice", "config")),
   // Seconds without a click before every open menu flashes and closes
-  // (src/config/menu-timeout.ts, src/daemon/menu-idle.ts).
+  // (src/config/menu-timeout.ts, src/renderer/menu-idle.ts).
   menuTimeout: intSetting(
     MENU_TIMEOUT_RANGE,
     MENU_TIMEOUT_DEFAULT,

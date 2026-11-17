@@ -8,9 +8,30 @@ import type {
   EventInput,
   Renderer,
   RendererOutput,
+  TimedRenderer,
 } from "../../src/renderer-interface/interface";
-import { rendererOf } from "../../src/renderer-interface/interface";
+import { rendererOf, timed } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
+import type { Collector } from "../../src/daemon/collector";
+import { systemTimekeeper } from "../../src/time";
+
+// `renderer` as the host holds it in process: each turn timed around its
+// answer, on `monotonic` — a unit test's own clock, which reads no time.
+export const hostHeld = (
+  renderer: Renderer,
+  monotonic: () => number = () => systemTimekeeper.monotonic(),
+): TimedRenderer => timed(renderer, monotonic);
+
+// A collector as a host's turns reach it, in a rig no feed follows a session
+// in: the frames a turn drew go nowhere.
+export const unfollowedCollector = (
+  collector: Pick<Collector, "subscribed" | "holding" | "writableSettings">,
+) => ({
+  subscribed: collector.subscribed.bind(collector),
+  holding: collector.holding.bind(collector),
+  writableSettings: collector.writableSettings.bind(collector),
+  frames: () => {},
+});
 
 // A renderer whose events `answered` answers, and which no push reaches.
 export function eventRenderer(

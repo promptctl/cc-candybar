@@ -389,6 +389,17 @@ const realDir = (dir) =>
     ? fs.realpathSync(dir)
     : path.join(realDir(path.dirname(dir)), path.basename(dir));
 
+const CLOCK_KEY = withoutExtension(CLOCK_FILE);
+// Whether an import brings in types alone, which carry no clock.
+const typeOnly = (node) =>
+  node.type === "TSImportType" ||
+  node.importKind === "type" ||
+  node.exportKind === "type" ||
+  (node.specifiers?.length > 0 &&
+    node.specifiers.every(
+      (s) => s.importKind === "type" || s.exportKind === "type",
+    ));
+
 const importDirection = {
   meta: { type: "problem", schema: [] },
   create(context) {
@@ -426,6 +437,16 @@ const importDirection = {
         context.report({
           node,
           message: `${fromZone} ${from} imports ${toZone} ${to}. ${ZONE_MESSAGE[fromZone]} [LAW:one-way-deps]`,
+        });
+      }
+      // [LAW:effects-at-boundaries] The renderer reads no clock and sets no
+      // timer: its time is the readings each input carries, and what it holds
+      // for later waits for a `due`. It may name the clock's types.
+      const rendering = fromZone === "renderer" || fromZone === "start";
+      if (rendering && to === CLOCK_KEY && !typeOnly(node)) {
+        context.report({
+          node,
+          message: `${from} imports the clock. The renderer's time is its turn's (src/renderer/turn-time.ts). [LAW:effects-at-boundaries]`,
         });
       }
     };

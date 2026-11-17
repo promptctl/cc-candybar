@@ -30,3 +30,29 @@ export const instantAt = (clock: Pick<Timekeeper, "now">): Instant =>
 export type AnimationTime = number & {
   readonly __animationTime: unique symbol;
 };
+
+// A reading of the host's monotonic clock, in seconds: what everything
+// scheduled is measured on (a feed's next frame, a menu's idle close, a held
+// deferral), because a tick never runs back while the wall may step.
+// [LAW:types-are-the-program] Branded apart from Instant, so a wall instant
+// is never held where a schedule is meant, or the reverse: `tickAt` is the
+// one way in.
+export type Tick = number & { readonly __tick: unique symbol };
+
+// [LAW:single-enforcer] The clock's monotonic reading (milliseconds) as the
+// tick a schedule is measured on (seconds).
+export const tickAt = (clock: Pick<Timekeeper, "monotonic">): Tick =>
+  (clock.monotonic() / 1000) as Tick;
+
+// What the host reads as an input's slot in a renderer's mailbox comes: the
+// wall instant, for what the bar shows and what is stamped, and the tick, for
+// what is scheduled.
+export interface Readings {
+  readonly at: Instant;
+  readonly tick: Tick;
+}
+
+// [LAW:single-enforcer] Both readings, taken together.
+export const readingsAt = (
+  clock: Pick<Timekeeper, "now" | "monotonic">,
+): Readings => ({ at: instantAt(clock), tick: tickAt(clock) });

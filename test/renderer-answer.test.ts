@@ -9,7 +9,7 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
-import { daemonFactsOf, UNFOLLOWED } from "./helpers/daemon-facts";
+import { daemonFactsOf } from "./helpers/daemon-facts";
 import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 import type { DoctorAsk } from "../src/doctor/gather";
 import fs from "node:fs";
@@ -28,11 +28,12 @@ import type {
 } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
 import { renderFrame, type RendererParts } from "../src/renderer/draw-bar";
+import { renderFailedFrame } from "../src/render/frame";
 import { MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
-import { instantAt, type Instant } from "../src/utils/instant";
+import type { Instant, Tick } from "../src/utils/instant";
 import {
   AT,
   PROJECT,
@@ -51,7 +52,13 @@ import type {
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { HeldEvent } from "../src/utils/event-hold";
-import { hearingEvents, NO_ACTS, NO_PUSHES } from "./helpers/renderers";
+import {
+  hearingEvents,
+  hostHeld,
+  NO_ACTS,
+  NO_PUSHES,
+  unfollowedCollector,
+} from "./helpers/renderers";
 import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
@@ -146,6 +153,9 @@ function checked(pane?: string): CheckedRenderRequest {
 
 const REQUEST = 7 as RequestId;
 
+// The readings every input here carries: the rig's instant, at the first tick.
+const READ = { at: AT, tick: 0 as Tick };
+
 // The session's config as the host delivers one ahead of a request: with the
 // world state its collector read at the request's keys, and its output's
 // subscriptions handed back to the collector.
@@ -155,7 +165,7 @@ const configure = async (
 ) => {
   const output = await r.answer({
     kind: "event",
-    at: AT,
+    ...READ,
     event: {
       kind: "config",
       context,
@@ -172,20 +182,17 @@ const request = async (t: { r: Renderer; rig: SessionRig }) => {
   await configure(t, context);
   return t.r.answer({
     kind: "event",
-    at: AT,
+    ...READ,
     event: {
       kind: "request",
       id: REQUEST,
       context,
-      idleSince: null,
-      following: [],
-      feeds: UNFOLLOWED_FEEDS,
     },
   });
 };
 
 const handIn = (r: Renderer, event: Event) =>
-  r.answer({ kind: "event", at: AT, event });
+  r.answer({ kind: "event", ...READ, event });
 
 // The session's view as the cache holds it, released at once.
 function viewOf(rig: SessionRig) {
@@ -198,7 +205,7 @@ function viewOf(rig: SessionRig) {
 const done = (r: Renderer, { session, id: of }: Effect, ok: boolean) =>
   r.answer({
     kind: "event",
-    at: AT,
+    ...READ,
     event: {
       kind: "effect-done",
       session,
@@ -237,7 +244,7 @@ describe("a statusline request", () => {
     });
     expect(present.frame.rows.length).toBeGreaterThan(0);
     // The turn's record is the draw's half of the render event.
-    expect(new Map(record).has("drew")).toBe(true);
+    expect(new Map(record).has("at")).toBe(true);
   });
 
   // A restarted renderer: the host releases whatever its first output does
@@ -252,9 +259,10 @@ describe("a statusline request", () => {
     };
     const output = await r.answer({
       kind: "event",
-      at: AT,
+      ...READ,
       event: {
         kind: "start",
+        viewers: {},
         sessions: [mine, theirs].map((context) => ({
           context,
           worldState: rig.served.collector.requested(context),
@@ -284,14 +292,11 @@ describe("a statusline request", () => {
     const { effects } = answered(
       await t.r.answer({
         kind: "event",
-        at: AT,
+        ...READ,
         event: {
           kind: "request",
           id: REQUEST,
           context,
-              idleSince: null,
-          following: [],
-          feeds: UNFOLLOWED_FEEDS,
         },
       }),
     );
@@ -302,7 +307,7 @@ describe("a statusline request", () => {
   test("draws the daemon's own faults its world state carries, and an answer that carried the pipe event tells the host once it arrived", async () => {
     const event = {
       text: "a launched program's pipe outlived its launch",
-      at: AT,
+      ...READ,
       answered: false,
     };
     const t = renderer(undefined, () => ({
@@ -327,7 +332,7 @@ describe("a statusline request", () => {
   test("draws an act's failure no session's bar held as the daemon's warning, and an answer that carried it tells the host once it arrived", async () => {
     const event = {
       text: "copy: pbcopy failed: exit 1",
-      at: AT,
+      ...READ,
       answered: false,
     };
     const t = renderer(undefined, () => ({
@@ -361,6 +366,33 @@ describe("a statusline request", () => {
 });
 
 describe("a feed's frame", () => {
+  // [LAW:no-silent-failure] A feed's render that threw reaches a lane as a
+  // Frame saying so, with no failure branch in the lane.
+  test("whose render threw is the failure's Frame, a still bar in the error glyph's words, and its answers say so", () => {
+    const parts = {
+      renderCache: {
+        holdView: () => null,
+        openFailure: () => ({ error: new Error("the view would not open") }),
+      },
+    } as unknown as RendererParts;
+    const frame = renderFrame(
+      parts,
+      SESSION,
+      30,
+      READ,
+      new Set(["band"]),
+      UNFOLLOWED_FEEDS,
+    )!;
+    expect(frame.bar).toEqual(renderFailedFrame("the view would not open"));
+    expect(frame.bar.nextChange).toBe(Infinity);
+    expect(JSON.parse(frame.answers.resp)).toMatchObject({
+      ok: false,
+      code: "RENDER_FAILED",
+      error: "the view would not open",
+    });
+    expect(frame.failure).not.toBeNull();
+  });
+
   test("records what it showed as it is drawn, under the feed, apart from the request's", async () => {
     const { r, parts, recorded, rig } = renderer();
     answered(await request({ r, rig }));
@@ -370,11 +402,14 @@ describe("a feed's frame", () => {
       by.push(drawer);
       record(sessionId, drawer, copies);
     };
-    const frame = renderFrame(parts, SESSION, MOVING_FPS, AT, {
-      following: new Set(),
-      feeds: UNFOLLOWED_FEEDS,
-      idleSince: null,
-    });
+    const frame = renderFrame(
+      parts,
+      SESSION,
+      MOVING_FPS,
+      READ,
+      new Set(),
+      UNFOLLOWED_FEEDS,
+    );
     expect(frame?.failure).toBeNull();
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
     expect(by).toEqual(["feed"]);
@@ -386,11 +421,14 @@ describe("a feed's frame", () => {
     const { r, parts, changed, rig } = renderer();
     answered(await request({ r, rig }));
     const draw = (at: Instant) =>
-      renderFrame(parts, SESSION, MOVING_FPS, at, {
-        following: new Set(),
-        feeds: UNFOLLOWED_FEEDS,
-        idleSince: null,
-      });
+      renderFrame(
+        parts,
+        SESSION,
+        MOVING_FPS,
+        { at, tick: 0 as Tick },
+        new Set(),
+        UNFOLLOWED_FEEDS,
+      );
     const changedBefore = changed.length;
     const revision = rig.sessionState.latestRevision();
     expect(draw(AT)?.failure).toBeNull();
@@ -484,7 +522,7 @@ describe("the world state the host hands in", () => {
     const { subscriptions } = await request(t);
     expect(subscriptions.sources[SESSION]?.at(-1)).toEqual(run(1));
     expect(subscriptions.sources[other]).toEqual([run(2)]);
-    expect(subscriptions.tmuxStatus).not.toContain(other);
+    expect(subscriptions.lanes[other]).toBeUndefined();
   });
 
   test("every output names each open view's plugin sources at their storage keys", async () => {
@@ -529,23 +567,21 @@ describe("the session's config, ahead of its request", () => {
     const host = rendererHost(
       "main",
       systemTimekeeper,
-      hearingEvents(t.r, (input) => kinds.push(input.event.kind)),
+      hostHeld(hearingEvents(t.r, (input) => kinds.push(input.event.kind))),
       () => {},
-      t.rig.served.collector, NO_ACTS,
+      unfollowedCollector(t.rig.served.collector),
+      NO_ACTS,
     );
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
       host,
       t.rig.served.collector,
-      { since: () => undefined },
-      UNFOLLOWED,
       systemTimekeeper,
       new AbortController().signal,
       () => {},
       checked(),
       REQUEST,
-      AT,
-      (instantAt(systemTimekeeper) + 5) as Instant,
+      systemTimekeeper.monotonic() + 5000,
       facts as never,
     );
     expect(kinds).toEqual(["config"]);
@@ -565,14 +601,11 @@ describe("the session's config, ahead of its request", () => {
     const t = renderer();
     const answering = await t.r.answer({
       kind: "event",
-      at: AT,
+      ...READ,
       event: {
         kind: "request",
         id: REQUEST,
         context: checked(),
-          idleSince: null,
-        following: [],
-        feeds: UNFOLLOWED_FEEDS,
       },
     });
     expect(threw(answering).failure.message).toMatch(
@@ -610,27 +643,27 @@ describe("two requests of one session at different keys", () => {
     const host = rendererHost(
       "main",
       systemTimekeeper,
-      hearingEvents(t.r, (input) => {
-        if (input.event.kind === "config")
-          requests.push(input.event.worldState);
-      }),
+      hostHeld(
+        hearingEvents(t.r, (input) => {
+          if (input.event.kind === "config")
+            requests.push(input.event.worldState);
+        }),
+      ),
       () => {},
-      t.rig.served.collector, NO_ACTS,
+      unfollowedCollector(t.rig.served.collector),
+      NO_ACTS,
     );
     t.rig.served.route(host);
     const ask = (pane: string, id: number) =>
       answerStatusline(
         host,
         t.rig.served.collector,
-        { since: () => undefined },
-        UNFOLLOWED,
         systemTimekeeper,
         new AbortController().signal,
         () => {},
         checked(pane),
         id as RequestId,
-        AT,
-        (instantAt(systemTimekeeper) + 10) as Instant,
+        systemTimekeeper.monotonic() + 10_000,
         [],
       );
 
@@ -753,30 +786,31 @@ describe("a click", () => {
 });
 
 describe("the idle close", () => {
-  test("closes the session's menus in its own turn, with no effect", async () => {
-    const closed: string[] = [];
+  test("closes, in a due turn, the menus of each session idle past its timeout, with no effect", async () => {
+    const closed: Array<[string, number]> = [];
     const t = renderer({
       ...NO_VERBS,
       handler: () => undefined,
-      closeIdle: (sessionId) => {
-        closed.push(sessionId);
+      closeIdle: (sessionId, _latest, { idleS }) => {
+        closed.push([sessionId, idleS]);
       },
     });
-    const idle = {
-      firedAt: instantAt(systemTimekeeper),
-      idleS: 30,
-      timeoutS: 30,
-    };
-    const { effects } = answered(
-      await handIn(t.r, {
-        kind: "menu-idle",
-        session: SESSION,
-        idle,
-        latest: null,
-        stillIdle: true,
-      }),
-    );
+    t.parts.menuIdle.drew(SESSION, 0 as Tick, true, 30);
+    const due = (tick: number) =>
+      t.r.answer({
+        kind: "event",
+        at: AT,
+        tick: tick as Tick,
+        event: { kind: "due" },
+      });
+    expect(answered(await due(29)).effects).toEqual([]);
+    expect(closed).toEqual([]);
+    const { effects, subscriptions } = answered(await due(30));
     expect(effects).toEqual([]);
-    expect(closed).toEqual([SESSION]);
+    expect(closed).toEqual([[SESSION, 30]]);
+    // Taken as closed: no close is due until a draw shows a menu again.
+    expect(subscriptions.wake).toBeNull();
+    expect(answered(await due(1000)).effects).toEqual([]);
+    expect(closed).toHaveLength(1);
   });
 });

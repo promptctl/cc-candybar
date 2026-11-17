@@ -45,7 +45,7 @@ export const HEALTHY_INSTALL_EDGE: InstallEdge = {
   digest: () => {
     throw new Error("doctor: no checkout in this test");
   },
-  nativeShipped: true,
+  nativeShipped: () => true,
 };
 
 // Its one daemon: well under its budget, never out of memory.

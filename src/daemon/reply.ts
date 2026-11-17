@@ -240,7 +240,6 @@ export async function replyTo(
     fileEvents,
     runs,
     sourceRuns,
-    menuIdle,
     tmuxStatusLines,
     watcherRegistry,
     limits,
@@ -286,10 +285,9 @@ export async function replyTo(
     // [LAW:nothing-unseen] The mailbox as the request found it, before its
     // own push joins it: the input holding it and everything ahead.
     const mailbox = parts.renderer.stats();
-    const { stats: drawn } = await renderer.ask(
-      { kind: "stats" },
-      instantAt(clock),
-    );
+    const {
+      stats: { framesDrawn, ...drawn },
+    } = await renderer.ask({ kind: "stats" });
     return stay({
       ok: true,
       stats: stats.snapshot({
@@ -302,9 +300,9 @@ export async function replyTo(
         transcriptReads: transcriptReads(),
         ...drawn,
         collector: parts.collector.stats(),
-        menuIdle: menuIdle.getStats(),
         mailbox,
-        frameFeeds: frameFeeds.getStats(),
+        // The frames drawn are the renderer's count, the rest the host's.
+        frameFeeds: { ...frameFeeds.getStats(), drawn: framesDrawn },
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
@@ -413,14 +411,11 @@ export async function replyTo(
     const answered = await answerStatusline(
       parts.renderer,
       parts.collector,
-      parts.menuIdle,
-      frameFeeds,
       clock,
       parts.closing,
       parts.log,
       checked.req,
       order,
-      at,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
       // draw (src/daemon/foundations/request-deadline.ts).
@@ -482,10 +477,7 @@ export async function replyTo(
         daemonV: PROTOCOL_VERSION,
       });
     }
-    const { snapshot } = await renderer.ask(
-      { kind: "debug", what: req.what },
-      instantAt(clock),
-    );
+    const { snapshot } = await renderer.ask({ kind: "debug", what: req.what });
     return stay({ ok: true, debug: snapshot });
   }
 
@@ -739,35 +731,24 @@ async function handleClick(
     noteFacts(facts, { sid: session.id });
     parts.collector.clicked(session.id);
   }
-  // [LAW:no-ambient-temporal-coupling] Its session's idle clock holds no
-  // deadline from the click's arrival to its answer: its wait in the mailbox
-  // is no idleness, and an idle close that fired meanwhile goes no further.
-  const pending = session?.ok ? session.id : null;
-  if (pending !== null) parts.menuIdle.clickArrived(pending);
-  let delivered: HostTurn;
-  try {
-    // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
-    // client took a TIMEOUT or left while it waited never lands, so clicking
-    // again cannot revert a toggle.
-    delivered = await parts.renderer.answer(() =>
-      click.gone()
-        ? failureOf(new ClickAbandoned(verb))
-        : {
-            kind: "event",
-            at: instantAt(parts.clock),
-            event: {
-              kind: "click",
-              verb,
-              value,
-              session,
-              arrival,
-              latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
-            },
+  // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
+  // client took a TIMEOUT or left while it waited never lands, so clicking
+  // again cannot revert a toggle.
+  const delivered: HostTurn = await parts.renderer.answer(() =>
+    click.gone()
+      ? failureOf(new ClickAbandoned(verb))
+      : {
+          kind: "event",
+          event: {
+            kind: "click",
+            verb,
+            value,
+            session,
+            arrival,
+            latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
           },
-    );
-  } finally {
-    if (pending !== null) parts.menuIdle.clickSettled(pending);
-  }
+        },
+  );
   // [LAW:nothing-unseen] How long the click waited for the renderer's turn.
   noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);

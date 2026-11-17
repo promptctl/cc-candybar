@@ -95,7 +95,7 @@ import {
 } from "../config/loader/plugins.js";
 import { ownedBy, pluginNs } from "../config/loader/plugin-scope.js";
 import { projectionsOf } from "../config/loader/projections.js";
-import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
+import type { TurnClock } from "./turn-time";
 import type { RenderCacheStats } from "../daemon/foundations/stats-snapshot";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
@@ -165,8 +165,8 @@ export const MAX_ENTRIES = 256;
 // the session source (src/renderer/session-source.ts) a view's payload is
 // derived through; they are not part of cache identity or lifecycle.
 export interface RenderDeps<S extends ViewSource = ViewSource> {
-  // The daemon's clock (StateDeps).
-  clock: Timekeeper;
+  // The renderer's turn time (StateDeps).
+  clock: TurnClock;
   // The daemon's state directory, where the repositories' answers are kept
   // (StateDeps).
   stateDir: string;
@@ -196,9 +196,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
 
 // What building one config's state needs.
 export interface StateDeps {
-  // The clock its variables' ages and the load's own duration run on: the
-  // daemon's.
-  readonly clock: Timekeeper;
+  // The clock its variables' ages run on, and its sources' held work: the
+  // renderer's turn time, or the clock of a command that draws once.
+  readonly clock: TurnClock;
   // The state directory whose answers book a load reads: which repositories'
   // plugins it may run.
   readonly stateDir: string;
@@ -362,7 +362,6 @@ export function pluginLoadLine(
     config,
     compiled,
   }: Pick<DslRenderState, "plugins" | "config" | "compiled">,
-  ms: number,
 ): string {
   const { checkout, loaded, dropped, unreached } = plugins;
   const checkoutField =
@@ -389,7 +388,7 @@ export function pluginLoadLine(
   const sources = declared.filter(([, d]) => d.kind === "source").length;
   const pluginVariables = declared.length - sources;
   return (
-    `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField} ms=${ms}` +
+    `config load ${chainName(layers, "<default>")}: projections=${[...projectionsOf(config).keys()].join(",") || "-"} instantSegments=${instantSegments(compiled).join(",") || "-"} instantTemplates=${compiled.instant.size} plugins loaded=${loaded.length} sources=${sources} pluginVariables=${pluginVariables} dropped=${dropped.length} unplaced=${unreached.length} checkout=${checkoutField}` +
     loaded.map((p) => ` +${p.path} data=${dataOf(p)}`).join("") +
     dropped.map((d) => ` -${d.path} (${d.reason})`).join("") +
     unreached.map((d) => ` ~${d.path} (${d.reason})`).join("")
@@ -664,9 +663,6 @@ export type LoadOutcome = {
   readonly home: string;
   readonly repos: RepoGate;
   readonly warning: string | null;
-  // How long the attempt took, resolution to built state or to its error:
-  // the one number that shows a load getting slower or faster.
-  readonly ms: number;
 } & (
   | {
       readonly kind: "built" | "kept";
@@ -961,11 +957,10 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
 }
 
 // What every load of one chain shares, whatever its attempt: the advisories
-// its resolution earned, and when it started.
+// its resolution earned.
 export interface LoadFrame {
   readonly repos: RepoGate;
   readonly advisories: ReadonlyArray<string | null>;
-  readonly started: Monotonic;
 }
 
 // [LAW:single-enforcer] The one place a load's outcome is composed, for every
@@ -979,14 +974,12 @@ export function settle(
   chain: ConfigChain,
   resolveWarnings: readonly string[],
   attempt: Attempt,
-  clock: Pick<Timekeeper, "monotonic">,
 ): LoadOutcome {
   const common = {
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain.layers.map((l) => l.path),
     home: chain.home,
     repos: frame.repos,
-    ms: elapsedMs(clock, frame.started),
   };
   const warning = (own: readonly string[]): string | null =>
     joinWarnings([...frame.advisories, ...resolveWarnings, ...own]);
@@ -1026,7 +1019,7 @@ function loadChain(
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain);
   if (resolved.kind === "failed") {
-    return settle(frame, chain, [], resolved, deps.clock);
+    return settle(frame, chain, [], resolved);
   }
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
@@ -1034,7 +1027,7 @@ function loadChain(
     served?.loadKey === resolved.key
       ? { kind: "kept", state: served }
       : buildRenderState(resolved, deps);
-  return settle(frame, chain, resolved.warnings, attempt, deps.clock);
+  return settle(frame, chain, resolved.warnings, attempt);
 }
 
 // [LAW:effects-at-boundaries] One attempt at the disk: read the user's
@@ -1051,7 +1044,6 @@ export function loadFromDisk(
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const started = deps.clock.monotonic();
   const resolution = resolveDslConfig(
     deps.locations,
     repoConfigs(deps.stateDir).read(),
@@ -1085,7 +1077,7 @@ export function loadFromDisk(
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
   // and its diagnostics count `lastError` and `lastWarning`.
-  return loadChain({ repos, advisories, started }, cwd, chain, deps, served);
+  return loadChain({ repos, advisories }, cwd, chain, deps, served);
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
@@ -1442,7 +1434,7 @@ export class RenderCache<
 
     const loaded = this.load(projectDir, cwd, configFile, null);
     if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     // [LAW:no-silent-failure] A config that fails its FIRST load still yields
     // a bar: the bundled default, built exactly here and only then — the error
     // is counted by the indicator beside its settings door, loud, and the
@@ -1983,7 +1975,7 @@ export class RenderCache<
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
     if (loaded.state !== null)
-      this.log("info", pluginLoadLine(loaded.layers, loaded.state, loaded.ms));
+      this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     if (loaded.kind === "built") {
       entry.state = loaded.state;
       this.serve(loaded.state);
@@ -2026,7 +2018,9 @@ export class RenderCache<
   // one whenever an entry is due.
   private armWalk(): void {
     if (this.walk !== null || this.due.size === 0) return;
-    this.walk = this.deps.clock.defer(() => this.walkOne());
+    // [LAW:no-ambient-temporal-coupling] Held for the next `due` turn, so
+    // the inputs that came meanwhile are taken between two entries' loads.
+    this.walk = this.deps.clock.after(0, () => this.walkOne());
   }
 
   // The turn takes the most recently used due entry, read off the map as it

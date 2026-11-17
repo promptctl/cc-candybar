@@ -4,8 +4,8 @@
 // the test hands in its own. A test that builds its daemon parts by hand spreads
 // these in.
 
-import { holdable, NO_PUSHES } from "./renderers";
-import { minter } from "./renderer-parts";
+import { holdable, hostHeld, NO_PUSHES } from "./renderers";
+import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
 import type { DaemonParts } from "../../src/daemon/daemon-parts";
@@ -13,7 +13,8 @@ import { rendererHost, type HostWorld } from "../../src/daemon/renderer-host";
 import type { ActsOnTheirWay } from "../../src/renderer/acts";
 import { mainRenderer } from "../../src/renderer/main";
 import { systemTimekeeper } from "../../src/time";
-import { instantOf } from "../../src/utils/instant";
+import { TurnTime } from "../../src/renderer/turn-time";
+import { MenuIdle } from "../../src/renderer/menu-idle";
 import {
   verbsOver,
   type DaemonVerbContext,
@@ -42,16 +43,32 @@ export function clickParts(
   // Another turn, held in the renderer's mailbox until `open`: every input
   // sent after it waits there, in flight.
   park: () => { readonly open: () => void; readonly holding: Promise<unknown> };
+  // The renderer's idle periods, which a test opens a menu's in.
+  menuIdle: MenuIdle;
 } {
+  const time = new TurnTime();
+  const menuIdle = new MenuIdle();
   // A click's turn reads the verbs and, for its output, the open views'
   // subscriptions: this rig opens none.
   const parts = {
-    verbs: verbsOver(verbCtx),
-    renderCache: { subscriptions: () => ({ sources: {} }) },
+    // A click's landing restarts its session's idle period, as the main
+    // renderer wires it.
+    verbs: verbsOver({
+      ...verbCtx,
+      clickLanded: (sessionId) => {
+        verbCtx.clickLanded(sessionId);
+        menuIdle.clicked(sessionId, time.tick);
+      },
+    }),
+    renderCache: { subscriptions: () => ({ sources: {} }), holdView: () => null },
+    // The renderer says what it does on the log its verbs write to.
+    log: verbCtx.log,
     // No view is open, so no lane is read.
     laneActs: { noted: () => {}, clicked: () => {} },
-    // What the renderer times each turn by.
-    clock: systemTimekeeper,
+    // The readings each input carries, and the idle periods a `due` closes.
+    time,
+    menuIdle,
+    feeds: noFeeds(),
     mint: minter(),
     // The acts the test's verb context asks, settled by this rig's host.
     acts: verbCtx.acts as ActsOnTheirWay,
@@ -70,10 +87,11 @@ export function clickParts(
   const renderer = rendererHost(
     "main",
     systemTimekeeper,
-    held.renderer,
+    hostHeld(held.renderer),
     () => {},
     {
       subscribed: () => {},
+      frames: () => {},
       holding: collector.holding,
       writableSettings: () => [],
     },
@@ -83,13 +101,13 @@ export function clickParts(
     renderer,
     collector,
     linkSigner: TEST_SIGNER,
+    menuIdle,
     park: () => {
       const open = held.hold();
       const holding = renderer.deliver(
         () => ({
           kind: "event",
-          at: instantOf(new Date()),
-          event: { kind: "start", sessions: [] },
+          event: { kind: "start", viewers: {}, sessions: [] },
         }),
         [],
       );

@@ -18,12 +18,12 @@ import type { DoctorAsk } from "../doctor/gather";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
-import type { Instant } from "../utils/instant";
+import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest } from "./request-context";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
-import type { Lane, LaneFeeds } from "../config/lanes";
+import type { Lane, LaneSwitches } from "../config/lanes";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
 import type { SlashLine } from "../claude-input/slash-line";
@@ -41,40 +41,69 @@ export type RequestId = number & { readonly [REQUEST_ID]: true };
 declare const EFFECT_ID: unique symbol;
 export type EffectId = number & { readonly [EFFECT_ID]: true };
 
-// [LAW:one-type-per-behavior] One interface over every transport: in process
-// for now, a socket to the renderer's own process later. Each kind of input
-// answers with its own output, so an input pays only for what it is.
-export interface Renderer {
-  answer(input: EventInput): Promise<RendererOutput>;
-  answer(input: AdapterInput): Promise<AdapterOutput>;
+// [LAW:one-type-per-behavior] One interface over every transport: in process,
+// or lines to the renderer's own process. Each kind of input answers with its
+// own output, so an input pays only for what it is.
+export interface Answering<E, A> {
+  answer(input: EventInput): Promise<E>;
+  answer(input: AdapterInput): Promise<A>;
 }
+
+// What a renderer implements: every input answered by its output.
+export type Renderer = Answering<RendererOutput, AdapterOutput>;
+
+// An output as its transport hands it to the host, with how long the turn
+// took, measured around `answer` on the clock of the process it ran in: the
+// renderer reads none, and the host tells the hop's cost from the turn's.
+export type Timed<O> = O & { readonly turnMs: number };
+
+// What the host holds of a renderer: its answers, each timed by its transport.
+export type TimedRenderer = Answering<
+  Timed<RendererOutput>,
+  Timed<AdapterOutput>
+>;
 
 export type RendererInput = EventInput | AdapterInput;
 
 // [LAW:single-enforcer] The one dispatch from an input to the answer of its
-// kind, which every renderer is built by. Each arm is typed by its own input
-// and output, so an arm answering the other kind's output fails the build,
-// which an overload's body does not.
-export function rendererOf(arms: {
-  readonly event: (input: EventInput) => Promise<RendererOutput>;
-  readonly adapter: (input: AdapterInput) => Promise<AdapterOutput>;
-}): Renderer {
-  function answer(input: EventInput): Promise<RendererOutput>;
-  function answer(input: AdapterInput): Promise<AdapterOutput>;
-  function answer(
-    input: RendererInput,
-  ): Promise<RendererOutput | AdapterOutput> {
+// kind, which every renderer and every transport is built by. Each arm is
+// typed by its own input and output, so an arm answering the other kind's
+// output fails the build, which an overload's body does not.
+export function rendererOf<E, A>(arms: {
+  readonly event: (input: EventInput) => Promise<E>;
+  readonly adapter: (input: AdapterInput) => Promise<A>;
+}): Answering<E, A> {
+  function answer(input: EventInput): Promise<E>;
+  function answer(input: AdapterInput): Promise<A>;
+  function answer(input: RendererInput): Promise<E | A> {
     return input.kind === "event" ? arms.event(input) : arms.adapter(input);
   }
   return { answer };
 }
 
-export interface EventInput {
+// [LAW:single-enforcer] The one measure of a turn, around the renderer's
+// `answer`, on the monotonic clock of the process it runs in.
+export function timed(
+  renderer: Renderer,
+  monotonic: () => number,
+): TimedRenderer {
+  const time = async <O>(answer: () => Promise<O>): Promise<Timed<O>> => {
+    const from = monotonic();
+    const output = await answer();
+    return { ...output, turnMs: Math.round(monotonic() - from) };
+  };
+  return rendererOf({
+    event: (input) => time(() => renderer.answer(input)),
+    adapter: (input) => time(() => renderer.answer(input)),
+  });
+}
+
+// [LAW:effects-at-boundaries] Every input carries the host's two readings,
+// made as its slot in the mailbox comes (`Readings`): the renderer reads no
+// clock.
+export interface EventInput extends Readings {
   readonly kind: "event";
   readonly event: Event;
-  // [LAW:effects-at-boundaries] The instant the turn runs at, read by the host:
-  // the renderer reads no clock for it.
-  readonly at: Instant;
 }
 
 // A session's config as its newest request names it, and the world state read
@@ -89,17 +118,19 @@ export interface SessionConfig {
 // (src/renderer-interface/adapter.ts). A push opens no view and names no
 // session's subscriptions, so it carries none of an event's turn: its output
 // is its reply alone.
-export interface AdapterInput {
+export interface AdapterInput extends Readings {
   readonly kind: "adapter";
   readonly push: AdapterPush;
-  readonly at: Instant;
 }
 
 // [LAW:no-silent-failure] A push's turn answers its reply, of its push's own
-// kind, or how it threw, as data.
-export type AdapterOutput =
+// kind, or how it threw, as data; and either way what the renderer needs read
+// and when it next wants a turn, as they stand after it: a push moves state
+// too (a reload of every entry starts a walk that wants turns).
+export type AdapterOutput = (
   | { readonly kind: "replied"; readonly reply: AdapterReply }
-  | { readonly kind: "threw"; readonly failure: Failure };
+  | { readonly kind: "threw"; readonly failure: Failure }
+) & { readonly subscriptions: Subscriptions };
 
 // [LAW:types-are-the-program] Every input and output of a turn is plain data:
 // the build fails on one a process could not carry.
@@ -112,6 +143,10 @@ export type Event =
       // one in, in one turn, so the start's output names everything the
       // renderer serves and the host releases nothing it still holds for one.
       readonly kind: "start";
+      // Who watches each session's frames as the start is made, taken
+      // before the sessions are configured: a watched session's feed holds
+      // its view before the view opens.
+      readonly viewers: Viewers;
       readonly sessions: readonly SessionConfig[];
     }
   | {
@@ -135,16 +170,6 @@ export type Event =
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
-      // When the idle period of the menus the session's last frame drew
-      // began, as the host's idle clock reads it as this turn comes: null
-      // while that frame drew none, or a click is in flight.
-      readonly idleSince: Instant | null;
-      // What the host's feeds know of the session at the request's instant:
-      // the lanes that follow it and draw it now, which the statusline hands
-      // the bar to, and what each was sent of late, which the bar's rate
-      // cell shows.
-      readonly following: readonly Lane[];
-      readonly feeds: LaneFeeds;
     }
   | {
       // A session's world state moved since the one the renderer holds: read
@@ -185,20 +210,48 @@ export type Event =
       readonly latest: CheckedRenderRequest | null;
     }
   | {
-      // The session's idle clock ran out: the turn closes its menus as the
-      // ✕ does.
-      readonly kind: "menu-idle";
-      readonly session: SessionId;
-      // The firing of the session's idle clock, whose span the close's line
-      // says.
-      readonly idle: IdleSpan;
-      // Whether the close goes ahead: the session still known idle since the
-      // firing, as the host's idle clock judged it as this turn came. A click
-      // since the firing keeps what it opened.
-      readonly stillIdle: boolean;
-      // The newest request of the session the host holds, as a click's.
-      readonly latest: CheckedRenderRequest | null;
+      // Who watches each session's frames now, whole: a feed opens for a
+      // session that gained its first viewer and closes for one that lost
+      // its last.
+      readonly kind: "viewers";
+      readonly viewers: Viewers;
+    }
+  | {
+      // The tick the renderer last declared (`Subscriptions.wake`) has
+      // come: what is due by the turn's tick runs in it.
+      readonly kind: "due";
     };
+
+// [LAW:one-source-of-truth] Who watches one session's frames, as the host
+// derives it from its own sources: each lane's subscribers and whether any of
+// them draws the bar now (a tmux status line showing the session's pane), and
+// whether the session's pane is on a screen.
+export interface SessionViewers {
+  readonly lanes: Readonly<Partial<Record<Lane, LaneViewers>>>;
+  readonly shown: boolean;
+  // Where the latest of its subscribers came among every subscriber the host
+  // has taken: one that joins is owed a frame even when the counts read as
+  // they did, as when one leaves and another takes its place.
+  readonly joined: number;
+}
+
+export interface LaneViewers {
+  readonly subscribers: number;
+  readonly drawing: boolean;
+}
+
+// Every session someone watches, whole: a session absent has no viewer.
+export type Viewers = Readonly<Record<SessionId, SessionViewers>>;
+
+// [LAW:one-source-of-truth] The lanes that follow a session and draw it now:
+// the one derivation from its viewers, which the renderer hands the bar to
+// and the host's lane edge waits on.
+export function followingOf(viewers: SessionViewers | undefined): Set<Lane> {
+  const following = new Set<Lane>();
+  for (const [lane, seen] of Object.entries(viewers?.lanes ?? {}))
+    if (seen.drawing) following.add(lane as Lane);
+  return following;
+}
 
 export type EffectOutcome =
   | { readonly kind: "ok" }
@@ -378,17 +431,44 @@ export type Subscription =
   | { readonly kind: "doctor"; readonly ask: DoctorAsk };
 
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
-// renderer holds needs read, and whose bar it draws in its tmux status line.
-// The host diffs it; nothing is declared by message, so nothing has to
-// remember what it asked. A session absent from it needs nothing read.
+// renderer holds needs read, which lanes its settings switch on, and when the
+// renderer next wants a turn. The host diffs it; nothing is declared by
+// message, so nothing has to remember what it asked. A session absent from it
+// needs nothing read.
 // [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
 // and a record, so it crosses a process as it is: a session absent is a key
 // absent, never one holding `undefined`, which JSON does not carry.
 export interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
-  // The sessions whose tmux status line switch is on, in order: the host
-  // holds each one's row in the pane its newest request reports.
-  readonly tmuxStatus: readonly SessionId[];
+  // The lanes each session with an open view switches on, as it draws them:
+  // the host gates every subscriber by its lane, and holds the tmux status
+  // line row of each session whose switch is on, in the pane its newest
+  // request reports. A session with no view has no switch to read.
+  readonly lanes: Readonly<Record<SessionId, LaneSwitches>>;
+  // [LAW:no-ambient-temporal-coupling] The tick the renderer next wants a
+  // turn at, derived from its own state as each turn ends: the host keeps one
+  // timer to it and hands it in as a `due`. Null while nothing is due.
+  readonly wake: Tick | null;
+}
+
+// A frame's two answers, serialized once for every subscriber: `resp`, which
+// a lane drawing the bar elsewhere is sent, and `statusline`, what Claude
+// Code's statusline shows (the bar, or the handoff line in its place while a
+// lane draws it elsewhere, src/renderer/lane-handoff.ts).
+export interface Answers {
+  readonly resp: string;
+  readonly statusline: string;
+}
+
+// A frame a feed drew, for the session's subscribers: the bar, which a lane
+// drawing it in tmux encodes, and its answers.
+// [LAW:decomposition] Every frame a feed draws is pushed: whether one changed
+// is the host's to judge, per subscriber, against what that one was sent.
+export interface PushedFrame {
+  readonly session: SessionId;
+  // Read through `parseFrame`: its Infinity crosses as null.
+  readonly bar: WireFrame;
+  readonly answers: Answers;
 }
 
 // How a turn ended, a turn that threw included: its failure as data, a class
@@ -406,18 +486,9 @@ export type TurnOutcome = {
 // [LAW:no-silent-failure] Every turn answers, so `answer` never rejects. Its
 // output names the open views' subscriptions as they stand after it, however
 // it ended: an act can land before its turn throws (a click that committed
-// and followed its view), and its view is read all the same.
-// `turnMs` is how long the turn took on the renderer's own clock, so the host
-// tells what the hop to the renderer cost from what the turn did.
+// and followed its view), and its view is read all the same. Its frames are
+// those its feeds drew in it.
 export type RendererOutput = TurnOutcome & {
   readonly subscriptions: Subscriptions;
-  readonly turnMs: number;
+  readonly frames: readonly PushedFrame[];
 };
-
-// A firing of a session's idle timer: when it fired, how long the session was
-// idle by then, and the timeout it ran.
-export interface IdleSpan {
-  readonly firedAt: Instant;
-  readonly idleS: number;
-  readonly timeoutS: number;
-}
