@@ -60048,6 +60048,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     });
   }
   if (req.kind === "stats") {
+    const mailbox = parts.renderer.stats();
     const { stats: drawn } = await renderer.ask(
       { kind: "stats" },
       instantAt(clock)
@@ -60065,7 +60066,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         ...drawn,
         collector: parts.collector.stats(),
         menuIdle: menuIdle.getStats(),
-        mailbox: parts.renderer.stats(),
+        mailbox,
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
@@ -75423,18 +75424,17 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   const inMailbox = (slot) => {
     const asked2 = clock.monotonic();
     queued++;
-    return mailbox.run(name, () => {
+    return mailbox.run(name, async () => {
       queued--;
-      return slot(elapsedMs(clock, asked2));
+      const queuedMs = elapsedMs(clock, asked2);
+      const held = { input: "-", since: clock.monotonic() };
+      holder = held;
+      try {
+        return await slot(queuedMs, (input) => void (held.input = input));
+      } finally {
+        holder = null;
+      }
     });
-  };
-  const answered = async (input, answer3) => {
-    holder = { input, since: clock.monotonic() };
-    try {
-      return await answer3();
-    } finally {
-      holder = null;
-    }
   };
   const unanswered = (failure, queuedMs) => ({
     turn: {
@@ -75454,10 +75454,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     try {
       release4 = session === null ? release4 : collector.holding(session);
       const sentAt = clock.monotonic();
-      const { subscriptions, turnMs, ...output } = await answered(
-        input.event.kind,
-        () => renderer.answer(input)
-      );
+      const { subscriptions, turnMs, ...output } = await renderer.answer(input);
       const turn = {
         ...output,
         queuedMs,
@@ -75562,33 +75559,37 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         );
     }
   };
-  const answer2 = async (make) => {
-    const { turn, settled: settled3 } = await inMailbox((queuedMs) => {
+  const taken = async (make) => {
+    const { event, slotted } = await inMailbox(async (queuedMs, holds2) => {
       let made;
       try {
         made = make();
       } catch (thrown2) {
         made = failureOf(thrown2);
       }
-      return made.kind === "event" ? inSlot(made, queuedMs) : Promise.resolve(unanswered(made, queuedMs));
+      if (made.kind !== "event")
+        return { event: null, slotted: unanswered(made, queuedMs) };
+      holds2(made.event.kind);
+      return { event: made.event, slotted: await inSlot(made, queuedMs) };
     });
-    return { ...turn, settled: await settled3 };
+    return {
+      event,
+      turn: { ...slotted.turn, settled: await slotted.settled }
+    };
   };
+  const answer2 = async (make) => (await taken(make)).turn;
   const deliver = async (make, about) => {
-    const made = {};
-    const turn = await answer2(() => made.input = make());
-    record2(made.input?.event ?? null, about, turn);
+    const { event, turn } = await taken(make);
+    record2(event, about, turn);
     return turn;
   };
   const ask2 = async (push, at) => {
-    const output = await inMailbox(
-      () => answered(
-        `push:${push.kind}`,
-        () => renderer.answer({ kind: "adapter", push, at })
-      ).catch(
+    const output = await inMailbox((_queuedMs, holds2) => {
+      holds2(`push:${push.kind}`);
+      return renderer.answer({ kind: "adapter", push, at }).catch(
         (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
-      )
-    );
+      );
+    });
     if (output.kind === "threw")
       throw new CrossedFailure({
         ...output.failure,
@@ -93235,9 +93236,7 @@ function createDaemon(inputs) {
       instant()
     )).lanes,
     // [LAW:no-ambient-temporal-coupling] The pin's wake of the session's
-    // state only moves the feed's timer, which fires in a later turn. A click
-    // that awaits gives up the loop, so a frame may show its writes ahead of
-    // its commit; the step stays whole.
+    // state only moves the feed's timer, which fires in a later turn.
     pin: (sessionId2) => parts.renderer.tell({ kind: "pin", session: sessionId2 }, instant()),
     unpin: (sessionId2) => parts.renderer.tell({ kind: "unpin", session: sessionId2 }, instant()),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
@@ -93477,9 +93476,10 @@ function createDaemon(inputs) {
     clock,
     exit: exit2,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in holds or waits for a journal's turn,
-    // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
-    // reached as the daemon closed is refused here and opens no feed.
+    // the way in. A click that got in waits its turn in the renderer's
+    // mailbox: one ahead of the close runs whole, and one behind it is
+    // refused; a subscribe its request reached as the daemon closed is
+    // refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
       return handleRequest(parts, req, timedOut, accepted, clientLeft);
@@ -93516,8 +93516,8 @@ function createDaemon(inputs) {
         // one waits behind whatever turn the renderer is in, which can outlast
         // shutdown's backstop, while this waits only on its own tmux calls.
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
-        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
-        // journal in flight, so none opens after.
+        // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
+        // every click ahead of it lands whole, and none behind it begins.
         ["configWrites close", rendererStep("close-journal")],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the

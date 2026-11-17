@@ -4,15 +4,22 @@
     {
       "version": "pr-780",
       "ref": "refs/pull/780/merge",
-      "sha": "9e4dfe7f5265b116e52394de1fdaf3001b77da4c",
-      "timestamp": "2026-11-17T03:56:08.512Z",
+      "sha": "5549baee2b380f64c038d0b19b7fd5d57480dfb1",
+      "timestamp": "2026-11-17T04:10:38.570Z",
       "commits": [
         {
-          "sha": "9e4dfe7f5265b116e52394de1fdaf3001b77da4c",
+          "sha": "5549baee2b380f64c038d0b19b7fd5d57480dfb1",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-16T20:55:20-07:00",
-          "message": "Merge aea85878ca80973f2cecce6f2c30c36bdc3f5545 into cd22d86be5a01cf1358b2319620a5b9823ffc034\n"
+          "timestamp": "2026-11-17T04:09:42Z",
+          "message": "Merge ed5ce78c883fbdbbd7861987df82208c72dbb2b9 into cd22d86be5a01cf1358b2319620a5b9823ffc034\n"
+        },
+        {
+          "sha": "ed5ce78c883fbdbbd7861987df82208c72dbb2b9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T21:09:31-07:00",
+          "message": "fix(daemon): the mailbox's stats name the slot's holder and are read before their own push, and the close tests close through the mailbox (5gb)\n"
         },
         {
           "sha": "aea85878ca80973f2cecce6f2c30c36bdc3f5545",
