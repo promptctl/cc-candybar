@@ -22,7 +22,11 @@ import {
   RENDER_ANSWERS,
   renderFailure,
 } from "./foundations/render-answers.js";
-import { failureOf, type Failure } from "./foundations/verb-error.js";
+import {
+  DaemonClosing,
+  failureOf,
+  type Failure,
+} from "./foundations/verb-error.js";
 import type { Response } from "./foundations/protocol";
 import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
@@ -181,19 +185,24 @@ export async function answerStatusline(
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
     // [LAW:no-ambient-temporal-coupling] Made as its turn comes, so what it
     // reads of the host follows every input ahead of it: a click that landed
-    // during the wait is drawn by this request's idle reading.
-    delivered = await host.answer(() => ({
-      kind: "event",
-      at,
-      event: {
-        kind: "request",
-        id,
-        context: req,
-        idleSince: menuIdle.since(session, at) ?? null,
-        following: [...feeds.following(session)],
-        feeds: feeds.feedsOf(session, at),
-      },
-    }));
+    // during the wait is drawn by this request's idle reading, and a wait the
+    // daemon's close ended draws nothing into views its teardown is closing.
+    delivered = await host.answer(() =>
+      closing.aborted
+        ? failureOf(new DaemonClosing("render"))
+        : {
+            kind: "event",
+            at,
+            event: {
+              kind: "request",
+              id,
+              context: req,
+              idleSince: menuIdle.since(session, at) ?? null,
+              following: [...feeds.following(session)],
+              feeds: feeds.feedsOf(session, at),
+            },
+          },
+    );
   } finally {
     release();
   }

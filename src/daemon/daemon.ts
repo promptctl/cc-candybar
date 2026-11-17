@@ -757,11 +757,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // its output names every session it serves; and every open feed gets its
     // `pin`. All through the host's one path to the renderer, each turn
     // recorded there.
+    // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
+    // every input after it, the pins included, finds its sessions handed in.
     start: async () => {
       const at = instant();
-      for (const sessionId of frameFeeds.openFeeds())
-        parts.renderer.tell({ kind: "pin", session: sessionId }, at);
-      await parts.renderer.deliver(
+      const started = parts.renderer.start(
         () => ({
           kind: "event",
           at,
@@ -779,6 +779,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         }),
         [["why", "renderer-start"]],
       );
+      for (const sessionId of frameFeeds.openFeeds())
+        parts.renderer.tell({ kind: "pin", session: sessionId }, at);
+      await started;
     },
     ended: (event) => {
       rendererEnded = event;
@@ -895,7 +898,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
         // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
         // every click ahead of it lands whole, and none behind it begins.
-        ["configWrites close", rendererStep("close-journal")],
+        ["renderer journal close", rendererStep("close-journal")],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.

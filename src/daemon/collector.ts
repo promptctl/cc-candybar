@@ -503,6 +503,9 @@ export class Collector {
         runInAction(() => {
           // The read a request's stamp already took.
           if (moved === stamped.from) return;
+          // [LAW:no-ambient-temporal-coupling] A stamp and its delivery are
+          // one action, so a request's wait (`settled`) sees only a stamp
+          // whose world state is already in the mailbox, ahead of its turn.
           if (this.stamp({ session, stamped }, moved))
             void this.deps.deliver({
               kind: "world-state",

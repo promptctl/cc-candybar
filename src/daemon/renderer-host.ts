@@ -34,7 +34,6 @@ import { instantAt, type Instant } from "../utils/instant.js";
 import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
-import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import type { MailboxStats } from "./foundations/stats-snapshot.js";
@@ -85,6 +84,10 @@ export interface RendererHost {
   // One turn, recorded on its own line. `about` is what the host knows of the
   // input beyond its session, for that line.
   deliver(make: () => EventInput, about: TurnRecord): Promise<TurnOutcome>;
+  // A fresh renderer's start, recorded on its own line: it heads the
+  // mailbox, behind only the slot in progress, since every input after it is
+  // about the sessions it hands in.
+  start(make: () => EventInput, about: TurnRecord): Promise<TurnOutcome>;
   // One push, at `at`, answered by its reply. A push that threw or rejected,
   // or one answered by another push's reply, rejects with an Error naming the
   // renderer and the push: the caller that awaits it owns the failure.
@@ -124,7 +127,7 @@ export function rendererHost(
   },
   world: HostWorld,
 ): RendererHost {
-  const mailbox = new KeyedSerialQueue<RendererName>();
+  const mailbox = new Mailbox();
   // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
   // when: its answer, its changes landing and their `effect-done` turns.
   let holder: { input: string; readonly since: Monotonic } | null = null;
@@ -135,10 +138,11 @@ export function rendererHost(
   // a way to name the input holding it.
   const inMailbox = <T>(
     slot: (queuedMs: number, holds: (input: string) => void) => Promise<T>,
+    at: Place = "last",
   ): Promise<T> => {
     const asked = clock.monotonic();
     queued++;
-    return mailbox.run(name, async () => {
+    return mailbox.post(at, async () => {
       queued--;
       const queuedMs = elapsedMs(clock, asked);
       const held = { input: "-", since: clock.monotonic() };
@@ -352,6 +356,7 @@ export function rendererHost(
   // was made.
   const taken = async (
     make: () => EventInput | Failure,
+    at: Place = "last",
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
     const { event, slotted } = await inMailbox(async (queuedMs, holds) => {
       // [LAW:no-silent-failure] A make that threw is the turn's failure.
@@ -365,7 +370,7 @@ export function rendererHost(
         return { event: null, slotted: unanswered(made, queuedMs) };
       holds(made.event.kind);
       return { event: made.event, slotted: await inSlot(made, queuedMs) };
-    });
+    }, at);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled },
@@ -375,14 +380,14 @@ export function rendererHost(
     (await taken(make)).turn;
   // [LAW:nothing-unseen] An input no event of its own records is recorded
   // here, as it was made in its slot.
-  const deliver = async (
-    make: () => EventInput,
-    about: TurnRecord,
-  ): Promise<TurnOutcome> => {
-    const { event, turn } = await taken(make);
-    record(event, about, turn);
-    return turn;
-  };
+  const recorded =
+    (at: Place) =>
+    async (make: () => EventInput, about: TurnRecord): Promise<TurnOutcome> => {
+      const { event, turn } = await taken(make, at);
+      record(event, about, turn);
+      return turn;
+    };
+  const deliver = recorded("last");
   // [LAW:single-enforcer] The one place a push's output is judged: a push is
   // answered by the reply of its own kind, or it failed.
   const ask = async <P extends AdapterPush>(
@@ -427,7 +432,47 @@ export function rendererHost(
     heldMs: holder === null ? 0 : elapsedMs(clock, holder.since),
     queued,
   });
-  return { name, answer, deliver, ask, tell, stats };
+  return { name, answer, deliver, start: recorded("first"), ask, tell, stats };
+}
+
+// Where a slot joins the mailbox: behind every slot waiting, or ahead of them.
+type Place = "first" | "last";
+
+// [LAW:no-ambient-temporal-coupling] A renderer's mailbox: one slot runs at a
+// time, each once the one before it has settled, and one posted while the
+// mailbox is idle runs at once, in the caller's turn. A slot's rejection is
+// its own caller's and never stops the slots behind it.
+class Mailbox {
+  // The slots still to run, while one runs.
+  private waiting: Array<() => Promise<void>> | null = null;
+
+  post<T>(at: Place, slot: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      // [LAW:types-are-the-program] An entry never rejects, so the drain
+      // below has no failure to carry.
+      const entry = async (): Promise<void> => {
+        try {
+          resolve(await slot());
+        } catch (e) {
+          reject(e);
+        }
+      };
+      if (this.waiting !== null) {
+        if (at === "first") this.waiting.unshift(entry);
+        else this.waiting.push(entry);
+        return;
+      }
+      const waiting: Array<() => Promise<void>> = [];
+      this.waiting = waiting;
+      const drain = (next: () => Promise<void>): void =>
+        void next().then(() => {
+          const after = waiting.shift();
+          if (after === undefined) this.waiting = null;
+          else drain(after);
+        });
+      drain(entry);
+    });
+  }
 }
 
 // [LAW:one-source-of-truth] The session an event names: what a turn holds,

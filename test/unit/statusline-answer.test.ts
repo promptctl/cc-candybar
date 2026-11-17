@@ -158,11 +158,18 @@ async function answer(
     return () => void holds.count--;
   };
   const answered = await answerStatusline(
-    rendererHost("main", CLOCK, renderer, (_level, line) => logged.push(line), {
-      subscribed: (subscriptions) => void subscribed.push(subscriptions),
-      writableSettings: () => [],
-      holding,
-    }, NO_ACTS),
+    rendererHost(
+      "main",
+      CLOCK,
+      renderer,
+      (_level, line) => logged.push(line),
+      {
+        subscribed: (subscriptions) => void subscribed.push(subscriptions),
+        writableSettings: () => [],
+        holding,
+      },
+      NO_ACTS,
+    ),
     {
       requested: (req) => {
         named.add(req.hookData.session_id);
@@ -457,16 +464,21 @@ describe("the request's wait, between its config and its request", () => {
     expect(facts.get("ended")).toBe("deadline");
   });
 
-  test("the daemon's close ends the wait", async () => {
+  test("the daemon's close ends the wait, and the request draws nothing into the closing views", async () => {
     const closing = new AbortController();
     closing.abort();
-    const { renderer } = scripted(output([present(1)]));
-    const { facts } = await answer(renderer, [], [], undefined, {
+    const { renderer, requests } = scripted(output([present(1)]));
+    const { answered, facts } = await answer(renderer, [], [], undefined, {
       settled: () => new Promise(() => {}),
       waitEndsAt: 5000,
       closing: closing.signal,
     });
     expect(facts.get("ended")).toBe("closed");
+    expect(requests).toHaveLength(0);
+    expect(answered.resp).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("the daemon closed"),
+    });
   });
 
   test("holds no place in the mailbox: an input sent during the wait is answered before the request", async () => {
@@ -507,7 +519,11 @@ describe("the request's wait, between its config and its request", () => {
     );
     await drained();
     await host.deliver(
-      () => ({ kind: "event", at: AT, event: { kind: "retire", session: SESSION } }),
+      () => ({
+        kind: "event",
+        at: AT,
+        event: { kind: "retire", session: SESSION },
+      }),
       [],
     );
     wait.end();

@@ -371,8 +371,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     };
     phase = { kind: "starting", link, queued: [] };
     write(channel, { kind: "boot", boot: own.boot() });
-    // [LAW:no-ambient-temporal-coupling] The start heads the queue: the host's
-    // one path reaches it in the order it is called, so every input after
+    // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
+    // the host's mailbox (src/daemon/renderer-host.ts), so every input after
     // this is queued behind the state it changes.
     // [LAW:no-silent-failure] A start that throws is said, and the renderer
     // serves what the inputs after it bring.
