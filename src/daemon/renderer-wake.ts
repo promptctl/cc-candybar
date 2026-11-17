@@ -8,16 +8,10 @@
 // turn the host runs.
 
 import type { Instant } from "../utils/instant.js";
-import type { Timekeeper } from "../time.js";
+import type { Monotonic, Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { DaemonClosing, failureOf } from "./foundations/verb-error.js";
 import type { Declared, HostTurn, MakeOrFail } from "./renderer-host.js";
-
-// How far ahead of the wall a timer may fire and still count as come: the
-// resolution timers fire at. A due is handed in at the instant declared, or
-// at the slot's own when that is later, so a frame due at a beat is drawn for
-// the beat.
-export const TIMER_RESOLUTION_S = 0.002;
 
 // How soon a due after one that threw may come: a renderer whose due keeps
 // throwing declares the same instant again, and would otherwise be handed a
@@ -32,6 +26,9 @@ type State =
   | {
       readonly kind: "armed";
       readonly at: Instant;
+      // [LAW:no-ambient-temporal-coupling] When it comes, on the monotonic
+      // clock: a wall that steps after the arming moves no due.
+      readonly moment: Monotonic;
       readonly cancel: () => void;
     }
   // A due is in the mailbox: what is declared before its make runs is moot,
@@ -65,6 +62,13 @@ const noCosts = (): Costs => ({
 
 export class RendererWake {
   private state: State = { kind: "idle" };
+  // The instant the renderer last declared: a due no renderer answered
+  // declared nothing, and this stands.
+  private wake: Instant | null = null;
+  // [LAW:no-silent-failure] Until when a due that threw holds the next one
+  // off, whichever turn declares it: a throw that repeats is a beat of
+  // failures, said once, not a spin. A due that answers clears it.
+  private heldUntil: Instant | null = null;
   // Whether a due's throw has been said since a due last answered: a due
   // that keeps throwing is said once.
   private throwSaid = false;
@@ -78,17 +82,10 @@ export class RendererWake {
   // [LAW:single-enforcer] Every output's wake lands here, in the order the
   // turns answered: the latest declaration is the one timer.
   declare({ subscriptions: { wake }, turn }: Declared): void {
-    if (this.state.kind === "closed" || this.state.kind === "queued") return;
-    if (this.state.kind === "armed") this.state.cancel();
-    this.state = { kind: "idle" };
-    if (wake === null) return;
-    // [LAW:no-silent-failure] A due that threw holds the next one off, so a
-    // throw that repeats is a beat of failures, said once, not a spin.
-    const at =
-      turn.due !== null && turn.threw
-        ? (Math.max(wake, turn.due + DUE_AFTER_THROW_MS / 1000) as Instant)
-        : wake;
-    this.arm(at);
+    if (turn.due !== null)
+      this.heldUntil = turn.threw ? heldOff(turn.due) : null;
+    this.wake = wake;
+    this.rearm();
   }
 
   // The daemon's close: no due after it. First in the teardown, so nothing
@@ -99,18 +96,40 @@ export class RendererWake {
     this.summarize();
   }
 
-  private arm(at: Instant): void {
-    const ms = Math.max(0, at * 1000 - this.deps.clock.now());
-    const cancel = this.deps.clock.after(ms, () => this.fired(at));
-    this.state = { kind: "armed", at, cancel };
+  // [LAW:dataflow-not-control-flow] The one timer, to the latest declaration
+  // held off by a throw. The instant already armed stands as it is.
+  private rearm(): void {
+    if (this.state.kind === "closed" || this.state.kind === "queued") return;
+    const at =
+      this.wake === null
+        ? null
+        : (Math.max(this.wake, this.heldUntil ?? this.wake) as Instant);
+    if (this.state.kind === "armed") {
+      if (this.state.at === at) return;
+      this.state.cancel();
+    }
+    this.state = { kind: "idle" };
+    if (at === null) return;
+    // The wall is read once, as the instant is armed: from here the wait is
+    // a span on the monotonic clock. The wall reads whole milliseconds, so
+    // the span runs to the whole millisecond at or after the instant, and the
+    // wall the due's slot reads has reached it.
+    const ms = Math.max(0, Math.ceil(at * 1000) - this.deps.clock.now());
+    this.arm(at, (this.deps.clock.monotonic() + ms) as Monotonic);
   }
 
-  // [LAW:no-ambient-temporal-coupling] A timer runs on the monotonic clock
-  // and may fire before the wall reaches the instant it was set for: the
-  // rest is waited, so no due is handed in before the instant it is for.
-  private fired(at: Instant): void {
-    if (at - this.deps.clock.now() / 1000 > TIMER_RESOLUTION_S) {
-      this.arm(at);
+  private arm(at: Instant, moment: Monotonic): void {
+    const ms = Math.max(0, moment - this.deps.clock.monotonic());
+    const cancel = this.deps.clock.after(ms, () => this.fired(at, moment));
+    this.state = { kind: "armed", at, moment, cancel };
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A timer may fire before its moment on
+  // the monotonic clock: the rest is waited, so no due is handed in early.
+  // The wall has no say here, so one stepped back delays no due.
+  private fired(at: Instant, moment: Monotonic): void {
+    if (this.deps.clock.monotonic() < moment) {
+      this.arm(at, moment);
       return;
     }
     this.state = { kind: "queued" };
@@ -119,35 +138,35 @@ export class RendererWake {
 
   private async handIn(at: Instant): Promise<void> {
     let lateMs = 0;
+    let handedAt = at;
     const turn = await this.deps.due((slotAt) => {
       // [LAW:single-enforcer] A due whose slot comes after the close is
       // refused as it is made: the close's own steps run without one.
       if (this.state.kind === "closed")
         return failureOf(new DaemonClosing("due"));
       this.state = { kind: "idle" };
+      handedAt = slotAt;
       lateMs = Math.max(0, (slotAt - at) * 1000);
-      return {
-        kind: "event",
-        at: Math.min(
-          Math.max(at, slotAt),
-          slotAt + TIMER_RESOLUTION_S,
-        ) as Instant,
-        event: { kind: "due" },
-      };
+      // [LAW:one-source-of-truth] At its slot's instant, as every input is,
+      // so no input runs at an instant earlier than a turn ahead of it.
+      return { kind: "event", at: slotAt, event: { kind: "due" } };
     });
     if (turn.kind === "answered") this.throwSaid = false;
     // [LAW:single-enforcer] No renderer was live to take it, and the
-    // supervisor says that; or the close refused it, which is no throw.
-    else if (
-      turn.failure.kind !== "down" &&
-      turn.failure.kind !== "closing" &&
-      !this.throwSaid
-    ) {
-      this.throwSaid = true;
-      this.deps.log(
-        "error",
-        `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${turn.failure.detail}`,
-      );
+    // supervisor says that and starts one, whose start declares; or the
+    // close refused it, which is no throw.
+    else if (turn.failure.kind !== "down" && turn.failure.kind !== "closing") {
+      if (!this.throwSaid) {
+        this.throwSaid = true;
+        this.deps.log(
+          "error",
+          `wake: due threw, next due no sooner than ${DUE_AFTER_THROW_MS}ms after it: ${turn.failure.detail}`,
+        );
+      }
+      // One no renderer answered declared nothing: the last declaration
+      // stands, held off.
+      this.heldUntil = heldOff(handedAt);
+      this.rearm();
     }
     this.costs.dues++;
     this.costs.lateMs += lateMs;
@@ -173,3 +192,7 @@ export class RendererWake {
     this.summarizedAt = this.deps.clock.monotonic();
   }
 }
+
+// The earliest a due may come after one at `due` threw.
+const heldOff = (due: Instant): Instant =>
+  (due + DUE_AFTER_THROW_MS / 1000) as Instant;

@@ -255,16 +255,25 @@ export function rendererHost(
               },
               collector.writableSettings,
             );
-      if (!world.closing()) {
-        collector.declared({
-          subscriptions,
-          turn: {
-            due: input.event.kind === "due" ? input.at : null,
-            threw: output.kind === "threw",
-          },
-        });
-        collector.framed(frames);
-      }
+      // [LAW:no-silent-failure] The renderer answered and its changes have
+      // landed, so a throw taking what it declared or drew is the host's own
+      // fault, on every bar, and never the turn's: the turn's effects are
+      // still owed their `effect-done`.
+      if (!world.closing())
+        try {
+          collector.declared({
+            subscriptions,
+            turn: {
+              due: input.event.kind === "due" ? input.at : null,
+              threw: output.kind === "threw",
+            },
+          });
+          collector.framed(frames);
+        } catch (thrown) {
+          const said = `renderer ${name} ${input.event.kind} turn's output was not taken: ${failureOf(thrown).detail}`;
+          log("error", said);
+          world.unheard(said);
+        }
       // An act no landing let go: the close is its own cause, and any other
       // is its changes', whose own outcome says why.
       const unperformed: EffectOutcome =
@@ -444,7 +453,14 @@ export function rendererHost(
   // answered by the reply of its own kind, or it failed.
   const ask = async <P extends AdapterPush>(
     push: P,
-  ): Promise<ReplyTo<P["kind"]>> => {
+  ): Promise<ReplyTo<P["kind"]>> => (await pushed(push)).reply;
+  // A push's reply, and how long the renderer's turn took.
+  const pushed = async <P extends AdapterPush>(
+    push: P,
+  ): Promise<{
+    readonly reply: ReplyTo<P["kind"]>;
+    readonly turnMs: number;
+  }> => {
     // A renderer that rejected fails the push as one whose turn threw, so
     // every failure is said with the renderer and the push it failed.
     const output = await inMailbox(async (_queuedMs, holds) => {
@@ -480,15 +496,32 @@ export function rendererHost(
       );
     // [LAW:types-are-the-program] exception: the kinds were just compared,
     // which the compiler cannot carry from the reply's kind to its type.
-    return output.reply as ReplyTo<P["kind"]>;
+    return {
+      reply: output.reply as ReplyTo<P["kind"]>,
+      turnMs: output.turnMs,
+    };
   };
+  // [LAW:nothing-unseen] A push nobody awaits has no event of its own: its
+  // line says what it cost, so a reload a watch or a write drove, which the
+  // renderer cannot time, is timed by the turn it ran in.
   const tell = (push: AdapterPush): void =>
-    void ask(push).catch((thrown: unknown) => {
-      const failure = failureOf(thrown);
-      // [LAW:single-enforcer] A push no renderer was live to take is the
-      // supervisor's to say.
-      if (failure.kind !== "down") log("error", failure.detail);
-    });
+    void pushed(push).then(
+      ({ turnMs }) =>
+        log(
+          "info",
+          eventLine("turn", [
+            ["renderer", name],
+            ["input", `push:${push.kind}`],
+            ["ms", String(turnMs)],
+          ]),
+        ),
+      (thrown: unknown) => {
+        const failure = failureOf(thrown);
+        // [LAW:single-enforcer] A push no renderer was live to take is the
+        // supervisor's to say.
+        if (failure.kind !== "down") log("error", failure.detail);
+      },
+    );
   const stats = (): MailboxStats => ({
     holder: holder?.input ?? null,
     heldMs: holder === null ? 0 : elapsedMs(clock, holder.since),

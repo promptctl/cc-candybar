@@ -330,10 +330,11 @@ export class Feeds {
   // [LAW:single-enforcer] The one way a feed's next frame is brought forward:
   // to the earliest its spacing allows after its last frame, never later
   // than it already falls due. Answers whether it moved anything: a wake that
-  // did not was coalesced into a frame already due.
+  // did not was coalesced into a frame already due. A last frame later than
+  // `at` saw the wall step back, and spaces nothing, as in `due`.
   private hasten(feed: Feed, at: Instant): boolean {
     const spaced =
-      feed.last === null
+      feed.last === null || feed.last > at
         ? at
         : Math.max(at, feed.last + this.spacingOf(feed) / 1000);
     if (feed.next !== null && feed.next <= spaced) return false;

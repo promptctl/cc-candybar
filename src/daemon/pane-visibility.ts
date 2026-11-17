@@ -93,6 +93,17 @@ export function statusLinesOf(
   return { sessionOf, shownBy };
 }
 
+// Whether two answers show the same status lines: a server polled while
+// nothing moved answers the same, which changes nothing anyone draws.
+export function sameStatusLines(a: StatusLines, b: StatusLines): boolean {
+  const same = (
+    x: ReadonlyMap<string, string>,
+    y: ReadonlyMap<string, string>,
+  ): boolean =>
+    x.size === y.size && [...x].every(([key, value]) => y.get(key) === value);
+  return same(a.sessionOf, b.sessionOf) && same(a.shownBy, b.shownBy);
+}
+
 // [LAW:types-are-the-program] What one tmux server last said: the panes it
 // shows and what its status lines show, or why it could not be asked. A server
 // that could not be asked shows every pane, so a failed query costs frames,

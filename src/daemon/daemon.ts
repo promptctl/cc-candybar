@@ -513,22 +513,23 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-source-of-truth] Who watches each session reaches the renderer
   // as one owed delivery: each change marks it owed, and its turn reads the
   // viewers whole as its slot comes, so changes that land before it are one
-  // turn. None is made once the close has begun: the teardown closes the
-  // feeds it would open.
-  let viewersOwed = false;
+  // turn. [LAW:no-ambient-temporal-coupling] None is made once the close has
+  // begun, as no due is: what the teardown does to the subscribers (tmux's
+  // restore, the feeds' close) moves viewers nobody draws for any more.
+  let viewers: "current" | "owed" | "closed" = "current";
   function viewersChanged(): void {
-    if (viewersOwed || closing.signal.aborted) return;
-    viewersOwed = true;
+    if (viewers !== "current") return;
+    viewers = "owed";
     void parts.renderer
       .answer((at) => {
-        viewersOwed = false;
-        return closing.signal.aborted
-          ? failureOf(new DaemonClosing("viewers"))
-          : {
-              kind: "event",
-              at,
-              event: { kind: "viewers", viewers: frameFeeds.viewers() },
-            };
+        if (viewers === "closed")
+          return failureOf(new DaemonClosing("viewers"));
+        viewers = "current";
+        return {
+          kind: "event",
+          at,
+          event: { kind: "viewers", viewers: frameFeeds.viewers() },
+        };
       })
       .then((turn) => {
         // [LAW:no-silent-failure] A viewers turn that threw is said; one the
@@ -682,6 +683,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // compiler checks each against its entry in `AdapterToHost` here, so no
   // renderer file names a host type.
   const reaches: AdapterToHost = {
+    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
+    // the host's part in its crossing shape: a notice.
     log,
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
@@ -865,9 +868,11 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           parts.renderer.ask({ kind });
       // The session state still flushes after a close failed (runTeardown).
       const teardown: readonly TeardownStep[] = [
-        // [LAW:no-ambient-temporal-coupling] First of all: no due is handed
-        // in from here, so nothing the close does wakes the renderer again.
+        // [LAW:no-ambient-temporal-coupling] First of all: no due and no
+        // viewers turn is handed in from here, so nothing the close does
+        // wakes the renderer again.
         ["renderer wake close", () => rendererWake.close()],
+        ["renderer viewers close", () => void (viewers = "closed")],
         // [LAW:no-ambient-temporal-coupling] Then: from here a renderer that
         // ends is not started again, so no step below waits on a fresh boot.
         ["renderer close begins", () => link.beginClose()],

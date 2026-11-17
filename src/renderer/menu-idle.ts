@@ -45,9 +45,12 @@ export class MenuIdle {
     idle.timeoutS = menus.timeoutS;
   }
 
-  // A click of the session landed at `at`: a new idle period begins.
+  // A click of the session landed at `at`: a new idle period begins. A
+  // session never drawn has no period to begin again: its records come only
+  // from draws, which its retirement ends, and its first draw begins one.
   clicked(sessionId: SessionId, at: Instant): void {
-    this.record(sessionId, at).since = at;
+    const idle = this.sessions.get(sessionId);
+    if (idle !== undefined) idle.since = at;
   }
 
   // The earliest close due, or null while no session draws a menu.

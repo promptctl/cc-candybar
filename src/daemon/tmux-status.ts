@@ -35,7 +35,7 @@ import type { SessionId } from "./foundations/session-id.js";
 import { LANES } from "../config/lanes.js";
 import type { TmuxRun } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import type { StatusLines } from "./pane-visibility.js";
+import { sameStatusLines, type StatusLines } from "./pane-visibility.js";
 import type { Subscriber } from "./frame-feed.js";
 import {
   decodeSegments,
@@ -625,10 +625,11 @@ export class TmuxStatusLines {
 
   // [LAW:single-enforcer] The one place what a server's status lines show
   // changes, its view or a session laid out: each is what `draws` reads, so
-  // each is announced.
+  // each change is announced. A poll that answers the same view moves nothing.
   private viewOf(server: Server, view: StatusLines): void {
+    const moved = server.view === null || !sameStatusLines(server.view, view);
     server.view = view;
-    this.deps.changed();
+    if (moved) this.deps.changed();
   }
 
   private laidOut(server: Server, session: string, layout: Layout | null) {

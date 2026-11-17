@@ -7,7 +7,6 @@
 import {
   DUE_AFTER_THROW_MS,
   RendererWake,
-  TIMER_RESOLUTION_S,
 } from "../../src/daemon/renderer-wake";
 import type { HostTurn, MakeOrFail } from "../../src/daemon/renderer-host";
 import {
@@ -39,13 +38,14 @@ const THREW = turn({
   failure: failureOf(new Error("the walk broke")),
 } as Partial<HostTurn>);
 
-// A wake over a held clock whose wall reads `short` ms behind it for the next
-// reads, and a mailbox that makes each due as its slot comes, `slotLateMs`
-// after the timer fired, or holds it while `holding`.
+// A wake over a held clock whose wall reads `behindMs` behind it, and a
+// mailbox that makes each due as its slot comes, `slotLateMs` after the timer
+// fired, or holds it while `holding`.
 function rig() {
   const clock = heldClock(new Date(START_MS));
   const state = {
-    shorts: [] as number[],
+    behindMs: 0,
+    armings: 0,
     slotLateMs: 0,
     holding: false,
     answer: turn(),
@@ -53,14 +53,19 @@ function rig() {
   };
   const made: Array<EventInput | Failure> = [];
   const logged: string[] = [];
+  const wall = (): number => clock.now() - state.behindMs;
   const make = (m: MakeOrFail): HostTurn => {
-    made.push(m(((clock.now() + state.slotLateMs) / 1000) as Instant));
+    made.push(m(((wall() + state.slotLateMs) / 1000) as Instant));
     return state.answer;
   };
   const wake = new RendererWake({
     clock: {
       ...clock,
-      now: () => clock.now() - (state.shorts.shift() ?? 0),
+      now: wall,
+      after: (ms, fire, options) => {
+        state.armings++;
+        return clock.after(ms, fire, options);
+      },
     },
     due: async (m) => {
       if (state.holding) {
@@ -114,27 +119,33 @@ test("each declaration replaces the last: one timer, to the latest", async () =>
   expect(r.clock.pending()).toBe(0);
 });
 
-test("a timer that fires before the wall reaches its instant waits out the rest, and hands in one due", async () => {
+test("a wall stepped back after the arming delays no due: it comes on the monotonic clock, at its slot's instant", async () => {
   const r = rig();
   r.declare(at(100));
-  // The wall reads 5 ms behind the timer's moment as it fires.
-  r.state.shorts = [5, 5];
+  r.state.behindMs = 60_000;
   await r.step(100);
-  expect(r.made).toEqual([]);
-  await r.step(5);
-  // [LAW:no-ambient-temporal-coupling] One due, never before its instant.
-  expect(r.made).toHaveLength(1);
-  expect(r.dueAt()[0]).toBeGreaterThanOrEqual(at(100));
+  // [LAW:no-ambient-temporal-coupling] The renderer sees the step in the
+  // due's instant, never a due held for the length of it.
+  expect(r.dueAt()).toEqual([at(100 - 60_000)]);
 });
 
-test("a timer early by less than its resolution counts as come, and its due is handed in at the instant declared", async () => {
+test("an instant between whole milliseconds is waited to the next one, so the wall the slot reads has reached it", async () => {
+  const r = rig();
+  r.declare(at(100.4));
+  await r.step(100);
+  expect(r.made).toEqual([]);
+  await r.step(1);
+  expect(r.dueAt()).toEqual([at(101)]);
+  expect(r.dueAt()[0]).toBeGreaterThanOrEqual(at(100.4));
+});
+
+test("declaring the instant already armed keeps its timer", async () => {
   const r = rig();
   r.declare(at(100));
-  const earlyMs = TIMER_RESOLUTION_S * 1000 - 1;
-  r.state.shorts = [earlyMs];
-  // Its slot comes as early as the timer fired.
-  r.state.slotLateMs = -earlyMs;
-  await r.step(100);
+  await r.step(50);
+  r.declare(at(100));
+  expect(r.state.armings).toBe(1);
+  await r.step(50);
   expect(r.dueAt()).toEqual([at(100)]);
 });
 
@@ -176,15 +187,55 @@ test("a due that threw holds the next one off, and a throw that repeats is said 
   r.declare(at(1100), { due: at(1100), threw: true });
   await r.step(DUE_AFTER_THROW_MS);
   expect(r.made).toHaveLength(3);
-  expect(r.logged.filter((l) => l.startsWith("error wake: due threw"))).toHaveLength(1);
+  expect(
+    r.logged.filter((l) => l.startsWith("error wake: due threw")),
+  ).toHaveLength(1);
   // A due that answers clears it: the next throw is said again.
   r.state.answer = turn();
-  r.declare(at(2200));
-  await r.step(100);
+  r.declare(at(3100));
+  await r.step(1000);
+  r.declare(at(3200), { due: at(3100), threw: false });
   r.state.answer = THREW;
-  r.declare(at(2300));
   await r.step(100);
-  expect(r.logged.filter((l) => l.startsWith("error wake: due threw"))).toHaveLength(2);
+  expect(
+    r.logged.filter((l) => l.startsWith("error wake: due threw")),
+  ).toHaveLength(2);
+});
+
+test("a due that threw holds off every declaration after it, not only its own, until a due answers", async () => {
+  const r = rig();
+  r.state.answer = THREW;
+  r.declare(at(100));
+  await r.step(100);
+  r.declare(at(100), { due: at(100), threw: true });
+  // Another turn (an effect-done, a request) declares the past instant.
+  r.declare(at(100));
+  await r.step(DUE_AFTER_THROW_MS - 1);
+  expect(r.made).toHaveLength(1);
+  await r.step(1);
+  expect(r.made).toHaveLength(2);
+  r.state.answer = turn();
+  r.declare(at(1150), { due: at(1100), threw: false });
+  r.declare(at(1150));
+  await r.step(50);
+  expect(r.dueAt()).toEqual([at(100), at(1100), at(1150)]);
+});
+
+test("a due the renderer rejected, which declared nothing, is armed again to the last declaration, held off", async () => {
+  const r = rig();
+  r.state.answer = turn({
+    kind: "threw",
+    failure: failureOf(new Error("the renderer's lines broke")),
+    turnMs: null,
+  } as Partial<HostTurn>);
+  r.declare(at(100));
+  await r.step(100);
+  expect(r.clock.pending()).toBe(1);
+  await r.step(DUE_AFTER_THROW_MS);
+  expect(r.dueAt()).toEqual([at(100), at(1100)]);
+  expect(
+    r.logged.filter((l) => l.startsWith("error wake: due threw")),
+  ).toHaveLength(1);
 });
 
 test("a due no renderer took is the supervisor's to say, and the next renderer's start declares its own", async () => {
@@ -221,5 +272,7 @@ test("the dues' cost is said once a minute, not once a due", async () => {
     await r.step(1000);
   }
   expect(r.made).toHaveLength(61);
-  expect(r.logged.filter((l) => l.startsWith("info wake dues="))).toHaveLength(1);
+  expect(r.logged.filter((l) => l.startsWith("info wake dues="))).toHaveLength(
+    1,
+  );
 });
