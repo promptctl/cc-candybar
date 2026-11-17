@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-788",
+      "ref": "refs/pull/788/merge",
+      "sha": "858b3a29f92fa4932fa2d396bf796678334013ee",
+      "timestamp": "2026-11-17T20:18:59.862Z",
+      "commits": [
+        {
+          "sha": "858b3a29f92fa4932fa2d396bf796678334013ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T13:10:01-07:00",
+          "message": "Merge a90e11d39f7674df2b9a050c32540c03c4c1ec20 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "a90e11d39f7674df2b9a050c32540c03c4c1ec20",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T13:09:31-07:00",
+          "message": "feat(daemon): a renderer's stored state is handed in at its start and changes only by store effects, under its name's profile (uh4)\n\nThe renderer opens no file. Its picks, drafts, settings history, doctor\nmarks, clicked terminals and post-mortems read come back as `store` writes,\nwhich the host holds in memory and writes behind under the profile the\nrenderer's name derives. A start hands all of it back, so a restarted or\ncrashed renderer keeps every pick, draft and undo step. The default name\nkeeps today's layout; a second name writes only under its own profile.\n\nNo stored state names a path: an undo step names its layer by role, and the\nconfig origin and client hints a click needs are the host's own session\ncontexts, kept across a daemon restart so a click acts before the session's\nnext request. The adapter's persistence entries are gone.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "6a80d602074487ee6985818c2347cc57b21d9e46",
