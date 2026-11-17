@@ -17,11 +17,12 @@ const EDGE_OPTS = { maxWidth: 80 };
 function renderCells(cells: readonly RichText[]): readonly Run[] {
   return drawStripCells(cells, {
     endcaps: "plain",
-    colorCompatibility: "truecolor", wrap: true, padding: 0,
+    colorCompatibility: "truecolor",
+    wrap: true,
+    padding: 0,
     width: Number.POSITIVE_INFINITY,
   }).lines.flat();
 }
-
 
 // Helper: evaluate a template and convert to StripCells.
 function evalCells(source: string, scope: object = {}) {
@@ -63,7 +64,9 @@ describe("multi-cell toolbar shape", () => {
     // The inter-link space is unlinked plain text; it becomes its own cell rather
     // than being absorbed into either neighbour. Same reasoning as the
     // "leading joiner" test below.
-    const cells = evalCells('{{ link "http://a" "A" }} {{ link "http://b" "B" }}');
+    const cells = evalCells(
+      '{{ link "http://a" "A" }} {{ link "http://b" "B" }}',
+    );
     expect(cells).toHaveLength(3);
     expect(resolvedStyle(cells[0]!.style).link).toBe("http://a");
     expect(cells[0]!.plain).toBe("A");
@@ -85,7 +88,7 @@ describe("multi-cell toolbar shape", () => {
     // boundary is determined by the fragment's style.link, not by what's
     // adjacent to it.
     const cells = evalCells(
-      '{{ link "u1" "A" }} {{ link "u2" "B" }} {{ link "u3" "C" }}'
+      '{{ link "u1" "A" }} {{ link "u2" "B" }} {{ link "u3" "C" }}',
     );
     expect(cells).toHaveLength(5);
     expect(resolvedStyle(cells[0]!.style).link).toBe("u1");
@@ -197,7 +200,11 @@ describe("fragmentsToCells — direct fragment input", () => {
     const named = new RichText("go", {
       style: { under: "repr.number", over: new Style({ link: "http://go" }) },
     });
-    const cells = fragmentsToCells([new RichText("a "), named, new RichText(" b")]);
+    const cells = fragmentsToCells([
+      new RichText("a "),
+      named,
+      new RichText(" b"),
+    ]);
     expect(cells.map((c) => c.plain)).toEqual(["a ", "go", " b"]);
     const style = resolvedStyle(cells[1]!.style);
     expect(style.link).toBe("http://go");
@@ -339,7 +346,9 @@ describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
     expect(plainOf(rendered)).toBe(" prefix SU suffix ");
     // Three foregrounds (green segment + red segment + a baseline) means the
     // parts survived as distinct foregrounds.
-    expect(new Set(rendered.map(({ fg }) => fg)).size).toBeGreaterThanOrEqual(3);
+    expect(new Set(rendered.map(({ fg }) => fg)).size).toBeGreaterThanOrEqual(
+      3,
+    );
   });
 });
 
@@ -365,10 +374,7 @@ describe("RichText cell shape — uniform-style collapse", () => {
   test("heterogeneous fg coalesces into one cell with spans for the divergent fg", () => {
     const baseStyle = new Style({ bgcolor: "blue", color: "white" });
     const cells = fragmentsToCells(
-      [
-        new RichText("ok"),
-        new RichText("err", { style: "red" }),
-      ],
+      [new RichText("ok"), new RichText("err", { style: "red" })],
       baseStyle,
     );
     expect(cells).toHaveLength(1);

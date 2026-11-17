@@ -16,7 +16,11 @@ import {
 } from "../../src/daemon/frame-feed";
 import type { Refusal } from "../../src/daemon/foundations/protocol";
 import type { Lane, LaneSwitches } from "../../src/config/lanes";
-import { renderFailedFrame, type Frame, type WireFrame } from "../../src/render/frame";
+import {
+  renderFailedFrame,
+  type Frame,
+  type WireFrame,
+} from "../../src/render/frame";
 import type {
   Answers,
   PushedFrame,
@@ -41,6 +45,7 @@ function rig() {
   const owed: Array<{
     make: () => Viewers;
     end: (kind: string) => void;
+    reject: (thrown: Error) => void;
   }> = [];
   const logged: string[] = [];
   const watching = { started: 0, stopped: 0 };
@@ -51,8 +56,8 @@ function rig() {
       return () => void watching.stopped++;
     },
     deliver: (make) =>
-      new Promise((resolve) =>
-        owed.push({ make, end: (kind) => resolve({ kind }) }),
+      new Promise((resolve, reject) =>
+        owed.push({ make, end: (kind) => resolve({ kind }), reject }),
       ),
     log: (level, line) => void logged.push(`${level} ${line}`),
   };
@@ -67,13 +72,15 @@ function rig() {
     await Promise.resolve();
     await Promise.resolve();
   };
-  // A delivery the renderer refused before its slot came: it read nothing.
-  const refusedUnread = async () => {
-    owed.shift()!.end("threw");
+  // A delivery whose host path rejected after its slot read the viewers.
+  const rejected = async () => {
+    const next = owed.shift()!;
+    handed.push(next.make());
+    next.reject(new Error("the record broke"));
     await Promise.resolve();
     await Promise.resolve();
   };
-  return { feeds, hidden, handed, owed, logged, watching, slot, refusedUnread };
+  return { feeds, hidden, handed, owed, logged, watching, slot, rejected };
 }
 
 // A subscriber on `lane`, recording the answers it was sent and its refusal.
@@ -94,7 +101,10 @@ function subscriber(lane: Lane, drawing = true) {
 }
 
 const BAR: WireFrame = { ...renderFailedFrame("the bar"), nextChange: null };
-const frame = (session = S, answers: Answers = { resp: "r", statusline: "s" }): PushedFrame => ({
+const frame = (
+  session = S,
+  answers: Answers = { resp: "r", statusline: "s" },
+): PushedFrame => ({
   session,
   bar: BAR,
   answers,
@@ -185,14 +195,19 @@ describe("the viewers the renderer is handed", () => {
     expect(r.handed).toHaveLength(2);
   });
 
-  test("a delivery refused before its slot came leaves the next announcement free to deliver", async () => {
+  test("a delivery that rejected is said, and the next announcement delivers again", async () => {
     const r = rig();
     r.feeds.subscribe(S, subscriber("band").sub);
-    await r.refusedUnread();
+    await r.rejected();
+    expect(r.logged).toContainEqual(
+      expect.stringMatching(
+        /^error feed viewers delivery rejected: .*the record broke/,
+      ),
+    );
     r.feeds.announce();
     expect(r.owed).toHaveLength(1);
     await r.slot();
-    expect(Object.keys(r.handed[0]!)).toEqual([S]);
+    expect(r.handed).toHaveLength(2);
   });
 
   test("a request whose pane comes off a screen is announced; one that changes nothing the renderer is handed is not", async () => {
@@ -223,7 +238,11 @@ describe("a subscriber", () => {
     expect(line.sent).toEqual(["s1"]);
     // The bar crosses with its Infinity as null, and is read back whole.
     expect(band.bars[0]!.nextChange).toBe(Infinity);
-    expect(r.feeds.getStats()).toMatchObject({ feeds: 1, subscribers: 2, pushed: 3 });
+    expect(r.feeds.getStats()).toMatchObject({
+      feeds: 1,
+      subscribers: 2,
+      pushed: 3,
+    });
   });
 
   test("joining later is handed the bar as it stands, at once", () => {

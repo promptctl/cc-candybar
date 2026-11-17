@@ -32,7 +32,9 @@ const row = (endcaps: Endcaps, separator?: string): readonly Run[] =>
 describe("endcaps are rich-js's named joiners", () => {
   test("the endcaps vocabulary and its option domain are exactly JOINERS' names", () => {
     expect([...ENDCAPS_SHAPES]).toEqual(Object.keys(JOINERS));
-    expect([...resolveOptionDomain("endcaps", new Map()).members]).toEqual(Object.keys(JOINERS));
+    expect([...resolveOptionDomain("endcaps", new Map()).members]).toEqual(
+      Object.keys(JOINERS),
+    );
   });
 
   describe.each(ENDCAPS_SHAPES.map((name) => [name]))("%s", (endcaps) => {
@@ -51,7 +53,9 @@ describe("endcaps are rich-js's named joiners", () => {
   });
 
   test("plain's separator and metro's rail are the terminal's own text, not a palette slot", () => {
-    expect(row("plain", " | ").find(({ text }) => text === " | ")?.fg).toBe("default");
+    expect(row("plain", " | ").find(({ text }) => text === " | ")?.fg).toBe(
+      "default",
+    );
     expect(row("metro").find(({ text }) => text === "──")?.fg).toBe("default");
   });
 });

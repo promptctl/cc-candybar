@@ -23,8 +23,14 @@ const THEME = listResolvablePaletteNames()[0]!;
 
 describe("a set on a setting key is checked against the setting's domain", () => {
   it.each([
-    ["{ set: 'endcaps', to: 'banana' }", /actions\.pick\.to: "banana" is outside the endcaps domain.*takes one of .*"powerline"/],
-    ["{ set: 'padding', to: '99' }", /actions\.pick\.to: "99" .*an integer from 0 to 16/],
+    [
+      "{ set: 'endcaps', to: 'banana' }",
+      /actions\.pick\.to: "banana" is outside the endcaps domain.*takes one of .*"powerline"/,
+    ],
+    [
+      "{ set: 'padding', to: '99' }",
+      /actions\.pick\.to: "99" .*an integer from 0 to 16/,
+    ],
     ["{ set: 'padding', to: '3 ' }", /actions\.pick\.to: "3 "/],
     // The session holds an integer as String(n) writes it, nothing else.
     ["{ set: 'padding', to: '-0' }", /actions\.pick\.to: "-0"/],
@@ -33,21 +39,51 @@ describe("a set on a setting key is checked against the setting's domain", () =>
     ["{ set: 'padding', min: 0, max: 20, by: 1 }", /actions\.pick\.max: "20"/],
     ["{ set: 'padding', min: -1, max: 16, by: 1 }", /actions\.pick\.min: "-1"/],
     // A stepper over a domain of names is refused even when its ends are names.
-    ["{ set: 'autoWrap', min: 0, max: 1, by: 1 }", /actions\.pick: a stepper writes the integers from 0 to 1, and autoWrap is not an integer range/],
+    [
+      "{ set: 'autoWrap', min: 0, max: 1, by: 1 }",
+      /actions\.pick: a stepper writes the integers from 0 to 1, and autoWrap is not an integer range/,
+    ],
     // An int cursor writes any integer the template binds.
-    ["{ set: 'padding', int: true }", /actions\.pick\.int: .*padding takes an integer from 0 to 16/],
+    [
+      "{ set: 'padding', int: true }",
+      /actions\.pick\.int: .*padding takes an integer from 0 to 16/,
+    ],
     ["{ set: 'theme', int: true }", /actions\.pick\.int: /],
-    ["{ set: 'autoWrap', cycle: ['true', 'maybe'] }", /actions\.pick\.cycle: "maybe" .*true or false/],
-    ["{ set: 'theme', to: 'no-such-theme' }", /actions\.pick\.to: "no-such-theme"/],
-    ["{ set: 'variation', from: ['accent', 'plaid'] }", /actions\.pick\.from: "plaid"/],
+    [
+      "{ set: 'autoWrap', cycle: ['true', 'maybe'] }",
+      /actions\.pick\.cycle: "maybe" .*true or false/,
+    ],
+    [
+      "{ set: 'theme', to: 'no-such-theme' }",
+      /actions\.pick\.to: "no-such-theme"/,
+    ],
+    [
+      "{ set: 'variation', from: ['accent', 'plaid'] }",
+      /actions\.pick\.from: "plaid"/,
+    ],
     ["{ set: 'endcaps', from: 'styles' }", /actions\.pick\.from: "none"/],
-    ["{ set: 'style', to: 'no-such-style' }", /actions\.pick\.to: "no-such-style"/],
-    ["{ set: 'preset', to: 'no-such-preset' }", /actions\.pick\.to: "no-such-preset"/],
+    [
+      "{ set: 'style', to: 'no-such-style' }",
+      /actions\.pick\.to: "no-such-style"/,
+    ],
+    [
+      "{ set: 'preset', to: 'no-such-preset' }",
+      /actions\.pick\.to: "no-such-preset"/,
+    ],
     // Not every value is an endcaps shape, so moving the key is not the fix.
-    ["{ set: 'style', cycle: ['capsule', 'vivid'] }", /actions\.pick\.cycle: "capsule" is outside the style domain/],
-    ["{ set: 'style', cycle: ['capsule', 'banana'] }", /actions\.pick\.cycle: "capsule", "banana" are outside/],
+    [
+      "{ set: 'style', cycle: ['capsule', 'vivid'] }",
+      /actions\.pick\.cycle: "capsule" is outside the style domain/,
+    ],
+    [
+      "{ set: 'style', cycle: ['capsule', 'banana'] }",
+      /actions\.pick\.cycle: "capsule", "banana" are outside/,
+    ],
     // A joiner added since the rename is a name a style may take: no such style.
-    ["{ set: 'style', to: 'slant' }", /actions\.pick\.to: "slant" is outside the style domain/],
+    [
+      "{ set: 'style', to: 'slant' }",
+      /actions\.pick\.to: "slant" is outside the style domain/,
+    ],
   ])("%s is a load error", (action, message) => {
     expect(() => load(action)).toThrow(message);
   });

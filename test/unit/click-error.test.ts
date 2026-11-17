@@ -77,9 +77,13 @@ test("reading a click's errors writes nothing, so a later render inside the hold
 
 test("a session with no click error, or a value an older daemon wrote, holds none", () => {
   const state = new SessionState();
-  expect(clickErrorAt(state, SID, at(100), "request")).toEqual({ kind: "none" });
+  expect(clickErrorAt(state, SID, at(100), "request")).toEqual({
+    kind: "none",
+  });
   state.set(SID, "click.error", 'set-state: placement "block" refused');
-  expect(clickErrorAt(state, SID, at(100), "request")).toEqual({ kind: "none" });
+  expect(clickErrorAt(state, SID, at(100), "request")).toEqual({
+    kind: "none",
+  });
 });
 
 test("an answer carrying another failure at the same instant leaves this one owed", () => {
@@ -91,7 +95,11 @@ test("an answer carrying another failure at the same instant leaves this one owe
 
 test("a record an older daemon wrote with no answered mark is owed to the next request", () => {
   const state = new SessionState();
-  state.set(SID, "click.error", JSON.stringify({ text: "set-state: refused", at: 100 }));
+  state.set(
+    SID,
+    "click.error",
+    JSON.stringify({ text: "set-state: refused", at: 100 }),
+  );
   expect(clickErrorAt(state, SID, at(END + 600), "request")).toEqual({
     kind: "owed",
     error,

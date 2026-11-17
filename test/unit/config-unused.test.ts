@@ -12,7 +12,12 @@ import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { unusedDeclarations } from "../../src/config/unused";
 
 function unusedIn(source: string): string[] {
-  const loaded = loadConfigSource("/cfg.json5", source, DEFAULT_DSL_CONFIG, NO_PROJECT);
+  const loaded = loadConfigSource(
+    "/cfg.json5",
+    source,
+    DEFAULT_DSL_CONFIG,
+    NO_PROJECT,
+  );
   // The file must be one the bar would load: an unused name is an advisory
   // about a config that works, never a second spelling of a load error.
   validateConfig(loaded, "/cfg.json5");
@@ -141,7 +146,9 @@ describe("unusedDeclarations", () => {
       segments: { s: { template: '${template}' } },
       root: { h: ["s"] },
     }`;
-    expect(unusedIn(config('{{ carousel "pick" "openIt" "label" }}'))).toEqual([]);
+    expect(unusedIn(config('{{ carousel "pick" "openIt" "label" }}'))).toEqual(
+      [],
+    );
     expect(
       unusedIn(
         config(

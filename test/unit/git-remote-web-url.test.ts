@@ -20,12 +20,21 @@ import {
 
 describe("remoteWebUrl — http(s) remotes are already the page", () => {
   test.each([
-    ["https://github.com/promptctl/cc-candybar.git", "https://github.com/promptctl/cc-candybar"],
-    ["https://github.com/promptctl/cc-candybar", "https://github.com/promptctl/cc-candybar"],
+    [
+      "https://github.com/promptctl/cc-candybar.git",
+      "https://github.com/promptctl/cc-candybar",
+    ],
+    [
+      "https://github.com/promptctl/cc-candybar",
+      "https://github.com/promptctl/cc-candybar",
+    ],
     // A trailing slash is chrome, not path.
     ["https://gitlab.com/group/proj/", "https://gitlab.com/group/proj"],
     // Nested groups (GitLab) and tildes (sr.ht) are ordinary path, untouched.
-    ["https://gitlab.com/group/sub/proj.git", "https://gitlab.com/group/sub/proj"],
+    [
+      "https://gitlab.com/group/sub/proj.git",
+      "https://gitlab.com/group/sub/proj",
+    ],
     ["https://git.sr.ht/~user/repo", "https://git.sr.ht/~user/repo"],
     // A self-hosted forge's web port IS part of its address — keep it.
     ["http://gitea.lan:3000/me/notes.git", "http://gitea.lan:3000/me/notes"],
@@ -73,7 +82,10 @@ describe("remoteWebUrl — credentials never reach a clickable link", () => {
   // and these cases are the proof of that, not a reminder to be careful.
   test.each([
     ["https://user@github.com/o/r.git", "https://github.com/o/r"],
-    ["https://x-access-token:ghp_SECRET@github.com/o/r.git", "https://github.com/o/r"],
+    [
+      "https://x-access-token:ghp_SECRET@github.com/o/r.git",
+      "https://github.com/o/r",
+    ],
     ["ssh://git@github.com/o/r.git", "https://github.com/o/r"],
   ])("%s → %s", (remote, expected) => {
     const web = remoteWebUrl(remote);
@@ -85,21 +97,36 @@ describe("remoteWebUrl — credentials never reach a clickable link", () => {
 describe("remoteWebUrl — ssh transposes to the same host and path", () => {
   test.each([
     // scp shorthand, the form every forge prints in its clone box.
-    ["git@github.com:promptctl/cc-candybar.git", "https://github.com/promptctl/cc-candybar"],
+    [
+      "git@github.com:promptctl/cc-candybar.git",
+      "https://github.com/promptctl/cc-candybar",
+    ],
     ["git@gitlab.com:group/sub/proj.git", "https://gitlab.com/group/sub/proj"],
     ["git@bitbucket.org:team/repo.git", "https://bitbucket.org/team/repo"],
     // Self-hosted Gitea/Forgejo — the case a hostname allow-list could never
     // recognize, and the reason the discriminator is URL SHAPE, not host name.
-    ["git@code.homelab:brandon/notes.git", "https://code.homelab/brandon/notes"],
-    ["forgejo@git.example.org:team/thing.git", "https://git.example.org/team/thing"],
+    [
+      "git@code.homelab:brandon/notes.git",
+      "https://code.homelab/brandon/notes",
+    ],
+    [
+      "forgejo@git.example.org:team/thing.git",
+      "https://git.example.org/team/thing",
+    ],
     // Explicit ssh:// form, with and without a port. An ssh port says nothing
     // about the web port, so it is DROPPED rather than carried over.
     ["ssh://git@gitea.lan:2222/me/notes.git", "https://gitea.lan/me/notes"],
-    ["ssh://git@gitlab.example.com:22/group/proj.git", "https://gitlab.example.com/group/proj"],
+    [
+      "ssh://git@gitlab.example.com:22/group/proj.git",
+      "https://gitlab.example.com/group/proj",
+    ],
     // The (unauthenticated, deprecated) git:// protocol transposes the same way.
     ["git://github.com/o/r.git", "https://github.com/o/r"],
     // An absolute scp path is still a path on that host.
-    ["git@git.example.org:/team/thing.git", "https://git.example.org/team/thing"],
+    [
+      "git@git.example.org:/team/thing.git",
+      "https://git.example.org/team/thing",
+    ],
   ])("%s → %s", (remote, expected) => {
     expect(remoteWebUrl(remote)).toBe(expected);
   });
@@ -157,7 +184,9 @@ describe("remoteWebUrl — host case does not change the answer", () => {
 
   // Path case is user data and survives untouched — only the host is normalized.
   test("the repo path keeps its case", () => {
-    expect(remoteWebUrl("git@github.com:Me/MyRepo.git")).toContain("/Me/MyRepo");
+    expect(remoteWebUrl("git@github.com:Me/MyRepo.git")).toContain(
+      "/Me/MyRepo",
+    );
   });
 });
 
@@ -220,12 +249,14 @@ describe("parseRemoteRef — git's two spellings decode to one shape", () => {
       port: "2222",
       path: "me/notes.git",
     });
-    expect(parseRemoteRef("https://x-token:secret@github.com/o/r.git")).toEqual({
-      scheme: "https",
-      host: "github.com",
-      port: "",
-      path: "o/r.git",
-    });
+    expect(parseRemoteRef("https://x-token:secret@github.com/o/r.git")).toEqual(
+      {
+        scheme: "https",
+        host: "github.com",
+        port: "",
+        path: "o/r.git",
+      },
+    );
   });
 });
 
@@ -357,7 +388,11 @@ describe("the repo's name and its link never disagree", () => {
     ["h:repo.git", "repo", "https://h/repo"],
     ["https://github.com/me/repo/", "repo", "https://github.com/me/repo"],
     ["https://github.com/me/repo.git", "repo", "https://github.com/me/repo"],
-    ["git@github.com:me/sub/repo.git", "repo", "https://github.com/me/sub/repo"],
+    [
+      "git@github.com:me/sub/repo.git",
+      "repo",
+      "https://github.com/me/sub/repo",
+    ],
   ])("%s → name %s, link %s", (url, name, link) => {
     expect(nameOf(url)).toBe(name);
     expect(remoteWebUrl(url)).toBe(link);
@@ -395,7 +430,9 @@ describe("forgeRemoteUrl — identity and forge dispatch are different questions
   });
 
   test("with no recognized forge, dispatch falls back to identity", () => {
-    const remotes = [{ name: "origin", urls: ["git@gitea.example.com:o/r.git"] }];
+    const remotes = [
+      { name: "origin", urls: ["git@gitea.example.com:o/r.git"] },
+    ];
     expect(forgeRemoteUrl(remotes)).toBe(repoRemoteUrl(remotes));
   });
 

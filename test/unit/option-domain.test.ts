@@ -30,7 +30,9 @@ describe("option-domain registry", () => {
     expect(resolveOptionDomain("themes", new Map()).members).toEqual(
       listResolvablePaletteNames(),
     );
-    expect(resolveOptionDomain("endcaps", new Map()).members).toEqual(ENDCAPS_SHAPES);
+    expect(resolveOptionDomain("endcaps", new Map()).members).toEqual(
+      ENDCAPS_SHAPES,
+    );
   });
 
   // [LAW:one-source-of-truth] candybar-config-engine-71o.3:
@@ -39,9 +41,9 @@ describe("option-domain registry", () => {
   // (themes/policy.ts) — a menu drawing from it can never enumerate a value
   // the loader or the render layer would reject.
   test("colorCompatibilities is a built-in registration sourced from the loader's own enum", () => {
-    expect(resolveOptionDomain("colorCompatibilities", new Map()).members).toEqual(
-      COLOR_COMPATIBILITIES,
-    );
+    expect(
+      resolveOptionDomain("colorCompatibilities", new Map()).members,
+    ).toEqual(COLOR_COMPATIBILITIES);
   });
 
   // rich-js's `resolveColorSystem` takes a bare string, so no type holds the
@@ -200,7 +202,9 @@ describe("a colour-valued domain resolves its own painter", () => {
     // The identity key is byte-exact through transposePalette's fast path, so
     // the floor answers with the base itself — the honest "picking this changes
     // nothing".
-    expect(paletteOf!("none", RENDER)).toBe(transposedPalette(BASE, looks.none));
+    expect(paletteOf!("none", RENDER)).toBe(
+      transposedPalette(BASE, looks.none),
+    );
   });
 
   test("`placementThemes` answers `bar` with the palette the bar is DRAWN in, and a theme with its own", () => {
@@ -225,7 +229,9 @@ describe("a colour-valued domain resolves its own painter", () => {
     expect(resolveOptionDomain("presets", domains).paletteOf).toBeUndefined();
     // An inline array is its own domain — a bare list of words, so it is
     // structurally incapable of being colour-valued.
-    expect(resolveOptionDomain(["a", "b"], new Map()).paletteOf).toBeUndefined();
+    expect(
+      resolveOptionDomain(["a", "b"], new Map()).paletteOf,
+    ).toBeUndefined();
   });
 
   test("a custom registration may declare a painter, and the disposer takes it with the domain", () => {
@@ -235,7 +241,9 @@ describe("a colour-valued domain resolves its own painter", () => {
       () => BASE,
     );
     try {
-      expect(resolveOptionDomain("painted-31z", new Map()).paletteOf!("one", RENDER)).toBe(BASE);
+      expect(
+        resolveOptionDomain("painted-31z", new Map()).paletteOf!("one", RENDER),
+      ).toBe(BASE);
     } finally {
       dispose();
     }

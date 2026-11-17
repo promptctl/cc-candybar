@@ -25,7 +25,13 @@ import { mergeWithDefault } from "../../src/config/loader/merge";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 
-const SCHEMA_PATH = path.resolve(__dirname, "..", "..", "schema", "cc-candybar.schema.json");
+const SCHEMA_PATH = path.resolve(
+  __dirname,
+  "..",
+  "..",
+  "schema",
+  "cc-candybar.schema.json",
+);
 
 let validate: ValidateFunction;
 let namedDeltaTargets: string[];
@@ -51,7 +57,10 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     "rows-form root with a bar-level when",
     `{ segments: { a: { template: 'a' } }, root: { rows: { extra: 'a' }, when: '{{ true }}' } }`,
   ],
-  ["globals only", `{ globals: { palette: 'dracula', default_separator: ' ' } }`],
+  [
+    "globals only",
+    `{ globals: { palette: 'dracula', default_separator: ' ' } }`,
+  ],
   [
     "A-grammar multi-row layout (v-arm)",
     `{
@@ -164,7 +173,10 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     }`,
   ],
   // ── A delta over a bundled segment omits its template (brandon-config-ph5)
-  ["segment delta over a bundled name", `{ segments: { directory: { palette: 'dracula' } } }`],
+  [
+    "segment delta over a bundled name",
+    `{ segments: { directory: { palette: 'dracula' } } }`,
+  ],
   // ── A segment says what it shows (brandon-config-schema-qqg)
   [
     "segment describing itself",
@@ -179,19 +191,37 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
 // Structurally broken — schema rejects, loader rejects.
 const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["unknown top-level key", `{ segmnets: {} }`],
-  ["a new segment without a template", `{ segments: { mine: { palette: 'x' } } }`],
+  [
+    "a new segment without a template",
+    `{ segments: { mine: { palette: 'x' } } }`,
+  ],
   ["bad doctor verb", `{ actions: { d: { doctor: 'bogus' } } }`],
-  ["doctor run carrying a check", `{ actions: { d: { doctor: 'run', check: 'tmuxTruecolor' } } }`],
-  ["non-identifier row name", `{ segments: { a: { template: 'a' } }, root: { rows: { 'a-b': 'a' } } }`],
+  [
+    "doctor run carrying a check",
+    `{ actions: { d: { doctor: 'run', check: 'tmuxTruecolor' } } }`,
+  ],
+  [
+    "non-identifier row name",
+    `{ segments: { a: { template: 'a' } }, root: { rows: { 'a-b': 'a' } } }`,
+  ],
   ["non-object rows", `{ root: { rows: 'a' } }`],
   ["non-string template", `{ segments: { a: { template: 42 } } }`],
-  ["non-string description", `{ segments: { a: { template: 'a', description: 42 } } }`],
-  ["bad direction enum", `{ root: { kind: 'container', direction: 'diagonal', children: [] } }`],
+  [
+    "non-string description",
+    `{ segments: { a: { template: 'a', description: 42 } } }`,
+  ],
+  [
+    "bad direction enum",
+    `{ root: { kind: 'container', direction: 'diagonal', children: [] } }`,
+  ],
   ["unknown variable kind", `{ variables: { x: { kind: 'bogus' } } }`],
   ["non-string palette", `{ globals: { palette: 5 } }`],
   // `layout:` was removed in 2de.19 — schema rejects (unknown key via additionalProperties),
   // loader rejects (migration error). Both surfaces correctly reject it.
-  ["removed layout key", `{ segments: { a: { template: 'a' } }, layout: [['a', 'b']] }`],
+  [
+    "removed layout key",
+    `{ segments: { a: { template: 'a' } }, layout: [['a', 'b']] }`,
+  ],
   // brandon-config-349: removed globals keys — closed out by the schema's
   // `additionalProperties: false` (never listed, so never completed), refused by
   // the loader with its pointer, wherever globals are authored.
@@ -199,7 +229,10 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
     (key) =>
       [
         [`removed globals.${key}`, `{ globals: { ${key}: 'x' } }`],
-        [`removed presets.p.globals.${key}`, `{ presets: { p: { globals: { ${key}: 'x' } } } }`],
+        [
+          `removed presets.p.globals.${key}`,
+          `{ presets: { p: { globals: { ${key}: 'x' } } } }`,
+        ],
         [`removed editGlobals.${key}`, `{ editGlobals: { ${key}: 'x' } }`],
       ] as const,
   ),
@@ -207,7 +240,10 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   // direction/name (→ throws), so the schema must require them too. The empty
   // object once passed all three arms vacuously; the required-ness closes that,
   // keeping schema and loader in lockstep.
-  ["bare container node (missing direction/children)", `{ root: { kind: 'container' } }`],
+  [
+    "bare container node (missing direction/children)",
+    `{ root: { kind: 'container' } }`,
+  ],
   ["bare segment node (missing name)", `{ root: { kind: 'segment' } }`],
   // Schema-checkable cycle shape: type + minItems. (Uniqueness/emptiness/slash
   // are loader refinements the schema mirrors structurally where JSON Schema
@@ -234,7 +270,10 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ],
   // ── Option A bad structural (2de.15) ─────────────────────────────────────
   ["A-grammar both h and v present", `{ root: { h: [], v: [] } }`],
-  ["A-grammar both seg and h present", `{ segments: { a: { template: 'a' } }, root: { seg: 'a', h: ['a'] } }`],
+  [
+    "A-grammar both seg and h present",
+    `{ segments: { a: { template: 'a' } }, root: { seg: 'a', h: ['a'] } }`,
+  ],
   ["A-grammar seg missing value (non-string)", `{ root: { seg: 42 } }`],
   ["A-grammar h with non-array value", `{ root: { h: 'not-an-array' } }`],
 ];

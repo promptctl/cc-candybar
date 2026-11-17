@@ -39,7 +39,9 @@ describe("tmuxStatusFrame", () => {
 
   test("a # in the text is drawn as one, never read as a directive", () => {
     const { rows } = tmuxStatusFrame(barOf([{ text: "#[fg=red]##{pane_id}" }]));
-    expect(rows).toEqual(["#[none,fg=terminal,bg=terminal]##[fg=red]####{pane_id}"]);
+    expect(rows).toEqual([
+      "#[none,fg=terminal,bg=terminal]##[fg=red]####{pane_id}",
+    ]);
   });
 
   test("a linked run is a range named by its link's digest, and the table maps it back", () => {
@@ -79,6 +81,8 @@ describe("tmuxStatusFrame", () => {
     const { rows } = tmuxStatusFrame(
       barOf([{ text: "framed", attrs: ["frame"] }]),
     );
-    expect(rows.join("")).toContain("a tmux status line cannot draw frame text");
+    expect(rows.join("")).toContain(
+      "a tmux status line cannot draw frame text",
+    );
   });
 });

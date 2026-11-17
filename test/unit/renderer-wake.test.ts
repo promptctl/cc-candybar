@@ -166,6 +166,16 @@ test("a tick further off than Node's longest timer arms the longest, which waits
   expect(r.live()).toHaveLength(1);
 });
 
+test("a `due` that rejected is heard as one that failed: said, and the wake arms again", async () => {
+  const r = rig(() => {
+    throw new Error("the record broke");
+  });
+  r.wake.declare(tick(1));
+  await r.fire();
+  expect(r.said).toEqual([expect.stringMatching(/the record broke/)]);
+  expect(r.live().map((t) => t.at)).toEqual([1000 + FAILED_DUE_HOLD_S * 1000]);
+});
+
 test("a `due` no renderer was live to take leaves the wake idle for the next renderer's start", async () => {
   const r = rig(() => failure("down"));
   r.wake.declare(tick(1));

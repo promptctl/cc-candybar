@@ -13,13 +13,20 @@ describe("detectTermExtent parses exactly what the Rust client parses", () => {
     expect(detectTermExtent(env, 0)).toBe(n);
   });
 
-  test.each(["", "0", " 80", "80 ", "80.5", "80\n", "80abc", "-80", "4294967296"])(
-    "rejects %j and falls through to the TTY",
-    (env) => {
-      expect(detectTermExtent(env, 0)).toBeUndefined();
-      expect(detectTermExtent(env, 24)).toBe(24);
-    },
-  );
+  test.each([
+    "",
+    "0",
+    " 80",
+    "80 ",
+    "80.5",
+    "80\n",
+    "80abc",
+    "-80",
+    "4294967296",
+  ])("rejects %j and falls through to the TTY", (env) => {
+    expect(detectTermExtent(env, 0)).toBeUndefined();
+    expect(detectTermExtent(env, 24)).toBe(24);
+  });
 
   test("no env value: the TTY answer, or nothing", () => {
     expect(detectTermExtent(undefined, 24)).toBe(24);

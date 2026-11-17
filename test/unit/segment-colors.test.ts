@@ -43,18 +43,28 @@ import {
 } from "../../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
-import type { PaletteRole, RichText, Style, ThemeKey } from "@promptctl/rich-js";
+import type {
+  PaletteRole,
+  RichText,
+  Style,
+  ThemeKey,
+} from "@promptctl/rich-js";
 import { resolvedStyle } from "../../src/render/rich-theme.js";
 
 // ─── Test palette ─────────────────────────────────────────────────────────────
 
 // Hand-spelled roles laid over a bundled theme's complete set, as `buildPalette`
 // would re-derive from them and move the colours each case measures on paper.
-const withRoles = (name: string, stated: ReadonlyMap<PaletteRole, ColorRgba>): Palette =>
+const withRoles = (
+  name: string,
+  stated: ReadonlyMap<PaletteRole, ColorRgba>,
+): Palette =>
   new Palette(
     name,
     true,
-    getThemePalette("nord").mapRoles((colour, role) => stated.get(role) ?? colour),
+    getThemePalette("nord").mapRoles(
+      (colour, role) => stated.get(role) ?? colour,
+    ),
   );
 
 function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
@@ -143,17 +153,37 @@ describe("no bg/fg templates → the tint, and the text paired with it", () => {
 
   test("{{ tint }} is the dealt decoration, readable inside bg: itself — a threshold's calm arm", () => {
     const h = makeHarness();
-    const calm = resolve(h, makeTestPalette(), h.parse('{{ ramp 10 "step" 0 (tint) 50 "error" }}'), undefined);
+    const calm = resolve(
+      h,
+      makeTestPalette(),
+      h.parse('{{ ramp 10 "step" 0 (tint) 50 "error" }}'),
+      undefined,
+    );
     expect(calm.bgcolor?.value?.hex).toBe(TINT.hex);
-    const hot = resolve(h, makeTestPalette(), h.parse('{{ ramp 60 "step" 0 (tint) 50 "error" }}'), undefined);
+    const hot = resolve(
+      h,
+      makeTestPalette(),
+      h.parse('{{ ramp 60 "step" 0 (tint) 50 "error" }}'),
+      undefined,
+    );
     expect(hot.bgcolor?.value?.hex).toBe("#ff4444");
   });
 
   test("a threshold resting on its calm arm wears the decoration's text; past it, text chosen for the alert", () => {
     const h = makeHarness();
-    const calm = resolve(h, makeTestPalette(), h.parse('{{ ramp 10 "step" 0 (tint) 50 "error" }}'), undefined);
+    const calm = resolve(
+      h,
+      makeTestPalette(),
+      h.parse('{{ ramp 10 "step" 0 (tint) 50 "error" }}'),
+      undefined,
+    );
     expect(calm.color?.value?.hex).toBe(PAIRED_TEXT.hex);
-    const hot = resolve(h, makeTestPalette(), h.parse('{{ ramp 60 "step" 0 (tint) 50 "error" }}'), undefined);
+    const hot = resolve(
+      h,
+      makeTestPalette(),
+      h.parse('{{ ramp 60 "step" 0 (tint) 50 "error" }}'),
+      undefined,
+    );
     expect(hot.color?.value?.hex).toBe(TEXT_ON_ERROR);
   });
 
@@ -177,7 +207,12 @@ describe("no bg/fg templates → the tint, and the text paired with it", () => {
 
   test("{{ bgOf }} in a fg template reads the tint when no bg is authored", () => {
     const h = makeHarness();
-    const style = resolve(h, makeTestPalette(), undefined, h.parse("{{ bgOf }}"));
+    const style = resolve(
+      h,
+      makeTestPalette(),
+      undefined,
+      h.parse("{{ bgOf }}"),
+    );
     expect(style.color?.value?.hex).toBe(TINT.hex);
   });
 });
@@ -193,7 +228,15 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
       ...TEST_ENGINE,
       extraFuncs: segmentColorFuncs(ref),
     });
-    openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT, PAIRED_TEXT);
+    openSegment(
+      ref,
+      SEG,
+      SEG,
+      makeTestPalette(),
+      DISCLOSURE,
+      TINT,
+      PAIRED_TEXT,
+    );
     return (fg: string, bg: string): string =>
       engine
         .parse(`{{ keptOn "${fg}" "${bg}" }}`)
@@ -205,7 +248,8 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
   // 2.73:1 once the terminal rounds both to 256 colours.
   const RED = "#ea6f92";
   const STATE = "#443546";
-  const drawn = (hex: string) => drawnColour(parseRgbHex(hex.slice(1)), ColorDepth.EIGHT_BIT);
+  const drawn = (hex: string) =>
+    drawnColour(parseRgbHex(hex.slice(1)), ColorDepth.EIGHT_BIT);
 
   test("in truecolor it is the colour itself, however faint — a theme that gives it faintly keeps it so", () => {
     const keptOn = at(ColorDepth.TRUECOLOR);
@@ -214,10 +258,15 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
   });
 
   test("at 256 colours it stands as far off its ground as the truecolor pair does, where rounding alone would cost it", () => {
-    const held = contrastRatio(parseRgbHex(RED.slice(1)), parseRgbHex(STATE.slice(1)));
+    const held = contrastRatio(
+      parseRgbHex(RED.slice(1)),
+      parseRgbHex(STATE.slice(1)),
+    );
     expect(contrastRatio(drawn(RED), drawn(STATE))).toBeLessThan(held);
     const kept = at(ColorDepth.EIGHT_BIT)(RED, STATE);
-    expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(held);
+    expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(
+      held,
+    );
   });
 
   test("at 256 colours a red that reads under the quiet floor on its ground before rounding keeps that contrast, and is never lifted toward the floor", () => {
@@ -227,11 +276,16 @@ describe("keptOn: a colour shown exactly as given, which the terminal's rounding
     // what it had, so it is the red itself.
     const FAINT_RED = "#ffa09b";
     const GROUND = "#2c87c4";
-    const held = contrastRatio(parseRgbHex(FAINT_RED.slice(1)), parseRgbHex(GROUND.slice(1)));
+    const held = contrastRatio(
+      parseRgbHex(FAINT_RED.slice(1)),
+      parseRgbHex(GROUND.slice(1)),
+    );
     expect(held).toBeLessThan(QUIET_MIN_CONTRAST);
     const kept = at(ColorDepth.EIGHT_BIT)(FAINT_RED, GROUND);
     expect(kept).toBe(FAINT_RED);
-    expect(contrastRatio(drawn(kept), drawn(GROUND))).toBeGreaterThanOrEqual(held);
+    expect(contrastRatio(drawn(kept), drawn(GROUND))).toBeGreaterThanOrEqual(
+      held,
+    );
   });
 
   test("a translucent colour is measured as the terminal draws it, over black — never laid over its ground", () => {
@@ -261,9 +315,16 @@ describe("roleTextOn: a role's text on a ground is a colour the theme names for 
     ["error-darken-2", parseRgbHex("641414")],
     ["error-darken-3", parseRgbHex("460000")],
   ]);
-  const on = (ground: string, palette = withRoles("reds", RED), role = "error"): string => {
+  const on = (
+    ground: string,
+    palette = withRoles("reds", RED),
+    role = "error",
+  ): string => {
     const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
-    const engine = createCcCandybarEngine({ ...TEST_ENGINE, extraFuncs: segmentColorFuncs(ref) });
+    const engine = createCcCandybarEngine({
+      ...TEST_ENGINE,
+      extraFuncs: segmentColorFuncs(ref),
+    });
     openSegment(ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT);
     return engine
       .parse(`{{ roleTextOn "${role}" "${ground}" }}`)
@@ -297,7 +358,9 @@ describe("roleTextOn: a role's text on a ground is a colour the theme names for 
 
   test("a role the palette names no full ladder for fails loudly, naming the missing entry, even where the text colour reads", () => {
     // nord's text-muted reads on black, and no theme has a muted ladder.
-    expect(() => on("#000000", getThemePalette("nord"), "muted")).toThrow(/"muted" did not resolve/);
+    expect(() => on("#000000", getThemePalette("nord"), "muted")).toThrow(
+      /"muted" did not resolve/,
+    );
   });
 });
 
@@ -540,9 +603,19 @@ describe("segment color functions in the engine", () => {
       extraFuncs: segmentColorFuncs(ref),
     });
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
-    openSegment(ref, SEG, SEG, makeTestPalette(), DISCLOSURE, TINT, PAIRED_TEXT);
+    openSegment(
+      ref,
+      SEG,
+      SEG,
+      makeTestPalette(),
+      DISCLOSURE,
+      TINT,
+      PAIRED_TEXT,
+    );
     const fragments = tpl.evaluate({});
-    expect(resolvedStyle(fragments[0]!.style).color?.value?.hex).toBe("#4488ff");
+    expect(resolvedStyle(fragments[0]!.style).color?.value?.hex).toBe(
+      "#4488ff",
+    );
     expect(fragments[0]?.plain).toBe("hello");
   });
 

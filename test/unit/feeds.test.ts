@@ -89,6 +89,7 @@ function rig() {
       };
     },
     pin: (session) => {
+      if (session === script.throwsFor) throw new Error(`${session} broke`);
       pins.push(`pin ${session}`);
       return () => void pins.push(`unpin ${session}`);
     },
@@ -139,6 +140,15 @@ describe("a feed's life", () => {
     expect(r.logged.at(-1)).toMatch(
       /^info feed sid="s" closed lanes=band:1 for=2s drawn=1 .*latenessHistogram=/,
     );
+  });
+
+  test("a feed whose pin throws keeps no other feed from opening, and its throw is the view's", () => {
+    const r = rig();
+    r.script.throwsFor = S;
+    expect(() => view({ [S]: watched(), [T]: watched() })(r.feeds)).toThrow(
+      "s broke",
+    );
+    expect(r.pins).toEqual([`pin ${T}`]);
   });
 
   test("a feed whose draw throws keeps no other feed's frame from going out, and its throw is the turn's", () => {

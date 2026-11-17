@@ -521,7 +521,7 @@ export function rendererHost(
     due: async () => {
       const {
         event,
-        slotted: { turn },
+        slotted: { turn, settled },
       } = await throughSlot(
         () =>
           wake.closed()
@@ -533,6 +533,13 @@ export function rendererHost(
             : { kind: "event", event: { kind: "due" } },
         "idle",
       );
+      // [LAW:no-silent-failure] Nothing awaits the acts' settling, so a
+      // settling that rejected is the daemon's, on every bar.
+      void settled.catch((thrown: unknown) => {
+        const text = `renderer ${name}'s due acts did not settle: ${failureOf(thrown).detail}`;
+        log("error", text);
+        world.unheard(text);
+      });
       record(event, [], turn);
       return turn;
     },

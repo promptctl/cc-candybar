@@ -11,6 +11,7 @@
 // when each frame is drawn (src/renderer/feeds.ts). Each frame drawn comes back
 // in a turn's output, and the host sends each subscriber what changed for it.
 
+import { inspect } from "node:util";
 import type { Frame, WireFrame } from "../render/frame";
 import { parseFrame } from "../render/frame";
 import { PROTOCOL_VERSION, type Refusal } from "./foundations/protocol";
@@ -220,21 +221,28 @@ export class FrameFeeds<Req> {
     if (this.delivery !== "current") return;
     if (JSON.stringify(this.viewers()) === this.handed) return;
     this.delivery = "owed";
-    let made = false;
     void this.deps
       .deliver(() => {
-        made = true;
         if (this.delivery === "owed") this.delivery = "current";
         const viewers = this.viewers();
         this.handed = JSON.stringify(viewers);
         return viewers;
       })
-      .then(({ kind }) => {
-        if (kind !== "answered") this.handed = null;
-        // [LAW:no-ambient-temporal-coupling] A delivery refused before its
-        // slot came read nothing: what it owed is owed to the next.
-        if (!made && this.delivery === "owed") this.delivery = "current";
-      });
+      .then(
+        ({ kind }) => {
+          if (kind !== "answered") this.handed = null;
+        },
+        // [LAW:no-silent-failure] A delivery that rejected is said, and what
+        // it owed is owed to the next announcement.
+        (thrown: unknown) => {
+          this.deps.log(
+            "error",
+            `feed viewers delivery rejected: ${inspect(thrown)}`,
+          );
+          this.handed = null;
+          if (this.delivery === "owed") this.delivery = "current";
+        },
+      );
   }
 
   // The renderer was handed the viewers some other way, a start's: null once

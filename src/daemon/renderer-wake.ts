@@ -16,7 +16,7 @@ import {
   encodedOf,
   recordMs,
 } from "./foundations/durations.js";
-import type { Failure } from "./foundations/verb-error.js";
+import { failureOf, type Failure } from "./foundations/verb-error.js";
 
 // How long a `due` that failed holds every later wake off when its turn asks
 // for a tick no later than its own: a renderer whose due turn throws before
@@ -128,7 +128,17 @@ export class RendererWake {
         return;
       }
       this.state = { kind: "queued" };
-      void this.deps.due().then((ended) => this.answered(tick, ended));
+      // [LAW:no-silent-failure] A `due` that rejected failed: the wake
+      // hears it as one that threw, so it is said and the wake arms again.
+      void this.deps.due().then(
+        (ended) => this.answered(tick, ended),
+        (thrown: unknown) =>
+          this.answered(tick, {
+            kind: "threw",
+            failure: failureOf(thrown),
+            turnMs: null,
+          }),
+      );
     });
   }
 

@@ -79,7 +79,7 @@ import {
   EMPTY_RENDER_MAP,
   serializeSegmentCells,
 } from "./debug.js";
-import type { Tick } from "../utils/instant.js";
+import { earliestOf } from "../utils/instant.js";
 import { failureOf, type Failure } from "../daemon/foundations/verb-error.js";
 import {
   rendererOf,
@@ -131,10 +131,16 @@ export function mainRenderer(
     switch (event.kind) {
       case "start":
         // The feeds first: a watched session's feed pins its view before
-        // the view opens.
-        feeds.view(event.viewers, time.tick);
-        for (const { context, worldState } of event.sessions)
-          configureSession(parts, context, worldState, record);
+        // the view opens. Each session is configured whatever another's
+        // configuring, or a feed, threw.
+        runEach([
+          () => feeds.view(event.viewers, time.tick),
+          ...event.sessions.map(
+            ({ context, worldState }) =>
+              () =>
+                configureSession(parts, context, worldState, record),
+          ),
+        ]);
         return;
       case "config":
         configureSession(parts, event.context, event.worldState, record);
@@ -224,7 +230,9 @@ export function mainRenderer(
     return {
       sources: Object.fromEntries(merged) as Subscriptions["sources"],
       lanes,
-      wake: earliest([time, menuIdle, feeds]),
+      // [LAW:one-source-of-truth] The tick the renderer next wants a turn
+      // at: the earliest any owner of a tick holds.
+      wake: earliestOf([time.next(), menuIdle.next(), feeds.next()]),
     };
   };
 
@@ -278,17 +286,6 @@ export function mainRenderer(
         };
       }),
   });
-}
-
-// [LAW:one-source-of-truth] The tick the renderer next wants a turn at: the
-// earliest any owner of a tick holds.
-function earliest(owners: ReadonlyArray<{ next(): Tick | null }>): Tick | null {
-  let wake: Tick | null = null;
-  for (const owner of owners) {
-    const next = owner.next();
-    if (next !== null && (wake === null || next < wake)) wake = next;
-  }
-  return wake;
 }
 
 // The sessions whose idle period has run out by the turn's tick, their menus

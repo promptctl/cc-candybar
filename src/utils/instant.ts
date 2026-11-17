@@ -44,6 +44,17 @@ export type Tick = number & { readonly __tick: unique symbol };
 export const tickAt = (clock: Pick<Timekeeper, "monotonic">): Tick =>
   (clock.monotonic() / 1000) as Tick;
 
+// [LAW:one-source-of-truth] The earliest of some schedules' ticks, or null
+// when none holds one: what every owner of a tick, and the renderer's wake
+// over them, answers as its next.
+export const earliestOf = (ticks: Iterable<Tick | null>): Tick | null => {
+  let earliest: Tick | null = null;
+  for (const tick of ticks)
+    if (tick !== null && (earliest === null || tick < earliest))
+      earliest = tick;
+  return earliest;
+};
+
 // What the host reads as an input's slot in a renderer's mailbox comes: the
 // wall instant, for what the bar shows and what is stamped, and the tick, for
 // what is scheduled.

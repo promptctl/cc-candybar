@@ -31,7 +31,9 @@ describe("renderSparkline — pure rendering of a fixed series", () => {
 
   test("a perfectly increasing 8-step series fills the whole ramp", () => {
     // min=1, max=8, range=7 ⇒ idx = round((v-1)/7 * 7) = v-1 ⇒ 0..7.
-    expect(renderSparkline([1, 2, 3, 4, 5, 6, 7, 8])).toBe(SPARK_LEVELS.join(""));
+    expect(renderSparkline([1, 2, 3, 4, 5, 6, 7, 8])).toBe(
+      SPARK_LEVELS.join(""),
+    );
   });
 
   test("endpoints always hit the lowest and highest glyph (relative scale)", () => {

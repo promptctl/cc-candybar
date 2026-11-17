@@ -47,20 +47,25 @@ describe("a link the bar draws", () => {
     ["a bare percent", "cc-candybar://100%/x%2"],
     ["text past ASCII", "cc-candybar://copy/café ✓ 🍬"],
     ["a lone surrogate", "cc-candybar://copy/a\uD800b"],
-  ])("signed with %s, is a URL the WHATWG parser leaves as it is", (_, link) => {
-    const signed = TEST_SIGNER.signLink(link);
-    expect(new URL(signed).href).toBe(signed);
-    expect(TEST_SIGNER.openLink(signed)).toEqual({
-      kind: "ok",
-      value: transitForm(link),
-    });
-  });
+  ])(
+    "signed with %s, is a URL the WHATWG parser leaves as it is",
+    (_, link) => {
+      const signed = TEST_SIGNER.signLink(link);
+      expect(new URL(signed).href).toBe(signed);
+      expect(TEST_SIGNER.openLink(signed)).toEqual({
+        kind: "ok",
+        value: transitForm(link),
+      });
+    },
+  );
 
   test("keeps what an effect list says when its readers take the mac off", () => {
     const signed = TEST_SIGNER.signLink(COPY);
     expect(transitForm(COPY)).toBe(COPY);
     expect(unprovenLink(signed)).toBe(COPY);
-    expect(effectsOf(signed)).toEqual([{ verb: VERB_COPY, args: ["rm -rf ~"] }]);
+    expect(effectsOf(signed)).toEqual([
+      { verb: VERB_COPY, args: ["rm -rf ~"] },
+    ]);
   });
 });
 
@@ -142,7 +147,10 @@ describe("a draw's frames", () => {
   test("sign every bar link however many cells repeat it, and leave other schemes as they are", () => {
     const sign = signingFrames(TEST_SIGNER);
     const pr = "https://github.com/o/r/pull/1";
-    const drawn = [sign(frame([COPY, COPY, pr, undefined])), sign(frame([COPY]))];
+    const drawn = [
+      sign(frame([COPY, COPY, pr, undefined])),
+      sign(frame([COPY])),
+    ];
     expect(drawn[0]!.rows[0]!.runs.map((r) => r.link)).toEqual([
       TEST_SIGNER.signLink(COPY),
       TEST_SIGNER.signLink(COPY),

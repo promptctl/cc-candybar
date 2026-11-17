@@ -14,9 +14,15 @@
 // prototype-pollution regression. Different invariants, different test
 // homes.
 
-import { makeAllowListValidator, type ValidateResult } from "../../src/daemon/foundations/state-validators";
+import {
+  makeAllowListValidator,
+  type ValidateResult,
+} from "../../src/daemon/foundations/state-validators";
 import { bareGates, stateGate } from "../helpers/gates";
-import { listResolvablePaletteNames, ENDCAPS_SHAPES } from "../../src/themes/policy";
+import {
+  listResolvablePaletteNames,
+  ENDCAPS_SHAPES,
+} from "../../src/themes/policy";
 import { EMPTY_DEFAULT } from "../helpers/parse-and-validate";
 
 // The gate of a session whose config declares no action: the built-in keys,
@@ -29,9 +35,7 @@ describe("state-validators contract", () => {
     // writable keys." A future change that adds one updates THIS list and
     // surfaces the change in the diff, so downstream surfaces (DSL
     // bindings, docs, panel migration) get the signal.
-    expect([...bare().listKeys()].sort()).toEqual(
-      ["endcaps", "theme"].sort(),
-    );
+    expect([...bare().listKeys()].sort()).toEqual(["endcaps", "theme"].sort());
   });
 
   test("theme validator accepts every resolvable palette name", () => {
@@ -156,9 +160,7 @@ describe("state-validators contract", () => {
       makeAllowListValidator(["with/slash", "another/bad"], "mode"),
     ).toThrow(/with\/slash, another\/bad/);
     // Slash-free lists build fine.
-    expect(() =>
-      makeAllowListValidator(["a", "b", "c"], "mode"),
-    ).not.toThrow();
+    expect(() => makeAllowListValidator(["a", "b", "c"], "mode")).not.toThrow();
   });
 
   test("ValidateResult discriminant is exhaustive (type-level)", () => {

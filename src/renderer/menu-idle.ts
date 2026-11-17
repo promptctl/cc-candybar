@@ -12,7 +12,12 @@
 import { closesAt } from "../config/menu-timeout.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { MenuIdleStats } from "../daemon/foundations/stats-snapshot.js";
-import type { Instant, Readings, Tick } from "../utils/instant.js";
+import {
+  earliestOf,
+  type Instant,
+  type Readings,
+  type Tick,
+} from "../utils/instant.js";
 
 interface Idle {
   since: Tick;
@@ -71,13 +76,11 @@ export class MenuIdle {
   // The earliest tick a session's menus close at, or null when none shows a
   // menu.
   next(): Tick | null {
-    let next: Tick | null = null;
-    for (const idle of this.sessions.values()) {
-      if (!idle.shown) continue;
-      const at = closesAt(idle.since, idle.timeoutS);
-      if (next === null || at < next) next = at;
-    }
-    return next;
+    return earliestOf(
+      [...this.sessions.values()].map((idle) =>
+        idle.shown ? closesAt(idle.since, idle.timeoutS) : null,
+      ),
+    );
   }
 
   // The sessions whose idle period has run out by `tick`, each taken as

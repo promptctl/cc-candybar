@@ -393,9 +393,7 @@ test("the session's config reaches the renderer first, with the world state read
   expect(configs).toEqual([
     { kind: "config", context: REQ, worldState: WORLD },
   ]);
-  expect(requests).toEqual([
-    { kind: "request", id: REQUEST, context: REQ },
-  ]);
+  expect(requests).toEqual([{ kind: "request", id: REQUEST, context: REQ }]);
   expect(subscribed).toEqual([opened, drawn]);
 });
 

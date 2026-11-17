@@ -10,7 +10,13 @@ describe("HELP_TEXT", () => {
   // landed. The glyph is read from the synthesis that renders it, not spelled
   // again here — a renamed anchor must break this loudly.
   test("points at the settings menu, with the glyph the bar actually renders", () => {
-    for (const tab of ["⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"]) {
+    for (const tab of [
+      "⚡ session",
+      "🎨 look",
+      "📐 layout",
+      "⚙ config",
+      "🧰 tools",
+    ]) {
       expect(HELP_TEXT).toContain(tab);
     }
     expect(HELP_TEXT).toContain(DOOR_GLYPH);
@@ -28,7 +34,9 @@ describe("HELP_TEXT", () => {
       );
     }
     expect(HELP_TEXT).toMatch(/first line\n\s+palette\s+🎨 theme\n\s+preset\s/);
-    expect(HELP_TEXT).toMatch(/⚙ config\n\s+autoWrap\s+wrap\n\s+padding\s+padding\n/);
+    expect(HELP_TEXT).toMatch(
+      /⚙ config\n\s+autoWrap\s+wrap\n\s+padding\s+padding\n/,
+    );
   });
 
   // brandon-check-m2a. A flag nobody is told about is a flag nobody uses: the
@@ -36,6 +44,8 @@ describe("HELP_TEXT", () => {
   // shipped feature with no way in.
   test("documents check's --render preview beside the command", () => {
     expect(HELP_TEXT).toContain("check [--render] [file]");
-    expect(HELP_TEXT).toMatch(/--render also prints the bar a fresh\n\s+session opens on/);
+    expect(HELP_TEXT).toMatch(
+      /--render also prints the bar a fresh\n\s+session opens on/,
+    );
   });
 });

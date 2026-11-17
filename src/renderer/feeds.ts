@@ -36,7 +36,12 @@ import {
   type Viewers,
 } from "../renderer-interface/interface.js";
 import type { Level } from "../renderer-interface/adapter.js";
-import type { Instant, Readings, Tick } from "../utils/instant.js";
+import {
+  earliestOf,
+  type Instant,
+  type Readings,
+  type Tick,
+} from "../utils/instant.js";
 import { runEach } from "../utils/run-each.js";
 
 // Milliseconds from the start of one frame to the next: the closest a feed
@@ -173,24 +178,33 @@ export class Feeds {
   // whose viewers moved is brought forward, since who follows it is drawn
   // into its frame. A feed's first frame falls due at once, in a later turn
   // than this one.
+  // Each feed is its own error boundary: one whose pin or unpin throws keeps
+  // no other feed from opening or closing.
   view(viewers: Viewers, tick: Tick): void {
-    for (const feed of [...this.feeds.values()])
-      if (!Object.hasOwn(viewers, feed.sessionId)) this.close(feed, tick);
-    for (const [sessionId, seen] of Object.entries(viewers) as Array<
-      [SessionId, SessionViewers]
-    >) {
-      const feed = this.feeds.get(sessionId);
-      if (feed === undefined) {
-        this.open(sessionId, seen, tick);
-        continue;
-      }
-      const before = feed.viewers;
-      feed.viewers = seen;
-      this.keepRates(feed);
-      if (before.shown !== seen.shown) this.wake(sessionId, "visibility", tick);
-      else if (JSON.stringify(before) !== JSON.stringify(seen))
-        this.wake(sessionId, "viewers", tick);
+    runEach([
+      ...[...this.feeds.values()]
+        .filter((feed) => !Object.hasOwn(viewers, feed.sessionId))
+        .map((feed) => () => this.close(feed, tick)),
+      ...(Object.entries(viewers) as Array<[SessionId, SessionViewers]>).map(
+        ([sessionId, seen]) =>
+          () =>
+            this.see(sessionId, seen, tick),
+      ),
+    ]);
+  }
+
+  private see(sessionId: SessionId, seen: SessionViewers, tick: Tick): void {
+    const feed = this.feeds.get(sessionId);
+    if (feed === undefined) {
+      this.open(sessionId, seen, tick);
+      return;
     }
+    const before = feed.viewers;
+    feed.viewers = seen;
+    this.keepRates(feed);
+    if (before.shown !== seen.shown) this.wake(sessionId, "visibility", tick);
+    else if (JSON.stringify(before) !== JSON.stringify(seen))
+      this.wake(sessionId, "viewers", tick);
   }
 
   // Something the session's bar shows changed, for `cause`: its next frame,
@@ -211,11 +225,7 @@ export class Feeds {
   // The earliest tick a feed's next frame falls due, or null when none waits
   // on a tick.
   next(): Tick | null {
-    let next: Tick | null = null;
-    for (const feed of this.feeds.values())
-      if (feed.next !== null && (next === null || feed.next < next))
-        next = feed.next;
-    return next;
+    return earliestOf([...this.feeds.values()].map((feed) => feed.next));
   }
 
   // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each

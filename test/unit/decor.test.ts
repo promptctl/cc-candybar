@@ -16,7 +16,12 @@ import {
 } from "@promptctl/rich-js";
 import { floorOf } from "../../src/config/globals-fields";
 import type { ActiveSegment } from "../../src/render/active-segment";
-import { bandItemStyle, closeCell, closeOn, stateCell } from "../../src/render/band-style";
+import {
+  bandItemStyle,
+  closeCell,
+  closeOn,
+  stateCell,
+} from "../../src/render/band-style";
 import {
   VARIATIONS,
   SHADES,
@@ -63,7 +68,18 @@ import {
   withSiblingAdded,
   type Shape,
 } from "../helpers/seeded-trees";
-import { DRAWN, LADDER, REGISTRY, SHADE_NAMES, TODAY, VARIATION_NAMES, VDC, cell, row, shownAt } from "../helpers/decor-vocabulary";
+import {
+  DRAWN,
+  LADDER,
+  REGISTRY,
+  SHADE_NAMES,
+  TODAY,
+  VARIATION_NAMES,
+  VDC,
+  cell,
+  row,
+  shownAt,
+} from "../helpers/decor-vocabulary";
 
 const DRACULA = getThemePalette("dracula");
 // The depth the placement properties are stated at. Dracula names every rung
@@ -71,21 +87,32 @@ const DRACULA = getThemePalette("dracula");
 // its dial position's own tones (pinned below): where a cell lands is read
 // straight off the dial's list.
 const AT = ColorDepth.TRUECOLOR;
-const placed = (decor: Decor, address: Address): DecorEntry => decorEntryFor(DRACULA, decor, address, AT);
+const placed = (decor: Decor, address: Address): DecorEntry =>
+  decorEntryFor(DRACULA, decor, address, AT);
 // The decor the address properties are stated under: a two-step variation, so
 // a row alternation is visible, at the default shade. Every property below is
 // about placement, which no variation or shade changes; the per-variation and
 // per-shade facts have their own describes.
-const TWO_STEP: Decor = { variation: VARIATIONS["duo"], shade: SHADES[floorOf("shade")] };
+const TWO_STEP: Decor = {
+  variation: VARIATIONS["duo"],
+  shade: SHADES[floorOf("shade")],
+};
 const decorWith = (variation: Variation): Decor => ({ ...TWO_STEP, variation });
 const BOUNDS = { maxDepth: 4, maxWidth: 6 };
 const SHAPES = drawShapes(0xa17, 60, BOUNDS);
 const ALL_NAMES = Object.keys(DISTRIBUTIONS) as DistributionName[];
-const N_FREE: DistributionName[] = ["van-der-corput", "golden-angle", "uniform"];
+const N_FREE: DistributionName[] = [
+  "van-der-corput",
+  "golden-angle",
+  "uniform",
+];
 const N_READING: DistributionName[] = ["monotonic", "ends-interleaved"];
 
 /** path -> hex, computed by visiting each node alone. */
-function colourMap(shape: Shape, distribution: Distribution): Map<string, string> {
+function colourMap(
+  shape: Shape,
+  distribution: Distribution,
+): Map<string, string> {
   return new Map(
     allNodes(shape, distribution).map(({ path, address }) => [
       pathKey(path),
@@ -100,7 +127,8 @@ const rung = (shade: RoleShade): number => LADDER.indexOf(shade);
 // count, short of the last colour the depth draws of a ladder that draws more
 // than two (the pressed button in that hue needs one), and never fewer than
 // two.
-const windowSizeOf = (count: number, ladderColours: number): number => Math.max(2, Math.min(count, ladderColours - 1));
+const windowSizeOf = (count: number, ladderColours: number): number =>
+  Math.max(2, Math.min(count, ladderColours - 1));
 
 // A window of three or more as the dial lists every position of three, in
 // the test's own words: its lowest rung, its highest, then those between,
@@ -117,18 +145,32 @@ const walked = (window: readonly RoleShade[]): readonly RoleShade[] => {
 // the muted form (the role blended into the background) standing one rung past
 // the ladder's end on the background's side; at an equal distance, the rung
 // away from the background first.
-const nearestFrom = (from: readonly RoleShade[], dark: boolean): RoleShade[] => {
-  const place = (shade: RoleShade): number => (shade === "muted" ? (dark ? -1 : LADDER.length) : rung(shade));
-  const distance = (r: RoleShade): number => Math.min(...from.map((f) => Math.abs(rung(r) - place(f))));
+const nearestFrom = (
+  from: readonly RoleShade[],
+  dark: boolean,
+): RoleShade[] => {
+  const place = (shade: RoleShade): number =>
+    shade === "muted" ? (dark ? -1 : LADDER.length) : rung(shade);
+  const distance = (r: RoleShade): number =>
+    Math.min(...from.map((f) => Math.abs(rung(r) - place(f))));
   return LADDER.filter((r) => !from.includes(r)).sort(
-    (a, b) => distance(a) - distance(b) || (dark ? rung(b) - rung(a) : rung(a) - rung(b)),
+    (a, b) =>
+      distance(a) - distance(b) ||
+      (dark ? rung(b) - rung(a) : rung(a) - rung(b)),
   );
 };
 
 describe("the shade dial", () => {
   // The dial's positions, lowest first; the jump candidates of
   // brandon-menus-sjhy.4fi follow them in the table.
-  const DIAL = ["muted", "deepest", "deeper", "middle", "brighter", "brightest"] as const;
+  const DIAL = [
+    "muted",
+    "deepest",
+    "deeper",
+    "middle",
+    "brighter",
+    "brightest",
+  ] as const;
 
   test("runs muted, then a window of three rungs from the deepest to the brightest, each one rung above the last", () => {
     expect(SHADE_NAMES.slice(0, DIAL.length)).toEqual([...DIAL]);
@@ -140,7 +182,9 @@ describe("the shade dial", () => {
     }
     // Turning the dial one position moves every cell exactly one rung.
     for (let p = 1; p < windows.length; p++) {
-      expect(windows[p]!.map(rung)).toEqual(windows[p - 1]!.map((s) => rung(s) + 1));
+      expect(windows[p]!.map(rung)).toEqual(
+        windows[p - 1]!.map((s) => rung(s) + 1),
+      );
     }
   });
 
@@ -153,7 +197,9 @@ describe("the shade dial", () => {
 
   test("rests on middle: one darkening, the role itself, one lightening", () => {
     expect(floorOf("shade")).toBe("middle");
-    expect([...SHADES.middle.tones].sort()).toEqual(["base", "darken-1", "lighten-1"].sort());
+    expect([...SHADES.middle.tones].sort()).toEqual(
+      ["base", "darken-1", "lighten-1"].sort(),
+    );
   });
 
   test("error/success/warning are absent from DECOR_HUES", () => {
@@ -175,22 +221,56 @@ describe("the shade dial", () => {
     expect(VARIATIONS["accent"].hues).toContain(KEYSTONE_HUE);
     // A tuning (brandon-menus-sjhy.4fi) keeps the accent for its keystones:
     // no depth of a menu it opens wears it.
-    const tunings = VARIATION_NAMES.filter((name) => VARIATIONS[name].keystones.length > 0);
+    const tunings = VARIATION_NAMES.filter(
+      (name) => VARIATIONS[name].keystones.length > 0,
+    );
     expect(tunings.length).toBeGreaterThan(0);
-    for (const name of tunings) expect([name, VARIATIONS[name].open]).not.toContain(KEYSTONE_HUE);
+    for (const name of tunings)
+      expect([name, VARIATIONS[name].open]).not.toContain(KEYSTONE_HUE);
   });
 
   test("a keystone wears the accent at the shade its place deals it, read off its authored place in its line; every other cell wears the row's hue", () => {
-    const under = (name: VariationName): Decor => ({ variation: VARIATIONS[name], shade: SHADES.middle });
+    const under = (name: VariationName): Decor => ({
+      variation: VARIATIONS[name],
+      shade: SHADES.middle,
+    });
     const hues = (name: VariationName, r: number, count: number): DecorHue[] =>
-      Array.from({ length: count }, (_, i) => placed(under(name), [row(r, 2), cell(i, count)]).hue);
-    expect(hues("ends-primary", 0, 4)).toEqual(["accent", "secondary", "secondary", "accent"]);
-    expect(hues("ends-primary", 1, 3)).toEqual(["accent", "secondary", "accent"]);
-    expect(hues("start-primary", 1, 3)).toEqual(["accent", "secondary", "secondary"]);
-    expect(hues("end-primary", 1, 3)).toEqual(["secondary", "secondary", "accent"]);
+      Array.from(
+        { length: count },
+        (_, i) => placed(under(name), [row(r, 2), cell(i, count)]).hue,
+      );
+    expect(hues("ends-primary", 0, 4)).toEqual([
+      "accent",
+      "secondary",
+      "secondary",
+      "accent",
+    ]);
+    expect(hues("ends-primary", 1, 3)).toEqual([
+      "accent",
+      "secondary",
+      "accent",
+    ]);
+    expect(hues("start-primary", 1, 3)).toEqual([
+      "accent",
+      "secondary",
+      "secondary",
+    ]);
+    expect(hues("end-primary", 1, 3)).toEqual([
+      "secondary",
+      "secondary",
+      "accent",
+    ]);
     // The bar's first cell alone: the first cell of the first row.
-    expect(hues("door-primary", 0, 3)).toEqual(["accent", "secondary", "secondary"]);
-    expect(hues("door-primary", 1, 3)).toEqual(["secondary", "secondary", "secondary"]);
+    expect(hues("door-primary", 0, 3)).toEqual([
+      "accent",
+      "secondary",
+      "secondary",
+    ]);
+    expect(hues("door-primary", 1, 3)).toEqual([
+      "secondary",
+      "secondary",
+      "secondary",
+    ]);
     // A keystone's shade is its place's, like any cell's.
     for (const i of [0, 3]) {
       expect(placed(under("ends-primary"), [row(0, 2), cell(i, 4)]).shade).toBe(
@@ -202,13 +282,16 @@ describe("the shade dial", () => {
     expect(placed(under("start-primary"), [row(1, 2)]).hue).toBe("accent");
     // A cell's place is its own however the row nests it: a group ending a row
     // at place 1 holds places 1 to 3 of 4, and only its last leaf ends the line.
-    expect([1, 2, 3].map((i) => placed(under("end-primary"), [row(0, 2), cell(1, 4), cell(i, 4)]).hue)).toEqual([
-      "secondary",
-      "secondary",
-      "accent",
-    ]);
+    expect(
+      [1, 2, 3].map(
+        (i) =>
+          placed(under("end-primary"), [row(0, 2), cell(1, 4), cell(i, 4)]).hue,
+      ),
+    ).toEqual(["secondary", "secondary", "accent"]);
     // Edit chrome's unit shares its cell's place, so it wears the keystone too.
-    expect(placed(under("ends-primary"), [row(0, 2), cell(3, 4), cell(3, 4)]).hue).toBe("accent");
+    expect(
+      placed(under("ends-primary"), [row(0, 2), cell(3, 4), cell(3, 4)]).hue,
+    ).toBe("accent");
   });
 });
 
@@ -221,39 +304,72 @@ describe("a dial window at a depth", () => {
   // that draws more than two, which the pressed button in that hue needs.
   test("holds as many tones as its size — the dial's count, short of the last colour a ladder of more than two draws, never fewer than two — wherever the role has them: the dial's tones the depth draws apart, then the nearest rungs drawn apart from all the window holds, a window of three listed lowest, highest, then the one between, as the dial lists a position", () => {
     const wrong: string[] = [];
-    const seen = { kept: 0, widened: 0, heldForPress: 0, fewerThanNamed: 0, flat: 0 };
+    const seen = {
+      kept: 0,
+      widened: 0,
+      heldForPress: 0,
+      fewerThanNamed: 0,
+      flat: 0,
+    };
     for (const drawnAt of DRAWN) {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
         for (const hue of DECOR_HUES) {
-          const drawn = (tone: RoleShade): string => shown(palette.get(shadeRole(hue, tone))).hex;
-          const size = (count: number): number => windowSizeOf(count, new Set(LADDER.map(drawn)).size);
+          const drawn = (tone: RoleShade): string =>
+            shown(palette.get(shadeRole(hue, tone))).hex;
+          const size = (count: number): number =>
+            windowSizeOf(count, new Set(LADDER.map(drawn)).size);
           for (const shade of SHADE_NAMES) {
             const tones: readonly RoleShade[] = SHADES[shade].tones;
-            const apart = tones.filter((tone, i) => tones.slice(0, i).every((t) => drawn(t) !== drawn(tone))).slice(0, size(tones.length));
+            const apart = tones
+              .filter((tone, i) =>
+                tones.slice(0, i).every((t) => drawn(t) !== drawn(tone)),
+              )
+              .slice(0, size(tones.length));
             // Every rung nearest the dial's tones first, each taken where it
             // is drawn apart from all the window holds by then, until the
             // window holds its size.
             const expected = walked(
               nearestFrom(tones, palette.dark).reduce<RoleShade[]>(
-                (held, r) => (held.length < size(tones.length) && held.every((t) => drawn(t) !== drawn(r)) ? [...held, r] : held),
+                (held, r) =>
+                  held.length < size(tones.length) &&
+                  held.every((t) => drawn(t) !== drawn(r))
+                    ? [...held, r]
+                    : held,
                 apart,
               ),
             );
             const window = windowAt(palette, hue, SHADES[shade], drawnAt);
             const where = `${palette.name} ${hue} ${shade} at ${ColorDepth[drawnAt]}`;
-            if (window.join() !== expected.join()) wrong.push(`${where}: ${window.join()}, expected ${expected.join()}`);
+            if (window.join() !== expected.join())
+              wrong.push(
+                `${where}: ${window.join()}, expected ${expected.join()}`,
+              );
             // Its size, else as many colours as the role's shades draw — its
             // ladder and the dial's own tones — and the tones it holds draw
             // as that many colours.
             const has = new Set([...LADDER, ...tones].map(drawn)).size;
-            if (window.length !== Math.min(size(tones.length), has)) wrong.push(`${where}: ${window.length} tones, its size is ${size(tones.length)} and the role draws ${has}`);
-            if (new Set(window.map(drawn)).size !== window.length) wrong.push(`${where}: ${window.join()} draws as fewer colours than it holds`);
+            if (window.length !== Math.min(size(tones.length), has))
+              wrong.push(
+                `${where}: ${window.length} tones, its size is ${size(tones.length)} and the role draws ${has}`,
+              );
+            if (new Set(window.map(drawn)).size !== window.length)
+              wrong.push(
+                `${where}: ${window.join()} draws as fewer colours than it holds`,
+              );
             // What the size leaves for: wherever the ladder draws more than
             // two colours, one of them is drawn as none of the window's tones,
             // so the button pressed in that hue has a colour of its own.
             const ladderColours = new Set(LADDER.map(drawn));
-            if (ladderColours.size > 2 && [...ladderColours].every((colour) => window.some((t) => drawn(t) === colour))) wrong.push(`${where}: ${window.join()} takes every colour its ladder draws`);
+            if (
+              ladderColours.size > 2 &&
+              [...ladderColours].every((colour) =>
+                window.some((t) => drawn(t) === colour),
+              )
+            )
+              wrong.push(
+                `${where}: ${window.join()} takes every colour its ladder draws`,
+              );
             seen[
               has === 1
                 ? "flat"
@@ -276,11 +392,22 @@ describe("a dial window at a depth", () => {
     // draws where it draws fewer than the position names, and the flat
     // ladders (textual-ansi's) — and at truecolor, outside a flat ladder,
     // every window is the dial's own.
-    expect([seen.kept > 0, seen.widened > 0, seen.heldForPress > 0, seen.fewerThanNamed > 0, seen.flat > 0]).toEqual([true, true, true, true, true]);
+    expect([
+      seen.kept > 0,
+      seen.widened > 0,
+      seen.heldForPress > 0,
+      seen.fewerThanNamed > 0,
+      seen.flat > 0,
+    ]).toEqual([true, true, true, true, true]);
     for (const palette of REGISTRY.filter((p) => p.name !== "textual-ansi")) {
       for (const hue of DECOR_HUES) {
         for (const shade of SHADE_NAMES) {
-          expect([palette.name, hue, shade, windowAt(palette, hue, SHADES[shade], AT)]).toEqual([palette.name, hue, shade, SHADES[shade].tones]);
+          expect([
+            palette.name,
+            hue,
+            shade,
+            windowAt(palette, hue, SHADES[shade], AT),
+          ]).toEqual([palette.name, hue, shade, SHADES[shade].tones]);
         }
       }
     }
@@ -292,36 +419,72 @@ describe("a dial window at a depth", () => {
     for (const drawnAt of DRAWN) {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
-        const drawn = (entry: DecorEntry): string => shown(decorEntryColour(palette, entry)).hex;
+        const drawn = (entry: DecorEntry): string =>
+          shown(decorEntryColour(palette, entry)).hex;
         for (const shade of SHADE_NAMES) {
           for (const name of ["accent", "duo", "alt"] as const) {
-            const decor: Decor = { variation: VARIATIONS[name], shade: SHADES[shade] };
+            const decor: Decor = {
+              variation: VARIATIONS[name],
+              shade: SHADES[shade],
+            };
             const sampled = vocabularyOf(palette, decor, drawnAt);
             const dealt = decor.variation.hues.flatMap((hue) => {
               const window = windowAt(palette, hue, SHADES[shade], drawnAt);
-              return SHADES[shade].tones.map((_, at) => ({ hue, shade: window[at % window.length]! }));
+              return SHADES[shade].tones.map((_, at) => ({
+                hue,
+                shade: window[at % window.length]!,
+              }));
             });
             const where = `${palette.name} ${name}/${shade} at ${ColorDepth[drawnAt]}: ${sampled.map((e) => `${e.hue} ${e.shade}`).join(", ")}`;
             // The groups meet between the last place of the first hue and the first of the second.
             const turn = SHADES[shade].tones.length;
-            if (sampled.length !== dealt.length) wrong.push(`${where}, not one place per tone the dial names, per hue`);
+            if (sampled.length !== dealt.length)
+              wrong.push(
+                `${where}, not one place per tone the dial names, per hue`,
+              );
             sampled.forEach((entry, i) => {
-              if (entry.hue !== dealt[i]!.hue) wrong.push(`${where}, place ${i} not in ${dealt[i]!.hue}`);
+              if (entry.hue !== dealt[i]!.hue)
+                wrong.push(`${where}, place ${i} not in ${dealt[i]!.hue}`);
               if (entry.shade === dealt[i]!.shade) return;
               seen.moved++;
               // A place moves only at the meeting, and only where the place
               // across it was drawn like it, as dealt or as it stands.
-              const across = i === turn ? turn - 1 : i === turn - 1 ? turn : undefined;
-              if (across === undefined || ![drawn(dealt[across]!), drawn(sampled[across]!)].includes(drawn(dealt[i]!)))
-                wrong.push(`${where}, place ${i} moved, though no place across a meeting was drawn like it`);
+              const across =
+                i === turn ? turn - 1 : i === turn - 1 ? turn : undefined;
+              if (
+                across === undefined ||
+                ![drawn(dealt[across]!), drawn(sampled[across]!)].includes(
+                  drawn(dealt[i]!),
+                )
+              )
+                wrong.push(
+                  `${where}, place ${i} moved, though no place across a meeting was drawn like it`,
+                );
             });
-            const beside = (i: number): string[] => [sampled[i - 1], sampled[i + 1]].flatMap((e) => (e === undefined ? [] : [drawn(e)]));
-            const hasRungToGive = (i: number): boolean => LADDER.some((rung) => !beside(i).includes(drawn({ hue: sampled[i]!.hue, shade: rung })));
+            const beside = (i: number): string[] =>
+              [sampled[i - 1], sampled[i + 1]].flatMap((e) =>
+                e === undefined ? [] : [drawn(e)],
+              );
+            const hasRungToGive = (i: number): boolean =>
+              LADDER.some(
+                (rung) =>
+                  !beside(i).includes(
+                    drawn({ hue: sampled[i]!.hue, shade: rung }),
+                  ),
+              );
             for (let i = 0; i + 1 < sampled.length; i++) {
               const [left, right] = [sampled[i]!, sampled[i + 1]!];
               if (drawn(left) !== drawn(right)) continue;
-              if (left.hue === right.hue && windowAt(palette, left.hue, SHADES[shade], drawnAt).length === 1) continue;
-              if (left.hue !== right.hue && !hasRungToGive(i) && !hasRungToGive(i + 1)) {
+              if (
+                left.hue === right.hue &&
+                windowAt(palette, left.hue, SHADES[shade], drawnAt).length === 1
+              )
+                continue;
+              if (
+                left.hue !== right.hue &&
+                !hasRungToGive(i) &&
+                !hasRungToGive(i + 1)
+              ) {
                 seen.noneToGive++;
                 continue;
               }
@@ -343,9 +506,12 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     for (const name of listThemePalettes()) {
       const palette = getThemePalette(name);
       for (const shade of SHADE_NAMES) {
-        const entries = VARIATIONS.duo.hues.flatMap((hue) => SHADES[shade].tones.map((tone) => ({ hue, shade: tone })));
+        const entries = VARIATIONS.duo.hues.flatMap((hue) =>
+          SHADES[shade].tones.map((tone) => ({ hue, shade: tone })),
+        );
         for (const entry of entries) {
-          const named = entry.shade === "base" ? entry.hue : `${entry.hue}-${entry.shade}`;
+          const named =
+            entry.shade === "base" ? entry.hue : `${entry.hue}-${entry.shade}`;
           expect([name, named, decorEntryColour(palette, entry).hex]).toEqual([
             name,
             named,
@@ -359,10 +525,16 @@ describe("the colour is its role at a shade, as the palette names it", () => {
   test("the row chooses the hue and the place in the row chooses the shade", () => {
     // Row 1 of 2 (vdc 0.5 × 2 = 1 -> secondary), cell 3 of 6 (vdc 0.75, in
     // the upper half -> entry 2 of the middle window, the role itself).
-    expect(placed(TWO_STEP, [row(1, 2), cell(3, 6)])).toEqual({ hue: "secondary", shade: "base" });
+    expect(placed(TWO_STEP, [row(1, 2), cell(3, 6)])).toEqual({
+      hue: "secondary",
+      shade: "base",
+    });
     // Only the innermost row counts: a row stacked above the whole bar (edit
     // mode's reset banner wraps the content as row 1 of 2) recolours nothing.
-    expect(placed(TWO_STEP, [row(1, 2), row(0, 2), cell(3, 6)])).toEqual({ hue: "primary", shade: "base" });
+    expect(placed(TWO_STEP, [row(1, 2), row(0, 2), cell(3, 6)])).toEqual({
+      hue: "primary",
+      shade: "base",
+    });
     // A cell is a leaf of its row, at its own place on the row's line however
     // the row nests it: the third leaf of a group at place 2 is at place 4,
     // and wears what a cell the row holds directly at 4 wears.
@@ -375,7 +547,10 @@ describe("the colour is its role at a shade, as the palette names it", () => {
       placed(TWO_STEP, [row(1, 2), cell(3, 6)]),
     );
     // A bar with no vertical container is one row, in the first bar hue.
-    expect(placed(TWO_STEP, [cell(1, 4)])).toEqual({ hue: TWO_STEP.variation.hues[0], shade: "base" });
+    expect(placed(TWO_STEP, [cell(1, 4)])).toEqual({
+      hue: TWO_STEP.variation.hues[0],
+      shade: "base",
+    });
   });
 
   test("the shade step is placed by its OWN distribution", () => {
@@ -383,7 +558,9 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     // 0.375, read by equal bins, in [⅓, ⅔) -> entry 1.
     expect(placed(TWO_STEP, [cell(1, 4)]).shade).toBe(SHADES.middle.tones[2]);
     expect(
-      placed(TWO_STEP, [{ ...cell(1, 4), distribution: DISTRIBUTIONS.monotonic }]).shade,
+      placed(TWO_STEP, [
+        { ...cell(1, 4), distribution: DISTRIBUTIONS.monotonic },
+      ]).shade,
     ).toBe(SHADES.middle.tones[1]);
   });
 
@@ -394,9 +571,19 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     const walk = (shade: ShadeName): RoleShade[] =>
       Array.from(
         { length: 16 },
-        (_, i) => placed({ ...TWO_STEP, shade: SHADES[shade] }, [row(0, 2), cell(i, 16)]).shade,
+        (_, i) =>
+          placed({ ...TWO_STEP, shade: SHADES[shade] }, [
+            row(0, 2),
+            cell(i, 16),
+          ]).shade,
       );
-    for (const shade of ["deepest", "deeper", "middle", "brighter", "brightest"] as const) {
+    for (const shade of [
+      "deepest",
+      "deeper",
+      "middle",
+      "brighter",
+      "brightest",
+    ] as const) {
       const low = rung(SHADES[shade].tones[0]);
       expect([shade, walk(shade).map((s) => rung(s) - low)]).toEqual([
         shade,
@@ -409,7 +596,10 @@ describe("the colour is its role at a shade, as the palette names it", () => {
       const { tones } = SHADES[shade];
       const [low, middle, high] = [...tones].sort((a, b) => rung(a) - rung(b));
       const steps = tones.length === 3 ? [low, middle, high, middle] : tones;
-      expect([shade, walk(shade)]).toEqual([shade, Array.from({ length: 16 }, (_, i) => steps[i % steps.length])]);
+      expect([shade, walk(shade)]).toEqual([
+        shade,
+        Array.from({ length: 16 }, (_, i) => steps[i % steps.length]),
+      ]);
     }
   });
 
@@ -427,7 +617,9 @@ describe("the colour is its role at a shade, as the palette names it", () => {
   // draws, never fewer than two — so at ansi a three-slot ladder's window
   // holds two, and a distribution whose least window that is not is not
   // claimed over it: the edge is stated instead.
-  const KEEP_NEIGHBOURS_APART: ReadonlyArray<readonly [DistributionName, number]> = [
+  const KEEP_NEIGHBOURS_APART: ReadonlyArray<
+    readonly [DistributionName, number]
+  > = [
     ["van-der-corput", 2],
     ["golden-angle", 3],
   ];
@@ -441,8 +633,14 @@ describe("the colour is its role at a shade, as the palette names it", () => {
       const shown = shownAt(drawnAt);
       for (const palette of REGISTRY) {
         for (const hue of DECOR_HUES) {
-          const drawnTone = (tone: RoleShade): string => shown(palette.get(shadeRole(hue, tone))).hex;
-          const variation: Variation = { hues: [hue], run: WHOLE_ROW, keystones: [], open: [hue] };
+          const drawnTone = (tone: RoleShade): string =>
+            shown(palette.get(shadeRole(hue, tone))).hex;
+          const variation: Variation = {
+            hues: [hue],
+            run: WHOLE_ROW,
+            keystones: [],
+            open: [hue],
+          };
           for (const shade of SHADE_NAMES) {
             const decor: Decor = { variation, shade: SHADES[shade] };
             const tones: readonly RoleShade[] = SHADES[shade].tones;
@@ -451,9 +649,15 @@ describe("the colour is its role at a shade, as the palette names it", () => {
             // The rule's edge, in the test's words: a window holds its size
             // wherever the role's shades draw that many colours, and every
             // colour they draw where they draw fewer.
-            const size = windowSizeOf(tones.length, new Set(LADDER.map(drawnTone)).size);
+            const size = windowSizeOf(
+              tones.length,
+              new Set(LADDER.map(drawnTone)).size,
+            );
             const has = new Set([...LADDER, ...tones].map(drawnTone)).size;
-            if (window.length !== Math.min(size, has)) short.push(`${where}: ${window.length} tones, its size is ${size} and the role draws ${has}`);
+            if (window.length !== Math.min(size, has))
+              short.push(
+                `${where}: ${window.length} tones, its size is ${size} and the role draws ${has}`,
+              );
             if (window.length < tones.length) held.edge++;
             for (const [name, least] of KEEP_NEIGHBOURS_APART) {
               // A position naming fewer tones than the distribution's least
@@ -463,17 +667,31 @@ describe("the colour is its role at a shade, as the palette names it", () => {
               if (tones.length < least || window.length < least) continue;
               if (name === "golden-angle") {
                 held.goldenAngle++;
-                if (window.some((tone) => !tones.includes(tone))) held.widenedUnderGoldenAngle++;
+                if (window.some((tone) => !tones.includes(tone)))
+                  held.widenedUnderGoldenAngle++;
               }
               const colour = (index: number, count: number): string => {
-                const entry = decorEntryFor(palette, decor, [row(0, 2), { ...cell(index, count), distribution: DISTRIBUTIONS[name] }], drawnAt);
+                const entry = decorEntryFor(
+                  palette,
+                  decor,
+                  [
+                    row(0, 2),
+                    {
+                      ...cell(index, count),
+                      distribution: DISTRIBUTIONS[name],
+                    },
+                  ],
+                  drawnAt,
+                );
                 return shown(decorEntryColour(palette, entry)).hex;
               };
               for (let count = 2; count <= 16; count++) {
                 rows++;
                 for (let i = 0; i + 1 < count; i++) {
                   if (colour(i, count) === colour(i + 1, count))
-                    alike.push(`${palette.name} ${hue} ${shade} at ${ColorDepth[drawnAt]}, ${name}, ${count} cells: ${i} and ${i + 1}`);
+                    alike.push(
+                      `${palette.name} ${hue} ${shade} at ${ColorDepth[drawnAt]}, ${name}, ${count} cells: ${i} and ${i + 1}`,
+                    );
                 }
               }
             }
@@ -483,12 +701,22 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     }
     expect(alike).toEqual([]);
     expect(short).toEqual([]);
-    expect(rows).toBeGreaterThan(DRAWN.length * REGISTRY.length * DECOR_HUES.length * SHADE_NAMES.length * 10);
+    expect(rows).toBeGreaterThan(
+      DRAWN.length *
+        REGISTRY.length *
+        DECOR_HUES.length *
+        SHADE_NAMES.length *
+        10,
+    );
     // Non-vacuous: golden angle is held over windows a depth widened back to
     // three, and the edge — a window short of its position's count (a
     // three-slot ladder at ansi, textual-ansi's flat ladders) — is met and
     // stated.
-    expect([held.goldenAngle > 0, held.widenedUnderGoldenAngle > 0, held.edge > 0]).toEqual([true, true, true]);
+    expect([
+      held.goldenAngle > 0,
+      held.widenedUnderGoldenAngle > 0,
+      held.edge > 0,
+    ]).toEqual([true, true, true]);
   });
 
   test("the even spreads deal every tone of a window an equal run, monotonic in the order the window lists them", () => {
@@ -505,13 +733,17 @@ describe("the colour is its role at a shade, as the palette names it", () => {
                 { ...cell(i, count), distribution: DISTRIBUTIONS[name] },
               ]).shade,
           );
-        expect([shade, count, dealt("monotonic")]).toEqual([shade, count, tones.flatMap((tone) => Array<RoleShade>(runs).fill(tone))]);
-        const interleaved = dealt("ends-interleaved");
-        expect([shade, count, tones.map((tone) => interleaved.filter((t) => t === tone).length)]).toEqual([
+        expect([shade, count, dealt("monotonic")]).toEqual([
           shade,
           count,
-          tones.map(() => runs),
+          tones.flatMap((tone) => Array<RoleShade>(runs).fill(tone)),
         ]);
+        const interleaved = dealt("ends-interleaved");
+        expect([
+          shade,
+          count,
+          tones.map((tone) => interleaved.filter((t) => t === tone).length),
+        ]).toEqual([shade, count, tones.map(() => runs)]);
       }
     }
   });
@@ -519,17 +751,32 @@ describe("the colour is its role at a shade, as the palette names it", () => {
   test("a muted row alternates its role's muted form with the role itself, in one hue", () => {
     const muted: Decor = { ...TWO_STEP, shade: SHADES.muted };
     for (const r of [0, 1]) {
-      const entries = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => placed(muted, [row(r, 2), cell(i, 8)]));
+      const entries = [0, 1, 2, 3, 4, 5, 6, 7].map((i) =>
+        placed(muted, [row(r, 2), cell(i, 8)]),
+      );
       expect(new Set(entries.map((e) => e.hue)).size).toBe(1);
-      expect(entries.map((e) => e.shade)).toEqual(["muted", "base", "muted", "base", "muted", "base", "muted", "base"]);
+      expect(entries.map((e) => e.shade)).toEqual([
+        "muted",
+        "base",
+        "muted",
+        "base",
+        "muted",
+        "base",
+        "muted",
+        "base",
+      ]);
     }
   });
 
   test("no two rows side by side share a hue", () => {
     // Rows land at 0, ½, ¼, ¾, … and a row's hue is the half it falls in, so
     // the first bit alternates them however many rows the bar stacks.
-    const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => placed(TWO_STEP, [row(i, 8)]).hue);
-    expect(hues).toEqual(Array.from({ length: 8 }, (_, i) => TWO_STEP.variation.hues[i % 2]));
+    const hues = [0, 1, 2, 3, 4, 5, 6, 7].map(
+      (i) => placed(TWO_STEP, [row(i, 8)]).hue,
+    );
+    expect(hues).toEqual(
+      Array.from({ length: 8 }, (_, i) => TWO_STEP.variation.hues[i % 2]),
+    );
   });
 
   test("row n wears step n of every variation, and a one-step variation is uniform", () => {
@@ -537,21 +784,33 @@ describe("the colour is its role at a shade, as the palette names it", () => {
       const decor = decorWith(VARIATIONS[name]);
       const steps: readonly string[] = decor.variation.hues;
       // The middle cell of three: no keystone place, so the row's stepped hue.
-      const hues = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => placed(decor, [row(i, 8), cell(1, 3)]).hue);
-      expect([name, hues]).toEqual([name, Array.from({ length: 8 }, (_, i) => steps[i % steps.length])]);
+      const hues = [0, 1, 2, 3, 4, 5, 6, 7].map(
+        (i) => placed(decor, [row(i, 8), cell(1, 3)]).hue,
+      );
+      expect([name, hues]).toEqual([
+        name,
+        Array.from({ length: 8 }, (_, i) => steps[i % steps.length]),
+      ]);
     }
     // The shade is the variation's business nowhere: the cell alone picks it.
     for (const name of VARIATION_NAMES) {
-      expect(placed(decorWith(VARIATIONS[name]), [row(1, 2), cell(3, 6)]).shade).toBe("base");
+      expect(
+        placed(decorWith(VARIATIONS[name]), [row(1, 2), cell(3, 6)]).shade,
+      ).toBe("base");
     }
   });
 
   test("a whole-row variation keeps one hue across a row; alt steps it every three cells", () => {
     const along = (variation: Variation, r: number) =>
-      [0, 1, 2, 3, 4, 5, 6, 7].map((i) => placed(decorWith(variation), [row(r, 2), cell(i, 8)]).hue);
+      [0, 1, 2, 3, 4, 5, 6, 7].map(
+        (i) => placed(decorWith(variation), [row(r, 2), cell(i, 8)]).hue,
+      );
     for (const name of ["accent", "duo", "mono"] as const) {
       const { hues } = VARIATIONS[name];
-      expect([name, along(VARIATIONS[name], 0)]).toEqual([name, Array(8).fill(hues[0])]);
+      expect([name, along(VARIATIONS[name], 0)]).toEqual([
+        name,
+        Array(8).fill(hues[0]),
+      ]);
     }
     // Variant C of 8fp: the shade turns at every cell, the hue after one cell
     // per shade — and each row starts on its own step, so rows still differ.
@@ -561,7 +820,9 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     expect(along(VARIATIONS.alt, 1)).toEqual([A, A, A, S, S, S, A, A]);
     // Never a hue change at every cell: within a run, neighbours share a hue
     // and differ by shade.
-    const shades = [0, 1, 2].map((i) => placed(decorWith(VARIATIONS.alt), [row(0, 2), cell(i, 8)]).shade);
+    const shades = [0, 1, 2].map(
+      (i) => placed(decorWith(VARIATIONS.alt), [row(0, 2), cell(i, 8)]).shade,
+    );
     expect(new Set(shades).size).toBe(3);
   });
 
@@ -569,7 +830,9 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     const alt = decorWith(VARIATIONS.alt);
     // A group at place 1 holding places 1 to 3: its last leaf is the row's
     // fourth cell, past the first run of three.
-    const grouped = [1, 2, 3].map((i) => placed(alt, [row(0, 2), cell(1, 8), cell(i, 8)]).hue);
+    const grouped = [1, 2, 3].map(
+      (i) => placed(alt, [row(0, 2), cell(1, 8), cell(i, 8)]).hue,
+    );
     const flat = [1, 2, 3].map((i) => placed(alt, [row(0, 2), cell(i, 8)]).hue);
     expect(grouped).toEqual(flat);
     expect(grouped).toEqual(["secondary", "secondary", "accent"]);
@@ -579,16 +842,27 @@ describe("the colour is its role at a shade, as the palette names it", () => {
     // root { v: [ { v: [x, y] }, z ] }: y is the second of its stack, z the
     // second of the bar's, so the two lines touch in one hue. Stated, not
     // hidden — see decorEntryFor.
-    expect(placed(TWO_STEP, [row(0, 2), row(1, 2)]).hue).toBe(placed(TWO_STEP, [row(1, 2)]).hue);
+    expect(placed(TWO_STEP, [row(0, 2), row(1, 2)]).hue).toBe(
+      placed(TWO_STEP, [row(1, 2)]).hue,
+    );
   });
 
   test("the root selects the variation's first step at the shade's first entry — or the keystone hue, being the bar's first cell and its last", () => {
     // The empty address has no step to place, so no distribution can reach it.
     for (const name of VARIATION_NAMES) {
       for (const shade of SHADE_NAMES) {
-        const decor: Decor = { variation: VARIATIONS[name], shade: SHADES[shade] };
-        const hue = VARIATIONS[name].keystones.length === 0 ? VARIATIONS[name].hues[0] : KEYSTONE_HUE;
-        expect(placed(decor, [])).toEqual({ hue, shade: SHADES[shade].tones[0] });
+        const decor: Decor = {
+          variation: VARIATIONS[name],
+          shade: SHADES[shade],
+        };
+        const hue =
+          VARIATIONS[name].keystones.length === 0
+            ? VARIATIONS[name].hues[0]
+            : KEYSTONE_HUE;
+        expect(placed(decor, [])).toEqual({
+          hue,
+          shade: SHADES[shade].tones[0],
+        });
       }
     }
   });
@@ -596,17 +870,30 @@ describe("the colour is its role at a shade, as the palette names it", () => {
   test("an open bar trigger opens its decor's lineage at depth 0, whatever its row", () => {
     for (const name of VARIATION_NAMES) {
       for (const shade of SHADE_NAMES) {
-        const decor: Decor = { variation: VARIATIONS[name], shade: SHADES[shade] };
-        for (const address of [[row(0, 2), cell(2, 4)], [row(1, 2), cell(0, 4)]]) {
+        const decor: Decor = {
+          variation: VARIATIONS[name],
+          shade: SHADES[shade],
+        };
+        for (const address of [
+          [row(0, 2), cell(2, 4)],
+          [row(1, 2), cell(0, 4)],
+        ]) {
           const region = { kind: "bar", decor, address } as const;
-          const { disclosure } = decorationFor(DRACULA, region, ColorDepth.TRUECOLOR);
-          expect([name, shade, disclosure]).toEqual([name, shade, { decor, depth: 0 }]);
+          const { disclosure } = decorationFor(
+            DRACULA,
+            region,
+            ColorDepth.TRUECOLOR,
+          );
+          expect([name, shade, disclosure]).toEqual([
+            name,
+            shade,
+            { decor, depth: 0 },
+          ]);
           expect(hueOf(disclosure)).toBe(VARIATIONS[name].open[0]);
         }
       }
     }
   });
-
 });
 
 // [LAW:verifiable-goals] candybar-joiners-e5r4.5x1: a window keeps one hue's
@@ -628,9 +915,24 @@ describe("where a row turns hue", () => {
   // The hue a place is dealt, in the test's own words: the row starts on its
   // own step (row 0 of 2 on the first, row 1 on the second) and steps every
   // run of cells, and a keystone place wears the keystone hue.
-  const hueAt = (variation: Variation, r: number, i: number, count: number): DecorHue => {
-    const keystone = variation.keystones.some((at) => (at === "bar-start" ? r === 0 && i === 0 : at === "line-start" ? i === 0 : i === count - 1));
-    return keystone ? KEYSTONE_HUE : variation.hues[(r + Math.floor(i / variation.run)) % variation.hues.length]!;
+  const hueAt = (
+    variation: Variation,
+    r: number,
+    i: number,
+    count: number,
+  ): DecorHue => {
+    const keystone = variation.keystones.some((at) =>
+      at === "bar-start"
+        ? r === 0 && i === 0
+        : at === "line-start"
+          ? i === 0
+          : i === count - 1,
+    );
+    return keystone
+      ? KEYSTONE_HUE
+      : variation.hues[
+          (r + Math.floor(i / variation.run)) % variation.hues.length
+        ]!;
   };
   const ROWS = Array.from({ length: 15 }, (_, i) => i + 2);
 
@@ -639,7 +941,14 @@ describe("where a row turns hue", () => {
     (name) => {
       const variation = VARIATIONS[name];
       const wrong: string[] = [];
-      const seen = { turns: 0, dealtAlike: 0, moved: 0, widened: 0, noneToGive: 0, offPress: 0 };
+      const seen = {
+        turns: 0,
+        dealtAlike: 0,
+        moved: 0,
+        widened: 0,
+        noneToGive: 0,
+        offPress: 0,
+      };
       for (const drawnAt of DRAWN) {
         const shown = shownAt(drawnAt);
         for (const palette of REGISTRY) {
@@ -654,46 +963,90 @@ describe("where a row turns hue", () => {
             drawnOf.set(key, hex);
             return hex;
           };
-          const ladder = (hue: DecorHue): string[] => LADDER.map((rung) => drawn({ hue, shade: rung }));
+          const ladder = (hue: DecorHue): string[] =>
+            LADDER.map((rung) => drawn({ hue, shade: rung }));
           for (const shade of SHADE_NAMES) {
             const decor: Decor = { variation, shade: SHADES[shade] };
-            const windowOf = (hue: DecorHue) => windowAt(palette, hue, SHADES[shade], drawnAt);
+            const windowOf = (hue: DecorHue) =>
+              windowAt(palette, hue, SHADES[shade], drawnAt);
             // What every open trigger on the bar wears: each opens the
             // lineage at depth 0, wherever it stands.
-            const pressed = shown(bandFor(palette, { decor, depth: 0 }, drawnAt).state).hex;
+            const pressed = shown(
+              bandFor(palette, { decor, depth: 0 }, drawnAt).state,
+            ).hex;
             for (const r of [0, 1]) {
               for (const count of ROWS) {
                 const where = `${palette.name} ${shade} at ${ColorDepth[drawnAt]}, row ${r}, ${count} cells`;
-                const line = Array.from({ length: count }, (_, i) => decorEntryFor(palette, decor, [row(r, 2), cell(i, count)], drawnAt));
+                const line = Array.from({ length: count }, (_, i) =>
+                  decorEntryFor(
+                    palette,
+                    decor,
+                    [row(r, 2), cell(i, count)],
+                    drawnAt,
+                  ),
+                );
                 // What each place deals before any turn is held: its hue's window, read by its place.
                 const dealt = line.map((_, i) => {
                   const hue = hueAt(variation, r, i, count);
-                  return { hue, shade: vocabularySelect(windowOf(hue), cell(i, count)) };
+                  return {
+                    hue,
+                    shade: vocabularySelect(windowOf(hue), cell(i, count)),
+                  };
                 });
-                const besideOf = (i: number): string[] => [line[i - 1], line[i + 1]].flatMap((entry) => (entry === undefined ? [] : [drawn(entry)]));
-                const hasRungToGive = (i: number): boolean => ladder(line[i]!.hue).some((c) => !besideOf(i).includes(c));
+                const besideOf = (i: number): string[] =>
+                  [line[i - 1], line[i + 1]].flatMap((entry) =>
+                    entry === undefined ? [] : [drawn(entry)],
+                  );
+                const hasRungToGive = (i: number): boolean =>
+                  ladder(line[i]!.hue).some((c) => !besideOf(i).includes(c));
                 // What stood beside a cell when its turn was read. The rule
                 // reads the line from its first place to its last, so each
                 // neighbour then wore what it was dealt or what it wears now,
                 // and the cell is judged against both.
-                const whenRead = (i: number): string[] => [i - 1, i + 1].flatMap((j) => (line[j] === undefined ? [] : [drawn(dealt[j]!), drawn(line[j]!)]));
-                const rungApart = (i: number, off: readonly string[]): boolean => ladder(line[i]!.hue).some((c) => !off.includes(c));
+                const whenRead = (i: number): string[] =>
+                  [i - 1, i + 1].flatMap((j) =>
+                    line[j] === undefined
+                      ? []
+                      : [drawn(dealt[j]!), drawn(line[j]!)],
+                  );
+                const rungApart = (
+                  i: number,
+                  off: readonly string[],
+                ): boolean =>
+                  ladder(line[i]!.hue).some((c) => !off.includes(c));
                 // What a moved cell keeps off: its neighbours, and the press
                 // as well wherever its ladder has a rung apart from all of them.
-                const keptOff = (i: number): string[] => (rungApart(i, [...whenRead(i), pressed]) ? [...whenRead(i), pressed] : whenRead(i));
+                const keptOff = (i: number): string[] =>
+                  rungApart(i, [...whenRead(i), pressed])
+                    ? [...whenRead(i), pressed]
+                    : whenRead(i);
                 line.forEach((entry, i) => {
-                  if (entry.hue !== dealt[i]!.hue) wrong.push(`${where}: ${i} wears ${entry.hue}, dealt ${dealt[i]!.hue}`);
+                  if (entry.hue !== dealt[i]!.hue)
+                    wrong.push(
+                      `${where}: ${i} wears ${entry.hue}, dealt ${dealt[i]!.hue}`,
+                    );
                   if (entry.shade === dealt[i]!.shade) return;
                   seen.moved++;
                   // A cell moves only where a cell across a turn beside it was
                   // drawn like what it was dealt, as dealt or as it stands.
                   const metAcross = [i - 1, i + 1].some(
-                    (j) => dealt[j] !== undefined && dealt[j]!.hue !== entry.hue && [drawn(dealt[j]!), drawn(line[j]!)].includes(drawn(dealt[i]!)),
+                    (j) =>
+                      dealt[j] !== undefined &&
+                      dealt[j]!.hue !== entry.hue &&
+                      [drawn(dealt[j]!), drawn(line[j]!)].includes(
+                        drawn(dealt[i]!),
+                      ),
                   );
-                  if (!metAcross) wrong.push(`${where}: ${i} left its tone, though no cell across a turn was drawn like it`);
+                  if (!metAcross)
+                    wrong.push(
+                      `${where}: ${i} left its tone, though no cell across a turn was drawn like it`,
+                    );
                   if (keptOff(i).includes(pressed)) {
                     seen.offPress++;
-                    if (drawn(entry) === pressed) wrong.push(`${where}: ${i} wears ${entry.shade}, drawn as the press ${pressed}`);
+                    if (drawn(entry) === pressed)
+                      wrong.push(
+                        `${where}: ${i} wears ${entry.shade}, drawn as the press ${pressed}`,
+                      );
                   }
                   // The order the rule moves in: both cells of a turn are
                   // tried apart from the press before either is tried apart
@@ -703,30 +1056,60 @@ describe("where a row turns hue", () => {
                   // that turn was read the two were drawn alike, so the cell
                   // across is judged against its own colour too.
                   if (drawn(entry) === pressed) {
-                    const across = [i - 1, i + 1].filter((j) => line[j] !== undefined && line[j]!.hue !== entry.hue);
-                    if (across.every((j) => rungApart(j, [...whenRead(j), drawn(dealt[j]!), drawn(line[j]!), pressed])))
-                      wrong.push(`${where}: ${i} fell back onto the press ${pressed}, though the cell across its turn had a rung apart from it`);
+                    const across = [i - 1, i + 1].filter(
+                      (j) =>
+                        line[j] !== undefined && line[j]!.hue !== entry.hue,
+                    );
+                    if (
+                      across.every((j) =>
+                        rungApart(j, [
+                          ...whenRead(j),
+                          drawn(dealt[j]!),
+                          drawn(line[j]!),
+                          pressed,
+                        ]),
+                      )
+                    )
+                      wrong.push(
+                        `${where}: ${i} fell back onto the press ${pressed}, though the cell across its turn had a rung apart from it`,
+                      );
                   }
                   if (windowOf(entry.hue).includes(entry.shade)) return;
                   seen.widened++;
-                  const apart = windowOf(entry.hue).filter((tone) => !keptOff(i).includes(drawn({ hue: entry.hue, shade: tone })));
-                  if (apart.length > 0) wrong.push(`${where}: ${i} wears ${entry.shade}, past its window's ${apart.join()}`);
+                  const apart = windowOf(entry.hue).filter(
+                    (tone) =>
+                      !keptOff(i).includes(
+                        drawn({ hue: entry.hue, shade: tone }),
+                      ),
+                  );
+                  if (apart.length > 0)
+                    wrong.push(
+                      `${where}: ${i} wears ${entry.shade}, past its window's ${apart.join()}`,
+                    );
                 });
                 for (let i = 0; i + 1 < count; i++) {
                   const [left, right] = [line[i]!, line[i + 1]!];
                   if (left.hue !== right.hue) {
                     seen.turns++;
-                    if (drawn(dealt[i]!) === drawn(dealt[i + 1]!)) seen.dealtAlike++;
+                    if (drawn(dealt[i]!) === drawn(dealt[i + 1]!))
+                      seen.dealtAlike++;
                   }
                   if (drawn(left) !== drawn(right)) continue;
                   // One hue: only a window of one tone, a role whose whole
                   // ladder draws as one colour (held by the window's own test).
-                  if (left.hue === right.hue && windowOf(left.hue).length === 1) continue;
-                  if (left.hue !== right.hue && !hasRungToGive(i) && !hasRungToGive(i + 1)) {
+                  if (left.hue === right.hue && windowOf(left.hue).length === 1)
+                    continue;
+                  if (
+                    left.hue !== right.hue &&
+                    !hasRungToGive(i) &&
+                    !hasRungToGive(i + 1)
+                  ) {
                     seen.noneToGive++;
                     continue;
                   }
-                  wrong.push(`${where}: ${i} and ${i + 1} both ${drawn(left)} (${left.hue} ${left.shade} | ${right.hue} ${right.shade})`);
+                  wrong.push(
+                    `${where}: ${i} and ${i + 1} both ${drawn(left)} (${left.hue} ${left.shade} | ${right.hue} ${right.shade})`,
+                  );
                 }
               }
             }
@@ -737,11 +1120,17 @@ describe("where a row turns hue", () => {
       // A whole-row variation with no keystone never turns along a row; one
       // that turns meets two hues on one colour at some depth, and holds each
       // such turn by moving a cell.
-      const turns = variation.run !== WHOLE_ROW || variation.keystones.length > 0;
-      expect([name, seen.turns > 0, seen.dealtAlike > 0, seen.moved > 0, seen.offPress > 0]).toEqual([name, turns, turns, turns, turns]);
+      const turns =
+        variation.run !== WHOLE_ROW || variation.keystones.length > 0;
+      expect([
+        name,
+        seen.turns > 0,
+        seen.dealtAlike > 0,
+        seen.moved > 0,
+        seen.offPress > 0,
+      ]).toEqual([name, turns, turns, turns, turns]);
     },
   );
-
 });
 
 describe("distributions", () => {
@@ -755,11 +1144,15 @@ describe("distributions", () => {
   test("n-free distributions ignore the count; n-reading ones use it", () => {
     for (let index = 0; index < 8; index++) {
       for (const name of N_FREE) {
-        expect(DISTRIBUTIONS[name].place(index, 8)).toBe(DISTRIBUTIONS[name].place(index, 20));
+        expect(DISTRIBUTIONS[name].place(index, 8)).toBe(
+          DISTRIBUTIONS[name].place(index, 20),
+        );
       }
     }
     for (const name of N_READING) {
-      expect(DISTRIBUTIONS[name].place(1, 8)).not.toBe(DISTRIBUTIONS[name].place(1, 20));
+      expect(DISTRIBUTIONS[name].place(1, 8)).not.toBe(
+        DISTRIBUTIONS[name].place(1, 20),
+      );
     }
   });
 
@@ -786,14 +1179,16 @@ describe("done-when: any node's colour is computable alone", () => {
         const inOrder = colourMap(shape, distribution);
         // A single node, evaluated with no other node ever visited.
         const lone = drawFrom(rng, nodes);
-        expect([name, seed, decorFor(DRACULA, TWO_STEP, lone.address, AT).hex]).toEqual([
+        expect([
           name,
           seed,
-          inOrder.get(pathKey(lone.path)),
-        ]);
+          decorFor(DRACULA, TWO_STEP, lone.address, AT).hex,
+        ]).toEqual([name, seed, inOrder.get(pathKey(lone.path))]);
         // The whole tree, evaluated back to front — a walk cursor would diverge here.
         for (const { path, address } of [...nodes].reverse()) {
-          expect(decorFor(DRACULA, TWO_STEP, address, AT).hex).toBe(inOrder.get(pathKey(path)));
+          expect(decorFor(DRACULA, TWO_STEP, address, AT).hex).toBe(
+            inOrder.get(pathKey(path)),
+          );
         }
       }
     }
@@ -811,7 +1206,12 @@ describe("done-when: adding a sibling", () => {
         const before = colourMap(shape, distribution);
         const after = colourMap(withSiblingAdded(shape, target), distribution);
         for (const [key, hex] of before) {
-          expect([name, seed, key, after.get(key)]).toEqual([name, seed, key, hex]);
+          expect([name, seed, key, after.get(key)]).toEqual([
+            name,
+            seed,
+            key,
+            hex,
+          ]);
         }
       }
     }
@@ -825,7 +1225,9 @@ describe("done-when: adding a sibling", () => {
       const distribution = DISTRIBUTIONS[name];
       let moved = 0;
       for (const { shape } of SHAPES) {
-        const parents = allNodes(shape, distribution).filter(({ path }) => nodeAt(shape, path).children.length >= 2);
+        const parents = allNodes(shape, distribution).filter(
+          ({ path }) => nodeAt(shape, path).children.length >= 2,
+        );
         const before = colourMap(shape, distribution);
         for (const { path } of parents) {
           const after = colourMap(withSiblingAdded(shape, path), distribution);
@@ -846,16 +1248,25 @@ describe("done-when: permuting an unrelated subtree", () => {
         const rng = seededRng(seed);
         // Below the root only: permuting the root's children leaves no node outside.
         const parents = allNodes(shape, distribution).filter(
-          ({ path }) => path.length > 0 && nodeAt(shape, path).children.length >= 2,
+          ({ path }) =>
+            path.length > 0 && nodeAt(shape, path).children.length >= 2,
         );
         if (parents.length === 0) continue;
         const target = drawFrom(rng, parents).path;
         const before = colourMap(shape, distribution);
-        const after = colourMap(withChildrenPermuted(shape, target, rng), distribution);
+        const after = colourMap(
+          withChildrenPermuted(shape, target, rng),
+          distribution,
+        );
         for (const { path } of allNodes(shape, distribution)) {
           if (isUnder(target, path) && path.length > target.length) continue;
           const key = pathKey(path);
-          expect([name, seed, key, after.get(key)]).toEqual([name, seed, key, before.get(key)]);
+          expect([name, seed, key, after.get(key)]).toEqual([
+            name,
+            seed,
+            key,
+            before.get(key),
+          ]);
         }
       }
     }
@@ -875,7 +1286,8 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
     for (const name of ALL_NAMES) {
       for (const { shape } of SHAPES) {
         for (const { address } of allNodes(shape, DISTRIBUTIONS[name])) {
-          for (const step of address) steps.set(`${name}:${step.index}/${step.count}`, step);
+          for (const step of address)
+            steps.set(`${name}:${step.index}/${step.count}`, step);
         }
       }
     }
@@ -888,7 +1300,13 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
   test("an empty vocabulary has nothing to select and says so, under every distribution", () => {
     expect(() => vocabularySelect([], undefined)).toThrow(/empty vocabulary/);
     for (const name of ALL_NAMES) {
-      expect(() => vocabularySelect([], { index: 1, count: 2, distribution: DISTRIBUTIONS[name] })).toThrow(/empty vocabulary/);
+      expect(() =>
+        vocabularySelect([], {
+          index: 1,
+          count: 2,
+          distribution: DISTRIBUTIONS[name],
+        }),
+      ).toThrow(/empty vocabulary/);
     }
   });
 });
@@ -896,9 +1314,18 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
 describe("depth steps along the lineage", () => {
   test("each depth wears the next hue of the lineage, wrapping; a one-hue lineage keeps it", () => {
     const today: Lineage = ["accent", "primary", "secondary"];
-    expect([0, 1, 2, 3].map((depth) => lineageHue(today, depth))).toEqual(["accent", "primary", "secondary", "accent"]);
-    expect([0, 1, 2, 3].map((depth) => lineageHue(["primary", "secondary"], depth))).toEqual(["primary", "secondary", "primary", "secondary"]);
-    expect([0, 1, 2, 3].map((depth) => lineageHue(["primary"], depth))).toEqual(["primary", "primary", "primary", "primary"]);
+    expect([0, 1, 2, 3].map((depth) => lineageHue(today, depth))).toEqual([
+      "accent",
+      "primary",
+      "secondary",
+      "accent",
+    ]);
+    expect(
+      [0, 1, 2, 3].map((depth) => lineageHue(["primary", "secondary"], depth)),
+    ).toEqual(["primary", "secondary", "primary", "secondary"]);
+    expect([0, 1, 2, 3].map((depth) => lineageHue(["primary"], depth))).toEqual(
+      ["primary", "primary", "primary", "primary"],
+    );
     // The shipped rows open as the bar did before the tunings; a tuning as
     // its name says.
     expect(VARIATIONS.accent.open).toEqual(today);
@@ -909,15 +1336,32 @@ describe("depth steps along the lineage", () => {
 describe("a band item is placed by its step", () => {
   test("a picker's option wears what a segment at its step wears, text and all, so one menu's items read alike", () => {
     for (const shade of ["middle", "muted"] as const) {
-      const decor: Decor = { variation: VARIATIONS["ends-primary"], shade: SHADES[shade] };
+      const decor: Decor = {
+        variation: VARIATIONS["ends-primary"],
+        shade: SHADES[shade],
+      };
       const disclosure: Disclosure = { decor, depth: 0 };
       for (const palette of REGISTRY) {
         // The option's style reads the active segment's palette and the band it opens, nothing else.
         const active = { palette, disclosure } as ActiveSegment;
         for (const index of [0, 1, 2]) {
-          const option = bandItemStyle(active, { index, count: 3, distribution: VDC }, ColorDepth.TRUECOLOR);
-          const segment = decorationFor(palette, { kind: "band", band: disclosure, address: [cell(index, 3)] }, ColorDepth.TRUECOLOR);
-          expect([palette.name, shade, index, option.bgcolor?.value?.hex, option.color?.value?.hex]).toEqual([
+          const option = bandItemStyle(
+            active,
+            { index, count: 3, distribution: VDC },
+            ColorDepth.TRUECOLOR,
+          );
+          const segment = decorationFor(
+            palette,
+            { kind: "band", band: disclosure, address: [cell(index, 3)] },
+            ColorDepth.TRUECOLOR,
+          );
+          expect([
+            palette.name,
+            shade,
+            index,
+            option.bgcolor?.value?.hex,
+            option.color?.value?.hex,
+          ]).toEqual([
             palette.name,
             shade,
             index,
@@ -940,7 +1384,10 @@ describe("an open menu wears shades its theme names, selected and never searched
     // out of the row it is pressed in.
     for (const name of SHADE_NAMES) {
       const tones: readonly RoleShade[] = SHADES[name].tones;
-      expect([name, tones.includes(SHADES[name].activated)]).toEqual([name, false]);
+      expect([name, tones.includes(SHADES[name].activated)]).toEqual([
+        name,
+        false,
+      ]);
     }
   });
 
@@ -953,7 +1400,10 @@ describe("an open menu wears shades its theme names, selected and never searched
         for (const shade of SHADE_NAMES) {
           for (const hue of DECOR_HUES) {
             const disclosure: Disclosure = {
-              decor: { variation: { ...TODAY.variation, open: [hue] }, shade: SHADES[shade] },
+              decor: {
+                variation: { ...TODAY.variation, open: [hue] },
+                shade: SHADES[shade],
+              },
               depth: 0,
             };
             const { state, plane } = bandFor(palette, disclosure, drawnAt);
@@ -966,17 +1416,36 @@ describe("an open menu wears shades its theme names, selected and never searched
               ["activated", stateCell(palette, state, drawnAt)],
               ["✕", closeCell(palette, state, drawnAt)],
               ["plane", stateCell(palette, plane, drawnAt)],
-              ["✕ on the plane", Style.combine([stateCell(palette, plane, drawnAt), closeOn(palette, plane, drawnAt)])],
+              [
+                "✕ on the plane",
+                Style.combine([
+                  stateCell(palette, plane, drawnAt),
+                  closeOn(palette, plane, drawnAt),
+                ]),
+              ],
               ...Array.from(
                 { length: 8 },
-                (_, index) => [`item ${index}`, bandItemStyle(active, { index, count: 8, distribution: VDC }, drawnAt)] as const,
+                (_, index) =>
+                  [
+                    `item ${index}`,
+                    bandItemStyle(
+                      active,
+                      { index, count: 8, distribution: VDC },
+                      drawnAt,
+                    ),
+                  ] as const,
               ),
             ];
             for (const [cell, style] of cells) {
               measured++;
-              const ratio = contrastRatio(shown(style.color!.value!), shown(style.bgcolor!.value!));
+              const ratio = contrastRatio(
+                shown(style.color!.value!),
+                shown(style.bgcolor!.value!),
+              );
               if (ratio < TEXT_MIN_CONTRAST) {
-                wrong.push(`${palette.name} ${shade} ${hue} ${cell} at ${ColorDepth[drawnAt]}: ${ratio.toFixed(2)}`);
+                wrong.push(
+                  `${palette.name} ${shade} ${hue} ${cell} at ${ColorDepth[drawnAt]}: ${ratio.toFixed(2)}`,
+                );
               }
             }
           }
@@ -984,6 +1453,12 @@ describe("an open menu wears shades its theme names, selected and never searched
       }
     }
     expect(wrong).toEqual([]);
-    expect(measured).toBe(DRAWN.length * REGISTRY.length * SHADE_NAMES.length * DECOR_HUES.length * 12);
+    expect(measured).toBe(
+      DRAWN.length *
+        REGISTRY.length *
+        SHADE_NAMES.length *
+        DECOR_HUES.length *
+        12,
+    );
   });
 });

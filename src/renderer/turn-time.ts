@@ -7,7 +7,12 @@
 // [LAW:no-ambient-temporal-coupling] Everything held is measured on ticks,
 // which never run back, so no holder handles a wall clock stepped.
 
-import type { Instant, Readings, Tick } from "../utils/instant.js";
+import {
+  earliestOf,
+  type Instant,
+  type Readings,
+  type Tick,
+} from "../utils/instant.js";
 import type { Timekeeper } from "../time.js";
 import { runEach } from "../utils/run-each.js";
 
@@ -62,10 +67,7 @@ export class TurnTime {
 
   // The earliest tick held work is due at, or null when none is held.
   next(): Tick | null {
-    let next: Tick | null = null;
-    for (const { until } of this.held)
-      if (next === null || until < next) next = until;
-    return next;
+    return earliestOf([...this.held].map(({ until }) => until));
   }
 
   // The work due by this turn's tick, earliest first. Each is taken from what

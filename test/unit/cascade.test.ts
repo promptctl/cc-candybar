@@ -13,7 +13,10 @@ import { ColorRamp, EASES, parseRgbHex } from "@promptctl/rich-js";
 import type { ColorRgba } from "@promptctl/rich-js";
 
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
-import { cascadeAt, parseCascadeStops } from "../../src/template-engine/cascade";
+import {
+  cascadeAt,
+  parseCascadeStops,
+} from "../../src/template-engine/cascade";
 
 const at = (value: number, ...specs: string[]): string =>
   cascadeAt(value, parseCascadeStops(specs));

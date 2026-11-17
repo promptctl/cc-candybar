@@ -123,12 +123,14 @@ describe("README describes the code it ships with", () => {
   // and `bin/cc-candybar-native` are build outputs the README also names, and a
   // check that failed on a fresh clone would be deleted rather than fixed.
   test("every source path the README cites exists", () => {
-    const cited = [...readme().matchAll(/`((?:src|rust-client)\/[\w./-]*)`/g)].map(
-      (match) => match[1]!,
-    );
+    const cited = [
+      ...readme().matchAll(/`((?:src|rust-client)\/[\w./-]*)`/g),
+    ].map((match) => match[1]!);
     // [LAW:no-silent-failure] A prose rewrite that stops backticking paths would
     // otherwise make this pass by matching nothing at all.
     expect(cited.length).toBeGreaterThan(0);
-    expect(cited.filter((cit) => !fs.existsSync(path.join(ROOT, cit)))).toEqual([]);
+    expect(cited.filter((cit) => !fs.existsSync(path.join(ROOT, cit)))).toEqual(
+      [],
+    );
   });
 });

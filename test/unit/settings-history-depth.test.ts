@@ -6,7 +6,10 @@
 import { autorun } from "mobx";
 import { SessionState } from "../../src/renderer/session-state";
 import { SettingsHistory } from "../../src/renderer/settings-history";
-import { sessionIdOf, type SessionId } from "../../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../../src/daemon/foundations/session-id";
 import { WRITES_IN_PLACE } from "../helpers/history-step";
 
 const A = sessionIdOf("a");

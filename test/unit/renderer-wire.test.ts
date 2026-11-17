@@ -36,8 +36,7 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
         throw new Error("no events here");
       },
       adapter: async (input) => {
-        if (input.push.kind === "close-views")
-          throw new Error("close refused");
+        if (input.push.kind === "close-views") throw new Error("close refused");
         host.log("info", "closed");
         host.eventAnswered(EVENT);
         return {

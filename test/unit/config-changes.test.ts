@@ -2,10 +2,7 @@
 // rebuild what was written byte for byte, a setting that moved refuses the
 // whole list naming where, and a write elsewhere in the file refuses nothing.
 
-import {
-  applyChanges,
-  diffChanges,
-} from "../../src/config/config-changes";
+import { applyChanges, diffChanges } from "../../src/config/config-changes";
 import { JSON_DIALECT } from "../../src/config/json5-edit";
 
 const BEFORE = `{
@@ -20,18 +17,37 @@ const BEFORE = `{
 `;
 
 // Each pair is a write a settings click makes; the diff must carry it whole.
-const WRITES: ReadonlyArray<readonly [string, string | null, string | null]> =
+const WRITES: ReadonlyArray<readonly [string, string | null, string | null]> = [
+  ["a value set in place", BEFORE, BEFORE.replace("padding: 1", "padding: 3")],
   [
-    ["a value set in place", BEFORE, BEFORE.replace("padding: 1", "padding: 3")],
-    ["a key added last", BEFORE, BEFORE.replace(`separator: " ",`, `separator: " ",\n    shade: "dark",`)],
-    ["a key removed from the middle", BEFORE, BEFORE.replace(`    theme: "dusk",\n`, "")],
-    ["a key restored to the middle", BEFORE.replace(`    theme: "dusk",\n`, ""), BEFORE],
-    ["a key restored first", BEFORE.replace("    padding: 1, // tight\n", ""), BEFORE],
-    ["a preset copied", BEFORE, BEFORE.replace("presets: {", "presets: { mine: { padding: 3 },")],
-    ["a file created", null, BEFORE],
-    ["a file deleted", BEFORE, null],
-    ["a file that does not parse, fixed", "{ globals: ", BEFORE],
-  ];
+    "a key added last",
+    BEFORE,
+    BEFORE.replace(`separator: " ",`, `separator: " ",\n    shade: "dark",`),
+  ],
+  [
+    "a key removed from the middle",
+    BEFORE,
+    BEFORE.replace(`    theme: "dusk",\n`, ""),
+  ],
+  [
+    "a key restored to the middle",
+    BEFORE.replace(`    theme: "dusk",\n`, ""),
+    BEFORE,
+  ],
+  [
+    "a key restored first",
+    BEFORE.replace("    padding: 1, // tight\n", ""),
+    BEFORE,
+  ],
+  [
+    "a preset copied",
+    BEFORE,
+    BEFORE.replace("presets: {", "presets: { mine: { padding: 3 },"),
+  ],
+  ["a file created", null, BEFORE],
+  ["a file deleted", BEFORE, null],
+  ["a file that does not parse, fixed", "{ globals: ", BEFORE],
+];
 
 describe("diffChanges", () => {
   test.each(WRITES)("%s rebuilds what was written", (_, before, after) => {
@@ -124,7 +140,10 @@ describe("applyChanges", () => {
       BEFORE,
       BEFORE.replace(`separator: " ",`, `separator: " ",\n    shade: "dark",`),
     );
-    const added = BEFORE.replace(`separator: " ",`, `separator: " ",\n    shade: "light",`);
+    const added = BEFORE.replace(
+      `separator: " ",`,
+      `separator: " ",\n    shade: "light",`,
+    );
     expect(applyChanges(added, insert)).toMatchObject({
       kind: "moved",
       at: ["globals", "shade"],
@@ -142,13 +161,16 @@ describe("applyChanges", () => {
 
   // A reader takes a file of whitespace for an empty object, so a member it
   // found missing there is inserted, in the file's own dialect.
-  test.each(["", "  \n"])("inserts a member into a file holding only %j", (blank) => {
-    expect(
-      applyChanges(
-        blank,
-        [{ op: "insert", at: ["env"], text: `{ "A": "1" }`, precedes: null }],
-        JSON_DIALECT,
-      ),
-    ).toEqual({ kind: "applied", text: `{\n  "env": { "A": "1" }\n}\n` });
-  });
+  test.each(["", "  \n"])(
+    "inserts a member into a file holding only %j",
+    (blank) => {
+      expect(
+        applyChanges(
+          blank,
+          [{ op: "insert", at: ["env"], text: `{ "A": "1" }`, precedes: null }],
+          JSON_DIALECT,
+        ),
+      ).toEqual({ kind: "applied", text: `{\n  "env": { "A": "1" }\n}\n` });
+    },
+  );
 });

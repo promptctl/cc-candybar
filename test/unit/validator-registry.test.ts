@@ -76,7 +76,8 @@ describe("two configs declaring one key", () => {
     expect(other.listKeys()).toEqual([]);
     const refused = other.validate("mode", "full");
     expect(refused.ok).toBe(false);
-    if (!refused.ok) expect(refused.reason).toMatch(/unknown config key "mode"/);
+    if (!refused.ok)
+      expect(refused.reason).toMatch(/unknown config key "mode"/);
   });
 });
 
@@ -109,7 +110,10 @@ describe("one config's own contributions", () => {
   });
 
   test("a built-in key re-claimed, an empty key and a slash-bearing key are refused", () => {
-    const ks = keyspace({ theme: (raw) => ({ ok: true, value: raw }) }, "state");
+    const ks = keyspace(
+      { theme: (raw) => ({ ok: true, value: raw }) },
+      "state",
+    );
     expect(() =>
       ks.gateFor(declares({ key: "theme", spec: { kind: "int" } })),
     ).toThrow(/"theme" is a built-in state key/);
@@ -185,7 +189,10 @@ describe("a daemon-wide key", () => {
   });
 
   test("a registration that cannot gate throws and leaves the keyspace as it was", () => {
-    const ks = keyspace({ theme: (raw) => ({ ok: true, value: raw }) }, "state");
+    const ks = keyspace(
+      { theme: (raw) => ({ ok: true, value: raw }) },
+      "state",
+    );
     const bare = declares();
     const dispose = ks.register("mode", ["red"]);
     expect(() => ks.register("theme", ["x"])).toThrow(/built-in state key/);
@@ -215,7 +222,9 @@ describe("a daemon-wide key", () => {
       key: "update.dismissed",
       spec: { kind: "allow-list", allowed: ["mine"] },
     });
-    expect(ks.gateFor(words).validate("update.dismissed", "mine").ok).toBe(true);
+    expect(ks.gateFor(words).validate("update.dismissed", "mine").ok).toBe(
+      true,
+    );
     ks.register("update.dismissed", ["1.2.3"]);
     expect(ks.gateFor(words).validate("update.dismissed", "1.2.3").ok).toBe(
       true,

@@ -15,12 +15,7 @@ describe("requestEvent", () => {
     const facts: RequestFacts = [];
     noteFacts(facts, { sid: "s1", termCols: "120" });
     const error = new Error("the renderer broke");
-    const { level, line } = requestEvent(
-      "render",
-      facts,
-      failureOf(error),
-      7,
-    );
+    const { level, line } = requestEvent("render", facts, failureOf(error), 7);
     expect(level).toBe("error");
     expect(line).toMatch(
       /^render sid=s1 termCols=120 took=7ms outcome=threw error="Error: the renderer broke\\n {4}at /,

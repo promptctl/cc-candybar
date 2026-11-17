@@ -10,7 +10,10 @@ import {
 } from "../../src/doctor/checks";
 import type { Identified, TerminalName } from "../../src/doctor/terminal";
 import { linkFields } from "../../src/doctor/report";
-import { parseClickedTerminals, withClicked } from "../../src/doctor/clicked-terminals";
+import {
+  parseClickedTerminals,
+  withClicked,
+} from "../../src/doctor/clicked-terminals";
 import { HEALTHY_FACTS } from "../helpers/doctor-facts";
 
 const probe = checkByName("links")!.probe;
@@ -25,7 +28,7 @@ const client = (features: readonly string[]): TmuxClient => ({
   termtype: "",
   termname: "xterm-256color",
   pid: 4242,
-      utf8: true,
+  utf8: true,
 });
 
 const seen = (
@@ -33,8 +36,14 @@ const seen = (
   tmuxClient: TmuxClient | null = null,
 ): TerminalIdentity => ({ kind: "seen", identified, tmuxClient });
 
-const clickedIn = (...sightings: string[]): Asked<readonly string[]> => ({ kind: "ok", value: sightings });
-const UNREAD: Asked<readonly string[]> = { kind: "failed", reason: "/c.json is not JSON" };
+const clickedIn = (...sightings: string[]): Asked<readonly string[]> => ({
+  kind: "ok",
+  value: sightings,
+});
+const UNREAD: Asked<readonly string[]> = {
+  kind: "failed",
+  reason: "/c.json is not JSON",
+};
 
 const verdict = (
   terminal: TerminalIdentity,
@@ -78,13 +87,18 @@ describe("links probe", () => {
   });
 
   test("Apple's Terminal draws none, and the reason names terminals that do", () => {
-    expect(verdict(seen(known("apple-terminal", "455.1")))).toEqual({ ok: false, reason: NO_LINKS, more: [] });
+    expect(verdict(seen(known("apple-terminal", "455.1")))).toEqual({
+      ok: false,
+      reason: NO_LINKS,
+      more: [],
+    });
   });
 
   test("a release before links came in says to update", () => {
     expect(verdict(seen(known("kitty", "0.18.3")))).toEqual({
       ok: false,
-      reason: "kitty 0.18.3 draws no links (OSC 8 came in 0.19.0) — update kitty",
+      reason:
+        "kitty 0.18.3 draws no links (OSC 8 came in 0.19.0) — update kitty",
       more: [],
     });
   });
@@ -110,12 +124,22 @@ describe("links probe", () => {
   // A doctor click that came back from a terminal is a link it drew and the
   // user clicked: the command reads that from the terminals clicked from.
   test("a click remembered for the terminal settles what its facts cannot", () => {
-    expect(verdict(seen(known("kitty", null)), "command", clickedIn("kitty"))).toEqual({ ok: true });
-    expect(verdict(seen({ kind: "unknown", called: "Hyper" }), "command", clickedIn("Hyper"))).toEqual({
+    expect(
+      verdict(seen(known("kitty", null)), "command", clickedIn("kitty")),
+    ).toEqual({ ok: true });
+    expect(
+      verdict(
+        seen({ kind: "unknown", called: "Hyper" }),
+        "command",
+        clickedIn("Hyper"),
+      ),
+    ).toEqual({
       ok: true,
     });
     // Remembered for one terminal, it answers for no other.
-    expect(verdict(seen(known("kitty", null)), "command", clickedIn("Alacritty")).ok).toBe(false);
+    expect(
+      verdict(seen(known("kitty", null)), "command", clickedIn("Alacritty")).ok,
+    ).toBe(false);
   });
 
   // Apple's Terminal inside tmux answers no XTVERSION: its TERM is all that is
@@ -127,7 +151,9 @@ describe("links probe", () => {
       reason: `the doctor does not know whether xterm-256color draws links (OSC 8) — ${PROVE}`,
       more: [],
     });
-    expect(verdict(xterm, "command", clickedIn("xterm-256color"))).toEqual({ ok: true });
+    expect(verdict(xterm, "command", clickedIn("xterm-256color"))).toEqual({
+      ok: true,
+    });
   });
 
   test("a terminal nothing names at all promises no remembering", () => {
@@ -140,7 +166,13 @@ describe("links probe", () => {
   });
 
   test("a remembered click does not speak for tmux, which says for itself", () => {
-    expect(verdict(seen(known("iterm2", null), client(["RGB"])), "command", clickedIn("iTerm2"))).toEqual({
+    expect(
+      verdict(
+        seen(known("iterm2", null), client(["RGB"])),
+        "command",
+        clickedIn("iTerm2"),
+      ),
+    ).toEqual({
       ok: false,
       reason: TMUX_LINE,
       more: [],
@@ -149,22 +181,29 @@ describe("links probe", () => {
 
   // A remembered click overturns any verdict but ok.
   test("a clicked-terminals list that cannot be read is named beside every failing verdict", () => {
-    const unread = "the terminals a doctor click came back from could not be read: /c.json is not JSON";
+    const unread =
+      "the terminals a doctor click came back from could not be read: /c.json is not JSON";
     expect(verdict(seen(known("kitty", null)), "command", UNREAD)).toEqual({
       ok: false,
       reason: `kitty draws links (OSC 8) since 0.19.0, and did not say which release this is — ${PROVE}`,
       more: [unread],
     });
-    expect(verdict(seen(known("apple-terminal", "455.1")), "command", UNREAD)).toEqual({
+    expect(
+      verdict(seen(known("apple-terminal", "455.1")), "command", UNREAD),
+    ).toEqual({
       ok: false,
       reason: NO_LINKS,
       more: [unread],
     });
-    expect(verdict(seen(known("iterm2", "3.7.2")), "command", UNREAD)).toEqual({ ok: true });
+    expect(verdict(seen(known("iterm2", "3.7.2")), "command", UNREAD)).toEqual({
+      ok: true,
+    });
   });
 
   test("inside tmux with hyperlinks → ok", () => {
-    expect(verdict(seen(known("iterm2", "3.7.2"), client(["RGB", "hyperlinks"])))).toEqual({ ok: true });
+    expect(
+      verdict(seen(known("iterm2", "3.7.2"), client(["RGB", "hyperlinks"]))),
+    ).toEqual({ ok: true });
   });
 
   test("inside tmux without hyperlinks: the reason is the terminal-features line to add", () => {
@@ -178,14 +217,17 @@ describe("links probe", () => {
   test("both halves broken: the terminal first, then tmux", () => {
     expect(verdict(seen(known("iterm2", "3.0.15"), client([])))).toEqual({
       ok: false,
-      reason: "iTerm2 3.0.15 draws no links (OSC 8 came in 3.1) — update iTerm2",
+      reason:
+        "iTerm2 3.0.15 draws no links (OSC 8 came in 3.1) — update iTerm2",
       more: [TMUX_LINE],
     });
   });
 
   // tmux passing links through helps only a terminal that draws them.
   test("a terminal that draws none gets no tmux line", () => {
-    expect(verdict(seen(known("apple-terminal", "455.1"), client(["RGB"])))).toEqual({
+    expect(
+      verdict(seen(known("apple-terminal", "455.1"), client(["RGB"]))),
+    ).toEqual({
       ok: false,
       reason: NO_LINKS,
       more: [],
@@ -193,34 +235,59 @@ describe("links probe", () => {
   });
 
   test("the doctor event says whether tmux writes OSC 8 to the client, and whether a click came back from the terminal", () => {
-    expect(linkFields(seen(known("iterm2", "3.7.2"), client(["hyperlinks"])), clickedIn())).toBe(
-      "tmuxLinks=yes clicked=no",
+    expect(
+      linkFields(
+        seen(known("iterm2", "3.7.2"), client(["hyperlinks"])),
+        clickedIn(),
+      ),
+    ).toBe("tmuxLinks=yes clicked=no");
+    expect(
+      linkFields(
+        seen(known("iterm2", "3.7.2"), client(["RGB"])),
+        clickedIn("iTerm2"),
+      ),
+    ).toBe("tmuxLinks=no clicked=yes");
+    expect(linkFields(seen(known("iterm2", "3.7.2")), UNREAD)).toBe(
+      "tmuxLinks=- clicked=unread",
     );
-    expect(linkFields(seen(known("iterm2", "3.7.2"), client(["RGB"])), clickedIn("iTerm2"))).toBe(
-      "tmuxLinks=no clicked=yes",
+    expect(linkFields(seen({ kind: "unnamed", term: "" }), clickedIn(""))).toBe(
+      "tmuxLinks=- clicked=-",
     );
-    expect(linkFields(seen(known("iterm2", "3.7.2")), UNREAD)).toBe("tmuxLinks=- clicked=unread");
-    expect(linkFields(seen({ kind: "unnamed", term: "" }), clickedIn(""))).toBe("tmuxLinks=- clicked=-");
-    expect(linkFields({ kind: "unasked", reason: "x" }, clickedIn())).toBe("tmuxLinks=- clicked=-");
+    expect(linkFields({ kind: "unasked", reason: "x" }, clickedIn())).toBe(
+      "tmuxLinks=- clicked=-",
+    );
   });
 
   test("no terminal reported, or tmux could not be asked: fails naming why", () => {
     expect(verdict({ kind: "unreported" })).toEqual({
       ok: false,
-      reason: "the client reported no terminal — re-run `cc-candybar install` to stage a current client",
+      reason:
+        "the client reported no terminal — re-run `cc-candybar install` to stage a current client",
     });
-    expect(verdict({ kind: "unasked", reason: "no server running on /s" })).toEqual({
+    expect(
+      verdict({ kind: "unasked", reason: "no server running on /s" }),
+    ).toEqual({
       ok: false,
-      reason: "tmux could not be asked which terminal is attached: no server running on /s",
+      reason:
+        "tmux could not be asked which terminal is attached: no server running on /s",
     });
   });
 });
 
 describe("the terminals a doctor click came back from", () => {
   test("the document reads as a list of terminals, or fails saying so", () => {
-    expect(parseClickedTerminals(["kitty", "Hyper"])).toEqual({ kind: "ok", value: ["kitty", "Hyper"] });
-    expect(parseClickedTerminals({ kitty: 1 })).toEqual({ kind: "failed", reason: "is not a list of terminals" });
-    expect(parseClickedTerminals([1])).toEqual({ kind: "failed", reason: "is not a list of terminals" });
+    expect(parseClickedTerminals(["kitty", "Hyper"])).toEqual({
+      kind: "ok",
+      value: ["kitty", "Hyper"],
+    });
+    expect(parseClickedTerminals({ kitty: 1 })).toEqual({
+      kind: "failed",
+      reason: "is not a list of terminals",
+    });
+    expect(parseClickedTerminals([1])).toEqual({
+      kind: "failed",
+      reason: "is not a list of terminals",
+    });
   });
 
   test("a terminal is filed once: filing one already filed is the same list, so nothing is written", () => {

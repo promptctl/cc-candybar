@@ -144,7 +144,18 @@ function rig(start: () => Promise<void> = async () => {}) {
   // The inputs the host sent the child, in order.
   const inputs = (child: Child) =>
     child.written.flatMap((l) => (l.kind === "input" ? [l] : []));
-  return { clock, children, logs, levels, ends, watched, held, link, inputs, key };
+  return {
+    clock,
+    children,
+    logs,
+    levels,
+    ends,
+    watched,
+    held,
+    link,
+    inputs,
+    key,
+  };
 }
 
 // Every promise chain the supervisor started settles: it awaits nothing but
@@ -587,7 +598,9 @@ describe("ids a renderer mints", () => {
       output: {
         kind: "answered",
         record: [],
-        effects: [{ kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" }],
+        effects: [
+          { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
+        ],
         subscriptions: { sources: {}, lanes: {}, wake: null },
         frames: [],
         turnMs: 0,
@@ -689,7 +702,9 @@ describe("a renderer process's close", () => {
     early.children[0]!.exit(EXITED);
     await settled();
     expect(early.levels.at(-1)).toBe("warn");
-    expect(early.logs.at(-1)).toBe("renderer main[1] exited in the daemon's close");
+    expect(early.logs.at(-1)).toBe(
+      "renderer main[1] exited in the daemon's close",
+    );
     await early.link.close();
 
     const asked = rig();
@@ -700,7 +715,9 @@ describe("a renderer process's close", () => {
     asked.children[0]!.exit(EXITED);
     await closed;
     expect(asked.levels.at(-1)).toBe("info");
-    expect(asked.logs.at(-1)).toBe("renderer main[1] exited in the daemon's close");
+    expect(asked.logs.at(-1)).toBe(
+      "renderer main[1] exited in the daemon's close",
+    );
   });
 
   test("a boot under way as the close begins ends then, signalled after the grace, and what waited for it fails as closed", async () => {
