@@ -4,15 +4,22 @@
     {
       "version": "pr-783",
       "ref": "refs/pull/783/merge",
-      "sha": "9f0b282802765d9cf2e4b1981dbdde123318d1a1",
-      "timestamp": "2026-11-17T09:37:56.877Z",
+      "sha": "2b314d4fba59bbda8463713d59dbbbc7da9c3a46",
+      "timestamp": "2026-11-17T09:49:11.952Z",
       "commits": [
         {
-          "sha": "9f0b282802765d9cf2e4b1981dbdde123318d1a1",
+          "sha": "2b314d4fba59bbda8463713d59dbbbc7da9c3a46",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T09:36:58Z",
-          "message": "Merge 8f5ad025f6f2b4b5d8405956819b9351db9dc5b7 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+          "timestamp": "2026-11-17T09:48:14Z",
+          "message": "Merge e4f15db104046e03435704e7346dd55d82a296c9 into b6dc81469a016d543c25b4d2b3bbeb3cdf41bdb1\n"
+        },
+        {
+          "sha": "e4f15db104046e03435704e7346dd55d82a296c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T02:48:04-07:00",
+          "message": "fix(renderer): each owner of a due turn moves its own work on when it fails, and the wake holds only a due that moved nothing (883)\n\nMedium review of #783: a feed that threw stayed due, so the wake-wide hold slowed every session's frames for good; a due whose turn returned a slow act kept the next wake waiting on it; a tick past Node's longest timer re-armed every millisecond.\n"
         },
         {
           "sha": "8f5ad025f6f2b4b5d8405956819b9351db9dc5b7",

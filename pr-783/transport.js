@@ -75138,6 +75138,7 @@ var message = (e) => e instanceof Error ? e.message : String(e);
 // src/daemon/renderer-wake.ts
 init_globals();
 var FAILED_DUE_HOLD_S = 1;
+var LONGEST_TIMER_MS = 2 ** 31 - 1;
 var SUMMARY_EVERY_S = 60;
 var RendererWake = class {
   constructor(deps) {
@@ -75148,9 +75149,11 @@ var RendererWake = class {
   state = { kind: "idle" };
   // The tick the renderer last declared, whatever state the wake was in.
   declared = null;
-  // The tick no wake is armed before, after a `due` failed; null while the
-  // dues answer.
+  // The tick no wake is armed before, after a `due` failed declaring no later
+  // tick; null otherwise.
   heldUntil = null;
+  // Whether the last `due` failed: a run of failures is said once.
+  failing = false;
   // [LAW:nothing-unseen] Every `due` turn the renderer answered, by how long
   // it took: what drawing the frames, closing idle menus and running held
   // work costs, read from the log.
@@ -75184,7 +75187,10 @@ var RendererWake = class {
   }
   timer(tick) {
     const { clock } = this.deps;
-    const ms = Math.max(0, (tick - tickAt(clock)) * 1e3);
+    const ms = Math.min(
+      LONGEST_TIMER_MS,
+      Math.max(0, (tick - tickAt(clock)) * 1e3)
+    );
     return clock.after(ms, () => {
       if (this.state.kind !== "armed" || this.state.tick !== tick) return;
       if (tickAt(clock) < tick) {
@@ -75192,10 +75198,10 @@ var RendererWake = class {
         return;
       }
       this.state = { kind: "queued" };
-      void this.deps.due().then((ended) => this.answered(ended));
+      void this.deps.due().then((ended) => this.answered(tick, ended));
     });
   }
-  answered(ended) {
+  answered(tick, ended) {
     if (this.state.kind === "closed") return;
     this.state = { kind: "idle" };
     if (ended.turnMs !== null) {
@@ -75205,17 +75211,17 @@ var RendererWake = class {
     const now2 = tickAt(this.deps.clock);
     if (now2 - this.summarizedAt >= SUMMARY_EVERY_S) this.summarize("running");
     if (ended.kind === "answered") {
+      this.failing = false;
       this.heldUntil = null;
       this.arm();
       return;
     }
     if (ended.failure.kind === "down") return;
     this.failed++;
-    if (this.heldUntil === null)
-      this.deps.said(
-        `the renderer's due turn failed, so what it holds for later waits ${FAILED_DUE_HOLD_S}s between tries: ${ended.failure.detail}`
-      );
-    this.heldUntil = now2 + FAILED_DUE_HOLD_S;
+    if (!this.failing)
+      this.deps.said(`the renderer's due turn failed: ${ended.failure.detail}`);
+    this.failing = true;
+    this.heldUntil = this.declared !== null && this.declared <= tick ? now2 + FAILED_DUE_HOLD_S : null;
     this.arm();
   }
   // [LAW:one-source-of-truth] The closing summary alone writes the whole
@@ -75397,22 +75403,23 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         );
     }
   };
+  const throughSlot = (make, at) => inMailbox(async (queuedMs, holds2) => {
+    let made;
+    try {
+      made = make();
+    } catch (thrown2) {
+      made = failureOf(thrown2);
+    }
+    if (made.kind !== "event")
+      return { event: null, slotted: unanswered(made, queuedMs) };
+    holds2(made.event.kind);
+    return {
+      event: made.event,
+      slotted: await inSlot(stamped(made), queuedMs)
+    };
+  }, at);
   const taken = async (make, at = "last") => {
-    const { event, slotted } = await inMailbox(async (queuedMs, holds2) => {
-      let made;
-      try {
-        made = make();
-      } catch (thrown2) {
-        made = failureOf(thrown2);
-      }
-      if (made.kind !== "event")
-        return { event: null, slotted: unanswered(made, queuedMs) };
-      holds2(made.event.kind);
-      return {
-        event: made.event,
-        slotted: await inSlot(stamped(made), queuedMs)
-      };
-    }, at);
+    const { event, slotted } = await throughSlot(make, at);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled }
@@ -75470,7 +75477,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   const wake = new RendererWake({
     clock,
     due: async () => {
-      const { event, turn } = await taken(
+      const {
+        event,
+        slotted: { turn }
+      } = await throughSlot(
         () => wake.closed() ? {
           kind: "closing",
           message: "the daemon is closing",
@@ -86185,7 +86195,8 @@ var Feeds = class {
   // [LAW:dataflow-not-control-flow] The frames due by this turn's tick, each
   // drawn into `frames` and its next set, in the order the feeds opened. Each
   // feed is its own error boundary, so one that throws keeps no other's frame
-  // from going out.
+  // from going out, and it is due again a still period on: a feed that throws
+  // on every frame throws once a still period, never at every turn.
   drawDue(readings, frames) {
     const { tick } = readings;
     runEach(
@@ -86193,10 +86204,15 @@ var Feeds = class {
         (feed2) => feed2.next !== null && feed2.next <= tick ? [{ feed: feed2, next: feed2.next }] : []
       ).map(({ feed: feed2, next }) => () => {
         recordMs(feed2.lateness, (tick - next) * 1e3);
-        const frame2 = this.drawOne(feed2, readings);
-        if (frame2 !== null) frames.push(frame2);
-        if (tick - feed2.summarizedAt >= SUMMARY_EVERY_S2)
-          this.summarize(feed2, "running", tick);
+        try {
+          const frame2 = this.drawOne(feed2, readings);
+          if (frame2 !== null) frames.push(frame2);
+          if (tick - feed2.summarizedAt >= SUMMARY_EVERY_S2)
+            this.summarize(feed2, "running", tick);
+        } catch (thrown2) {
+          feed2.next = tick + this.deps.periods.still / 1e3;
+          throw thrown2;
+        }
       })
     );
   }
