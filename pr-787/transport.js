@@ -10157,7 +10157,7 @@ var require_end_of_stream = __commonJS({
         throw new ERR_INVALID_ARG_TYPE("stream", ["ReadableStream", "WritableStream", "Stream"], stream);
       }
       const readable = (_options$readable = options.readable) !== null && _options$readable !== void 0 ? _options$readable : isReadableNodeStream(stream);
-      const writable = (_options$writable = options.writable) !== null && _options$writable !== void 0 ? _options$writable : isWritableNodeStream(stream);
+      const writable2 = (_options$writable = options.writable) !== null && _options$writable !== void 0 ? _options$writable : isWritableNodeStream(stream);
       const wState = stream._writableState;
       const rState = stream._readableState;
       const onlegacyfinish = () => {
@@ -10165,7 +10165,7 @@ var require_end_of_stream = __commonJS({
           onfinish();
         }
       };
-      let willEmitClose = _willEmitClose(stream) && isReadableNodeStream(stream) === readable && isWritableNodeStream(stream) === writable;
+      let willEmitClose = _willEmitClose(stream) && isReadableNodeStream(stream) === readable && isWritableNodeStream(stream) === writable2;
       let writableFinished = isWritableFinished(stream, false);
       const onfinish = () => {
         writableFinished = true;
@@ -10185,10 +10185,10 @@ var require_end_of_stream = __commonJS({
         if (stream.destroyed) {
           willEmitClose = false;
         }
-        if (willEmitClose && (!stream.writable || writable)) {
+        if (willEmitClose && (!stream.writable || writable2)) {
           return;
         }
-        if (!writable || writableFinished) {
+        if (!writable2 || writableFinished) {
           callback.call(stream);
         }
       };
@@ -10205,7 +10205,7 @@ var require_end_of_stream = __commonJS({
         if (readable && !readableFinished && isReadableNodeStream(stream, true)) {
           if (!isReadableFinished(stream, false)) return callback.call(stream, new ERR_STREAM_PREMATURE_CLOSE());
         }
-        if (writable && !writableFinished) {
+        if (writable2 && !writableFinished) {
           if (!isWritableFinished(stream, false)) return callback.call(stream, new ERR_STREAM_PREMATURE_CLOSE());
         }
         callback.call(stream);
@@ -10231,7 +10231,7 @@ var require_end_of_stream = __commonJS({
         } else {
           stream.on("request", onrequest);
         }
-      } else if (writable && !wState) {
+      } else if (writable2 && !wState) {
         stream.on("end", onlegacyfinish);
         stream.on("close", onlegacyfinish);
       }
@@ -10252,7 +10252,7 @@ var require_end_of_stream = __commonJS({
         }
       } else if (!readable && (!willEmitClose || isReadable(stream)) && (writableFinished || isWritable(stream) === false)) {
         process2.nextTick(onclosed);
-      } else if (!writable && (!willEmitClose || isWritable(stream)) && (readableFinished || isReadable(stream) === false)) {
+      } else if (!writable2 && (!willEmitClose || isWritable(stream)) && (readableFinished || isReadable(stream) === false)) {
         process2.nextTick(onclosed);
       } else if (rState && stream.req && stream.aborted) {
         process2.nextTick(onclosed);
@@ -12281,8 +12281,8 @@ var require_readable = __commonJS({
       }
     }
     function endWritableNT(stream) {
-      const writable = stream.writable && !stream.writableEnded && !stream.destroyed;
-      if (writable) {
+      const writable2 = stream.writable && !stream.writableEnded && !stream.destroyed;
+      if (writable2) {
         stream.end();
       }
     }
@@ -13079,10 +13079,10 @@ var require_duplexify = __commonJS({
       }
       if (typeof (body === null || body === void 0 ? void 0 : body.writable) === "object" || typeof (body === null || body === void 0 ? void 0 : body.readable) === "object") {
         const readable = body !== null && body !== void 0 && body.readable ? isReadableNodeStream(body === null || body === void 0 ? void 0 : body.readable) ? body === null || body === void 0 ? void 0 : body.readable : duplexify(body.readable) : void 0;
-        const writable = body !== null && body !== void 0 && body.writable ? isWritableNodeStream(body === null || body === void 0 ? void 0 : body.writable) ? body === null || body === void 0 ? void 0 : body.writable : duplexify(body.writable) : void 0;
+        const writable2 = body !== null && body !== void 0 && body.writable ? isWritableNodeStream(body === null || body === void 0 ? void 0 : body.writable) ? body === null || body === void 0 ? void 0 : body.writable : duplexify(body.writable) : void 0;
         return _duplexify({
           readable,
-          writable
+          writable: writable2
         });
       }
       const then = body === null || body === void 0 ? void 0 : body.then;
@@ -13177,7 +13177,7 @@ var require_duplexify = __commonJS({
       const r = pair.readable && typeof pair.readable.read !== "function" ? Readable.wrap(pair.readable) : pair.readable;
       const w = pair.writable;
       let readable = !!isReadable(r);
-      let writable = !!isWritable(w);
+      let writable2 = !!isWritable(w);
       let ondrain;
       let onfinish;
       let onreadable;
@@ -13197,11 +13197,11 @@ var require_duplexify = __commonJS({
         readableObjectMode: !!(r !== null && r !== void 0 && r.readableObjectMode),
         writableObjectMode: !!(w !== null && w !== void 0 && w.writableObjectMode),
         readable,
-        writable
+        writable: writable2
       });
-      if (writable) {
+      if (writable2) {
         eos(w, (err) => {
-          writable = false;
+          writable2 = false;
           if (err) {
             destroyer(r, err);
           }
@@ -13603,7 +13603,7 @@ var require_pipeline = __commonJS({
       }
       yield* Readable.prototype[SymbolAsyncIterator].call(val);
     }
-    async function pumpToNode(iterable, writable, finish, { end }) {
+    async function pumpToNode(iterable, writable2, finish, { end }) {
       let error;
       let onresolve = null;
       const resume = (err) => {
@@ -13629,25 +13629,25 @@ var require_pipeline = __commonJS({
           };
         }
       });
-      writable.on("drain", resume);
+      writable2.on("drain", resume);
       const cleanup = eos(
-        writable,
+        writable2,
         {
           readable: false
         },
         resume
       );
       try {
-        if (writable.writableNeedDrain) {
+        if (writable2.writableNeedDrain) {
           await wait();
         }
         for await (const chunk3 of iterable) {
-          if (!writable.write(chunk3)) {
+          if (!writable2.write(chunk3)) {
             await wait();
           }
         }
         if (end) {
-          writable.end();
+          writable2.end();
           await wait();
         }
         finish();
@@ -13655,14 +13655,14 @@ var require_pipeline = __commonJS({
         finish(error !== err ? aggregateTwoErrors(error, err) : err);
       } finally {
         cleanup();
-        writable.off("drain", resume);
+        writable2.off("drain", resume);
       }
     }
-    async function pumpToWeb(readable, writable, finish, { end }) {
-      if (isTransformStream(writable)) {
-        writable = writable.writable;
+    async function pumpToWeb(readable, writable2, finish, { end }) {
+      if (isTransformStream(writable2)) {
+        writable2 = writable2.writable;
       }
-      const writer = writable.getWriter();
+      const writer = writable2.getWriter();
       try {
         for await (const chunk3 of readable) {
           await writer.ready;
@@ -14014,22 +14014,22 @@ var require_compose = __commonJS({
           cb(err);
         } else if (err) {
           d.destroy(err);
-        } else if (!readable && !writable) {
+        } else if (!readable && !writable2) {
           d.destroy();
         }
       }
       const head = streams[0];
       const tail = pipeline(streams, onfinished);
-      const writable = !!(isWritable(head) || isWritableStream(head) || isTransformStream(head));
+      const writable2 = !!(isWritable(head) || isWritableStream(head) || isTransformStream(head));
       const readable = !!(isReadable(tail) || isReadableStream(tail) || isTransformStream(tail));
       d = new Duplex({
         // TODO (ronag): highWaterMark?
         writableObjectMode: !!(head !== null && head !== void 0 && head.writableObjectMode),
         readableObjectMode: !!(tail !== null && tail !== void 0 && tail.readableObjectMode),
-        writable,
+        writable: writable2,
         readable
       });
-      if (writable) {
+      if (writable2) {
         if (isNodeStream(head)) {
           d._write = function(chunk3, encoding, callback) {
             if (head.write(chunk3, encoding)) {
@@ -14050,8 +14050,8 @@ var require_compose = __commonJS({
             }
           });
         } else if (isWebStream(head)) {
-          const writable2 = isTransformStream(head) ? head.writable : head;
-          const writer = writable2.getWriter();
+          const writable3 = isTransformStream(head) ? head.writable : head;
+          const writer = writable3.getWriter();
           d._write = async function(chunk3, encoding, callback) {
             try {
               await writer.ready;
@@ -71244,10 +71244,10 @@ var ManagedStorage = class {
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
   // as a removal does. Lost only if the path is gone or holds another folder;
-  // otherwise `present` runs. A lost folder its holds still name opens its
-  // next generation at once (`kept`), which makes the folder again and
-  // re-reads its held files, so no draw shows a value from a folder no longer
-  // there. A generation already ended has nothing left to judge.
+  // otherwise `present` runs. A lost folder's held files are re-read from the
+  // path, so no draw shows a value from a folder no longer there while the
+  // next period opens the next generation. A generation already ended has
+  // nothing left to judge.
   judged(watched, present) {
     const { health } = watched;
     if (health.kind !== "watching") return;
@@ -71270,7 +71270,7 @@ var ManagedStorage = class {
       "info",
       `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${now2 === "gone" ? "gone" : "replaced"}`
     );
-    this.kept(key.folder);
+    this.sessions.changed((f) => f.folder === key.folder);
   }
   // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
   // folder still there, is a standing fault: every source read from the
@@ -71290,8 +71290,9 @@ var ManagedStorage = class {
     this.sessions.changed((f) => f.folder === key.folder);
   }
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
-  // folder. Each period judges every folder against the disk: the event naming
-  // a removed folder can drop without a stall. Every change of delivery and
+  // folder. Each period opens the next generation of every folder lost before
+  // it, and judges every watched one against the disk: the event naming a
+  // removed folder can drop without a stall. Every change of delivery and
   // every catch-up re-reads every held file, so no lane keeps a stall after
   // delivery moves on, and a file written during a span lands; a catch-up
   // also opens the next generation of every held folder whose generation
@@ -71300,7 +71301,8 @@ var ManagedStorage = class {
     switch (notice.kind) {
       case "period":
         for (const watched of [...this.watched.values()])
-          this.judged(watched, () => {
+          if (watched.health.kind === "lost") this.kept(watched.key.folder);
+          else this.judged(watched, () => {
           });
         return;
       case "caught-up":
@@ -74793,7 +74795,7 @@ function landsIn(target, layers) {
   return { kind: "at", file };
 }
 var originText = (origin) => `projectDir=${origin.projectDir} cwd=${origin.cwd} configFile=${origin.target.path ?? "-"}`;
-function performChanges(changes, book, writable, layers) {
+function performChanges(changes, book, writable2, layers) {
   const rewrites = /* @__PURE__ */ new Map();
   const local = /* @__PURE__ */ new Set();
   let answered = [];
@@ -74813,7 +74815,7 @@ function performChanges(changes, book, writable, layers) {
       const named3 = landsIn(target, layers);
       if (named3.kind === "refused") return refused(named3.reason);
       const file = resolvedTarget(named3.file);
-      if (target.kind === "claude-settings" && !writable(session).some((f) => resolvedTarget(f) === file))
+      if (target.kind === "claude-settings" && !writable2(session).some((f) => resolvedTarget(f) === file))
         return refused(
           `${file} is not a settings file the session's doctor read`
         );
@@ -75006,6 +75008,13 @@ var RendererWake = class {
 };
 
 // src/daemon/renderer-host.ts
+var THREW_AS = {
+  "bad-request": "refused",
+  threw: "failed",
+  closing: "closing",
+  abandoned: "failed",
+  down: "failed"
+};
 function rendererHost(name, clock, renderer, log, collector, world) {
   const mailbox = new KeyedSerialQueue();
   const stamped = stampedOf(clock);
@@ -75117,7 +75126,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           before = acted;
         }
       }
-      const settled3 = Promise.all(configured).then(() => Promise.all(owed)).finally(release4);
+      const settled3 = Promise.all(configured).then(async (caused) => [
+        ...caused.flat(),
+        ...await Promise.all(owed)
+      ]).finally(release4);
       return { turn, settled: settled3 };
     } catch (thrown2) {
       release4();
@@ -75161,11 +75173,17 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const configInSlot = async (origin, why2) => {
     const made = configMade(origin)();
-    if (made.kind !== "event") return { settled: Promise.resolve() };
+    if (made.kind !== "event") return { settled: Promise.resolve([]) };
     const input = stamped(made);
     const { turn, settled: settled3 } = await inSlot(input, 0);
     record2(input.event, [["why", why2]], turn);
-    return { settled: settled3 };
+    const threw2 = turn.kind === "threw" ? [
+      {
+        kind: THREW_AS[turn.failure.kind],
+        reason: turn.failure.message
+      }
+    ] : [];
+    return { settled: settled3.then((outcomes) => [...threw2, ...outcomes]) };
   };
   const doneOf = (effect, outcome) => ({
     kind: "event",
@@ -85294,9 +85312,9 @@ function handedOffTo(lanes, following) {
   );
 }
 var HANDOFF_BUTTON = "[\u27F2 claude]";
-function laneHandoff(sessionId2, writable, lanes) {
+function laneHandoff(sessionId2, writable2, lanes) {
   const reset = effectsUrl(
-    writable.filter((layer) => layer !== "project").map((layer) => ({
+    writable2.filter((layer) => layer !== "project").map((layer) => ({
       verb: VERB_RESET_CONFIG,
       args: [
         sessionId2,
@@ -85847,12 +85865,12 @@ function deliver(parts, delivery) {
     answeredClickError(parts.sessionState, session, clickShown);
   for (const event of eventsShown) parts.eventAnswered(event);
 }
-function statuslineOf(sessionId2, writable, drawn, elsewhere) {
+function statuslineOf(sessionId2, writable2, drawn, elsewhere) {
   const [first2, ...rest2] = elsewhere;
   return first2 === void 0 || drawn.viewerOpen ? drawn.body : standIn(
     drawn.body,
     handoffRows(
-      laneHandoff(sessionId2, writable, [first2, ...rest2]),
+      laneHandoff(sessionId2, writable2, [first2, ...rest2]),
       drawn.diagnostics,
       sessionId2,
       drawn.geometry
@@ -86720,6 +86738,14 @@ function closingView(store, nestOf2, log) {
 // src/renderer/config-file-store.ts
 init_globals();
 var import_json55 = __toESM(require_dist(), 1);
+
+// src/config/config-snapshot.ts
+init_globals();
+function writable(content) {
+  return content.kind !== "unreadable";
+}
+
+// src/renderer/config-file-store.ts
 var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
 var BOOLEAN_FALSY = /* @__PURE__ */ new Set(["0", "false", ""]);
 function persistValueText(key, raw) {
@@ -86900,7 +86926,7 @@ function writeLayerOf(snapshot, role, configFile, home) {
     throw new BadVerbArgs(
       `the ${role} layer is not writable: ${configFile !== null ? `${configFile} is the session's one config layer (it was named explicitly), so there is no ${role} layer to write` : `the ${role} layer is the project's, and this session has no approved project`}`
     );
-  if (layer.content.kind === "unreadable")
+  if (!writable(layer.content))
     throw new BadVerbArgs(
       `the ${role} layer is not writable: ${layer.path} could not be read (${layer.content.error}), and a click does not write over a file it could not read`
     );
@@ -89740,7 +89766,7 @@ function chainOf(snapshot, locs) {
     layers: chain2.filter((l) => l.content.kind === "text").map((l) => ({ path: l.path, role: l.role })),
     // Every chain holds the user layer: it is the one no answer gates.
     home: chain2.find((l) => l.role === "user").path,
-    writable: chain2.map((l) => l.role),
+    writable: chain2.filter((l) => writable(l.content)).map((l) => l.role),
     snapshot,
     locs
   };
@@ -89943,13 +89969,13 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle2(snapshot, chain2, resolveWarnings, attempt4) {
+function settle2(chain2, resolveWarnings, attempt4) {
   const common = {
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain2.layers.map((l) => l.path),
     home: chain2.home
   };
-  const warning = (own2) => joinWarnings([...snapshot.notices, ...resolveWarnings, ...own2]);
+  const warning = (own2) => joinWarnings([...chain2.snapshot.notices, ...resolveWarnings, ...own2]);
   switch (attempt4.kind) {
     case "built":
     case "kept":
@@ -89971,22 +89997,16 @@ function settle2(snapshot, chain2, resolveWarnings, attempt4) {
       };
   }
 }
-function loadChain(snapshot, cwd2, chain2, deps, served = null) {
+function loadChain(cwd2, chain2, deps, served = null) {
   const resolved = resolveLoad(cwd2, chain2);
   if (resolved.kind === "failed") {
-    return settle2(snapshot, chain2, [], resolved);
+    return settle2(chain2, [], resolved);
   }
   const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle2(snapshot, chain2, resolved.warnings, attempt4);
+  return settle2(chain2, resolved.warnings, attempt4);
 }
 function loadOrigin(cwd2, snapshot, deps, served = null) {
-  return loadChain(
-    snapshot,
-    cwd2,
-    chainOf(snapshot, deps.locations),
-    deps,
-    served
-  );
+  return loadChain(cwd2, chainOf(snapshot, deps.locations), deps, served);
 }
 function fallbackState(cwd2, snapshot, deps) {
   const resolved = resolveLoad(cwd2, {
@@ -90140,10 +90160,11 @@ var RenderCache = class {
   configure(origin, snapshot) {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    this.snapshots.set(key, snapshot);
+    const held = { snapshot, digest: digestOf2(snapshot) };
+    this.snapshots.set(key, held);
     const entry = this.entries.get(key);
-    if (entry !== void 0 && entry.digest !== digestOf2(snapshot))
-      this.reloadInto(entry, snapshot, { kind: "config" });
+    if (entry !== void 0 && entry.digest !== held.digest)
+      this.reloadInto(entry, held, { kind: "config" });
   }
   // Whether the host handed in `origin`'s config and the renderer still
   // names it: what an event that needs it waits for.
@@ -90183,7 +90204,7 @@ var RenderCache = class {
       return existing;
     }
     const { projectDir, cwd: cwd2 } = origin;
-    const snapshot = this.snapshotFor(origin);
+    const { snapshot, digest: digest2 } = this.held(origin);
     const loaded = this.load(cwd2, snapshot, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
@@ -90193,7 +90214,7 @@ var RenderCache = class {
       configFile: origin.target.path,
       configLayers: loaded.layers,
       snapshot,
-      digest: digestOf2(snapshot),
+      digest: digest2,
       lastError: loaded.error,
       lastWarning: loaded.warning,
       state: loaded.state ?? fallbackState(cwd2, snapshot, this.deps)
@@ -90430,13 +90451,16 @@ var RenderCache = class {
   // did not park until its origin's `config` came: a bug, said with the
   // origin.
   snapshotFor(origin) {
+    return this.held(origin).snapshot;
+  }
+  held(origin) {
     if (this.closed) throw new Error("render cache used after close");
-    const snapshot = this.snapshots.get(originKey(origin));
-    if (snapshot === void 0)
+    const held = this.snapshots.get(originKey(origin));
+    if (held === void 0)
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`
       );
-    return snapshot;
+    return held;
   }
   // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
   // serving it, and its state is retired.
@@ -90579,12 +90603,12 @@ var RenderCache = class {
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
-  reloadInto(entry, snapshot, cause) {
+  reloadInto(entry, { snapshot, digest: digest2 }, cause) {
     const sessions = this.sessionsOn(entry);
     const served = entry.state;
     const loaded = this.load(entry.cwd, snapshot, served);
     entry.snapshot = snapshot;
-    entry.digest = digestOf2(snapshot);
+    entry.digest = digest2;
     entry.configLayers = loaded.layers;
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;
@@ -91017,16 +91041,16 @@ function mainRenderer(parts, pushed) {
         }
         return;
       case "config": {
-        parts.renderCache.configure(event.origin, event.config);
         const key = originKey(event.origin);
         const ready = parked.filter((p2) => originKey(p2.origin) === key);
         parked = parked.filter((p2) => originKey(p2.origin) !== key);
-        runEach(
-          ready.map(({ event: waited }) => () => {
+        runEach([
+          () => parts.renderCache.configure(event.origin, event.config),
+          ...ready.map(({ event: waited }) => () => {
             if (waited.kind === "context") openSession(parts, waited.context);
             else turn(waited, record2, effects, frames);
           })
-        );
+        ]);
         return;
       }
       case "request": {
@@ -93247,7 +93271,8 @@ function readLayer(file) {
   try {
     return { kind: "text", text: fs_default.readFileSync(file, "utf-8") };
   } catch (e) {
-    return { kind: "unreadable", error: e.message };
+    const error = e.code === "EISDIR" ? "not a file" : e.message;
+    return { kind: "unreadable", error };
   }
 }
 function layerOf(role, file, content, home) {
@@ -93375,13 +93400,13 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The origins followed become exactly `origins`. Each
   // new one is discovered, all in one batch over one read of what origins
   // share, and its watch acquired before any let go is released, so a
-  // directory both name keeps its OS handle. Answers the newly followed.
+  // directory both name keeps its OS handle.
   follow(origins) {
-    if (this.closed) return [];
+    if (this.closed) return;
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     const gone = [...this.followed].filter(([key]) => !wanted.has(key));
-    if (fresh.length + gone.length === 0) return [];
+    if (fresh.length + gone.length === 0) return;
     if (fresh.length > 0) {
       const shared = readShared(this.deps);
       for (const [key, origin] of fresh)
@@ -93395,7 +93420,6 @@ var ConfigDiscovery = class {
       "info",
       `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${gone.length}`
     );
-    return fresh.map(([, origin]) => origin);
   }
   // What discovery found at `origin` last: null while it is not followed.
   snapshotOf(origin) {

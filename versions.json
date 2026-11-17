@@ -4,15 +4,22 @@
     {
       "version": "pr-787",
       "ref": "refs/pull/787/merge",
-      "sha": "f8bed316b0e73a225356bcbdc0d93d22837e042d",
-      "timestamp": "2026-11-17T16:11:46.243Z",
+      "sha": "e00e3557f087f0540224b757fe405ac72a018ee0",
+      "timestamp": "2026-11-17T16:39:57.115Z",
       "commits": [
         {
-          "sha": "f8bed316b0e73a225356bcbdc0d93d22837e042d",
+          "sha": "e00e3557f087f0540224b757fe405ac72a018ee0",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T09:10:40-07:00",
-          "message": "Merge 7fcfcd91188faeb56f579a7b066e6590a1ddafa1 into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
+          "timestamp": "2026-11-17T16:38:55Z",
+          "message": "Merge a95caccbbd86cf845c063bf263111dbf20bd439f into ba43c3ab383835c4accd3c0dd502526e7277592c\n"
+        },
+        {
+          "sha": "a95caccbbd86cf845c063bf263111dbf20bd439f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T09:38:42-07:00",
+          "message": "fix(daemon): a waiting click answers for what it did, and nothing waits forever (adf)\n\n- A turn settles as the config turns it named, so a click that waited for\n  its origin's config answers with that turn's refusals and throws.\n- A config turn whose reload throws still runs every event parked on it.\n- One writable predicate decides what the bar offers and what a write\n  refuses: a layer discovery could not read is neither.\n- `check` is never clean about a layer it could not read, and a directory\n  reads as \"not a file\".\n- A lost storage folder is made again at the next period, so a plugin\n  folder being removed is not refilled under its own rmdir.\n- Drop dead writableRoles and follow()'s unused answer; digest a snapshot\n  once as it is handed in; settle reads notices off the chain it loads.\n- Comments on the doctor, chainOver and repoConfig say what the code does.\n"
         },
         {
           "sha": "7fcfcd91188faeb56f579a7b066e6590a1ddafa1",
