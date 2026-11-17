@@ -28,9 +28,15 @@ test("the first entry, absolute against the client's cwd; blank is the default",
 });
 
 test("the daemon takes only an absolute directory; none is ~/.claude", () => {
-  expect(parseClientHints({ claudeConfigDir: "/a" }).claudeConfigDir).toBe("/a");
-  expect(parseClientHints({ claudeConfigDir: ".claude" }).claudeConfigDir).toBeUndefined();
-  expect(parseClientHints({ claudeConfigDir: 7 }).claudeConfigDir).toBeUndefined();
+  expect(parseClientHints({ claudeConfigDir: "/a" }).claudeConfigDir).toBe(
+    "/a",
+  );
+  expect(
+    parseClientHints({ claudeConfigDir: ".claude" }).claudeConfigDir,
+  ).toBeUndefined();
+  expect(
+    parseClientHints({ claudeConfigDir: 7 }).claudeConfigDir,
+  ).toBeUndefined();
   expect(claudeConfigDir(undefined, "/home/test")).toBe(
     path.join("/home/test", ".claude"),
   );

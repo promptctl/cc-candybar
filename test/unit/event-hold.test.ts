@@ -3,7 +3,11 @@
 // request until an answer has carried it; and the one rule for an event that
 // follows another.
 
-import { answeredBy, eventHoldAt, joinedEvent } from "../../src/utils/event-hold";
+import {
+  answeredBy,
+  eventHoldAt,
+  joinedEvent,
+} from "../../src/utils/event-hold";
 import type { Instant } from "../../src/utils/instant";
 
 const at = (seconds: number): Instant => seconds as Instant;

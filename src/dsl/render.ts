@@ -1279,8 +1279,8 @@ export type DrawSelection = Pick<
   // caller draws with a fresh one, so its render is the effect's calm first
   // frame and nothing in it fades in or dissolves out.
   readonly effects?: SessionEffects<RenderedLine>;
-  // When the session's idle period began — its last click, or its first
-  // render by this daemon (src/daemon/menu-idle.ts) — which the flash its open
+  // When the session's idle period began — its last click, or the draw that
+  // first showed a menu (src/renderer/menu-idle.ts) — which the flash its open
   // menus wear before they close counts from. A caller with no such clock
   // (check) never flashes.
   readonly idleSince?: Instant;

@@ -93,7 +93,10 @@ const LOOKS: readonly Readonly<Partial<Record<Attribute, boolean>>>[] = [
 function grid(): Segment[] {
   const texts = ["x", "cell text", "🍫", ""];
   let at = 0;
-  const cell = (color: (typeof COLORS)[number], bg: (typeof COLORS)[number]) => {
+  const cell = (
+    color: (typeof COLORS)[number],
+    bg: (typeof COLORS)[number],
+  ) => {
     at += 1;
     const style = new Style({
       color,
@@ -221,9 +224,9 @@ describe("encodeAnsi over runLines writes what rich-js's encoder writes", () => 
       const lines = runLines(segments, destination.colorSystem);
       expect(encodeAnsi(lines, depth)).toBe(ansi.slice(0, -1));
       expectDrawnAt(lines, depth);
-      expect(
-        lines.flat().filter((run) => run.link !== undefined),
-      ).not.toEqual([]);
+      expect(lines.flat().filter((run) => run.link !== undefined)).not.toEqual(
+        [],
+      );
     });
 
     test.each(LOOPS)("every moment of %s over a wrapped strip", (loop) => {
@@ -371,7 +374,8 @@ describe("the one path from a draw to bytes", () => {
     }));
   // Every clause bringing a name in from rich-js. A namespace import brings in
   // every name it has.
-  const FROM_RICH_JS = /\b(?:import|export)\b[^;]*?from\s+"@promptctl\/rich-js"/g;
+  const FROM_RICH_JS =
+    /\b(?:import|export)\b[^;]*?from\s+"@promptctl\/rich-js"/g;
   const importersOf = (name: string): readonly string[] =>
     files
       .filter(({ text }) =>
@@ -385,12 +389,14 @@ describe("the one path from a draw to bytes", () => {
     expect(importersOf("segmentsToString")).toContain(FRAME);
   });
 
-  test.each(["segmentsToString", "segmentToString", "renderToString", "Console"])(
-    "only src/render/frame.ts imports %s",
-    (name) => {
-      expect(importersOf(name).filter((file) => file !== FRAME)).toEqual([]);
-    },
-  );
+  test.each([
+    "segmentsToString",
+    "segmentToString",
+    "renderToString",
+    "Console",
+  ])("only src/render/frame.ts imports %s", (name) => {
+    expect(importersOf(name).filter((file) => file !== FRAME)).toEqual([]);
+  });
 
   test("nothing in src asks a style for its SGR codes", () => {
     const callers = files.filter(({ text }) => text.includes(".toSgrCodes("));

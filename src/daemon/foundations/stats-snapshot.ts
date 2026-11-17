@@ -124,8 +124,8 @@ export interface StatsSnapshot {
     sessions: number;
     effects: number;
   };
-  // Sessions whose idle clock is kept, and those with a timer armed to close
-  // their menus (src/daemon/menu-idle.ts).
+  // Sessions whose idle clock the renderer keeps, and those whose menus it
+  // will close when their idle period runs out (src/renderer/menu-idle.ts).
   menuIdle: MenuIdleStats;
   // The renderer's mailbox (src/daemon/renderer-host.ts): the input in its
   // turn and for how long, and how many wait behind it. A holder held long is
@@ -206,8 +206,6 @@ export interface CollectorStats {
 export interface MenuIdleStats {
   readonly sessions: number;
   readonly armed: number;
-  // Clicks in flight, from arrival until they land or are refused.
-  readonly pending: number;
 }
 
 export interface RunStats {

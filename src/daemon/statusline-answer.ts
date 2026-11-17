@@ -6,7 +6,7 @@
 import path from "node:path";
 import type {
   Effect,
-  EventInput,
+  Event,
   Present,
   RequestId,
   TurnOutcome,
@@ -17,7 +17,6 @@ import { elapsedMs, type Timekeeper } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { checkoutLocation } from "../utils/git-root.js";
-import { instantAt, type Instant } from "../utils/instant.js";
 import {
   failedWith,
   RENDER_ANSWERS,
@@ -32,9 +31,7 @@ import type { Response } from "./foundations/protocol";
 import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
-import type { HostTurn, RendererHost } from "./renderer-host.js";
-import type { MenuIdle } from "./menu-idle.js";
-import type { FrameFeeds } from "./frame-feed.js";
+import type { HostTurn, Made, RendererHost } from "./renderer-host.js";
 import {
   noteFacts,
   type RequestFacts,
@@ -86,6 +83,9 @@ export function located(req: CheckedRenderRequest): CheckedRenderRequest {
   };
 }
 
+// A turn's time, or `-` for a turn no renderer answered.
+const msOf = (ms: number | null): string => (ms === null ? "-" : `${ms}ms`);
+
 // [LAW:nothing-unseen] What a turn the request's answer took learned, on the
 // request's own event.
 function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
@@ -95,17 +95,12 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 export async function answerStatusline(
   host: RendererHost,
   collector: Pick<Collector, "requested" | "holding" | "settled">,
-  // The session's idle clock and its feeds, which the request's draw reads
-  // as its turn comes.
-  menuIdle: Pick<MenuIdle, "since">,
-  feeds: Pick<FrameFeeds<CheckedRenderRequest>, "following" | "feedsOf">,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after">,
   // The daemon's close, which ends the request's wait.
   closing: AbortSignal,
   log: DaemonLogger,
   arrived: CheckedRenderRequest,
   id: RequestId,
-  at: Instant,
   // The monotonic moment the request's wait ends, the host's own reading.
   waitEndsAt: number,
   facts: RequestFacts,
@@ -118,7 +113,6 @@ export async function answerStatusline(
     void host.deliver(
       () => ({
         kind: "event",
-        at: instantAt(clock),
         event: {
           kind: "effect-done",
           session: effect.session,
@@ -132,8 +126,10 @@ export async function answerStatusline(
   // [LAW:single-enforcer] Each of the request's turns is made as its slot
   // comes, and none once the daemon's close has begun: the teardown is
   // closing the views it would open or draw into.
-  const unlessClosing = (make: () => EventInput) => (): EventInput | Failure =>
-    closing.aborted ? failureOf(new DaemonClosing("render")) : make();
+  const unlessClosing = (event: Event) => (): Made =>
+    closing.aborted
+      ? failureOf(new DaemonClosing("render"))
+      : { kind: "event", event };
   const worldState = collector.requested(req);
   // [LAW:no-ambient-temporal-coupling] The request holds its session from its
   // config to its answer, wait included, so no sweep retires it between.
@@ -149,11 +145,7 @@ export async function answerStatusline(
     // mailbox: another input's turn that lands meanwhile, one that evicts
     // the session's view included, moves what the wait covers.
     configured = await host.answer(
-      unlessClosing(() => ({
-        kind: "event",
-        at,
-        event: { kind: "config", context: req, worldState },
-      })),
+      unlessClosing({ kind: "config", context: req, worldState }),
     );
     // [LAW:nothing-unseen] The config turn's record leads: it opens with the
     // session, which the event's readers key on (`render sid=`), and says
@@ -191,30 +183,23 @@ export async function answerStatusline(
     // [LAW:nothing-unseen] How the wait went, on the render event: an answer
     // drawn with values pending says so by name.
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-    // [LAW:no-ambient-temporal-coupling] Made as its turn comes, so what it
-    // reads of the host follows every input ahead of it: a click that landed
-    // during the wait is drawn by this request's idle reading.
+    // [LAW:no-ambient-temporal-coupling] Its readings are made as its turn
+    // comes, so it draws the instant it is drawn at, after every input
+    // ahead of it: a click that landed during the wait included.
     delivered = await host.answer(
-      unlessClosing(() => ({
-        kind: "event",
-        at,
-        event: {
-          kind: "request",
-          id,
-          context: req,
-          idleSince: menuIdle.since(session, at) ?? null,
-          following: [...feeds.following(session)],
-          feeds: feeds.feedsOf(session, at),
-        },
-      })),
+      unlessClosing({ kind: "request", id, context: req }),
     );
   } finally {
     release();
   }
   recorded(facts, delivered);
-  // [LAW:nothing-unseen] Both turns' waits in the mailbox and hops, beside
-  // `took`: what reaching the renderer cost this request.
+  // [LAW:nothing-unseen] Both turns' times in the renderer, their waits in
+  // the mailbox and their hops, beside `took`: what the renderer and reaching
+  // it cost this request. `drew=` is what the draw's reserve is held to
+  // (DRAW_RESERVE_MS), with `encoded=` for its bytes.
   noteFacts(facts, {
+    configured: msOf(configured.turnMs),
+    drew: msOf(delivered.turnMs),
     mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
     hop:
       configured.hopMs === null || delivered.hopMs === null
@@ -267,8 +252,8 @@ export async function answerStatusline(
     done(presented, `encoding its frame threw: ${failure.message}`);
     return failed(host, failure, "its frame could not be encoded: ");
   }
-  // [LAW:nothing-unseen] The bytes' share of the draw's reserve, beside the
-  // renderer's `drew=`.
+  // [LAW:nothing-unseen] The bytes' share of the draw's reserve, beside
+  // `drew=`.
   noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
   return {
     outcome: { kind: "ok" },

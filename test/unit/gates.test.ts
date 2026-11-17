@@ -2,7 +2,12 @@
 // two values share nothing, and a daemon's gates hold the update notice's keys
 // from construction.
 
-import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD, UPDATE_NOTICE_SESSION_KEY, daemonGates } from "../../src/daemon/foundations/update-keys";
+import {
+  UPDATE_DISMISSED_KEY,
+  UPDATE_NOTICE_FIELD,
+  UPDATE_NOTICE_SESSION_KEY,
+  daemonGates,
+} from "../../src/daemon/foundations/update-keys";
 import { createGates } from "../../src/daemon/foundations/gates";
 import { EMPTY_DEFAULT } from "../helpers/parse-and-validate";
 
@@ -25,10 +30,12 @@ describe("a gates value is the whole of what its loads accept", () => {
       state: [{ key: "mode", allowed: ["full"] }],
       config: [],
     });
-    expect(gates.state.gateFor(EMPTY_DEFAULT).validate("mode", "full")).toEqual({
-      ok: true,
-      value: "full",
-    });
+    expect(gates.state.gateFor(EMPTY_DEFAULT).validate("mode", "full")).toEqual(
+      {
+        ok: true,
+        value: "full",
+      },
+    );
   });
 
   test("a daemon's gates hold the update notice's keys, and a bare value does not", () => {
@@ -39,9 +46,9 @@ describe("a gates value is the whole of what its loads accept", () => {
     expect(held.config.gateFor(EMPTY_DEFAULT).listKeys()).toContain(
       UPDATE_NOTICE_FIELD,
     );
-    expect(createGates(NONE).state.gateFor(EMPTY_DEFAULT).listKeys()).not.toContain(
-      UPDATE_DISMISSED_KEY,
-    );
+    expect(
+      createGates(NONE).state.gateFor(EMPTY_DEFAULT).listKeys(),
+    ).not.toContain(UPDATE_DISMISSED_KEY);
   });
 
   test("a held key stays when a later registration of it is disposed", () => {

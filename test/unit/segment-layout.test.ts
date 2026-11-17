@@ -16,7 +16,10 @@ import {
   RichText,
 } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../../src/template-engine/engine";
-import { applySegmentLayout, evaluateWhen } from "../../src/template-engine/layout";
+import {
+  applySegmentLayout,
+  evaluateWhen,
+} from "../../src/template-engine/layout";
 import { resolvedStyle } from "../../src/render/rich-theme.js";
 // edgeStyle resolves a style name against the render's theme; none is named here.
 const EDGE_OPTS = { maxWidth: 80 };
@@ -28,9 +31,7 @@ function cell(text: string, style?: Style | string): RichText {
 }
 
 // The strip items a layout lays out, for the tests that read only its text.
-function laidText(
-  ...args: Parameters<typeof applySegmentLayout>
-): RichText[] {
+function laidText(...args: Parameters<typeof applySegmentLayout>): RichText[] {
   return applySegmentLayout(...args).map((c) => c.text);
 }
 
@@ -120,10 +121,18 @@ describe("auto width — collapse to one cell, no width constraint", () => {
 // A fill width is content-sized here and carries its demand to the row
 // (src/render/fill.ts) as a field of the laid cell; no other width does.
 describe("fill width — content-sized, carrying its demand", () => {
-  const sizing = { justify: "right", truncate: "middle", padding: 0, placement: PLACEMENT } as const;
+  const sizing = {
+    justify: "right",
+    truncate: "middle",
+    padding: 0,
+    placement: PLACEMENT,
+  } as const;
 
   test("fill states its demand with the sizing the row will honour", () => {
-    const [laid] = applySegmentLayout([cell("hi")], { ...sizing, width: "fill" });
+    const [laid] = applySegmentLayout([cell("hi")], {
+      ...sizing,
+      width: "fill",
+    });
     expect(laid!.text.plain).toBe("hi");
     expect(laid!.fill).toEqual({
       justify: "right",
@@ -164,9 +173,7 @@ describe("padding — synthesized inside the collapsed cell, before sizing", () 
   });
 
   test("empty input stays empty regardless of padding (no phantom pill)", () => {
-    expect(
-      laidText([], { ...autoOptions, padding: 2 }),
-    ).toHaveLength(0);
+    expect(laidText([], { ...autoOptions, padding: 2 })).toHaveLength(0);
   });
 });
 
@@ -404,8 +411,8 @@ describe("truncation preserves per-character styling through the cut", () => {
     expect(result[0]!.plain).toBe("…world");
     // The "world" span survives intact on the right.
     const spans = result[0]!.spans;
-    const redSpan = spans.find((s) =>
-      resolvedStyle(s.style).color?.name === "red",
+    const redSpan = spans.find(
+      (s) => resolvedStyle(s.style).color?.name === "red",
     );
     expect(redSpan).toBeDefined();
     expect(result[0]!.plain.slice(redSpan!.start, redSpan!.end)).toBe("world");

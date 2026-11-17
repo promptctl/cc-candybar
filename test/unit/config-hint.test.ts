@@ -6,7 +6,11 @@
 // same table.
 import path from "node:path";
 import { hostOf } from "../helpers/host";
-import { CONFIG_ENV, cliConfigTarget, detectConfigEnv } from "../../src/config-hint";
+import {
+  CONFIG_ENV,
+  cliConfigTarget,
+  detectConfigEnv,
+} from "../../src/config-hint";
 
 const CWD = "/work/proj";
 // A home no machine has, so `~` expands to the host a test states.
@@ -20,11 +24,14 @@ describe("detectConfigEnv (client-side CC_CANDYBAR_CONFIG probe)", () => {
 
   test("unset or empty is no override", () => {
     expect(detectConfigEnv(on({}), CWD)).toBeUndefined();
-    expect(detectConfigEnv(on({ CC_CANDYBAR_CONFIG: "" }), CWD)).toBeUndefined();
+    expect(
+      detectConfigEnv(on({ CC_CANDYBAR_CONFIG: "" }), CWD),
+    ).toBeUndefined();
   });
 
   test("a set value is resolved against the client's cwd, `~` against home", () => {
-    const hint = (v: string) => detectConfigEnv(on({ CC_CANDYBAR_CONFIG: v }), CWD);
+    const hint = (v: string) =>
+      detectConfigEnv(on({ CC_CANDYBAR_CONFIG: v }), CWD);
     expect(hint("/etc/bar.json5")).toBe("/etc/bar.json5");
     expect(hint("examples/demo.json5")).toBe("/work/proj/examples/demo.json5");
     expect(hint("../x/./y.json5")).toBe("/work/x/y.json5");
@@ -49,7 +56,9 @@ describe("cliConfigTarget (the file a CLI run checks)", () => {
 
   test("with neither, the run searches", () => {
     expect(cliConfigTarget("", on({}), CWD)).toEqual({ source: "search" });
-    expect(cliConfigTarget(undefined, on({}), CWD)).toEqual({ source: "search" });
+    expect(cliConfigTarget(undefined, on({}), CWD)).toEqual({
+      source: "search",
+    });
   });
 
   test("a named file outranks the variable and is resolved against cwd", () => {

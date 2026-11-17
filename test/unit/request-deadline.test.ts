@@ -3,7 +3,10 @@
 // first, less the draw's reserve — and, from a client too old to state one,
 // by the earliest an old client gives up at.
 
-import { CONNECT_TIMEOUT_MS, TOTAL_BUDGET_MS } from "../../src/daemon/foundations/protocol";
+import {
+  CONNECT_TIMEOUT_MS,
+  TOTAL_BUDGET_MS,
+} from "../../src/daemon/foundations/protocol";
 import {
   DRAW_RESERVE_MS,
   REQUEST_TIMEOUT_MS,
@@ -64,13 +67,19 @@ describe("a request's deadline field", () => {
   });
 
   test("epoch milliseconds are stated", () => {
-    expect(parseClientDeadline(5_000_150)).toEqual({ kind: "stated", at: 5_000_150 });
-  });
-
-  test.each([["soon"], [1.5], [0], [-1], [null]])("%p is refused, naming what was sent", (raw) => {
-    expect(parseClientDeadline(raw)).toEqual({
-      kind: "refused",
-      problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`,
+    expect(parseClientDeadline(5_000_150)).toEqual({
+      kind: "stated",
+      at: 5_000_150,
     });
   });
+
+  test.each([["soon"], [1.5], [0], [-1], [null]])(
+    "%p is refused, naming what was sent",
+    (raw) => {
+      expect(parseClientDeadline(raw)).toEqual({
+        kind: "refused",
+        problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`,
+      });
+    },
+  );
 });

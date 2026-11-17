@@ -1,4 +1,10 @@
-import { fakeSpawner, program, shell, exits, hangs } from "../../src/proc/spawner-fake";
+import {
+  fakeSpawner,
+  program,
+  shell,
+  exits,
+  hangs,
+} from "../../src/proc/spawner-fake";
 import { heldClock } from "../helpers/held-clock";
 import { spawnerContract, type Program } from "../contract/spawner.contract";
 
@@ -35,7 +41,9 @@ describe("the fake spawner", () => {
     const spawner = fakeSpawner(heldClock(new Date(0)));
     spawner.program(shell("echo hi"), exits(1));
     spawner.program(shell("echo hi"), exits(0, "hi\n"));
-    const r = spawner.spawnSync("/bin/sh", ["-c", "echo hi"], { encoding: "utf8" });
+    const r = spawner.spawnSync("/bin/sh", ["-c", "echo hi"], {
+      encoding: "utf8",
+    });
     expect(r.stdout).toBe("hi\n");
   });
 

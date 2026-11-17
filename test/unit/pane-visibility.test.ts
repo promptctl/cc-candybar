@@ -24,7 +24,12 @@ const hint = (socket: string, pane: string) => ({
 // draws none.
 describe("statusLinesOf", () => {
   test("names each pane's session and the pane each session's status line shows", () => {
-    const panes = ["%1 $1 1 1 0 1", "%2 $1 1 1 0 0", "%3 $2 1 1 0 1", "%4 $3 1 1 0 1"].join("\n");
+    const panes = [
+      "%1 $1 1 1 0 1",
+      "%2 $1 1 1 0 0",
+      "%3 $2 1 1 0 1",
+      "%4 $3 1 1 0 1",
+    ].join("\n");
     const clients = ["$1 0 %1", "$2 1 %3", ""].join("\n");
     const status = statusLinesOf(panes, clients);
     expect([...status.sessionOf]).toEqual([
@@ -87,7 +92,8 @@ describe("PaneVisibility", () => {
     const log: string[] = [];
     const sockets = new Set(Object.keys(answers));
     const counts = { asks: 0, inFlight: 0, overlap: false, readFails: false };
-    const visibility = new PaneVisibility({ clock: systemTimekeeper,
+    const visibility = new PaneVisibility({
+      clock: systemTimekeeper,
       listPanes: async (socket) => {
         counts.asks++;
         counts.inFlight++;
@@ -106,8 +112,18 @@ describe("PaneVisibility", () => {
       intervalMs: INTERVAL_MS,
       log: (_level, line) => log.push(line),
     });
-    const serverLog = () => log.filter((l) => l.startsWith("visibility socket="));
-    return { visibility, changes, answered, log, serverLog, answers, sockets, counts };
+    const serverLog = () =>
+      log.filter((l) => l.startsWith("visibility socket="));
+    return {
+      visibility,
+      changes,
+      answered,
+      log,
+      serverLog,
+      answers,
+      sockets,
+      counts,
+    };
   }
 
   test("a session outside tmux, or on a server not yet asked, counts as shown", () => {
@@ -143,10 +159,15 @@ describe("PaneVisibility", () => {
     const stop = h.visibility.follow();
     await pass(0);
     await pass(INTERVAL_MS);
-    h.answers["/s"] = { kind: "failed", reason: "tmux list-panes failed (no server)" };
+    h.answers["/s"] = {
+      kind: "failed",
+      reason: "tmux list-panes failed (no server)",
+    };
     await pass(INTERVAL_MS);
     stop();
-    expect(h.answered.map(([socket, status]) => [socket, [...status.sessionOf]])).toEqual([
+    expect(
+      h.answered.map(([socket, status]) => [socket, [...status.sessionOf]]),
+    ).toEqual([
       ["/s", [["%1", "$1"]]],
       ["/s", [["%1", "$1"]]],
     ]);
@@ -195,7 +216,10 @@ describe("PaneVisibility", () => {
   test("follow asks at once and each interval after, never twice at once, until it stops", async () => {
     // Each answer takes longer than the interval: the next ask is due an
     // interval after the last answered, at 0, 2500 and 5000 ms.
-    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } }, 1500);
+    const h = harness(
+      { "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } },
+      1500,
+    );
     const stop = h.visibility.follow();
     // A second follow while the loop runs starts no second loop.
     h.visibility.follow();
@@ -220,7 +244,10 @@ describe("PaneVisibility", () => {
   });
 
   test("an answer that arrives after the stop does not stand, and a follow at once after it waits its turn", async () => {
-    const h = harness({ "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } }, 1500);
+    const h = harness(
+      { "/s": { kind: "ok", stdout: "%1 $1 0 1 0 1\n" } },
+      1500,
+    );
     const stop = h.visibility.follow();
     await pass(5);
     stop();

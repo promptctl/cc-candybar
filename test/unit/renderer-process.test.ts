@@ -31,9 +31,10 @@ import type {
   AdapterOutput,
   EffectId,
   RendererOutput,
+  Timed,
 } from "../../src/renderer-interface/interface";
 import type { HeldEvent } from "../../src/utils/event-hold";
-import type { Instant } from "../../src/utils/instant";
+import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import {
   RendererDown,
@@ -143,7 +144,18 @@ function rig(start: () => Promise<void> = async () => {}) {
   // The inputs the host sent the child, in order.
   const inputs = (child: Child) =>
     child.written.flatMap((l) => (l.kind === "input" ? [l] : []));
-  return { clock, children, logs, levels, ends, watched, held, link, inputs, key };
+  return {
+    clock,
+    children,
+    logs,
+    levels,
+    ends,
+    watched,
+    held,
+    link,
+    inputs,
+    key,
+  };
 }
 
 // Every promise chain the supervisor started settles: it awaits nothing but
@@ -154,10 +166,16 @@ const settled = async (): Promise<void> => {
 
 const pin: AdapterInput = {
   kind: "adapter",
-  push: { kind: "pin", session: SESSION },
+  push: { kind: "close-journal" },
   at: 0 as Instant,
+  tick: 0 as Tick,
 };
-const PINNED: AdapterOutput = { kind: "replied", reply: { kind: "pin" } };
+const PINNED: Timed<AdapterOutput> = {
+  kind: "replied",
+  reply: { kind: "close-journal" },
+  subscriptions: { sources: {}, lanes: {}, wake: null },
+  turnMs: 0,
+};
 
 describe("a renderer process's start", () => {
   test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the host's digest", () => {
@@ -214,7 +232,7 @@ describe("a renderer process's start", () => {
   test("the complete start heads what waits for the boot, so an input during the boot follows it as a change", async () => {
     const unpin: AdapterInput = {
       ...pin,
-      push: { kind: "unpin", session: SESSION },
+      push: { kind: "close-views" },
     };
     const r = rig(async () => {
       await r.link.renderer.answer(pin);
@@ -421,12 +439,14 @@ describe("ids a renderer mints", () => {
         kind: "adapter",
         push: { kind: "watch", id: 1 as WatchId, heard: null, deaf: [] },
         at: 0 as Instant,
+        tick: 0 as Tick,
       }),
     ).rejects.toThrow(RendererDown);
     void link.renderer.answer({
       kind: "adapter",
       push: { kind: "watch", id: 3 as WatchId, heard: null, deaf: [] },
       at: 0 as Instant,
+      tick: 0 as Tick,
     });
     await settled();
     expect(inputs(second).at(-1)!.input).toMatchObject({
@@ -527,11 +547,12 @@ describe("ids a renderer mints", () => {
       event: { kind: "retire", session: SESSION },
     } as never);
     await settled();
-    const answeredWith: RendererOutput = {
+    const answeredWith: Timed<RendererOutput> = {
       kind: "answered",
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, tmuxStatus: [] },
+      subscriptions: { sources: {}, lanes: {}, wake: null },
+      frames: [],
       turnMs: 0,
     };
     child.say({ kind: "output", n: inputs(child)[0]!.n, output: answeredWith });
@@ -577,8 +598,11 @@ describe("ids a renderer mints", () => {
       output: {
         kind: "answered",
         record: [],
-        effects: [{ kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" }],
-        subscriptions: { sources: {}, tmuxStatus: [] },
+        effects: [
+          { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
+        ],
+        subscriptions: { sources: {}, lanes: {}, wake: null },
+        frames: [],
         turnMs: 0,
       },
     });
@@ -678,7 +702,9 @@ describe("a renderer process's close", () => {
     early.children[0]!.exit(EXITED);
     await settled();
     expect(early.levels.at(-1)).toBe("warn");
-    expect(early.logs.at(-1)).toBe("renderer main[1] exited in the daemon's close");
+    expect(early.logs.at(-1)).toBe(
+      "renderer main[1] exited in the daemon's close",
+    );
     await early.link.close();
 
     const asked = rig();
@@ -689,7 +715,9 @@ describe("a renderer process's close", () => {
     asked.children[0]!.exit(EXITED);
     await closed;
     expect(asked.levels.at(-1)).toBe("info");
-    expect(asked.logs.at(-1)).toBe("renderer main[1] exited in the daemon's close");
+    expect(asked.logs.at(-1)).toBe(
+      "renderer main[1] exited in the daemon's close",
+    );
   });
 
   test("a boot under way as the close begins ends then, signalled after the grace, and what waited for it fails as closed", async () => {

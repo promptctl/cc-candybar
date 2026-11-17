@@ -173,15 +173,15 @@ import {
   parseSessionId,
   type SessionId,
 } from "../../daemon/foundations/session-id";
-import type { IdleSpan } from "../../renderer-interface/interface";
+import type { IdleSpan } from "../menu-idle";
 
 // What the daemon hands everything that writes a session's state: a click's
-// verb, and the idle timer that closes its menus (`closeIdleMenus`).
+// verb, and the idle close of its menus (`closeIdleMenus`).
 export interface DaemonContext {
   // What this daemon's clicks may write: the gates its root built.
   readonly gates: Gates;
   readonly sessionState: SessionStateRW;
-  // [LAW:effects-at-boundaries] The daemon's clock.
+  // [LAW:effects-at-boundaries] The turn's wall instant, which the host read.
   readonly now: () => Instant;
   readonly log: (level: "info" | "warn" | "error", msg: string) => void;
   // [LAW:single-enforcer] Where every act a click asks of the host goes: its
@@ -208,7 +208,7 @@ export interface DaemonContext {
   // beside the settings history.
   readonly navigation: NavigationHistory;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
-  // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
+  // turn: the session's idle period restarts (src/renderer/menu-idle.ts).
   readonly clickLanded: (sessionId: SessionId) => void;
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
@@ -1850,26 +1850,22 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),
 ]) as readonly string[];
 
-// [LAW:single-enforcer] The idle timer's close (brandon-menus-sjhy.my3) takes
+// [LAW:single-enforcer] The idle close (brandon-menus-sjhy.my3) takes
 // a click's own path: the journals the verb table opens — so an exit from edit
 // mode releases its savepoint, and ◁ back can reopen what it closed — and the
 // closing view, which folds everything open inside what closes. It writes
 // `closed` to each menu open at the top, the write its ✕ makes. No URL names
-// it: it is not in VERBS. Whether it goes ahead is the host's idle clock's
-// to say, as its turn came (`stillIdle`): a click since the firing keeps
-// what it opened.
+// it: it is not in VERBS. It runs in a `due` turn, so a click lands wholly
+// before it or after it, and a `due` waits behind every input that arrives
+// while it waits, so a click that has arrived lands before it: it restarts
+// the idle period, and the close is not due.
 export function closeIdleMenus(
   sid: SessionId,
   latest: CheckedRenderRequest | null,
   idle: IdleSpan,
-  stillIdle: boolean,
   ctx: DaemonContext,
   effects: Effect[],
 ): void {
-  if (!stillIdle) {
-    ctx.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
-    return;
-  }
   journaled("menu-idle", sid, latest, ctx, effects, (c) => {
     const roots = openRoots(nestOf(c, sid), (key) =>
       c.navigating.get(sid, key),

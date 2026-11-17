@@ -480,7 +480,6 @@ describe("the daemon's side of the round trip", () => {
     const ctx = testVerbContext(new SessionState());
     const parts = {
       clock: { monotonic: () => performance.now(), now: () => Date.now() },
-      menuIdle: { clickArrived: () => {}, clickSettled: () => {} },
       payloadProviders: {},
       frameFeeds: { latest: () => null },
       log: () => {},

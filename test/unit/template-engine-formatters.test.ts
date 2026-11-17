@@ -27,7 +27,11 @@ import {
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object = {}): string {
   const engine = createCcCandybarEngine(TEST_ENGINE);
-  return engine.parse(source).evaluate(scope).map((rt) => rt.plain).join("");
+  return engine
+    .parse(source)
+    .evaluate(scope)
+    .map((rt) => rt.plain)
+    .join("");
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -46,19 +50,25 @@ describe("numeric argType gate — precision-losing bigint rejected at the bound
   test("int accepts a bigint within safe-integer range", () => {
     // Engine encodes ambiguous Go-template numeric literals as bigint; values
     // inside ±Number.MAX_SAFE_INTEGER (2^53 − 1) round-trip safely.
-    const tpl = createCcCandybarEngine(TEST_ENGINE).parse("{{ formatInteger 1000000000 }}");
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(
+      "{{ formatInteger 1000000000 }}",
+    );
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 
   test("int rejects a bigint above MAX_SAFE_INTEGER", () => {
     const huge = String(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
-    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(`{{ formatInteger ${huge} }}`);
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(
+      `{{ formatInteger ${huge} }}`,
+    );
     expect(() => tpl.evaluate({})).toThrow();
   });
 
   test("int rejects a bigint below MIN_SAFE_INTEGER", () => {
     const tiny = String(BigInt(Number.MIN_SAFE_INTEGER) - 1n);
-    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(`{{ formatInteger ${tiny} }}`);
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(
+      `{{ formatInteger ${tiny} }}`,
+    );
     expect(() => tpl.evaluate({})).toThrow();
   });
 
@@ -75,7 +85,9 @@ describe("numeric argType gate — precision-losing bigint rejected at the bound
 
   test("float (round) accepts a large finite value without a precision guard", () => {
     // float is intentionally lossy-tolerant — a big literal converts, not throws.
-    const tpl = createCcCandybarEngine(TEST_ENGINE).parse("{{ round 1000000000 }}");
+    const tpl = createCcCandybarEngine(TEST_ENGINE).parse(
+      "{{ round 1000000000 }}",
+    );
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 });
@@ -146,7 +158,10 @@ describe("shortenModelName wrapper", () => {
 
   test("composes with formatModelName: raw → friendly → short", () => {
     expect(
-      evalText('{{ shortenModelName (formatModelName "claude-opus-4-7") }}', {}),
+      evalText(
+        '{{ shortenModelName (formatModelName "claude-opus-4-7") }}',
+        {},
+      ),
     ).toBe("O4.7");
   });
 });

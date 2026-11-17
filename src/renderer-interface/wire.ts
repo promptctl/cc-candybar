@@ -4,8 +4,9 @@
 // code runs over a pipe in a test as over a process's stdio.
 //
 // [LAW:one-type-per-behavior] One transport over the one interface: the host
-// holds a `Renderer` and the renderer holds an `AdapterToHost` whichever side
-// of a process they are on.
+// holds a `TimedRenderer` and the renderer holds an `AdapterToHost` whichever
+// side of a process they are on. A turn is timed in the renderer's process,
+// around its answer, and its time crosses with its output.
 
 import type { Failure } from "../daemon/foundations/verb-error.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
@@ -18,10 +19,11 @@ import {
   rendererOf,
   type AdapterInput,
   type AdapterOutput,
-  type Renderer,
   type RendererInput,
   type RendererOutput,
   type EventInput,
+  type Timed,
+  type TimedRenderer,
 } from "./interface.js";
 
 // What a renderer process builds itself from: the host's view of its machine
@@ -58,7 +60,7 @@ export function bootEnv(
   );
 }
 
-// A reach's path in `AdapterToHost`, dotted: `menuIdle.clicked`, `doctor.forge`.
+// A reach's path in `AdapterToHost`, dotted: `watches.watch`, `storage.hold`.
 export type ReachPath = string;
 
 export type HostLine =
@@ -85,7 +87,7 @@ export type RendererLine =
   | {
       readonly kind: "output";
       readonly n: number;
-      readonly output: RendererOutput | AdapterOutput;
+      readonly output: Timed<RendererOutput | AdapterOutput>;
     }
   // An input whose answer rejected: nothing of its turn is taken, so the
   // host's caller hears it as the turn's failure.
@@ -121,9 +123,7 @@ type ReachKinds<T> = {
 };
 
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
-  wake: "notice",
   log: "notice",
-  menuIdle: { clicked: "notice", observe: "notice" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" },
@@ -191,7 +191,7 @@ export function lineSplitter(heard: (line: string) => void): {
 // and resolves with its output; `heard` takes every line the renderer says;
 // `ended` rejects whatever is still owed, with why.
 export interface RendererOverLines {
-  readonly renderer: Renderer;
+  readonly renderer: TimedRenderer;
   readonly ping: () => Promise<MemorySizes>;
   readonly heapSnapshot: (file: string) => Promise<void>;
   readonly heard: (line: RendererLine) => void;
@@ -242,7 +242,7 @@ export function rendererOverLines(deps: {
       send(line(n));
     });
   const answer = (input: RendererInput) =>
-    owe<RendererOutput | AdapterOutput>(
+    owe<Timed<RendererOutput | AdapterOutput>>(
       input.kind === "event"
         ? `${input.event.kind} input`
         : `${input.push.kind} push`,
@@ -258,8 +258,10 @@ export function rendererOverLines(deps: {
   const renderer = rendererOf({
     // [LAW:types-are-the-program] exception: the renderer answers each input
     // with the output of its kind, which the line cannot carry to its type.
-    event: (input: EventInput) => answer(input) as Promise<RendererOutput>,
-    adapter: (input: AdapterInput) => answer(input) as Promise<AdapterOutput>,
+    event: (input: EventInput) =>
+      answer(input) as Promise<Timed<RendererOutput>>,
+    adapter: (input: AdapterInput) =>
+      answer(input) as Promise<Timed<AdapterOutput>>,
   });
   // [LAW:no-ambient-temporal-coupling] Each reach is performed as its line
   // arrives, so the notices land in the order sent.
@@ -366,7 +368,7 @@ export function hostOverLines(
 // its output, and the host's reads of the process answered here, outside any
 // turn.
 export function serveRenderer(deps: {
-  readonly renderer: Renderer;
+  readonly renderer: TimedRenderer;
   readonly send: (line: RendererLine) => void;
   readonly memory: () => MemorySizes;
   readonly heapSnapshot: (file: string) => void;
@@ -380,7 +382,7 @@ export function serveRenderer(deps: {
         void (
           renderer.answer as (
             i: RendererInput,
-          ) => Promise<RendererOutput | AdapterOutput>
+          ) => Promise<Timed<RendererOutput | AdapterOutput>>
         )(line.input).then(
           (output) => send({ kind: "output", n: line.n, output }),
           (thrown: unknown) =>

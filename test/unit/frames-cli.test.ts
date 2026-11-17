@@ -12,7 +12,12 @@ test("a reconnect says why: a daemon from before subscribe restarts on the new b
   expect(
     afterStreamEnd({
       kind: "refused",
-      resp: { ok: false, code: "BAD_REQUEST", error: "BAD_REQUEST said", daemonV: PROTOCOL_VERSION },
+      resp: {
+        ok: false,
+        code: "BAD_REQUEST",
+        error: "BAD_REQUEST said",
+        daemonV: PROTOCOL_VERSION,
+      },
     }),
   ).toEqual({
     kind: "reconnect",
@@ -22,7 +27,11 @@ test("a reconnect says why: a daemon from before subscribe restarts on the new b
   });
   expect(
     afterStreamEnd({ kind: "failed", error: new Error("ENOENT") }),
-  ).toEqual({ kind: "reconnect", reason: "stream failed (ENOENT)", kick: true });
+  ).toEqual({
+    kind: "reconnect",
+    reason: "stream failed (ENOENT)",
+    kick: true,
+  });
 });
 
 test("a missing or unknown --lane is refused with exit 2, naming the lanes", async () => {
@@ -33,9 +42,13 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
     const exit = jest.spyOn(process, "exit").mockImplementation((code) => {
       throw new Error(`exit ${String(code)}`);
     });
-    const stderr = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const stderr = jest
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
     try {
-      await expect(runFrames(argv, "/opt/cc/dist/index.mjs", WORLD)).rejects.toThrow("exit 2");
+      await expect(
+        runFrames(argv, "/opt/cc/dist/index.mjs", WORLD),
+      ).rejects.toThrow("exit 2");
       expect(String(stderr.mock.calls[0]?.[0])).toMatch(
         /--lane needs one of band, statusline, pane/,
       );
@@ -48,6 +61,10 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
 
 test("--session is not a flag of frames: a named session's frames are the native client's follow", async () => {
   await expect(
-    runFrames(["node", "cc-candybar", "frames", "--lane", "band", "--session", "s"], "/opt/cc/dist/index.mjs", WORLD),
+    runFrames(
+      ["node", "cc-candybar", "frames", "--lane", "band", "--session", "s"],
+      "/opt/cc/dist/index.mjs",
+      WORLD,
+    ),
   ).rejects.toThrow(/--session/);
 });

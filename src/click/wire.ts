@@ -541,8 +541,8 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
 // [LAW:one-source-of-truth] The session a click is in: the first segment of
 // its first session-bearing effect — every SESSION_FIRST_VERBS member carries
 // it there — or none. Dispatch surfaces a failed step in that session's bar,
-// and the daemon counts the click as that session's activity
-// (src/daemon/menu-idle.ts). [LAW:single-enforcer] It is read as it crosses
+// and the renderer counts the click as that session's activity
+// (src/renderer/menu-idle.ts). [LAW:single-enforcer] It is read as it crosses
 // the one session-id checkpoint, so every reader of a click's session reads
 // the same checked value; one that fails is no session's, and its verb
 // refuses the click.

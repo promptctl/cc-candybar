@@ -75,14 +75,8 @@ describe("Crosses", () => {
 
 describe("Reaches", () => {
   it("is a check the typecheck runs", () => {
-    expect([
-      inPlace,
-      handed,
-      hole,
-      held,
-      grown,
-      untyped,
-      reaches,
-    ]).toHaveLength(7);
+    expect([inPlace, handed, hole, held, grown, untyped, reaches]).toHaveLength(
+      7,
+    );
   });
 });

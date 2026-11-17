@@ -12,9 +12,11 @@ import type {
 } from "../../src/renderer/verbs/port";
 import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
-import { systemTimekeeper } from "../../src/time";
 import { TEST_SIGNER } from "./link-signer";
 import type { EffectId } from "../../src/renderer-interface/interface";
+import { TurnTime } from "../../src/renderer/turn-time";
+import { MenuIdle } from "../../src/renderer/menu-idle";
+import { FEED_PERIODS, Feeds } from "../../src/renderer/feeds";
 
 // A renderer that acts no verb: every click names a verb it does not have,
 // and an idle close is refused, so a test that clicks hands in the act it
@@ -28,6 +30,15 @@ export const NO_VERBS: RendererVerbs = {
   changeDone: () => false,
 };
 
+// Feeds no session is watched in: none draws.
+export const noFeeds = (): Feeds =>
+  new Feeds({
+    draw: () => null,
+    pin: () => () => {},
+    log: () => {},
+    periods: FEED_PERIODS,
+  });
+
 // A renderer's effect ids, from 1.
 export const minter = (): (() => EffectId) => {
   let minted = 0;
@@ -40,16 +51,11 @@ const unhosted = (what: string) => (): never => {
   throw new Error(`${what}: no host part in this rig`);
 };
 
-// The host a renderer test draws against: no feed follows a session, no
-// update is offered, file events are heard, and nothing is idle.
+// The host a renderer test draws against: no update is offered, and file
+// events are heard.
 export function inertHost(): AdapterToHost {
   return {
-    wake: () => {},
     log: () => {},
-    menuIdle: {
-      clicked: () => {},
-      observe: () => {},
-    },
     eventAnswered: () => {},
     watches: { watch: unhosted("watches"), unwatch: unhosted("watches") },
     storage: { hold: unhosted("storage"), release: unhosted("storage") },
@@ -69,7 +75,12 @@ export function rendererParts({
 }): MainRendererParts {
   return {
     ...inertHost(),
-    clock: systemTimekeeper,
+    // The rig's own time: a test drawing outside a turn runs it in one
+    // (`time.during`).
+    time: new TurnTime(),
+    // No feed follows a session, and nothing is idle.
+    menuIdle: new MenuIdle(),
+    feeds: noFeeds(),
     linkSigner: TEST_SIGNER,
     sessionState,
     renderCache: cache as never,

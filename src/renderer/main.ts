@@ -6,9 +6,11 @@
 // present's `effect-done` records what the frame showed, once the host says
 // whether its client took it. A world state the host hands in, with a
 // `config` or alone, is what the session's views draw from, and a retire ends
-// what the renderer holds of the session. A click, and the idle clock's close
-// of a session's menus, act in their turn. Every output says what the open
-// views need read, as they stand once the turn's act has landed.
+// what the renderer holds of the session. A click acts in its turn, and a
+// `due` runs what the renderer held for its tick: work deferred, the close of
+// a session's idle menus, and its feeds' frames. Every output says what the
+// open views need read and when the renderer next wants a turn, as they stand
+// once the turn's act has landed.
 
 import {
   answerRequest,
@@ -19,6 +21,11 @@ import {
   viewLanes,
   type RendererParts,
 } from "./draw-bar.js";
+import { TurnTime } from "./turn-time.js";
+import { runEach } from "../utils/run-each.js";
+import { MenuIdle } from "./menu-idle.js";
+import { FEED_PERIODS, Feeds } from "./feeds.js";
+import type { LaneSwitches } from "../config/lanes.js";
 import type { RequestFacts } from "../daemon/foundations/request-event.js";
 import { clickTurn } from "./click.js";
 import {
@@ -26,7 +33,6 @@ import {
   type DaemonVerbContext,
   type MainRendererParts,
 } from "./verbs/port.js";
-import { elapsedMs, type Timekeeper } from "../time.js";
 import type { SessionStorage } from "../renderer-interface/session-state.js";
 import type {
   HistoryStorage,
@@ -73,13 +79,14 @@ import {
   EMPTY_RENDER_MAP,
   serializeSegmentCells,
 } from "./debug.js";
-import type { Instant } from "../utils/instant.js";
+import { earliestOf } from "../utils/instant.js";
 import { failureOf, type Failure } from "../daemon/foundations/verb-error.js";
 import {
   rendererOf,
   type Effect,
   type EffectId,
   type Event,
+  type PushedFrame,
   type Renderer,
   type Subscription,
   type Subscriptions,
@@ -90,23 +97,24 @@ import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
 // How a turn ended, apart from what it returned.
-type TurnEnd =
-  | { readonly kind: "answered" }
+type Ended<T> =
+  | { readonly kind: "answered"; readonly value: T }
   | { readonly kind: "threw"; readonly failure: Failure };
 
 export function mainRenderer(
   parts: MainRendererParts,
   // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
   // in its own turn, synchronously.
-  pushed: (push: AdapterPush, at: Instant) => AdapterReply,
+  pushed: (push: AdapterPush) => AdapterReply,
 ): Renderer {
+  const { time, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
   // its client, held from the turn that returned it until its one
   // `effect-done`: the host settles every present it is handed, so this
   // holds only presents still on their way.
   const deliveries = new Map<EffectId, () => void>();
   // The subscriptions this renderer last returned: none before its first turn.
-  let subscriptions: Subscriptions = { sources: {}, tmuxStatus: [] };
+  let subscriptions: Subscriptions = { sources: {}, lanes: {}, wake: null };
 
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
@@ -116,28 +124,31 @@ export function mainRenderer(
   // answered, is the one order of the renderer's turns.
   const turn = (
     event: Event,
-    at: Instant,
     record: RequestFacts,
     effects: Effect[],
+    frames: PushedFrame[],
   ): void => {
     switch (event.kind) {
       case "start":
-        for (const { context, worldState } of event.sessions)
-          configureSession(parts, context, worldState, at, record);
+        // The feeds first: a watched session's feed pins its view before
+        // the view opens. Each session is configured whatever another's
+        // configuring, or a feed, threw.
+        runEach([
+          () => feeds.view(event.viewers, time.tick),
+          ...event.sessions.map(
+            ({ context, worldState }) =>
+              () =>
+                configureSession(parts, context, worldState, record),
+          ),
+        ]);
         return;
       case "config":
-        configureSession(parts, event.context, event.worldState, at, record);
+        configureSession(parts, event.context, event.worldState, record);
         return;
       case "request": {
         const { frame, delivered } = answerRequest(
           parts,
           event.context,
-          at,
-          {
-            following: new Set(event.following),
-            feeds: event.feeds,
-            idleSince: event.idleSince,
-          },
           record,
           effects,
         );
@@ -160,6 +171,7 @@ export function mainRenderer(
         // The run first: a teardown that throws leaves no run asking for a
         // session the host has discarded.
         parts.doctorRuns.retire(event.session);
+        menuIdle.retire(event.session);
         retireSession(parts, event.session);
         return;
       case "effect-done": {
@@ -179,14 +191,21 @@ export function mainRenderer(
       case "click":
         clickTurn(parts, event, effects);
         return;
-      case "menu-idle":
-        parts.verbs.closeIdle(
-          event.session,
-          event.latest,
-          event.idle,
-          event.stillIdle,
-          effects,
-        );
+      case "viewers":
+        feeds.view(event.viewers, time.tick);
+        return;
+      case "due":
+        // [LAW:dataflow-not-control-flow] Every owner of a tick, in one
+        // order: held work first (a walk's load, a settled write), so the
+        // menus a close reads and the frames drawn after it see it landed;
+        // then the closes, so the frames drawn show them. Each owner runs
+        // whatever one before it threw, so one session's failure stalls no
+        // other's close or frames.
+        runEach([
+          () => time.runDue(),
+          () => closeIdleMenus(parts, effects),
+          () => feeds.drawDue({ at: time.at, tick: time.tick }, frames),
+        ]);
         return;
     }
   };
@@ -201,66 +220,111 @@ export function mainRenderer(
     );
     for (const [session, run] of parts.doctorRuns.subscriptions())
       merged.set(session, [...(merged.get(session) ?? []), run]);
-    const sources = Object.fromEntries(merged) as Subscriptions["sources"];
+    // [LAW:one-source-of-truth] Read off the same open views: a session whose
+    // view closes stops being named, so its switches go.
+    const lanes: Record<SessionId, LaneSwitches> = {};
+    for (const session of Object.keys(views) as SessionId[]) {
+      const switches = viewLanes(parts, session);
+      if (switches !== null) lanes[session] = switches;
+    }
     return {
-      sources,
-      // [LAW:one-source-of-truth] Read off the same open views: a session
-      // whose view closes stops being named, so its row goes.
-      tmuxStatus: (Object.keys(sources) as SessionId[]).filter(
-        (session) => viewLanes(parts, session)?.tmuxStatus === true,
-      ),
+      sources: Object.fromEntries(merged) as Subscriptions["sources"],
+      lanes,
+      // [LAW:one-source-of-truth] The tick the renderer next wants a turn
+      // at: the earliest any owner of a tick holds.
+      wake: earliestOf([time.next(), menuIdle.next(), feeds.next()]),
     };
+  };
+
+  // [LAW:single-enforcer] Every turn, an event's or a push's, ends here:
+  // what the renderer needs read and when it next wants a turn are read as
+  // they stand when it ends, however it ended. Read as part of the turn, so
+  // a read that throws fails it, and the subscriptions last returned stand.
+  const ending = <T>(run: () => T): Ended<T> => {
+    try {
+      let value: T;
+      try {
+        value = run();
+      } finally {
+        subscriptions = subscribed();
+      }
+      return { kind: "answered", value };
+    } catch (thrown) {
+      // [LAW:single-enforcer] Classified here, where it was thrown: a class
+      // crosses no process.
+      return { kind: "threw", failure: failureOf(thrown) };
+    }
   };
 
   return rendererOf({
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
-    adapter: async (input) => {
-      try {
-        return { kind: "replied", reply: pushed(input.push, input.at) };
-      } catch (thrown) {
-        return { kind: "threw", failure: failureOf(thrown) };
-      }
-    },
-    event: async (input) => {
-      const record: RequestFacts = [];
-      const from = parts.clock.monotonic();
-      const effects: Effect[] = [];
-      // [LAW:one-source-of-truth] What the renderer needs read: the open
-      // views' subscriptions as they stand when the turn ends, however it
-      // ended. Read as part of the turn, so a read that throws fails the
-      // turn and still hands on its effects, which are owed their
-      // `effect-done`; the subscriptions last returned then stand.
-      let ended: TurnEnd;
-      try {
-        try {
-          turn(input.event, input.at, record, effects);
-        } finally {
-          subscriptions = subscribed();
-        }
-        ended = { kind: "answered" };
-      } catch (thrown) {
-        // [LAW:single-enforcer] Classified here, where it was thrown: a
-        // class crosses no process.
-        ended = { kind: "threw", failure: failureOf(thrown) };
-      }
-      return {
-        ...ended,
-        effects,
-        record,
-        subscriptions,
-        turnMs: elapsedMs(parts.clock, from),
-      };
-    },
+    adapter: async (input) =>
+      time.during(input, () => {
+        const ended = ending(() => pushed(input.push));
+        return {
+          ...(ended.kind === "answered"
+            ? { kind: "replied" as const, reply: ended.value }
+            : ended),
+          subscriptions,
+        };
+      }),
+    event: async (input) =>
+      time.during(input, () => {
+        const record: RequestFacts = [];
+        const effects: Effect[] = [];
+        const frames: PushedFrame[] = [];
+        const ended = ending(() => turn(input.event, record, effects, frames));
+        return {
+          ...(ended.kind === "answered"
+            ? { kind: "answered" as const }
+            : ended),
+          effects,
+          record,
+          subscriptions,
+          frames,
+        };
+      }),
   });
 }
 
-// What the main renderer is built from besides the host's parts: its clock,
-// the storage its session state, history and doctor load from, the signer its
-// links are drawn with, and the facts of the machine its loads resolve under.
+// The sessions whose idle period has run out by the turn's tick, their menus
+// closed as the ✕ does, by the context their view was drawn with: none when
+// the view was evicted.
+// [LAW:no-silent-failure] A close that throws is said with its session, and
+// the others close all the same: the session's period begins again
+// (`MenuIdle.due`), so its close is tried a timeout later, never at once.
+function closeIdleMenus(parts: MainRendererParts, effects: Effect[]): void {
+  for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
+    try {
+      const latest = factsOf(parts, session);
+      parts.verbs.closeIdle(session, latest, idle, effects);
+    } catch (thrown) {
+      const failure = failureOf(thrown);
+      // A close the daemon's close cut off is a refusal, as a click's is.
+      parts.log(
+        failure.kind === "closing" ? "info" : "error",
+        `menu-idle: close failed (session=${session}): ${failure.detail}`,
+      );
+    }
+  }
+}
+
+// The context the session's open view was drawn with, or null when it has
+// none.
+function factsOf(
+  parts: MainRendererParts,
+  session: SessionId,
+): CheckedRenderRequest | null {
+  using hold = parts.renderCache.holdView(session);
+  return hold?.view.facts() ?? null;
+}
+
+// What the main renderer is built from besides the host's parts: the storage
+// its session state, history and doctor load from, the signer its links are
+// drawn with, and the facts of the machine its loads resolve under. No clock:
+// every input carries the host's readings.
 export interface MainRendererInputs {
-  readonly clock: Timekeeper;
-  readonly now: () => Instant;
   readonly storage: {
     readonly session: SessionStorage;
     readonly history: HistoryStorage;
@@ -311,7 +375,12 @@ function startOver(
   history: LoadedHistory,
   host: AdapterToHost,
 ): Renderer {
-  const { clock, now, gates, linkSigner } = inputs;
+  const { gates, linkSigner } = inputs;
+  // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
+  // each input carries, and the work held for a later `due`.
+  const time = new TurnTime();
+  const now = () => time.at;
+  const menuIdle = new MenuIdle();
   // [LAW:single-enforcer] The renderer's lines go to the host's one log.
   const { log } = host;
   const settingsHistory = new SettingsHistory(
@@ -361,7 +430,7 @@ function startOver(
   const watches = new Watches(host.watches);
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
-      clock,
+      clock: time.clock,
       stateDir: inputs.stateDir,
       locations: inputs.locations,
       env: inputs.env,
@@ -399,19 +468,45 @@ function startOver(
           log("info", configLoadedLine(entry, cause, settled));
           // A reload changes the bar of every session drawn from the entry,
           // even one that failed and kept the old config: its indicator says so.
-          for (const sessionId of sessions) host.wake(sessionId, "reload");
+          for (const sessionId of sessions)
+            feeds.wake(sessionId, "reload", time.tick);
         },
         // [LAW:single-enforcer] What a session's view draws from moved: its
         // feed's next frame is brought forward, whatever moved it: a request's
         // facts, a refresh landing after its deadline, a source publishing, a
         // pick. The dump link, which no view holds, wakes the same way.
-        onViewChanged: (sessionId) => host.wake(sessionId, "data"),
+        onViewChanged: (sessionId) => feeds.wake(sessionId, "data", time.tick),
       },
     },
   );
+  // [LAW:no-ambient-temporal-coupling] Each open feed's pin, from its open
+  // to its close: the view's hold and the reaction that wakes the feed when
+  // the session's state moves, so the reaction lives exactly as long as the
+  // feed that hears it.
+  const pin = (sessionId: SessionId): (() => void) => {
+    const unhold = renderCache.pin(sessionId);
+    const unwatch = reaction(
+      () => sessionState.revision(sessionId),
+      () => feeds.wake(sessionId, "state", time.tick),
+    );
+    return () => {
+      unwatch();
+      // [LAW:single-enforcer] A feed's pin is its life: releasing it is the
+      // one moment the feed stops drawing, so its drawn copies retire with it.
+      renderCache.stopDrawing(sessionId, "feed");
+      unhold();
+    };
+  };
+  const feeds: Feeds = new Feeds({
+    draw: (sessionId, fps, readings, following, laneFeeds) =>
+      renderFrame(parts, sessionId, fps, readings, following, laneFeeds),
+    pin,
+    log,
+    periods: FEED_PERIODS,
+  });
   const parts: RendererParts = {
     ...host,
-    clock,
+    time,
     linkSigner,
     sessionState,
     renderCache,
@@ -419,6 +514,8 @@ function startOver(
     renderWarnings,
     effectSessions,
     laneActs,
+    menuIdle,
+    feeds,
   };
   const reloadConfig = (origin: RenderOrigin): void =>
     renderCache.reload(origin.projectDir, origin.cwd, origin.target.path, {
@@ -430,7 +527,7 @@ function startOver(
     stateDir: inputs.stateDir,
     locations: inputs.locations,
     configWrites,
-    clickLanded: (sessionId) => host.menuIdle.clicked(sessionId, now()),
+    clickLanded: (sessionId) => menuIdle.clicked(sessionId, time.tick),
     log,
     acts,
     now,
@@ -473,59 +570,10 @@ function startOver(
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
-  // [LAW:single-enforcer] Each open feed's pin, from its `pin` to its
-  // `unpin`: the view's hold and the reaction that wakes the feed when the
-  // session's state moves, so the reaction lives exactly as long as the feed
-  // that hears it.
-  const pins = new Map<SessionId, () => void>();
-  const pin = (sessionId: SessionId): void => {
-    // [LAW:no-silent-failure] A feed opens once per session, so a second pin
-    // is the host's bug.
-    if (pins.has(sessionId))
-      throw new Error(`pin of session ${sessionId}, whose feed is pinned`);
-    const unhold = renderCache.pin(sessionId);
-    const unwatch = reaction(
-      () => sessionState.revision(sessionId),
-      () => host.wake(sessionId, "state"),
-    );
-    pins.set(sessionId, () => {
-      unwatch();
-      // [LAW:single-enforcer] A feed's pin is its life: releasing it is the
-      // one moment the feed stops drawing, so its drawn copies retire with it.
-      renderCache.stopDrawing(sessionId, "feed");
-      unhold();
-    });
-  };
-  const unpin = (sessionId: SessionId): void => {
-    const release = pins.get(sessionId);
-    if (release === undefined)
-      throw new Error(
-        `unpin of session ${sessionId}, whose feed is not pinned`,
-      );
-    pins.delete(sessionId);
-    release();
-  };
   // [LAW:types-are-the-program] Exhaustive over the pushes: a new arm is a
   // compile error here until the renderer answers it.
-  const pushed = (push: AdapterPush, at: Instant): AdapterReply => {
+  const pushed = (push: AdapterPush): AdapterReply => {
     switch (push.kind) {
-      case "frame":
-        return {
-          kind: "frame",
-          frame: renderFrame(parts, push.session, push.fps, at, {
-            following: new Set(push.following),
-            feeds: push.feeds,
-            idleSince: push.idleSince,
-          }),
-        };
-      case "lanes":
-        return { kind: "lanes", lanes: viewLanes(parts, push.session) };
-      case "pin":
-        pin(push.session);
-        return { kind: "pin" };
-      case "unpin":
-        unpin(push.session);
-        return { kind: "unpin" };
       case "stats":
         return {
           kind: "stats",
@@ -537,6 +585,8 @@ function startOver(
               observers: sessionState.observers(),
               revision: sessionState.latestRevision(),
             },
+            menuIdle: menuIdle.stats(),
+            framesDrawn: feeds.drawn(),
           },
         };
       case "debug":
@@ -559,6 +609,8 @@ function startOver(
         configWrites.close();
         return { kind: "close-journal" };
       case "close-views":
+        // The feeds first: each releases its pin on a view the close ends.
+        feeds.closeAll(time.tick);
         renderCache.close();
         return { kind: "close-views" };
       case "close-session-state":
@@ -569,6 +621,8 @@ function startOver(
   return mainRenderer(
     {
       ...parts,
+      menuIdle,
+      feeds,
       verbs: verbsOver(verbCtx),
       mint,
       acts,

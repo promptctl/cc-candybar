@@ -59,7 +59,9 @@ describe("readers take no value from a comment line", () => {
     expect(sgrOfHex(src, /fg: "(#[0-9a-f]{6})"/, 38)).toBe(
       JSON.stringify("\x1b[38;2;200;40;40m"),
     );
-    expect(sgrOfHex("// fg: \"#000000\"\n", /fg: "(#[0-9a-f]{6})"/, 38)).toBeNull();
+    expect(
+      sgrOfHex('// fg: "#000000"\n', /fg: "(#[0-9a-f]{6})"/, 38),
+    ).toBeNull();
   });
 
   it("lit", () => {

@@ -18,9 +18,9 @@ import { rendererAdapters } from "./daemon/production-adapters.js";
 import { linkSigner } from "./click/link-signer.js";
 import { daemonGates } from "./daemon/foundations/update-keys.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
-import { instantAt } from "./utils/instant.js";
+import { readingsAt } from "./utils/instant.js";
 import { loadMainRenderer } from "./renderer/main.js";
-import type { Renderer } from "./renderer-interface/interface.js";
+import { timed, type TimedRenderer } from "./renderer-interface/interface.js";
 import type { AdapterToHost } from "./renderer-interface/adapter.js";
 import { bakedDigest } from "./daemon/build-currency.js";
 import {
@@ -41,7 +41,7 @@ export function runRenderer(world: World): void {
   // the host's close does: through the renderer's own close step, so a
   // renderer the host never closed (its host died, a throw ended it) loses
   // only what no flush could save.
-  let renderer: Renderer | null = null;
+  let renderer: TimedRenderer | null = null;
   // [LAW:single-enforcer] One way out, taken once, whichever end came first.
   let leaving = false;
   const leave = async (code: number): Promise<void> => {
@@ -55,7 +55,11 @@ export function runRenderer(world: World): void {
         .answer({
           kind: "adapter",
           push: { kind: "close-session-state" },
-          at: instantAt(world.clock),
+          // [LAW:effects-at-boundaries] exception: the process is leaving and
+          // its host may be gone, so this last turn's readings are its own. Its
+          // tick is on another origin than the host's, which nothing reads:
+          // the process ends once the flush has, and no `due` comes after.
+          ...readingsAt(world.clock),
         })
         .catch(
           (thrown: unknown) =>
@@ -125,7 +129,7 @@ function booted(
   world: World,
   boot: RendererBoot,
   reaches: AdapterToHost,
-): Renderer {
+): TimedRenderer {
   const own = bakedDigest();
   if (boot.digest !== own)
     throw new Error(
@@ -139,9 +143,9 @@ function booted(
   const paths = daemonPaths(host);
   const { clock } = world;
   const adapters = rendererAdapters(paths, clock);
-  return loadMainRenderer({
-    clock,
-    now: () => instantAt(clock),
+  // [LAW:single-enforcer] Each turn timed in this process, around its
+  // answer: the host tells the hop from the turn.
+  const renderer = loadMainRenderer({
     storage: {
       ...adapters.storage(reaches.log),
       doctor: adapters.doctorStores,
@@ -154,4 +158,5 @@ function booted(
     gates: daemonGates(),
     memoryLimitBytes: boot.memoryLimitBytes,
   }).start(reaches);
+  return timed(renderer, () => clock.monotonic());
 }

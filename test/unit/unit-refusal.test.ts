@@ -1,8 +1,21 @@
 import { ignoredFrom } from "../helpers/package-files";
-import { allows, isUnderRoot, refusal, type Call, type PackageFiles } from "../helpers/unit-refusal";
+import {
+  allows,
+  isUnderRoot,
+  refusal,
+  type Call,
+  type PackageFiles,
+} from "../helpers/unit-refusal";
 
-const ROOT: PackageFiles = { root: "/work/pkg", ignored: ["dist/", "test-records/", ".claude/worktrees/", "debug.log"] };
-const call = (name: string, ...args: unknown[]): Call => ({ surface: "filesystem", call: name, args });
+const ROOT: PackageFiles = {
+  root: "/work/pkg",
+  ignored: ["dist/", "test-records/", ".claude/worktrees/", "debug.log"],
+};
+const call = (name: string, ...args: unknown[]): Call => ({
+  surface: "filesystem",
+  call: name,
+  args,
+});
 
 describe("which file system calls a unit test may make", () => {
   test.each([
@@ -38,8 +51,18 @@ describe("which file system calls a unit test may make", () => {
     expect(allows(call("fs.openSync", "/work/pkg/a", "w"), ROOT)).toBe(false);
     expect(allows(call("fs.openSync", "/work/pkg/a", "r"), ROOT)).toBe(true);
     expect(allows(call("fs.openSync", "/work/pkg/a"), ROOT)).toBe(true);
-    expect(allows(call("fs.open", "/work/pkg/a", () => undefined), ROOT)).toBe(true);
-    expect(allows(call("fs.open", "/tmp/a", () => undefined), ROOT)).toBe(false);
+    expect(
+      allows(
+        call("fs.open", "/work/pkg/a", () => undefined),
+        ROOT,
+      ),
+    ).toBe(true);
+    expect(
+      allows(
+        call("fs.open", "/tmp/a", () => undefined),
+        ROOT,
+      ),
+    ).toBe(false);
   });
 
   test("a descriptor operation passes, because its open was judged", () => {
@@ -48,8 +71,18 @@ describe("which file system calls a unit test may make", () => {
   });
 
   test("every other surface is refused whole, whatever its arguments", () => {
-    for (const surface of ["socket", "child process", "network", "clock"] as const) {
-      expect(allows({ surface, call: "x.y", args: ["/work/pkg/package.json"] }, ROOT)).toBe(false);
+    for (const surface of [
+      "socket",
+      "child process",
+      "network",
+      "clock",
+    ] as const) {
+      expect(
+        allows(
+          { surface, call: "x.y", args: ["/work/pkg/package.json"] },
+          ROOT,
+        ),
+      ).toBe(false);
     }
   });
 });
@@ -69,8 +102,13 @@ describe("what lies under the package root", () => {
 
 describe("the refusal's message", () => {
   test("names the call, the surface and the test", () => {
-    const text = refusal(call("fs.writeFileSync", "/tmp/a", "data"), "writes a file");
-    expect(text).toContain('reached the filesystem: fs.writeFileSync("/tmp/a", "data") in test "writes a file"');
+    const text = refusal(
+      call("fs.writeFileSync", "/tmp/a", "data"),
+      "writes a file",
+    );
+    expect(text).toContain(
+      'reached the filesystem: fs.writeFileSync("/tmp/a", "data") in test "writes a file"',
+    );
   });
 
   test("says the call was outside a test, at load or in a hook, when no test is running", () => {
@@ -82,11 +120,17 @@ describe("the refusal's message", () => {
 
 describe("what git's ignored listing becomes", () => {
   test("keeps a path whose name has a special character as itself", () => {
-    expect(ignoredFrom("dist/\0tést/\0debug.log\0")).toEqual(["dist/", "tést/", "debug.log"]);
+    expect(ignoredFrom("dist/\0tést/\0debug.log\0")).toEqual([
+      "dist/",
+      "tést/",
+      "debug.log",
+    ]);
   });
 
   test("leaves node_modules at any depth out, because the lockfile pins it", () => {
-    expect(ignoredFrom("node_modules/\0scripts/bar-web/node_modules/\0dist/\0")).toEqual(["dist/"]);
+    expect(
+      ignoredFrom("node_modules/\0scripts/bar-web/node_modules/\0dist/\0"),
+    ).toEqual(["dist/"]);
   });
 
   test("keeps a path that only ends in node_modules", () => {

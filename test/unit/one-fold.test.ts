@@ -5,14 +5,15 @@
 // load refuses naming both names.
 
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
-import {
-  unauthored,
-} from "../../src/config/dsl-loader";
+import { unauthored } from "../../src/config/dsl-loader";
 import { declaredVariables } from "../../src/config/loader/refs";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import type { DslConfig } from "../../src/config/dsl-types";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
-import { parseAndValidate, validateConfig } from "../helpers/parse-and-validate";
+import {
+  parseAndValidate,
+  validateConfig,
+} from "../helpers/parse-and-validate";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 

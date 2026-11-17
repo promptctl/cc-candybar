@@ -37,6 +37,22 @@ describe("KeyedSerialQueue", () => {
     await expect(b).resolves.toBe("after");
   });
 
+  test("a task placed idle runs behind every task placed after it while it waited", async () => {
+    const queue = new KeyedSerialQueue<string>();
+    const held = gate();
+    const ran: string[] = [];
+    const task = (name: string) => async (): Promise<void> => {
+      ran.push(name);
+    };
+    const running = queue.run("k", () => held.wait);
+    const idle = queue.run("k", task("idle"), "idle");
+    const last = queue.run("k", task("last"));
+    const first = queue.run("k", task("first"), "first");
+    held.open();
+    await Promise.all([running, idle, last, first]);
+    expect(ran).toEqual(["first", "last", "idle"]);
+  });
+
   test("another key does not wait", async () => {
     const queue = new KeyedSerialQueue<string>();
     const held = gate();

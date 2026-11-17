@@ -38,7 +38,11 @@ const vert = (...rows: string[][]): LayoutNode => ({
 // not the bundled default's specific shape. Two named rows, so a replaced
 // row's POSITION is observable.
 const DFLT: DslConfig = {
-  globals: { default_separator: " ", default_empty_value: "-", palette: "textual-dark" },
+  globals: {
+    default_separator: " ",
+    default_empty_value: "-",
+    palette: "textual-dark",
+  },
   variables: {
     ...PAYLOAD_INPUTS,
     foo: { kind: "literal", value: "default-foo" },
@@ -86,7 +90,10 @@ describe("mergeWithDefault", () => {
     };
     const out = mergeWithDefault(raw, DFLT);
     expect(out.variables.foo).toEqual({ kind: "literal", value: "user-foo" });
-    expect(out.variables.bar).toEqual({ kind: "literal", value: "default-bar" });
+    expect(out.variables.bar).toEqual({
+      kind: "literal",
+      value: "default-bar",
+    });
     expect(out.variables.baz).toEqual({ kind: "literal", value: "user-baz" });
   });
 
@@ -227,7 +234,9 @@ describe("mergeWithDefault", () => {
   });
 
   test("rows: `{ rows: {} }` is the merge's identity", () => {
-    expect(mergeWithDefault({ root: { rows: {} } }, DFLT).root).toEqual(DFLT.root);
+    expect(mergeWithDefault({ root: { rows: {} } }, DFLT).root).toEqual(
+      DFLT.root,
+    );
   });
 });
 
@@ -250,7 +259,9 @@ describe("validateConfig", () => {
       ...DFLT,
       root: rootOf(vert(["does-not-exist"])),
     };
-    expect(() => validateConfig(unauthored(merged), "<test>")).toThrow(ConfigError);
+    expect(() => validateConfig(unauthored(merged), "<test>")).toThrow(
+      ConfigError,
+    );
   });
 
   test("throws ConfigError when a merged template references an unknown variable", () => {
@@ -261,6 +272,8 @@ describe("validateConfig", () => {
         a: { template: " {{ .does_not_exist }} " } as SegmentDecl,
       },
     };
-    expect(() => validateConfig(unauthored(merged), "<test>")).toThrow(ConfigError);
+    expect(() => validateConfig(unauthored(merged), "<test>")).toThrow(
+      ConfigError,
+    );
   });
 });

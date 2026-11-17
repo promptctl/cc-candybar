@@ -108,7 +108,9 @@ describe("formatReport", () => {
   it("says when the machine was busier than it has cores", () => {
     const busy = reportOf([row("a", [1, 1, 1])], { loadAtEnd: 40 });
     expect(formatReport(busy, null)).toMatch(/BUSY/);
-    expect(formatReport(reportOf([row("a", [1, 1, 1])]), null)).not.toMatch(/BUSY/);
+    expect(formatReport(reportOf([row("a", [1, 1, 1])]), null)).not.toMatch(
+      /BUSY/,
+    );
   });
 
   it("keeps a benchmark that did not run in the report, and says why", () => {

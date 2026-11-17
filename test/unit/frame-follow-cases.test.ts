@@ -5,7 +5,10 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PROTOCOL_VERSION, type Response } from "../../src/daemon/foundations/protocol";
+import {
+  PROTOCOL_VERSION,
+  type Response,
+} from "../../src/daemon/foundations/protocol";
 import { isRefusal, type StreamEnd } from "../../src/daemon/client-frames";
 import {
   afterStreamEnd,
@@ -23,7 +26,11 @@ interface Cases {
   readonly streamEnd: readonly {
     readonly end:
       | { readonly kind: "failed" | "closed-there" }
-      | { readonly kind: "refused"; readonly code: string; readonly daemonV?: Version };
+      | {
+          readonly kind: "refused";
+          readonly code: string;
+          readonly daemonV?: Version;
+        };
     readonly then: { readonly kind: string; readonly kick?: boolean };
   }[];
   readonly worthSaying: readonly {
@@ -39,19 +46,30 @@ interface Cases {
 }
 
 const CASES = JSON.parse(
-  readFileSync(join(__dirname, "..", "fixtures", "frame-follow-cases.json"), "utf8"),
+  readFileSync(
+    join(__dirname, "..", "fixtures", "frame-follow-cases.json"),
+    "utf8",
+  ),
 ) as Cases;
 
 const versionOf = (v: Version | undefined): number | undefined =>
-  v === undefined ? undefined : v === "older" ? PROTOCOL_VERSION - 1 : PROTOCOL_VERSION + 1;
+  v === undefined
+    ? undefined
+    : v === "older"
+      ? PROTOCOL_VERSION - 1
+      : PROTOCOL_VERSION + 1;
 
 function responseOf(raw: Cases["message"][number]["resp"]): Response {
   const { daemonV, ...rest } = raw;
   const v = versionOf(daemonV);
-  return (v === undefined ? rest : { ...rest, daemonV: v }) as unknown as Response;
+  return (v === undefined
+    ? rest
+    : { ...rest, daemonV: v }) as unknown as Response;
 }
 
-function endOf(raw: Cases["streamEnd"][number]["end"]): Exclude<StreamEnd, { kind: "closed-here" }> {
+function endOf(
+  raw: Cases["streamEnd"][number]["end"],
+): Exclude<StreamEnd, { kind: "closed-here" }> {
   switch (raw.kind) {
     case "failed":
       return { kind: "failed", error: new Error("ECONNREFUSED") };
@@ -60,18 +78,29 @@ function endOf(raw: Cases["streamEnd"][number]["end"]): Exclude<StreamEnd, { kin
     case "refused":
       return {
         kind: "refused",
-        resp: responseOf({ ok: false, code: raw.code, error: "said", daemonV: raw.daemonV }) as Extract<Response, { ok: false }>,
+        resp: responseOf({
+          ok: false,
+          code: raw.code,
+          error: "said",
+          daemonV: raw.daemonV,
+        }) as Extract<Response, { ok: false }>,
       };
   }
 }
 
-test.each(CASES.message)("message %j: a refusal ends the stream, a frame is drawn", ({ resp, refusal }) => {
-  expect(isRefusal(responseOf(resp))).toBe(refusal);
-});
+test.each(CASES.message)(
+  "message %j: a refusal ends the stream, a frame is drawn",
+  ({ resp, refusal }) => {
+    expect(isRefusal(responseOf(resp))).toBe(refusal);
+  },
+);
 
 test.each(CASES.streamEnd)("stream end %j", ({ end, then }) => {
   const next = afterStreamEnd(endOf(end));
-  expect({ kind: next.kind, ...(next.kind === "reconnect" && { kick: next.kick }) }).toEqual(then);
+  expect({
+    kind: next.kind,
+    ...(next.kind === "reconnect" && { kick: next.kick }),
+  }).toEqual(then);
 });
 
 test.each(CASES.worthSaying)("worth saying %j", ({ last, next, says }) => {

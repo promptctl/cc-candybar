@@ -126,9 +126,12 @@ interface Renderer {
   answer(input: RendererInput): Promise<RendererOutput>;
 }
 
+// Every input carries two readings the host made as its mailbox slot came:
+// the wall instant a frame shows, and a monotonic tick, which everything the
+// renderer schedules is measured on, so a stepped wall moves no schedule.
 type RendererInput =
-  | { kind: "start"; start: Start; at: Instant }
-  | { kind: "event"; event: Event; at: Instant };
+  | { kind: "start"; start: Start; at: Instant; tick: Tick }
+  | { kind: "event"; event: Event; at: Instant; tick: Tick };
 
 // [LAW:one-source-of-truth] Complete, like a world state: a renderer that
 // (re)starts holds everything it would hold had it never stopped, except the
@@ -139,6 +142,7 @@ interface Start {
   readonly linkKey: LinkKey;
   readonly stored: StoredState;
   readonly sessions: readonly SessionSnapshot[];
+  readonly viewers: Viewers;                 // who watches each session, whole
 }
 
 interface SessionSnapshot {
@@ -155,8 +159,8 @@ type Event =
   | { kind: "world-state"; worldState: WorldState }
   | { kind: "config"; session: SessionId; config: ConfigSnapshot }
   | { kind: "effect-done"; of: EffectId; outcome: Outcome<EffectResult> }
-  | { kind: "due"; due: Scheduled }
-  | { kind: "viewer"; session: SessionId; surface: Surface; on: boolean }
+  | { kind: "due" }                          // the tick the last output declared has come
+  | { kind: "viewers"; viewers: Viewers }    // who watches each session, whole
   | { kind: "retire"; session: SessionId };
 
 interface RendererOutput {
@@ -167,14 +171,20 @@ interface RendererOutput {
   // [LAW:nothing-unseen] The turn's own record. A renderer writes no log;
   // the host writes this one.
   readonly record: TurnRecord;
+  // The frames this turn's feeds drew, which the host sends each subscriber
+  // whose lane's answer changed.
+  readonly frames: readonly PushedFrame[];
 }
 
 interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
-  // The sessions whose tmux status row is on. The host holds each one's row
-  // at the pane its newest request reports, and lets a row go once its
-  // session is no longer named.
-  readonly tmuxStatus: readonly SessionId[];
+  // The lanes each viewed session switches on. The host gates subscribers on
+  // them, and holds the tmux status row of each session whose row is on at
+  // the pane its newest request reports.
+  readonly lanes: Readonly<Record<SessionId, LaneSwitches>>;
+  // The one tick the renderer next wants a turn at, or null. The host keeps
+  // one timer for it and hands in a `due` when it comes.
+  readonly wake: Tick | null;
 }
 
 // Where a declaration came from is what repository trust is judged on. A layer
@@ -220,7 +230,7 @@ type PluginRef = Pick<Plugin, "origin" | "name">;
 - **Every input gets exactly one output, in order.** The host sends the next input to a renderer only after the last one's output arrived. That serialization is the state machine's turn, owned by the renderer's mailbox in the host. A turn is synchronous, and inputs are plain data. [LAW:no-ambient-temporal-coupling]
 - **A multi-step act is a chain.** Each step is one effect, the chain's phase is state machine state, and the state machine returns the next step when the last one's `effect-done` arrives. `type-slash` is one step because its check and its act must not be separated. A pane's identity is one function of the pane, with no per-request stamp.
 - **A request is answered by its `present` effect.** The statusline arm of `present` carries the request it answers, and only that arm does. A request whose output holds no such effect is answered with a failure naming the renderer, never with an empty bar. One mechanism delivers every frame to every surface. [LAW:one-type-per-behavior]
-- **Time is handed in.** Every input carries `at`. A renderer asks to be woken with a `schedule` effect and is woken by a `due` event carrying the token it chose. Animation is a renderer scheduling its next frame.
+- **Time is handed in.** Every input carries `at` and `tick`, read by the host as the input's slot comes. A renderer reads no clock and sets no timer: every output declares the tick it next wants a turn at, and the host hands in a `due` when it comes. A renderer's due turn runs the work it held for that tick, closes idle menus, and draws its feeds' frames. Animation is a renderer declaring its next frame's tick.
 - **The state a draw used to write is the state machine's.** Frame memory (on the tmux status row, the links its frame carried) and animation clocks are renderer state keyed by session and surface. The draw returns a frame and its memory as values; the state machine stores them. A frame drawn for a session reflects every event whose turn completed before the draw began, and no part of one whose turn has not. [LAW:effects-at-boundaries]
 - **Subscriptions replace `follow`, `declare` and `key`.** The host knows every session's locator from the requests it receives. A source's key is evaluated by the renderer over its own store, as today, and its digest travels in `subscriptions`; two renderers subscribed to one digest share one run, and a new key is a new run served stale-while-revalidate: the old reading stands until the new one lands. That is still a loop from world state to keys to reads to world state, but it is the one loop and the host owns it, the way the Elm runtime owns subscriptions. A declaration has one canonical form: its environment names are a sorted set, every digest is taken over JSON with keys sorted at every level, and a session's subscriptions leave in digest order. So two declarations that mean one read are one run, and an output is the same bytes whatever order a config declares in.
 - **The collector is the one checkpoint for reads.** A subscription asks the host to read a path or run a shell command, so the collector judges every declaration when it arrives: absolute paths, regex captures and the shell sources' minimum TTL with the loader's own specs, and repository trust by the layer or plugin a declaration came from. A refused declaration is a failed reading for that source, with the reason. The renderer's loader parses declarations and does not judge them. [LAW:single-enforcer]
@@ -246,8 +256,7 @@ type Effect =
   | { kind: "approve-repo"; session: SessionId; role: LayerRole; answer: boolean }
   | { kind: "apply-update"; session: SessionId }
   | { kind: "open"; session: SessionId | null; url: string }
-  | { kind: "copy"; session: SessionId | null; text: string }
-  | { kind: "schedule"; at: Instant; due: Scheduled };
+  | { kind: "copy"; session: SessionId | null; text: string };
 
 type Surface = "statusline" | PushedSurface;
 type PushedSurface = "band" | "pane" | "tmux-status" | "browser";
@@ -278,7 +287,7 @@ interface Program {
 }
 ```
 
-`Address` is a setting's place inside its document, the keys and indexes from the document's root. `StoreName` is one name per durable store the profile holds; `SlashLine` is a slash command and its arguments, already parsed by the grammar the bar uses today; `Pane` is a tmux pane and its server, from the client hints the renderer holds for the session; `Scheduled` is a token the renderer chose and gets back.
+`Address` is a setting's place inside its document, the keys and indexes from the document's root. `StoreName` is one name per durable store the profile holds; `SlashLine` is a slash command and its arguments, already parsed by the grammar the bar uses today; `Pane` is a tmux pane and its server, from the client hints the renderer holds for the session.
 
 - **An act carries where it goes.** A slash line, a restart and a surface name the pane they act in, from the client hints the renderer holds for the session, so an act after a daemon restart goes where the bar the user clicked was drawn. A session that reported no pane is refused by the renderer, with the hints' own reason, and no act is sent. The band's install is the exception, because it needs no pane: it carries the session's tmux facts as reported, and only its `/reload-plugins` is refused outside tmux. The host decides nothing about where an act goes.
 - **A turn's acts follow its landing.** Every act in a turn is performed only once the turn's changes and its trust-book answers have landed, in the order the turn returned them. A turn with no changes lands at once, and the daemon's close is one more landing outcome, `closing`, so no act starts once the close has begun, and each settles `closing`. An act whose changes were refused or failed is `skipped`, holding no error of its own, since the changes' outcome already says why. An act over in its turn (copy, open, a slash line, an update) is settled before the click is answered; a run, a restart and a surface outlive the click, and their `effect-done` arrives when they end. An act's failure shows on its session's bar, joining a click error no answer has carried yet. One with no session, or whose renderer has ended, shows on every bar as the daemon's.
@@ -310,7 +319,7 @@ interface Program {
 - **What needs an install.** A new built-in field of world state, a change to how a source is read, a new effect or a new surface adapter is host code, tried by installing it.
 - **A renderer** is named by the `renderer` field of the client's session context: its name from `CC_CANDYBAR_NAME`, absent meaning the default name, `main`, and its bundle, the client's own. A session is moved to another renderer by starting Claude Code with other values (goals.md R-16). Only a Claude Code client's request binds a name to a bundle; no click, timer or later input names code.
 - **Every renderer runs in its own process.** The supervisor starts one as the host arms, from the bound bundle, and speaks the renderer interface to it as JSON lines over its stdio, the first line a boot carrying the digest of the source the host was built from, which a renderer built from other source refuses, with the reason on the bar's ⚠. Its life is one state, `starting → live → down → starting`: an input while it starts waits for the start and goes after the start's own, and an input while it is down fails as `down` at once, counted and said once at the next start, so a dead renderer spawns nothing per request. A renderer that ended is started again after a backoff that doubles while each ends within a minute of its start or before its boot answered, up to a minute, and is none after one that lived. A name bound to one bundle refuses a second bundle loudly, naming both, until the first is retired. The in-process transport is the one `cc-candybar check` and tests use, since they draw through the same renderer with no host process.
-- **A start is complete.** A renderer that starts again holds nothing, so the host delivers, through its one path to the renderer, one `start` turn carrying the config of every session the collector reads whose newest request it holds, with that session's latest stamp, and a `pin` for every open feed. The start is one turn so that its output names every session the renderer serves: a turn per session would declare one, and the host would release every other session's subscriptions and tmux status row until its own turn took them back. What the ended renderer held (its watches, its storage folders) stays held until the new one has started and its `start` turn has answered, so a folder both name is never closed and reopened; a renderer that ended before that hands nothing on.
+- **A start is complete.** A renderer that starts again holds nothing, so the host delivers, through its one path to the renderer, one `start` turn carrying the config of every session the collector reads whose newest request it holds, with that session's latest stamp, and the viewers of every watched session. The start is one turn so that its output names every session the renderer serves: a turn per session would declare one, and the host would release every other session's subscriptions and tmux status row until its own turn took them back. What the ended renderer held (its watches, its storage folders) stays held until the new one has started and its `start` turn has answered, so a folder both name is never closed and reopened; a renderer that ended before that hands nothing on.
 - **Ids are the host's.** Each id a renderer mints for an effect, a watch or a storage hold is translated to one the host mints, never repeated across renderers, so an id from an ended renderer names nothing in the next and its use fails as `down`.
 - **A renderer that stops answering is ended.** The supervisor pings a live renderer every ten seconds, answered outside any turn; one owed an answer for a minute, which is well above a compile or a reload of every entry, is ended as hung and started again. A boot is judged by the same minute.
 - **The memory limit is the host's whole.** The backstop charges the host and its renderer together: on macOS one `footprint` call over both pids, on Linux the two RSS readings, the renderer's from its latest ping. A breach writes each process's attribution, then the renderer's heap snapshot, then the host's, and the host exits as today. The doctor's daemon row and daemon-stats report each process's share beside the total.
@@ -390,7 +399,7 @@ Each step leaves a working bar. The renderer leaves the host's process first, th
 | decomposition | The host's purpose is one sentence, the bar's boundary with the world, and each of its parts has one: accept, route, read world state, discover config, carry out effects, run a surface, supervise, record. A renderer's is "answer each input". | The host holds everything world-facing and is the part most likely to become a god process. Its parts must stay apart, and a part that learns a verb's meaning or a renderer's state has broken the boundary. Its parts meet only through interfaces, so one can move to its own process, as Chrome's services did. |
 | effects-at-boundaries | The renderer is pure in the full sense: no I/O, no clock, no log. The host is the only edge. | — |
 | one-way-deps | Host → renderer, launchd → host. Nothing points up. | — |
-| no-ambient-temporal-coupling | The host owns every order: per-renderer input, effects within a turn, a run before its refresh, a schedule before its `due`. | — |
+| no-ambient-temporal-coupling | The host owns every order: per-renderer input, effects within a turn, a run before its refresh, a declared wake before its `due`. Every schedule is measured on ticks, which never run back. | — |
 | single-enforcer | The collector judges every read a renderer subscribes to, the interpreter every effect, the host every signed link, the renderer that drew a row every range id on it; repository trust has one keeper. | — |
 | types-are-the-program | Effects are typed operations; a config write is a `change` guarded per setting; inputs and outputs are closed unions. | The wire loses types, so each side parses what it receives. That is one parser per direction at the one boundary, not a duplicate check. |
 | one-source-of-truth | World state lives in the collector, renderer state in its renderer, durable state in the profile's files, written only by effects. | `subscriptions` make a loop from world state to keys to reads. It is the one loop and has one owner; it is not a second source. |

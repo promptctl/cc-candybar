@@ -72,12 +72,16 @@ function onlySpanChanged(
   span: { start: number; end: number },
   replacement: string,
 ): void {
-  expect(after).toBe(before.slice(0, span.start) + replacement + before.slice(span.end));
+  expect(after).toBe(
+    before.slice(0, span.start) + replacement + before.slice(span.end),
+  );
 }
 
 describe("parseDocument", () => {
   test("parses comments, single quotes, unquoted and quoted keys, trailing commas, hex and escapes", () => {
-    const doc = parseDocument(`{ a: 0x1F, 'b': 'it\\'s', "c d": [1, .5, -Infinity, NaN, null, true,], /* c */ e: "\\u0041", }`);
+    const doc = parseDocument(
+      `{ a: 0x1F, 'b': 'it\\'s', "c d": [1, .5, -Infinity, NaN, null, true,], /* c */ e: "\\u0041", }`,
+    );
     const value = (k: string) => nodeAt(doc, [k]);
     expect(value("a")).toMatchObject({ kind: "number", value: 31 });
     expect(value("b")).toMatchObject({ kind: "string", value: "it's" });
@@ -85,14 +89,23 @@ describe("parseDocument", () => {
     const cd = value("c d");
     expect(cd?.kind).toBe("array");
     expect(cd?.kind === "array" && cd.elements.map((n) => n.kind)).toEqual([
-      "number", "number", "number", "number", "null", "boolean",
+      "number",
+      "number",
+      "number",
+      "number",
+      "null",
+      "boolean",
     ]);
   });
 
   test("spans are exact: textOf a node reproduces its source bytes", () => {
     const doc = parseDocument(CONFIG);
-    expect(textOf(CONFIG, nodeAt(doc, ["globals", "palette"])!)).toBe("'catppuccin-mocha'");
-    expect(textOf(CONFIG, nodeAt(doc, ["segments", "quoted-name"])!)).toBe('{ template: "x", bg: "surface" }');
+    expect(textOf(CONFIG, nodeAt(doc, ["globals", "palette"])!)).toBe(
+      "'catppuccin-mocha'",
+    );
+    expect(textOf(CONFIG, nodeAt(doc, ["segments", "quoted-name"])!)).toBe(
+      '{ template: "x", bg: "surface" }',
+    );
   });
 
   test("a syntax error is a loud Json5EditError with an offset", () => {
@@ -126,23 +139,49 @@ describe("setValue — replacing an existing value touches only that value's spa
   test("a number and a nested segment field", () => {
     const doc = parseDocument(CONFIG);
     const padded = setValue(CONFIG, ["globals", "padding"], "0");
-    onlySpanChanged(CONFIG, padded, nodeAt(doc, ["globals", "padding"])!.span, "0");
-    const pal = setValue(CONFIG, ["segments", "directory", "palette"], '"dracula"');
-    onlySpanChanged(CONFIG, pal, nodeAt(doc, ["segments", "directory", "palette"])!.span, '"dracula"');
+    onlySpanChanged(
+      CONFIG,
+      padded,
+      nodeAt(doc, ["globals", "padding"])!.span,
+      "0",
+    );
+    const pal = setValue(
+      CONFIG,
+      ["segments", "directory", "palette"],
+      '"dracula"',
+    );
+    onlySpanChanged(
+      CONFIG,
+      pal,
+      nodeAt(doc, ["segments", "directory", "palette"])!.span,
+      '"dracula"',
+    );
   });
 
   test("a multi-line replacement is re-indented to the entry's own line", () => {
     const src = `{\n  presets: {\n    compact: {\n      root: "old",\n    },\n  },\n}\n`;
-    const after = setValue(src, ["presets", "compact", "root"], `{\n  h: [\n    "a",\n  ],\n}`);
-    expect(after).toBe(`{\n  presets: {\n    compact: {\n      root: {\n        h: [\n          "a",\n        ],\n      },\n    },\n  },\n}\n`);
+    const after = setValue(
+      src,
+      ["presets", "compact", "root"],
+      `{\n  h: [\n    "a",\n  ],\n}`,
+    );
+    expect(after).toBe(
+      `{\n  presets: {\n    compact: {\n      root: {\n        h: [\n          "a",\n        ],\n      },\n    },\n  },\n}\n`,
+    );
     expect(JSON5.parse(after).presets.compact.root).toEqual({ h: ["a"] });
   });
 });
 
 describe("setValue — adding an entry matches the container's own style", () => {
   test("appends after the last entry of a multi-line object, AFTER its trailing comment, with its trailing comma", () => {
-    const after = setValue(CONFIG, ["segments", "directory", "bg"], '"surface"');
-    expect(after).toContain(`      palette: "nord",\n      bg: "surface",\n    },`);
+    const after = setValue(
+      CONFIG,
+      ["segments", "directory", "bg"],
+      '"surface"',
+    );
+    expect(after).toContain(
+      `      palette: "nord",\n      bg: "surface",\n    },`,
+    );
     expect(JSON5.parse(after).segments.directory.bg).toBe("surface");
     // Nothing else moved.
     expect(after.replace(`      bg: "surface",\n`, "")).toBe(CONFIG);
@@ -150,30 +189,40 @@ describe("setValue — adding an entry matches the container's own style", () =>
 
   test("a trailing comment on the last entry stays on its own line", () => {
     const src = `{\n  a: 1, // about a\n}\n`;
-    expect(setValue(src, ["b"], "2")).toBe(`{\n  a: 1, // about a\n  b: 2,\n}\n`);
+    expect(setValue(src, ["b"], "2")).toBe(
+      `{\n  a: 1, // about a\n  b: 2,\n}\n`,
+    );
   });
 
   test("no trailing comma in the source → none added", () => {
     const src = `{\n  a: 1 // about a\n}\n`;
-    expect(setValue(src, ["b"], "2")).toBe(`{\n  a: 1, // about a\n  b: 2\n}\n`);
+    expect(setValue(src, ["b"], "2")).toBe(
+      `{\n  a: 1, // about a\n  b: 2\n}\n`,
+    );
   });
 
   test("an inline object grows inline", () => {
     expect(setValue(`{ a: 1 }`, ["b"], "2")).toBe(`{ a: 1, b: 2 }`);
     expect(setValue(`{ a: 1, }`, ["b"], "2")).toBe(`{ a: 1, b: 2, }`);
     const after = setValue(CONFIG, ["globals", "style"], '"vivid"');
-    expect(after).toContain(`globals: { palette: 'catppuccin-mocha', padding: 2, style: "vivid", }, // trailing note`);
+    expect(after).toContain(
+      `globals: { palette: 'catppuccin-mocha', padding: 2, style: "vivid", }, // trailing note`,
+    );
   });
 
   test("an empty object opens onto an indented line", () => {
     const src = `{\n  globals: {},\n}\n`;
-    expect(setValue(src, ["globals", "padding"], "1")).toBe(`{\n  globals: {\n    padding: 1,\n  },\n}\n`);
+    expect(setValue(src, ["globals", "padding"], "1")).toBe(
+      `{\n  globals: {\n    padding: 1,\n  },\n}\n`,
+    );
   });
 
   test("missing intermediate objects are created, nested and indented", () => {
     const src = `{\n  root: "bar",\n}\n`;
     const after = setValue(src, ["segments", "git", "palette"], '"nord"');
-    expect(after).toBe(`{\n  root: "bar",\n  segments: {\n    git: {\n      palette: "nord",\n    },\n  },\n}\n`);
+    expect(after).toBe(
+      `{\n  root: "bar",\n  segments: {\n    git: {\n      palette: "nord",\n    },\n  },\n}\n`,
+    );
     expect(JSON5.parse(after).segments.git.palette).toBe("nord");
   });
 
@@ -184,28 +233,38 @@ describe("setValue — adding an entry matches the container's own style", () =>
   });
 
   test("an empty document becomes a one-entry object", () => {
-    expect(setValue("", ["globals", "palette"], '"nord"')).toBe(`{\n  globals: {\n    palette: "nord",\n  },\n}\n`);
+    expect(setValue("", ["globals", "palette"], '"nord"')).toBe(
+      `{\n  globals: {\n    palette: "nord",\n  },\n}\n`,
+    );
     expect(setValue("  \n", ["padding"], "1")).toBe(`{\n  padding: 1,\n}\n`);
   });
 
   test("a step through a non-object is a loud error", () => {
-    expect(() => setValue(`{ globals: 1 }`, ["globals", "palette"], '"x"')).toThrow(/globals is not an object/);
+    expect(() =>
+      setValue(`{ globals: 1 }`, ["globals", "palette"], '"x"'),
+    ).toThrow(/globals is not an object/);
   });
 });
 
 describe("deleteValue", () => {
   test("a member alone on its line takes its whole line, including its trailing comment", () => {
     const after = deleteValue(CONFIG, ["segments", "directory", "template"]);
-    expect(after).toBe(CONFIG.replace(`      template: "{{ .cwd }}", // why: fish-style\n`, ""));
+    expect(after).toBe(
+      CONFIG.replace(`      template: "{{ .cwd }}", // why: fish-style\n`, ""),
+    );
   });
 
   test("a multi-line member takes all of its lines", () => {
     const after = deleteValue(CONFIG, ["segments", "directory"]);
-    expect(after).toBe(CONFIG.replace(
-      `    directory: {\n      template: "{{ .cwd }}", // why: fish-style\n      palette: "nord",\n    },\n`,
-      "",
-    ));
-    expect(JSON5.parse(after).segments).toEqual({ "quoted-name": { template: "x", bg: "surface" } });
+    expect(after).toBe(
+      CONFIG.replace(
+        `    directory: {\n      template: "{{ .cwd }}", // why: fish-style\n      palette: "nord",\n    },\n`,
+        "",
+      ),
+    );
+    expect(JSON5.parse(after).segments).toEqual({
+      "quoted-name": { template: "x", bg: "surface" },
+    });
   });
 
   test("inline members: first, middle, last", () => {
@@ -220,14 +279,36 @@ describe("deleteValue", () => {
   // the declaration it overlaid instead of shadowing it as `{}`; the root
   // is never pruned.
   test("pruning: an emptied ancestor goes with its last member, the root survives, a sibling stays", () => {
-    expect(deleteValue(`{ segments: { directory: { palette: "nord" } } }`, ["segments", "directory", "palette"])).toBe(`{  }`);
-    expect(deleteValue(`{ globals: {}, segments: { directory: { palette: "nord" } } }`, ["segments", "directory", "palette"])).toBe(`{ globals: {} }`);
-    expect(deleteValue(`{ presets: { compact: { root: { h: [] }, globals: { padding: 0 } } } }`, ["presets", "compact", "root"])).toBe(`{ presets: { compact: { globals: { padding: 0 } } } }`);
+    expect(
+      deleteValue(`{ segments: { directory: { palette: "nord" } } }`, [
+        "segments",
+        "directory",
+        "palette",
+      ]),
+    ).toBe(`{  }`);
+    expect(
+      deleteValue(
+        `{ globals: {}, segments: { directory: { palette: "nord" } } }`,
+        ["segments", "directory", "palette"],
+      ),
+    ).toBe(`{ globals: {} }`);
+    expect(
+      deleteValue(
+        `{ presets: { compact: { root: { h: [] }, globals: { padding: 0 } } } }`,
+        ["presets", "compact", "root"],
+      ),
+    ).toBe(`{ presets: { compact: { globals: { padding: 0 } } } }`);
     expect(deleteValue(`{ a: 1 }`, ["a"])).toBe(`{  }`);
   });
 
   test("`keep` stops pruning at a declaration that is one by its name alone", () => {
-    expect(deleteValue(`{ presets: { mine: { root: { h: [] } } } }`, ["presets", "mine", "root"], 2)).toBe(`{ presets: { mine: {  } } }`);
+    expect(
+      deleteValue(
+        `{ presets: { mine: { root: { h: [] } } } }`,
+        ["presets", "mine", "root"],
+        2,
+      ),
+    ).toBe(`{ presets: { mine: {  } } }`);
   });
 
   test("an absent path returns the text unchanged; an empty document stays empty", () => {
@@ -245,13 +326,22 @@ describe("removeSegmentRef — the authored shape grammar, addressed by name", (
 
   test("an inline ref: first, middle, last", () => {
     expect(removeSegmentRef(CONFIG, ["root"], "directory")).toBe(
-      CONFIG.replace(`["directory", "gitaculous", "toolbar"]`, `["gitaculous", "toolbar"]`),
+      CONFIG.replace(
+        `["directory", "gitaculous", "toolbar"]`,
+        `["gitaculous", "toolbar"]`,
+      ),
     );
     expect(removeSegmentRef(CONFIG, ["root"], "gitaculous")).toBe(
-      CONFIG.replace(`["directory", "gitaculous", "toolbar"]`, `["directory", "toolbar"]`),
+      CONFIG.replace(
+        `["directory", "gitaculous", "toolbar"]`,
+        `["directory", "toolbar"]`,
+      ),
     );
     expect(removeSegmentRef(CONFIG, ["root"], "toolbar")).toBe(
-      CONFIG.replace(`["directory", "gitaculous", "toolbar"]`, `["directory", "gitaculous"]`),
+      CONFIG.replace(
+        `["directory", "gitaculous", "toolbar"]`,
+        `["directory", "gitaculous"]`,
+      ),
     );
   });
 
@@ -274,44 +364,86 @@ describe("removeSegmentRef — the authored shape grammar, addressed by name", (
     const src = `{ root: { kind: "container", direction: "vertical", children: [
       { kind: "group", name: "g", label: "G", children: ["a", "b"] },
     ] } }`;
-    expect(removeSegmentRef(src, ["root"], "b")).toBe(src.replace(`["a", "b"]`, `["a"]`));
+    expect(removeSegmentRef(src, ["root"], "b")).toBe(
+      src.replace(`["a", "b"]`, `["a"]`),
+    );
     expect(removeSegmentRef(src, ["root"], "zzz")).toBeNull();
-    expect(removeSegmentRef(CONFIG, ["presets", "compact", "root"], "a")).toBeNull();
+    expect(
+      removeSegmentRef(CONFIG, ["presets", "compact", "root"], "a"),
+    ).toBeNull();
   });
 
   test("the first match in pre-order wins when a name repeats", () => {
     const src = `{ root: { v: [ { h: ["a", "x"] }, { h: ["x", "b"] } ] } }`;
-    expect(removeSegmentRef(src, ["root"], "x")).toBe(`{ root: { v: [ { h: ["a"] }, { h: ["x", "b"] } ] } }`);
+    expect(removeSegmentRef(src, ["root"], "x")).toBe(
+      `{ root: { v: [ { h: ["a"] }, { h: ["x", "b"] } ] } }`,
+    );
   });
 });
 
 describe("insertSegmentRef", () => {
   test("after/before an inline anchor", () => {
-    expect(insertSegmentRef(CONFIG, ["root"], { seg: "gitPr" }, "gitaculous", "after")).toBe(
-      CONFIG.replace(`["directory", "gitaculous", "toolbar"]`, `["directory", "gitaculous", "gitPr", "toolbar"]`),
+    expect(
+      insertSegmentRef(
+        CONFIG,
+        ["root"],
+        { seg: "gitPr" },
+        "gitaculous",
+        "after",
+      ),
+    ).toBe(
+      CONFIG.replace(
+        `["directory", "gitaculous", "toolbar"]`,
+        `["directory", "gitaculous", "gitPr", "toolbar"]`,
+      ),
     );
-    expect(insertSegmentRef(CONFIG, ["root"], { seg: "gitPr" }, "directory", "before")).toBe(
-      CONFIG.replace(`["directory", "gitaculous", "toolbar"]`, `["gitPr", "directory", "gitaculous", "toolbar"]`),
+    expect(
+      insertSegmentRef(
+        CONFIG,
+        ["root"],
+        { seg: "gitPr" },
+        "directory",
+        "before",
+      ),
+    ).toBe(
+      CONFIG.replace(
+        `["directory", "gitaculous", "toolbar"]`,
+        `["gitPr", "directory", "gitaculous", "toolbar"]`,
+      ),
     );
   });
 
   test("after an own-line anchor: a new line at the same indent, after the anchor's comment", () => {
-    expect(insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "model", "after")).toBe(
-      CONFIG.replace(`      "model", // the model\n`, `      "model", // the model\n      "speed",\n`),
+    expect(
+      insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "model", "after"),
+    ).toBe(
+      CONFIG.replace(
+        `      "model", // the model\n`,
+        `      "model", // the model\n      "speed",\n`,
+      ),
     );
-    expect(insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "weekly", "after")).toBe(
+    expect(
+      insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "weekly", "after"),
+    ).toBe(
       CONFIG.replace(`      "weekly"\n`, `      "weekly",\n      "speed"\n`),
     );
   });
 
   test("before an own-line anchor", () => {
-    expect(insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "context", "before")).toBe(
-      CONFIG.replace(`      "context",\n`, `      "speed",\n      "context",\n`),
+    expect(
+      insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "context", "before"),
+    ).toBe(
+      CONFIG.replace(
+        `      "context",\n`,
+        `      "speed",\n      "context",\n`,
+      ),
     );
   });
 
   test("an absent anchor → null", () => {
-    expect(insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "nope", "after")).toBeNull();
+    expect(
+      insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "nope", "after"),
+    ).toBeNull();
   });
 });
 
@@ -335,17 +467,21 @@ describe("a bare-segment root is the one-child container it abbreviates", () => 
   });
 
   test("insert beside the sole segment keeps the original ref verbatim, its when included", () => {
-    expect(insertSegmentRef(bare, path, { seg: "clock" }, "sidebar", "after")).toBe(
-      `{ presets: { compact: { root: { h: ["sidebar", "clock"] } } } }`,
-    );
-    expect(insertSegmentRef(gated, path, { seg: "clock" }, "sidebar", "before")).toBe(
+    expect(
+      insertSegmentRef(bare, path, { seg: "clock" }, "sidebar", "after"),
+    ).toBe(`{ presets: { compact: { root: { h: ["sidebar", "clock"] } } } }`);
+    expect(
+      insertSegmentRef(gated, path, { seg: "clock" }, "sidebar", "before"),
+    ).toBe(
       `{ presets: { compact: { root: { h: ["clock", { seg: "sidebar", when: "{{ .x }}" }] } } } }`,
     );
   });
 
   test("a miss on a bare root is still null — the normalization is never committed alone", () => {
     expect(removeSegmentRef(bare, path, "zzz")).toBeNull();
-    expect(insertSegmentRef(bare, path, { seg: "clock" }, "zzz", "after")).toBeNull();
+    expect(
+      insertSegmentRef(bare, path, { seg: "clock" }, "zzz", "after"),
+    ).toBeNull();
   });
 });
 
@@ -361,7 +497,9 @@ describe("a `{ rows }` root: edits reach the named rows", () => {
   } } }`;
 
   test("remove / insert inside one row leave the other rows verbatim", () => {
-    expect(removeSegmentRef(rows, ["root"], "y")).toBe(rows.replace(`["x", "y"]`, `["x"]`));
+    expect(removeSegmentRef(rows, ["root"], "y")).toBe(
+      rows.replace(`["x", "y"]`, `["x"]`),
+    );
     expect(insertSegmentRef(rows, ["root"], { seg: "w" }, "z", "before")).toBe(
       rows.replace(`["z"]`, `["w", "z"]`),
     );
@@ -371,15 +509,19 @@ describe("a `{ rows }` root: edits reach the named rows", () => {
     expect(removeSegmentRef(rows, ["root"], "demo")).toBe(
       rows.replace(`sys: "demo"`, `sys: { h: [] }`),
     );
-    expect(insertSegmentRef(rows, ["root"], { seg: "clock" }, "demo", "after")).toBe(
-      rows.replace(`sys: "demo"`, `sys: { h: ["demo", "clock"] }`),
-    );
+    expect(
+      insertSegmentRef(rows, ["root"], { seg: "clock" }, "demo", "after"),
+    ).toBe(rows.replace(`sys: "demo"`, `sys: { h: ["demo", "clock"] }`));
     expect(removeSegmentRef(rows, ["root"], "zzz")).toBeNull();
   });
 
   test("rowEntriesOf names the rows in authored order; a tree has none", () => {
     const fragment = nodeAt(parseDocument(rows), ["root"])!;
-    expect(rowEntriesOf(fragment)?.map((e) => e.key)).toEqual(["a", "sys", "b"]);
+    expect(rowEntriesOf(fragment)?.map((e) => e.key)).toEqual([
+      "a",
+      "sys",
+      "b",
+    ]);
     expect(rowEntriesOf(nodeAt(parseDocument(CONFIG), ["root"])!)).toBeNull();
   });
 
@@ -416,7 +558,10 @@ describe("setPlacementSetting — a value lands inside its placement", () => {
 
   test("an object ref gains a settings object, or one more member of it", () => {
     expect(setPlacementSetting(src, ["root"], "x2", "on", "false")).toBe(
-      src.replace(`{ seg: "x", id: "x2" }`, `{ seg: "x", id: "x2", settings: { on: false } }`),
+      src.replace(
+        `{ seg: "x", id: "x2" }`,
+        `{ seg: "x", id: "x2", settings: { on: false } }`,
+      ),
     );
     expect(setPlacementSetting(src, ["root"], "y", "n", "2")).toBe(
       src.replace(`settings: { n: 1 }`, `settings: { n: 2 }`),
@@ -428,7 +573,10 @@ describe("setPlacementSetting — a value lands inside its placement", () => {
 
   test("a bare-string row is normalized first, and a missing id is null", () => {
     expect(setPlacementSetting(src, ["root"], "demo", "on", "true")).toBe(
-      src.replace(`sys: "demo"`, `sys: { h: [{ seg: "demo", settings: { on: true } }] }`),
+      src.replace(
+        `sys: "demo"`,
+        `sys: { h: [{ seg: "demo", settings: { on: true } }] }`,
+      ),
     );
     expect(setPlacementSetting(src, ["root"], "nope", "on", "true")).toBeNull();
   });
@@ -450,24 +598,53 @@ describe("a CRLF document keeps its own line terminator", () => {
   });
 
   test("insert after / before an own-line anchor ends the new line in CRLF", () => {
-    const after = insertSegmentRef(CRLF, ["root"], { seg: "speed" }, "model", "after")!;
+    const after = insertSegmentRef(
+      CRLF,
+      ["root"],
+      { seg: "speed" },
+      "model",
+      "after",
+    )!;
     expect(after).toBe(
-      CRLF.replace(`      "model", // the model\r\n`, `      "model", // the model\r\n      "speed",\r\n`),
+      CRLF.replace(
+        `      "model", // the model\r\n`,
+        `      "model", // the model\r\n      "speed",\r\n`,
+      ),
     );
     noBareLf(after);
-    const before = insertSegmentRef(CRLF, ["root"], { seg: "speed" }, "context", "before")!;
-    expect(before).toBe(CRLF.replace(`      "context",\r\n`, `      "speed",\r\n      "context",\r\n`));
+    const before = insertSegmentRef(
+      CRLF,
+      ["root"],
+      { seg: "speed" },
+      "context",
+      "before",
+    )!;
+    expect(before).toBe(
+      CRLF.replace(
+        `      "context",\r\n`,
+        `      "speed",\r\n      "context",\r\n`,
+      ),
+    );
     noBareLf(before);
   });
 
   test("an appended entry and a nested multi-line value use CRLF", () => {
     const appended = setValue(CRLF, ["segments", "directory", "fg"], '"text"');
     expect(appended).toBe(
-      CRLF.replace(`      palette: "nord",\r\n`, `      palette: "nord",\r\n      fg: "text",\r\n`),
+      CRLF.replace(
+        `      palette: "nord",\r\n`,
+        `      palette: "nord",\r\n      fg: "text",\r\n`,
+      ),
     );
     noBareLf(appended);
-    const nested = setValue(CRLF, ["presets", "mine", "root"], json5Text({ h: ["a"] }));
-    expect(JSON5.parse(nested)).toMatchObject({ presets: { mine: { root: { h: ["a"] } } } });
+    const nested = setValue(
+      CRLF,
+      ["presets", "mine", "root"],
+      json5Text({ h: ["a"] }),
+    );
+    expect(JSON5.parse(nested)).toMatchObject({
+      presets: { mine: { root: { h: ["a"] } } },
+    });
     noBareLf(nested);
   });
 
@@ -482,11 +659,23 @@ describe("a CRLF document keeps its own line terminator", () => {
 
 describe("json5Text", () => {
   test("identifier keys unquoted, others quoted, one member per line, nested indentation", () => {
-    expect(json5Text({ template: "{{ .x }}", "v1.c": [1, { a: true }], empty: {}, none: [] })).toBe(
+    expect(
+      json5Text({
+        template: "{{ .x }}",
+        "v1.c": [1, { a: true }],
+        empty: {},
+        none: [],
+      }),
+    ).toBe(
       `{\n  template: "{{ .x }}",\n  "v1.c": [\n    1,\n    {\n      a: true,\n    },\n  ],\n  empty: {},\n  none: [],\n}`,
     );
-    expect(JSON5.parse(json5Text({ template: "{{ .x }}", "v1.c": [1, { a: true }] }))).toEqual({
-      template: "{{ .x }}", "v1.c": [1, { a: true }],
+    expect(
+      JSON5.parse(
+        json5Text({ template: "{{ .x }}", "v1.c": [1, { a: true }] }),
+      ),
+    ).toEqual({
+      template: "{{ .x }}",
+      "v1.c": [1, { a: true }],
     });
   });
 });
@@ -541,7 +730,11 @@ describe("movableTextOf", () => {
   test("the anchor line's indent comes off every line but a string's own continuation", () => {
     const text = "{\n  a: {\n    w: 'x \\\n    y',\n    b: 1,\n  },\n}";
     const node = nodeAt(parseDocument(text), ["a"])!;
-    expect(movableTextOf(text, node)).toBe("{\n  w: 'x \\\n    y',\n  b: 1,\n}");
-    expect(JSON5.parse(movableTextOf(text, node)).w).toBe(JSON5.parse(text).a.w);
+    expect(movableTextOf(text, node)).toBe(
+      "{\n  w: 'x \\\n    y',\n  b: 1,\n}",
+    );
+    expect(JSON5.parse(movableTextOf(text, node)).w).toBe(
+      JSON5.parse(text).a.w,
+    );
   });
 });

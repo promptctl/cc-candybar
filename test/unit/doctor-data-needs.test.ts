@@ -34,10 +34,7 @@ describe("dataNeeds", () => {
 
   test("a segment set to ignore missing data needs nothing", () => {
     expect(
-      needsIn(
-        `{ segments: { block: { missingData: "ignore" } } }`,
-        "default",
-      ),
+      needsIn(`{ segments: { block: { missingData: "ignore" } } }`, "default"),
     ).toEqual({ pullRequests: [], rateLimits: ["weekly"] });
   });
 

@@ -1,33 +1,67 @@
-// The host's one path for a push (src/daemon/renderer-host.ts): `ask` hands
+// The host's one path to a renderer (src/daemon/renderer-host.ts): `ask` hands
 // back the reply of the push's own kind or rejects, and `tell` says a failure
-// on the log, since nothing awaits it; and a start heads the mailbox.
+// on the log, since nothing awaits it; a start heads the mailbox; every input
+// carries the slot's readings; and an output is taken whole, a taker's throw
+// failing no turn that answered.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
-import { failureOf } from "../../src/daemon/foundations/verb-error";
+import {
+  failureOf,
+  type Failure,
+} from "../../src/daemon/foundations/verb-error";
 import {
   rendererOf,
   type AdapterOutput,
+  type RendererOutput,
+  type Subscriptions,
 } from "../../src/renderer-interface/interface";
-import { instantOf } from "../../src/utils/instant";
+import type { AdapterReply } from "../../src/renderer-interface/adapter";
 import type { Monotonic } from "../../src/time";
-import { NO_ACTS, pushRenderer } from "../helpers/renderers";
+import type { Tick } from "../../src/utils/instant";
+import { hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
+import type { Renderer } from "../../src/renderer-interface/interface";
 
-const AT = instantOf(new Date(0));
+// A renderer held as the host holds it, its turns taking no time.
+const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
+
+const NONE: Subscriptions = { sources: {}, lanes: {}, wake: null };
+
+// A clock that reads `wall` and `mono` as they stand, and sets no timer: no
+// output here declares a wake.
+const clockAt = (read: { wall: number; mono: number }) => ({
+  now: () => read.wall,
+  monotonic: () => read.mono as Monotonic,
+  after: (): (() => void) => {
+    throw new Error("this rig sets no timer");
+  },
+});
 
 // A host over a renderer that answers every push with `output`; `said`
 // settles with the first line it logs.
-function hostOver(output: AdapterOutput) {
+// A push's end, without the subscriptions every push answers with.
+type Ended =
+  | { readonly kind: "replied"; readonly reply: AdapterReply }
+  | { readonly kind: "threw"; readonly failure: Failure };
+
+function hostOver(output: Ended) {
   let say: (line: string) => void = () => {};
   const said = new Promise<string>((resolve) => (say = resolve));
+  const taken: Subscriptions[] = [];
   const host = rendererHost(
     "main",
-    { now: () => 0, monotonic: () => 0 as Monotonic },
-    pushRenderer(async () => output),
+    clockAt({ wall: 0, mono: 0 }),
+    held(
+      pushRenderer(
+        async (): Promise<AdapterOutput> => ({
+          ...output,
+          subscriptions: NONE,
+        }),
+      ),
+    ),
     (level, line) => say(`${level} ${line}`),
     {
-      subscribed: () => {
-        throw new Error("a push names no subscriptions");
-      },
+      subscribed: (subscriptions) => void taken.push(subscriptions),
+      frames: () => {},
       writableSettings: () => {
         throw new Error("a push lands no change");
       },
@@ -37,35 +71,48 @@ function hostOver(output: AdapterOutput) {
     },
     NO_ACTS,
   );
-  return { host, said };
+  return { host, said, taken };
 }
 
-test("an ask is handed the reply of its push's own kind", async () => {
-  const { host } = hostOver({
+test("an ask is handed the reply of its push's own kind, and its subscriptions are taken", async () => {
+  const { host, taken } = hostOver({
     kind: "replied",
-    reply: { kind: "lanes", lanes: null },
+    reply: { kind: "reload-config" },
   });
-  expect(await host.ask({ kind: "lanes", session: "s" as never }, AT)).toEqual({
-    kind: "lanes",
-    lanes: null,
-  });
+  expect(
+    await host.ask({
+      kind: "reload-config",
+      origin: {
+        projectDir: "/p",
+        cwd: "/p",
+        target: { kind: "default" },
+      } as never,
+    }),
+  ).toEqual({ kind: "reload-config" });
+  expect(taken).toEqual([NONE]);
 });
 
 test("an ask answered with another push's reply rejects, naming both", async () => {
-  const { host } = hostOver({ kind: "replied", reply: { kind: "pin" } });
-  await expect(
-    host.ask({ kind: "lanes", session: "s" as never }, AT),
-  ).rejects.toThrow("renderer main answered push lanes with a pin reply");
+  const { host } = hostOver({
+    kind: "replied",
+    reply: { kind: "close-views" },
+  });
+  await expect(host.ask({ kind: "close-journal" })).rejects.toThrow(
+    "renderer main answered push close-journal with a close-views reply",
+  );
 });
 
-test("an ask whose push threw rejects with the renderer's failure", async () => {
+test("an ask whose push threw rejects with the renderer's failure and the turn's time", async () => {
   const { host } = hostOver({
     kind: "threw",
     failure: failureOf(new Error("the view broke")),
   });
-  await expect(host.ask({ kind: "stats" }, AT)).rejects.toThrow(
+  await expect(host.ask({ kind: "stats" })).rejects.toThrow(
     /renderer main push stats threw: .*the view broke/,
   );
+  await expect(host.ask({ kind: "stats" })).rejects.toMatchObject({
+    failure: { detail: expect.stringMatching(/ took=\d+ms: /) },
+  });
 });
 
 test("a tell that fails is said on the log, and nothing rejects", async () => {
@@ -73,12 +120,24 @@ test("a tell that fails is said on the log, and nothing rejects", async () => {
     kind: "threw",
     failure: failureOf(new Error("no such session")),
   });
-  expect(host.tell({ kind: "unpin", session: "s" as never }, AT)).toBe(
-    undefined,
-  );
+  expect(host.tell({ kind: "close-views" })).toBe(undefined);
   expect(await said).toMatch(
-    /^error renderer main push unpin threw: .*no such session/,
+    /^error renderer main push close-views threw.*: .*no such session/,
   );
+});
+
+// Every promise chain a turn starts settles on microtasks alone: these
+// renderers answer at once.
+const settled = async (): Promise<void> => {
+  for (let i = 0; i < 50; i++) await Promise.resolve();
+};
+
+const answered = (): RendererOutput => ({
+  kind: "answered",
+  effects: [],
+  subscriptions: NONE,
+  record: [],
+  frames: [],
 });
 
 test("a start heads the mailbox, behind only the slot in progress", async () => {
@@ -87,46 +146,324 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
     "main",
-    { now: () => 0, monotonic: () => 0 as Monotonic },
-    rendererOf({
-      event: async (input) => {
-        heard.push(input.event.kind);
-        return {
-          kind: "answered",
-          effects: [],
-          subscriptions: { sources: {}, tmuxStatus: [] },
-          record: [],
-          turnMs: 0,
-        };
-      },
-      adapter: async (input) => {
-        heard.push(`push:${input.push.kind}`);
-        await opened;
-        return { kind: "replied", reply: { kind: "lanes", lanes: null } };
-      },
-    }),
+    clockAt({ wall: 0, mono: 0 }),
+    held(
+      rendererOf({
+        event: async (input) => {
+          heard.push(input.event.kind);
+          return answered();
+        },
+        adapter: async (input) => {
+          heard.push(`push:${input.push.kind}`);
+          await opened;
+          return {
+            kind: "replied",
+            reply: { kind: "close-journal" },
+            subscriptions: NONE,
+          };
+        },
+      }),
+    ),
     () => {},
     {
       subscribed: () => {},
+      frames: () => {},
       writableSettings: () => [],
       holding: () => () => {},
     },
     NO_ACTS,
   );
-  const held = host.ask({ kind: "lanes", session: "s" as never }, AT);
+  const asked = host.ask({ kind: "close-journal" });
   const waiting = host.deliver(
-    () => ({
-      kind: "event",
-      at: AT,
-      event: { kind: "retire", session: "s" as never },
-    }),
+    () => ({ kind: "event", event: { kind: "retire", session: "s" as never } }),
     [],
   );
   const started = host.start(
-    () => ({ kind: "event", at: AT, event: { kind: "start", sessions: [] } }),
+    () => ({
+      kind: "event",
+      event: { kind: "start", viewers: {}, sessions: [] },
+    }),
     [],
   );
   open();
-  await Promise.all([held, waiting, started]);
-  expect(heard).toEqual(["push:lanes", "start", "retire"]);
+  await Promise.all([asked, waiting, started]);
+  expect(heard).toEqual(["push:close-journal", "start", "retire"]);
+});
+
+test("an input carries the clock's two readings as its slot comes, never as it was asked", async () => {
+  const read = { wall: 100_000, mono: 5000 };
+  const readings: Array<{ at: number; tick: number }> = [];
+  let open = (): void => {};
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const host = rendererHost(
+    "main",
+    clockAt(read),
+    held(
+      rendererOf({
+        event: async (input) => {
+          readings.push({ at: input.at, tick: input.tick });
+          if (input.event.kind === "due") await opened;
+          return answered();
+        },
+        adapter: async () => {
+          throw new Error("no push here");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  const first = host.deliver(
+    () => ({ kind: "event", event: { kind: "due" } }),
+    [],
+  );
+  // Asked while the first holds the mailbox, at the clock as it stands.
+  const second = host.deliver(
+    () => ({ kind: "event", event: { kind: "due" } }),
+    [],
+  );
+  await Promise.resolve();
+  read.wall = 107_000;
+  read.mono = 12_000;
+  open();
+  await Promise.all([first, second]);
+  expect(readings).toEqual([
+    { at: 100, tick: 5 },
+    { at: 107, tick: 12 },
+  ]);
+});
+
+test("a taker that throws fails no turn that answered: it is said on every bar, and the frames are still taken", async () => {
+  const unheard: string[] = [];
+  const frames: number[] = [];
+  const host = rendererHost(
+    "main",
+    clockAt({ wall: 0, mono: 0 }),
+    held(
+      rendererOf({
+        event: async () => ({
+          ...answered(),
+          frames: [
+            {
+              session: "s" as never,
+              bar: { rows: [] } as never,
+              answers: { resp: "r", statusline: "s" },
+            },
+          ],
+        }),
+        adapter: async () => {
+          throw new Error("no push here");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {
+        throw new Error("the collector broke");
+      },
+      frames: (taken) => void frames.push(taken.length),
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    { ...NO_ACTS, unheard: (text) => void unheard.push(text) },
+  );
+  const turn = await host.answer(() => ({
+    kind: "event",
+    event: { kind: "due" },
+  }));
+  expect(turn.kind).toBe("answered");
+  expect(frames).toEqual([1]);
+  expect(unheard).toEqual([
+    expect.stringMatching(
+      /^renderer main's subscriptions could not be taken: .*the collector broke/,
+    ),
+  ]);
+});
+
+test("a declared wake is handed in as a `due`, and none is made after the wake closes", async () => {
+  const fire: Array<() => void> = [];
+  const heard: string[] = [];
+  const read = { wall: 0, mono: 0 };
+  const host = rendererHost(
+    "main",
+    {
+      ...clockAt(read),
+      after: (_ms: number, run: () => void) => {
+        fire.push(run);
+        return () => {};
+      },
+    },
+    held(
+      rendererOf({
+        event: async (input) => {
+          heard.push(input.event.kind);
+          return {
+            ...answered(),
+            subscriptions: {
+              ...NONE,
+              wake: input.event.kind === "due" ? null : (1 as Tick),
+            },
+          };
+        },
+        adapter: async () => {
+          throw new Error("no push here");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  await host.deliver(
+    () => ({ kind: "event", event: { kind: "retire", session: "s" as never } }),
+    [],
+  );
+  expect(fire).toHaveLength(1);
+  read.mono = 1000;
+  fire[0]!();
+  await settled();
+  expect(heard).toEqual(["retire", "due"]);
+  // Declared again, then closed: the timer that fires makes no `due`.
+  await host.deliver(
+    () => ({ kind: "event", event: { kind: "retire", session: "s" as never } }),
+    [],
+  );
+  host.closeWake();
+  fire.at(-1)!();
+  await settled();
+  expect(heard).toEqual(["retire", "due", "retire"]);
+});
+
+test("the wake arms its next `due` once the renderer answered, while an act its `due` returned is still on its way", async () => {
+  const fire: Array<() => void> = [];
+  const read = { wall: 0, mono: 0 };
+  let finish = (): void => {};
+  const acted = new Promise<void>((resolve) => (finish = resolve));
+  const host = rendererHost(
+    "main",
+    {
+      ...clockAt(read),
+      after: (_ms: number, run: () => void) => {
+        fire.push(run);
+        return () => {};
+      },
+    },
+    held(
+      rendererOf({
+        event: async (input) => ({
+          ...answered(),
+          effects:
+            input.event.kind === "due"
+              ? [{ kind: "copy", id: 1 as never, session: null, text: "x" }]
+              : [],
+          subscriptions: { ...NONE, wake: (read.mono / 1000 + 1) as Tick },
+        }),
+        adapter: async () => {
+          throw new Error("no push here");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    {
+      ...NO_ACTS,
+      perform: async () => {
+        await acted;
+        return { kind: "ok" };
+      },
+    },
+  );
+  await host.deliver(
+    () => ({ kind: "event", event: { kind: "retire", session: "s" as never } }),
+    [],
+  );
+  read.mono = 1000;
+  fire[0]!();
+  await settled();
+  // The copy has not ended, and the next `due` is armed all the same.
+  expect(fire).toHaveLength(2);
+  finish();
+  await settled();
+});
+
+test("a `due` waits behind every input that arrives while it waits, so a click that has arrived lands before an idle close", async () => {
+  const fire: Array<() => void> = [];
+  const heard: string[] = [];
+  const read = { wall: 0, mono: 0 };
+  let open = (): void => {};
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  const named = (event: { kind: string; session?: unknown }): string =>
+    event.kind === "retire" ? `retire:${String(event.session)}` : event.kind;
+  const host = rendererHost(
+    "main",
+    {
+      ...clockAt(read),
+      after: (_ms: number, run: () => void) => {
+        fire.push(run);
+        return () => {};
+      },
+    },
+    held(
+      rendererOf({
+        event: async (input) => {
+          heard.push(named(input.event));
+          // The long turn the `due` waits behind.
+          if (named(input.event) === "retire:long") await opened;
+          return {
+            ...answered(),
+            subscriptions: {
+              ...NONE,
+              wake: input.event.kind === "due" ? null : (1 as Tick),
+            },
+          };
+        },
+        adapter: async () => {
+          throw new Error("no push here");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      writableSettings: () => [],
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  const retire = (session: string) =>
+    host.deliver(
+      () => ({
+        kind: "event",
+        event: { kind: "retire", session: session as never },
+      }),
+      [],
+    );
+  await retire("first");
+  const long = retire("long");
+  await settled();
+  read.mono = 1000;
+  fire[0]!();
+  // Arrives after the `due` joined the mailbox, as a click would.
+  const behind = retire("click");
+  open();
+  await Promise.all([long, behind]);
+  await settled();
+  expect(heard).toEqual(["retire:first", "retire:long", "retire:click", "due"]);
 });

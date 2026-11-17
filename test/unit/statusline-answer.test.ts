@@ -9,9 +9,12 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
-import { UNFOLLOWED } from "../helpers/daemon-facts";
-import { UNFOLLOWED_FEEDS } from "../../src/config/lanes";
-import { eventRenderer, hearingEvents, NO_ACTS } from "../helpers/renderers";
+import {
+  eventRenderer,
+  hearingEvents,
+  hostHeld,
+  NO_ACTS,
+} from "../helpers/renderers";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
@@ -33,13 +36,10 @@ import {
 } from "../../src/renderer-interface/interface";
 import type { WorldState } from "../../src/facts/world-state";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
-import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
-import { instantOf as at } from "../../src/utils/instant";
 
 const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
-const AT = instantOf(new Date(1_700_000_000_000));
 const FRAME = renderFailedFrame("the bar");
 // What the host reads of a checked request: its session, its encoding, and a
 // hook naming no directory, so no checkout is read for it.
@@ -50,7 +50,7 @@ const REQ = {
 } as unknown as CheckedRenderRequest;
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
-const NO_SUBSCRIPTIONS: Subscriptions = { sources: {}, tmuxStatus: [] };
+const NO_SUBSCRIPTIONS: Subscriptions = { sources: {}, lanes: {}, wake: null };
 // The request's deadline is a timer the case fires itself (`deadlines`).
 const deadlines = new Set<() => void>();
 const CLOCK = {
@@ -81,7 +81,7 @@ const output = (
   effects,
   subscriptions: NO_SUBSCRIPTIONS,
   record,
-  turnMs: 0,
+  frames: [],
 });
 
 // A turn that threw `message`, having reached `record`.
@@ -95,7 +95,7 @@ const threwWith = (
   effects: [],
   subscriptions,
   record,
-  turnMs: 0,
+  frames: [],
 });
 
 // A renderer whose request turn answers `request`, whose config
@@ -133,11 +133,10 @@ function scripted(
 }
 
 // What a case's request meets in the host: its session's wait, how long it
-// may take, the idle clock it reads, and the daemon's close.
+// may take, and the daemon's close.
 interface Meets {
   readonly settled?: (session: unknown, signal: AbortSignal) => Promise<void>;
   readonly waitEndsAt?: number;
-  readonly idleSince?: () => ReturnType<typeof at> | undefined;
   readonly closing?: AbortSignal;
 }
 
@@ -161,10 +160,11 @@ async function answer(
     rendererHost(
       "main",
       CLOCK,
-      renderer,
+      hostHeld(renderer, CLOCK.monotonic),
       (_level, line) => logged.push(line),
       {
         subscribed: (subscriptions) => void subscribed.push(subscriptions),
+        frames: () => {},
         writableSettings: () => [],
         holding,
       },
@@ -179,14 +179,11 @@ async function answer(
       // A warm session: nothing it reads is still unread.
       settled: meets.settled ?? (async () => {}),
     },
-    { since: meets.idleSince ?? (() => undefined) },
-    UNFOLLOWED,
     CLOCK,
     meets.closing ?? NOT_CLOSING,
     (_level, line) => logged.push(line),
     REQ,
     REQUEST,
-    AT,
     meets.waitEndsAt ?? 0,
     facts,
   );
@@ -199,12 +196,15 @@ const drained = async (): Promise<void> => {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 };
 
-test("the request's present answers it, in the request's encoding, and its settle is its effect-done", async () => {
-  const { renderer, heard } = scripted(output([present(1)], [["drew", "2ms"]]));
+test("the request's present answers it, in the request's encoding, with each turn's time, and its settle is its effect-done", async () => {
+  const { renderer, heard } = scripted(output([present(1)]));
   const { answered, facts } = await answer(renderer);
   expect(answered.resp).toEqual({ ok: true, frame: FRAME });
   expect(facts.get("renderer")).toBe("main");
-  expect(facts.get("drew")).toBe("2ms");
+  // How long the renderer's own config and draw turns took, timed where
+  // they ran.
+  expect(facts.get("configured")).toMatch(/^\d+ms$/);
+  expect(facts.get("drew")).toMatch(/^\d+ms$/);
   expect(facts.get("effects")).toBe("present:statusline");
   expect(facts.has("encoded")).toBe(true);
   answered.settled(true);
@@ -311,7 +311,7 @@ test("a render turn that throws a bad argument is still the daemon's failure, as
     failure: failureOf(new BadVerbArgs("no such row")),
     effects: [],
     subscriptions: NO_SUBSCRIPTIONS,
-    turnMs: 0,
+    frames: [],
     record: [],
   });
   const { answered } = await answer(renderer);
@@ -344,7 +344,8 @@ test("a renderer that rejects is the turn's failure, said on its line, and the s
 test("a turn that throws still hands the host what its open views read", async () => {
   const left: Subscriptions = {
     sources: { [SESSION]: [] },
-    tmuxStatus: [],
+    lanes: {},
+    wake: null,
   };
   const subscribed: Subscriptions[] = [];
   const { renderer } = scripted(threwWith([], "the draw broke", left));
@@ -364,7 +365,7 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
   await drained();
   expect(logged).toEqual([
     expect.stringMatching(
-      /^turn renderer=main input=effect-done sid=a-session effect=1 error=.*no such present/,
+      /^turn renderer=main input=effect-done sid=a-session effect=1 took=\d+ms error=.*no such present/,
     ),
   ]);
 });
@@ -372,9 +373,10 @@ test("a failed effect-done turn is said on a turn line naming the renderer and t
 test("the session's config reaches the renderer first, with the world state read at the request's keys, and its subscriptions reach the host before the request does", async () => {
   const opened: Subscriptions = {
     sources: { [SESSION]: [] },
-    tmuxStatus: [],
+    lanes: {},
+    wake: null,
   };
-  const drawn: Subscriptions = { sources: {}, tmuxStatus: [] };
+  const drawn: Subscriptions = { sources: {}, lanes: {}, wake: null };
   const subscribed: Subscriptions[] = [];
   const { renderer, configs, requests } = scripted(
     { ...output([present(1)]), subscriptions: drawn },
@@ -391,16 +393,7 @@ test("the session's config reaches the renderer first, with the world state read
   expect(configs).toEqual([
     { kind: "config", context: REQ, worldState: WORLD },
   ]);
-  expect(requests).toEqual([
-    {
-      kind: "request",
-      id: REQUEST,
-      context: REQ,
-      idleSince: null,
-      following: [],
-      feeds: UNFOLLOWED_FEEDS,
-    },
-  ]);
+  expect(requests).toEqual([{ kind: "request", id: REQUEST, context: REQ }]);
   expect(subscribed).toEqual([opened, drawn]);
 });
 
@@ -506,13 +499,17 @@ describe("the request's wait, between its config and its request", () => {
     const host = rendererHost(
       "main",
       CLOCK,
-      eventRenderer(async ({ event }) => {
-        order.push(event.kind);
-        return event.kind === "request" ? output([present(1)]) : output([]);
-      }),
+      hostHeld(
+        eventRenderer(async ({ event }) => {
+          order.push(event.kind);
+          return event.kind === "request" ? output([present(1)]) : output([]);
+        }),
+        CLOCK.monotonic,
+      ),
       () => {},
       {
         subscribed: () => {},
+        frames: () => {},
         writableSettings: () => [],
         holding: () => () => {},
       },
@@ -525,45 +522,21 @@ describe("the request's wait, between its config and its request", () => {
         holding: () => () => {},
         settled: wait.settled,
       },
-      { since: () => undefined },
-      UNFOLLOWED,
       CLOCK,
       NOT_CLOSING,
       () => {},
       REQ,
       REQUEST,
-      AT,
       5000,
       [],
     );
     await drained();
     await host.deliver(
-      () => ({
-        kind: "event",
-        at: AT,
-        event: { kind: "retire", session: SESSION },
-      }),
+      () => ({ kind: "event", event: { kind: "retire", session: SESSION } }),
       [],
     );
     wait.end();
     await answering;
     expect(order).toEqual(["config", "retire", "request"]);
-  });
-
-  test("a click that landed during the wait is drawn by the request's idle reading", async () => {
-    const wait = held();
-    // The idle clock as the host keeps it: a click restarts its period.
-    let since: ReturnType<typeof at> | undefined = at(new Date(1_000));
-    const { renderer, requests } = scripted(output([present(1)]));
-    const answering = answer(renderer, [], [], undefined, {
-      settled: wait.settled,
-      waitEndsAt: 5000,
-      idleSince: () => since,
-    });
-    await drained();
-    since = at(new Date(2_000));
-    wait.end();
-    await answering;
-    expect(requests).toMatchObject([{ idleSince: at(new Date(2_000)) }]);
   });
 });

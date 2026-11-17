@@ -78,9 +78,18 @@ export function requestEvent(
   outcome: RequestOutcome,
   tookMs: number,
 ): { readonly level: LogLevel; readonly line: string } {
+  return drawEvent(kind, [...facts, ["took", `${tookMs}ms`]], outcome);
+}
+
+// The same event for a draw no clock of its own times: a feed's frame, drawn
+// in a renderer's turn, which the host times.
+export function drawEvent(
+  kind: RequestKind,
+  facts: RequestFacts,
+  outcome: RequestOutcome,
+): { readonly level: LogLevel; readonly line: string } {
   const fields: RequestFacts = [
     ...facts,
-    ["took", `${tookMs}ms`],
     ["outcome", outcome.kind],
     ...detailOf(outcome),
   ];

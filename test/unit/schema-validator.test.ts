@@ -10,7 +10,11 @@ const VALID_HOOK = {
   transcript_path: "/tmp/abc123.jsonl",
   cwd: "/home/user/project",
   model: { id: "claude-sonnet-4-6", display_name: "Claude Sonnet" },
-  workspace: { current_dir: "/home/user/project", project_dir: "/home/user/project", added_dirs: [] },
+  workspace: {
+    current_dir: "/home/user/project",
+    project_dir: "/home/user/project",
+    added_dirs: [],
+  },
 };
 
 // ─── Happy path ───────────────────────────────────────────────────────────────
@@ -40,9 +44,9 @@ describe("validateHookData — happy path", () => {
         total_input_tokens: 8500,
         total_output_tokens: 1200,
         context_window_size: 200000,
-        used_percentage: null,       // nullable per schema
-        remaining_percentage: null,  // nullable per schema
-        current_usage: null,         // nullable per schema
+        used_percentage: null, // nullable per schema
+        remaining_percentage: null, // nullable per schema
+        current_usage: null, // nullable per schema
       },
       exceeds_200k_tokens: false,
       effort: { level: "high" },
@@ -53,7 +57,11 @@ describe("validateHookData — happy path", () => {
       },
       vim: { mode: "NORMAL" },
       agent: { name: "security-reviewer" },
-      worktree: { name: "my-feature", path: "/worktrees/feat", original_cwd: "/project" },
+      worktree: {
+        name: "my-feature",
+        path: "/worktrees/feat",
+        original_cwd: "/project",
+      },
     };
     const { report } = validateHookData(hook);
     expect(report.missingRequired).toHaveLength(0);
@@ -85,12 +93,16 @@ describe("validateHookData — required fields", () => {
 
   test("missing session_id", () => {
     const { session_id: _, ...rest } = VALID_HOOK;
-    expect(validateHookData(rest).report.missingRequired).toContain("session_id");
+    expect(validateHookData(rest).report.missingRequired).toContain(
+      "session_id",
+    );
   });
 
   test("missing transcript_path", () => {
     const { transcript_path: _, ...rest } = VALID_HOOK;
-    expect(validateHookData(rest).report.missingRequired).toContain("transcript_path");
+    expect(validateHookData(rest).report.missingRequired).toContain(
+      "transcript_path",
+    );
   });
 
   test("missing cwd", () => {
@@ -110,27 +122,43 @@ describe("validateHookData — required fields", () => {
 
   test("missing model.display_name", () => {
     const hook = { ...VALID_HOOK, model: { id: "claude-sonnet-4-6" } };
-    expect(validateHookData(hook).report.missingRequired).toContain("model.display_name");
+    expect(validateHookData(hook).report.missingRequired).toContain(
+      "model.display_name",
+    );
   });
 
   test("missing workspace object", () => {
     const { workspace: _, ...rest } = VALID_HOOK;
-    expect(validateHookData(rest).report.missingRequired).toContain("workspace");
+    expect(validateHookData(rest).report.missingRequired).toContain(
+      "workspace",
+    );
   });
 
   test("missing workspace.current_dir", () => {
-    const hook = { ...VALID_HOOK, workspace: { project_dir: "/p", added_dirs: [] } };
-    expect(validateHookData(hook).report.missingRequired).toContain("workspace.current_dir");
+    const hook = {
+      ...VALID_HOOK,
+      workspace: { project_dir: "/p", added_dirs: [] },
+    };
+    expect(validateHookData(hook).report.missingRequired).toContain(
+      "workspace.current_dir",
+    );
   });
 
   test("missing workspace.project_dir", () => {
-    const hook = { ...VALID_HOOK, workspace: { current_dir: "/p", added_dirs: [] } };
-    expect(validateHookData(hook).report.missingRequired).toContain("workspace.project_dir");
+    const hook = {
+      ...VALID_HOOK,
+      workspace: { current_dir: "/p", added_dirs: [] },
+    };
+    expect(validateHookData(hook).report.missingRequired).toContain(
+      "workspace.project_dir",
+    );
   });
 
   test("null value counts as missing (same as absent)", () => {
     const hook = { ...VALID_HOOK, session_id: null };
-    expect(validateHookData(hook).report.missingRequired).toContain("session_id");
+    expect(validateHookData(hook).report.missingRequired).toContain(
+      "session_id",
+    );
   });
 });
 
@@ -140,7 +168,11 @@ describe("validateHookData — type mismatches", () => {
   test("session_id as number", () => {
     const hook = { ...VALID_HOOK, session_id: 42 };
     expect(validateHookData(hook).report.typeMismatches).toContainEqual(
-      expect.objectContaining({ path: "session_id", expected: "string", got: "number" }),
+      expect.objectContaining({
+        path: "session_id",
+        expected: "string",
+        got: "number",
+      }),
     );
   });
 
@@ -158,28 +190,47 @@ describe("validateHookData — type mismatches", () => {
   test("cwd as boolean", () => {
     const hook = { ...VALID_HOOK, cwd: true };
     expect(validateHookData(hook).report.typeMismatches).toContainEqual(
-      expect.objectContaining({ path: "cwd", expected: "string", got: "boolean" }),
+      expect.objectContaining({
+        path: "cwd",
+        expected: "string",
+        got: "boolean",
+      }),
     );
   });
 
   test("model as array (expected non-array object)", () => {
     const hook = { ...VALID_HOOK, model: [] };
     expect(validateHookData(hook).report.typeMismatches).toContainEqual(
-      expect.objectContaining({ path: "model", expected: "object", got: "array" }),
+      expect.objectContaining({
+        path: "model",
+        expected: "object",
+        got: "array",
+      }),
     );
   });
 
   test("model.id as number", () => {
     const hook = { ...VALID_HOOK, model: { id: 99, display_name: "X" } };
     expect(validateHookData(hook).report.typeMismatches).toContainEqual(
-      expect.objectContaining({ path: "model.id", expected: "string", got: "number" }),
+      expect.objectContaining({
+        path: "model.id",
+        expected: "string",
+        got: "number",
+      }),
     );
   });
 
   test("workspace.current_dir as number", () => {
-    const hook = { ...VALID_HOOK, workspace: { ...VALID_HOOK.workspace, current_dir: 0 } };
+    const hook = {
+      ...VALID_HOOK,
+      workspace: { ...VALID_HOOK.workspace, current_dir: 0 },
+    };
     expect(validateHookData(hook).report.typeMismatches).toContainEqual(
-      expect.objectContaining({ path: "workspace.current_dir", expected: "string", got: "number" }),
+      expect.objectContaining({
+        path: "workspace.current_dir",
+        expected: "string",
+        got: "number",
+      }),
     );
   });
 
@@ -198,7 +249,9 @@ describe("validateHookData — type mismatches", () => {
 describe("validateHookData — unknown fields", () => {
   test("a single unknown field is reported", () => {
     const hook = { ...VALID_HOOK, some_new_field: "surprise" };
-    expect(validateHookData(hook).report.unknownTopLevelFields).toContain("some_new_field");
+    expect(validateHookData(hook).report.unknownTopLevelFields).toContain(
+      "some_new_field",
+    );
   });
 
   test("multiple unknown fields are all reported", () => {
@@ -216,8 +269,21 @@ describe("validateHookData — unknown fields", () => {
       session_name: "x",
       version: "1.0.0",
       output_style: { name: "default" },
-      cost: { total_cost_usd: 0, total_duration_ms: 0, total_api_duration_ms: 0, total_lines_added: 0, total_lines_removed: 0 },
-      context_window: { total_input_tokens: 0, total_output_tokens: 0, context_window_size: 200000, used_percentage: null, remaining_percentage: null, current_usage: null },
+      cost: {
+        total_cost_usd: 0,
+        total_duration_ms: 0,
+        total_api_duration_ms: 0,
+        total_lines_added: 0,
+        total_lines_removed: 0,
+      },
+      context_window: {
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        context_window_size: 200000,
+        used_percentage: null,
+        remaining_percentage: null,
+        current_usage: null,
+      },
       exceeds_200k_tokens: false,
       effort: { level: "high" },
       thinking: { enabled: false },
@@ -246,12 +312,16 @@ describe("validateHookData — data pass-through and edge cases", () => {
 
   test("string input does not throw and reports required fields missing", () => {
     expect(() => validateHookData("bad")).not.toThrow();
-    expect(validateHookData("bad").report.missingRequired.length).toBeGreaterThan(0);
+    expect(
+      validateHookData("bad").report.missingRequired.length,
+    ).toBeGreaterThan(0);
   });
 
   test("array input does not throw and reports required fields missing", () => {
     expect(() => validateHookData([])).not.toThrow();
-    expect(validateHookData([]).report.missingRequired.length).toBeGreaterThan(0);
+    expect(validateHookData([]).report.missingRequired.length).toBeGreaterThan(
+      0,
+    );
   });
 });
 
@@ -272,7 +342,9 @@ describe("validateHookData — workspace.added_dirs", () => {
   });
 
   test("a list of strings is legal", () => {
-    expect(validateHookData(withDirs(["/a", "/b"])).report.typeMismatches).toHaveLength(0);
+    expect(
+      validateHookData(withDirs(["/a", "/b"])).report.typeMismatches,
+    ).toHaveLength(0);
   });
 
   test.each([
@@ -280,7 +352,9 @@ describe("validateHookData — workspace.added_dirs", () => {
     ["a list holding a number", ["/a", 1], "array"],
     ["a list holding an ill-formed string", ["\uD800"], "array"],
   ])("%s is a type mismatch", (_label, value, got) => {
-    expect(validateHookData(withDirs(value)).report.typeMismatches).toContainEqual({
+    expect(
+      validateHookData(withDirs(value)).report.typeMismatches,
+    ).toContainEqual({
       path: "workspace.added_dirs",
       expected: "string-list",
       got,

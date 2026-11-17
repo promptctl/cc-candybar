@@ -4,10 +4,7 @@
 
 import { ConfigWrites } from "../../src/renderer/config-writes";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import type {
-  Effect,
-  EffectId,
-} from "../../src/renderer-interface/interface";
+import type { Effect, EffectId } from "../../src/renderer-interface/interface";
 
 const SID = sessionIdOf("s1");
 const DISK: Record<string, string> = {

@@ -1,6 +1,9 @@
 import { POWERLINE } from "../helpers/powerline";
 import { stripCell, type PlainSegment } from "../helpers/strip-cell";
-import { renderStripCells, type BuildLineOptions } from "../../src/render/strip";
+import {
+  renderStripCells,
+  type BuildLineOptions,
+} from "../../src/render/strip";
 
 const seg = (text: string): PlainSegment => ({ text });
 
@@ -19,7 +22,8 @@ describe("renderStripCells wrap behavior", () => {
       const out = stripOf([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
         width: 200,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -34,7 +38,8 @@ describe("renderStripCells wrap behavior", () => {
       const out = stripOf([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
         width: oneLine.length,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -46,7 +51,8 @@ describe("renderStripCells wrap behavior", () => {
       const out = stripOf([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
         width: 16,
       });
       const rows = out.split("\n");
@@ -86,7 +92,8 @@ describe("renderStripCells wrap behavior", () => {
       const out = stripOf([seg("alpha"), seg("beta"), seg("gamma")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: false, padding: 1,
+        wrap: false,
+        padding: 1,
         width: 16,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -103,12 +110,14 @@ describe("renderStripCells wrap behavior", () => {
       };
       const noWrap = stripOf(segments, {
         ...base,
-        wrap: false, padding: 1,
+        wrap: false,
+        padding: 1,
         width: 16,
       });
       const unbounded = stripOf(segments, {
         ...base,
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
         width: Number.POSITIVE_INFINITY,
       });
       expect(noWrap).toBe(unbounded);
@@ -118,7 +127,8 @@ describe("renderStripCells wrap behavior", () => {
       const base = {
         endcaps: "plain" as const,
         colorCompatibility: "none" as const,
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
       };
       const segments = [seg("a"), seg("bb"), seg("ccc")];
       const unbounded = stripOf(segments, {
@@ -133,7 +143,8 @@ describe("renderStripCells wrap behavior", () => {
       const out = stripOf([], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
         width: 80,
       });
       expect(out).toBe("");
@@ -143,13 +154,15 @@ describe("renderStripCells wrap behavior", () => {
       const wide = stripOf([seg("a")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
         width: 80,
       });
       const wrapped = stripOf([seg("alpha"), seg("beta")], {
         endcaps: "plain",
         colorCompatibility: "none",
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
         width: 8,
       });
       expect(wide.endsWith("\n")).toBe(false);
@@ -166,7 +179,8 @@ describe("renderStripCells wrap behavior", () => {
       const out = stripOf([lit("aaa"), lit("bbb"), lit("ccc")], {
         endcaps: "powerline",
         colorCompatibility: "none",
-        wrap: true, padding: 1,
+        wrap: true,
+        padding: 1,
         width: 8,
       });
       const rows = out.split("\n");
