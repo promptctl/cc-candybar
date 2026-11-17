@@ -466,14 +466,33 @@ describe("the request's wait, between its config and its request", () => {
 
   test("the daemon's close ends the wait, and the request draws nothing into the closing views", async () => {
     const closing = new AbortController();
-    closing.abort();
-    const { renderer, requests } = scripted(output([present(1)]));
+    const { renderer, configs, requests } = scripted(output([present(1)]));
     const { answered, facts } = await answer(renderer, [], [], undefined, {
-      settled: () => new Promise(() => {}),
+      // The close begins while the request waits.
+      settled: () => {
+        closing.abort();
+        return new Promise(() => {});
+      },
       waitEndsAt: 5000,
       closing: closing.signal,
     });
     expect(facts.get("ended")).toBe("closed");
+    expect(configs).toHaveLength(1);
+    expect(requests).toHaveLength(0);
+    expect(answered.resp).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("the daemon closed"),
+    });
+  });
+
+  test("a request whose config turn comes up once the close has begun opens no view", async () => {
+    const closing = new AbortController();
+    closing.abort();
+    const { renderer, configs, requests } = scripted(output([present(1)]));
+    const { answered } = await answer(renderer, [], [], undefined, {
+      closing: closing.signal,
+    });
+    expect(configs).toHaveLength(0);
     expect(requests).toHaveLength(0);
     expect(answered.resp).toMatchObject({
       ok: false,

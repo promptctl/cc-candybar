@@ -34,6 +34,7 @@ import { instantAt, type Instant } from "../utils/instant.js";
 import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
+import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import type { MailboxStats } from "./foundations/stats-snapshot.js";
@@ -127,7 +128,7 @@ export function rendererHost(
   },
   world: HostWorld,
 ): RendererHost {
-  const mailbox = new Mailbox();
+  const mailbox = new KeyedSerialQueue<RendererName>();
   // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
   // when: its answer, its changes landing and their `effect-done` turns.
   let holder: { input: string; readonly since: Monotonic } | null = null;
@@ -142,17 +143,21 @@ export function rendererHost(
   ): Promise<T> => {
     const asked = clock.monotonic();
     queued++;
-    return mailbox.post(at, async () => {
-      queued--;
-      const queuedMs = elapsedMs(clock, asked);
-      const held = { input: "-", since: clock.monotonic() };
-      holder = held;
-      try {
-        return await slot(queuedMs, (input) => void (held.input = input));
-      } finally {
-        holder = null;
-      }
-    });
+    return mailbox.run(
+      name,
+      async () => {
+        queued--;
+        const queuedMs = elapsedMs(clock, asked);
+        const held = { input: "-", since: clock.monotonic() };
+        holder = held;
+        try {
+          return await slot(queuedMs, (input) => void (held.input = input));
+        } finally {
+          holder = null;
+        }
+      },
+      at,
+    );
   };
 
   // A turn no renderer answered: nothing of it was taken, so the
@@ -228,10 +233,7 @@ export function rendererHost(
           ? landed
           : { kind: "skipped", reason: `not performed: ${landed.reason}` };
       const owed: Array<Promise<EffectOutcome>> = [];
-      // [LAW:no-ambient-temporal-coupling] Each act starts once every act
-      // over in its turn before it has ended, so two copies land in the
-      // order the turn asked them.
-      let before: Promise<unknown> = Promise.resolve();
+      const acts: HostAct[] = [];
       for (const effect of output.effects) {
         if (effect.kind === "present") {
           if (input.event.kind !== "request")
@@ -245,17 +247,23 @@ export function rendererHost(
             );
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
           owed.push((await settleInSlot(effect, landed)).settled);
+        else acts.push(effect);
+      }
+      // [LAW:no-ambient-temporal-coupling] The acts go once every change of
+      // the turn has had its `effect-done` turn, wherever the turn returned
+      // them, and each once every act over in the turn before it has ended,
+      // so two copies land in the order the turn asked them.
+      let before: Promise<unknown> = Promise.resolve();
+      for (const act of acts) {
+        const acted =
+          landed.kind === "ok"
+            ? before.then(() => world.perform(act))
+            : Promise.resolve(unperformed);
+        const settled = acted.then((outcome) => settle(act, outcome));
+        if (outlives(act)) void settled;
         else {
-          const acted =
-            landed.kind === "ok"
-              ? before.then(() => world.perform(effect))
-              : Promise.resolve(unperformed);
-          const settled = acted.then((outcome) => settle(effect, outcome));
-          if (outlives(effect)) void settled;
-          else {
-            owed.push(settled);
-            before = acted;
-          }
+          owed.push(settled);
+          before = acted;
         }
       }
       const settled = Promise.all(owed).finally(release);
@@ -433,46 +441,6 @@ export function rendererHost(
     queued,
   });
   return { name, answer, deliver, start: recorded("first"), ask, tell, stats };
-}
-
-// Where a slot joins the mailbox: behind every slot waiting, or ahead of them.
-type Place = "first" | "last";
-
-// [LAW:no-ambient-temporal-coupling] A renderer's mailbox: one slot runs at a
-// time, each once the one before it has settled, and one posted while the
-// mailbox is idle runs at once, in the caller's turn. A slot's rejection is
-// its own caller's and never stops the slots behind it.
-class Mailbox {
-  // The slots still to run, while one runs.
-  private waiting: Array<() => Promise<void>> | null = null;
-
-  post<T>(at: Place, slot: () => Promise<T>): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      // [LAW:types-are-the-program] An entry never rejects, so the drain
-      // below has no failure to carry.
-      const entry = async (): Promise<void> => {
-        try {
-          resolve(await slot());
-        } catch (e) {
-          reject(e);
-        }
-      };
-      if (this.waiting !== null) {
-        if (at === "first") this.waiting.unshift(entry);
-        else this.waiting.push(entry);
-        return;
-      }
-      const waiting: Array<() => Promise<void>> = [];
-      this.waiting = waiting;
-      const drain = (next: () => Promise<void>): void =>
-        void next().then(() => {
-          const after = waiting.shift();
-          if (after === undefined) this.waiting = null;
-          else drain(after);
-        });
-      drain(entry);
-    });
-  }
 }
 
 // [LAW:one-source-of-truth] The session an event names: what a turn holds,

@@ -6,6 +6,7 @@
 import path from "node:path";
 import type {
   Effect,
+  EventInput,
   Present,
   RequestId,
   TurnOutcome,
@@ -128,6 +129,11 @@ export async function answerStatusline(
       }),
       [["effect", String(effect.id)]],
     );
+  // [LAW:single-enforcer] Each of the request's turns is made as its slot
+  // comes, and none once the daemon's close has begun: the teardown is
+  // closing the views it would open or draw into.
+  const unlessClosing = (make: () => EventInput) => (): EventInput | Failure =>
+    closing.aborted ? failureOf(new DaemonClosing("render")) : make();
   const worldState = collector.requested(req);
   // [LAW:no-ambient-temporal-coupling] The request holds its session from its
   // config to its answer, wait included, so no sweep retires it between.
@@ -142,11 +148,13 @@ export async function answerStatusline(
     // wait is the host's, between the two turns, and holds no place in the
     // mailbox: another input's turn that lands meanwhile, one that evicts
     // the session's view included, moves what the wait covers.
-    configured = await host.answer(() => ({
-      kind: "event",
-      at,
-      event: { kind: "config", context: req, worldState },
-    }));
+    configured = await host.answer(
+      unlessClosing(() => ({
+        kind: "event",
+        at,
+        event: { kind: "config", context: req, worldState },
+      })),
+    );
     // [LAW:nothing-unseen] The config turn's record leads: it opens with the
     // session, which the event's readers key on (`render sid=`), and says
     // what the context was, whether or not a request turn runs after it.
@@ -185,23 +193,20 @@ export async function answerStatusline(
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
     // [LAW:no-ambient-temporal-coupling] Made as its turn comes, so what it
     // reads of the host follows every input ahead of it: a click that landed
-    // during the wait is drawn by this request's idle reading, and a wait the
-    // daemon's close ended draws nothing into views its teardown is closing.
-    delivered = await host.answer(() =>
-      closing.aborted
-        ? failureOf(new DaemonClosing("render"))
-        : {
-            kind: "event",
-            at,
-            event: {
-              kind: "request",
-              id,
-              context: req,
-              idleSince: menuIdle.since(session, at) ?? null,
-              following: [...feeds.following(session)],
-              feeds: feeds.feedsOf(session, at),
-            },
-          },
+    // during the wait is drawn by this request's idle reading.
+    delivered = await host.answer(
+      unlessClosing(() => ({
+        kind: "event",
+        at,
+        event: {
+          kind: "request",
+          id,
+          context: req,
+          idleSince: menuIdle.since(session, at) ?? null,
+          following: [...feeds.following(session)],
+          feeds: feeds.feedsOf(session, at),
+        },
+      })),
     );
   } finally {
     release();
