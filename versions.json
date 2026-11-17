@@ -4,15 +4,22 @@
     {
       "version": "pr-780",
       "ref": "refs/pull/780/merge",
-      "sha": "5549baee2b380f64c038d0b19b7fd5d57480dfb1",
-      "timestamp": "2026-11-17T04:10:38.570Z",
+      "sha": "68c44e8ad8491a3bca0627cc78818cd94f4cca6f",
+      "timestamp": "2026-11-17T04:21:10.388Z",
       "commits": [
         {
-          "sha": "5549baee2b380f64c038d0b19b7fd5d57480dfb1",
+          "sha": "68c44e8ad8491a3bca0627cc78818cd94f4cca6f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T04:09:42Z",
-          "message": "Merge ed5ce78c883fbdbbd7861987df82208c72dbb2b9 into cd22d86be5a01cf1358b2319620a5b9823ffc034\n"
+          "timestamp": "2026-11-17T04:20:06Z",
+          "message": "Merge 036f75618950f95c663fcc4c12c742c606fd3888 into cd22d86be5a01cf1358b2319620a5b9823ffc034\n"
+        },
+        {
+          "sha": "036f75618950f95c663fcc4c12c742c606fd3888",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T21:19:54-07:00",
+          "message": "fix(daemon): a fresh renderer's start heads the host's mailbox, and a request the close woke draws nothing (5gb)\n"
         },
         {
           "sha": "ed5ce78c883fbdbbd7861987df82208c72dbb2b9",

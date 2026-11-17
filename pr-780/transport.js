@@ -48927,18 +48927,20 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, closing
       closing
     );
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-    delivered = await host.answer(() => ({
-      kind: "event",
-      at,
-      event: {
-        kind: "request",
-        id: id2,
-        context: req,
-        idleSince: menuIdle.since(session, at) ?? null,
-        following: [...feeds.following(session)],
-        feeds: feeds.feedsOf(session, at)
+    delivered = await host.answer(
+      () => closing.aborted ? failureOf(new DaemonClosing("render")) : {
+        kind: "event",
+        at,
+        event: {
+          kind: "request",
+          id: id2,
+          context: req,
+          idleSince: menuIdle.since(session, at) ?? null,
+          following: [...feeds.following(session)],
+          feeds: feeds.feedsOf(session, at)
+        }
       }
-    }));
+    );
   } finally {
     release4();
   }
@@ -75418,13 +75420,13 @@ var message = (e) => e instanceof Error ? e.message : String(e);
 
 // src/daemon/renderer-host.ts
 function rendererHost(name, clock, renderer, log, collector, world) {
-  const mailbox = new KeyedSerialQueue();
+  const mailbox = new Mailbox();
   let holder = null;
   let queued = 0;
-  const inMailbox = (slot) => {
+  const inMailbox = (slot, at = "last") => {
     const asked2 = clock.monotonic();
     queued++;
-    return mailbox.run(name, async () => {
+    return mailbox.post(at, async () => {
       queued--;
       const queuedMs = elapsedMs(clock, asked2);
       const held = { input: "-", since: clock.monotonic() };
@@ -75559,7 +75561,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         );
     }
   };
-  const taken = async (make) => {
+  const taken = async (make, at = "last") => {
     const { event, slotted } = await inMailbox(async (queuedMs, holds2) => {
       let made;
       try {
@@ -75571,18 +75573,19 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         return { event: null, slotted: unanswered(made, queuedMs) };
       holds2(made.event.kind);
       return { event: made.event, slotted: await inSlot(made, queuedMs) };
-    });
+    }, at);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled }
     };
   };
   const answer2 = async (make) => (await taken(make)).turn;
-  const deliver = async (make, about) => {
-    const { event, turn } = await taken(make);
+  const recorded2 = (at) => async (make, about) => {
+    const { event, turn } = await taken(make, at);
     record2(event, about, turn);
     return turn;
   };
+  const deliver = recorded2("last");
   const ask2 = async (push, at) => {
     const output = await inMailbox((_queuedMs, holds2) => {
       holds2(`push:${push.kind}`);
@@ -75611,8 +75614,36 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     heldMs: holder === null ? 0 : elapsedMs(clock, holder.since),
     queued
   });
-  return { name, answer: answer2, deliver, ask: ask2, tell, stats };
+  return { name, answer: answer2, deliver, start: recorded2("first"), ask: ask2, tell, stats };
 }
+var Mailbox = class {
+  // The slots still to run, while one runs.
+  waiting = null;
+  post(at, slot) {
+    return new Promise((resolve, reject2) => {
+      const entry = async () => {
+        try {
+          resolve(await slot());
+        } catch (e) {
+          reject2(e);
+        }
+      };
+      if (this.waiting !== null) {
+        if (at === "first") this.waiting.unshift(entry);
+        else this.waiting.push(entry);
+        return;
+      }
+      const waiting = [];
+      this.waiting = waiting;
+      const drain = (next) => void next().then(() => {
+        const after = waiting.shift();
+        if (after === void 0) this.waiting = null;
+        else drain(after);
+      });
+      drain(entry);
+    });
+  }
+};
 function sessionOf(event) {
   switch (event.kind) {
     // A start is every session's: it holds none of them alone.
@@ -93389,11 +93420,11 @@ function createDaemon(inputs) {
     // its output names every session it serves; and every open feed gets its
     // `pin`. All through the host's one path to the renderer, each turn
     // recorded there.
+    // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
+    // every input after it, the pins included, finds its sessions handed in.
     start: async () => {
       const at = instant();
-      for (const sessionId2 of frameFeeds.openFeeds())
-        parts.renderer.tell({ kind: "pin", session: sessionId2 }, at);
-      await parts.renderer.deliver(
+      const started2 = parts.renderer.start(
         () => ({
           kind: "event",
           at,
@@ -93409,6 +93440,9 @@ function createDaemon(inputs) {
         }),
         [["why", "renderer-start"]]
       );
+      for (const sessionId2 of frameFeeds.openFeeds())
+        parts.renderer.tell({ kind: "pin", session: sessionId2 }, at);
+      await started2;
     },
     ended: (event) => {
       rendererEnded = event;
@@ -93518,7 +93552,7 @@ function createDaemon(inputs) {
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
         // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
         // every click ahead of it lands whole, and none behind it begins.
-        ["configWrites close", rendererStep("close-journal")],
+        ["renderer journal close", rendererStep("close-journal")],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
