@@ -4,15 +4,22 @@
     {
       "version": "pr-791",
       "ref": "refs/pull/791/merge",
-      "sha": "fa9557d3b10b511596bceae03056f671678b131b",
-      "timestamp": "2026-11-17T23:46:47.706Z",
+      "sha": "68da87bfa6cbe3a0bfdd6efcda25e8b072af6433",
+      "timestamp": "2026-11-17T23:56:22.622Z",
       "commits": [
         {
-          "sha": "fa9557d3b10b511596bceae03056f671678b131b",
+          "sha": "68da87bfa6cbe3a0bfdd6efcda25e8b072af6433",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T23:45:48Z",
-          "message": "Merge 2b718db435db0c1db04e518d3aa0611085899a3c into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+          "timestamp": "2026-11-17T23:55:26Z",
+          "message": "Merge de3e2c650cf75d536726e1cd9cdfa188fe3ed62f into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "de3e2c650cf75d536726e1cd9cdfa188fe3ed62f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T16:55:07-07:00",
+          "message": "fix(daemon): the session book's load saves the merged book, and a serve that threw serves again (uh4)\n\nA save the sessions heard before the load made no longer lands alone\nover the file's sessions. The held stores' failures go through the one\naggregator every error boundary uses. The renderer drains its documents\nfirst, so their throw leaves the other stores' writes for the next turn.\nA failed history save and a refused slash click say what is true.\n"
         },
         {
           "sha": "2b718db435db0c1db04e518d3aa0611085899a3c",

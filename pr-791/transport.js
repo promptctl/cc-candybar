@@ -30048,6 +30048,7 @@ var SessionBook = class {
     );
     for (const [session, durable] of heard) this.book.set(session, durable);
     this.bound();
+    this.storage.save(Object.fromEntries(this.book));
   }
   // The session's newest request: what it says the session is, kept when it
   // moved.
@@ -64895,7 +64896,7 @@ var CacheManager = class {
     await this.ensureCacheDirectories(root);
     const cachePath = import_node_path25.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
-    for (let attempt5 = 0; attempt5 < MAX_RETRIES; attempt5++) {
+    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
       const isCurrentlyLocked = this.isLocked(root, lockName);
       if (isCurrentlyLocked) {
         debug(`Cache for ${cacheType} is locked, waiting...`);
@@ -64920,7 +64921,7 @@ var CacheManager = class {
           debug(`No shared ${cacheType} usage cache found`);
           return null;
         }
-        const attemptNumber = attempt5 + 1;
+        const attemptNumber = attempt4 + 1;
         debug(
           `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
         );
@@ -88852,7 +88853,7 @@ var slash = (value, ctx) => {
   const live = contextFor(ctx.context, sid)?.live ?? null;
   if (live === null)
     throw new BadVerbArgs(
-      `${line} was not typed: session ${sid} has not been heard since the daemon started, so its pane is not known until its next request`
+      `${line} was not typed: the daemon holds no request of session ${sid}, so its pane is not known until its next request`
     );
   const pane = tmuxPaneOf(live.hints.tmux);
   if (pane.kind === "refused")
@@ -90163,31 +90164,31 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle2(chain2, resolveWarnings, attempt5) {
+function settle2(chain2, resolveWarnings, attempt4) {
   const common = {
     // [LAW:one-source-of-truth] The files reported are the chain loaded.
     layers: chain2.layers.map((l) => l.path),
     home: chain2.home
   };
   const warning = (own2) => joinWarnings([...chain2.snapshot.notices, ...resolveWarnings, ...own2]);
-  switch (attempt5.kind) {
+  switch (attempt4.kind) {
     case "built":
     case "kept":
       return {
         ...common,
-        kind: attempt5.kind,
-        warning: warning(attempt5.state.buildWarnings),
-        state: attempt5.state,
+        kind: attempt4.kind,
+        warning: warning(attempt4.state.buildWarnings),
+        state: attempt4.state,
         error: null
       };
     case "failed":
       return {
         ...common,
         kind: "failed",
-        warning: warning(attempt5.warnings),
+        warning: warning(attempt4.warnings),
         state: null,
-        error: thrown(attempt5.cause),
-        cause: attempt5.cause
+        error: thrown(attempt4.cause),
+        cause: attempt4.cause
       };
   }
 }
@@ -90196,8 +90197,8 @@ function loadChain(cwd2, chain2, deps, served = null) {
   if (resolved.kind === "failed") {
     return settle2(chain2, [], resolved);
   }
-  const attempt5 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle2(chain2, resolved.warnings, attempt5);
+  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
+  return settle2(chain2, resolved.warnings, attempt4);
 }
 function loadOrigin(cwd2, snapshot, deps, served = null) {
   return loadChain(cwd2, chainOf(snapshot, deps.locations), deps, served);
@@ -91439,9 +91440,9 @@ function mainRendererOf(inputs, host) {
   );
   const documents = new HeldDocuments(inputs.stored.doctor);
   const drained = () => [
+    ...documents.drain(),
     ...sessionState.drain(),
-    ...settingsHistory.drain(),
-    ...documents.drain()
+    ...settingsHistory.drain()
   ];
   let minted = 0;
   const mint = () => ++minted;
@@ -91697,8 +91698,7 @@ var HeldStores = class {
   // renderer holds the refused write too, and the store's next write saves
   // the copy held here whole.
   take(writes) {
-    const refused2 = [];
-    const documents = [];
+    const steps2 = [];
     let sessions = false;
     let history = false;
     for (const write of writes)
@@ -91714,35 +91714,32 @@ var HeldStores = class {
         case "marks":
         case "clicked":
         case "postMortemsRead":
-          if (this.doctor[write.store].kind !== "ok") {
-            refused2.push(
-              `the renderer filed ${write.store}, which did not read; nothing was written`
-            );
-            break;
-          }
-          this.doctor = {
-            ...this.doctor,
-            [write.store]: { kind: "ok", value: write.value }
-          };
-          documents.push(write);
+          steps2.push(() => this.file(write));
           break;
       }
-    if (!this.closed) {
-      if (sessions)
-        this.storage.session.save(Object.fromEntries(this.sessions));
-      if (history)
-        attempt4(
-          refused2,
-          () => this.storage.history.save(Object.fromEntries(this.history))
-        );
-      for (const write of documents)
-        attempt4(refused2, () => {
-          const filed = fileDocument(this.storage.doctor, write);
-          if (filed.kind === "failed")
-            throw new Error(`${write.store} not filed: ${filed.reason}`);
-        });
-    }
-    if (refused2.length > 0) throw new Error(`stored: ${refused2.join("; ")}`);
+    if (sessions && !this.closed)
+      steps2.push(
+        () => this.storage.session.save(Object.fromEntries(this.sessions))
+      );
+    if (history && !this.closed)
+      steps2.push(
+        () => this.storage.history.save(Object.fromEntries(this.history))
+      );
+    runEach(steps2);
+  }
+  file(write) {
+    if (this.doctor[write.store].kind !== "ok")
+      throw new Error(
+        `the renderer filed ${write.store}, which did not read; nothing was written`
+      );
+    this.doctor = {
+      ...this.doctor,
+      [write.store]: { kind: "ok", value: write.value }
+    };
+    if (this.closed) return;
+    const filed = fileDocument(this.storage.doctor, write);
+    if (filed.kind === "failed")
+      throw new Error(`${write.store} not filed: ${filed.reason}`);
   }
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
   // lands, and what is written after it (a render that was awaiting, a run
@@ -91753,13 +91750,6 @@ var HeldStores = class {
     this.closed = true;
   }
 };
-function attempt4(refused2, write) {
-  try {
-    write();
-  } catch (thrown2) {
-    refused2.push(thrown2 instanceof Error ? thrown2.message : String(thrown2));
-  }
-}
 function moved(store, key, value) {
   store.delete(key);
   if (value !== null) store.set(key, value);
@@ -94245,10 +94235,10 @@ function createDaemon(inputs) {
   const serve = () => {
     closing.signal.throwIfAborted();
     if (served) return;
-    served = true;
     stores.load();
     sessionBook.load();
     link.serve();
+    served = true;
   };
   const parts = {
     closing: closing.signal,
@@ -95095,7 +95085,7 @@ function fileHistoryStorage(file, logger) {
         fs_default.mkdirSync(import_node_path50.default.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(state), 384);
       } catch (e) {
-        const message2 = `settings-history write failed \u2014 the change landed but is not undoable: ${e.message}`;
+        const message2 = `settings-history write failed \u2014 the change landed and undoes until the daemon restarts, not after: ${e.message}`;
         logger("error", message2);
         throw new Error(message2);
       }
