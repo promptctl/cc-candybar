@@ -388,21 +388,20 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after
     // this is queued behind the state it changes.
-    // [LAW:no-silent-failure] A start that throws is said, and ends the
-    // renderer: one that never took its start holds none of the state every
-    // input after it changes. The next start, after the backoff, is the
-    // retry, so a key the host could not read recovers once it can.
-    const start = own
+    // [LAW:no-silent-failure] A start that fails ends the renderer, and its
+    // end says why: one that never took its start holds none of the state
+    // every input after it changes. The next start, after the backoff, is
+    // the retry, so a key the host could not read recovers once it can.
+    const start: Promise<boolean> = own
       .start(generationOf === 1 ? "first" : "crashed")
-      .catch((thrown: unknown) => {
-        const failure = failureOf(thrown);
-        log(
-          "error",
-          `renderer ${name}[${generationOf}] start failed: ${failure.detail}`,
-        );
-        link.stopped ??= `failed its start: ${failure.message}`;
-        link.kill.abort(new Error("its start failed"));
-      });
+      .then(
+        () => true,
+        (thrown: unknown) => {
+          link.stopped ??= `failed its start: ${failureOf(thrown).message}`;
+          link.kill.abort(new Error("its start failed"));
+          return false;
+        },
+      );
     heardBy = (text) => heard(link, start, text);
     void channel.ended.then((result) => {
       stdout.end();
@@ -411,7 +410,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     });
   };
 
-  const heard = (link: Link, start: Promise<void>, text: string): void => {
+  const heard = (link: Link, start: Promise<boolean>, text: string): void => {
     let line: RendererLine;
     try {
       line = JSON.parse(text) as RendererLine;
@@ -438,7 +437,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
   };
 
-  const started = (link: Link, start: Promise<void>): void => {
+  const started = (link: Link, start: Promise<boolean>): void => {
     if (phase.kind !== "starting" || phase.link !== link) return;
     const { queued } = phase;
     phase = { kind: "live", link };
@@ -451,8 +450,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     for (const send of queued) send();
     // [LAW:no-ambient-temporal-coupling] What an ended renderer held goes once
     // this one has started and taken its start, and stays if it ends first.
-    void start.then(() => {
-      if (current() !== link) return;
+    void start.then((took) => {
+      if (!took || current() !== link) return;
       link.tookOver = true;
       releaseGone();
     });

@@ -1704,6 +1704,15 @@ function click(verb: string): (value: string, ctx: VerbContext) => void {
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
     const steps = stepsOf(verb, value);
+    // [LAW:nothing-unseen] A session's click the host handed no context with
+    // measures no lane, so a switch it moves sets nothing up: said, since
+    // what lost the context (its file unread or unwritten, or the bound) was
+    // said where it happened, not here.
+    if (sid !== null && latestOf(ctx.latest, sid) === null)
+      ctx.log(
+        "warn",
+        `lane: ${verb} on session ${sid} came with no context the host holds; no lane follows it`,
+      );
     journaled(verb, sid, ctx.latest, ctx, ctx.effects, (c) => {
       try {
         foldEffects(steps, sid, c);

@@ -10,8 +10,8 @@
 // reading that file renders by, and setting a lane up in each would restart
 // every idle Claude Code on the machine for one session's save. A setup needs
 // the session's pane, from the context the host hands in with the click,
-// which it keeps across its own restarts: a click it holds none for is
-// refused before it reaches here. The tmux status line asks for no act: the
+// which it keeps across its own restarts: a click it holds none for never
+// reaches here, and says so. The tmux status line asks for no act: the
 // renderer declares the sessions whose switch is on in its subscriptions, and
 // the host holds their rows (src/daemon/tmux-status.ts).
 

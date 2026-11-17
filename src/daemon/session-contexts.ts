@@ -57,11 +57,17 @@ export class SessionContexts {
     this.held.delete(context.session);
     this.held.set(context.session, context);
     if (before !== undefined && sameContext(before, context)) return;
+    this.evictOldest();
+    this.file?.save();
+  }
+
+  // [LAW:single-enforcer] The bound, kept however the book grew: a note, or
+  // a file written by a build with a larger one.
+  private evictOldest(): void {
     for (const oldest of this.held.keys()) {
       if (this.held.size <= MAX_SESSIONS) break;
       this.held.delete(oldest);
     }
-    this.file?.save();
   }
 
   of(session: SessionId): SessionContext | null {
@@ -121,6 +127,7 @@ export class SessionContexts {
         );
       else this.held.set(session, context);
     }
+    this.evictOldest();
   }
 }
 

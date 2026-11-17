@@ -1,12 +1,7 @@
 // The daemon as a value: what it holds, built from its inputs, and its one close.
 
 import { Runs } from "./runs.js";
-import {
-  locationsFor,
-  profileOf,
-  type DaemonPaths,
-  type Profile,
-} from "./paths";
+import { locationsFor, type DaemonPaths, type Profile } from "./paths";
 import type { Host } from "../host";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
@@ -58,14 +53,12 @@ import { clickLaunchVia } from "./foundations/click-launch.js";
 import type { LaneEdge } from "./lane-setup.js";
 import { Acts } from "./acts.js";
 import { linkSignerOver } from "../click/link-signer.js";
+import { CrossedFailure } from "./foundations/verb-error.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost } from "./renderer-host.js";
 import { startMainRenderer } from "../renderer/main.js";
-import {
-  MAIN_RENDERER,
-  type RendererName,
-} from "../renderer-interface/renderer-name.js";
+import type { RendererName } from "../renderer-interface/renderer-name.js";
 import type { ProfileStore } from "./profile-store.js";
 import type { SessionContexts } from "./session-contexts.js";
 import type { RendererPort } from "./renderer-process.js";
@@ -115,10 +108,9 @@ export interface DaemonAdapters {
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
   readonly launcher: (own: LaunchOwner) => TestableLauncher;
-  // [LAW:effects-at-boundaries] A profile's directories made, and the profile
-  // spelled as the disk resolves them (main's user config is the user's, so
-  // its directory is not made).
-  readonly profile: (wanted: Profile, main: boolean) => Profile;
+  // [LAW:effects-at-boundaries] The profile a renderer's name derives, its
+  // directories made and spelled as the disk resolves them.
+  readonly profile: (name: RendererName, host: Host) => Profile;
   // [LAW:one-source-of-truth] The renderer's stored state under the profile
   // directory its name derives, read once as the daemon is built, and each
   // session's context, which a click is handed. Built over the daemon's log:
@@ -257,10 +249,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   } = inputs;
   // [LAW:one-source-of-truth] The renderer's profile, canonical once, and
   // the places every config load resolves under, its user config among them.
-  const profile = inputs.profile(
-    profileOf(rendererName, host),
-    rendererName === MAIN_RENDERER,
-  );
+  const profile = inputs.profile(rendererName, host);
   const locs = locationsFor(host, profile);
   const instant = (): Instant => instantAt(clock);
   // [LAW:single-enforcer] What ends the daemon's work: every launch through its
@@ -685,7 +674,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async (cause) => {
-      const { kind } = await parts.renderer.start(() => {
+      const turn = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
         // The key crosses in base64, so the start crosses as a line.
@@ -715,9 +704,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           },
         };
       }, [["why", "renderer-start"]]);
+      if (turn.kind === "answered") return;
       // A start that failed may have opened none of its feeds: the next
       // announcement hands the viewers in again.
-      if (kind !== "answered") frameFeeds.handedIn(null);
+      frameFeeds.handedIn(null);
+      // [LAW:no-silent-failure] The supervisor's to act on: a renderer that
+      // never took its start holds none of what it would serve by.
+      throw new CrossedFailure(turn.failure);
     },
     ended: (event) => {
       rendererEnded = event;

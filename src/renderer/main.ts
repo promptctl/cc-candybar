@@ -467,10 +467,6 @@ export function startMainRenderer(
   inputs: MainRendererInputs,
   host: AdapterToHost,
 ): Renderer {
-  return startOver(inputs, host);
-}
-
-function startOver(inputs: MainRendererInputs, host: AdapterToHost): Renderer {
   const { gates } = inputs;
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
   // each input carries, and the work held for a later `due`.

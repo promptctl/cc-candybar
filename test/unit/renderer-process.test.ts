@@ -277,9 +277,7 @@ describe("a renderer process's start", () => {
       "renderer main[1] failed its start: the link key could not be read: EACCES; it restarts, and unsaved state (open menus, armed confirms) is lost",
     ]);
     expect(logs).toContainEqual(
-      expect.stringMatching(
-        /^renderer main\[1\] start failed: .*the link key could not be read: EACCES/,
-      ),
+      `renderer main[1] failed its start: the link key could not be read: EACCES after 0 s; next start in ${BACKOFF_FIRST_MS / 1000} s`,
     );
     clock.advance(BACKOFF_FIRST_MS);
     children[1]!.say({ kind: "started", pid: 9002 });

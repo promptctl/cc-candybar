@@ -34,6 +34,10 @@ import {
 import { storePath } from "../../../src/daemon/profile-store";
 import type { DaemonAdapters } from "../../../src/daemon/daemon";
 import {
+  inProcessPort,
+  type LinkOwner,
+} from "../../../src/daemon/renderer-process";
+import {
   classifyInbound,
   PROTOCOL_VERSION,
   type ReaderRenderRequest,
@@ -119,6 +123,8 @@ describe("the daemon is a value", () => {
       digest?: string;
       profileStore?: DaemonAdapters["profileStore"];
       rendererName?: RendererName;
+      linkKey?: DaemonAdapters["linkKey"];
+      renderer?: DaemonAdapters["renderer"];
     } = {},
   ): Daemon => {
     const { daemon, daemonLog } = buildDaemon({
@@ -131,6 +137,8 @@ describe("the daemon is a value", () => {
       ...(inputs.clock && { clock: inputs.clock }),
       ...(inputs.profileStore && { profileStore: inputs.profileStore }),
       ...(inputs.rendererName && { rendererName: inputs.rendererName }),
+      ...(inputs.linkKey && { linkKey: inputs.linkKey }),
+      ...(inputs.renderer && { renderer: inputs.renderer }),
     });
     open = daemon;
     openLogs.push(daemonLog);
@@ -326,6 +334,23 @@ describe("the daemon is a value", () => {
   // [LAW:one-source-of-truth] A renderer's profile is a function of its name
   // alone: a second name keeps its picks under its own, and the main
   // profile's files are never written.
+  test("a start the host cannot read the link key for fails with the reason, for its supervisor to restart", async () => {
+    let owner: LinkOwner | null = null;
+    const daemon = construct({
+      linkKey: () => ({ kind: "failed", reason: "EACCES: link.key" }),
+      renderer: (prepared) => ({
+        start: (own) => {
+          owner = own;
+          return inProcessPort(prepared).start(own);
+        },
+      }),
+    });
+    await expect(owner!.start("crashed")).rejects.toThrow(
+      "the link key could not be read: EACCES: link.key",
+    );
+    await close(daemon);
+  });
+
   test("a renderer of a second name writes only under its own profile", async () => {
     writeConfig(PADDED);
     const work = parseRendererName("work")!;

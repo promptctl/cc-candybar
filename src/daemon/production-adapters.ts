@@ -15,7 +15,8 @@ import { linkKeyFile, linkKeyFromFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
 import { inProcessPort } from "./renderer-process.js";
 import type { DaemonLog } from "./log";
-import { canonicalProfile, type DaemonPaths } from "./paths";
+import { canonicalProfile, profileOf, type DaemonPaths } from "./paths";
+import { MAIN_RENDERER } from "../renderer-interface/renderer-name.js";
 import { profileStore } from "./profile-store.js";
 import { SessionContexts } from "./session-contexts.js";
 
@@ -32,7 +33,8 @@ export function productionAdapters(
   return {
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
-    profile: canonicalProfile,
+    profile: (name, host) =>
+      canonicalProfile(profileOf(name, host), name === MAIN_RENDERER),
     profileStore: (dir, failed, log) => profileStore(dir, machine, failed, log),
     sessionContexts: (failed, log) =>
       new SessionContexts(paths.sessionContexts, machine, failed, log),
