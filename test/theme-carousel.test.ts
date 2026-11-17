@@ -14,7 +14,7 @@
 //      (and under that style): the closed cells' tints, the open state and its
 //      plane, the alerts.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, heldSegments } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
@@ -109,7 +109,7 @@ function rig(
       () => false,
     );
     const depth = effective.colorCompatibility;
-    last = drawPayload(
+    last = heldSegments(sink, drawPayload(
       config,
       compiled,
       store,
@@ -132,9 +132,9 @@ function rig(
       },
       instantOf(new Date()),
       opts(cols, padding, style, depth),
-      { perSegmentSink: sink },
+      undefined,
       effective,
-    ).frame;
+    )).frame;
     return last;
   };
   const click = async (url: string): Promise<void> => {

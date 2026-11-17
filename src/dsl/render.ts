@@ -54,7 +54,13 @@ import {
   SessionEffects,
   type MenuFlash,
   type RowKind,
+  type SessionMotion,
 } from "../render/effect.js";
+import {
+  beginRecord,
+  recordFrom,
+  type FrameRecord,
+} from "../render/frame-memory.js";
 import {
   decideEffectName,
   decideStyleName,
@@ -1168,20 +1174,6 @@ function segmentsUnder(node: CompiledNode): CompiledSegmentNode[] {
 // `undefined` holes to reach a later observer, and a new observer is one field
 // here rather than a signature change every caller re-counts.
 export interface RenderObservers {
-  // [LAW:dataflow-not-control-flow] Optional per-segment cell sink. When
-  // present, each rendered segment's RichText array (post-layout, pre-
-  // serialization) is written to this map under its placement id — its
-  // segment's name unless the placement names its own. Storing
-  // cells (not pre-serialized strings) keeps the hot path's serializer
-  // work proportional to the joined line only — debug consumers serialize
-  // on demand. Hidden-by-when segments are absent from the map (presence
-  // = "this segment rendered"). The map is cleared before the first row so
-  // stale segment names never survive a layout edit. Per-segment standalone
-  // serialization is not byte-identical to the segment's slice within the
-  // joined line (powerline joiners sit *between* segments and have no
-  // place in a one-segment render), but for debug visibility this is the
-  // natural per-segment shape.
-  readonly perSegmentSink?: Map<string, readonly RichText[]>;
   // [LAW:no-silent-failure] Optional observer for per-segment evaluation errors.
   // A failing segment renders as a visible ⚠ error cell (partial rendering, the
   // daemon's author-facing channel) — a headless caller with no one looking at
@@ -1190,24 +1182,33 @@ export interface RenderObservers {
   // registry-dispose contract): an observer that throws is a caller bug
   // surfaced loudly, never caught and absorbed by the render walk.
   readonly onSegmentError?: (placementId: string, message: string) => void;
-  // [LAW:no-silent-failure] Optional observer for what this render had to settle
-  // for itself and could not honour (`RenderWarning`). The render goes on — a
-  // throw would take the whole statusline away — but nothing else on the bar
-  // says why it looks as it does.
-  //
-  // Optional for the same reason the two above are: a caller that passes none has
-  // said it is not listening (a compile-only test). Both shipping
-  // callers listen — the daemon records each for the bar's diagnostics
-  // (src/renderer/render-warnings.ts), and `cc-candybar check` fails a globals rule, a gate or a
-  // variable that cannot refresh, so each is visible whether or not anyone is
-  // looking at a bar.
-  readonly onRenderWarning?: (warning: RenderWarning) => void;
 }
 
-// [LAW:types-are-the-program] A draw: the frame it drew, and what the walk
-// that drew it reports of itself.
+// [LAW:types-are-the-program] A draw: the frame it drew, the memory it made,
+// and what the walk that drew it reports of itself.
 export interface DrawnFrame {
   readonly frame: Frame;
+  // [LAW:effects-at-boundaries] What the frame leaves, which the draw writes
+  // nowhere: the surface's record of it (handed to its next draw as
+  // `DrawSelection.record`) and the session's motion (`SessionEffects.keep`).
+  // A caller drawing one frame keeps neither.
+  readonly memory: {
+    readonly record: FrameRecord<RenderedLine>;
+    readonly motion: SessionMotion;
+  };
+  // [LAW:no-silent-failure] What the render had to settle for itself and
+  // could not honour (`RenderWarning`). The render goes on — a throw would
+  // take the whole statusline away — but nothing else on the bar says why it
+  // looks as it does, so its caller records them (the renderer, for the bar's
+  // diagnostics: src/renderer/render-warnings.ts) or fails on them (check).
+  readonly warnings: readonly RenderWarning[];
+  // Each rendered segment's cells (post-layout, pre-serialization), by
+  // placement id, for the `debug segments` projection: kept as cells so the
+  // draw pays no serializer cost, and absent for a segment hidden by its
+  // `when`. A segment's standalone serialization is not byte-identical to its
+  // slice of the joined line (powerline joiners sit between segments), which
+  // is the natural shape for debug visibility.
+  readonly segments: ReadonlyMap<string, readonly RichText[]>;
   // How many of the view's parts this frame evaluated (src/dsl/parts.ts):
   // between data changes, only those that read the instant.
   readonly evaluated: number;
@@ -1274,11 +1275,15 @@ export type DrawSelection = Pick<
   | "menuTimeout"
 > & {
   // The session's effect memory: when its effect came into force (the effect's
-  // own t = 0), the effects already made for its rows, and what each placement
-  // its last frame drew. The daemon hands each session its own; an omitting
-  // caller draws with a fresh one, so its render is the effect's calm first
-  // frame and nothing in it fades in or dissolves out.
+  // own t = 0) and the effects already made for its rows. The daemon hands
+  // each session its own; an omitting caller draws with a fresh one, so its
+  // render is the effect's calm first frame.
   readonly effects?: SessionEffects<RenderedLine>;
+  // The record of the last frame the drawing surface kept of the view: what
+  // each placement drew and the transitions in flight. An omitting caller
+  // draws a first frame, so nothing in it fades in or dissolves out and no
+  // loading cell holds a last drawing.
+  readonly record?: FrameRecord<RenderedLine>;
   // When the session's idle period began — its last click, or the draw that
   // first showed a menu (src/renderer/menu-idle.ts) — which the flash its open
   // menus wear before they close counts from. A caller with no such clock
@@ -1340,8 +1345,10 @@ export function drawDsl(
   observers: RenderObservers | undefined,
   selection: DrawSelection,
 ): DrawnFrame {
-  const { perSegmentSink, onSegmentError, onRenderWarning } = observers ?? {};
-  const warn = (warning: RenderWarning): void => onRenderWarning?.(warning);
+  const { onSegmentError } = observers ?? {};
+  const warnings: RenderWarning[] = [];
+  const warn = (warning: RenderWarning): void => void warnings.push(warning);
+  const segments = new Map<string, readonly RichText[]>();
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
   // render's instant: its templates' `frames` run through this timeline, and
   // the effects below through the same one (brandon-menus-sjhy.nt2).
@@ -1385,17 +1392,18 @@ export function drawDsl(
     variation: VARIATIONS[selection.variation],
     shade: SHADES[selection.shade],
   };
-  // The view's record of this frame, kept once its rows serialize, and the
-  // sources whose values it drew as not answered yet. The session's state
-  // revision is read through the session the view draws for.
+  // The record of this frame, read once its rows serialize, and the sources
+  // whose values it drew as not answered yet. The session's state revision is
+  // read through the session the view draws for. What the walk draws on is
+  // the surface's last record, if it was drawn from this same source.
   const source = {
     config,
     preset,
     revision: registry.stateRevision(),
     width: drawOpts.width,
   };
-  const record = parts.memory.begin(source, returnedBy);
-  const last = parts.memory.from(source);
+  const record = beginRecord(source, returnedBy);
+  const last = recordFrom(selection.record ?? null, source);
   const waited = new Set<string>();
   const ruleFrame: RuleFrame = {
     held: (slot) => last?.rules.get(slot),
@@ -1493,8 +1501,6 @@ export function drawDsl(
     flash,
   );
 
-  perSegmentSink?.clear();
-
   // [LAW:no-defensive-null-guards] A segment node names one declared segment
   // (the loader validates it); a miss is a caller bug the segment render
   // throws on.
@@ -1538,7 +1544,7 @@ export function drawDsl(
       gate,
       padding: drawOpts.padding,
       region,
-      perSegmentSink,
+      segments,
       onSegmentError,
       placement: (node) => parts.placement(node),
       evaluateOnce: (node, scope, palette, body) =>
@@ -1618,8 +1624,8 @@ export function drawDsl(
         ),
       };
     });
-  motion.drawn();
-  record.commit();
+  const left = motion.memory();
+  const memory = { record: record.record(left.passages), motion: left.motion };
   // What the frame arms under the settings in force, drawn or not: a menu this
   // frame is the first to draw, whose idle period — and the flash before it
   // closes on its own — begins with it, an effect rule, fades, or a placement
@@ -1664,6 +1670,9 @@ export function drawDsl(
       motion: frameMotion,
       pending: [...waited].sort(),
     },
+    memory,
+    warnings,
+    segments,
     evaluated: parts.evaluated - evaluatedBefore,
     cellBreaks: rendered.reduce((sum, row) => sum + row.cellBreaks, 0),
     rules,

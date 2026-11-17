@@ -25,8 +25,7 @@ import { lastBinding } from "./helpers/render-binding";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionEffects, type RowItem } from "../src/render/effect";
-import { FrameMemory } from "../src/render/frame-memory";
-import { framed } from "./helpers/frames";
+import { framed, surfaceRecord } from "./helpers/frames";
 import { drawnChars, shown } from "./helpers/seams";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import {
@@ -420,7 +419,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
 
   test("a frame never drawn is never compared against", () => {
     const fx = new SessionEffects<string>("s");
-    const memory = new FrameMemory<string>();
+    const memory = surfaceRecord<string>();
     const first = framed(fx, memory, "none", fx.clockAt(at(0), 1), fades);
     first.placed("left", left);
     first.row("r", "bar", [item("left")]);
@@ -440,7 +439,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
   });
   test("a placement that laid no cell of its own draws what it returned, and is kept as nothing", () => {
     const fx = new SessionEffects<string>("s");
-    const memory = new FrameMemory<string>();
+    const memory = surfaceRecord<string>();
     framed(fx, memory, "none", fx.clockAt(at(0), 1), fades).drawn();
     const motion = framed(fx, memory, "none", fx.clockAt(at(1), 1), fades);
     expect(motion.placed("left", ["right"])).toEqual(["right"]);
@@ -450,7 +449,7 @@ describe("a render that throws leaves the last drawn frame to compare against", 
 
   test("a placement reached twice in one frame is a loud error", () => {
     const fx = new SessionEffects<string>("s");
-    const memory = new FrameMemory<string>();
+    const memory = surfaceRecord<string>();
     const motion = framed(fx, memory, "none", fx.clockAt(at(0), 1), fades);
     motion.placed("left", left);
     expect(() => motion.placed("left", left)).toThrow(

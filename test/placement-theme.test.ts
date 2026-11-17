@@ -31,6 +31,7 @@ import { resolvedStyle } from "../src/render/rich-theme.js";
 import { settingsOf } from "../src/config/dsl-types";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
+import { heldSegments } from "./helpers/draw-payload";
 import { VERB_SAVE } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
@@ -84,15 +85,12 @@ function themeBar(src: string) {
     host: durable.host,
   });
   const { config } = rig;
-  let sink = new Map<string, readonly RichText[]>();
-  const render = (barTheme = BAR_A): Frame => {
-    sink = new Map();
-    return rig.draw({
+  const sink = new Map<string, readonly RichText[]>();
+  const render = (barTheme = BAR_A): Frame =>
+    heldSegments(sink, rig.draw({
       opts: { width: 200 },
-      observers: { perSegmentSink: sink },
       selection: selectionFor(config, { theme: decided(barTheme) }),
-    }).frame;
-  };
+    })).frame;
   // The background a placement's cell wears, read by its id.
   const bgOf = (id: string): string => {
     const cell = sink.get(id)?.[0];

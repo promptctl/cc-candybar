@@ -20,7 +20,7 @@
 //   - a body whose every child is hidden lays no row and so no ✕ — not on
 //     the bar, and not in the trigger's cell sink.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, heldSegments } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, type Row } from "../src/render/frame";
 import { linksOf, type DrawnLink } from "../src/click/read";
@@ -133,10 +133,12 @@ function build(src: string, withDefault: boolean) {
   const sink = new Map<string, readonly RichText[]>();
   const render = (): readonly Row[] => {
     const errors: string[] = [];
-    const out = drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
-      perSegmentSink: sink,
-      onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-    }).frame;
+    const out = heldSegments(
+      sink,
+      drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
+        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
+      }),
+    ).frame;
     if (errors.length > 0) throw new Error(errors.join("\n"));
     return out.rows;
   };

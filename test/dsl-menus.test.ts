@@ -29,6 +29,7 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { picked, selectionFor } from "./helpers/selection";
 import { buildRig } from "./helpers/rig";
+import { heldSegments } from "./helpers/draw-payload";
 import { ColorDepth } from "@promptctl/rich-js";
 import { ownLinks } from "./helpers/ambient-chrome";
 import {
@@ -149,8 +150,7 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
   const palette = getThemePalette("textual-dark");
   const sink = new Map<string, readonly RichText[]>();
   const render = (): Frame =>
-    rig.draw({
-      observers: { perSegmentSink: sink },
+    heldSegments(sink, rig.draw({
       // `look` is the session's style pick, resolved as the daemon resolves it.
       // [LAW:no-silent-failure] naming an undeclared style would collapse to the
       // floor, so tests that depend on a style assert its effect.
@@ -159,7 +159,7 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
         {},
         picked(look === undefined ? {} : { style: look }),
       ),
-    }).frame;
+    })).frame;
   const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
     const url = ownUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),

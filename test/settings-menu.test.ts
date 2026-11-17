@@ -53,6 +53,7 @@ import {
 } from "../src/config/disclosure";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
+import { heldSegments } from "./helpers/draw-payload";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import type { ActionDecl } from "../src/config/action";
 import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
@@ -99,8 +100,7 @@ function menuBar(
   // Each segment's cells from the last render, by name.
   const sink = new Map<string, readonly RichText[]>();
   const render = (): Frame => {
-    sink.clear();
-    return rig.draw({ payload, observers: { perSegmentSink: sink } }).frame;
+    return heldSegments(sink, rig.draw({ payload })).frame;
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
   const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {

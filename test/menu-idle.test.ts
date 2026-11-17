@@ -13,6 +13,7 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
+import { heldSegments } from "./helpers/draw-payload";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
 import { clickSessionOf } from "../src/click/wire";
@@ -173,16 +174,14 @@ function idleBar(src: string) {
   const sink = new Map<string, readonly RichText[]>();
   // A frame drawn at `when`, its session idle since `idleSince`.
   const draw = (when: Instant, idleSince?: Instant) => {
-    sink.clear();
-    return rig.draw({
+    return heldSegments(sink, rig.draw({
       payload: PAYLOAD,
       at: when,
-      observers: { perSegmentSink: sink },
       selection: selectionFor(
         config,
         idleSince === undefined ? {} : { idleSince },
       ),
-    }).frame;
+    })).frame;
   };
   const logged: string[] = [];
   const ctx: VerbContext = {

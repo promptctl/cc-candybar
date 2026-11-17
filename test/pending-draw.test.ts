@@ -95,8 +95,7 @@ function renderer(cfg: ValidatedConfig) {
     unanswer: () => store.setDocument("doc", pendingOf("unread")),
     draw: (width = 160): Drawn => {
       const errors: string[] = [];
-      const warnings: RenderWarning[] = [];
-      const { frame } = drawPayload(
+      const { frame, warnings } = drawPayload(
         cfg,
         compiled,
         store,
@@ -110,10 +109,7 @@ function renderer(cfg: ValidatedConfig) {
           padding: 1,
           width,
         },
-        {
-          onSegmentError: (id, message) => errors.push(`${id}: ${message}`),
-          onRenderWarning: (warning) => warnings.push(warning),
-        },
+        { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
         selectionFor(cfg),
         (digest) => runs.run(digest),
       );

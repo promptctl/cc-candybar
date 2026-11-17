@@ -9,7 +9,7 @@
 //   4. `{{ themePreview "applyAction" }}` is two rows of the selected option's
 //      palette;
 //   5. a link drawn in several colour runs reads as one link.
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, heldSegments } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -61,7 +61,7 @@ function rig(template: string) {
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const sink = new Map<string, readonly RichText[]>();
-  const rendered = drawPayload(
+  const rendered = heldSegments(sink, drawPayload(
     config,
     compiled,
     store,
@@ -69,8 +69,8 @@ function rig(template: string) {
     PAYLOAD,
     instantOf(new Date()),
     OPTS,
-    { perSegmentSink: sink },
-  ).frame;
+    undefined,
+  )).frame;
   registry.dispose();
   return { rendered, cells: sink.get("s") ?? [] };
 }

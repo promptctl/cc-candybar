@@ -14,7 +14,7 @@
 //   - the render's style reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, heldSegments } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
@@ -98,7 +98,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const sink = new Map<string, readonly RichText[]>();
   const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame =>
-    drawPayload(
+    heldSegments(sink, drawPayload(
       config,
       compiled,
       store,
@@ -106,13 +106,13 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       { session_id: "s1", ...payload },
       instantOf(new Date()),
       OPTS,
-      { perSegmentSink: sink },
+      undefined,
       selectionFor(config, {
         ...(look === undefined ? {} : { style: { kind: "decided" as const, name: "test", value: look } }),
         ...(variation === undefined ? {} : { variation }),
         ...(shade === undefined ? {} : { shade }),
       }),
-    ).frame;
+    )).frame;
   const root = compiled.roots.get(PRESET_FLOOR)!;
   const bgOf = (name: string): string => {
     const cell = sink.get(name)?.[0];

@@ -11,6 +11,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
+import { heldSegments } from "./helpers/draw-payload";
 import { mintPlacement } from "../src/config/layout-ops";
 import { arrangedSegment } from "../src/config/edit-chrome";
 import { insertSegmentRef, removeSegmentRef } from "../src/config/json5-edit";
@@ -24,7 +25,7 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 function placementBar(src: string) {
   const rig = buildRig({ source: src });
   const sink = new Map<string, readonly RichText[]>();
-  const render = (): Frame => rig.draw({ observers: { perSegmentSink: sink } }).frame;
+  const render = (): Frame => heldSegments(sink, rig.draw()).frame;
   // The text one placement drew, read off the sink by its id.
   const textOf = (id: string): string =>
     (sink.get(id) ?? [])

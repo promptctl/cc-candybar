@@ -263,7 +263,9 @@ export interface NodeRenderCtx {
   // hands its parts (`PlacementParts.evaluate`) so its colours derive from where it sits, with no
   // walk state read.
   readonly region: Region;
-  readonly perSegmentSink?: Map<string, readonly RichText[]>;
+  // Each rendered segment's cells, by placement id, as the draw returns them
+  // (`DrawnFrame.segments`).
+  readonly segments: Map<string, readonly RichText[]>;
   // [LAW:no-silent-failure] Optional observer for the per-segment render catch
   // below: a caught evaluation error renders as a visible ⚠ error cell (partial
   // rendering — the daemon's channel), AND is reported here so a headless caller
@@ -925,15 +927,13 @@ function drawSegment(
     // the body it led (none when the body laid no row) — a risen trigger's
     // row among them. A disclosure body's cells belong to the
     // segments in it, each of which sinks its own.
-    if (ctx.perSegmentSink !== undefined) {
-      ctx.perSegmentSink.set(
-        node.id,
-        [
-          ...laidLines.flatMap((line) => line.cells),
-          ...bodyLines.flatMap(leadOf),
-        ].flatMap(cellParts),
-      );
-    }
+    ctx.segments.set(
+      node.id,
+      [
+        ...laidLines.flatMap((line) => line.cells),
+        ...bodyLines.flatMap(leadOf),
+      ].flatMap(cellParts),
+    );
     // Below row 0 every line is a drop: menu bands first (template order),
     // then the disclosure body, in the order they hang under the trigger.
     return [...laidLines, ...ledBody];

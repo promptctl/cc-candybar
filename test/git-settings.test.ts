@@ -2,7 +2,7 @@
 // shows (brandon-segment-settings-i4n.u36). Each case places the segment twice
 // on one bar — a bare copy on every default and a copy with one setting off —
 // so it pins both the setting's effect and that two copies never share a value.
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, heldSegments } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
@@ -73,7 +73,7 @@ function renderPair(
   const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    drawPayload(
+    heldSegments(sink, drawPayload(
       config,
       compiled,
       store,
@@ -87,8 +87,8 @@ function renderPair(
         padding: 0,
         width: Number.POSITIVE_INFINITY,
       },
-      { perSegmentSink: sink },
-    ).frame;
+      undefined,
+    )).frame;
   } finally {
     registry.dispose();
   }

@@ -20,7 +20,7 @@
 //     opens is the depth-0 band of the bar's lineage every bar trigger opens —
 //     the anchor of the chain.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, heldSegments } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -199,10 +199,12 @@ function build(src: string, withDefault = false) {
   // the sink, which would read here as "did not render"; say what it was.
   const render = (): Frame => {
     const errors: string[] = [];
-    const out = drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
-      perSegmentSink: sink,
-      onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-    }).frame;
+    const out = heldSegments(
+      sink,
+      drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
+        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
+      }),
+    ).frame;
     if (errors.length > 0) throw new Error(errors.join("\n"));
     return out;
   };

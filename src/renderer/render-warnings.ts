@@ -9,7 +9,7 @@
 // every renderer's together, in one fixed order, so every surface counts and
 // pages the same list and a viewer opened on one surface finds its message on
 // the other. The drawing renderer reads its own last frame's record whatever
-// it was drawn from: its walk replaces it at this frame's end, and a record
+// it was drawn from: the turn that drew this frame replaces it, and a record
 // emptied first would make a warning still met look gone for one frame,
 // closing an open viewer and reopening it on the next. Another renderer's
 // record counts only while drawn from the same config, since that renderer
@@ -93,15 +93,24 @@ export class RenderWarningRecords {
     return listed;
   }
 
-  // Records what a frame warned. Says whether that changed what the
-  // renderer's next frame shows.
-  drawn(
+  // Whether a frame that warned `warnings` changes what the renderer's next
+  // frame shows.
+  moves(
+    sessionId: SessionId,
+    by: Drawing["by"],
+    warnings: readonly RenderWarning[],
+  ): boolean {
+    return JSON.stringify(this.of(sessionId, by)) !== JSON.stringify(warnings);
+  }
+
+  // [LAW:single-enforcer] The one writer: the turn that drew a frame records
+  // what it warned.
+  keep(
     sessionId: SessionId,
     by: Drawing["by"],
     scope: RecordScope,
     warnings: readonly RenderWarning[],
-  ): boolean {
-    const held = this.of(sessionId, by);
+  ): void {
     const key = keyOf(sessionId, by);
     this.records.delete(key);
     this.records.set(key, {
@@ -112,7 +121,6 @@ export class RenderWarningRecords {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
     }
-    return JSON.stringify(held) !== JSON.stringify(warnings);
   }
 }
 

@@ -16,8 +16,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SessionEffects, type RowItem } from "../src/render/effect";
-import { FrameMemory } from "../src/render/frame-memory";
-import { framed } from "./helpers/frames";
+import { framed, surfaceRecord, type SurfaceRecord } from "./helpers/frames";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import {
   ANIMATION_SPEED_NAMES,
@@ -52,7 +51,7 @@ const loopT = (
     fx.clockAt(when, ANIMATION_SPEEDS[speed]),
     STILL_FRAME,
   );
-  motion.drawn();
+  fx.keep(motion.memory().motion);
   return fx.lastFrame().t;
 };
 
@@ -126,7 +125,7 @@ describe("a fade runs at the session's animation speed", () => {
   // in it; what is fading in after it.
   const frame = (
     fx: SessionEffects<string>,
-    memory: FrameMemory<string>,
+    memory: SurfaceRecord<string>,
     when: Instant,
     speed: AnimationSpeedName,
     shown: boolean,
@@ -155,7 +154,7 @@ describe("a fade runs at the session's animation speed", () => {
     }),
   )("at %s, a twenty-second fade %s s in is %j", (speed, later, fading) => {
     const fx = new SessionEffects<string>("s");
-    const memory = new FrameMemory<string>();
+    const memory = surfaceRecord<string>();
     frame(fx, memory, at(0), speed, false);
     expect(frame(fx, memory, at(1), speed, true)).toEqual([
       { placement: "left", t: 0 },

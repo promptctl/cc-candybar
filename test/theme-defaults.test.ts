@@ -16,7 +16,7 @@
 // [LAW:single-enforcer] Everything runs the real spine: parse → merge →
 // validate, resolveEffectiveGlobals, registerDslConfig + drawDsl.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, heldSegments } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import type { RichText } from "@promptctl/rich-js";
@@ -271,7 +271,7 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
   try {
     const effective = resolveEffectiveGlobals(config, () => null, () => false);
     const at = instantOf(new Date());
-    drawPayload(
+    heldSegments(sink, drawPayload(
       config,
       compiled,
       store,
@@ -279,11 +279,11 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       { session_id: SID },
       at,
       renderOptionsOf(effective, OPTS_WIDTH),
-      { perSegmentSink: sink },
+      undefined,
       effective,
-    ).frame;
+    )).frame;
     const daemon = bg();
-    drawPayload(
+    heldSegments(sink, drawPayload(
       config,
       compiled,
       store,
@@ -291,8 +291,8 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       { session_id: SID },
       at,
       renderOptionsOf(effective, OPTS_WIDTH),
-      { perSegmentSink: sink },
-    ).frame;
+      undefined,
+    )).frame;
     return { daemon, compileOnly: bg() };
   } finally {
     registry.dispose();

@@ -1,7 +1,7 @@
 // The checkout's location: what `checkoutLocation` reads off a real
 // checkout, and what `directory` draws from it. `gitaculous` reads the same
 // payload fields only to decide whether it has a branch to show at all.
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, heldSegments } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -71,7 +71,7 @@ function drawAll(
   const sink = new Map<string, readonly RichText[]>();
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    drawPayload(
+    heldSegments(sink, drawPayload(
       config,
       compiled,
       store,
@@ -79,8 +79,8 @@ function drawAll(
       { session_id: "s", home: "/home/me", ...payload },
       instantOf(new Date(0)),
       { endcaps: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 0, width: Number.POSITIVE_INFINITY },
-      { perSegmentSink: sink },
-    ).frame;
+      undefined,
+    )).frame;
   } finally {
     registry.dispose();
   }
