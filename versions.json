@@ -4,15 +4,22 @@
     {
       "version": "pr-780",
       "ref": "refs/pull/780/merge",
-      "sha": "68c44e8ad8491a3bca0627cc78818cd94f4cca6f",
-      "timestamp": "2026-11-17T04:21:10.388Z",
+      "sha": "c81e39d25b5c72feb3b8a0351ee34e7955220892",
+      "timestamp": "2026-11-17T04:30:29.191Z",
       "commits": [
         {
-          "sha": "68c44e8ad8491a3bca0627cc78818cd94f4cca6f",
+          "sha": "c81e39d25b5c72feb3b8a0351ee34e7955220892",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T04:20:06Z",
-          "message": "Merge 036f75618950f95c663fcc4c12c742c606fd3888 into cd22d86be5a01cf1358b2319620a5b9823ffc034\n"
+          "timestamp": "2026-11-17T04:29:38Z",
+          "message": "Merge ae6ab438a2bcdcec49325965f281cec3fe480bb4 into cd22d86be5a01cf1358b2319620a5b9823ffc034\n"
+        },
+        {
+          "sha": "ae6ab438a2bcdcec49325965f281cec3fe480bb4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T21:29:27-07:00",
+          "message": "fix(daemon): a turn's acts go once its changes have had their effect-done, neither of a request's turns runs once the close begins, and the mailbox is the keyed queue with a place at its head (5gb)\n"
         },
         {
           "sha": "036f75618950f95c663fcc4c12c742c606fd3888",

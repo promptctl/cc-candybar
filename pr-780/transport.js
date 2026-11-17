@@ -48893,16 +48893,19 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, closing
     }),
     [["effect", String(effect.id)]]
   );
+  const unlessClosing = (make) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : make();
   const worldState = collector.requested(req);
   const release4 = collector.holding(session);
   let configured;
   let delivered;
   try {
-    configured = await host.answer(() => ({
-      kind: "event",
-      at,
-      event: { kind: "config", context: req, worldState }
-    }));
+    configured = await host.answer(
+      unlessClosing(() => ({
+        kind: "event",
+        at,
+        event: { kind: "config", context: req, worldState }
+      }))
+    );
     recorded(facts, configured);
     if (configured.kind === "threw") {
       noteFacts(facts, { renderer: host.name });
@@ -48928,7 +48931,7 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, closing
     );
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
     delivered = await host.answer(
-      () => closing.aborted ? failureOf(new DaemonClosing("render")) : {
+      unlessClosing(() => ({
         kind: "event",
         at,
         event: {
@@ -48939,7 +48942,7 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, closing
           following: [...feeds.following(session)],
           feeds: feeds.feedsOf(session, at)
         }
-      }
+      }))
     );
   } finally {
     release4();
@@ -60899,7 +60902,7 @@ init_globals();
 var KeyedSerialQueue = class {
   // Each key's tasks still to run, while one runs.
   waiting = /* @__PURE__ */ new Map();
-  run(key, task) {
+  run(key, task, at = "last") {
     return new Promise((resolve, reject2) => {
       const entry = async () => {
         try {
@@ -60910,7 +60913,8 @@ var KeyedSerialQueue = class {
       };
       const behind = this.waiting.get(key);
       if (behind !== void 0) {
-        behind.push(entry);
+        if (at === "first") behind.unshift(entry);
+        else behind.push(entry);
         return;
       }
       const tasks = [];
@@ -75420,23 +75424,27 @@ var message = (e) => e instanceof Error ? e.message : String(e);
 
 // src/daemon/renderer-host.ts
 function rendererHost(name, clock, renderer, log, collector, world) {
-  const mailbox = new Mailbox();
+  const mailbox = new KeyedSerialQueue();
   let holder = null;
   let queued = 0;
   const inMailbox = (slot, at = "last") => {
     const asked2 = clock.monotonic();
     queued++;
-    return mailbox.post(at, async () => {
-      queued--;
-      const queuedMs = elapsedMs(clock, asked2);
-      const held = { input: "-", since: clock.monotonic() };
-      holder = held;
-      try {
-        return await slot(queuedMs, (input) => void (held.input = input));
-      } finally {
-        holder = null;
-      }
-    });
+    return mailbox.run(
+      name,
+      async () => {
+        queued--;
+        const queuedMs = elapsedMs(clock, asked2);
+        const held = { input: "-", since: clock.monotonic() };
+        holder = held;
+        try {
+          return await slot(queuedMs, (input) => void (held.input = input));
+        } finally {
+          holder = null;
+        }
+      },
+      at
+    );
   };
   const unanswered = (failure, queuedMs) => ({
     turn: {
@@ -75480,7 +75488,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       collector.subscribed(subscriptions);
       const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
       const owed = [];
-      let before = Promise.resolve();
+      const acts = [];
       for (const effect of output.effects) {
         if (effect.kind === "present") {
           if (input.event.kind !== "request")
@@ -75492,14 +75500,16 @@ function rendererHost(name, clock, renderer, log, collector, world) {
             );
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
           owed.push((await settleInSlot(effect, landed)).settled);
+        else acts.push(effect);
+      }
+      let before = Promise.resolve();
+      for (const act2 of acts) {
+        const acted = landed.kind === "ok" ? before.then(() => world.perform(act2)) : Promise.resolve(unperformed);
+        const settled4 = acted.then((outcome) => settle3(act2, outcome));
+        if (outlives(act2)) void settled4;
         else {
-          const acted = landed.kind === "ok" ? before.then(() => world.perform(effect)) : Promise.resolve(unperformed);
-          const settled4 = acted.then((outcome) => settle3(effect, outcome));
-          if (outlives(effect)) void settled4;
-          else {
-            owed.push(settled4);
-            before = acted;
-          }
+          owed.push(settled4);
+          before = acted;
         }
       }
       const settled3 = Promise.all(owed).finally(release4);
@@ -75616,34 +75626,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   });
   return { name, answer: answer2, deliver, start: recorded2("first"), ask: ask2, tell, stats };
 }
-var Mailbox = class {
-  // The slots still to run, while one runs.
-  waiting = null;
-  post(at, slot) {
-    return new Promise((resolve, reject2) => {
-      const entry = async () => {
-        try {
-          resolve(await slot());
-        } catch (e) {
-          reject2(e);
-        }
-      };
-      if (this.waiting !== null) {
-        if (at === "first") this.waiting.unshift(entry);
-        else this.waiting.push(entry);
-        return;
-      }
-      const waiting = [];
-      this.waiting = waiting;
-      const drain = (next) => void next().then(() => {
-        const after = waiting.shift();
-        if (after === void 0) this.waiting = null;
-        else drain(after);
-      });
-      drain(entry);
-    });
-  }
-};
 function sessionOf(event) {
   switch (event.kind) {
     // A start is every session's: it holds none of them alone.
