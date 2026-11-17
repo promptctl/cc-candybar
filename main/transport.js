@@ -48877,10 +48877,11 @@ function located(req) {
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived2, id2, at, waitEndsAt, facts) {
+async function answerStatusline(host, collector, menuIdle, feeds, clock, closing, log, arrived2, id2, at, waitEndsAt, facts) {
   const req = located(arrived2);
+  const session = req.hookData.session_id;
   const done = (effect, reason) => void host.deliver(
-    {
+    () => ({
       kind: "event",
       at: instantAt(clock),
       event: {
@@ -48889,41 +48890,66 @@ async function answerStatusline(host, collector, menuIdle, feeds, clock, arrived
         of: effect.id,
         outcome: reason === null ? { kind: "ok" } : { kind: "failed", reason }
       }
-    },
+    }),
     [["effect", String(effect.id)]]
   );
+  const unlessClosing = (make) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : make();
   const worldState = collector.requested(req);
-  const configured = await host.answer({
-    kind: "event",
-    at,
-    event: {
-      kind: "config",
-      context: req,
-      worldState
+  const release4 = collector.holding(session);
+  let configured;
+  let delivered;
+  try {
+    configured = await host.answer(
+      unlessClosing(() => ({
+        kind: "event",
+        at,
+        event: { kind: "config", context: req, worldState }
+      }))
+    );
+    recorded(facts, configured);
+    if (configured.kind === "threw") {
+      noteFacts(facts, { renderer: host.name });
+      return failed2(host, configured.failure, "its config turn: ");
     }
-  });
-  recorded(facts, configured);
-  if (configured.kind === "threw") {
-    noteFacts(facts, { renderer: host.name });
-    return failed2(host, configured.failure, "its config turn: ");
+    const waitFrom = clock.monotonic();
+    const budget = waitEndsAt - waitFrom;
+    noteFacts(facts, {
+      deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
+    });
+    const ended = await waitWithin(
+      (signal) => collector.settled(session, signal),
+      budget,
+      // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
+      // it is a bug, said against the session, never one that ends the
+      // daemon.
+      (e, how) => log(
+        "error",
+        `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`
+      ),
+      clock.after,
+      closing
+    );
+    noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
+    delivered = await host.answer(
+      unlessClosing(() => ({
+        kind: "event",
+        at,
+        event: {
+          kind: "request",
+          id: id2,
+          context: req,
+          idleSince: menuIdle.since(session, at) ?? null,
+          following: [...feeds.following(session)],
+          feeds: feeds.feedsOf(session, at)
+        }
+      }))
+    );
+  } finally {
+    release4();
   }
-  const delivered = await host.answer({
-    kind: "event",
-    at,
-    // [LAW:no-ambient-temporal-coupling] The wait crosses as what is left of
-    // it at delivery, so the renderer counts it on its own clock.
-    event: {
-      kind: "request",
-      id: id2,
-      context: req,
-      waitMs: waitEndsAt - clock.monotonic(),
-      idleSince: menuIdle.since(req.hookData.session_id, at) ?? null,
-      following: [...feeds.following(req.hookData.session_id)],
-      feeds: feeds.feedsOf(req.hookData.session_id, at)
-    }
-  });
   recorded(facts, delivered);
   noteFacts(facts, {
+    mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
     hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
   });
   const { effects } = delivered;
@@ -60027,6 +60053,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     });
   }
   if (req.kind === "stats") {
+    const mailbox = parts.renderer.stats();
     const { stats: drawn } = await renderer.ask(
       { kind: "stats" },
       instantAt(clock)
@@ -60044,6 +60071,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         ...drawn,
         collector: parts.collector.stats(),
         menuIdle: menuIdle.getStats(),
+        mailbox,
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
@@ -60119,6 +60147,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       parts.menuIdle,
       frameFeeds,
       clock,
+      parts.closing,
+      parts.log,
       checked.req,
       order2,
       at,
@@ -60235,7 +60265,6 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
     ["queued", `${spanMs(accepted.at, t0)}ms`]
   ];
   const click3 = {
-    id: accepted.id,
     gone: () => timedOut() || clientLeft()
   };
   const outcome = await run3(facts, click3).catch(failureOf);
@@ -60328,40 +60357,41 @@ var VERB_FACT = {
   "tmux-status": "linkVerb"
 };
 async function handleClick(parts, verb, value, arrival, facts, click3) {
-  var _stack = [];
-  try {
-    noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
-    const session = clickSessionOf(verb, value);
-    if (session === null) noteFacts(facts, { sid: "-" });
-    else if (session.ok) {
-      noteFacts(facts, { sid: session.id });
-      parts.collector.clicked(session.id);
-    }
-    const _held = __using(_stack, parts.clicks.hold(click3));
-    const delivered = await parts.renderer.answer({
-      kind: "event",
-      at: instantAt(parts.clock),
-      event: {
-        kind: "click",
-        verb,
-        value,
-        session,
-        arrival,
-        id: click3.id,
-        latest: session?.ok ? parts.frameFeeds.latest(session.id) : null
-      }
-    });
-    facts.push(...delivered.record);
-    if (delivered.kind === "threw") return delivered.failure;
-    const missed = delivered.settled.find(
-      (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped"
-    );
-    return missed === void 0 ? { kind: "ok" } : clickFailure(missed);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
+  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
+  const session = clickSessionOf(verb, value);
+  if (session === null) noteFacts(facts, { sid: "-" });
+  else if (session.ok) {
+    noteFacts(facts, { sid: session.id });
+    parts.collector.clicked(session.id);
   }
+  const pending2 = session?.ok ? session.id : null;
+  if (pending2 !== null) parts.menuIdle.clickArrived(pending2);
+  let delivered;
+  try {
+    delivered = await parts.renderer.answer(
+      () => click3.gone() ? failureOf(new ClickAbandoned(verb)) : {
+        kind: "event",
+        at: instantAt(parts.clock),
+        event: {
+          kind: "click",
+          verb,
+          value,
+          session,
+          arrival,
+          latest: session?.ok ? parts.frameFeeds.latest(session.id) : null
+        }
+      }
+    );
+  } finally {
+    if (pending2 !== null) parts.menuIdle.clickSettled(pending2);
+  }
+  noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
+  facts.push(...delivered.record);
+  if (delivered.kind === "threw") return delivered.failure;
+  const missed = delivered.settled.find(
+    (outcome) => outcome.kind !== "ok" && outcome.kind !== "skipped"
+  );
+  return missed === void 0 ? { kind: "ok" } : clickFailure(missed);
 }
 function clickFailure(outcome) {
   const kind = CLICK_FAILURE[outcome.kind];
@@ -60872,7 +60902,7 @@ init_globals();
 var KeyedSerialQueue = class {
   // Each key's tasks still to run, while one runs.
   waiting = /* @__PURE__ */ new Map();
-  run(key, task) {
+  run(key, task, at = "last") {
     return new Promise((resolve, reject2) => {
       const entry = async () => {
         try {
@@ -60883,7 +60913,8 @@ var KeyedSerialQueue = class {
       };
       const behind = this.waiting.get(key);
       if (behind !== void 0) {
-        behind.push(entry);
+        if (at === "first") behind.unshift(entry);
+        else behind.push(entry);
         return;
       }
       const tasks = [];
@@ -71784,7 +71815,7 @@ var RuntimeStats = class _RuntimeStats {
       collector: { sessions: 0, retiring: 0 },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0, pending: 0 },
-      journalTurns: { holder: null, heldMs: 0, queued: 0 },
+      mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
@@ -71850,7 +71881,7 @@ var RuntimeStats = class _RuntimeStats {
       collector: extras.collector,
       effectCache: extras.effectCache,
       menuIdle: extras.menuIdle,
-      journalTurns: extras.journalTurns,
+      mailbox: extras.mailbox,
       runs: extras.runs,
       sessionState: extras.sessionState,
       frameFeeds: extras.frameFeeds,
@@ -72090,6 +72121,33 @@ function capturing(pattern2) {
   return groups > 0 ? regexParser(regex) : `parse.regex must contain a capture group \u2014 its group 1 is the value; got ${JSON.stringify(pattern2)}`;
 }
 
+// src/facts/awaited.ts
+init_globals();
+function awaitsReading({ builtins, sources, runs }, subscribed) {
+  return [
+    ...AWAITED_BUILTINS.map((name) => builtins[name]),
+    ...Object.values(sources),
+    ...[...subscribed].map((digest2) => (runs[digest2] ?? UNREAD_RUN).reading)
+  ].some(awaitedReading);
+}
+var AWAITED = {
+  session: true,
+  today: false,
+  speed: true,
+  context: true,
+  metrics: true,
+  activity: true,
+  cache: true,
+  autocompact: true,
+  git: true,
+  pr: false,
+  tmux: true,
+  hostName: true,
+  hostUser: true
+};
+var AWAITED_BUILTINS = Object.keys(AWAITED).filter((name) => AWAITED[name]);
+var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
+
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
 var writableOf = ({ doctor }, kept) => doctor.kind === "ok" && doctor.value.kind === "read" ? writableSettingsFiles(doctor.value) : kept;
@@ -72127,7 +72185,13 @@ var Collector = class {
     this.deps = deps;
   }
   deps;
-  records = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] Observable as far as a request's wait reads
+  // them (`settled`): which sessions are read, each one's phase, its latest
+  // stamp and its subscriptions.
+  records = observable.map(
+    void 0,
+    { deep: false }
+  );
   stopSweep = null;
   // [LAW:one-source-of-truth] The daemon's facts, derived once for every
   // session, and moved only when what they say moved.
@@ -72160,6 +72224,31 @@ var Collector = class {
     });
     this.armSweep();
     return document;
+  }
+  // [LAW:single-enforcer] A request's wait on its world state (rule 1 of the
+  // model): until the session's latest stamp has no fact its draw waits on
+  // that has never answered, over the runs its renderer subscribes to now
+  // (`awaitsReading`), or the session is no longer read, or `signal` ends it.
+  // The wait triggers no read: the owners' reads follow the world, and each
+  // stamp they move goes to the renderer ahead of the request, so the request
+  // draws the world state the wait ended on. It reads the subscriptions as
+  // they move, so a turn that drops a run (a view retired, a config that no
+  // longer names it) ends the wait on that run.
+  async settled(session, signal) {
+    try {
+      await when(
+        () => {
+          const record2 = this.records.get(session);
+          return record2?.phase.kind !== "live" || !awaitsReading(
+            record2.stamped.document,
+            record2.subscriptions.runs.keys()
+          );
+        },
+        { signal }
+      );
+    } catch (e) {
+      if (!signal.aborted) throw e;
+    }
   }
   // A click is a person's input naming the session, as a request is, so the
   // next sweep keeps it whatever the click's turn draws in the meantime. A
@@ -72261,7 +72350,7 @@ var Collector = class {
     this.disarmSweep();
     for (const { phase } of this.records.values())
       if (phase.kind === "live") release3(phase);
-    this.records.clear();
+    runInAction(() => this.records.clear());
   }
   open(session, locator) {
     const subscriptions = {
@@ -72285,19 +72374,28 @@ var Collector = class {
       reader.holds.close();
       throw e;
     }
-    const stamped = {
-      document,
-      from: first2,
-      writable: writableOf(document, [])
-    };
-    return {
-      session,
-      stamped,
-      subscriptions,
-      active: true,
-      turns: 0,
-      phase: this.watch(session, stamped, reader)
-    };
+    const stamped = observable(
+      { document, from: first2, writable: writableOf(document, []) },
+      { document: observableRef, from: false, writable: false }
+    );
+    return observable(
+      {
+        session,
+        stamped,
+        subscriptions,
+        active: true,
+        turns: 0,
+        phase: this.watch(session, stamped, reader)
+      },
+      {
+        session: false,
+        stamped: false,
+        subscriptions: observableRef,
+        active: false,
+        turns: false,
+        phase: observableRef
+      }
+    );
   }
   // A retiring record read again: holds at the request's keys, and its stamps
   // go on from the document it kept.
@@ -72441,14 +72539,14 @@ var Collector = class {
   retire(record2, live) {
     release3(live);
     const retiring = { kind: "retiring" };
-    record2.phase = retiring;
+    runInAction(() => record2.phase = retiring);
     this.deps.log(
       "info",
       `session retired sid=${JSON.stringify(record2.session)}`
     );
     void this.deps.deliver({ kind: "retire", session: record2.session }).then(() => {
       if (record2.phase === retiring && this.records.get(record2.session) === record2)
-        this.records.delete(record2.session);
+        runInAction(() => this.records.delete(record2.session));
       if (this.records.size === 0) this.disarmSweep();
     });
   }
@@ -75325,16 +75423,53 @@ function putBack(written3, cause) {
 var message = (e) => e instanceof Error ? e.message : String(e);
 
 // src/daemon/renderer-host.ts
-var performed = (effect) => effect.kind !== "present" && effect.kind !== "change" && effect.kind !== "approve-repo";
 function rendererHost(name, clock, renderer, log, collector, world) {
-  const held = async (input) => {
+  const mailbox = new KeyedSerialQueue();
+  let holder = null;
+  let queued = 0;
+  const inMailbox = (slot, at = "last") => {
+    const asked2 = clock.monotonic();
+    queued++;
+    return mailbox.run(
+      name,
+      async () => {
+        queued--;
+        const queuedMs = elapsedMs(clock, asked2);
+        const held = { input: "-", since: clock.monotonic() };
+        holder = held;
+        try {
+          return await slot(queuedMs, (input) => void (held.input = input));
+        } finally {
+          holder = null;
+        }
+      },
+      at
+    );
+  };
+  const unanswered = (failure, queuedMs) => ({
+    turn: {
+      kind: "threw",
+      failure,
+      record: [],
+      effects: [],
+      queuedMs,
+      hopMs: null
+    },
+    settled: Promise.resolve([])
+  });
+  const inSlot = async (input, queuedMs) => {
     const session = sessionOf(input.event);
-    const release4 = session === null ? () => {
-    } : collector.holding(session);
+    let release4 = () => {
+    };
     try {
+      release4 = session === null ? release4 : collector.holding(session);
       const sentAt = clock.monotonic();
-      const { subscriptions, turnMs, ...answered } = await renderer.answer(input);
-      const output = { ...answered, hopMs: elapsedMs(clock, sentAt) - turnMs };
+      const { subscriptions, turnMs, ...output } = await renderer.answer(input);
+      const turn = {
+        ...output,
+        queuedMs,
+        hopMs: elapsedMs(clock, sentAt) - turnMs
+      };
       const changes = output.effects.filter(
         (effect) => effect.kind === "change"
       );
@@ -75350,71 +75485,72 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         },
         collector.writableSettings
       );
+      collector.subscribed(subscriptions);
       const unperformed = landed.kind === "ok" || landed.kind === "closing" ? landed : { kind: "skipped", reason: `not performed: ${landed.reason}` };
-      const inTurn = [];
-      let before = Promise.resolve();
+      const owed = [];
+      const acts = [];
       for (const effect of output.effects) {
         if (effect.kind === "present") {
           if (input.event.kind !== "request")
-            inTurn.push(
-              settle3(effect, {
+            owed.push(
+              (await settleInSlot(effect, {
                 kind: "failed",
                 reason: `a ${input.event.kind} turn answers no request`
-              })
+              })).settled
             );
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
-          inTurn.push(settle3(effect, landed));
+          owed.push((await settleInSlot(effect, landed)).settled);
+        else acts.push(effect);
+      }
+      let before = Promise.resolve();
+      for (const act2 of acts) {
+        const acted = landed.kind === "ok" ? before.then(() => world.perform(act2)) : Promise.resolve(unperformed);
+        const settled4 = acted.then((outcome) => settle3(act2, outcome));
+        if (outlives(act2)) void settled4;
         else {
-          const acted = landed.kind === "ok" ? before.then(() => world.perform(effect)) : Promise.resolve(unperformed);
-          const settled3 = acted.then((outcome) => settle3(effect, outcome));
-          if (outlives(effect)) void settled3;
-          else {
-            inTurn.push(settled3);
-            before = acted;
-          }
+          owed.push(settled4);
+          before = acted;
         }
       }
-      collector.subscribed(subscriptions);
-      return { ...output, settled: await Promise.all(inTurn) };
-    } finally {
+      const settled3 = Promise.all(owed).finally(release4);
+      return { turn, settled: settled3 };
+    } catch (thrown2) {
       release4();
+      return unanswered(failureOf(thrown2), queuedMs);
     }
   };
-  const turn = (input) => held(input).catch(
-    (thrown2) => ({
-      kind: "threw",
-      failure: failureOf(thrown2),
-      record: [],
-      effects: [],
-      hopMs: null,
-      settled: []
-    })
-  );
+  const doneOf = (effect, outcome) => ({
+    kind: "event",
+    at: instantAt(clock),
+    event: {
+      kind: "effect-done",
+      session: effect.session,
+      of: effect.id,
+      outcome
+    }
+  });
   const settle3 = async (effect, outcome) => {
-    const failed3 = performed(effect) && (outcome.kind === "failed" || outcome.kind === "refused");
-    if (failed3 && effect.session === null) world.unheard(outcome.reason);
+    const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
+    if (failed3 !== null && effect.session === null) world.unheard(failed3);
     const delivered = await deliver(
-      {
-        kind: "event",
-        at: instantAt(clock),
-        event: {
-          kind: "effect-done",
-          session: effect.session,
-          of: effect.id,
-          outcome
-        }
-      },
+      () => doneOf(effect, outcome),
       [["effect", String(effect.id)]]
     );
-    if (failed3 && effect.session !== null && delivered.kind === "threw" && delivered.failure.kind === "down")
-      world.unheard(outcome.reason);
+    if (failed3 !== null && effect.session !== null && delivered.kind === "threw" && delivered.failure.kind === "down")
+      world.unheard(failed3);
     return outcome;
   };
-  const record2 = (input, about, delivered) => {
-    const session = sessionOf(input.event);
+  const settleInSlot = async (effect, outcome) => {
+    const input = doneOf(effect, outcome);
+    const { turn, settled: settled3 } = await inSlot(input, 0);
+    record2(input.event, [["effect", String(effect.id)]], turn);
+    return { settled: settled3.then(() => outcome) };
+  };
+  const record2 = (event, about, delivered) => {
+    const session = event === null ? null : sessionOf(event);
     const head = [
       ["renderer", name],
-      ["input", input.event.kind],
+      ["input", event?.kind ?? "-"],
       ...session === null ? [] : [["sid", session]],
       ...about
     ];
@@ -75435,15 +75571,38 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         );
     }
   };
-  const deliver = async (input, about) => {
-    const delivered = await turn(input);
-    record2(input, about, delivered);
-    return delivered;
+  const taken = async (make, at = "last") => {
+    const { event, slotted } = await inMailbox(async (queuedMs, holds2) => {
+      let made;
+      try {
+        made = make();
+      } catch (thrown2) {
+        made = failureOf(thrown2);
+      }
+      if (made.kind !== "event")
+        return { event: null, slotted: unanswered(made, queuedMs) };
+      holds2(made.event.kind);
+      return { event: made.event, slotted: await inSlot(made, queuedMs) };
+    }, at);
+    return {
+      event,
+      turn: { ...slotted.turn, settled: await slotted.settled }
+    };
   };
+  const answer2 = async (make) => (await taken(make)).turn;
+  const recorded2 = (at) => async (make, about) => {
+    const { event, turn } = await taken(make, at);
+    record2(event, about, turn);
+    return turn;
+  };
+  const deliver = recorded2("last");
   const ask2 = async (push, at) => {
-    const output = await renderer.answer({ kind: "adapter", push, at }).catch(
-      (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
-    );
+    const output = await inMailbox((_queuedMs, holds2) => {
+      holds2(`push:${push.kind}`);
+      return renderer.answer({ kind: "adapter", push, at }).catch(
+        (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
+      );
+    });
     if (output.kind === "threw")
       throw new CrossedFailure({
         ...output.failure,
@@ -75460,7 +75619,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const failure = failureOf(thrown2);
     if (failure.kind !== "down") log("error", failure.detail);
   });
-  return { name, answer: turn, deliver, ask: ask2, tell };
+  const stats = () => ({
+    holder: holder?.input ?? null,
+    heldMs: holder === null ? 0 : elapsedMs(clock, holder.since),
+    queued
+  });
+  return { name, answer: answer2, deliver, start: recorded2("first"), ask: ask2, tell, stats };
 }
 function sessionOf(event) {
   switch (event.kind) {
@@ -84952,37 +85116,6 @@ function projectSpeedHistory(obs) {
 function renderWidth(hints) {
   return applyClaudeCodeReserve(hints.termCols ?? DEFAULT_TERMINAL_WIDTH);
 }
-function awaitsReading({ builtins, sources, runs }, named3) {
-  return [
-    ...AWAITED_BUILTINS.map((name) => builtins[name]),
-    ...Object.values(sources),
-    ...[...named3].map((run3) => (runs[run3.digest] ?? UNREAD_RUN).reading)
-  ].some(awaitedReading);
-}
-var AWAITED = {
-  session: true,
-  today: false,
-  speed: true,
-  context: true,
-  metrics: true,
-  activity: true,
-  cache: true,
-  autocompact: true,
-  git: true,
-  pr: false,
-  tmux: true,
-  hostName: true,
-  hostUser: true
-};
-var AWAITED_BUILTINS = Object.keys(AWAITED).filter((name) => AWAITED[name]);
-var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
-async function settleWorld(worldState, named3, signal) {
-  try {
-    await when(() => !awaitsReading(worldState(), named3()), { signal });
-  } catch (e) {
-    if (!signal.aborted) throw e;
-  }
-}
 function firstPending(...lanes) {
   const lane = lanes.find((l) => l.kind === "pending");
   return lane?.kind === "pending" ? pendingOf(lane.why) : void 0;
@@ -85858,43 +85991,17 @@ function recordRequest(parts, req) {
     sessionState.set(sessionId2, SESSION_RENDER_ORIGIN_KEY, origin);
   }
 }
-async function answerRequest(parts, req, at, waitMs, feed2, facts, effects) {
+function answerRequest(parts, req, at, feed2, facts, effects) {
   var _stack = [];
   try {
-    const { clock, log } = parts;
-    const turnFrom = clock.monotonic();
+    const { clock } = parts;
+    const drawFrom = clock.monotonic();
     const setup = __using(_stack, setUpRender(parts, req, at, facts));
     parts.laneActs.noted(
       req,
       laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
       effects
     );
-    const waitFrom = clock.monotonic();
-    const budget = waitMs - (waitFrom - turnFrom);
-    noteFacts(facts, {
-      deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
-    });
-    const ended = await waitWithin(
-      (signal) => settleWorld(
-        () => parts.worldStates.of(setup.sessionId),
-        () => setup.view.registry.namedRuns().values(),
-        signal
-      ),
-      budget,
-      // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
-      // it is a bug, said against the session, never one that ends the daemon.
-      (e, ended2) => log(
-        "error",
-        `render wait failed after it ended ended=${ended2} sid=${JSON.stringify(setup.sessionId)}: ${inspect(e)}`
-      ),
-      clock.after,
-      parts.renderCache.closing
-    );
-    const drawFrom = clock.monotonic();
-    noteFacts(facts, {
-      waited: `${Math.round(drawFrom - waitFrom)}ms`,
-      ended
-    });
     const sessionId2 = req.hookData.session_id;
     const { drawn, clickShown, eventsShown, delivered, lanes } = drawRender(
       parts,
@@ -85951,24 +86058,11 @@ function statuslineOf(sessionId2, writable, drawn, elsewhere) {
 
 // src/renderer/click.ts
 init_globals();
-async function clickTurn({ verbs, menuIdle }, { verb, value, session, arrival, id: id2, latest }, record2, effects) {
+function clickTurn({ verbs }, { verb, value, arrival, latest }, effects) {
   const handler = verbs.handler(verb);
   if (handler === void 0)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
-  const pending2 = session?.ok ? session.id : null;
-  if (pending2 !== null) menuIdle.clickArrived(pending2);
-  try {
-    await handler(value, {
-      arrival,
-      placeWaited: (ms) => noteFacts(record2, { placeWait: `${ms}ms` }),
-      turnWaited: (ms) => noteFacts(record2, { turnWait: `${ms}ms` }),
-      click: id2,
-      latest,
-      effects
-    });
-  } finally {
-    if (pending2 !== null) menuIdle.clickSettled(pending2);
-  }
+  handler(value, { arrival, latest, effects });
 }
 
 // src/renderer/verbs/port.ts
@@ -87651,7 +87745,7 @@ function oneArg(value) {
 function ask(ctx, act2) {
   ctx.acts.ask(ctx.effects, act2);
 }
-var copy = async (value, ctx) => ask(ctx, { kind: "copy", session: ctx.session, text: oneArg(value) });
+var copy = (value, ctx) => ask(ctx, { kind: "copy", session: ctx.session, text: oneArg(value) });
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
   "feed"
@@ -87661,7 +87755,7 @@ function requireDrawer(by) {
     throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
   return by;
 }
-var copyDiagnostic = async (value, ctx) => {
+var copyDiagnostic = (value, ctx) => {
   const [sessionId2 = "", by = "", key = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -87673,8 +87767,8 @@ var copyDiagnostic = async (value, ctx) => {
     );
   ask(ctx, { kind: "copy", session: sid, text: text4 });
 };
-var openVscode = async (value, ctx) => ask(ctx, { kind: "open", session: ctx.session, target: oneArg(value) });
-var setState = async (rawValue, ctx) => {
+var openVscode = (value, ctx) => ask(ctx, { kind: "open", session: ctx.session, target: oneArg(value) });
+var setState = (rawValue, ctx) => {
   const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId2);
   const gate2 = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
@@ -87714,7 +87808,7 @@ function stepWithin(current2, by, min3, max3) {
   if (n < min3) return current2 === min3 ? max3 : min3;
   return n;
 }
-var stepState = async (rawValue, ctx) => {
+var stepState = (rawValue, ctx) => {
   const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
     () => decodeSegments(rawValue)
   );
@@ -87907,7 +88001,7 @@ function editStore(ctx, sid) {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after)
   };
 }
-var setConfig = async (rawValue, ctx) => {
+var setConfig = (rawValue, ctx) => {
   const {
     sid,
     role,
@@ -87935,7 +88029,7 @@ var setConfig = async (rawValue, ctx) => {
     `set-config: ${landing.key}=${result.value} \u2192 ${into.path} (session=${sid})`
   );
 };
-var stepConfig = async (rawValue, ctx) => {
+var stepConfig = (rawValue, ctx) => {
   const {
     sid,
     role,
@@ -87984,7 +88078,7 @@ var stepConfig = async (rawValue, ctx) => {
     `step-config: ${landing.key} ${current2}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
   );
 };
-var save = async (value, ctx) => {
+var save = (value, ctx) => {
   const { sid, role } = configWire("save", value);
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
@@ -88025,7 +88119,7 @@ function gatePlacements(verb, gate2, placements) {
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
-var savePreset = async (value, ctx) => {
+var savePreset = (value, ctx) => {
   const { sid, role } = configWire("save-preset", value);
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
@@ -88061,7 +88155,7 @@ var savePreset = async (value, ctx) => {
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${into.path} (session=${sid})`
   );
 };
-var saveThemeDefault = async (value, ctx) => {
+var saveThemeDefault = (value, ctx) => {
   const { sid, role } = configWire("save-theme-default", value);
   const origin = sessionOrigin(ctx, sid);
   const config2 = ctx.configFor(origin);
@@ -88094,7 +88188,7 @@ var saveThemeDefault = async (value, ctx) => {
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${into.path} (session=${sid})`
   );
 };
-var deletePreset2 = async (value, ctx) => {
+var deletePreset2 = (value, ctx) => {
   const {
     sid,
     role,
@@ -88112,7 +88206,7 @@ var deletePreset2 = async (value, ctx) => {
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
   ctx.log("info", `delete-preset: ${name} \u2190 ${into.path} (session=${sid})`);
 };
-var resetConfig = async (value, ctx) => {
+var resetConfig = (value, ctx) => {
   const { sid, role, args: keys2 } = configWire("reset-config", value);
   const origin = sessionOrigin(ctx, sid);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
@@ -88157,7 +88251,7 @@ function endedSessionKeys(ended, configuring) {
     ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
   ]);
 }
-var applyLayoutOp2 = async (rawValue, ctx) => {
+var applyLayoutOp2 = (rawValue, ctx) => {
   const {
     sid,
     role,
@@ -88196,14 +88290,14 @@ var applyLayoutOp2 = async (rawValue, ctx) => {
     `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
   );
 };
-var undo = async (value, ctx) => {
+var undo = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const step4 = ctx.journal.undo(sid);
   ctx.journal.wrote();
   ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
-var back = async (value, ctx) => {
+var back = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   const { step: step4, discarded } = ctx.navigation.back(
     sid,
@@ -88213,7 +88307,7 @@ var back = async (value, ctx) => {
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
-var rewind = async (value, ctx) => {
+var rewind = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   ctx.journal.wrote();
   const restored = ctx.journal.rewind(sid);
@@ -88222,14 +88316,14 @@ var rewind = async (value, ctx) => {
     `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
   );
 };
-var redo = async (value, ctx) => {
+var redo = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const step4 = ctx.journal.redo(sid);
   ctx.journal.wrote();
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
-var applyUpdate = async (value, ctx) => ask(ctx, { kind: "apply-update", session: requireSessionId(oneArg(value)) });
+var applyUpdate = (value, ctx) => ask(ctx, { kind: "apply-update", session: requireSessionId(oneArg(value)) });
 function sessionHints(ctx, sid) {
   const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
   if (raw === null) {
@@ -88266,11 +88360,11 @@ function reportedFacts(ctx, sid, verb) {
     `${verb}: the doctor's report is being read \u2014 click again once it is in`
   );
 }
-var doctorRun = async (value, ctx) => {
+var doctorRun = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
 };
-var doctorFix = async (value, ctx) => {
+var doctorFix = (value, ctx) => {
   const [sessionId2 = "", checkName = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -88316,7 +88410,7 @@ var doctorFix = async (value, ctx) => {
     }
   }
 };
-var doctorMark = async (value, ctx) => {
+var doctorMark = (value, ctx) => {
   const [sessionId2 = "", checkName = "", mark = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -88350,7 +88444,7 @@ var doctorMark = async (value, ctx) => {
   );
   ctx.doctorRuns.report(ctx.sessionState, sid, { ...facts, marks });
 };
-var slash = async (value, ctx) => {
+var slash = (value, ctx) => {
   const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId2);
   const declared = Object.values(
@@ -88425,14 +88519,14 @@ function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     }))
   };
 }
-var run2 = async (value, ctx) => ask(
+var run2 = (value, ctx) => ask(
   ctx,
   runOf3(
     decodeWire(() => decodeSegments(value)),
     ctx
   )
 );
-var repoConfig = async (value, ctx) => {
+var repoConfig = (value, ctx) => {
   const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
     () => decodeSegments(value)
   );
@@ -88477,7 +88571,7 @@ function stepsOf(verb, value) {
     verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }]
   );
 }
-async function foldEffects(steps2, sid, ctx) {
+function foldEffects(steps2, sid, ctx) {
   const errors2 = [];
   let operational = false;
   for (const { verb, value } of steps2) {
@@ -88487,7 +88581,7 @@ async function foldEffects(steps2, sid, ctx) {
       continue;
     }
     try {
-      await leaf(value, ctx);
+      leaf(value, ctx);
     } catch (e) {
       const failure = failureOf(e);
       if (failure.kind !== "bad-request" && failure.kind !== "threw") {
@@ -88513,7 +88607,8 @@ function throwAll(failures) {
     );
   }
 }
-async function journaled(sid, latest, ctx, effects, handler) {
+function journaled(verb, sid, latest, ctx, effects, handler) {
+  ctx.configWrites.begin(verb);
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
@@ -88528,7 +88623,7 @@ async function journaled(sid, latest, ctx, effects, handler) {
     (line) => ctx.log("info", line)
   );
   try {
-    await handler({
+    handler({
       ...ctx,
       session: sid,
       sessionState: closing(journal.sessionState),
@@ -88571,26 +88666,17 @@ async function journaled(sid, latest, ctx, effects, handler) {
   throwAll(failures);
 }
 function click(verb) {
-  return async (value, ctx) => {
+  return (value, ctx) => {
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
     const steps2 = stepsOf(verb, value);
-    return ctx.journalTurns.click(
-      verb,
-      sid,
-      {
-        placed: ctx.placeWaited,
-        waited: ctx.turnWaited,
-        gone: ctx.clientGone
-      },
-      () => journaled(sid, ctx.latest, ctx, ctx.effects, async (c) => {
-        try {
-          await foldEffects(steps2, sid, c);
-        } finally {
-          if (sid !== null) ctx.clickLanded(sid);
-        }
-      })
-    );
+    journaled(verb, sid, ctx.latest, ctx, ctx.effects, (c) => {
+      try {
+        foldEffects(steps2, sid, c);
+      } finally {
+        if (sid !== null) ctx.clickLanded(sid);
+      }
+    });
   };
 }
 var VERBS = new Map(
@@ -88601,46 +88687,35 @@ var VERBS = new Map(
 var VERB_NAMES = Object.freeze([
   ...VERBS.keys()
 ]);
-function closeIdleMenus(sid, latest, idle, ctx, effects) {
-  return ctx.journalTurns.take(
-    "menu-idle",
-    {
-      waited: (ms) => ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
-      gone: async () => false
-    },
-    (turn) => journaled(sid, latest, ctx, effects, async (c) => {
-      if (!await turn.landed(idle.confirm())) {
-        c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
-        return;
-      }
-      const roots = openRoots(
-        nestOf(c, sid),
-        (key) => c.navigating.get(sid, key)
-      );
-      c.navigating.setBatch(
-        sid,
-        roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
-      );
-      c.log(
-        "info",
-        `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
-      );
-    })
-  );
+function closeIdleMenus(sid, latest, idle, stillIdle, ctx, effects) {
+  if (!stillIdle) {
+    ctx.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
+    return;
+  }
+  journaled("menu-idle", sid, latest, ctx, effects, (c) => {
+    const roots = openRoots(
+      nestOf(c, sid),
+      (key) => c.navigating.get(sid, key)
+    );
+    c.navigating.setBatch(
+      sid,
+      roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
+    );
+    c.log(
+      "info",
+      `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`
+    );
+  });
 }
 
 // src/renderer/verbs/port.ts
-function verbsOver(ctx, clicks) {
+function verbsOver(ctx) {
   return {
     handler: (verb) => {
       const handler = VERBS.get(verb);
-      return handler && ((value, { click: click3, ...facts }) => handler(value, {
-        ...ctx,
-        ...facts,
-        clientGone: () => clicks.gone(click3)
-      }));
+      return handler && ((value, facts) => handler(value, { ...ctx, ...facts }));
     },
-    closeIdle: (sessionId2, latest, idle, effects) => closeIdleMenus(sessionId2, latest, idle, ctx, effects),
+    closeIdle: (sessionId2, latest, idle, stillIdle, effects) => closeIdleMenus(sessionId2, latest, idle, stillIdle, ctx, effects),
     changeDone: (id2, outcome, effects) => changeDone(ctx, id2, outcome, effects)
   };
 }
@@ -90674,69 +90749,6 @@ function rendererOf(arms) {
   return { answer: answer2 };
 }
 
-// src/renderer/journal-turns.ts
-init_globals();
-var DAEMON_WIDE = "journals";
-var JournalTurns = class {
-  constructor(deps) {
-    this.deps = deps;
-  }
-  deps;
-  queue = new KeyedSerialQueue();
-  sessions = new KeyedSerialQueue();
-  open = true;
-  holder = null;
-  queued = 0;
-  // Runs `body` in its turn, unless the daemon closed or the asker left while
-  // it waited: a click whose client took a TIMEOUT never lands, so clicking
-  // again cannot revert a toggle.
-  take(verb, { waited, gone }, body) {
-    const asked2 = this.deps.monotonic();
-    this.queued++;
-    return this.queue.run(DAEMON_WIDE, async () => {
-      await this.deps.changesLanded();
-      this.queued--;
-      const since = this.deps.monotonic();
-      waited(spanMs(asked2, since));
-      this.holder = { verb, since };
-      try {
-        this.refuseClosed(verb);
-        if (await gone()) throw new ClickAbandoned(verb);
-        this.refuseClosed(verb);
-        return await body({
-          landed: (p2) => p2.finally(() => this.refuseClosed(verb))
-        });
-      } finally {
-        this.holder = null;
-      }
-    });
-  }
-  // A click from arrival to landing: in `session`'s order (a click naming none
-  // goes straight on), `body` in its turn.
-  click(verb, session, { placed: placed2, waited, gone }, body) {
-    const arrived2 = this.deps.monotonic();
-    const inPlace = () => {
-      placed2(elapsedMs(this.deps, arrived2));
-      return this.take(verb, { waited, gone }, body);
-    };
-    return session === null ? inPlace() : this.sessions.run(session, inPlace);
-  }
-  getStats() {
-    const { holder, queued } = this;
-    return {
-      holder: holder?.verb ?? null,
-      heldMs: holder === null ? 0 : elapsedMs(this.deps, holder.since),
-      queued
-    };
-  }
-  close() {
-    this.open = false;
-  }
-  refuseClosed(verb) {
-    if (!this.open) throw new DaemonClosing(verb);
-  }
-};
-
 // src/renderer/config-writes.ts
 init_globals();
 var ConfigWrites = class {
@@ -90749,13 +90761,23 @@ var ConfigWrites = class {
   // The open click's writes, by file: what it read first, and wrote last.
   open = /* @__PURE__ */ new Map();
   landing = null;
-  waiting = [];
   closed = false;
   // The open click's changes to Claude Code's settings, which no renderer
   // reads: each made against what the session's doctor reading saw.
   settings = [];
   // The open click's answers to the trust book, in the order it gave them.
   answers = [];
+  // A click's journal opens: refused once the daemon's close has begun, so a
+  // click the close cut off writes nothing. [LAW:no-silent-failure] A landing
+  // still owed here is the host's bug: it hands a turn's `effect-done`s in
+  // before the next input.
+  begin(verb) {
+    if (this.closed) throw new DaemonClosing(verb);
+    if (this.landing !== null)
+      throw new Error(
+        `${verb} began while a click's changes to ${this.landing.of.files.join(", ")} were still landing`
+      );
+  }
   // [LAW:one-source-of-truth] `file` as the open click left it: its last
   // write, else the disk, which holds every click ahead of it.
   read(file) {
@@ -90790,7 +90812,6 @@ var ConfigWrites = class {
     const settings = this.settings;
     this.answers = [];
     this.settings = [];
-    if (this.closed) return this.open.clear();
     const written3 = [...this.open].flatMap(([path44, { before, after }]) => {
       const list2 = diffChanges(before, after);
       return list2.length === 0 ? [] : [{ path: path44, list: list2 }];
@@ -90848,16 +90869,11 @@ var ConfigWrites = class {
     if (outcome.kind !== "ok") landing.missed ??= outcome;
     if (landing.owed.size > 0) return "owed";
     this.landing = null;
-    for (const resume of this.waiting.splice(0)) resume();
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
   }
-  // No click seals after this: the daemon is closing.
+  // No click begins after this: the daemon is closing.
   close() {
     this.closed = true;
-  }
-  // Resolves once no click's changes are on their way.
-  landed() {
-    return this.landing === null ? Promise.resolve() : new Promise((resume) => this.waiting.push(resume));
   }
 };
 
@@ -90865,7 +90881,7 @@ var ConfigWrites = class {
 function mainRenderer(parts, pushed) {
   const deliveries = /* @__PURE__ */ new Map();
   let subscriptions = { sources: {}, tmuxStatus: [] };
-  const turn = async (event, at, record2, effects) => {
+  const turn = (event, at, record2, effects) => {
     switch (event.kind) {
       case "start":
         for (const { context, worldState } of event.sessions)
@@ -90875,11 +90891,10 @@ function mainRenderer(parts, pushed) {
         configureSession(parts, event.context, event.worldState, at, record2);
         return;
       case "request": {
-        const { frame: frame2, delivered } = await answerRequest(
+        const { frame: frame2, delivered } = answerRequest(
           parts,
           event.context,
           at,
-          event.waitMs,
           {
             following: new Set(event.following),
             feeds: event.feeds,
@@ -90920,20 +90935,35 @@ function mainRenderer(parts, pushed) {
         return;
       }
       case "click":
-        await clickTurn(parts, event, record2, effects);
+        clickTurn(parts, event, effects);
         return;
       case "menu-idle":
-        await parts.verbs.closeIdle(
+        parts.verbs.closeIdle(
           event.session,
           event.latest,
-          {
-            ...event.idle,
-            confirm: () => parts.menuIdle.confirmClose(event.session, event.idle.firedAt)
-          },
+          event.idle,
+          event.stillIdle,
           effects
         );
         return;
     }
+  };
+  const subscribed = () => {
+    const views = parts.renderCache.subscriptions().sources;
+    const merged = new Map(
+      Object.entries(views)
+    );
+    for (const [session, run3] of parts.doctorRuns.subscriptions())
+      merged.set(session, [...merged.get(session) ?? [], run3]);
+    const sources = Object.fromEntries(merged);
+    return {
+      sources,
+      // [LAW:one-source-of-truth] Read off the same open views: a session
+      // whose view closes stops being named, so its row goes.
+      tmuxStatus: Object.keys(sources).filter(
+        (session) => viewLanes(parts, session)?.tmuxStatus === true
+      )
+    };
   };
   return rendererOf({
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
@@ -90949,30 +90979,17 @@ function mainRenderer(parts, pushed) {
       const record2 = [];
       const from = parts.clock.monotonic();
       const effects = [];
-      const ended = await turn(input.event, input.at, record2, effects).finally(() => {
-        const views = parts.renderCache.subscriptions().sources;
-        const merged = new Map(
-          Object.entries(views)
-        );
-        for (const [session, run3] of parts.doctorRuns.subscriptions())
-          merged.set(session, [...merged.get(session) ?? [], run3]);
-        const sources = Object.fromEntries(
-          merged
-        );
-        subscriptions = {
-          sources,
-          // [LAW:one-source-of-truth] Read off the same open views: a
-          // session whose view closes stops being named, so its row goes.
-          tmuxStatus: Object.keys(sources).filter(
-            (session) => viewLanes(parts, session)?.tmuxStatus === true
-          )
-        };
-      }).then(
-        () => ({ kind: "answered" }),
-        // [LAW:single-enforcer] Classified here, where it was thrown: a
-        // class crosses no process.
-        (thrown2) => ({ kind: "threw", failure: failureOf(thrown2) })
-      );
+      let ended;
+      try {
+        try {
+          turn(input.event, input.at, record2, effects);
+        } finally {
+          subscriptions = subscribed();
+        }
+        ended = { kind: "answered" };
+      } catch (thrown2) {
+        ended = { kind: "threw", failure: failureOf(thrown2) };
+      }
       return {
         ...ended,
         effects,
@@ -91008,10 +91025,6 @@ function startOver(inputs, sessionState, history, host) {
     ask: (effects, act2) => acts.ask(effects, act2),
     refused: actFailed,
     log
-  });
-  const journalTurns = new JournalTurns({
-    monotonic: () => clock.monotonic(),
-    changesLanded: () => configWrites.landed()
   });
   const navigationHistory = new NavigationHistory();
   const effectSessions = new EffectSessions();
@@ -91094,7 +91107,6 @@ function startOver(inputs, sessionState, history, host) {
     sessionState,
     stateDir: inputs.stateDir,
     locations: inputs.locations,
-    journalTurns,
     configWrites,
     clickLanded: (sessionId2) => host.menuIdle.clicked(sessionId2, now2()),
     log,
@@ -91185,8 +91197,7 @@ function startOver(inputs, sessionState, history, host) {
               sessions: sessionState.size(),
               observers: sessionState.observers(),
               revision: sessionState.latestRevision()
-            },
-            journalTurns: journalTurns.getStats()
+            }
           }
         };
       case "debug":
@@ -91203,10 +91214,9 @@ function startOver(inputs, sessionState, history, host) {
       case "reload-config":
         reloadConfig(push.origin);
         return { kind: "reload-config" };
-      // [LAW:no-ambient-temporal-coupling] No journal opens after this, and
-      // the one in flight stops at its next await once the host's abort lands.
+      // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
+      // runs whole, so none is in flight.
       case "close-journal":
-        journalTurns.close();
         configWrites.close();
         return { kind: "close-journal" };
       case "close-views":
@@ -91220,7 +91230,7 @@ function startOver(inputs, sessionState, history, host) {
   return mainRenderer(
     {
       ...parts,
-      verbs: verbsOver(verbCtx, host.clicks),
+      verbs: verbsOver(verbCtx),
       mint,
       acts,
       doctorRuns
@@ -91256,21 +91266,14 @@ function bootEnv(env2) {
 var REACH_KINDS = {
   wake: "notice",
   log: "notice",
-  menuIdle: {
-    clicked: "notice",
-    clickArrived: "notice",
-    clickSettled: "notice",
-    observe: "notice",
-    confirmClose: "call"
-  },
-  clicks: { gone: "call" },
+  menuIdle: { clicked: "notice", observe: "notice" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" }
 };
 function reachesOf(table, prefix = "") {
   return Object.entries(table).flatMap(
-    ([key, value]) => typeof value === "string" ? [[`${prefix}${key}`, value]] : reachesOf(value, `${prefix}${key}.`)
+    ([key, value]) => typeof value === "string" ? [`${prefix}${key}`] : reachesOf(value, `${prefix}${key}.`)
   );
 }
 var REACHES = reachesOf(REACH_KINDS);
@@ -92850,29 +92853,20 @@ async function readDoctorRun(deps, { session, hints, origin, ask: ask2 }) {
   }
 }
 
-// src/daemon/clicks-in-flight.ts
-init_globals();
-var ClicksInFlight = class {
-  held = /* @__PURE__ */ new Map();
-  hold({ id: id2, gone }) {
-    this.held.set(id2, gone);
-    return { [Symbol.dispose]: () => void this.held.delete(id2) };
-  }
-  gone(click3) {
-    const gone = this.held.get(click3);
-    if (gone === void 0) throw new Error(`click ${click3} is not in flight`);
-    return gone();
-  }
-};
-
 // src/daemon/menu-idle.ts
 init_globals();
-async function closeByTurn(host, at, sessionId2, idle, latest) {
-  const delivered = await host.answer({
+async function closeByTurn(host, at, sessionId2, idle, latest, stillIdle) {
+  const delivered = await host.answer(() => ({
     kind: "event",
     at: at(),
-    event: { kind: "menu-idle", session: sessionId2, idle, latest }
-  });
+    event: {
+      kind: "menu-idle",
+      session: sessionId2,
+      idle,
+      latest: latest(),
+      stillIdle: stillIdle()
+    }
+  }));
   return delivered.kind === "threw" ? delivered.failure : null;
 }
 var MAX_SESSIONS6 = 256;
@@ -93001,9 +92995,9 @@ var MenuIdle = class {
   // every menu shut — so the timer waits for a render that draws a menu again
   // (a group open by default, a close that failed) and closes it a timeout
   // after this one: never at once, and never for a session that stopped
-  // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn
-  // among the journals, so whether the session is still idle is read in that
-  // turn: a click since this firing keeps what it opened. The record follows
+  // rendering. [LAW:no-ambient-temporal-coupling] The close waits its turn in
+  // the renderer's mailbox, so whether the session is still idle is read as
+  // that turn comes: a click since this firing keeps what it opened. The record follows
   // that decision (`confirmClose`), and until the close settles no frame arms
   // another. A close that failed waits a timeout too, so it is retried at that
   // pace and not at every frame.
@@ -93178,7 +93172,8 @@ function createDaemon(inputs) {
       instant,
       sessionId2,
       idle,
-      frameFeeds.latest(sessionId2)
+      () => frameFeeds.latest(sessionId2),
+      () => menuIdle.confirmClose(sessionId2, idle.firedAt)
     ),
     failed: (sessionId2, failure) => log(
       LEVEL[failure.kind],
@@ -93254,9 +93249,7 @@ function createDaemon(inputs) {
       instant()
     )).lanes,
     // [LAW:no-ambient-temporal-coupling] The pin's wake of the session's
-    // state only moves the feed's timer, which fires in a later turn. A click
-    // that awaits gives up the loop, so a frame may show its writes ahead of
-    // its commit; the step stays whole.
+    // state only moves the feed's timer, which fires in a later turn.
     pin: (sessionId2) => parts.renderer.tell({ kind: "pin", session: sessionId2 }, instant()),
     unpin: (sessionId2) => parts.renderer.tell({ kind: "unpin", session: sessionId2 }, instant()),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
@@ -93353,24 +93346,22 @@ function createDaemon(inputs) {
     }),
     clock,
     watched: (sessionId2) => frameFeeds.feedOpen(sessionId2),
-    deliver: (event) => parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
+    deliver: (event) => parts.renderer.deliver(
+      () => ({ kind: "event", event, at: instant() }),
+      []
+    ),
     log
   });
-  const clicks = new ClicksInFlight();
   const rendererWatches = /* @__PURE__ */ new Map();
   const reaches = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice, or an awaited call.
+    // the host's part in its crossing shape: a notice.
     wake: (sessionId2, cause) => frameFeeds.wake(sessionId2, cause),
     log,
     menuIdle: {
       clicked: (sessionId2, at) => menuIdle.clicked(sessionId2, at),
-      clickArrived: (sessionId2) => menuIdle.clickArrived(sessionId2),
-      clickSettled: (sessionId2) => menuIdle.clickSettled(sessionId2),
-      observe: (sessionId2, at, shown, timeoutS) => menuIdle.observe(sessionId2, at, shown, timeoutS),
-      confirmClose: async (sessionId2, firedAt) => menuIdle.confirmClose(sessionId2, firedAt)
+      observe: (sessionId2, at, shown, timeoutS) => menuIdle.observe(sessionId2, at, shown, timeoutS)
     },
-    clicks: { gone: async (click3) => clicks.gone(click3) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -93411,20 +93402,29 @@ function createDaemon(inputs) {
     // its output names every session it serves; and every open feed gets its
     // `pin`. All through the host's one path to the renderer, each turn
     // recorded there.
+    // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
+    // every input after it, the pins included, finds its sessions handed in.
     start: async () => {
       const at = instant();
-      for (const sessionId2 of frameFeeds.openFeeds())
-        parts.renderer.tell({ kind: "pin", session: sessionId2 }, at);
-      const sessions = [...collector.liveDocuments()].flatMap(
-        ([sessionId2, worldState]) => {
-          const req = frameFeeds.latest(sessionId2);
-          return req === null ? [] : [{ context: located(req), worldState }];
-        }
-      );
-      await parts.renderer.deliver(
-        { kind: "event", at, event: { kind: "start", sessions } },
+      const started2 = parts.renderer.start(
+        () => ({
+          kind: "event",
+          at,
+          event: {
+            kind: "start",
+            sessions: [...collector.liveDocuments()].flatMap(
+              ([sessionId2, worldState]) => {
+                const req = frameFeeds.latest(sessionId2);
+                return req === null ? [] : [{ context: located(req), worldState }];
+              }
+            )
+          }
+        }),
         [["why", "renderer-start"]]
       );
+      for (const sessionId2 of frameFeeds.openFeeds())
+        parts.renderer.tell({ kind: "pin", session: sessionId2 }, at);
+      await started2;
     },
     ended: (event) => {
       rendererEnded = event;
@@ -93432,7 +93432,7 @@ function createDaemon(inputs) {
     }
   });
   const parts = {
-    clicks,
+    closing: closing.signal,
     home: host.home,
     tmp: host.tmp,
     launcher,
@@ -93492,9 +93492,10 @@ function createDaemon(inputs) {
     clock,
     exit: exit2,
     // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in holds or waits for a journal's turn,
-    // and close ends those (src/renderer/journal-turns.ts); a subscribe its request
-    // reached as the daemon closed is refused here and opens no feed.
+    // the way in. A click that got in waits its turn in the renderer's
+    // mailbox: one ahead of the close runs whole, and one behind it is
+    // refused; a subscribe its request reached as the daemon closed is
+    // refused here and opens no feed.
     handle: async (req, timedOut, accepted, clientLeft) => {
       closing.signal.throwIfAborted();
       return handleRequest(parts, req, timedOut, accepted, clientLeft);
@@ -93531,9 +93532,9 @@ function createDaemon(inputs) {
         // one waits behind whatever turn the renderer is in, which can outlast
         // shutdown's backstop, while this waits only on its own tmux calls.
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
-        // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
-        // journal in flight, so none opens after.
-        ["journalTurns close", rendererStep("close-journal")],
+        // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
+        // every click ahead of it lands whole, and none behind it begins.
+        ["renderer journal close", rendererStep("close-journal")],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
