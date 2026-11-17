@@ -71,7 +71,6 @@ import {
 } from "../utils/event-hold.js";
 import { located } from "./statusline-answer.js";
 import { DoctorSource } from "./cache/doctor.js";
-import { ClicksInFlight } from "./clicks-in-flight.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -442,7 +441,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // close is a `menu-idle` turn of the renderer, the journaled write a ✕ makes,
   // through the host's one path to it, which the parts below hold: no close is
   // due before a frame has drawn a menu, so the parts exist by then.
-  const menuIdle = new MenuIdle({
+  const menuIdle: MenuIdle = new MenuIdle({
     clock,
     now: instant,
     close: (sessionId, idle) =>
@@ -451,7 +450,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         instant,
         sessionId,
         idle,
-        frameFeeds.latest(sessionId),
+        () => frameFeeds.latest(sessionId),
+        () => menuIdle.confirmClose(sessionId, idle.firedAt),
       ),
     failed: (sessionId, failure) =>
       log(
@@ -689,11 +689,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     watched: (sessionId) => frameFeeds.feedOpen(sessionId),
     deliver: (event) =>
-      parts.renderer.deliver({ kind: "event", event, at: instant() }, []),
+      parts.renderer.deliver(
+        () => ({ kind: "event", event, at: instant() }),
+        [],
+      ),
     log,
   });
 
-  const clicks = new ClicksInFlight();
   // [LAW:single-enforcer] Each watch the renderer holds, by the id it minted,
   // from its `watch` to its `unwatch`.
   const rendererWatches = new Map<WatchId, WatcherHandle>();
@@ -702,19 +704,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // renderer file names a host type.
   const reaches: AdapterToHost = {
     // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice, or an awaited call.
+    // the host's part in its crossing shape: a notice.
     wake: (sessionId, cause) => frameFeeds.wake(sessionId, cause),
     log,
     menuIdle: {
       clicked: (sessionId, at) => menuIdle.clicked(sessionId, at),
-      clickArrived: (sessionId) => menuIdle.clickArrived(sessionId),
-      clickSettled: (sessionId) => menuIdle.clickSettled(sessionId),
       observe: (sessionId, at, shown, timeoutS) =>
         menuIdle.observe(sessionId, at, shown, timeoutS),
-      confirmClose: async (sessionId, firedAt) =>
-        menuIdle.confirmClose(sessionId, firedAt),
     },
-    clicks: { gone: async (click) => clicks.gone(click) },
     eventAnswered: (event) => {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
@@ -766,14 +763,22 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       const at = instant();
       for (const sessionId of frameFeeds.openFeeds())
         parts.renderer.tell({ kind: "pin", session: sessionId }, at);
-      const sessions = [...collector.liveDocuments()].flatMap(
-        ([sessionId, worldState]) => {
-          const req = frameFeeds.latest(sessionId);
-          return req === null ? [] : [{ context: located(req), worldState }];
-        },
-      );
       await parts.renderer.deliver(
-        { kind: "event", at, event: { kind: "start", sessions } },
+        () => ({
+          kind: "event",
+          at,
+          event: {
+            kind: "start",
+            sessions: [...collector.liveDocuments()].flatMap(
+              ([sessionId, worldState]) => {
+                const req = frameFeeds.latest(sessionId);
+                return req === null
+                  ? []
+                  : [{ context: located(req), worldState }];
+              },
+            ),
+          },
+        }),
         [["why", "renderer-start"]],
       );
     },
@@ -783,7 +788,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
   });
   const parts: DaemonParts = {
-    clicks,
+    closing: closing.signal,
     home: host.home,
     tmp: host.tmp,
     launcher,
@@ -891,7 +896,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
         // [LAW:no-ambient-temporal-coupling] Before the abort that wakes the
         // journal in flight, so none opens after.
-        ["journalTurns close", rendererStep("close-journal")],
+        ["configWrites close", rendererStep("close-journal")],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.

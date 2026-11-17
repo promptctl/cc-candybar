@@ -2,10 +2,6 @@
 // acted on in this turn, so the turn's output reads the subscriptions as they
 // stand once the act has landed (its commit).
 
-import {
-  noteFacts,
-  type RequestFacts,
-} from "../daemon/foundations/request-event.js";
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
 import type { Effect, Event } from "../renderer-interface/interface.js";
 import type { MainRendererParts } from "./verbs/port.js";
@@ -16,31 +12,15 @@ type ClickEvent = Extract<Event, { kind: "click" }>;
 // request; whatever the act throws is the turn's throw, which the renderer
 // classifies as the turn's failure and the host turns into the click's reply
 // by its kind.
-export async function clickTurn(
-  { verbs, menuIdle }: Pick<MainRendererParts, "verbs" | "menuIdle">,
-  { verb, value, session, arrival, id, latest }: ClickEvent,
-  record: RequestFacts,
+export function clickTurn(
+  { verbs }: Pick<MainRendererParts, "verbs">,
+  { verb, value, arrival, latest }: ClickEvent,
   // Where the click's config changes go, kept by the turn even when the
   // handler throws.
   effects: Effect[],
-): Promise<void> {
+): void {
   const handler = verbs.handler(verb);
   if (handler === undefined)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
-  // A session that passed the checkpoint is pending on its idle clock until
-  // the click settles.
-  const pending = session?.ok ? session.id : null;
-  if (pending !== null) menuIdle.clickArrived(pending);
-  try {
-    await handler(value, {
-      arrival,
-      placeWaited: (ms) => noteFacts(record, { placeWait: `${ms}ms` }),
-      turnWaited: (ms) => noteFacts(record, { turnWait: `${ms}ms` }),
-      click: id,
-      latest,
-      effects,
-    });
-  } finally {
-    if (pending !== null) menuIdle.clickSettled(pending);
-  }
+  handler(value, { arrival, latest, effects });
 }

@@ -35,6 +35,7 @@ import type { WorldState } from "../../src/facts/world-state";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import { instantOf } from "../../src/utils/instant";
 import type { Monotonic } from "../../src/time";
+import { instantOf as at } from "../../src/utils/instant";
 
 const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
@@ -44,15 +45,23 @@ const FRAME = renderFailedFrame("the bar");
 // hook naming no directory, so no checkout is read for it.
 const REQ = {
   encoding: "frame",
+  deadline: { kind: "unstated" },
   hookData: { session_id: SESSION },
 } as unknown as CheckedRenderRequest;
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
 const NO_SUBSCRIPTIONS: Subscriptions = { sources: {}, tmuxStatus: [] };
+// The request's deadline is a timer the case fires itself (`deadlines`).
+const deadlines = new Set<() => void>();
 const CLOCK = {
   monotonic: () => 0 as Monotonic,
   now: () => 1_700_000_000_000,
+  after: (_ms: number, fire: () => void) => {
+    deadlines.add(fire);
+    return () => void deadlines.delete(fire);
+  },
 };
+const NOT_CLOSING = new AbortController().signal;
 
 const present = (id: number, request = REQUEST): Present => ({
   kind: "present",
@@ -123,39 +132,55 @@ function scripted(
   };
 }
 
+// What a case's request meets in the host: its session's wait, how long it
+// may take, the idle clock it reads, and the daemon's close.
+interface Meets {
+  readonly settled?: (session: unknown, signal: AbortSignal) => Promise<void>;
+  readonly waitEndsAt?: number;
+  readonly idleSince?: () => ReturnType<typeof at> | undefined;
+  readonly closing?: AbortSignal;
+}
+
 async function answer(
   renderer: Renderer,
   logged: string[] = [],
   subscribed: Subscriptions[] = [],
   holds: { count: number; sessions: string[] } = { count: 0, sessions: [] },
+  meets: Meets = {},
 ) {
   const facts: RequestFacts = [];
   const named = new Set<string>();
+  // Mirrors the collector: only a session a request has named is held.
+  const holding = (session: string) => {
+    if (!named.has(session)) return () => {};
+    holds.count++;
+    holds.sessions.push(session);
+    return () => void holds.count--;
+  };
   const answered = await answerStatusline(
     rendererHost("main", CLOCK, renderer, (_level, line) => logged.push(line), {
       subscribed: (subscriptions) => void subscribed.push(subscriptions),
       writableSettings: () => [],
-      // Mirrors the collector: only a session a request has named is held.
-      holding: (session) => {
-        if (!named.has(session)) return () => {};
-        holds.count++;
-        holds.sessions.push(session);
-        return () => void holds.count--;
-      },
+      holding,
     }, NO_ACTS),
     {
       requested: (req) => {
         named.add(req.hookData.session_id);
         return WORLD;
       },
+      holding,
+      // A warm session: nothing it reads is still unread.
+      settled: meets.settled ?? (async () => {}),
     },
-    { since: () => undefined },
+    { since: meets.idleSince ?? (() => undefined) },
     UNFOLLOWED,
     CLOCK,
+    meets.closing ?? NOT_CLOSING,
+    (_level, line) => logged.push(line),
     REQ,
     REQUEST,
     AT,
-    0,
+    meets.waitEndsAt ?? 0,
     facts,
   );
   return { answered, facts: new Map(facts) };
@@ -364,7 +389,6 @@ test("the session's config reaches the renderer first, with the world state read
       kind: "request",
       id: REQUEST,
       context: REQ,
-      waitMs: 0,
       idleSince: null,
       following: [],
       feeds: UNFOLLOWED_FEEDS,
@@ -373,7 +397,7 @@ test("the session's config reaches the renderer first, with the world state read
   expect(subscribed).toEqual([opened, drawn]);
 });
 
-test("the host holds the session through each of its turns, with nothing held by the request's own code, and lets go once each answers or throws", async () => {
+test("the request holds its session from its config to its answer, wait included, the host holds it through each turn, and every hold is let go once each answers or throws", async () => {
   const threw = () => threwWith([], "x");
   for (const [config, request] of [
     [output([]), output([present(1)])],
@@ -389,10 +413,122 @@ test("the host holds the session through each of its turns, with nothing held by
     });
     await answer(renderer, [], [], holds);
     expect(heldDuring).toEqual(
-      config.kind === "threw" ? ["config:1"] : ["config:1", "request:1"],
+      config.kind === "threw" ? ["config:2"] : ["config:2", "request:2"],
     );
     // Each turn's hold names the session the request's document was read for.
     expect(new Set(holds.sessions)).toEqual(new Set([REQ.hookData.session_id]));
     expect(holds.count).toBe(0);
   }
+});
+
+describe("the request's wait, between its config and its request", () => {
+  // A wait the case ends: `end` settles the session's world state.
+  const held = () => {
+    let end = (): void => {};
+    const settled = (_session: unknown, signal: AbortSignal) =>
+      new Promise<void>((resolve) => {
+        end = resolve;
+        signal.addEventListener("abort", () => resolve());
+      });
+    return { settled, end: () => end() };
+  };
+
+  test("a warm session's request is delivered at once", async () => {
+    const { renderer, requests } = scripted(output([present(1)]));
+    const { answered, facts } = await answer(renderer, [], [], undefined, {
+      waitEndsAt: 5000,
+    });
+    expect(answered.resp).toEqual({ ok: true, frame: FRAME });
+    expect(requests).toHaveLength(1);
+    expect(facts.get("ended")).toBe("answered");
+  });
+
+  test("a wait that outlasts the client's deadline ends there, and the request draws what is landed", async () => {
+    const { renderer, requests } = scripted(output([present(1)]));
+    const answering = answer(renderer, [], [], undefined, {
+      settled: () => new Promise(() => {}),
+      waitEndsAt: 5000,
+    });
+    await drained();
+    for (const fire of deadlines) fire();
+    const { answered, facts } = await answering;
+    expect(answered.resp).toEqual({ ok: true, frame: FRAME });
+    expect(requests).toHaveLength(1);
+    expect(facts.get("ended")).toBe("deadline");
+  });
+
+  test("the daemon's close ends the wait", async () => {
+    const closing = new AbortController();
+    closing.abort();
+    const { renderer } = scripted(output([present(1)]));
+    const { facts } = await answer(renderer, [], [], undefined, {
+      settled: () => new Promise(() => {}),
+      waitEndsAt: 5000,
+      closing: closing.signal,
+    });
+    expect(facts.get("ended")).toBe("closed");
+  });
+
+  test("holds no place in the mailbox: an input sent during the wait is answered before the request", async () => {
+    const wait = held();
+    const order: string[] = [];
+    const host = rendererHost(
+      "main",
+      CLOCK,
+      eventRenderer(async ({ event }) => {
+        order.push(event.kind);
+        return event.kind === "request" ? output([present(1)]) : output([]);
+      }),
+      () => {},
+      {
+        subscribed: () => {},
+        writableSettings: () => [],
+        holding: () => () => {},
+      },
+      NO_ACTS,
+    );
+    const answering = answerStatusline(
+      host,
+      {
+        requested: () => WORLD,
+        holding: () => () => {},
+        settled: wait.settled,
+      },
+      { since: () => undefined },
+      UNFOLLOWED,
+      CLOCK,
+      NOT_CLOSING,
+      () => {},
+      REQ,
+      REQUEST,
+      AT,
+      5000,
+      [],
+    );
+    await drained();
+    await host.deliver(
+      () => ({ kind: "event", at: AT, event: { kind: "retire", session: SESSION } }),
+      [],
+    );
+    wait.end();
+    await answering;
+    expect(order).toEqual(["config", "retire", "request"]);
+  });
+
+  test("a click that landed during the wait is drawn by the request's idle reading", async () => {
+    const wait = held();
+    // The idle clock as the host keeps it: a click restarts its period.
+    let since: ReturnType<typeof at> | undefined = at(new Date(1_000));
+    const { renderer, requests } = scripted(output([present(1)]));
+    const answering = answer(renderer, [], [], undefined, {
+      settled: wait.settled,
+      waitEndsAt: 5000,
+      idleSince: () => since,
+    });
+    await drained();
+    since = at(new Date(2_000));
+    wait.end();
+    await answering;
+    expect(requests).toMatchObject([{ idleSince: at(new Date(2_000)) }]);
+  });
 });

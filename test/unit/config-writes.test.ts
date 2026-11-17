@@ -68,7 +68,7 @@ describe("a click's config writes", () => {
     ]);
   });
 
-  test("the consequence waits for every change, and the next turn waits with it", async () => {
+  test("the consequence waits for every change, and no click begins while one is owed", () => {
     const w = writes();
     const effects: Effect[] = [];
     let applied = false;
@@ -76,11 +76,10 @@ describe("a click's config writes", () => {
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
     w.seal(effects, SID, () => (applied = true));
     const [a, b] = ids(effects);
-    let opened = false;
-    const next = w.landed().then(() => (opened = true));
     expect(w.settled(a!, { kind: "ok" })).toBe("owed");
-    await Promise.resolve();
-    expect(opened).toBe(false);
+    expect(() => w.begin("next")).toThrow(
+      "next began while a click's changes to /a.json5, /b.json5 were still landing",
+    );
     const landed = w.settled(b!, { kind: "ok" });
     expect(landed).toMatchObject({
       session: SID,
@@ -91,8 +90,7 @@ describe("a click's config writes", () => {
     if (landed === undefined || landed === "owed") throw new Error("unlanded");
     landed.consequence([]);
     expect(applied).toBe(true);
-    await next;
-    expect(opened).toBe(true);
+    expect(() => w.begin("next")).not.toThrow();
   });
 
   test("a landing that missed reports why, though a later change landed", () => {

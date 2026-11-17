@@ -695,12 +695,12 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       await rt.clickVerb(VERB_DOCTOR_RUN);
       expect(rt.render()).toContain("✓ Nerd Font");
       expect(markUrl(rt, "drawn")).toBeUndefined();
-      await expect(
+      expect(() =>
         VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/drawn", rt.ctx),
-      ).rejects.toThrow(BadVerbArgs);
-      await expect(
+      ).toThrow(BadVerbArgs);
+      expect(() =>
         VERBS.get(VERB_DOCTOR_MARK)!("s1/nerdFont/perhaps", rt.ctx),
-      ).rejects.toThrow(/the mark is "perhaps"/);
+      ).toThrow(/the mark is "perhaps"/);
     });
 
     test("a mark book that stops reading before the mark is filed refuses the click and keeps the file", async () => {

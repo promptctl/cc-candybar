@@ -5,12 +5,11 @@
 
 import type { RendererParts } from "../draw-bar.js";
 import type { SessionId } from "../../daemon/foundations/session-id.js";
-import type { AdapterToHost } from "../../renderer-interface/adapter.js";
 import type {
   Effect,
   EffectId,
   EffectOutcome,
-  RequestId,
+  IdleSpan,
 } from "../../renderer-interface/interface.js";
 import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
 import type { ActsOnTheirWay } from "../acts.js";
@@ -19,25 +18,15 @@ import {
   changeDone,
   closeIdleMenus,
   VERBS,
-  type IdleClose,
   type VerbContext,
 } from "./index.js";
 
-// What the verb context holds of one click: how it arrived, where its waits
-// are noted, and whether its client is gone.
-type VerbClickFacts = Pick<
-  VerbContext,
-  "arrival" | "placeWaited" | "turnWaited" | "clientGone" | "latest" | "effects"
->;
-
-// The facts the renderer brings of one click: the same, the click named by its
-// request for whether its client is gone, which the host answers.
-export type ClickFacts = Omit<VerbClickFacts, "clientGone"> & {
-  readonly click: RequestId;
-};
+// What the verb context holds of one click: how it arrived, the newest
+// request of its session, and its turn's effects.
+export type ClickFacts = Pick<VerbContext, "arrival" | "latest" | "effects">;
 
 // The daemon's verb context, less what each click brings.
-export type DaemonVerbContext = Omit<VerbContext, keyof VerbClickFacts>;
+export type DaemonVerbContext = Omit<VerbContext, keyof ClickFacts>;
 
 // [LAW:locality-or-seam] The renderer's port onto the verbs, so a renderer
 // test hands in the act it means to observe.
@@ -45,15 +34,16 @@ export interface RendererVerbs {
   // The handler for `verb`, or undefined for a verb the table does not have.
   handler(
     verb: string,
-  ): ((value: string, click: ClickFacts) => Promise<void>) | undefined;
+  ): ((value: string, click: ClickFacts) => void) | undefined;
   // The idle clock's close of the session's menus: the journaled write a ✕
-  // makes.
+  // makes, when the session is still idle since the firing.
   closeIdle(
     sessionId: SessionId,
     latest: CheckedRenderRequest | null,
-    idle: IdleClose,
+    idle: IdleSpan,
+    stillIdle: boolean,
     effects: Effect[],
-  ): Promise<void>;
+  ): void;
   // A change's `effect-done`, in its turn, whose effects what its click's
   // consequence asks joins: false for an id no click's change holds.
   changeDone(id: EffectId, outcome: EffectOutcome, effects: Effect[]): boolean;
@@ -77,28 +67,16 @@ export type MainRendererParts = RendererParts & {
 // builds. [LAW:dataflow-not-control-flow] The dispatch is a table lookup: the
 // verb table (src/renderer/verbs/index.ts) is the one list of supported verbs,
 // and their handlers live there.
-// [LAW:effects-at-boundaries] exception: a click's waits ask the host in place
-// whether its client left, so the port is where a click's id meets the host's
-// answer.
-export function verbsOver(
-  ctx: DaemonVerbContext,
-  clicks: AdapterToHost["clicks"],
-): RendererVerbs {
+export function verbsOver(ctx: DaemonVerbContext): RendererVerbs {
   return {
     handler: (verb) => {
       const handler = VERBS.get(verb);
       return (
-        handler &&
-        ((value, { click, ...facts }) =>
-          handler(value, {
-            ...ctx,
-            ...facts,
-            clientGone: () => clicks.gone(click),
-          }))
+        handler && ((value, facts) => handler(value, { ...ctx, ...facts }))
       );
     },
-    closeIdle: (sessionId, latest, idle, effects) =>
-      closeIdleMenus(sessionId, latest, idle, ctx, effects),
+    closeIdle: (sessionId, latest, idle, stillIdle, effects) =>
+      closeIdleMenus(sessionId, latest, idle, stillIdle, ctx, effects),
     changeDone: (id, outcome, effects) => changeDone(ctx, id, outcome, effects),
   };
 }

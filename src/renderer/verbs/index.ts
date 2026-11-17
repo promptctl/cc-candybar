@@ -133,7 +133,6 @@ import {
   clickSessionOf,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
-import type { JournalTurns } from "../journal-turns";
 import type { ConfigWrites, Landed } from "../config-writes";
 import type {
   ActRequest,
@@ -208,9 +207,6 @@ export interface DaemonContext {
   // open (src/renderer/navigation-history.ts), journaled around each click
   // beside the settings history.
   readonly navigation: NavigationHistory;
-  // [LAW:no-ambient-temporal-coupling] Whose turn it is to hold those journals
-  // (src/renderer/journal-turns.ts).
-  readonly journalTurns: Pick<JournalTurns, "take" | "click">;
   // [LAW:no-ambient-temporal-coupling] A click of the session landed, in its
   // turn: the session's idle clock restarts (src/daemon/menu-idle.ts).
   readonly clickLanded: (sessionId: SessionId) => void;
@@ -268,12 +264,6 @@ export interface VerbContext extends DaemonContext {
   // status-line range — the one per-click fact here; the daemon's dispatcher
   // sets it on each click.
   readonly arrival: ClickArrival;
-  // [LAW:nothing-unseen] How long THIS click waited for its place in its
-  // session, and for its turn, for its event.
-  readonly placeWaited: (ms: number) => void;
-  readonly turnWaited: (ms: number) => void;
-  // Whether the client that sent THIS click has left.
-  readonly clientGone: () => Promise<boolean>;
   // The newest request of THIS click's session the host holds.
   readonly latest: CheckedRenderRequest | null;
   // THIS click's turn's effects, which its config changes join.
@@ -297,12 +287,13 @@ export type ClickContext = Journaled<VerbContext>;
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
 // raw wire-level `value` string and the daemon's verb context; it returns
-// nothing (clicks have no payload) once what it awaits has landed.
+// nothing (clicks have no payload), and acts within its turn: what it asks
+// of the host is an effect its turn returns.
 // User-facing failures throw an Error, which the turn's classification
 // (src/daemon/foundations/verb-error.ts) answers as RENDER_FAILED.
 // Invalid-shape inputs (e.g. missing required slash-delimited subfield)
 // throw a BadVerbArgs error, which it answers as BAD_REQUEST.
-export type VerbHandler = (value: string, ctx: ClickContext) => Promise<void>;
+export type VerbHandler = (value: string, ctx: ClickContext) => void;
 
 export { BadVerbArgs };
 
@@ -336,7 +327,7 @@ function ask(ctx: ClickContext, act: ActRequest): void {
 
 // A copy's failure shows on the bar of the session its click names; a plain
 // copy link names none, so its failure is the daemon's to show.
-const copy: VerbHandler = async (value, ctx) =>
+const copy: VerbHandler = (value, ctx) =>
   ask(ctx, { kind: "copy", session: ctx.session, text: oneArg(value) });
 
 // [LAW:parse-dont-validate] The renderer a copy click names: the surface it
@@ -354,7 +345,7 @@ function requireDrawer(by: string): Drawing["by"] {
 // [LAW:no-silent-failure] A key the frame the click came from does not list
 // (the message fixed since, or the session never drawn here) is refused,
 // never a clipboard silently left as it was.
-const copyDiagnostic: VerbHandler = async (value, ctx) => {
+const copyDiagnostic: VerbHandler = (value, ctx) => {
   const [sessionId = "", by = "", key = ""] = decodeWire(() =>
     decodeSegments(value),
   );
@@ -367,7 +358,7 @@ const copyDiagnostic: VerbHandler = async (value, ctx) => {
   ask(ctx, { kind: "copy", session: sid, text });
 };
 
-const openVscode: VerbHandler = async (value, ctx) =>
+const openVscode: VerbHandler = (value, ctx) =>
   ask(ctx, { kind: "open", session: ctx.session, target: oneArg(value) });
 
 // [LAW:single-enforcer] One verb writes SessionState — for every key the
@@ -406,7 +397,7 @@ const openVscode: VerbHandler = async (value, ctx) =>
 //   the loader and the state-validator factories reject slash-bearing keys and
 //   option values upstream, so a slash never reaches here in practice. The N=1
 //   form is the degenerate single-pair case — the parser walks pairs uniformly.
-const setState: VerbHandler = async (rawValue, ctx) => {
+const setState: VerbHandler = (rawValue, ctx) => {
   // [LAW:single-enforcer] Decode the whole encoded tail at this boundary; the
   // session id is the head, the rest are the (key,value) pairs. A malformed
   // escape in any segment is bad input, not a handler failure (decodeWire).
@@ -497,7 +488,7 @@ function stepWithin(
 // the signed delta against the bounds the session's own config declares, then
 // route the result through its gate so the one range gate owns the [min,max]
 // clamp and the canonical decimal form that persists.
-const stepState: VerbHandler = async (rawValue, ctx) => {
+const stepState: VerbHandler = (rawValue, ctx) => {
   const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
     decodeSegments(rawValue),
   );
@@ -852,7 +843,7 @@ function editStore(ctx: ClickContext, sid: SessionId): EditStore {
 // [LAW:no-silent-failure] Unknown key or out-of-domain value is a loud
 // BAD_REQUEST — the config-file twin of `set-state`'s gate (configGate),
 // derived from the SAME action table.
-const setConfig: VerbHandler = async (rawValue, ctx) => {
+const setConfig: VerbHandler = (rawValue, ctx) => {
   const {
     sid,
     role,
@@ -885,7 +876,7 @@ const setConfig: VerbHandler = async (rawValue, ctx) => {
 // against the value the file declares at the layer the click lands in (or,
 // when it declares none, what the bar renders there — configKeySeed), wrapped
 // and re-validated through the SAME range gate, then written durably.
-const stepConfig: VerbHandler = async (rawValue, ctx) => {
+const stepConfig: VerbHandler = (rawValue, ctx) => {
   const {
     sid,
     role,
@@ -952,7 +943,7 @@ const stepConfig: VerbHandler = async (rawValue, ctx) => {
 // [LAW:single-enforcer] Each value re-crosses the gate that admitted it as a
 // session pick (the session's stateGate): a value the gate no longer admits is
 // refused loudly here, never written to the file.
-const save: VerbHandler = async (value, ctx) => {
+const save: VerbHandler = (value, ctx) => {
   const { sid, role } = configWire("save", value);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
@@ -1016,7 +1007,7 @@ function gatePlacements(
 // the loaded file lacks.
 // [LAW:single-enforcer] Each pinned value re-crosses the session gate that
 // admitted it, as a save's do.
-const savePreset: VerbHandler = async (value, ctx) => {
+const savePreset: VerbHandler = (value, ctx) => {
   const { sid, role } = configWire("save-preset", value);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
@@ -1064,7 +1055,7 @@ const savePreset: VerbHandler = async (value, ctx) => {
 // [LAW:no-silent-failure] A theme chosen by a rule has no name until a render
 // evaluates it, and a theme's default is keyed by name: refused, naming the
 // rule, never a guess at what it would have rendered.
-const saveThemeDefault: VerbHandler = async (value, ctx) => {
+const saveThemeDefault: VerbHandler = (value, ctx) => {
   const { sid, role } = configWire("save-theme-default", value);
   const origin = sessionOrigin(ctx, sid);
   const config = ctx.configFor(origin);
@@ -1100,7 +1091,7 @@ const saveThemeDefault: VerbHandler = async (value, ctx) => {
 // Delete a preset the session's config file authors. A session that was in
 // it returns to the file's default arrangement; any other session in it
 // falls to the floor, as it would for a name deleted by hand.
-const deletePreset: VerbHandler = async (value, ctx) => {
+const deletePreset: VerbHandler = (value, ctx) => {
   const {
     sid,
     role,
@@ -1130,7 +1121,7 @@ const deletePreset: VerbHandler = async (value, ctx) => {
 // [LAW:no-ambient-temporal-coupling] The write and the picks it clears land
 // together, as a save's do, so no frame draws a pick's absence over a file
 // that still holds the value.
-const resetConfig: VerbHandler = async (value, ctx) => {
+const resetConfig: VerbHandler = (value, ctx) => {
   const { sid, role, args: keys } = configWire("reset-config", value);
   const origin = sessionOrigin(ctx, sid);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
@@ -1206,7 +1197,7 @@ function endedSessionKeys(
 // gate proves the VALUE is one an action allows; decodeLayoutOp stamps its
 // shape, and the store proves the KEY is a preset-root target — a globals
 // or segment-palette key smuggled through this verb is refused there.
-const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
+const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   const {
     sid,
     role,
@@ -1258,7 +1249,7 @@ const applyLayoutOp: VerbHandler = async (rawValue, ctx) => {
 // moves and what it restores; this handler is plumbing between the wire and
 // it. [LAW:no-silent-failure] An empty stack and a stale target are loud
 // BAD_REQUESTs, surfaced as a transient click.error.
-const undo: VerbHandler = async (value, ctx) => {
+const undo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const step = ctx.journal.undo(sid);
@@ -1268,7 +1259,7 @@ const undo: VerbHandler = async (value, ctx) => {
 
 // [LAW:single-enforcer] Back restores through the click's settings view, never
 // a navigation journal, so going back is not itself a step it could return to.
-const back: VerbHandler = async (value, ctx) => {
+const back: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   const { step, discarded } = ctx.navigation.back(
     sid,
@@ -1285,7 +1276,7 @@ const back: VerbHandler = async (value, ctx) => {
 // [LAW:no-silent-failure] A session with no savepoint is a loud BAD_REQUEST
 // with nothing written; a target changed since is one too, raised after every
 // other target was put back, naming the target it kept.
-const rewind: VerbHandler = async (value, ctx) => {
+const rewind: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   // Said first: a stale target throws after the rest were put back.
   ctx.journal.wrote();
@@ -1297,7 +1288,7 @@ const rewind: VerbHandler = async (value, ctx) => {
 };
 
 // undo's mirror — steps the same history forward one click.
-const redo: VerbHandler = async (value, ctx) => {
+const redo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const step = ctx.journal.redo(sid);
@@ -1309,7 +1300,7 @@ const redo: VerbHandler = async (value, ctx) => {
 // click (brandon-build-notice-5d6). The wire carries only the session id (for
 // click.error surfacing); the daemon's update watch decides what to run from
 // its own provenance, so no command or version ever arrives from a URL.
-const applyUpdate: VerbHandler = async (value, ctx) =>
+const applyUpdate: VerbHandler = (value, ctx) =>
   ask(ctx, { kind: "apply-update", session: requireSessionId(oneArg(value)) });
 
 // [LAW:no-silent-failure] A session that has never rendered has no hints —
@@ -1375,7 +1366,7 @@ function reportedFacts(
 // A click while the session's run is on its way starts no other: the launcher
 // refuses a probe within a second of the last of its kind, so a second run
 // behind the first would be refused, and the first is the one the click asks.
-const doctorRun: VerbHandler = async (value, ctx) => {
+const doctorRun: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
 };
@@ -1387,7 +1378,7 @@ const doctorRun: VerbHandler = async (value, ctx) => {
 // setting moved since is refused with the reason on the bar. The run starts
 // again either way, so the row is read again after the change landed or was
 // refused.
-const doctorFix: VerbHandler = async (value, ctx) => {
+const doctorFix: VerbHandler = (value, ctx) => {
   const [sessionId = "", checkName = ""] = decodeWire(() =>
     decodeSegments(value),
   );
@@ -1438,7 +1429,7 @@ const doctorFix: VerbHandler = async (value, ctx) => {
 
 // Record what the user saw of the glyphs THIS check's verdict shows, under the
 // sighting they are, then write the report again with the mark folded in.
-const doctorMark: VerbHandler = async (value, ctx) => {
+const doctorMark: VerbHandler = (value, ctx) => {
   const [sessionId = "", checkName = "", mark = ""] = decodeWire(() =>
     decodeSegments(value),
   );
@@ -1481,7 +1472,7 @@ const doctorMark: VerbHandler = async (value, ctx) => {
 // action in the session's config declares — the declaration found supplies
 // the SlashLine typed, so the URL chooses among the config's lines and can
 // add none. The pane is the one the session's last render reported.
-const slash: VerbHandler = async (value, ctx) => {
+const slash: VerbHandler = (value, ctx) => {
   const [sessionId = "", line = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const declared = Object.values(
@@ -1575,7 +1566,7 @@ function runOf(
   };
 }
 
-const run: VerbHandler = async (value, ctx) =>
+const run: VerbHandler = (value, ctx) =>
   ask(
     ctx,
     runOf(
@@ -1593,7 +1584,7 @@ const run: VerbHandler = async (value, ctx) =>
 // lives beside the link key, and the render cache watches it, so every bar
 // reloads; the clicking session's reloads as the answer lands, before the
 // click answers. The answer lands with the click's changes or not at all.
-const repoConfig: VerbHandler = async (value, ctx) => {
+const repoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),
   );
@@ -1682,11 +1673,11 @@ function stepsOf(verb: string, value: string): readonly Step[] {
 // [LAW:one-source-of-truth] Per-effect errors are written to session state
 // so the bar shows WHICH effect(s) failed, for the hold src/daemon/foundations/click-error.ts
 // sets. Only possible when the click names a session.
-async function foldEffects(
+function foldEffects(
   steps: readonly Step[],
   sid: SessionId | null,
   ctx: ClickContext,
-): Promise<void> {
+): void {
   const errors: string[] = [];
   let operational = false;
   for (const { verb, value } of steps) {
@@ -1696,12 +1687,12 @@ async function foldEffects(
       continue;
     }
     try {
-      await leaf(value, ctx);
+      leaf(value, ctx);
     } catch (e) {
       // [LAW:single-enforcer] Classified once, by failureOf. A click the
-      // daemon's close, its client leaving or no live renderer cut off is
-      // over: no later effect runs, it keeps its own class, and what failed
-      // before it has no bar left to reach, so the log has it.
+      // daemon's close cut off is over: no later effect runs, it keeps its
+      // own class, and what failed before it has no bar left to reach, so the
+      // log has it.
       const failure = failureOf(e);
       if (failure.kind !== "bad-request" && failure.kind !== "threw") {
         if (errors.length > 0) ctx.log("warn", `click: ${errors.join("; ")}`);
@@ -1749,16 +1740,18 @@ function throwAll(failures: readonly unknown[]): void {
 // render, frame or other session's write can make, and what it asks joins the
 // effects of the turn the click landed in.
 //
-// [LAW:single-enforcer] It runs in the journal's turn `click` took
-// (src/renderer/journal-turns.ts), begin through the lanes' read, so an awaited
-// handler keeps its step whole.
-async function journaled<C extends DaemonContext>(
+// [LAW:no-ambient-temporal-coupling] It runs whole within one turn, begin
+// through seal: the host's mailbox hands the renderer one input at a time,
+// and a handler awaits nothing, so no other journal opens beside it.
+function journaled<C extends DaemonContext>(
+  verb: string,
   sid: SessionId | null,
   latest: CheckedRenderRequest | null,
   ctx: C,
   effects: Effect[],
-  handler: (ctx: Journaled<C>) => Promise<void>,
-): Promise<void> {
+  handler: (ctx: Journaled<C>) => void,
+): void {
+  ctx.configWrites.begin(verb);
   const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
@@ -1776,7 +1769,7 @@ async function journaled<C extends DaemonContext>(
       (line) => ctx.log("info", line),
     );
   try {
-    await handler({
+    handler({
       ...ctx,
       session: sid,
       sessionState: closing(journal.sessionState),
@@ -1823,33 +1816,20 @@ async function journaled<C extends DaemonContext>(
   throwAll(failures);
 }
 
-// [LAW:single-enforcer] A click: its place in its session's order, then a
-// journal around the fold of its effects in its turn
-// (src/renderer/journal-turns.ts).
-function click(
-  verb: string,
-): (value: string, ctx: VerbContext) => Promise<void> {
-  return async (value, ctx) => {
+// [LAW:single-enforcer] A click: a journal around the fold of its effects,
+// in its turn.
+function click(verb: string): (value: string, ctx: VerbContext) => void {
+  return (value, ctx) => {
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
     const steps = stepsOf(verb, value);
-    return ctx.journalTurns.click(
-      verb,
-      sid,
-      {
-        placed: ctx.placeWaited,
-        waited: ctx.turnWaited,
-        gone: ctx.clientGone,
-      },
-      () =>
-        journaled(sid, ctx.latest, ctx, ctx.effects, async (c) => {
-          try {
-            await foldEffects(steps, sid, c);
-          } finally {
-            if (sid !== null) ctx.clickLanded(sid);
-          }
-        }),
-    );
+    journaled(verb, sid, ctx.latest, ctx, ctx.effects, (c) => {
+      try {
+        foldEffects(steps, sid, c);
+      } finally {
+        if (sid !== null) ctx.clickLanded(sid);
+      }
+    });
   };
 }
 
@@ -1859,7 +1839,7 @@ function click(
 // `dispatch`.
 export const VERBS: ReadonlyMap<
   string,
-  (value: string, ctx: VerbContext) => Promise<void>
+  (value: string, ctx: VerbContext) => void
 > = new Map(
   [...LEAF_VERBS.keys(), VERB_DISPATCH].map(
     (verb) => [verb, click(verb)] as const,
@@ -1870,53 +1850,38 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),
 ]) as readonly string[];
 
-// The idle close as its verb takes it: the firing, and the clock's say over
-// whether it goes ahead.
-export interface IdleClose extends IdleSpan {
-  // Whether the close goes ahead, read in its turn: the session still known
-  // idle since the timer fired, which a click, or its record's eviction, ends.
-  // When it does, the clock's record follows it.
-  readonly confirm: () => Promise<boolean>;
-}
-
 // [LAW:single-enforcer] The idle timer's close (brandon-menus-sjhy.my3) takes
 // a click's own path: the journals the verb table opens — so an exit from edit
 // mode releases its savepoint, and ◁ back can reopen what it closed — and the
 // closing view, which folds everything open inside what closes. It writes
 // `closed` to each menu open at the top, the write its ✕ makes. No URL names
-// it: it is not in VERBS.
+// it: it is not in VERBS. Whether it goes ahead is the host's idle clock's
+// to say, as its turn came (`stillIdle`): a click since the firing keeps
+// what it opened.
 export function closeIdleMenus(
   sid: SessionId,
   latest: CheckedRenderRequest | null,
-  idle: IdleClose,
+  idle: IdleSpan,
+  stillIdle: boolean,
   ctx: DaemonContext,
   effects: Effect[],
-): Promise<void> {
-  return ctx.journalTurns.take(
-    "menu-idle",
-    {
-      waited: (ms) =>
-        ctx.log("info", `menu-idle: waited=${ms}ms (session=${sid})`),
-      gone: async () => false,
-    },
-    (turn) =>
-      journaled(sid, latest, ctx, effects, async (c) => {
-        if (!(await turn.landed(idle.confirm()))) {
-          c.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
-          return;
-        }
-        const roots = openRoots(nestOf(c, sid), (key) =>
-          c.navigating.get(sid, key),
-        );
-        c.navigating.setBatch(
-          sid,
-          roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
-        );
-        c.log(
-          "info",
-          `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
-            `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
-        );
-      }),
-  );
+): void {
+  if (!stillIdle) {
+    ctx.log("info", `menu-idle: no longer idle, kept (session=${sid})`);
+    return;
+  }
+  journaled("menu-idle", sid, latest, ctx, effects, (c) => {
+    const roots = openRoots(nestOf(c, sid), (key) =>
+      c.navigating.get(sid, key),
+    );
+    c.navigating.setBatch(
+      sid,
+      roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+    );
+    c.log(
+      "info",
+      `menu-idle: closed=${roots.map(({ key }) => key).join(",") || "-"} ` +
+        `idle=${idle.idleS.toFixed(1)}s timeout=${idle.timeoutS}s (session=${sid})`,
+    );
+  });
 }

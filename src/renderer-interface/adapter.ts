@@ -7,7 +7,6 @@
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { Response } from "../daemon/foundations/protocol.js";
 import type { RenderOrigin } from "../config-hint.js";
-import type { RequestId } from "./interface.js";
 import type { Frame, WireFrame } from "../render/frame";
 import type { Instant } from "../utils/instant.js";
 import type { Lane, LaneFeeds, LaneSwitches } from "../config/lanes.js";
@@ -80,8 +79,8 @@ export interface LogLine {
 }
 
 // [LAW:effects-at-boundaries] exception: what the renderer reaches in the
-// host that crosses a process: each a notice, which answers nothing, or an
-// awaited call answering plain data.
+// host that crosses a process: each a notice, which answers nothing, so a
+// turn never waits on the host.
 export interface AdapterToHost {
   // A feed's next frame brought forward.
   readonly wake: (sessionId: SessionId, cause: WakeCause) => void;
@@ -92,21 +91,13 @@ export interface AdapterToHost {
   // idle period is read by the host and handed in with the input it draws.
   readonly menuIdle: {
     readonly clicked: (sessionId: SessionId, at: Instant) => void;
-    readonly clickArrived: (sessionId: SessionId) => void;
-    readonly clickSettled: (sessionId: SessionId) => void;
     readonly observe: (
       sessionId: SessionId,
       at: Instant,
       shown: boolean,
       timeoutS: number,
     ) => void;
-    readonly confirmClose: (
-      sessionId: SessionId,
-      firedAt: Instant,
-    ) => Promise<boolean>;
   };
-  // Whether a click's client has left.
-  readonly clicks: { readonly gone: (click: RequestId) => Promise<boolean> };
   // An answer carrying a daemon-wide held event (the launcher's pipe event,
   // the last renderer's end) reached its client.
   readonly eventAnswered: (event: HeldEvent) => void;
@@ -222,5 +213,4 @@ export interface RendererStats {
   readonly renderCache: RenderCacheStats;
   readonly effectCache: StatsSnapshot["effectCache"];
   readonly sessionState: StatsSnapshot["sessionState"];
-  readonly journalTurns: StatsSnapshot["journalTurns"];
 }

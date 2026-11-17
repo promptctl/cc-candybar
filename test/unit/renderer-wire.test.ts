@@ -26,8 +26,8 @@ import { inertHost } from "../helpers/renderer-parts";
 
 const SESSION = "s1" as SessionId;
 
-// A renderer that tells the host a notice, awaits a call, and answers with
-// what the call returned; and one push that throws.
+// A renderer that tells the host two notices and answers; and one push that
+// throws.
 function talkingRenderer(host: AdapterToHost): Renderer {
   return rendererOf({
     event: async () => {
@@ -36,11 +36,8 @@ function talkingRenderer(host: AdapterToHost): Renderer {
     adapter: async (input) => {
       if (input.push.kind === "lanes") throw new Error("lanes refused");
       host.log("info", "pinned");
-      const gone = await host.clicks.gone({} as never);
-      return {
-        kind: "replied",
-        reply: gone ? { kind: "pin" } : { kind: "unpin" },
-      };
+      host.menuIdle.clicked(SESSION, 7 as Instant);
+      return { kind: "replied", reply: { kind: "pin" } };
     },
   });
 }
@@ -53,11 +50,9 @@ function recordingHost(): { host: AdapterToHost; saw: string[] } {
     host: {
       ...inertHost(),
       log: (_level, msg) => saw.push(`log ${msg}`),
-      clicks: {
-        gone: async () => {
-          saw.push("gone?");
-          return true;
-        },
+      menuIdle: {
+        ...inertHost().menuIdle,
+        clicked: (session, at) => saw.push(`clicked ${session} ${at}`),
       },
     },
   };
@@ -78,8 +73,7 @@ function overLines(host: AdapterToHost): Renderer {
     queueMicrotask(() => lines.heard(crossed(line))),
   );
   toRenderer = serveRenderer({
-    renderer: talkingRenderer(reaches.host),
-    host: reaches,
+    renderer: talkingRenderer(reaches),
     send: (line) => queueMicrotask(() => lines.heard(crossed(line))),
     memory: () => ({ rss: 1, heapTotal: 1 }),
     heapSnapshot: () => {},
@@ -101,10 +95,10 @@ describe("the renderer over lines", () => {
     const crossed = await overLines(there.host).answer(push("pin"));
     expect(crossed).toEqual(inProcess);
     expect(there.saw).toEqual(here.saw);
-    expect(there.saw).toEqual(["log pinned", "gone?"]);
+    expect(there.saw).toEqual(["log pinned", `clicked ${SESSION} 7`]);
   });
 
-  test("a call and the notice after it, heard in one chunk, reach the host in the order sent", () => {
+  test("two notices heard in one chunk reach the host in the order sent", () => {
     const { host, saw } = recordingHost();
     const lines = rendererOverLines({
       send: () => {},
@@ -113,9 +107,9 @@ describe("the renderer over lines", () => {
         throw new Error(message);
       },
     });
-    lines.heard({ kind: "call", n: 1, reach: "clicks.gone", args: [{}] });
+    lines.heard({ kind: "notice", reach: "menuIdle.clicked", args: [SESSION, 7] });
     lines.heard({ kind: "notice", reach: "log", args: ["info", "after"] });
-    expect(saw).toEqual(["gone?", "log after"]);
+    expect(saw).toEqual([`clicked ${SESSION} 7`, "log after"]);
   });
 
   test("a line heard after the renderer's end reaches nothing, and is said", () => {

@@ -59,7 +59,7 @@ import {
   fakeMetrics,
   withTranscriptLanes,
 } from "./helpers/payload-owners";
-import { awaitsReading } from "../src/renderer/render-payload";
+import { awaitsReading } from "../src/facts/awaited";
 import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 
@@ -287,6 +287,43 @@ describe("a session's transcript", () => {
     // What the transcript said when the trigger last read it, not the append
     // this request arrived after: the trigger reads it, not the request.
     expect(messagesOf(warm)).toBe(1);
+  });
+
+});
+
+// A first read still on its way.
+const UNREAD: Current<unknown> = {
+  kind: "pending",
+  why: "unread",
+  landed: new Promise<void>(() => {}),
+};
+
+describe("a request's wait", () => {
+  test("ends once the read it waits on lands, and a warm session's at once", async () => {
+    const { owners, land } = handLanded();
+    const { collector } = collectorOver(owners);
+    land("host.name", UNREAD);
+    collector.requested(requestAt("/a"));
+    let ended = false;
+    const waiting = collector
+      .settled(SID, new AbortController().signal)
+      .then(() => (ended = true));
+    await drained();
+    expect(ended).toBe(false);
+    land("host.name", ok("box"));
+    await waiting;
+    await collector.settled(SID, new AbortController().signal);
+  });
+
+  test("ends when its signal does", async () => {
+    const { owners, land } = handLanded();
+    const { collector } = collectorOver(owners);
+    land("host.name", UNREAD);
+    collector.requested(requestAt("/a"));
+    const signal = new AbortController();
+    const waiting = collector.settled(SID, signal.signal);
+    signal.abort();
+    await waiting;
   });
 });
 
@@ -547,6 +584,21 @@ describe("the sweep", () => {
     expect(clock.pending()).toBe(0);
     // The renderer let go of the session's document, so seq 1 is taken.
     expect(collector.requested(requestAt("/a")).seq).toBe(first.seq);
+  });
+
+  test("a wait on a session the sweep retires ends with it", async () => {
+    const { owners, land } = handLanded();
+    const { collector, clock } = collectorOver(owners);
+    land("host.name", UNREAD);
+    collector.requested(requestAt("/a"));
+    let ended = false;
+    const waiting = collector
+      .settled(SID, new AbortController().signal)
+      .then(() => (ended = true));
+    await drained();
+    expect(ended).toBe(false);
+    clock.advance(2 * SESSION_SWEEP_MS);
+    await waiting;
   });
 
   test("keeps a session an open feed draws", () => {

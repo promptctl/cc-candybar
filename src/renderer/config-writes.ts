@@ -4,13 +4,14 @@
 // which config a session renders. A click lands whole or not at all, so what
 // else it did is its consequence (its journal's commit), held here from its
 // turn until its changes' `effect-done`s: applied once they land, dropped
-// when they do not. A journal turn opens only once no click's changes are on their way
-// (src/renderer/journal-turns.ts), so each click reads the files the clicks
-// ahead of it wrote, and at most one click is ever landing. The host owes every
-// change it is handed its `effect-done` (src/daemon/renderer-host.ts).
+// when they do not. The host lands a turn's changes, and hands in their
+// `effect-done`s, before the renderer's next input (src/daemon/renderer-host.ts),
+// so each click reads the files the clicks ahead of it wrote, and at most one
+// click is ever landing.
 
 import { diffChanges, type Change } from "../config/config-changes.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
+import { DaemonClosing } from "../daemon/foundations/verb-error.js";
 import type { RepoAnswer } from "../config/loader/repo-gate.js";
 import type {
   Act,
@@ -48,7 +49,6 @@ export class ConfigWrites {
     readonly owed: Set<EffectId>;
     missed: Exclude<EffectOutcome, { kind: "ok" }> | null;
   } | null = null;
-  private waiting: Array<() => void> = [];
   private closed = false;
   // The open click's changes to Claude Code's settings, which no renderer
   // reads: each made against what the session's doctor reading saw.
@@ -65,6 +65,18 @@ export class ConfigWrites {
     // The file as it stands on disk.
     private readonly disk: (file: string) => string | null,
   ) {}
+
+  // A click's journal opens: refused once the daemon's close has begun, so a
+  // click the close cut off writes nothing. [LAW:no-silent-failure] A landing
+  // still owed here is the host's bug: it hands a turn's `effect-done`s in
+  // before the next input.
+  begin(verb: string): void {
+    if (this.closed) throw new DaemonClosing(verb);
+    if (this.landing !== null)
+      throw new Error(
+        `${verb} began while a click's changes to ${this.landing.of.files.join(", ")} were still landing`,
+      );
+  }
 
   // [LAW:one-source-of-truth] `file` as the open click left it: its last
   // write, else the disk, which holds every click ahead of it.
@@ -109,9 +121,6 @@ export class ConfigWrites {
     const settings = this.settings;
     this.answers = [];
     this.settings = [];
-    // [LAW:no-ambient-temporal-coupling] A click the daemon's close cut off
-    // lands nothing, so nothing of it is performed under the teardown.
-    if (this.closed) return this.open.clear();
     const written = [...this.open].flatMap(([path, { before, after }]) => {
       const list = diffChanges(before, after);
       return list.length === 0 ? [] : [{ path, list }];
@@ -174,19 +183,11 @@ export class ConfigWrites {
     if (outcome.kind !== "ok") landing.missed ??= outcome;
     if (landing.owed.size > 0) return "owed";
     this.landing = null;
-    for (const resume of this.waiting.splice(0)) resume();
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
   }
 
-  // No click seals after this: the daemon is closing.
+  // No click begins after this: the daemon is closing.
   close(): void {
     this.closed = true;
-  }
-
-  // Resolves once no click's changes are on their way.
-  landed(): Promise<void> {
-    return this.landing === null
-      ? Promise.resolve()
-      : new Promise((resume) => this.waiting.push(resume));
   }
 }

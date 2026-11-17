@@ -5,7 +5,6 @@ import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
 import { cacheTallyFacts } from "./readings.js";
 import { failedWith, renderFailure } from "./foundations/render-answers.js";
-import type { ClickInFlight } from "./clicks-in-flight.js";
 import {
   answerStatusline,
   NOTHING_TO_SETTLE,
@@ -36,7 +35,12 @@ import {
 } from "../click/wire";
 import { unprovenLink, type LinkSigner } from "../click/link-signer.js";
 import { openClick, parseClick, type ReadClick } from "./click-reading.js";
-import { badRequest, failureOf } from "./foundations/verb-error";
+import {
+  badRequest,
+  ClickAbandoned,
+  failureOf,
+} from "./foundations/verb-error";
+import type { HostTurn } from "./renderer-host.js";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import { readStores } from "../doctor/gather";
@@ -56,6 +60,11 @@ import {
   type RequestFacts,
   type RequestOutcome,
 } from "./foundations/request-event.js";
+
+// A click as its connection knows it: whether its client has left.
+interface ClickInFlight {
+  readonly gone: () => boolean;
+}
 
 // [LAW:no-ambient-temporal-coupling] A request whose semantics include "then
 // exit" (the shutdown verb, the stale-binary version mismatch) must not exit
@@ -291,6 +300,7 @@ export async function replyTo(
         ...drawn,
         collector: parts.collector.stats(),
         menuIdle: menuIdle.getStats(),
+        mailbox: parts.renderer.stats(),
         frameFeeds: frameFeeds.getStats(),
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
@@ -403,6 +413,8 @@ export async function replyTo(
       parts.menuIdle,
       frameFeeds,
       clock,
+      parts.closing,
+      parts.log,
       checked.req,
       order,
       at,
@@ -545,11 +557,11 @@ async function clickEvent(
     ["req", String(accepted.id)],
     ["queued", `${spanMs(accepted.at, t0)}ms`],
   ];
-  // When a click still waiting for its turn is refused: the daemon's deadline,
-  // or a client that waited for the answer leaving. The connection knows which
-  // clients wait (the forwarder does not), so its `clientLeft` already says so.
+  // When a click still waiting in the mailbox is refused: the daemon's
+  // deadline, or a client that waited for the answer leaving. The connection
+  // knows which clients wait (the forwarder does not), so its `clientLeft`
+  // already says so.
   const click: ClickInFlight = {
-    id: accepted.id,
     gone: () => timedOut() || clientLeft(),
   };
   // [LAW:single-enforcer] Whatever a click throws is its outcome, whichever
@@ -724,23 +736,37 @@ async function handleClick(
     noteFacts(facts, { sid: session.id });
     parts.collector.clicked(session.id);
   }
-  // [LAW:single-enforcer] Held through its turn, so its waits ask the host
-  // whether its client left, by its id.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- held for its disposal
-  using _held = parts.clicks.hold(click);
-  const delivered = await parts.renderer.answer({
-    kind: "event",
-    at: instantAt(parts.clock),
-    event: {
-      kind: "click",
-      verb,
-      value,
-      session,
-      arrival,
-      id: click.id,
-      latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
-    },
-  });
+  // [LAW:no-ambient-temporal-coupling] Its session's idle clock holds no
+  // deadline from the click's arrival to its answer: its wait in the mailbox
+  // is no idleness, and an idle close that fired meanwhile goes no further.
+  const pending = session?.ok ? session.id : null;
+  if (pending !== null) parts.menuIdle.clickArrived(pending);
+  let delivered: HostTurn;
+  try {
+    // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
+    // client took a TIMEOUT or left while it waited never lands, so clicking
+    // again cannot revert a toggle.
+    delivered = await parts.renderer.answer(() =>
+      click.gone()
+        ? failureOf(new ClickAbandoned(verb))
+        : {
+            kind: "event",
+            at: instantAt(parts.clock),
+            event: {
+              kind: "click",
+              verb,
+              value,
+              session,
+              arrival,
+              latest: session?.ok ? parts.frameFeeds.latest(session.id) : null,
+            },
+          },
+    );
+  } finally {
+    if (pending !== null) parts.menuIdle.clickSettled(pending);
+  }
+  // [LAW:nothing-unseen] How long the click waited for the renderer's turn.
+  noteFacts(facts, { mailbox: `${delivered.queuedMs}ms` });
   facts.push(...delivered.record);
   if (delivered.kind === "threw") return delivered.failure;
   // [LAW:no-silent-failure] A click whose changes did not land, or whose act

@@ -93,7 +93,7 @@ export function runRenderer(world: World): void {
     }
     if (line.kind !== "boot") throw new Error(`a ${line.kind} before the boot`);
     try {
-      renderer = booted(world, line.boot, host.host);
+      renderer = booted(world, line.boot, host);
     } catch (thrown) {
       send({ kind: "refused", failure: failureOf(thrown) });
       void leave(1);
@@ -101,7 +101,6 @@ export function runRenderer(world: World): void {
     }
     served = serveRenderer({
       renderer,
-      host,
       send,
       memory: () => {
         const { rss, heapTotal } = process.memoryUsage();

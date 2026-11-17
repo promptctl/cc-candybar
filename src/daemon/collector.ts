@@ -20,8 +20,10 @@ import {
   compareStructural,
   computed,
   observable,
+  observableRef,
   reaction,
   runInAction,
+  when,
   type IComputedValue,
   type IObservableValue,
 } from "mobx";
@@ -59,6 +61,7 @@ import { judgeRun } from "./foundations/judge-run.js";
 import { writableSettingsFiles } from "../doctor/gather.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { CollectorStats } from "./foundations/stats-snapshot";
+import { awaitsReading } from "../facts/awaited.js";
 
 // [LAW:no-ambient-temporal-coupling] The collector's one timer, armed by the
 // first session and stopped with the last: every interval it retires each
@@ -219,7 +222,13 @@ function release({ stop, holds }: Live): void {
 }
 
 export class Collector {
-  private readonly records = new Map<SessionId, SessionRecord>();
+  // [LAW:one-source-of-truth] Observable as far as a request's wait reads
+  // them (`settled`): which sessions are read, each one's phase, its latest
+  // stamp and its subscriptions.
+  private readonly records = observable.map<SessionId, SessionRecord>(
+    undefined,
+    { deep: false },
+  );
   private stopSweep: (() => void) | null = null;
 
   constructor(private readonly deps: CollectorDeps) {}
@@ -256,6 +265,36 @@ export class Collector {
     });
     this.armSweep();
     return document;
+  }
+
+  // [LAW:single-enforcer] A request's wait on its world state (rule 1 of the
+  // model): until the session's latest stamp has no fact its draw waits on
+  // that has never answered, over the runs its renderer subscribes to now
+  // (`awaitsReading`), or the session is no longer read, or `signal` ends it.
+  // The wait triggers no read: the owners' reads follow the world, and each
+  // stamp they move goes to the renderer ahead of the request, so the request
+  // draws the world state the wait ended on. It reads the subscriptions as
+  // they move, so a turn that drops a run (a view retired, a config that no
+  // longer names it) ends the wait on that run.
+  async settled(session: SessionId, signal: AbortSignal): Promise<void> {
+    try {
+      await when(
+        () => {
+          const record = this.records.get(session);
+          return (
+            record?.phase.kind !== "live" ||
+            !awaitsReading(
+              record.stamped.document,
+              record.subscriptions.runs.keys(),
+            )
+          );
+        },
+        { signal },
+      );
+    } catch (e) {
+      // The signal's abort is the one rejection the wait expects.
+      if (!signal.aborted) throw e;
+    }
   }
 
   // A click is a person's input naming the session, as a request is, so the
@@ -376,7 +415,7 @@ export class Collector {
     this.disarmSweep();
     for (const { phase } of this.records.values())
       if (phase.kind === "live") release(phase);
-    this.records.clear();
+    runInAction(() => this.records.clear());
   }
 
   private open(session: SessionId, locator: ViewFacts): SessionRecord {
@@ -403,19 +442,28 @@ export class Collector {
       reader.holds.close();
       throw e;
     }
-    const stamped: Stamped = {
-      document,
-      from: first,
-      writable: writableOf(document, []),
-    };
-    return {
-      session,
-      stamped,
-      subscriptions,
-      active: true,
-      turns: 0,
-      phase: this.watch(session, stamped, reader),
-    };
+    const stamped: Stamped = observable(
+      { document, from: first, writable: writableOf(document, []) },
+      { document: observableRef, from: false, writable: false },
+    );
+    return observable(
+      {
+        session,
+        stamped,
+        subscriptions,
+        active: true,
+        turns: 0,
+        phase: this.watch(session, stamped, reader),
+      },
+      {
+        session: false,
+        stamped: false,
+        subscriptions: observableRef,
+        active: false,
+        turns: false,
+        phase: observableRef,
+      },
+    );
   }
 
   // A retiring record read again: holds at the request's keys, and its stamps
@@ -589,7 +637,7 @@ export class Collector {
   private retire(record: SessionRecord, live: Live): void {
     release(live);
     const retiring = { kind: "retiring" } as const;
-    record.phase = retiring;
+    runInAction(() => (record.phase = retiring));
     this.deps.log(
       "info",
       `session retired sid=${JSON.stringify(record.session)}`,
@@ -601,7 +649,7 @@ export class Collector {
           record.phase === retiring &&
           this.records.get(record.session) === record
         )
-          this.records.delete(record.session);
+          runInAction(() => this.records.delete(record.session));
         if (this.records.size === 0) this.disarmSweep();
       });
   }

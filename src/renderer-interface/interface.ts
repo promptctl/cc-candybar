@@ -129,22 +129,15 @@ export type Event =
       readonly worldState: WorldState;
     }
   | {
-      // A request of a session whose `config` came before it: the turn draws
-      // from the world state the renderer holds for the session.
+      // A request of a session whose `config` came before it, delivered once
+      // its wait on the session's world state has ended in the host: the
+      // turn draws at once, from the world state the renderer holds.
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
-      // How long the request may still wait, in milliseconds from this
-      // turn's start, from its client's deadline: a span, which each process
-      // counts on its own monotonic clock, so no clock is shared and none
-      // stepped moves it. The renderer still waits inside this turn, over the
-      // world states the host hands in, until the mailbox moves the wait, so
-      // its turns overlap: other inputs, other requests' included, arrive
-      // while this one waits.
-      readonly waitMs: number;
       // When the idle period of the menus the session's last frame drew
-      // began, as the host's idle clock reads it at the request's instant:
-      // null while that frame drew none, or a click is in flight.
+      // began, as the host's idle clock reads it as this turn comes: null
+      // while that frame drew none, or a click is in flight.
       readonly idleSince: Instant | null;
       // What the host's feeds know of the session at the request's instant:
       // the lanes that follow it and draw it now, which the statusline hands
@@ -185,11 +178,6 @@ export type Event =
       // null when the click names none.
       readonly session: ParsedSessionId | null;
       readonly arrival: ClickArrival;
-      // The request the click arrived in. Whether its client left or its
-      // deadline passed is the host's to say, from the click's connection,
-      // asked by this id while the turn waits for the click's place and its
-      // journal turn.
-      readonly id: RequestId;
       // [LAW:one-source-of-truth] The newest request of the click's session
       // the host holds, whose hints are the pane its lanes follow: null when
       // the click names no session, or the host holds no request of it (none
@@ -201,10 +189,13 @@ export type Event =
       // ✕ does.
       readonly kind: "menu-idle";
       readonly session: SessionId;
-      // The firing of the session's idle clock: the close's line says its
-      // span, and the close's journal turn names it when it asks the clock
-      // whether the session is still idle since.
+      // The firing of the session's idle clock, whose span the close's line
+      // says.
       readonly idle: IdleSpan;
+      // Whether the close goes ahead: the session still known idle since the
+      // firing, as the host's idle clock judged it as this turn came. A click
+      // since the firing keeps what it opened.
+      readonly stillIdle: boolean;
       // The newest request of the session the host holds, as a click's.
       readonly latest: CheckedRenderRequest | null;
     };

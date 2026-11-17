@@ -58,11 +58,6 @@ export function bootEnv(
   );
 }
 
-// How an awaited call ended, as data: a rejection keeps its failure's kind.
-export type Returned =
-  | { readonly kind: "ok"; readonly value: unknown }
-  | { readonly kind: "failed"; readonly failure: Failure };
-
 // A reach's path in `AdapterToHost`, dotted: `menuIdle.clicked`, `doctor.forge`.
 export type ReachPath = string;
 
@@ -72,11 +67,6 @@ export type HostLine =
       readonly kind: "input";
       readonly n: number;
       readonly input: RendererInput;
-    }
-  | {
-      readonly kind: "returned";
-      readonly n: number;
-      readonly returned: Returned;
     }
   // [LAW:single-enforcer] The supervisor's one check that the renderer's loop turns:
   // answered outside any turn, with what the process holds of memory.
@@ -105,12 +95,6 @@ export type RendererLine =
       readonly reach: ReachPath;
       readonly args: readonly unknown[];
     }
-  | {
-      readonly kind: "call";
-      readonly n: number;
-      readonly reach: ReachPath;
-      readonly args: readonly unknown[];
-    }
   | { readonly kind: "ping"; readonly n: number; readonly usage: MemorySizes }
   | {
       readonly kind: "heap-snapshot";
@@ -121,36 +105,25 @@ export type RendererLine =
     };
 
 // [LAW:types-are-the-program] Every line is plain data. A reach's arguments
-// and an awaited value are checked where they are spelled (`REACHES_CROSS`).
-export const HOST_LINES_CROSS: Crosses<
-  Exclude<HostLine, { kind: "returned" }>
-> = true;
+// are checked where they are spelled (`REACHES_CROSS`).
+export const HOST_LINES_CROSS: Crosses<HostLine> = true;
 export const RENDERER_LINES_CROSS: Crosses<
-  Exclude<RendererLine, { kind: "notice" | "call" }>
+  Exclude<RendererLine, { kind: "notice" }>
 > = true;
 
-// [LAW:types-are-the-program] Which reaches answer nothing and which are
-// awaited, for every reach `AdapterToHost` spells: a reach added there fails
-// the build here until it is listed as what it is.
+// [LAW:types-are-the-program] Every reach `AdapterToHost` spells, each a
+// notice (`REACHES_CROSS`): a reach added there fails the build here until it
+// is listed.
 type ReachKinds<T> = {
-  readonly [K in keyof T]: T[K] extends (...args: never[]) => infer R
-    ? [R] extends [Promise<unknown>]
-      ? "call"
-      : "notice"
+  readonly [K in keyof T]: T[K] extends (...args: never[]) => unknown
+    ? "notice"
     : ReachKinds<T[K]>;
 };
 
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   wake: "notice",
   log: "notice",
-  menuIdle: {
-    clicked: "notice",
-    clickArrived: "notice",
-    clickSettled: "notice",
-    observe: "notice",
-    confirmClose: "call",
-  },
-  clicks: { gone: "call" },
+  menuIdle: { clicked: "notice", observe: "notice" },
   eventAnswered: "notice",
   watches: { watch: "notice", unwatch: "notice" },
   storage: { hold: "notice", release: "notice" },
@@ -160,13 +133,10 @@ type Reach = (...args: readonly unknown[]) => unknown;
 
 // [LAW:single-enforcer] The one walk of the table: each reach's path and
 // kind, in the table's order.
-function reachesOf(
-  table: object,
-  prefix = "",
-): ReadonlyArray<readonly [ReachPath, "notice" | "call"]> {
+function reachesOf(table: object, prefix = ""): readonly ReachPath[] {
   return Object.entries(table).flatMap(([key, value]) =>
     typeof value === "string"
-      ? [[`${prefix}${key}`, value as "notice" | "call"] as const]
+      ? [`${prefix}${key}`]
       : reachesOf(value as object, `${prefix}${key}.`),
   );
 }
@@ -292,20 +262,9 @@ export function rendererOverLines(deps: {
     adapter: (input: AdapterInput) => answer(input) as Promise<AdapterOutput>,
   });
   // [LAW:no-ambient-temporal-coupling] Each reach is performed as its line
-  // arrives, a call's as a notice's, so a call and the notices around it land
-  // in the order sent; only a call's answer waits.
+  // arrives, so the notices land in the order sent.
   const reached = (path: ReachPath, args: readonly unknown[]): unknown =>
     reachAt(host, path)(...args);
-  const calling = (
-    path: ReachPath,
-    args: readonly unknown[],
-  ): Promise<unknown> => {
-    try {
-      return Promise.resolve(reached(path, args));
-    } catch (thrown) {
-      return Promise.reject(thrown as Error);
-    }
-  };
   const heard = (line: RendererLine): void => {
     // [LAW:no-silent-failure] A line a renderer said as it ended (its pipes
     // can close after its end) reaches nothing: what it would hold has no
@@ -323,21 +282,6 @@ export function rendererOverLines(deps: {
             `renderer notice ${line.reach} threw: ${failureOf(thrown).detail}`,
           );
         }
-        return;
-      case "call":
-        void calling(line.reach, line.args)
-          .then(
-            (value): Returned => ({ kind: "ok", value }),
-            (thrown: unknown): Returned => ({
-              kind: "failed",
-              failure: failureOf(thrown),
-            }),
-          )
-          .then((returned) =>
-            gone === null
-              ? send({ kind: "returned", n: line.n, returned })
-              : undefined,
-          );
         return;
       case "output":
       case "rejected":
@@ -398,69 +342,31 @@ export function rendererOverLines(deps: {
   };
 }
 
-// The host as a renderer in another process holds it: each reach a line,
-// each awaited call resolved by the `returned` that names it.
-export interface HostOverLines {
-  readonly host: AdapterToHost;
-  readonly returned: (n: number, returned: Returned) => void;
-}
-
+// The host as a renderer in another process holds it: each reach a line.
 export function hostOverLines(
   send: (line: RendererLine) => void,
-): HostOverLines {
-  const waiting = new Map<
-    number,
-    {
-      readonly resolve: (v: unknown) => void;
-      readonly reject: (e: Error) => void;
-    }
-  >();
-  let next = 0;
-  const reach =
-    (path: ReachPath, kind: "notice" | "call"): Reach =>
-    (...args) => {
-      if (kind === "notice") {
-        send({ kind: "notice", reach: path, args });
-        return undefined;
-      }
-      return new Promise((resolve, reject) => {
-        const n = ++next;
-        waiting.set(n, { resolve, reject });
-        send({ kind: "call", n, reach: path, args });
-      });
-    };
+): AdapterToHost {
   const host: Record<string, unknown> = {};
-  for (const [path, kind] of REACHES) {
+  for (const path of REACHES) {
     const keys = path.split(".");
     const leaf = keys.pop() as string;
     const group = keys.reduce<Record<string, unknown>>(
       (at, key) => (at[key] ??= {}) as Record<string, unknown>,
       host,
     );
-    group[leaf] = reach(path, kind);
+    group[leaf] = (...args: readonly unknown[]) =>
+      send({ kind: "notice", reach: path, args });
   }
-  return {
-    // [LAW:types-are-the-program] exception: built from `REACH_KINDS`, whose
-    // type is `AdapterToHost`'s own shape, so every reach is here.
-    host: host as unknown as AdapterToHost,
-    returned: (n, returned) => {
-      const call = waiting.get(n);
-      // [LAW:no-silent-failure] A return for no call is the host's bug.
-      if (call === undefined)
-        throw new Error(`the host returned call ${n}, which is not waiting`);
-      waiting.delete(n);
-      if (returned.kind === "ok") call.resolve(returned.value);
-      else call.reject(new CrossedFailure(returned.failure));
-    },
-  };
+  // [LAW:types-are-the-program] exception: built from `REACH_KINDS`, whose
+  // type is `AdapterToHost`'s own shape, so every reach is here.
+  return host as unknown as AdapterToHost;
 }
 
 // The renderer's side of the lines past its boot: each input answered by
-// its output, every reach's return handed back, and the host's reads of the
-// process answered here, outside any turn.
+// its output, and the host's reads of the process answered here, outside any
+// turn.
 export function serveRenderer(deps: {
   readonly renderer: Renderer;
-  readonly host: HostOverLines;
   readonly send: (line: RendererLine) => void;
   readonly memory: () => MemorySizes;
   readonly heapSnapshot: (file: string) => void;
@@ -480,9 +386,6 @@ export function serveRenderer(deps: {
           (thrown: unknown) =>
             send({ kind: "rejected", n: line.n, failure: failureOf(thrown) }),
         );
-        return;
-      case "returned":
-        deps.host.returned(line.n, line.returned);
         return;
       case "ping":
         send({ kind: "ping", n: line.n, usage: deps.memory() });

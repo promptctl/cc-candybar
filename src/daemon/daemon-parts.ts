@@ -16,7 +16,6 @@ import type { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
 import type { DoctorStores } from "../doctor/ports";
 import type { RendererHost } from "./renderer-host.js";
-import type { ClicksInFlight } from "./clicks-in-flight.js";
 import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
@@ -57,8 +56,8 @@ export interface DaemonParts {
   readonly limits: LimitsHandle;
   // The host's one path to the main renderer (src/daemon/renderer-host.ts).
   readonly renderer: RendererHost;
-  // The clicks whose turns run, and whether each one's client has left.
-  readonly clicks: ClicksInFlight;
+  // The daemon's close, which ends a request's wait.
+  readonly closing: AbortSignal;
   // [LAW:single-enforcer] The host's one reader of every session's world
   // (src/daemon/collector.ts).
   readonly collector: Collector;

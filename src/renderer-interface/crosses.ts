@@ -72,8 +72,8 @@ export type Crosses<T> = [Exclude<Each<T, DEPTH>, true>] extends [never]
   : Exclude<Each<T, DEPTH>, true>;
 
 // A reach of one side into the other crosses when what it is handed does and
-// it answers nothing, a notice, or a promise of what crosses, an awaited call.
-// Its arguments are a list, so an `undefined` among them arrives as null.
+// it answers nothing: a notice, so a turn never waits on the other side. Its
+// arguments are a list, so an `undefined` among them arrives as null.
 export interface CannotReach<Reach> {
   readonly cannotReach: Reach;
 }
@@ -83,13 +83,7 @@ type Answer<R> = 0 extends 1 & R
   ? CannotReach<R>
   : [R] extends [void]
     ? true
-    : [R] extends [Promise<infer V>]
-      ? 0 extends 1 & V
-        ? CannotReach<R>
-        : [V] extends [void]
-          ? true
-          : Crosses<V>
-      : CannotReach<R>;
+    : CannotReach<R>;
 
 type Reach<T> = [T] extends [(...args: infer A) => infer R]
   ? [Exclude<Crosses<A> | Answer<R>, true>] extends [never]

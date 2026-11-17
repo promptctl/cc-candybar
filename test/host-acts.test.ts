@@ -113,7 +113,7 @@ function hostOver(
     world,
   );
   const turn = () =>
-    host.answer({
+    host.answer(() => ({
       kind: "event",
       at: AT,
       event: {
@@ -121,8 +121,9 @@ function hostOver(
         session: S,
         idle: { firedAt: AT, idleS: 30, timeoutS: 30 },
         latest: null,
+        stillIdle: true,
       },
-    });
+    }));
   return { turn, did, unheard };
 }
 
