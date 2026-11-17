@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-780",
+      "ref": "refs/pull/780/merge",
+      "sha": "9e4dfe7f5265b116e52394de1fdaf3001b77da4c",
+      "timestamp": "2026-11-17T03:56:08.512Z",
+      "commits": [
+        {
+          "sha": "9e4dfe7f5265b116e52394de1fdaf3001b77da4c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T20:55:20-07:00",
+          "message": "Merge aea85878ca80973f2cecce6f2c30c36bdc3f5545 into cd22d86be5a01cf1358b2319620a5b9823ffc034\n"
+        },
+        {
+          "sha": "aea85878ca80973f2cecce6f2c30c36bdc3f5545",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-16T20:54:50-07:00",
+          "message": "feat(daemon): a request waits in the host for its world state, and the renderer takes one input at a time (5gb)\n\nEvery input to a renderer, events and pushes alike, passes one mailbox in the\nhost and is one turn, sent only once the last has answered. An input is made\nas its turn comes, so what it reads of the host (a request's idle clock and\nfeeds, whether a click's client left, whether a session is still idle for its\nclose) follows every turn ahead of it. A turn's config changes land, and their\neffect-done turns run, in its own place in the mailbox, so the next input\nfinds them landed.\n\nA request is three steps: its config turn, a wait in the host on the session's\nworld state over the runs the renderer subscribes to now, then its request\nturn. The wait holds no place in the mailbox, so a retire that drops a run it\nwaits on ends the wait on it. The collector owns the wait; the rule for what a\ndraw waits on moves to shared facts.\n\nThe turn never waits: the adapter's awaited calls (clicks.gone,\nmenuIdle.confirmClose, clickArrived, clickSettled) and the wire's call and\nreturned lines are deleted, and a reach crosses only as a notice. JournalTurns,\nClicksInFlight and the async in the verbs are deleted. The mailbox's holder and\nqueue replace journalTurns in stats, and each turn records its mailbox wait.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "cd22d86be5a01cf1358b2319620a5b9823ffc034",
