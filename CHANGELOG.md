@@ -1,3 +1,9 @@
+## [1.228.0](https://github.com/promptctl/cc-candybar/compare/v1.227.0...v1.228.0) (2026-11-17)
+
+### Features
+
+* **renderer:** time is handed in as two readings, and the renderer owns its schedules (883) ([#783](https://github.com/promptctl/cc-candybar/issues/783)) ([6813576](https://github.com/promptctl/cc-candybar/commit/681357616352fb4f7476a7b1035b61a244971844))
+
 ## [1.227.0](https://github.com/promptctl/cc-candybar/compare/v1.226.0...v1.227.0) (2026-11-17)
 
 ### Features
