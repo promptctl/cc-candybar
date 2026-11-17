@@ -42,6 +42,15 @@ export interface Layer {
   readonly listed: Readonly<Record<string, PluginFile>>;
 }
 
+// [LAW:single-enforcer] Whether a click may write a layer holding `content`:
+// what the bar offers and what a write refuses, so it never offers one its
+// click refuses. A file it could not read is never written over.
+export function writable(
+  content: Layer["content"],
+): content is Exclude<Layer["content"], { readonly kind: "unreadable" }> {
+  return content.kind !== "unreadable";
+}
+
 // The one repository an origin's directories belong to. Project and local
 // share its answer, kept under `dir`: a linked worktree's main checkout.
 export interface RepoQuestion {

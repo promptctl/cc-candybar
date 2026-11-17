@@ -32,7 +32,11 @@ import {
   loadSnapshot,
   type LoadedChain,
 } from "../config/dsl-loader.js";
-import type { ConfigSnapshot, Layer } from "../config/config-snapshot.js";
+import {
+  writable,
+  type ConfigSnapshot,
+  type Layer,
+} from "../config/config-snapshot.js";
 import { LAYER_ROLES, type LayerRole } from "../config/layer-role.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
@@ -456,7 +460,7 @@ export function writeLayerOf(
           : `the ${role} layer is the project's, and this session has no approved project`
       }`,
     );
-  if (layer.content.kind === "unreadable")
+  if (!writable(layer.content))
     throw new BadVerbArgs(
       `the ${role} layer is not writable: ${layer.path} could not be read (${layer.content.error}), and a click does not write over a file it could not read`,
     );
@@ -625,8 +629,9 @@ function inheritedOf(into: Seen): DslConfig {
 
 // The chain the written layer's text — or its absence — loads to, between
 // the layers the click holds, exactly as discovery orders it: an existing
-// file is a layer whatever it holds. The written text is discovered as it
-// would read, so the definitions its own list names are the ones it proves.
+// file is a layer whatever it holds. The written text keeps the definitions
+// discovery read for its layer, so a `plugins` entry discovery did not read
+// for it refuses the write, naming the entry, until discovery has read it.
 function chainOver(into: Seen, text: string | null): LoadedChain {
   const layers = [
     ...into.below,

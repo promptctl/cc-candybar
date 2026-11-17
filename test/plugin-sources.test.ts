@@ -25,7 +25,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
-import { FileEventDelivery } from "../src/daemon/cache/file-events";
+import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
 import {
   WatcherRegistry,
   type WatcherCounters,
@@ -163,6 +163,8 @@ interface Rig {
   readonly configs: ConfigHost;
   readonly providers: ReturnType<typeof createPayloadProviders>;
   readonly counters: WatcherCounters;
+  // What the daemon's owner of file events says, by hand: its period too.
+  readonly fileEvents: HandDelivery;
   readonly sessionState: SessionState;
   // What the views' documents carry as the daemon's update.
   readonly updateFact: UpdateFact;
@@ -210,17 +212,14 @@ function rig(): Rig {
   // Every file here lives in one folder, so the sessions' transcript watches
   // would share it with the storage folders these cases count: the trigger
   // hears nothing here, as in every rig.
+  const fileEvents = handDelivery();
   const providers = withTranscriptLanes(
     createPayloadProviders({
       clock: systemTimekeeper,
       launcher: world.launcher,
       host,
       watchers,
-      fileEvents: new FileEventDelivery({
-        clock: systemTimekeeper,
-        watchers,
-        logger: log,
-      }),
+      fileEvents,
       logger: log,
       ledger: new RefreshLedger(log),
       sourceRuns: new SourceRuns({
@@ -291,6 +290,7 @@ function rig(): Rig {
     configs,
     providers,
     counters,
+    fileEvents,
     sessionState,
     updateFact,
     reloads,
@@ -1278,7 +1278,7 @@ describe("a storage folder's watch", () => {
 
   // The owner of a folder a load still holds opens its next generation the
   // moment it finds the folder gone, so no config reload is what recovers it.
-  test("removing the session folder, and nothing else, has its owner make it again with no reload, and the next write shows", async () => {
+  test("removing the session folder, and nothing else, has its owner make it again at the next period with no reload, and the next write shows", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
     const held = r.hold(file);
@@ -1293,11 +1293,11 @@ describe("a storage folder's watch", () => {
         if (fs.existsSync(storage))
           fs.rmSync(storage, { recursive: true, maxRetries: 3 });
       },
-      () =>
-        r.providers.managedStorage.stats().lost > lost &&
-        fs.existsSync(storage),
-      "the owner making the removed folder again",
+      () => r.providers.managedStorage.stats().lost > lost,
+      "the loss of the removed folder",
     );
+    expect(fs.existsSync(storage)).toBe(false);
+    r.fileEvents.notify({ kind: "period" });
     expect(fs.statSync(storage).isDirectory()).toBe(true);
     expect(entry.state).toBe(state);
     const view = viewOf(r, file);

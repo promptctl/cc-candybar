@@ -224,16 +224,6 @@ function placeOf(
   );
 }
 
-// [LAW:one-source-of-truth] The roles a session's chain can write: what its
-// save offers, read off the same placement a write resolves, so the bar never
-// offers a layer its click would refuse.
-export function writableRoles(
-  resolved: ConfigResolution,
-  query: ConfigQuery,
-): readonly LayerRole[] {
-  return chainPlaces(resolved, query).map((l) => l.role);
-}
-
 // [LAW:one-source-of-truth] Each role the session's chain can write, lowest
 // first, at the file a write there lands in: the placement every write
 // resolves, so discovery's chain holds exactly the layers a click can write.

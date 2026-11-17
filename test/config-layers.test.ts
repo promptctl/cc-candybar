@@ -16,7 +16,11 @@ import {
   type CheckOutcome,
 } from "../src/check";
 import { homeLayer } from "../src/config/dsl-loader";
-import { originOf } from "./helpers/config-host";
+import { loadDiscovered, originOf } from "./helpers/config-host";
+import { SessionState } from "../src/renderer/session-state";
+import { systemTimekeeper } from "../src/time";
+import { TEST_SIGNER } from "./helpers/link-signer";
+import { bareGates } from "./helpers/gates";
 import { loadChain } from "./helpers/discovered-load";
 import type { LayerRole } from "../src/config/layer-role";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -797,4 +801,32 @@ describe("a project layer inserting into the user's row", () => {
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     expect(() => barLoad()).toThrow(/2 placements with the id "other"/);
   });
+});
+
+// [LAW:single-enforcer] What the bar offers to save to is what a click may
+// write: a layer discovery could not read is never offered, as a write there
+// is refused.
+test("a layer that could not be read is no role the bar offers to save to", () => {
+  fs.mkdirSync(projectFile);
+  const loaded = loadDiscovered(project, project, undefined, {
+    clock: systemTimekeeper,
+    stateDir: stateDir(host),
+    locations: locations(host),
+    env: host.env,
+    sessionState: new SessionState(),
+    signer: TEST_SIGNER,
+    gates: bareGates(),
+  });
+  try {
+    expect(loaded.snapshot.chain.map((l) => [l.role, l.content.kind])).toEqual(
+      [
+        ["user", "text"],
+        ["project", "unreadable"],
+        ["local", "absent"],
+      ],
+    );
+    expect(loaded.state!.writable).toEqual(["user", "local"]);
+  } finally {
+    loaded.state?.registry.dispose();
+  }
 });

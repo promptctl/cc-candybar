@@ -191,20 +191,21 @@ export function mainRenderer(
         }
         return;
       case "config": {
-        parts.renderCache.configure(event.origin, event.config);
         // [LAW:no-ambient-temporal-coupling] Every event that waited for this
         // origin runs now, in arrival order, its effects and frames this
         // turn's, so they land in the slot it arrived in. Each runs whatever
-        // another threw.
+        // the reload or another threw: no later turn brings them back, so
+        // none is left waiting.
         const key = originKey(event.origin);
         const ready = parked.filter((p) => originKey(p.origin) === key);
         parked = parked.filter((p) => originKey(p.origin) !== key);
-        runEach(
-          ready.map(({ event: waited }) => () => {
+        runEach([
+          () => parts.renderCache.configure(event.origin, event.config),
+          ...ready.map(({ event: waited }) => () => {
             if (waited.kind === "context") openSession(parts, waited.context);
             else turn(waited, record, effects, frames);
           }),
-        );
+        ]);
         return;
       }
       case "request": {

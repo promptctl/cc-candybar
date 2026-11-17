@@ -99,16 +99,24 @@ const textOfLayer = (
 };
 
 test("follows exactly the origins named: each discovered once as it is first named, and one let go is dropped with its watch", () => {
-  const { discovery, counters } = discoveryRig();
+  const { discovery, counters, logged } = discoveryRig();
   const { origin: a } = named("a");
   const { origin: b } = named("b");
-  expect(discovery.follow([a])).toEqual([a]);
-  expect(discovery.follow([a, b])).toEqual([b]);
-  expect(discovery.follow([a, b])).toEqual([]);
+  const follows = () => logged.filter((l) => l.includes("why=follow"));
+  discovery.follow([a]);
+  discovery.follow([a, b]);
+  discovery.follow([a, b]);
+  expect(follows()).toEqual([
+    "config discovery why=follow followed=1 discovered=1 released=0",
+    "config discovery why=follow followed=2 discovered=1 released=0",
+  ]);
   expect(discovery.snapshotOf(a)).not.toBeNull();
   const opened = counters.watchersOpened;
   const closedBefore = counters.watchersClosed;
-  expect(discovery.follow([b])).toEqual([]);
+  discovery.follow([b]);
+  expect(follows().at(-1)).toBe(
+    "config discovery why=follow followed=1 discovered=0 released=1",
+  );
   expect(discovery.snapshotOf(a)).toBeNull();
   expect(counters.watchersOpened).toBe(opened);
   expect(counters.watchersClosed).toBeGreaterThan(closedBefore);
@@ -172,6 +180,6 @@ test("once closed, it follows nothing and lets every watch go", () => {
   discovery.follow([origin]);
   discovery.close();
   expect(counters.watchersClosed).toBe(counters.watchersOpened);
-  expect(discovery.follow([origin])).toEqual([]);
+  discovery.follow([origin]);
   expect(discovery.snapshotOf(origin)).toBeNull();
 });

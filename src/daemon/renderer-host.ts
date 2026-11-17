@@ -133,6 +133,19 @@ export interface RendererHost {
   stats(): MailboxStats;
 }
 
+// [LAW:types-are-the-program] A turn's failure as the outcome of what waited
+// on it: a bad request is refused, a close is a close, anything else failed.
+const THREW_AS = {
+  "bad-request": "refused",
+  threw: "failed",
+  closing: "closing",
+  abandoned: "failed",
+  down: "failed",
+} as const satisfies Record<
+  Failure["kind"],
+  Exclude<EffectOutcome["kind"], "ok" | "skipped">
+>;
+
 // A turn as its slot leaves it: what the renderer answered, and its effects'
 // outcomes, which settle once its acts have, after the slot.
 interface Slotted {
@@ -275,7 +288,7 @@ export function rendererHost(
       // [LAW:no-ambient-temporal-coupling] Every origin the output newly
       // names, and every one the landing moved, gets its `config` turn here,
       // ahead of the landing's `effect-done` turns.
-      const configured: Array<Promise<unknown>> = [];
+      const configured: Array<Promise<readonly EffectOutcome[]>> = [];
       for (const origin of named)
         configured.push(
           (await configInSlot(origin, "config-subscribed")).settled,
@@ -337,8 +350,14 @@ export function rendererHost(
           before = acted;
         }
       }
+      // [LAW:no-silent-failure] A turn settles as what it caused: its own
+      // effects, and the `config` turns it named or moved, which run what
+      // waited on them, so a click that waited answers for what it did.
       const settled = Promise.all(configured)
-        .then(() => Promise.all(owed))
+        .then(async (caused) => [
+          ...caused.flat(),
+          ...(await Promise.all(owed)),
+        ])
         .finally(release);
       return { turn, settled };
     } catch (thrown) {
@@ -403,13 +422,24 @@ export function rendererHost(
   const configInSlot = async (
     origin: RenderOrigin,
     why: string,
-  ): Promise<{ readonly settled: Promise<unknown> }> => {
+  ): Promise<{ readonly settled: Promise<readonly EffectOutcome[]> }> => {
     const made = configMade(origin)();
-    if (made.kind !== "event") return { settled: Promise.resolve() };
+    if (made.kind !== "event") return { settled: Promise.resolve([]) };
     const input = stamped(made);
     const { turn, settled } = await inSlot(input, 0);
     record(input.event, [["why", why]], turn);
-    return { settled };
+    // A `config` turn that threw failed whatever waited on it, as its own
+    // turn would have: a waiting click's bad request is still the user's.
+    const threw: readonly EffectOutcome[] =
+      turn.kind === "threw"
+        ? [
+            {
+              kind: THREW_AS[turn.failure.kind],
+              reason: turn.failure.message,
+            },
+          ]
+        : [];
+    return { settled: settled.then((outcomes) => [...threw, ...outcomes]) };
   };
 
   // [LAW:no-silent-failure] Each effect's outcome goes back to the renderer

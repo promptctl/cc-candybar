@@ -140,7 +140,6 @@ export type { ConfigIssue, DroppedFileError } from "./loader/diagnostics.js";
 export {
   dslConfigCandidatePaths,
   configResolutionNotice,
-  writableRoles,
   homeLayer,
 } from "./loader/chain-places.js";
 export type { ConfigLayer, ConfigResolution } from "./loader/chain-places.js";

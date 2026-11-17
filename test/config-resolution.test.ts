@@ -24,7 +24,6 @@ import { join } from "node:path";
 
 import {
   configResolutionNotice,
-  writableRoles,
   dslConfigCandidatePaths,
 } from "../src/config/dsl-loader";
 import {
@@ -245,14 +244,11 @@ describe("resolveDslConfig", () => {
         { path: projJson, role: "project" },
         { path: join(proj, ".cc-candybar.local.json5"), role: "local" },
       ]);
-      expect(
-        writableRoles(resolveDslConfig(L, approving(proj), query), query),
-      ).toEqual(["user", "project", "local"]);
       // Unapproved, the project's layers are not the session's to write.
       const unanswered = { kind: "ok", value: {} } as const;
       expect(
-        writableRoles(resolveDslConfig(L, unanswered, query), query),
-      ).toEqual(["user"]);
+        chainPlaces(resolveDslConfig(L, unanswered, query), query),
+      ).toEqual([{ path: xdgJson5, role: "user" }]);
     } finally {
       cleanup();
     }

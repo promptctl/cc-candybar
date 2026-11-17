@@ -76,13 +76,13 @@ export class ConfigDiscovery {
   // [LAW:single-enforcer] The origins followed become exactly `origins`. Each
   // new one is discovered, all in one batch over one read of what origins
   // share, and its watch acquired before any let go is released, so a
-  // directory both name keeps its OS handle. Answers the newly followed.
-  follow(origins: readonly RenderOrigin[]): readonly RenderOrigin[] {
-    if (this.closed) return [];
+  // directory both name keeps its OS handle.
+  follow(origins: readonly RenderOrigin[]): void {
+    if (this.closed) return;
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     const gone = [...this.followed].filter(([key]) => !wanted.has(key));
-    if (fresh.length + gone.length === 0) return [];
+    if (fresh.length + gone.length === 0) return;
     if (fresh.length > 0) {
       const shared = readShared(this.deps);
       for (const [key, origin] of fresh)
@@ -96,7 +96,6 @@ export class ConfigDiscovery {
       "info",
       `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${gone.length}`,
     );
-    return fresh.map(([, origin]) => origin);
   }
 
   // What discovery found at `origin` last: null while it is not followed.

@@ -397,13 +397,18 @@ describe("ManagedStorage watches", () => {
 
   // [LAW:no-ambient-temporal-coupling] A config load no longer follows a
   // folder's loss, so its owner is the one that recovers it.
-  test("a folder removed under its watch is made again by its owner at once, as a new generation, with no load's hold", async () => {
+  // Not at once: a plugin folder being removed would have its storage folder
+  // made in it again before its own removal, which then fails as not empty.
+  test("a folder removed under its watch is made again by its owner at the next period, as a new generation, with no load's hold", async () => {
     const watches = fakeWatches();
     const r = rig();
     r.hold();
     fs.rmSync(r.folder, { recursive: true });
     watches[0]!.listener("rename", path.basename(r.folder));
     await until(() => r.storage.stats().lost === 1, "the loss");
+    expect(r.generation()).toBe(0);
+    expect(fs.existsSync(r.folder)).toBe(false);
+    r.fileEvents.notify({ kind: "period" });
     expect(r.generation()).toBe(1);
     expect(fs.statSync(r.folder).isDirectory()).toBe(true);
   });

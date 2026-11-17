@@ -71,7 +71,6 @@ export const NO_CONFIGS: HostWorld["configs"] = {
       throw new Error(
         `this rig discovers no config, and its renderer named ${origins.length}`,
       );
-    return [];
   },
   snapshotOf: () => null,
   landed: () => [],

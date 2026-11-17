@@ -80,7 +80,6 @@ function hostOver(
   const configs: HostWorld["configs"] = {
     follow: (origins) => {
       followed = origins;
-      return [];
     },
     snapshotOf: (origin) =>
       followed.some((o) => o.projectDir === origin.projectDir)
@@ -160,4 +159,50 @@ test("an origin a watch moved that the renderer let go by its slot is abandoned,
   await host.answer(() => ({ kind: "event", event: due }));
   expect(heard).toEqual(["due"]);
   expect(logged.some((l) => l.includes("is no longer followed"))).toBe(true);
+});
+
+// [LAW:no-silent-failure] A click that waited for its origin's config runs in
+// that config turn, so the turn that named the origin answers for it.
+describe("a turn settles as the config turns it named", () => {
+  test("a change one of them returned is among its outcomes, refused as it landed", async () => {
+    const change: Effect = {
+      kind: "change",
+      id: 1 as EffectId,
+      session: S,
+      target: { kind: "layer", origin: ORIGIN, role: "user" },
+      // Read from a file the disk no longer holds.
+      changes: diffChanges(
+        `{ globals: { theme: "noon" } }\n`,
+        `{ globals: { theme: "dawn" } }\n`,
+      ),
+    };
+    const { host, heard } = hostOver((event) =>
+      output(event.kind === "config" ? [change] : [], [ORIGIN]),
+    );
+    const answered = await host.answer(() => ({ kind: "event", event: due }));
+    expect(heard).toEqual(["due", "config", "effect-done refused"]);
+    expect(answered.settled).toEqual([
+      { kind: "refused", reason: expect.any(String) },
+    ]);
+  });
+
+  test("one that threw is its failure", async () => {
+    const { host } = hostOver((event) =>
+      event.kind === "config"
+        ? {
+            ...output([], [ORIGIN]),
+            kind: "threw",
+            failure: {
+              kind: "threw",
+              message: "the waiting click broke",
+              detail: "the waiting click broke",
+            },
+          }
+        : output([], [ORIGIN]),
+    );
+    const answered = await host.answer(() => ({ kind: "event", event: due }));
+    expect(answered.settled).toEqual([
+      { kind: "failed", reason: "the waiting click broke" },
+    ]);
+  });
 });

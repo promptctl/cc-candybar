@@ -16,7 +16,7 @@ import type {
 import type { LinkSigner } from "../click/link-signer.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
-import type { ConfigSnapshot } from "../config/config-snapshot.js";
+import { writable, type ConfigSnapshot } from "../config/config-snapshot.js";
 import type { Drawing } from "../config/lanes.js";
 import type { FrameRecord } from "../render/frame-memory.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
@@ -321,7 +321,7 @@ function chainOf(snapshot: ConfigSnapshot, locs: Locations): ConfigChain {
       .map((l) => ({ path: l.path, role: l.role })),
     // Every chain holds the user layer: it is the one no answer gates.
     home: chain.find((l) => l.role === "user")!.path,
-    writable: chain.map((l) => l.role),
+    writable: chain.filter((l) => writable(l.content)).map((l) => l.role),
     snapshot,
     locs,
   };
@@ -407,6 +407,13 @@ export function configDisposeLine(
   released: number,
 ): string {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
+}
+
+// A snapshot the host handed in, digested once as it arrived: what an entry
+// loaded from it is compared by.
+interface HeldSnapshot {
+  readonly snapshot: ConfigSnapshot;
+  readonly digest: string;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -837,7 +844,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
 // warnings earned before a failure reach the bar beside the error, and a kept
 // state never drops a line its build earned.
 export function settle(
-  snapshot: ConfigSnapshot,
   chain: ConfigChain,
   resolveWarnings: readonly string[],
   attempt: Attempt,
@@ -854,7 +860,7 @@ export function settle(
   // discovery watches every candidate path, so creating/removing a duplicate
   // — or the named file appearing — hands in a snapshot that moved.
   const warning = (own: readonly string[]): string | null =>
-    joinWarnings([...snapshot.notices, ...resolveWarnings, ...own]);
+    joinWarnings([...chain.snapshot.notices, ...resolveWarnings, ...own]);
   switch (attempt.kind) {
     case "built":
     case "kept":
@@ -883,7 +889,6 @@ export function settle(
 // from keep it, since rebuilding it would reopen every session view and
 // restart its sources for nothing.
 function loadChain(
-  snapshot: ConfigSnapshot,
   cwd: string,
   chain: ConfigChain,
   deps: StateDeps,
@@ -891,7 +896,7 @@ function loadChain(
 ): LoadOutcome {
   const resolved = resolveLoad(cwd, chain);
   if (resolved.kind === "failed") {
-    return settle(snapshot, chain, [], resolved);
+    return settle(chain, [], resolved);
   }
   // [LAW:one-source-of-truth] A memo on load identity, as the compile table
   // is on compile identity.
@@ -899,7 +904,7 @@ function loadChain(
     served?.loadKey === resolved.key
       ? { kind: "kept", state: served }
       : buildRenderState(resolved, deps);
-  return settle(snapshot, chain, resolved.warnings, attempt);
+  return settle(chain, resolved.warnings, attempt);
 }
 
 // [LAW:effects-at-boundaries] One attempt at a state from what discovery
@@ -920,13 +925,7 @@ export function loadOrigin(
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
   // and its diagnostics count `lastError` and `lastWarning`.
-  return loadChain(
-    snapshot,
-    cwd,
-    chainOf(snapshot, deps.locations),
-    deps,
-    served,
-  );
+  return loadChain(cwd, chainOf(snapshot, deps.locations), deps, served);
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
@@ -1162,7 +1161,7 @@ export class RenderCache<
   // it in: the one source every entry loads from. An origin the renderer stops
   // naming is pruned, so an entry made after loads only a snapshot the host
   // still follows.
-  private readonly snapshots = new Map<string, ConfigSnapshot>();
+  private readonly snapshots = new Map<string, HeldSnapshot>();
   // [LAW:one-source-of-truth] Whether the cache has closed, and the signal a
   // wait over one of its views ends at: one fact, so a render waiting as the
   // close drops its view ends then, not at its deadline.
@@ -1239,10 +1238,11 @@ export class RenderCache<
   configure(origin: RenderOrigin, snapshot: ConfigSnapshot): void {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    this.snapshots.set(key, snapshot);
+    const held = { snapshot, digest: digestOf(snapshot) };
+    this.snapshots.set(key, held);
     const entry = this.entries.get(key);
-    if (entry !== undefined && entry.digest !== digestOf(snapshot))
-      this.reloadInto(entry, snapshot, { kind: "config" });
+    if (entry !== undefined && entry.digest !== held.digest)
+      this.reloadInto(entry, held, { kind: "config" });
   }
 
   // Whether the host handed in `origin`'s config and the renderer still
@@ -1293,7 +1293,7 @@ export class RenderCache<
     }
 
     const { projectDir, cwd } = origin;
-    const snapshot = this.snapshotFor(origin);
+    const { snapshot, digest } = this.held(origin);
     const loaded = this.load(cwd, snapshot, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
@@ -1309,7 +1309,7 @@ export class RenderCache<
       configFile: origin.target.path,
       configLayers: loaded.layers,
       snapshot,
-      digest: digestOf(snapshot),
+      digest,
       lastError: loaded.error,
       lastWarning: loaded.warning,
       state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
@@ -1612,13 +1612,17 @@ export class RenderCache<
   // did not park until its origin's `config` came: a bug, said with the
   // origin.
   snapshotFor(origin: RenderOrigin): ConfigSnapshot {
+    return this.held(origin).snapshot;
+  }
+
+  private held(origin: RenderOrigin): HeldSnapshot {
     if (this.closed) throw new Error("render cache used after close");
-    const snapshot = this.snapshots.get(originKey(origin));
-    if (snapshot === undefined)
+    const held = this.snapshots.get(originKey(origin));
+    if (held === undefined)
       throw new Error(
         `no config is held for origin projectDir=${valueOf(origin.projectDir)} cwd=${valueOf(origin.cwd)} configFile=${valueOf(origin.target.path ?? "-")}: an event that needs it was not parked for its config`,
       );
-    return snapshot;
+    return held;
   }
 
   // [LAW:single-enforcer] The one way an entry leaves the map: the map stops
@@ -1810,7 +1814,7 @@ export class RenderCache<
   // arm the load took.
   private reloadInto(
     entry: CacheEntry,
-    snapshot: ConfigSnapshot,
+    { snapshot, digest }: HeldSnapshot,
     cause: LoadCause,
   ): void {
     // Taken before the reload, so a session whose view fails to reopen over
@@ -1821,7 +1825,7 @@ export class RenderCache<
     const served = entry.state;
     const loaded = this.load(entry.cwd, snapshot, served);
     entry.snapshot = snapshot;
-    entry.digest = digestOf(snapshot);
+    entry.digest = digest;
     entry.configLayers = loaded.layers;
     entry.lastWarning = loaded.warning;
     entry.lastError = loaded.error;

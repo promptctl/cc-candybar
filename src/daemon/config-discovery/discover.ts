@@ -188,12 +188,17 @@ export function sessionPlugins(
   };
 }
 
-// A layer file's text, or why it could not be read.
+// A layer file's text, or why it could not be read. A directory's read error
+// names no path, so it is said as what it is.
 export function readLayer(file: string): Layer["content"] {
   try {
     return { kind: "text", text: fs.readFileSync(file, "utf-8") };
   } catch (e) {
-    return { kind: "unreadable", error: (e as Error).message };
+    const error =
+      (e as NodeJS.ErrnoException).code === "EISDIR"
+        ? "not a file"
+        : (e as Error).message;
+    return { kind: "unreadable", error };
   }
 }
 

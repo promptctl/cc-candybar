@@ -482,17 +482,25 @@ export async function checkConfig(
       stateDir: stateDir(world.host),
     }),
   );
-  // [LAW:one-source-of-truth] Readability is the one read discovery made: the
-  // named file not read — not there, a directory, behind a directory stat
-  // cannot see past — is the `unreadable` outcome, distinct from a file that
-  // read but is invalid. A searched layer not read is the bar's notice, as
-  // the daemon renders it.
-  const named = snapshot.chain.find((l) => l.path === configPath)?.content;
-  if (configPath !== undefined && named !== undefined && named.kind !== "text")
+  // [LAW:one-source-of-truth] Readability is the one read discovery made: a
+  // layer not read — not there when named, a directory, a file it could not
+  // open — is the `unreadable` outcome, distinct from a file that read but is
+  // invalid. [LAW:no-silent-failure] A verdict is never `clean` about a file
+  // it did not read, named or searched; only a searched layer not yet written
+  // is no layer.
+  const unread = snapshot.chain.find(
+    (l) =>
+      l.content.kind === "unreadable" ||
+      (l.content.kind === "absent" && l.path === configPath),
+  );
+  if (unread !== undefined)
     return {
       kind: "unreadable",
-      path: configPath,
-      message: named.kind === "absent" ? "not found" : named.error,
+      path: unread.path,
+      message:
+        unread.content.kind === "unreadable"
+          ? unread.content.error
+          : "not found",
     };
   warnings.push(...snapshot.notices, ...repoGateLines(repos));
   const layers = snapshot.chain

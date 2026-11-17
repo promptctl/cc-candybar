@@ -1298,11 +1298,11 @@ function sessionHints(
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
 
 // A run of the session's doctor, asked by this click (src/renderer/doctor.ts).
-// [LAW:no-ambient-temporal-coupling] Its config is reloaded first, as a save
-// does: a run is a verdict on the files as they are now, not on whether the fs
-// watcher has caught up with an edit made a moment ago. The host reads the
-// machine for it (src/daemon/cache/doctor.ts) once the turn's subscriptions
-// name it, after the turn's changes have landed.
+// [LAW:one-source-of-truth] It judges the load the session's bar is drawn
+// from: the config discovery last handed in, so the verdict is on the bar the
+// user sees, and a watch that cannot hear the files is the bar's own notice.
+// The host reads the machine for it (src/daemon/cache/doctor.ts) once the
+// turn's subscriptions name it, after the turn's changes have landed.
 function startRun(ctx: ClickContext, sid: SessionId): void {
   const origin = sessionOrigin(ctx, sid);
   ctx.doctorRuns.start(ctx.sessionState, sid, {
@@ -1549,9 +1549,10 @@ const run: VerbHandler = (value, ctx) =>
 // the question drew it, for this session, for this directory and this answer.
 // The link's own signature proves only that the bar drew the link, and a
 // config can draw any link, so the answer keeps a mac of its own. The book
-// lives beside the link key, and the render cache watches it, so every bar
-// reloads; the clicking session's reloads as the answer lands, before the
-// click answers. The answer lands with the click's changes or not at all.
+// lives beside the link key. The host lands the answer with the click's
+// changes or not at all, and its config discovery then hands in a new config
+// for every origin with a repository to ask about, the clicking session's
+// before the click answers.
 const repoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = "", dir = "", answer = "", mac = ""] = decodeWire(() =>
     decodeSegments(value),
