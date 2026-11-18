@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-799",
+      "ref": "refs/pull/799/merge",
+      "sha": "bca7b732d1e316abca6e836230dc5204d00ab3f9",
+      "timestamp": "2026-11-18T12:49:34.690Z",
+      "commits": [
+        {
+          "sha": "bca7b732d1e316abca6e836230dc5204d00ab3f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:48:32-07:00",
+          "message": "Merge 2da58b391ed0013455c92fe34ae64ef6afd42c6d into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "2da58b391ed0013455c92fe34ae64ef6afd42c6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:48:16-07:00",
+          "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-798",
       "ref": "refs/pull/798/merge",
       "sha": "48807b5a66a39e89b1657221bbb65e862aab0f36",
