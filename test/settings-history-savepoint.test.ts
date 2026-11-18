@@ -351,18 +351,24 @@ describe("the savepoint survives a restart", () => {
     expect(readConfigText(file)).toBe("v1");
   });
 
-  test("a savepoint of the wrong shape is a wrong-shaped file, dropped whole", () => {
+  test("a savepoint of the wrong shape drops its session alone, by name", () => {
     const historyFile = path.join(dir, "history.json");
+    const kept = { past: [], future: [] };
     fs.writeFileSync(
       historyFile,
-      JSON.stringify({ [SID]: { past: [], future: [], savepoint: 3 } }),
+      JSON.stringify({
+        [SID]: { past: [], future: [], savepoint: 3 },
+        other: kept,
+      }),
     );
     const logs: string[] = [];
     const storage = fileHistoryStorage(historyFile, (_level, m) =>
       logs.push(m),
     );
-    expect(Object.fromEntries(storage.load())).toEqual({});
-    expect(logs.join("\n")).toMatch(/unexpected shape/);
+    expect(Object.fromEntries(storage.load())).toEqual({ other: kept });
+    expect(logs).toEqual([
+      `settings-history load: dropped session "${SID}": its value has the wrong shape`,
+    ]);
   });
 
   test("changes to a key that is no longer a setting leave alone, named in the log", () => {

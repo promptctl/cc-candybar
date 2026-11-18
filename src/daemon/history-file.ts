@@ -6,13 +6,12 @@ import path from "node:path";
 import type { DaemonLogger } from "../utils/logger";
 import { writeAtomic } from "../utils/atomic-write.js";
 import { layerRoleOf } from "../config/layer-role";
-import { sessionKeyed, type SessionId } from "./foundations/session-id";
+import { loadSessionFile } from "./session-state-file";
 import {
   type Change,
   type Step,
   type SessionHistory,
   type Savepoint,
-  type HistoryState,
   type HistoryStorage,
   isSettingKey,
 } from "../renderer-interface/history-storage";
@@ -95,65 +94,40 @@ function withoutRetiredKeys(
   };
 }
 
-// [LAW:no-silent-failure] A missing file is a first boot. An unreadable or
-// wrong-shaped one is logged and dropped WHOLE rather than salvaged entry by
-// entry. A write failure throws: the click's change landed and the renderer
-// holds its step, but a restart would lose it.
+// [LAW:single-enforcer] Loaded as every per-session file is: a session whose
+// key or history is refused is named and dropped alone, and the rest load.
+// A write failure throws: the click's change landed and the renderer holds
+// its step, but a restart would lose it.
 export function fileHistoryStorage(
   file: string,
   logger: DaemonLogger,
 ): HistoryStorage {
   return {
     load: () => {
-      const loaded = new Map<SessionId, SessionHistory>();
-      let raw: string;
-      try {
-        raw = fs.readFileSync(file, "utf8");
-      } catch (e) {
-        const code = (e as NodeJS.ErrnoException).code;
-        if (code !== "ENOENT") {
-          logger(
-            "warn",
-            `settings-history read failed (${code}); starting empty`,
-          );
-        }
-        return loaded;
+      const retired = new Set<string>();
+      const loaded = loadSessionFile(
+        {
+          name: "settings-history",
+          parse: (value) =>
+            isSessionHistory(value) ? withoutRetiredKeys(value, retired) : null,
+        },
+        file,
+        logger,
+      );
+      if (retired.size > 0) {
+        logger(
+          "warn",
+          `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`,
+        );
       }
-      try {
-        const parsed: unknown = JSON.parse(raw);
-        if (
-          parsed !== null &&
-          typeof parsed === "object" &&
-          !Array.isArray(parsed) &&
-          Object.values(parsed).every(isSessionHistory)
-        ) {
-          const retired = new Set<string>();
-          const keyed = sessionKeyed(parsed as HistoryState, (key, problem) =>
-            logger(
-              "warn",
-              `settings-history load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
-            ),
-          );
-          for (const [id, history] of keyed)
-            loaded.set(id, withoutRetiredKeys(history, retired));
-          if (retired.size > 0) {
-            logger(
-              "warn",
-              `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`,
-            );
-          }
-          return loaded;
-        }
-      } catch {
-        // reported below
-      }
-      logger("warn", "settings-history load: unexpected shape, starting empty");
       return loaded;
     },
     save: (state) => {
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        writeAtomic(file, JSON.stringify(state), 0o600);
+        // [LAW:effects-at-boundaries] The file is the one place the
+        // sessions are a record.
+        writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 0o600);
       } catch (e) {
         const message = `settings-history write failed — the change landed and undoes until the daemon restarts, not after: ${(e as Error).message}`;
         logger("error", message);

@@ -88,13 +88,9 @@ export class HeldStores {
           break;
       }
     if (sessions && !this.closed)
-      steps.push(() =>
-        this.storage.session.save(Object.fromEntries(this.sessions)),
-      );
+      steps.push(() => this.storage.session.save(new Map(this.sessions)));
     if (history && !this.closed)
-      steps.push(() =>
-        this.storage.history.save(Object.fromEntries(this.history)),
-      );
+      steps.push(() => this.storage.history.save(new Map(this.history)));
     runEach(steps);
   }
 

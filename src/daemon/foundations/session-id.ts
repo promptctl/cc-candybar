@@ -31,7 +31,7 @@ export function parseSessionId(raw: unknown): ParsedSessionId {
         : raw === "." || raw === ".."
           ? `is ${JSON.stringify(raw)}, which names a folder, not a session`
           : isArrayIndex(raw)
-            ? `is ${JSON.stringify(raw)}, an array index, which a record keyed by session id lists before every other key`
+            ? `is ${JSON.stringify(raw)}, an array index, which is never a session id`
             : /[/\\\0]/.test(raw)
               ? `contains a path separator or NUL: ${JSON.stringify(raw)}`
               : Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES

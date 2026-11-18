@@ -72,9 +72,9 @@ describe("a daemon aimed by its paths value", () => {
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
     const second = adapters.profile(rendererNameOf("second"), () => {});
-    second.session.save({ [sessionIdOf("s1")]: { theme: "x" } });
+    second.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
     await second.session.flush();
-    second.history.save({});
+    second.history.save(new Map());
     second.doctor.clicked.update((seen) => [...seen, "kitty"]);
 
     const own = path.join(aimed.state, "renderers", "second", "state");
@@ -106,9 +106,9 @@ describe("a daemon aimed by its paths value", () => {
       await daemonLog.drained();
 
       const storage = adapters.profile(MAIN_RENDERER, () => {});
-      storage.session.save({ [sessionIdOf("s1")]: { theme: "x" } });
+      storage.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
       await storage.session.flush();
-      storage.history.save({});
+      storage.history.save(new Map());
       storage.doctor.clicked.update((seen) => [...seen, "kitty"]);
       adapters.linkKey();
       const limits = adapters.limits({

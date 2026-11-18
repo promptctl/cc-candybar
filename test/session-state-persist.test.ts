@@ -97,7 +97,7 @@ describe("the session state's file", () => {
   it("each flush logs the bytes and sessions it wrote and how long it took", async () => {
     const logged: string[] = [];
     const session = storage((_level, line) => logged.push(line));
-    session.save({ [S1]: { theme: "dracula" } });
+    session.save(new Map([[S1, { theme: "dracula" }]]));
     await session.flush();
     const bytes = Buffer.byteLength(readFileSync(file, "utf8"));
     expect(logged.at(-1)).toMatch(
@@ -135,9 +135,9 @@ describe("the session state's file", () => {
   // called, and the file still lands whole, owner-only.
   it("a debounced save lands on disk by itself and says so", async () => {
     const logged: string[] = [];
-    storage((_level, line) => logged.push(line)).save({
-      [S1]: { theme: "nord" },
-    });
+    storage((_level, line) => logged.push(line)).save(
+      new Map([[S1, { theme: "nord" }]]),
+    );
     await settled(() =>
       logged.some((l) => l.startsWith("session-state saved")),
     );
@@ -166,9 +166,9 @@ describe("the session state's file", () => {
       });
     let flushed: Promise<void>;
     try {
-      session.save({ [S1]: { theme: "old" } });
+      session.save(new Map([[S1, { theme: "old" }]]));
       await settled(() => spy.mock.calls.length === 1);
-      session.save({ [S1]: { theme: "new" } });
+      session.save(new Map([[S1, { theme: "new" }]]));
       flushed = session.flush();
       release();
       await flushed;
@@ -194,7 +194,7 @@ describe("the session state's file", () => {
         Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
       );
     try {
-      session.save({ [S1]: { theme: "nord" } });
+      session.save(new Map([[S1, { theme: "nord" }]]));
       await expect(session.flush()).rejects.toThrow(
         expect.objectContaining({ code: "ENOSPC" }),
       );
@@ -227,14 +227,14 @@ describe("the session state's file", () => {
     let writeSpy: jest.SpiedFunction<typeof fs.promises.writeFile> | null =
       null;
     try {
-      session.save({ [S1]: { theme: "old" } });
+      session.save(new Map([[S1, { theme: "old" }]]));
       await until(() => renameSpy.mock.calls.length === 1, "the held rename");
       writeSpy = jest
         .spyOn(fs.promises, "writeFile")
         .mockRejectedValueOnce(
           Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
         );
-      session.save({ [S1]: { theme: "new" } });
+      session.save(new Map([[S1, { theme: "new" }]]));
       const flushed = session.flush();
       release();
       await expect(flushed).rejects.toThrow(/ENOSPC/);
@@ -270,7 +270,7 @@ describe("the session state's file", () => {
       0,
       (_level, line) => logged.push(line),
     );
-    session.save({ [S1]: { theme: "nord" } });
+    session.save(new Map([[S1, { theme: "nord" }]]));
     await expect(session.flush()).rejects.toThrow("not encodable");
     encodable = true;
     await session.flush();
@@ -291,7 +291,7 @@ describe("the session state's file", () => {
       systemTimekeeper,
       0,
       (_level, line) => logged.push(line),
-    ).save({ [S1]: { theme: "nord" } });
+    ).save(new Map([[S1, { theme: "nord" }]]));
     await settled(() => logged.some((l) => l.includes("save failed")));
     await throughout(
       () => logged.filter((l) => l.includes("save failed")).length === 1,
@@ -348,8 +348,8 @@ describe("the session state's file", () => {
         systemTimekeeper,
         500,
       );
-      session.save({ [S1]: { theme: "nord" } });
-      session.save({ [S1]: { theme: "nord", style: "muted" } });
+      session.save(new Map([[S1, { theme: "nord" }]]));
+      session.save(new Map([[S1, { theme: "nord", style: "muted" }]]));
       jest.advanceTimersByTime(499);
       expect(existsSync(file)).toBe(false);
 
@@ -451,7 +451,7 @@ describe("the session state's file", () => {
       systemTimekeeper,
       0,
     );
-    session.save({ [S1]: { theme: "nord" } });
+    session.save(new Map([[S1, { theme: "nord" }]]));
     // The write fails; the snapshot must NOT be dropped.
     await expect(session.flush()).rejects.toThrow(/EEXIST/);
     expect(existsSync(badPath)).toBe(false);
@@ -464,7 +464,7 @@ describe("the session state's file", () => {
 
   it("writes the state file with owner-only (no group/other) permissions", async () => {
     const session = storage();
-    session.save({ [S1]: { theme: "nord" } });
+    session.save(new Map([[S1, { theme: "nord" }]]));
     await session.flush();
     expect(statSync(file).mode & 0o077).toBe(0);
   });

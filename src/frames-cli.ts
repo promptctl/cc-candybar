@@ -39,6 +39,10 @@ import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { newestWins } from "./utils/newest-wins";
 import { LANE_NAMES, parseLane } from "./config/lanes";
+import {
+  parseSessionId,
+  type SessionId,
+} from "./daemon/foundations/session-id";
 
 // `bundle`: the bundle this process runs, as its entry names it.
 // What a stream last said: nothing yet, a frame or the lane-off refusal on
@@ -63,6 +67,35 @@ export function worthSaying(last: Said, next: Event): boolean {
     last.kind === "fault" &&
     next.reason !== last.reason
   );
+}
+
+// [LAW:parse-dont-validate] One stdin line: Claude Code's statusline JSON and
+// the session it names, past the session-id checkpoint the daemon's doors
+// use, or what is wrong with it.
+export type StdinLine =
+  | {
+      readonly ok: true;
+      readonly hook: ClaudeHookData;
+      readonly session: SessionId;
+    }
+  | { readonly ok: false; readonly problem: string };
+
+export function parseStdinLine(line: string): StdinLine {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(line);
+  } catch (e) {
+    return {
+      ok: false,
+      problem: `stdin line is not JSON: ${(e as Error).message}`,
+    };
+  }
+  const session = parseSessionId(
+    (raw as { session_id?: unknown } | null)?.session_id,
+  );
+  return session.ok
+    ? { ok: true, hook: raw as ClaudeHookData, session: session.id }
+    : { ok: false, problem: `stdin line's session_id ${session.problem}` };
 }
 
 export async function runFrames(
@@ -104,7 +137,7 @@ export async function runFrames(
   // it, as a subscriber of the daemon does.
   const emit = newestWins(process.stdout);
 
-  let sessionId: string | null = null;
+  let sessionId: SessionId | null = null;
   let lastHook: ClaudeHookData | null = null;
   let follower: FrameFollower | null = null;
   let said: Said = { kind: "none" };
@@ -136,7 +169,7 @@ export async function runFrames(
     if (planOutcome(outcome).kick) obtainDaemonKick(world);
   };
 
-  const subscribe = (id: string): void => {
+  const subscribe = (id: SessionId): void => {
     follower?.close();
     follower = followFrames(world, socketPath(world.host), id, lane, {
       frame: (resp) =>
@@ -158,22 +191,17 @@ export async function runFrames(
 
   for await (const line of createInterface({ input: process.stdin })) {
     if (line.trim() === "") continue;
-    let hook: ClaudeHookData;
-    try {
-      hook = JSON.parse(line) as ClaudeHookData;
-    } catch (e) {
-      say(`stdin line is not JSON: ${(e as Error).message}`);
+    const parsed = parseStdinLine(line);
+    if (!parsed.ok) {
+      say(parsed.problem);
       continue;
     }
-    if (typeof hook.session_id !== "string" || hook.session_id === "") {
-      say("stdin line carries no session_id");
-      continue;
-    }
+    const { hook, session } = parsed;
     lastHook = hook;
     await forward(hook);
-    if (hook.session_id !== sessionId) {
-      sessionId = hook.session_id;
-      subscribe(sessionId);
+    if (session !== sessionId) {
+      sessionId = session;
+      subscribe(session);
     }
   }
   process.exit(0);

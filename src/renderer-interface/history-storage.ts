@@ -67,7 +67,8 @@ export type LoadedHistory = ReadonlyMap<SessionId, SessionHistory>;
 // binds a file, or keeps nothing.
 export interface HistoryStorage {
   load(): LoadedHistory;
-  save(state: HistoryState): void;
+  // An ordered copy the storage keeps, oldest first: the order is the file's.
+  save(state: ReadonlyMap<SessionId, SessionHistory>): void;
 }
 
 // [LAW:one-source-of-truth] The session keys a settings control writes: a
