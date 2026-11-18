@@ -17,10 +17,7 @@ import {
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { Lane } from "../config/lanes.js";
-import {
-  pasteLineArgs,
-  productionClaudeInputEdge,
-} from "../claude-input/edge.js";
+import { pasteLineArgs } from "../claude-input/edge.js";
 import { lineage, processTable } from "../proc/process-table.js";
 import type { ProcessProbe } from "./process-fingerprint.js";
 import { presence } from "../utils/presence.js";
@@ -272,7 +269,6 @@ export function productionLaneEdge(
 ): LaneEdge {
   const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
-    claudeInput: productionClaudeInputEdge(launcher),
     barPanes: async (hint) =>
       barPanesOf(
         await tmux(launcher, hint, [

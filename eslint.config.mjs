@@ -163,7 +163,7 @@ const OWNED_IMPORTS = {
   },
   productionClaudeInputEdge: {
     group: ["**/claude-input/edge", "**/claude-input/edge.js"],
-    owners: ["src/daemon/production-adapters.ts", "src/daemon/lane-edge.ts"],
+    owners: ["src/daemon/production-adapters.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
   productionLaneEdge: {

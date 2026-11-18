@@ -7,7 +7,11 @@
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import type { SlashTyper, TypeResult } from "../claude-input/typing.js";
+import {
+  typeInPane,
+  type ClaudeInputEdge,
+  type TypeResult,
+} from "../claude-input/typing.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -32,8 +36,11 @@ type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
 
 export interface ActDeps {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
-  // A slash line typed into a pane, once the prompt there reads ready.
-  readonly type: SlashTyper;
+  // [LAW:one-source-of-truth] The daemon's one edge onto Claude Code's
+  // prompt: every read of it and every slash line typed into it go through
+  // this edge. A lane step is handed the part it uses: a restart its read, a
+  // band install the queued typing every slash click goes through.
+  readonly claudeInput: ClaudeInputEdge;
   readonly run: (run: RunAct) => Promise<RunEnd>;
   // The update notice's act: what it applies is the update watch's.
   readonly applyUpdate: () => Promise<void>;
@@ -156,6 +163,7 @@ export class Acts {
           restartClaude(
             { ...act.at, sessionId: act.session },
             act.pane,
+            deps.claudeInput.read,
             lanes.host,
             lanes.edge,
           ),
@@ -193,7 +201,11 @@ export class Acts {
 
   // A slash line typed into `pane` in its turn.
   private typed(pane: TmuxHint, line: SlashLine): Promise<TypeResult> {
-    return this.inPane.run(paneKey(pane), () => this.deps.type(pane, line));
+    // [LAW:single-enforcer] The one way a line is typed: in the pane's turn,
+    // once the prompt there reads ready.
+    return this.inPane.run(paneKey(pane), () =>
+      typeInPane(this.deps.claudeInput)(pane, line),
+    );
   }
 
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A

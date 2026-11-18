@@ -50,7 +50,7 @@ import {
 import { runTmuxAsync } from "../proc/tmux.js";
 import { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
 import { shellWord } from "../shell-word.js";
-import { typeInPane, type ClaudeInputEdge } from "../claude-input/typing.js";
+import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import type { LaneEdge } from "./lane-setup.js";
 import { Acts } from "./acts.js";
@@ -459,7 +459,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // turns return (src/daemon/acts.ts).
   const acts = new Acts({
     launch: clickLaunchVia(launcher),
-    type: typeInPane(inputs.claudeInput(launcher)),
+    claudeInput: inputs.claudeInput(launcher),
     run: (run) => runs.start(run),
     applyUpdate: () => updateWatch.act(),
     lanes: {

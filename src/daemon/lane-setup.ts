@@ -21,8 +21,10 @@
 //                   on (src/daemon/tmux-status.ts).
 //
 // [LAW:effects-at-boundaries] Each lane's setup is a plan over `LaneEdge`, the
-// record holding every effect (tmux, the `claude` CLI, the process table, the
-// pane's prompt), so a test drives every plan with fakes. The renderer asks
+// record holding its effects on tmux, the `claude` CLI and the process table,
+// so a test drives every plan with fakes. Claude Code's prompt is read and
+// typed into through the host's one input edge, handed to the step that uses
+// it. The renderer asks
 // for each as an act (src/renderer/lane-acts.ts), and the host performs it
 // (src/daemon/acts.ts).
 
@@ -98,7 +100,6 @@ export interface PaneClaude {
 }
 
 export interface LaneEdge {
-  readonly claudeInput: ClaudeInputEdge;
   // The bar panes the daemon opened for `tmux.pane`.
   readonly barPanes: (tmux: TmuxHint) => Promise<readonly string[]>;
   // Split a pane under `tmux.pane` running `argv` with `env`, tagged as its
@@ -207,6 +208,7 @@ export async function bandOn(
 export async function restartClaude(
   session: LaneAt,
   tmux: TmuxHint,
+  read: ClaudeInputEdge["read"],
   host: LaneHost,
   edge: LaneEdge,
 ): Promise<string> {
@@ -223,6 +225,7 @@ export async function restartClaude(
   return restartUnderAttach(
     session,
     tmux,
+    read,
     { node: host.node[0]!, launcher, preload: host.preload },
     edge,
   );
@@ -316,6 +319,7 @@ function environmentOf(env: readonly string[]): ReadonlyMap<string, string> {
 async function restartUnderAttach(
   session: LaneAt,
   tmux: TmuxHint,
+  read: ClaudeInputEdge["read"],
   attach: Attach,
   edge: LaneEdge,
 ): Promise<string> {
@@ -351,7 +355,7 @@ async function restartUnderAttach(
       `Claude Code in ${tmux.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`,
     );
   }
-  const loses = endingLoses(await edge.claudeInput.read(tmux));
+  const loses = endingLoses(await read(tmux));
   if (loses !== null) {
     throw new Error(
       `Claude Code in ${tmux.pane} was left running: ${loses} — then turn ${LANES.statusline.label} off and on again`,

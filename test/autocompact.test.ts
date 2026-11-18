@@ -7,7 +7,6 @@
 // test/claude-input.test.ts's; the lane itself is
 // test/render-payload-outcomes.test.ts's.
 
-import { typeInPane } from "../src/claude-input/typing";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -100,7 +99,7 @@ function runtime(read: Outcome<AutoCompactWindow>, contextWindow = 1_000_000) {
     },
   };
   const ctx = testVerbContext(sessionState, undefined, config);
-  const host = { type: typeInPane(claudeInput) };
+  const host = { claudeInput };
   const urls = linkUrls(raw).filter((u) =>
     effectsOf(u).some((e) => e.verb === VERB_SLASH),
   );
