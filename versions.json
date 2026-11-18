@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-836",
+      "ref": "refs/pull/836/merge",
+      "sha": "f4bfced60647b9aea79bd3682e269fec47c47baf",
+      "timestamp": "2026-11-18T22:41:14.845Z",
+      "commits": [
+        {
+          "sha": "f4bfced60647b9aea79bd3682e269fec47c47baf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:40:06-07:00",
+          "message": "Merge 8b192575f684b14156a9fc66776d094faba28a3a into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
+        },
+        {
+          "sha": "8b192575f684b14156a9fc66776d094faba28a3a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:35:58-07:00",
+          "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
+        }
+      ]
+    },
+    {
       "version": "pr-832",
       "ref": "refs/pull/832/merge",
       "sha": "69cbef302ecfa4e684e2d676b933448abe90f20e",
