@@ -200,9 +200,11 @@ const isBelow = (at: string, root: string): boolean =>
 // The directories below `at` as they are now, by listing directories, never
 // through a link. `trusted` keeps the watches held under a directory already
 // held at `at`'s own level as they are, since only `at`'s own listing moved;
-// below a directory new here, everything is listed. [LAW:no-silent-failure] A
-// directory that cannot be listed is named in `unlisted`, and what is below it
-// is unknown, not gone, so the watches held there stay.
+// below a directory new here, everything is listed. A directory with nothing
+// at its path, or a file there now, has nothing below it: it left, as a pruned
+// ref prefix does. [LAW:no-silent-failure] Any other directory that cannot be
+// listed is named in `unlisted`, and what is below it is unknown, not gone, so
+// the watches held there stay.
 function dirsBelow(
   at: string,
   held: ReadonlySet<string>,
@@ -214,7 +216,9 @@ function dirsBelow(
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(at, { withFileTypes: true });
-  } catch {
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return [];
     unlisted.push(at);
     return [...held].filter((p) => isBelow(p, at));
   }

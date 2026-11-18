@@ -645,11 +645,14 @@ describe("WatcherRegistry", () => {
       const feat = path.join(root, "feat");
       fs.mkdirSync(path.join(feat, "x"), { recursive: true });
       const seen: Invalidation[] = [];
-      acquired(seen);
+      const handle = acquired(seen);
       expect(reg.dirWatches()).toBe(3);
       fs.rmSync(feat, { recursive: true });
       fs.writeFileSync(feat, "ref");
       await until(() => reg.dirWatches() === 1, "the pruned watches closing");
+      // Gone is not refused: nothing at the path is no fault to show.
+      expect(handle.deaf).toEqual([]);
+      expect(seen.filter((inv) => inv.kind === "failed")).toEqual([]);
       seen.length = 0;
       fs.writeFileSync(path.join(root, "main"), "ref");
       await until(() => seen.length > 0, "the root's next event");
