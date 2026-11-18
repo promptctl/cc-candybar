@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-834",
+      "ref": "refs/pull/834/merge",
+      "sha": "fbcd52f0a242493d930f3212002621c72dd642d5",
+      "timestamp": "2026-11-18T22:37:31.516Z",
+      "commits": [
+        {
+          "sha": "fbcd52f0a242493d930f3212002621c72dd642d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T22:36:24Z",
+          "message": "Merge 4b9d7203c92d668f637c6f21fa3e654e6c612069 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
+        },
+        {
+          "sha": "4b9d7203c92d668f637c6f21fa3e654e6c612069",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:36:06-07:00",
+          "message": "fix(test): the doctor's effect-refresh run waits for the run before it to report\n\nA click while a doctor run is on its way starts none, and one draw between\ntwo clicks does not carry the first run's reading every time, so the second\nclick was sometimes taken by the run still out and only three runs reported.\nThe test now waits for the earlier run's row, which its click cleared, before\nit clicks again.\n"
+        },
+        {
+          "sha": "ac6bf4fb1a4f55d233d2b0e32311b4ec76e033d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:27:27-07:00",
+          "message": "fix(git): the daemon's git and forge reads run without the spawning shell's repository variables (38p6)\n\nThe detached daemon's environment is whichever shell spawned it, so a\nGIT_DIR, GIT_WORK_TREE or GH_REPO from a git hook, a `rebase --exec` or a\nvcsh shell pointed every session's git and PR read at that shell's\nrepository.\n\nThe process now settles the names once at start (`git rev-parse\n--local-env-vars`, plus gh's GH_REPO) and hands them to createDaemon as\ndata; the daemon builds its one environment without them before anything\nreads it, so every launch that inherits it runs without them and a read\nasks nothing. A git that fails the ask or answers nothing leaves a fixed\nlist (git 2.50.1's answer), warned of in daemon.log, as a standing warning\non every bar and in a new `git environment` doctor row, which otherwise\nnames the dropped variables. plugin install settles its own through the\nsame function and warns the same way. The Pages site's simulated git\nanswers the ask.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-835",
       "ref": "refs/pull/835/merge",
       "sha": "5f4fbc5ee76d11b3e1cc0200dc8db1d7d4ac54a3",
@@ -56,28 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:14:02-07:00",
           "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-834",
-      "ref": "refs/pull/834/merge",
-      "sha": "7593e639dda420a51dbe27a2c1e42d44ad7204f2",
-      "timestamp": "2026-11-18T22:33:35.892Z",
-      "commits": [
-        {
-          "sha": "7593e639dda420a51dbe27a2c1e42d44ad7204f2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:32:29-07:00",
-          "message": "Merge ac6bf4fb1a4f55d233d2b0e32311b4ec76e033d2 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
-        },
-        {
-          "sha": "ac6bf4fb1a4f55d233d2b0e32311b4ec76e033d2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:27:27-07:00",
-          "message": "fix(git): the daemon's git and forge reads run without the spawning shell's repository variables (38p6)\n\nThe detached daemon's environment is whichever shell spawned it, so a\nGIT_DIR, GIT_WORK_TREE or GH_REPO from a git hook, a `rebase --exec` or a\nvcsh shell pointed every session's git and PR read at that shell's\nrepository.\n\nThe process now settles the names once at start (`git rev-parse\n--local-env-vars`, plus gh's GH_REPO) and hands them to createDaemon as\ndata; the daemon builds its one environment without them before anything\nreads it, so every launch that inherits it runs without them and a read\nasks nothing. A git that fails the ask or answers nothing leaves a fixed\nlist (git 2.50.1's answer), warned of in daemon.log, as a standing warning\non every bar and in a new `git environment` doctor row, which otherwise\nnames the dropped variables. plugin install settles its own through the\nsame function and warns the same way. The Pages site's simulated git\nanswers the ask.\n"
         }
       ]
     },
