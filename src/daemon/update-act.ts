@@ -29,7 +29,7 @@ import {
   type Launcher,
 } from "../proc/launcher";
 import { readTailSync } from "../utils/transcript-fs";
-import type { StartTimeRead } from "./process-fingerprint";
+import { sameProcess, type StartTimeRead } from "./process-fingerprint";
 import { spanMs, type Monotonic, type Timekeeper } from "../time.js";
 import { IDLE, type ActState } from "../facts/world-state";
 
@@ -90,7 +90,7 @@ export function looked(
   done: Monotonic,
   longestLookMs: number,
 ): Look {
-  if (prev === null || !sameJob(prev.job, job)) {
+  if (prev === null || !sameRecord(prev.job, job)) {
     return {
       kind: "first",
       watched: {
@@ -236,9 +236,9 @@ export async function isRecordedJob(
   if (record.started <= boot || !jobs.jobGroupAlive(record.pid)) return false;
   const leader = await read(record.pid);
   return (
-    record.startTime === null ||
     leader.kind === "unavailable" ||
-    leader.token === record.startTime
+    sameProcess(record, { pid: record.pid, startTime: leader.token }) !==
+      "different"
   );
 }
 
@@ -298,13 +298,20 @@ export interface ActReader {
 // though its pid may come back as someone else's. `final` holds the facts from
 // then on, since a job writes its verdict before its group ends.
 interface Known {
+  readonly act: number;
   readonly record: ActRecord;
   ours: boolean;
   final: ActFacts | null;
 }
 
-const sameJob = (a: ActRecord, b: ActRecord): boolean =>
-  a.pid === b.pid && a.startTime === b.startTime;
+// Whether two reads found one act record, field for field. Not a question
+// about processes, so not sameProcess's: two records missing a start time
+// under one recycled pid must not pass as one act.
+const sameRecord = (a: ActRecord, b: ActRecord): boolean =>
+  a.identity === b.identity &&
+  a.pid === b.pid &&
+  a.startTime === b.startTime &&
+  a.started === b.started;
 
 // [LAW:effects-at-boundaries] The edge that reads acts. Who the recorded job
 // is gets settled by a fingerprint once per job (a `ps`); after that each read
@@ -323,8 +330,13 @@ export function makeActReader(
     const actDir = path.join(dir, String(act));
     const record = readRecord(actDir);
     if (record === null) return null;
-    if (known === null || !sameJob(known.record, record)) {
+    if (
+      known === null ||
+      known.act !== act ||
+      !sameRecord(known.record, record)
+    ) {
       known = {
+        act,
         record,
         ours: await isRecordedJob(record, read, jobs, bootedAt(clock)),
         final: null,

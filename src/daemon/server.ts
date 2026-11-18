@@ -10,22 +10,13 @@ import {
   leasePathFor,
   type DaemonPaths,
 } from "./paths";
-import {
-  arbitrateSocket,
-  readLease,
-  removeLeaseIfOwned,
-  writeLease,
-} from "./socket-lease";
+import { arbitrateSocket, readLease, writeLease } from "./socket-lease";
 import {
   makeOwnershipWatch,
   readSocketIdentity,
   type SocketIdentity,
 } from "./socket-ownership";
-import {
-  readOwnStartTime,
-  sameLiveProcess,
-  systemProbe,
-} from "./process-fingerprint";
+import { readOwnStartTime, liveness, systemProbe } from "./process-fingerprint";
 import { admitDaemon, realBreakerDeps, removeEntry } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
@@ -55,7 +46,8 @@ import { resetSpawnBackoff } from "./acquire";
 // pid still names THIS process or a recycled ghost (process-fingerprint.ts).
 // null when this host cannot fingerprint (no `ps`) — readers then fall back to
 // kill(pid,0), no worse than before the fingerprint existed.
-let myStartTime: string | null = null;
+// Set at boot, before anything that names this process reads it.
+let myStartTime = "";
 
 // The registry path this daemon claimed in the fork-bomb breaker's population
 // registry (fork-bomb-breaker.ts), or null when exempt (the canonical
@@ -284,12 +276,14 @@ function bindOrAttachAndExit(
 }
 
 // [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
-// pid lease, NEVER a connect probe. The path already exists (a live daemon, or
-// a stale file from a crashed one); the lease's owner pid + kill(pid,0) decides
-// which. A concurrent recoverer is another process, so no liveness read was ever
-// atomic with the unlink, and this runs once per bind attempt in one daemon, so
-// the await on `ps` adds no in-process entrant and needs no re-check: the lease
-// and the ownership self-check are what recover a lost race.
+// lease, NEVER a connect probe. The path already exists (a live daemon, or a
+// stale file from an ended one); whether the lease's owner identity (pid and
+// start-time) is still a live process decides which (the liveness fold). A
+// concurrent recoverer is another process, so no liveness read was ever atomic
+// with the unlink, and this runs once per bind attempt in one daemon, so the
+// await on the start-time read adds no in-process entrant and needs no
+// re-check: the lease and the ownership self-check are what recover a lost
+// race.
 //
 // [LAW:effects-at-boundaries] The decision is the arbitrateSocket fold
 // over the lease read + the injected probe; the kill / unlink / rebind effects
@@ -304,8 +298,8 @@ async function handleAddressInUse(
   // source for the whole arbitration.
   const decision = await arbitrateSocket(
     readLease(leasePathFor(sockPath)),
-    (pid, startTime) =>
-      sameLiveProcess(pid, startTime, systemProbe(daemon.launcher)),
+    process.pid,
+    (pid, startTime) => liveness(pid, startTime, systemProbe(daemon.launcher)),
   );
   if (decision.kind === "attach-and-exit") {
     serverLog("info", `EADDRINUSE: ${decision.reason} — exiting`);
@@ -381,7 +375,11 @@ function onListening(daemon: Daemon, sockPath: string): void {
   // window minimal keeps it vanishingly rare.
   // [LAW:one-source-of-truth] Derive the lease from the same sockPath we bound,
   // matching handleAddressInUse's read — one identity source across write + read.
-  writeLeaseFile(sockPath);
+  const leaseFailure = writeLeaseFile(sockPath);
+  if (leaseFailure !== null) {
+    refuseBoot(new Error(`lease write failed: ${leaseFailure}`));
+    return;
+  }
   try {
     fs.chmodSync(sockPath, 0o600);
   } catch (e) {
@@ -419,7 +417,7 @@ function onListening(daemon: Daemon, sockPath: string): void {
 function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
   makeOwnershipWatch({
     bound,
-    myPid: process.pid,
+    me: { pid: process.pid, startTime: myStartTime },
     readIdentity: () => readSocketIdentity(sockPath),
     readLease: () => readLease(leasePathFor(sockPath)),
     shutdown: (code) => shutdown(code),
@@ -431,26 +429,26 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
 // --- socket-ownership lease ---
 //
 // [LAW:one-source-of-truth] The lease is the authority for socket ownership —
-// its owner pid + kill(pid,0) is what the next daemon's EADDRINUSE arbitration
-// consults (handleAddressInUse). Exclusion RIGHT NOW is still the atomic bind()
+// its owner identity (pid and start-time) is what the next daemon's EADDRINUSE
+// arbitration consults (handleAddressInUse). Exclusion RIGHT NOW is still the atomic bind()
 // in bindOrAttachAndExit(); the lease answers the separate question "may I
 // destroy this existing path" over time. It also carries the same diagnostic
 // fields the old pidfile did, so one file serves both roles.
 //
 // Overwrite-on-write (no EEXIST check). We only reach onListening after winning
-// the bind, so whatever stale lease a dead owner left is ours to replace. Write
-// failure is non-fatal: the lease is best-effort ownership signalling on top of
-// bind()'s hard exclusion; a missing lease degrades a future arbitration to
-// "reclaim" (unlink + rebind), never to a wrong attach.
+// the bind, so whatever stale lease a dead owner left is ours to replace.
+// [LAW:no-silent-failure] A write that fails refuses the boot: the lease on disk
+// is still the predecessor's, so serving on would end at the first ownership
+// self-check as a "displacement" that never happened. Returns the reason, or
+// null once the lease names us.
 
-function writeLeaseFile(sockPath: string): void {
-  const reason = writeLease(leasePathFor(sockPath), {
+function writeLeaseFile(sockPath: string): string | null {
+  return writeLease(leasePathFor(sockPath), {
     pid: process.pid,
     version: PROTOCOL_VERSION,
     binPath: process.argv[1],
     startTime: myStartTime,
   });
-  if (reason !== null) serverLog("warn", `lease write failed: ${reason}`);
 }
 
 // --- shutdown ---
@@ -507,20 +505,13 @@ function shutdown(code: number): void {
 async function closeThenExit(code: number): Promise<void> {
   // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every step runs,
   // in order, and one that throws is said by name without skipping the rest:
-  // a close that failed still gives up the lease. An unhandled rejection here
-  // would only reach a shutdown already under way, and the backstop's SIGKILL
-  // would end the process in place of the exit below.
+  // a close that failed still gives up the registry slot. An unhandled
+  // rejection here would only reach a shutdown already under way, and the
+  // backstop's SIGKILL would end the process in place of the exit below.
   const steps: ReadonlyArray<readonly [string, () => unknown]> = [
     ["close", () => serving?.close()],
-    // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
-    // displaced daemon (socket stolen, thief wrote its own lease) must not
-    // delete the live owner's lease on its way out, or the next EADDRINUSE
-    // would read `absent` and reclaim the thief's live socket — cascading the
-    // theft.
-    [
-      "lease removal",
-      () => removeLeaseIfOwned(daemonProcess().paths.lease, process.pid),
-    ],
+    // [LAW:single-enforcer] The lease stays, as the socket path does; why is
+    // at writeLease.
     // [LAW:single-enforcer] The registry's one removal (removeEntry). A slot
     // this daemon never claimed (exempt production, or refused before
     // claiming one) is null and skipped.

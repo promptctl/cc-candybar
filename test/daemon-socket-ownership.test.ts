@@ -10,27 +10,28 @@ import {
   type SocketIdentity,
 } from "../src/daemon/socket-ownership";
 import { type LeaseRead } from "../src/daemon/socket-lease";
+import { type ProcessIdentity } from "../src/daemon/process-fingerprint";
 import { systemTimekeeper } from "../src/time";
 
 const BOUND: SocketIdentity = { dev: 1, ino: 100 };
-const MY_PID = 4242;
+const ME: ProcessIdentity = { pid: 4242, startTime: "st" };
 // The socket identity + lease state that PROVE ownership: still our inode, lease
 // still names us.
 const HELD: IdentityRead = { kind: "present", identity: { dev: 1, ino: 100 } };
-const MINE: LeaseRead = { kind: "owned", pid: MY_PID, startTime: "st" };
+const MINE: LeaseRead = { kind: "owned", ...ME };
 
 // The full input enumeration of the pure fold: ownership is the CONJUNCTION of
 // "still my inode" AND "lease still names me"; either failing → displaced.
 describe("checkOwnership (pure fold)", () => {
   test("held inode + lease names me → owned", () => {
-    expect(checkOwnership(BOUND, HELD, MY_PID, MINE)).toEqual({ kind: "owned" });
+    expect(checkOwnership(BOUND, HELD, ME, MINE)).toEqual({ kind: "owned" });
   });
 
   test("present + different inode → displaced", () => {
     const d = checkOwnership(
       BOUND,
       { kind: "present", identity: { dev: 1, ino: 200 } },
-      MY_PID,
+      ME,
       MINE,
     );
     expect(d.kind).toBe("displaced");
@@ -41,14 +42,14 @@ describe("checkOwnership (pure fold)", () => {
     const d = checkOwnership(
       BOUND,
       { kind: "present", identity: { dev: 2, ino: 100 } },
-      MY_PID,
+      ME,
       MINE,
     );
     expect(d.kind).toBe("displaced");
   });
 
   test("absent (ENOENT) → displaced", () => {
-    const d = checkOwnership(BOUND, { kind: "absent" }, MY_PID, MINE);
+    const d = checkOwnership(BOUND, { kind: "absent" }, ME, MINE);
     expect(d.kind).toBe("displaced");
     expect(d.kind === "displaced" && d.reason).toContain("ENOENT");
   });
@@ -57,7 +58,7 @@ describe("checkOwnership (pure fold)", () => {
     const d = checkOwnership(
       BOUND,
       { kind: "unreadable", detail: "EIO boom" },
-      MY_PID,
+      ME,
       MINE,
     );
     expect(d.kind).toBe("displaced");
@@ -69,7 +70,7 @@ describe("checkOwnership (pure fold)", () => {
   // wrote its own pid into the lease. The lease arm catches what the inode arm
   // cannot — draining the orphan.
   test("held inode BUT lease reassigned to another pid → displaced", () => {
-    const d = checkOwnership(BOUND, HELD, MY_PID, {
+    const d = checkOwnership(BOUND, HELD, ME, {
       kind: "owned",
       pid: 9999,
       startTime: "other",
@@ -78,14 +79,27 @@ describe("checkOwnership (pure fold)", () => {
     expect(d.kind === "displaced" && d.reason).toContain("9999");
   });
 
+  // [LAW:single-enforcer] The lease names us only when it names this very
+  // process: our pid under another start-time is an identity the arbitration
+  // would call a different process, so the self-check does too.
+  test("held inode BUT lease names our pid under another start-time → displaced", () => {
+    const d = checkOwnership(BOUND, HELD, ME, {
+      kind: "owned",
+      pid: ME.pid,
+      startTime: "other",
+    });
+    expect(d.kind).toBe("displaced");
+    expect(d.kind === "displaced" && d.reason).toContain("start=other");
+  });
+
   test("held inode BUT lease absent → displaced (no longer hold the authority)", () => {
-    const d = checkOwnership(BOUND, HELD, MY_PID, { kind: "absent" });
+    const d = checkOwnership(BOUND, HELD, ME, { kind: "absent" });
     expect(d.kind).toBe("displaced");
     expect(d.kind === "displaced" && d.reason).toContain("absent");
   });
 
   test("held inode BUT lease unreadable → displaced", () => {
-    const d = checkOwnership(BOUND, HELD, MY_PID, {
+    const d = checkOwnership(BOUND, HELD, ME, {
       kind: "unreadable",
       detail: "bad JSON",
     });
@@ -150,8 +164,7 @@ describe("readSocketIdentity (fs boundary)", () => {
 
     expect(
       bound.kind === "present" &&
-        checkOwnership(bound.identity, readSocketIdentity(p), MY_PID, MINE)
-          .kind,
+        checkOwnership(bound.identity, readSocketIdentity(p), ME, MINE).kind,
     ).toBe("displaced");
   });
 });
@@ -166,7 +179,7 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
       shutdownCalls,
       deps: {
         bound: BOUND,
-        myPid: MY_PID,
+        me: ME,
         // Default: the lease still names us (isolates the inode arm unless a
         // test overrides readLease to exercise the lease arm).
         readLease: () => MINE,

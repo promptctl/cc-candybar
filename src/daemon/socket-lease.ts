@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import type { ProcessIdentity } from "./process-fingerprint";
+import type { Liveness, ProcessIdentity } from "./process-fingerprint";
 import { publishByRename } from "../utils/atomic-write";
 
 // ─── Socket ownership lease ──────────────────────────────────────────────────
@@ -27,8 +27,8 @@ import { publishByRename } from "../utils/atomic-write";
 // What a lease read yielded. Distinguishing absent / unreadable / owned keeps
 // the arbitration decision a full enumeration over raw inputs (see
 // arbitrateSocket) rather than collapsing the ambiguous cases early. `startTime`
-// is the owner's kernel start-time fingerprint, or null when the writing host
-// could not fingerprint (no `ps`) — the reader then falls back to kill(pid,0).
+// is the owner's kernel start-time fingerprint, or null in a lease an older
+// release wrote without one, which sameProcess finds incomparable.
 export type LeaseRead =
   | { kind: "absent" }
   | { kind: "unreadable"; detail: string }
@@ -44,17 +44,21 @@ export type SocketArbitration =
 // identity → liveness); the rest is operator diagnostics carried in the same
 // file so the lease subsumes the old diagnostic pidfile — one file, one identity
 // root. `startTime` is the kernel start-time token (also human-readable, so it
-// doubles as the "daemon started at" diagnostic the old `startedAt` gave), or
-// null when this host could not fingerprint.
+// doubles as the "daemon started at" diagnostic the old `startedAt` gave).
 export interface LeaseRecord extends ProcessIdentity {
+  // [LAW:types-are-the-program] A daemon always knows its own start time (a
+  // boot that cannot read it is refused), so the lease it writes always names
+  // one. A lease on disk from an older release may still hold null, which the
+  // reader types as ProcessIdentity's.
+  startTime: string;
   version: number;
   binPath: string | undefined;
 }
 
 // [LAW:effects-at-boundaries][LAW:dataflow-not-control-flow] The whole
-// arbitration is a fold: (raw lease read, injected liveness predicate) →
-// decision. Reading process identity is the sole effect and it is injected via
-// `isSameLiveProcess`, so every branch is exercised by input enumeration with no
+// arbitration is a fold: (raw lease read, injected liveness fold) → decision.
+// Reading process identity is the sole effect and it is injected via
+// `livenessOf`, so every branch is exercised by input enumeration with no
 // real processes. Full input space:
 //   owned + same-live  → attach-and-exit (the SAME live owner holds the path; we
 //                        are a duplicate — exit so the incumbent keeps serving)
@@ -64,7 +68,7 @@ export interface LeaseRecord extends ProcessIdentity {
 //                        daemon left a stale socket; prefer availability)
 //   unreadable         → reclaim (can't prove a live owner — same)
 //
-// [LAW:one-source-of-truth] `isSameLiveProcess(pid, startTime)` consults the
+// [LAW:one-source-of-truth] `livenessOf(pid, startTime)` consults the
 // kernel's process identity ((pid, start-time), see process-fingerprint.ts), not
 // a bare pid. This closes RESIDUAL 1: a crashed daemon's pid recycled to a
 // long-lived process now reads NOT-same (different start-time) → reclaim, so a
@@ -73,29 +77,32 @@ export interface LeaseRecord extends ProcessIdentity {
 // Failure directions:
 //   false-dead (steal a live socket) — made self-healing by the ownership
 //     self-check (brandon-daemon-lifecycle-2b3.2), and now far rarer: the
-//     start-time match will not false-negative a live owner unless the host
-//     cannot fingerprint at all, in which case sameLiveProcess falls back to
-//     kill(pid,0) — the prior behavior, no worse.
+//     start-time match will not false-negative a live owner. The opposite
+//     direction (sparing a recycled pid) needs the read of a live pid's start
+//     time to fail, or a lease an older release wrote without one.
+// The decision's reason carries the fold's own why, so a line that attached
+// to an owner whose start time could not be read says so.
 // Reclaiming on missing/unreadable is the availability-preferring direction — a
 // stale socket with no reclaimer is a hard no-service stall, strictly worse than
 // a transient double-serve that self-heals.
 export async function arbitrateSocket(
   read: LeaseRead,
-  isSameLiveProcess: (
-    pid: number,
-    startTime: string | null,
-  ) => Promise<boolean>,
+  myPid: number,
+  livenessOf: (pid: number, startTime: string | null) => Promise<Liveness>,
 ): Promise<SocketArbitration> {
   if (read.kind === "owned") {
-    return (await isSameLiveProcess(read.pid, read.startTime))
-      ? {
-          kind: "attach-and-exit",
-          reason: `live owner pid=${read.pid} holds the socket`,
-        }
-      : {
-          kind: "reclaim",
-          reason: `owner pid=${read.pid} is gone or recycled`,
-        };
+    // No other live process holds our pid, so a lease naming it was left by an
+    // earlier holder of the pid: stale, as the fork-bomb registry reads its own.
+    if (read.pid === myPid)
+      return {
+        kind: "reclaim",
+        reason: `lease names this daemon's own pid=${myPid}, left by an earlier holder`,
+      };
+    const { live, why } = await livenessOf(read.pid, read.startTime);
+    return {
+      kind: live ? "attach-and-exit" : "reclaim",
+      reason: `owner pid=${read.pid} ${why}`,
+    };
   }
   if (read.kind === "absent") {
     return {
@@ -139,9 +146,9 @@ export function readLease(leasePath: string): LeaseRead {
     };
   }
   // startTime is the process fingerprint. A present value must be a string;
-  // absent/null means "unfingerprinted" (an older lease, or a host without
-  // `ps`) and the reader falls back to kill(pid,0). A present-but-non-string is
-  // malformed → unreadable (never silently coerce a lie into a fingerprint).
+  // absent/null is a lease an older release wrote without one, which compares
+  // as incomparable. A present-but-non-string is malformed → unreadable (never
+  // silently coerce a lie into a fingerprint).
   const rawStartTime = record?.startTime;
   if (
     rawStartTime !== undefined &&
@@ -158,6 +165,15 @@ export function readLease(leasePath: string): LeaseRead {
 
 // Write our lease after we win the bind. Overwrite-on-write: whoever holds the
 // socket right now replaces whatever stale lease a dead owner left.
+//
+// [LAW:single-enforcer] Publishing is the lease's one mutation; nothing removes
+// a lease. POSIX has no unlink-if-still-mine, so any removal is a check and then
+// an unlink of a shared name, and a successor's publish landing between the two
+// is the lease the unlink takes. An absent lease drains that successor at its
+// next ownership self-check and lets the next EADDRINUSE reclaim its live
+// socket. A lease its owner left on exit names a dead process identity, which
+// arbitration reclaims exactly as it does an absent one, and the next publish
+// replaces it.
 //
 // [LAW:no-ambient-temporal-coupling] Published by rename, so a concurrent
 // reader (a second daemon's EADDRINUSE arbitration) sees either the old lease
@@ -176,22 +192,5 @@ export function writeLease(
     // [LAW:no-silent-failure] The reason is the caller's: a lease that did
     // not land, and any staged file it left, reach whoever wrote it.
     return (e as Error).message;
-  }
-}
-
-// [LAW:one-source-of-truth] Only the owner mutates its lease. A daemon that was
-// displaced (its socket stolen, the thief wrote a new lease) must NOT delete the
-// current owner's lease on its way out — that would make the next EADDRINUSE
-// read `absent` and reclaim the live thief's socket, cascading the theft. So
-// remove only when the lease still names us.
-export function removeLeaseIfOwned(leasePath: string, myPid: number): void {
-  const read = readLease(leasePath);
-  if (read.kind === "owned" && read.pid === myPid) {
-    try {
-      fs.unlinkSync(leasePath);
-    } catch {
-      // Best-effort cleanup; a leftover lease naming a dead pid is harmless
-      // (the next daemon reads it, kill(pid,0)→ESRCH, reclaims).
-    }
   }
 }

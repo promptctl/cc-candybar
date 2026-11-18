@@ -1,17 +1,26 @@
 import { spawn } from "node:child_process";
 import { processLauncher } from "./helpers/host";
 import {
-  readStartTime,
+  liveness,
   readOwnStartTime,
   sameLiveProcess,
+  sameProcess,
+  systemProbe,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
+import { arbitrateSocket } from "../src/daemon/socket-lease";
 import { type LaunchResult, type Launcher } from "../src/proc/launcher";
 
+// [LAW:behavior-not-structure] The `ps` reader is reached the way the daemon
+// reaches it, through the system probe, on the real launcher or a fake one.
 const realRead = (pid: number): Promise<StartTimeRead> =>
-  readStartTime(pid, processLauncher.launch);
+  systemProbe(processLauncher).startTime(pid);
+const readStartTime = (
+  pid: number,
+  launch: Launcher["launch"],
+): Promise<StartTimeRead> => systemProbe({ launch }).startTime(pid);
 
-// A fake launcher yielding a fixed LaunchResult, so readStartTime's parse/branch
+// A fake launcher yielding a fixed LaunchResult, so the reader's parse/branch
 // logic is exercised without a real `ps`.
 const launcher =
   (res: LaunchResult): Launcher["launch"] =>
@@ -139,19 +148,30 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
     return d;
   };
 
-  test("start + token matches lease → true (same process alive)", async () => {
-    const d = deps({ kind: "start", token: "T" }, false);
+  test("alive + start + token matches lease → true (same process alive)", async () => {
+    const d = deps({ kind: "start", token: "T" }, true);
     expect(await sameLiveProcess(10, "T", d)).toBe(true);
-    expect(d.pidAliveCalls).toBe(0); // fingerprint decided; no fallback
   });
 
-  test("start + token differs → false (recycled / restarted process)", async () => {
+  test("alive + start + token differs → false (recycled / restarted process)", async () => {
     const d = deps({ kind: "start", token: "OTHER" }, true);
     expect(await sameLiveProcess(10, "T", d)).toBe(false);
-    expect(d.pidAliveCalls).toBe(0);
   });
 
-  test("unavailable → falls back to kill(pid,0)", async () => {
+  // A dead pid is stale whatever its lease recorded, so no start-time is read
+  // for it: the common case after a daemon's exit spawns nothing.
+  test("dead pid → false without reading a start-time", async () => {
+    const read = jest.fn<Promise<StartTimeRead>, [number]>(async () => ({
+      kind: "start",
+      token: "T",
+    }));
+    expect(
+      await sameLiveProcess(10, "T", { startTime: read, alive: () => false }),
+    ).toBe(false);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  test("alive + unavailable → kill(pid,0) again", async () => {
     expect(
       await sameLiveProcess(
         10,
@@ -159,41 +179,116 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
         deps({ kind: "unavailable", detail: "x" }, true),
       ),
     ).toBe(true);
-    expect(
-      await sameLiveProcess(
-        10,
-        "T",
-        deps({ kind: "unavailable", detail: "x" }, false),
-      ),
-    ).toBe(false);
   });
 
-  // A null lease token (the writer could not fingerprint) must NOT consult the
-  // start-time at all — fall straight back to kill(pid,0), preserving .1's
-  // theft protection on a host without `ps`.
-  test("null lease token → kill(pid,0) fallback without reading start-time", async () => {
-    const read = jest.fn<Promise<StartTimeRead>, [number]>(async () => ({
-      kind: "unavailable",
-      detail: "unused",
-    }));
-    const d = { startTime: read, alive: () => true };
+  // A lease an older release wrote with no start time has nothing to compare:
+  // sameProcess calls it incomparable, so a live pid is spared.
+  test("alive + null recorded token → true", async () => {
+    const d = deps({ kind: "start", token: "T" }, true);
     expect(await sameLiveProcess(10, null, d)).toBe(true);
+  });
+
+  // The read could not answer, and by the time it did the pid had ended: the
+  // second kill(pid,0) is what calls it gone.
+  test("start time unreadable and the pid has since died → false", async () => {
+    let alive = true;
+    const probe = {
+      alive: () => alive,
+      startTime: async (): Promise<StartTimeRead> => {
+        alive = false;
+        return { kind: "unavailable", detail: "ps timeout" };
+      },
+    };
+    expect(await liveness(10, "T", probe)).toEqual({
+      live: false,
+      why: "is gone",
+    });
+  });
+});
+
+// [LAW:single-enforcer] The one identity comparison, over the token exactly
+// as every release spells it.
+describe("sameProcess", () => {
+  const at = (startTime: string | null, pid = 10) => ({ pid, startTime });
+
+  test("equal tokens are the same process, others are not", () => {
+    expect(sameProcess(at("a"), at("a"))).toBe("same");
+    expect(sameProcess(at("a"), at("b"))).toBe("different");
+  });
+
+  test("another pid is a different process whatever the tokens", () => {
+    expect(sameProcess(at("a"), at("a", 11))).toBe("different");
+  });
+
+  test("a missing start time is incomparable, never a mismatch", () => {
+    expect(sameProcess(at(null), at("a"))).toBe("incomparable");
+    expect(sameProcess(at("a"), at(null))).toBe("incomparable");
+  });
+});
+
+describe("liveness", () => {
+  const probe = (read: StartTimeRead) => ({
+    alive: () => true,
+    startTime: async () => read,
+  });
+
+  test("an unreadable start time says why the owner was spared", async () => {
+    expect(
+      await liveness(10, "T", probe({ kind: "unavailable", detail: "EACCES" })),
+    ).toEqual({ live: true, why: "is alive, start time unreadable: EACCES" });
+  });
+});
+
+describe("the system probe's identity check", () => {
+  // The machine's kill(pid,0) on a pid that has ended, beside a start-time
+  // read that records every call: a dead pid is judged with no read at all.
+  test("a dead pid is stale and its start time is never read", async () => {
+    const read = jest.fn<Promise<StartTimeRead>, [number]>();
+    const probe = {
+      alive: systemProbe(processLauncher).alive,
+      startTime: read,
+    };
+    const child = spawn(process.execPath, ["-e", "0"], { stdio: "ignore" });
+    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    expect(await sameLiveProcess(child.pid!, "any", probe)).toBe(false);
     expect(read).not.toHaveBeenCalled();
+  });
+
+  test("a live pid recorded under another start-time is reclaimed", async () => {
+    const probe = systemProbe(processLauncher);
+    const now = await probe.startTime(process.pid);
+    if (now.kind !== "start") throw new Error(`no start time: ${now.detail}`);
+    expect(
+      await arbitrateSocket(
+        {
+          kind: "owned",
+          pid: process.pid,
+          // A start time this pid does not have: its earlier owner's.
+          startTime: `${now.token}0`,
+        },
+        -1,
+        (pid, startTime) => liveness(pid, startTime, probe),
+      ),
+    ).toMatchObject({ kind: "reclaim" });
   });
 });
 
 describe("readOwnStartTime", () => {
-  test("our own pid → a non-null token", async () => {
-    expect(await readOwnStartTime(process.pid, realRead)).not.toBeNull();
+  test("our own pid → a token", async () => {
+    expect(
+      (await readOwnStartTime(process.pid, realRead)).length,
+    ).toBeGreaterThan(0);
   });
 
-  test("unavailable read → null (unfingerprinted lease)", async () => {
-    expect(
-      await readOwnStartTime(process.pid, async () => ({
+  // [LAW:no-silent-failure] A daemon that cannot name itself refuses to boot,
+  // so the reason is the error, never a null start time written down.
+  test("unavailable read → an error carrying the reason", async () => {
+    await expect(
+      readOwnStartTime(process.pid, async () => ({
         kind: "unavailable",
         detail: "no ps",
       })),
-    ).toBeNull();
+    ).rejects.toThrow(/own start time: no ps/);
   });
 
   test("start read → the token", async () => {

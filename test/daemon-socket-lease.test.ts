@@ -5,10 +5,15 @@ import path from "node:path";
 import {
   arbitrateSocket,
   readLease,
-  removeLeaseIfOwned,
   writeLease,
   type LeaseRead,
 } from "../src/daemon/socket-lease";
+import {
+  readOwnStartTime,
+  type Liveness,
+} from "../src/daemon/process-fingerprint";
+import { processProbe } from "./helpers/host";
+import { oldReleaseStartTime } from "./helpers/old-release";
 
 // ─── Pure arbitration: full input-space enumeration ──────────────────────────
 //
@@ -18,8 +23,12 @@ import {
 // socket-theft fix (the integration tests below only prove the wiring).
 
 describe("arbitrateSocket (pure decision)", () => {
-  const SAME = async (): Promise<boolean> => true;
-  const NOT_SAME = async (): Promise<boolean> => false;
+  const ME = 1;
+  const SAME = async (): Promise<Liveness> => ({ live: true, why: "is alive" });
+  const NOT_SAME = async (): Promise<Liveness> => ({
+    live: false,
+    why: "is gone",
+  });
   const owned = (pid: number, startTime: string | null = "st"): LeaseRead => ({
     kind: "owned",
     pid,
@@ -27,29 +36,51 @@ describe("arbitrateSocket (pure decision)", () => {
   });
 
   test("owned + same-live → attach-and-exit (a live owner holds the socket)", async () => {
-    const d = await arbitrateSocket(owned(4242), SAME);
+    const d = await arbitrateSocket(owned(4242), ME, SAME);
     expect(d.kind).toBe("attach-and-exit");
     expect(d.reason).toContain("4242");
   });
 
+  // [LAW:nothing-unseen] The decision's line says what the fold found, so an
+  // owner spared because its start time could not be read says so.
+  // No other live process holds our pid, so a lease naming it is stale,
+  // whatever liveness would say of the pid (it is alive: it is us).
+  test("a lease naming our own pid → reclaim, without asking liveness", async () => {
+    const isSame = jest.fn(SAME);
+    const d = await arbitrateSocket(owned(ME), ME, isSame);
+    expect(d.kind).toBe("reclaim");
+    expect(isSame).not.toHaveBeenCalled();
+  });
+
+  test("the reason carries the liveness fold's why", async () => {
+    const d = await arbitrateSocket(owned(4242), ME, async () => ({
+      live: true,
+      why: "is alive, start time unreadable: EACCES",
+    }));
+    expect(d.reason).toBe(
+      "owner pid=4242 is alive, start time unreadable: EACCES",
+    );
+  });
+
   test("owned + not-same → reclaim (owner crashed OR pid recycled)", async () => {
-    const d = await arbitrateSocket(owned(4242), NOT_SAME);
+    const d = await arbitrateSocket(owned(4242), ME, NOT_SAME);
     expect(d.kind).toBe("reclaim");
     expect(d.reason).toContain("4242");
   });
 
   test("absent → reclaim (no lease; stale socket, no live owner)", async () => {
     // The liveness predicate must not even be consulted when there is no pid.
-    const isSame = jest.fn(async () => true);
-    const d = await arbitrateSocket({ kind: "absent" }, isSame);
+    const isSame = jest.fn(SAME);
+    const d = await arbitrateSocket({ kind: "absent" }, ME, isSame);
     expect(d.kind).toBe("reclaim");
     expect(isSame).not.toHaveBeenCalled();
   });
 
   test("unreadable → reclaim (cannot prove a live owner)", async () => {
-    const isSame = jest.fn(async () => true);
+    const isSame = jest.fn(SAME);
     const d = await arbitrateSocket(
       { kind: "unreadable", detail: "bad JSON" },
+      ME,
       isSame,
     );
     expect(d.kind).toBe("reclaim");
@@ -60,10 +91,10 @@ describe("arbitrateSocket (pure decision)", () => {
   // The predicate receives BOTH the pid and the lease's start-time token — the
   // process-identity pair that lets a recycled pid be distinguished from the
   // original owner (RESIDUAL 1). arbitrateSocket forwards them verbatim; the
-  // sameLiveProcess fold (process-fingerprint) decides.
+  // liveness fold (process-fingerprint) decides.
   test("forwards pid AND startTime to the injected predicate", async () => {
-    const isSame = jest.fn(async () => true);
-    await arbitrateSocket(owned(999, "Thu Jul  9 05:04:25 2026"), isSame);
+    const isSame = jest.fn(SAME);
+    await arbitrateSocket(owned(999, "Thu Jul  9 05:04:25 2026"), ME, isSame);
     expect(isSame).toHaveBeenCalledWith(999, "Thu Jul  9 05:04:25 2026");
   });
 
@@ -74,8 +105,10 @@ describe("arbitrateSocket (pure decision)", () => {
   // regardless of whether it is currently accepting connections.
   test("liveness comes only from the injected predicate, never from connect", async () => {
     const record = owned(999);
-    expect((await arbitrateSocket(record, SAME)).kind).toBe("attach-and-exit");
-    expect((await arbitrateSocket(record, NOT_SAME)).kind).toBe("reclaim");
+    expect((await arbitrateSocket(record, ME, SAME)).kind).toBe(
+      "attach-and-exit",
+    );
+    expect((await arbitrateSocket(record, ME, NOT_SAME)).kind).toBe("reclaim");
   });
 });
 
@@ -114,20 +147,22 @@ describe("lease file I/O", () => {
     expect(fs.statSync(leasePath).mode & 0o077).toBe(0);
   });
 
-  // A host that could not fingerprint (no `ps`) writes a null start-time; the
-  // reader surfaces it as null so sameLiveProcess falls back to kill(pid,0).
-  test("writeLease → readLease round-trips a null start-time (unfingerprinted)", async () => {
+  // [LAW:one-source-of-truth] Every release reads the lease, and a release
+  // before this one judges its owner by raw token equality against `ps`. A
+  // lease the daemon writes today must still read as its live owner to that
+  // rule, or an older daemon beside a newer one would reclaim its live socket.
+  test("a lease written today names its owner under the old rule (raw token equality with ps)", async () => {
+    const old = await oldReleaseStartTime(process.pid);
     writeLease(leasePath, {
-      pid: 1234,
+      pid: process.pid,
       version: 2,
       binPath: undefined,
-      startTime: null,
+      startTime: await readOwnStartTime(process.pid, processProbe.startTime),
     });
-    expect(readLease(leasePath)).toEqual({
-      kind: "owned",
-      pid: 1234,
-      startTime: null,
-    });
+    const raw = JSON.parse(fs.readFileSync(leasePath, "utf8")) as {
+      startTime: unknown;
+    };
+    expect(raw.startTime === old).toBe(true);
   });
 
   // Backward-compat: an OLD lease with no startTime key reads as unfingerprinted
@@ -158,38 +193,5 @@ describe("lease file I/O", () => {
   ])("readLease: %s → unreadable", (_label, contents) => {
     fs.writeFileSync(leasePath, contents);
     expect(readLease(leasePath).kind).toBe("unreadable");
-  });
-
-  test("removeLeaseIfOwned: removes when the lease names us", async () => {
-    writeLease(leasePath, {
-      pid: 777,
-      version: 2,
-      binPath: undefined,
-      startTime: "t",
-    });
-    removeLeaseIfOwned(leasePath, 777);
-    expect(fs.existsSync(leasePath)).toBe(false);
-  });
-
-  // [LAW:one-source-of-truth] A displaced daemon must NOT delete the current
-  // owner's lease — that would cascade the theft (next EADDRINUSE reads absent
-  // → reclaims the live thief's socket).
-  test("removeLeaseIfOwned: keeps a lease owned by someone else", async () => {
-    writeLease(leasePath, {
-      pid: 888,
-      version: 2,
-      binPath: undefined,
-      startTime: "t",
-    });
-    removeLeaseIfOwned(leasePath, 777);
-    expect(readLease(leasePath)).toEqual({
-      kind: "owned",
-      pid: 888,
-      startTime: "t",
-    });
-  });
-
-  test("removeLeaseIfOwned: no-op on an absent lease", async () => {
-    expect(() => removeLeaseIfOwned(leasePath, 777)).not.toThrow();
   });
 });

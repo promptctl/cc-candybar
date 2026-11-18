@@ -14,8 +14,9 @@ import type { Launcher } from "../proc/launcher";
 //
 // [LAW:one-source-of-truth] The authority is the kernel's process identity, not
 // a bare pid. `ps -o lstart=` exposes the start-time on every Unix we ship to
-// (darwin + linux). The reported token is treated as OPAQUE — compared by string
-// equality, never parsed — so there is no date-format representation to drift
+// (darwin + linux). The token is persisted in leases, registry entries and act
+// records that daemons of every release read, so its spelling is fixed: it is
+// treated as OPAQUE — compared by string equality, never parsed — so there is no date-format representation to drift
 // [FRAMING:representation]: a producer/consumer parse mismatch is unrepresentable
 // when neither side parses. That opaque-equality invariant holds ONLY if the
 // GENERATOR is deterministic. `ps -o lstart=` is strftime-formatted (locale) via
@@ -44,8 +45,9 @@ export interface ProcessIdentity {
 // would be an over-claim ([LAW:types-are-the-program]) that could false-dead a
 // live owner and reclaim its socket. So:
 //   start       — the pid is live and this is its start-time token (the ONLY
-//                 thing `ps` can assert soundly: it printed a row).
-//   unavailable — `ps` reported no start-time (absent OR unreadable OR errored).
+//                 thing a read can assert soundly: it found the pid's row).
+//   unavailable — no start-time came back (absent OR unreadable OR errored),
+//                 with the reason.
 //                 Callers defer to kill(pid,0), the sound liveness test, which
 //                 correctly reclaims a truly-dead pid and spares a live one.
 // The fingerprint's unique contribution is the `start`+mismatch case (a recycled
@@ -66,7 +68,7 @@ export type StartTimeRead =
 // spawn-error, timeout — is `unavailable`, deferring the alive/dead call to
 // kill(pid,0) rather than risk declaring a live owner dead from a `ps` exit
 // code that cannot distinguish "gone" from "cannot read".
-export async function readStartTime(
+async function readStartTime(
   pid: number,
   launch: Launcher["launch"],
 ): Promise<StartTimeRead> {
@@ -97,15 +99,15 @@ export async function readStartTime(
 }
 
 // [LAW:effects-at-boundaries] What the daemon asks of the machine's process
-// table about one pid: is a process there, and when did it start. Everything
-// that decides from these (the liveness fold below, the lease, the watchdog)
-// takes a probe, so a test names the processes it means instead of starting
-// them. This is not src/proc/process-table.ts, which reads the whole `ps -A`
-// listing for descent; this answers about a pid's identity.
+// table about one pid: is a process of ours there, and when did it start.
+// Everything that decides from these (the liveness fold below, the lease, the
+// watchdog) takes a probe, so a test names the processes it means instead of
+// starting them. This is not src/proc/process-table.ts, which reads the whole
+// `ps -A` listing for descent; this answers about a pid's identity.
 export interface ProcessProbe {
-  // [LAW:no-silent-failure] ESRCH: the process is gone. EPERM: a live process
-  // we don't own (the pid was reused by another user), taken as alive so a
-  // reused pid can never make us act on a process whose real owner still runs.
+  // [LAW:no-silent-failure] ESRCH: the process is gone. EPERM: the pid belongs
+  // to another user, and so is no process of ours: every file that names one of
+  // our processes lives under a directory only we can read.
   alive(pid: number): boolean;
   startTime(pid: number): Promise<StartTimeRead>;
 }
@@ -117,54 +119,98 @@ export function systemProbe(launcher: Pick<Launcher, "launch">): ProcessProbe {
       try {
         process.kill(pid, 0);
         return true;
-      } catch (e) {
-        return (e as NodeJS.ErrnoException).code === "EPERM";
+      } catch {
+        return false;
       }
     },
     startTime: (pid) => readStartTime(pid, launcher.launch),
   };
 }
 
-// [LAW:dataflow-not-control-flow] The liveness verdict is a pure fold over the
-// start-time read + the lease's recorded token. Full input space:
-//   read=start + token matches lease   → true  (same process still alive)
-//   read=start + token differs         → false (a DIFFERENT process holds the
-//                                        pid — a recycle, or a restarted daemon)
-//   read=unavailable                   → kill(pid,0) fallback (the sound
-//                                        alive/dead test: a truly-dead pid →
-//                                        false → reclaim; a live pid ps couldn't
-//                                        read → true → spared)
-//   lease token = null (unfingerprinted at write, e.g. a host without `ps`) →
-//                                        kill(pid,0) fallback for the same reason
+// What comparing two identities can say. `incomparable` is a pair with nothing
+// to tell them apart by: the same pid where either start time is missing (a
+// record written by a release that let one be). It is never taken as a
+// mismatch.
+export type Sameness = "same" | "different" | "incomparable";
+
+// [LAW:single-enforcer] Whether two identities name one process. Every
+// comparison of a recorded process with another (the arbitration, the ownership
+// self-check, the fork-bomb registry, the update act's job) asks it here. The
+// token is compared exactly as every release has spelled and compared it, so a
+// record either release writes reads the same to both.
+export function sameProcess(a: ProcessIdentity, b: ProcessIdentity): Sameness {
+  if (a.pid !== b.pid) return "different";
+  if (a.startTime === null || b.startTime === null) return "incomparable";
+  return a.startTime === b.startTime ? "same" : "different";
+}
+
+// What the liveness fold found about a recorded owner, and why: the reason is
+// what an arbitration's log line says.
+export interface Liveness {
+  readonly live: boolean;
+  readonly why: string;
+}
+
+const GONE: Liveness = { live: false, why: "is gone" };
+
+// [LAW:dataflow-not-control-flow] The liveness verdict is a pure fold over
+// kill(pid,0), the start-time read and the recorded token. Full input space:
+//   pid not ours                  → not live, and no start time is read: a dead
+//                                   pid is stale whatever it recorded
+//   ours + read=start             → by sameProcess: `different` is a recycled
+//                                   pid or a restarted daemon; `incomparable`
+//                                   (a record with no start time) is spared
+//   ours + read=unavailable       → kill(pid,0) again, with the read's reason
 //
-// [LAW:no-silent-failure] Only the `start`+mismatch case comes from the
-// fingerprint; every ambiguous `ps` outcome defers to kill, so the DANGEROUS
-// direction (declaring a live daemon dead → stealing its socket, the storm this
-// epic fights) never happens merely because `ps` could not answer. The only
-// thing forfeited when `ps` cannot answer is detecting a recycled pid.
-export async function sameLiveProcess(
+// [LAW:no-silent-failure] Only a `different` start time comes from the
+// fingerprint; every ambiguous read defers to kill, so the DANGEROUS direction
+// (declaring a live daemon dead → stealing its socket, the storm this epic
+// fights) never happens merely because the read could not answer. The only
+// thing forfeited when it cannot is detecting a recycled pid.
+export async function liveness(
   pid: number,
-  leaseToken: string | null,
+  recorded: string | null,
   probe: ProcessProbe,
-): Promise<boolean> {
-  if (leaseToken === null) return probe.alive(pid);
+): Promise<Liveness> {
+  if (!probe.alive(pid)) return GONE;
   const read = await probe.startTime(pid);
-  switch (read.kind) {
-    case "start":
-      return read.token === leaseToken;
-    case "unavailable":
-      return probe.alive(pid);
+  if (read.kind === "unavailable")
+    return probe.alive(pid)
+      ? { live: true, why: `is alive, start time unreadable: ${read.detail}` }
+      : GONE;
+  switch (
+    sameProcess({ pid, startTime: recorded }, { pid, startTime: read.token })
+  ) {
+    case "same":
+      return { live: true, why: "is alive with its recorded start time" };
+    case "different":
+      return {
+        live: false,
+        why: "is another process now (its start time differs)",
+      };
+    case "incomparable":
+      return { live: true, why: "is alive; its record holds no start time" };
   }
 }
 
-// Read THIS process's own start-time to stamp into its lease. `unavailable`
-// (no `ps`) collapses to `null` — the lease records "unfingerprinted", and every
-// reader of it falls back to kill(pid,0) via sameLiveProcess. A dead result is
-// impossible for our own live pid; if it somehow occurs we also record null.
+// The verdict alone, for a caller with no line to log.
+export async function sameLiveProcess(
+  pid: number,
+  recorded: string | null,
+  probe: ProcessProbe,
+): Promise<boolean> {
+  return (await liveness(pid, recorded, probe)).live;
+}
+
+// [LAW:no-silent-failure] THIS process's own start time, which every record it
+// writes names it by. A record without one could never be told from a process
+// that reuses our pid, so a read that cannot answer is an error for the boot to
+// refuse on, never a null written down.
 export async function readOwnStartTime(
   pid: number,
   read: (pid: number) => Promise<StartTimeRead>,
-): Promise<string | null> {
+): Promise<string> {
   const r = await read(pid);
-  return r.kind === "start" ? r.token : null;
+  if (r.kind === "start") return r.token;
+  throw new Error(`cannot read this process's own start time: ${r.detail}`);
 }

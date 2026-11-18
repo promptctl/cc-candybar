@@ -1,5 +1,7 @@
 import fs from "node:fs";
-import { hostOf, worldOf, WORLD } from "./helpers/host";
+import { hostOf, processProbe, worldOf, WORLD } from "./helpers/host";
+import { readOwnStartTime } from "../src/daemon/process-fingerprint";
+import { oldReleaseStartTime } from "./helpers/old-release";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -258,9 +260,12 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     const registryDir = path.join(link, "daemons");
     try {
       expect(() =>
-        realBreakerDeps(registryWorld(), null, registryDir, () => {}).ensureDirSafe(
+        realBreakerDeps(
+          registryWorld(),
+          "st",
           registryDir,
-        ),
+          () => {},
+        ).ensureDirSafe(registryDir),
       ).toThrow(/symlink/);
     } finally {
       fs.unlinkSync(link);
@@ -274,9 +279,12 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     const registryDir = path.join(root, "daemons");
     try {
       expect(() =>
-        realBreakerDeps(registryWorld(), null, registryDir, () => {}).ensureDirSafe(
+        realBreakerDeps(
+          registryWorld(),
+          "st",
           registryDir,
-        ),
+          () => {},
+        ).ensureDirSafe(registryDir),
       ).not.toThrow();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -291,7 +299,9 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
       // platform would fail the two-level check — proving the override path
       // deliberately does not apply it.
       expect(() =>
-        realBreakerDeps(registryWorld(dir), null, dir, () => {}).ensureDirSafe(dir),
+        realBreakerDeps(registryWorld(dir), "st", dir, () => {}).ensureDirSafe(
+          dir,
+        ),
       ).not.toThrow();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -317,9 +327,41 @@ describe("realBreakerDeps writeEntry (no staged file left)", () => {
     const identity = { pid: 123, startTime: "st" };
     try {
       expect(() =>
-        realBreakerDeps(WORLD, null, dir, () => {}).writeEntry(filePath, identity),
+        realBreakerDeps(WORLD, "st", dir, () => {}).writeEntry(
+          filePath,
+          identity,
+        ),
       ).toThrow();
       expect(fs.readdirSync(dir)).toEqual(["pid-123.json"]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// [LAW:one-source-of-truth] Daemons of every release share the registry, and
+// a release before this one counts an entry live by raw token equality against
+// `ps`. An entry written today must still count under that rule, or an older
+// daemon's sweep would delete a live daemon's entry and its count come short.
+describe("realBreakerDeps writeEntry (read by older releases)", () => {
+  test("an entry written today names its owner under the old rule (raw token equality with ps)", async () => {
+    const dir = freshDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `pid-${process.pid}.json`);
+    const old = await oldReleaseStartTime(process.pid);
+    const startTime = await readOwnStartTime(
+      process.pid,
+      processProbe.startTime,
+    );
+    try {
+      realBreakerDeps(WORLD, startTime, dir, () => {}).writeEntry(filePath, {
+        pid: process.pid,
+        startTime,
+      });
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
+        startTime: unknown;
+      };
+      expect(raw.startTime === old).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -333,7 +375,7 @@ describe("realBreakerDeps removeFile (the sweep's removal)", () => {
     fs.mkdirSync(path.join(filePath, "occupied"), { recursive: true });
     const warned: string[] = [];
     try {
-      realBreakerDeps(WORLD, null, dir, (m) => warned.push(m)).removeFile(
+      realBreakerDeps(WORLD, "st", dir, (m) => warned.push(m)).removeFile(
         filePath,
       );
       expect(warned).toEqual([
@@ -347,7 +389,7 @@ describe("realBreakerDeps removeFile (the sweep's removal)", () => {
 
   test("an entry gone already is removed, with nothing said", () => {
     const warned: string[] = [];
-    realBreakerDeps(WORLD, null, freshDir(), (m) => warned.push(m)).removeFile(
+    realBreakerDeps(WORLD, "st", freshDir(), (m) => warned.push(m)).removeFile(
       path.join(freshDir(), "pid-123.json"),
     );
     expect(warned).toEqual([]);

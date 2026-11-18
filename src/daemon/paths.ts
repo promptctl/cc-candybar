@@ -142,15 +142,11 @@ export function ensureSocketParentSafe(sockPath: string): void {
 // diagnostic pidfile: it carries the owner pid (the reclaim authority) plus the
 // same diagnostic fields.
 // [LAW:one-source-of-truth] The socket→lease derivation lives here alone, so
-// leasePath() (the runtime authority path) and ensureSocketParentSafe's symlink
-// gate agree by construction. Takes the socket path explicitly so the safety
+// the daemon's reads and writes of the lease and ensureSocketParentSafe's
+// symlink gate agree by construction. Takes the socket path explicitly so the safety
 // check certifies the exact path it was handed, not a re-derived one.
 export function leasePathFor(sockPath: string): string {
   return `${sockPath}.lease`;
-}
-
-export function leasePath(host: Host): string {
-  return leasePathFor(socketPath(host));
 }
 
 export function sessionStatePath(host: Host): string {
@@ -230,7 +226,6 @@ export function logPath(host: Host): string {
 // so the layout is still derived in this file alone.
 export interface DaemonPaths {
   readonly socket: string;
-  readonly lease: string;
   readonly state: string;
   readonly registry: string;
   readonly log: string;
@@ -245,7 +240,6 @@ export interface DaemonPaths {
 export function daemonPaths(host: Host): DaemonPaths {
   return {
     socket: socketPath(host),
-    lease: leasePath(host),
     state: stateDir(host),
     registry: daemonRegistryDir(host),
     log: logPath(host),

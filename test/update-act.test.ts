@@ -26,7 +26,6 @@ import {
   type ActRecord,
 } from "../src/daemon/update-act";
 import {
-  readStartTime,
   systemProbe,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
@@ -682,6 +681,58 @@ describe("claimAct: one act per bundle", () => {
     ).toBe(false);
   });
 
+  // [LAW:single-enforcer] Who the job is goes through the one identity
+  // comparison: a record with no start time says nothing against the leader,
+  // so the live group is taken as the job's; a different start time is not it.
+  test("a job is judged by the one identity comparison", async () => {
+    const read = async (): Promise<StartTimeRead> => ({
+      kind: "start",
+      token: "Thu Jul  9 05:04:25 2026",
+    });
+    const alive = { jobGroupAlive: () => true };
+    const record = { ...RECORD, pid: 7, started: 10 };
+    expect(
+      await isRecordedJob({ ...record, startTime: null }, read, alive, 0),
+    ).toBe(true);
+    expect(
+      await isRecordedJob(
+        { ...record, startTime: "Fri Jul 10 05:04:25 2026" },
+        read,
+        alive,
+        0,
+      ),
+    ).toBe(false);
+  });
+
+  // A record with no start time under a recycled pid compares as
+  // incomparable to the act before it, which is no reason to take it for that
+  // act: a new act number is a new act, whose facts are its own.
+  test("a new act under the same pid with no start time is not the ended act", async () => {
+    const dir = dirOf();
+    const write = (act: number, status: string | null) => {
+      fs.mkdirSync(path.join(dir, String(act)), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, String(act), "record.json"),
+        JSON.stringify({ ...RECORD, pid: 7, startTime: null }),
+      );
+      if (status !== null)
+        fs.writeFileSync(path.join(dir, String(act), "status"), status);
+    };
+    const reader = makeActReader(
+      dir,
+      sameLeader,
+      processLauncher,
+      systemTimekeeper,
+    );
+    write(1, "exit 0\n");
+    expect((await reader.read())!.act).toBe(1);
+    fs.rmSync(path.join(dir, "1"), { recursive: true, force: true });
+    write(2, null);
+    const facts = (await reader.read())!;
+    expect(facts.act).toBe(2);
+    expect(facts.end).toBeNull();
+  });
+
   test("an act pruned under a read gives way to the newer act that pruned it", async () => {
     const dir = dirOf();
     const write = (act: number, status: string) => {
@@ -777,9 +828,17 @@ describe("claimAct: one act per bundle", () => {
     expect(await watch.running()).toBe(false);
     expect(watch.acts().actsError).toMatch(/update act files .*JSON/);
     expect(logged).toEqual([watch.acts().actsError]);
+    // pid 1 is alive, so the record names it under a start time from this
+    // host's own source that is not pid 1's: someone else's job, and no act.
+    const pid1 = await processProbe.startTime(1);
+    if (pid1.kind !== "start") throw new Error(`pid 1: ${pid1.detail}`);
     fs.writeFileSync(
       path.join(dir, "1", "record.json"),
-      JSON.stringify({ ...RECORD, started: Date.now() }),
+      JSON.stringify({
+        ...RECORD,
+        startTime: `${pid1.token}0`,
+        started: Date.now(),
+      }),
     );
     expect(await watch.running()).toBe(false);
     expect(watch.acts().actsError).toBeNull();
@@ -791,7 +850,10 @@ describe("claimAct: one act per bundle", () => {
     const dir = dirOf();
     fs.mkdirSync(path.join(dir, "1"), { recursive: true });
     const { started: _started, ...missing } = RECORD;
-    fs.writeFileSync(path.join(dir, "1", "record.json"), JSON.stringify(missing));
+    fs.writeFileSync(
+      path.join(dir, "1", "record.json"),
+      JSON.stringify(missing),
+    );
     await expect(
       makeActReader(dir, sameLeader, processLauncher, systemTimekeeper).read(),
     ).rejects.toThrow(
@@ -1105,10 +1167,9 @@ describe("the update watch: one turn at a time on the act files", () => {
   test("a success restarts through the binary watch, which waits on the same queue", async () => {
     const dir = actsDir(scratch, "/some/bundle/index.mjs");
     const stop = marker("stop");
-    // The real `ps` reads this watch's fingerprint, so the record's must be real.
-    await running(dir, stop, (pid) =>
-      readStartTime(pid, processLauncher.launch),
-    );
+    // The host probe reads this watch's fingerprint, so the record's must be
+    // real, read the same way.
+    await running(dir, stop, processProbe.startTime);
     const logged: string[] = [];
     let exits = 0;
     const target = marker("bundle");

@@ -1,19 +1,18 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { processLauncher } from "../../helpers/host";
+import { processProbe } from "../../helpers/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { readLease, writeLease } from "../../../src/daemon/socket-lease";
-import { readStartTime } from "../../../src/daemon/process-fingerprint";
 import { waitForExit } from "../../helpers/daemon-wire";
 import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 
-// The real kernel start-time of a live pid, so a planted lease matches the true
-// process identity the daemon's arbitration reads back via `ps`.
+// The real kernel start-time of a live pid, read from this host's own source,
+// so a planted lease matches the identity the daemon's arbitration reads back.
 async function realStartTime(pid: number): Promise<string> {
-  const r = await readStartTime(pid, processLauncher.launch);
+  const r = await processProbe.startTime(pid);
   if (r.kind !== "start") {
     throw new Error(`expected a live start-time for pid ${pid}, got ${r.kind}`);
   }
@@ -41,8 +40,12 @@ function makeFixture(): Fixture {
   // ensureSocketParentSafe requires uid==me + mode 0700 on the socket parent.
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const sockPath = path.join(stateDir, "socket");
-  const cacheHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slt-c-"));
-  const configHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slt-g-"));
+  const cacheHome = fs.mkdtempSync(
+    path.join(os.tmpdir(), "cc-candybar-slt-c-"),
+  );
+  const configHome = fs.mkdtempSync(
+    path.join(os.tmpdir(), "cc-candybar-slt-g-"),
+  );
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     CC_CANDYBAR_SOCKET: sockPath,
@@ -125,7 +128,11 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         startTime: await realStartTime(holderPid),
       });
 
-      const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
+      const {
+        child: daemon,
+        killTree,
+        release,
+      } = await spawnTestDaemon(fx.env);
       try {
         const result = await raceExit(daemon, BUDGET_MS);
         // Exits cleanly (attach-and-exit), never SIGKILL/crash.
@@ -223,9 +230,10 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         pid: recycledPid,
         version: 2,
         binPath: "/crashed",
-        // A start-time that cannot be the live holder's (far in the past) — the
-        // fingerprint mismatch is what forces the reclaim.
-        startTime: "Thu Jan  1 00:00:00 1970",
+        // A start-time from this host's own source that is not the live
+        // holder's — the fingerprint mismatch is what forces the reclaim. A
+        // token from another source would be incomparable and spare it.
+        startTime: `${await realStartTime(recycledPid)}0`,
       });
 
       // Fingerprint mismatch → reclaim → serve, despite the pid being alive.
@@ -249,6 +257,31 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
       }
     } finally {
       holder.kill("SIGKILL");
+      fx.cleanup();
+    }
+  });
+});
+
+// [LAW:single-enforcer] A daemon's exit removes no lease; why is at writeLease.
+// The case runs the real close a signal starts. Its own lease still standing
+// after its owner's exit is what shows no removal runs, so neither its own lease
+// nor a newer daemon's published over it can be taken on the way out.
+describe("a daemon's exit and the lease (integration)", () => {
+  jest.setTimeout(30_000);
+
+  test("a daemon's own lease outlives its exit", async () => {
+    const fx = makeFixture();
+    try {
+      const daemon = await spawnDaemonWithEnv(fx.env);
+      const own = readLease(fx.leasePath);
+      expect(own.kind).toBe("owned");
+
+      const exited = waitForExit(daemon.child);
+      daemon.killTree("SIGTERM");
+      await exited;
+
+      expect(readLease(fx.leasePath)).toEqual(own);
+    } finally {
       fx.cleanup();
     }
   });
