@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-import type { ProcessIdentity } from "./process-fingerprint";
+import type { Liveness, ProcessIdentity } from "./process-fingerprint";
 import { publishByRename } from "../utils/atomic-write";
 
 // ─── Socket ownership lease ──────────────────────────────────────────────────
@@ -52,9 +52,9 @@ export interface LeaseRecord extends ProcessIdentity {
 }
 
 // [LAW:effects-at-boundaries][LAW:dataflow-not-control-flow] The whole
-// arbitration is a fold: (raw lease read, injected liveness predicate) →
-// decision. Reading process identity is the sole effect and it is injected via
-// `isSameLiveProcess`, so every branch is exercised by input enumeration with no
+// arbitration is a fold: (raw lease read, injected liveness fold) → decision.
+// Reading process identity is the sole effect and it is injected via
+// `livenessOf`, so every branch is exercised by input enumeration with no
 // real processes. Full input space:
 //   owned + same-live  → attach-and-exit (the SAME live owner holds the path; we
 //                        are a duplicate — exit so the incumbent keeps serving)
@@ -64,7 +64,7 @@ export interface LeaseRecord extends ProcessIdentity {
 //                        daemon left a stale socket; prefer availability)
 //   unreadable         → reclaim (can't prove a live owner — same)
 //
-// [LAW:one-source-of-truth] `isSameLiveProcess(pid, startTime)` consults the
+// [LAW:one-source-of-truth] `livenessOf(pid, startTime)` consults the
 // kernel's process identity ((pid, start-time), see process-fingerprint.ts), not
 // a bare pid. This closes RESIDUAL 1: a crashed daemon's pid recycled to a
 // long-lived process now reads NOT-same (different start-time) → reclaim, so a
@@ -74,28 +74,23 @@ export interface LeaseRecord extends ProcessIdentity {
 //   false-dead (steal a live socket) — made self-healing by the ownership
 //     self-check (brandon-daemon-lifecycle-2b3.2), and now far rarer: the
 //     start-time match will not false-negative a live owner unless the host
-//     cannot fingerprint at all, in which case sameLiveProcess falls back to
-//     kill(pid,0) — the prior behavior, no worse.
+//     cannot fingerprint at all, in which case the liveness fold falls back
+//     to kill(pid,0) — the prior behavior, no worse.
+// The decision's reason carries the fold's own why, so a line that attached
+// to an owner whose start time could not be read says so.
 // Reclaiming on missing/unreadable is the availability-preferring direction — a
 // stale socket with no reclaimer is a hard no-service stall, strictly worse than
 // a transient double-serve that self-heals.
 export async function arbitrateSocket(
   read: LeaseRead,
-  isSameLiveProcess: (
-    pid: number,
-    startTime: string | null,
-  ) => Promise<boolean>,
+  livenessOf: (pid: number, startTime: string | null) => Promise<Liveness>,
 ): Promise<SocketArbitration> {
   if (read.kind === "owned") {
-    return (await isSameLiveProcess(read.pid, read.startTime))
-      ? {
-          kind: "attach-and-exit",
-          reason: `live owner pid=${read.pid} holds the socket`,
-        }
-      : {
-          kind: "reclaim",
-          reason: `owner pid=${read.pid} is gone or recycled`,
-        };
+    const { live, why } = await livenessOf(read.pid, read.startTime);
+    return {
+      kind: live ? "attach-and-exit" : "reclaim",
+      reason: `owner pid=${read.pid} ${why}`,
+    };
   }
   if (read.kind === "absent") {
     return {

@@ -16,11 +16,7 @@ import {
   readSocketIdentity,
   type SocketIdentity,
 } from "./socket-ownership";
-import {
-  readOwnStartTime,
-  sameLiveProcess,
-  systemProbe,
-} from "./process-fingerprint";
+import { readOwnStartTime, liveness, systemProbe } from "./process-fingerprint";
 import { admitDaemon, realBreakerDeps, removeEntry } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
@@ -281,10 +277,12 @@ function bindOrAttachAndExit(
 // [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
 // lease, NEVER a connect probe. The path already exists (a live daemon, or a
 // stale file from an ended one); whether the lease's owner identity (pid and
-// start-time) is still a live process decides which (sameLiveProcess). A concurrent recoverer is another process, so no liveness read was ever
-// atomic with the unlink, and this runs once per bind attempt in one daemon, so
-// the await on `ps` adds no in-process entrant and needs no re-check: the lease
-// and the ownership self-check are what recover a lost race.
+// start-time) is still a live process decides which (the liveness fold). A
+// concurrent recoverer is another process, so no liveness read was ever atomic
+// with the unlink, and this runs once per bind attempt in one daemon, so the
+// await on the start-time read adds no in-process entrant and needs no
+// re-check: the lease and the ownership self-check are what recover a lost
+// race.
 //
 // [LAW:effects-at-boundaries] The decision is the arbitrateSocket fold
 // over the lease read + the injected probe; the kill / unlink / rebind effects
@@ -299,8 +297,7 @@ async function handleAddressInUse(
   // source for the whole arbitration.
   const decision = await arbitrateSocket(
     readLease(leasePathFor(sockPath)),
-    (pid, startTime) =>
-      sameLiveProcess(pid, startTime, systemProbe(daemon.launcher)),
+    (pid, startTime) => liveness(pid, startTime, systemProbe(daemon.launcher)),
   );
   if (decision.kind === "attach-and-exit") {
     serverLog("info", `EADDRINUSE: ${decision.reason} — exiting`);

@@ -1,19 +1,18 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { processLauncher } from "../../helpers/host";
+import { processProbe } from "../../helpers/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { readLease, writeLease } from "../../../src/daemon/socket-lease";
-import { readStartTime } from "../../../src/daemon/process-fingerprint";
 import { waitForExit } from "../../helpers/daemon-wire";
 import { spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 
-// The real kernel start-time of a live pid, so a planted lease matches the true
-// process identity the daemon's arbitration reads back via `ps`.
+// The real kernel start-time of a live pid, read from this host's own source,
+// so a planted lease matches the identity the daemon's arbitration reads back.
 async function realStartTime(pid: number): Promise<string> {
-  const r = await readStartTime(pid, processLauncher.launch);
+  const r = await processProbe.startTime(pid);
   if (r.kind !== "start") {
     throw new Error(`expected a live start-time for pid ${pid}, got ${r.kind}`);
   }
@@ -231,9 +230,10 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         pid: recycledPid,
         version: 2,
         binPath: "/crashed",
-        // A start-time that cannot be the live holder's (far in the past) — the
-        // fingerprint mismatch is what forces the reclaim.
-        startTime: "Thu Jan  1 00:00:00 1970",
+        // A start-time from this host's own source that is not the live
+        // holder's — the fingerprint mismatch is what forces the reclaim. A
+        // token from another source would be incomparable and spare it.
+        startTime: `${await realStartTime(recycledPid)}0`,
       });
 
       // Fingerprint mismatch → reclaim → serve, despite the pid being alive.

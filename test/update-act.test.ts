@@ -682,6 +682,29 @@ describe("claimAct: one act per bundle", () => {
     ).toBe(false);
   });
 
+  // [LAW:single-enforcer] Who the job is goes through the one identity
+  // comparison: a leader whose start time another source minted says nothing
+  // against the record, so the live group is taken as the job's.
+  test("a job recorded by another start-time source is taken as the job's", async () => {
+    const read = async (): Promise<StartTimeRead> => ({
+      kind: "start",
+      token: "proc:boot:1",
+    });
+    const alive = { jobGroupAlive: () => true };
+    const record = { ...RECORD, pid: 7, started: 10 };
+    expect(
+      await isRecordedJob(
+        { ...record, startTime: "Thu Jul  9 05:04:25 2026" },
+        read,
+        alive,
+        0,
+      ),
+    ).toBe(true);
+    expect(
+      await isRecordedJob({ ...record, startTime: "proc:boot:2" }, read, alive, 0),
+    ).toBe(false);
+  });
+
   test("an act pruned under a read gives way to the newer act that pruned it", async () => {
     const dir = dirOf();
     const write = (act: number, status: string) => {
@@ -777,9 +800,17 @@ describe("claimAct: one act per bundle", () => {
     expect(await watch.running()).toBe(false);
     expect(watch.acts().actsError).toMatch(/update act files .*JSON/);
     expect(logged).toEqual([watch.acts().actsError]);
+    // pid 1 is alive, so the record names it under a start time from this
+    // host's own source that is not pid 1's: someone else's job, and no act.
+    const pid1 = await processProbe.startTime(1);
+    if (pid1.kind !== "start") throw new Error(`pid 1: ${pid1.detail}`);
     fs.writeFileSync(
       path.join(dir, "1", "record.json"),
-      JSON.stringify({ ...RECORD, started: Date.now() }),
+      JSON.stringify({
+        ...RECORD,
+        startTime: `${pid1.token}0`,
+        started: Date.now(),
+      }),
     );
     expect(await watch.running()).toBe(false);
     expect(watch.acts().actsError).toBeNull();

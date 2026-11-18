@@ -29,7 +29,7 @@ import {
   type Launcher,
 } from "../proc/launcher";
 import { readTailSync } from "../utils/transcript-fs";
-import type { StartTimeRead } from "./process-fingerprint";
+import { sameProcess, type StartTimeRead } from "./process-fingerprint";
 import { spanMs, type Monotonic, type Timekeeper } from "../time.js";
 import { IDLE, type ActState } from "../facts/world-state";
 
@@ -236,9 +236,9 @@ export async function isRecordedJob(
   if (record.started <= boot || !jobs.jobGroupAlive(record.pid)) return false;
   const leader = await read(record.pid);
   return (
-    record.startTime === null ||
     leader.kind === "unavailable" ||
-    leader.token === record.startTime
+    sameProcess(record, { pid: record.pid, startTime: leader.token }) !==
+      "different"
   );
 }
 
@@ -304,7 +304,7 @@ interface Known {
 }
 
 const sameJob = (a: ActRecord, b: ActRecord): boolean =>
-  a.pid === b.pid && a.startTime === b.startTime;
+  sameProcess(a, b) !== "different";
 
 // [LAW:effects-at-boundaries] The edge that reads acts. Who the recorded job
 // is gets settled by a fingerprint once per job (a `ps`); after that each read

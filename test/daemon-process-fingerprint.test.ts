@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import { processLauncher } from "./helpers/host";
 import {
+  liveness,
   procStatStartTime,
   readStartTime,
   readOwnStartTime,
   sameLiveProcess,
+  sameProcess,
   systemProbe,
   type StartTimeRead,
 } from "../src/daemon/process-fingerprint";
@@ -188,33 +190,89 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
   });
 });
 
-describe("the system probe's identity check", () => {
-  // [LAW:effects-at-boundaries] A launcher that records every launch: a dead
-  // pid must be judged with no subprocess at all.
-  test("a dead pid is stale and no ps is spawned", async () => {
-    const launches: string[] = [];
-    const probe = systemProbe({
-      launch: async (spec) => {
-        launches.push(spec.bin);
-        return okStdout("Thu Jan  1 00:00:00 1970");
-      },
+// [LAW:single-enforcer] The one identity comparison. A token carries the
+// source that minted it, and two sources say nothing about each other.
+describe("sameProcess", () => {
+  const at = (startTime: string | null, pid = 10) => ({ pid, startTime });
+
+  test("one source: equal tokens are the same process, others are not", () => {
+    expect(sameProcess(at("ps:a"), at("ps:a"))).toBe("same");
+    expect(sameProcess(at("proc:b:1"), at("proc:b:2"))).toBe("different");
+  });
+
+  test("another pid is a different process whatever the tokens", () => {
+    expect(sameProcess(at("ps:a"), at("ps:a", 11))).toBe("different");
+  });
+
+  test("tokens from two sources, or a missing one, are incomparable", () => {
+    expect(sameProcess(at("ps:a"), at("proc:b:1"))).toBe("incomparable");
+    expect(sameProcess(at("Thu Jul  9 05:04:25 2026"), at("ps:a"))).toBe(
+      "incomparable",
+    );
+    expect(sameProcess(at(null), at("ps:a"))).toBe("incomparable");
+  });
+});
+
+describe("liveness", () => {
+  const probe = (read: StartTimeRead) => ({
+    alive: () => true,
+    startTime: async () => read,
+  });
+
+  // A live process recorded by another source (a daemon from before the
+  // tags, or another platform's reader) is spared, never taken as recycled.
+  test("a live pid recorded by another source is live", async () => {
+    expect(
+      await liveness(
+        10,
+        "Thu Jul  9 05:04:25 2026",
+        probe({ kind: "start", token: "proc:b:1" }),
+      ),
+    ).toEqual({
+      live: true,
+      why: "is alive; its start time was recorded by another source",
     });
+  });
+
+  test("an unreadable start time says why the owner was spared", async () => {
+    expect(
+      await liveness(
+        10,
+        "proc:b:1",
+        probe({ kind: "unavailable", detail: "EACCES" }),
+      ),
+    ).toEqual({ live: true, why: "is alive, start time unreadable: EACCES" });
+  });
+});
+
+describe("the system probe's identity check", () => {
+  // The machine's kill(pid,0) on a pid that has ended, beside a start-time
+  // read that records every call: a dead pid is judged with no read at all.
+  test("a dead pid is stale and its start time is never read", async () => {
+    const read = jest.fn<Promise<StartTimeRead>, [number]>();
+    const probe = {
+      alive: systemProbe(processLauncher).alive,
+      startTime: read,
+    };
     const child = spawn(process.execPath, ["-e", "0"], { stdio: "ignore" });
     await new Promise<void>((resolve) => child.once("exit", () => resolve()));
-    expect(await sameLiveProcess(child.pid!, "any", probe)).toBe(false);
-    expect(launches).toEqual([]);
+    expect(await sameLiveProcess(child.pid!, "ps:any", probe)).toBe(false);
+    expect(read).not.toHaveBeenCalled();
   });
 
   test("a live pid recorded under another start-time is reclaimed", async () => {
     const probe = systemProbe(processLauncher);
+    const now = await probe.startTime(process.pid);
+    if (now.kind !== "start") throw new Error(`no start time: ${now.detail}`);
     expect(
       await arbitrateSocket(
         {
           kind: "owned",
           pid: process.pid,
-          startTime: "a start before the reuse",
+          // This host's own source, one tick off: the pid's earlier owner.
+          startTime: `${now.token}0`,
         },
-        (pid, startTime) => sameLiveProcess(pid, startTime, probe),
+        (pid, startTime) => liveness(pid, startTime, probe),
       ),
     ).toMatchObject({ kind: "reclaim" });
   });
@@ -232,6 +290,13 @@ describe("procStatStartTime", () => {
   test("a line without the field → null", () => {
     expect(procStatStartTime("7 (x) S 1 2")).toBeNull();
     expect(procStatStartTime("")).toBeNull();
+  });
+
+  // Without the command name's paren there is nothing to count fields from,
+  // even when the line holds enough numbers.
+  test("a line with no `)` → null", () => {
+    const numbers = Array.from({ length: 50 }, (_, i) => String(i + 1));
+    expect(procStatStartTime(numbers.join(" "))).toBeNull();
   });
 });
 

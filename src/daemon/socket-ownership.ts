@@ -34,8 +34,9 @@ import type { Timekeeper } from "../time";
 // so there is no race-free "the inode I truly bound"). But a real thief, being a
 // daemon, writes its OWN pid into the lease. So ownership requires a SECOND
 // condition: the lease must still name us. A displacer must touch one of the two
-// representations — steal the socket (inode changes) or overwrite the lease (pid
-// changes) — so requiring BOTH drains any orphan within a bounded number of
+// representations — steal the socket (inode changes) or overwrite the lease
+// (the identity it names changes) — so requiring BOTH drains any orphan within
+// a bounded number of
 // intervals. "The lease still names me" is the same identity equality the
 // sibling arbitration uses (pid and start-time), asked of one function.
 
@@ -114,7 +115,7 @@ export function checkOwnership(
       reason: `lease not held (${lease.kind}) — no longer the socket owner`,
     };
   }
-  if (!sameProcess(lease, me)) {
+  if (sameProcess(lease, me) === "different") {
     return {
       kind: "displaced",
       reason: `lease reassigned (names pid=${lease.pid} start=${lease.startTime}, we are pid=${me.pid} start=${me.startTime}) — a reclaimer overwrote it`,

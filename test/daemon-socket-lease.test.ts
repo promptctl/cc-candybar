@@ -8,6 +8,7 @@ import {
   writeLease,
   type LeaseRead,
 } from "../src/daemon/socket-lease";
+import { type Liveness } from "../src/daemon/process-fingerprint";
 
 // ─── Pure arbitration: full input-space enumeration ──────────────────────────
 //
@@ -17,8 +18,11 @@ import {
 // socket-theft fix (the integration tests below only prove the wiring).
 
 describe("arbitrateSocket (pure decision)", () => {
-  const SAME = async (): Promise<boolean> => true;
-  const NOT_SAME = async (): Promise<boolean> => false;
+  const SAME = async (): Promise<Liveness> => ({ live: true, why: "is alive" });
+  const NOT_SAME = async (): Promise<Liveness> => ({
+    live: false,
+    why: "is gone",
+  });
   const owned = (pid: number, startTime: string | null = "st"): LeaseRead => ({
     kind: "owned",
     pid,
@@ -31,6 +35,18 @@ describe("arbitrateSocket (pure decision)", () => {
     expect(d.reason).toContain("4242");
   });
 
+  // [LAW:nothing-unseen] The decision's line says what the fold found, so an
+  // owner spared because its start time could not be read says so.
+  test("the reason carries the liveness fold's why", async () => {
+    const d = await arbitrateSocket(owned(4242), async () => ({
+      live: true,
+      why: "is alive, start time unreadable: EACCES",
+    }));
+    expect(d.reason).toBe(
+      "owner pid=4242 is alive, start time unreadable: EACCES",
+    );
+  });
+
   test("owned + not-same → reclaim (owner crashed OR pid recycled)", async () => {
     const d = await arbitrateSocket(owned(4242), NOT_SAME);
     expect(d.kind).toBe("reclaim");
@@ -39,14 +55,14 @@ describe("arbitrateSocket (pure decision)", () => {
 
   test("absent → reclaim (no lease; stale socket, no live owner)", async () => {
     // The liveness predicate must not even be consulted when there is no pid.
-    const isSame = jest.fn(async () => true);
+    const isSame = jest.fn(SAME);
     const d = await arbitrateSocket({ kind: "absent" }, isSame);
     expect(d.kind).toBe("reclaim");
     expect(isSame).not.toHaveBeenCalled();
   });
 
   test("unreadable → reclaim (cannot prove a live owner)", async () => {
-    const isSame = jest.fn(async () => true);
+    const isSame = jest.fn(SAME);
     const d = await arbitrateSocket(
       { kind: "unreadable", detail: "bad JSON" },
       isSame,
@@ -59,9 +75,9 @@ describe("arbitrateSocket (pure decision)", () => {
   // The predicate receives BOTH the pid and the lease's start-time token — the
   // process-identity pair that lets a recycled pid be distinguished from the
   // original owner (RESIDUAL 1). arbitrateSocket forwards them verbatim; the
-  // sameLiveProcess fold (process-fingerprint) decides.
+  // liveness fold (process-fingerprint) decides.
   test("forwards pid AND startTime to the injected predicate", async () => {
-    const isSame = jest.fn(async () => true);
+    const isSame = jest.fn(SAME);
     await arbitrateSocket(owned(999, "Thu Jul  9 05:04:25 2026"), isSame);
     expect(isSame).toHaveBeenCalledWith(999, "Thu Jul  9 05:04:25 2026");
   });
