@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-805",
+      "ref": "refs/pull/805/merge",
+      "sha": "aa48949b0837b731f1b32414b31731d5451f75d5",
+      "timestamp": "2026-11-18T15:39:35.166Z",
+      "commits": [
+        {
+          "sha": "aa48949b0837b731f1b32414b31731d5451f75d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:38:30Z",
+          "message": "Merge b000616e787867aaa5297453301de93ec0137e67 into 36b0c268535b139534bb9b29bd59ac0a0621b719\n"
+        },
+        {
+          "sha": "b000616e787867aaa5297453301de93ec0137e67",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:38:17-07:00",
+          "message": "fix(watchers): a path watched by name is polled at its path, and only folders ride the OS event stream (iywk)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "36b0c268535b139534bb9b29bd59ac0a0621b719",
@@ -71,28 +93,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:48:16-07:00",
           "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-805",
-      "ref": "refs/pull/805/merge",
-      "sha": "ca26458194eb21f7dc48911d300e2450c6a34a59",
-      "timestamp": "2026-11-18T15:25:53.526Z",
-      "commits": [
-        {
-          "sha": "ca26458194eb21f7dc48911d300e2450c6a34a59",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:24:42-07:00",
-          "message": "Merge 06fe5118482059951754e159bcd2ac2028716ba8 into f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017\n"
-        },
-        {
-          "sha": "06fe5118482059951754e159bcd2ac2028716ba8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:24:10-07:00",
-          "message": "fix(watchers): a path watched by name is polled at its path, and only folders ride the OS event stream (iywk)\n"
         }
       ]
     }
