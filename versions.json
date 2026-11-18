@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-802",
+      "ref": "refs/pull/802/merge",
+      "sha": "f93a8d6a32f2e43bd1ef6bfc4ecd4c68e65f8426",
+      "timestamp": "2026-11-18T13:56:09.277Z",
+      "commits": [
+        {
+          "sha": "f93a8d6a32f2e43bd1ef6bfc4ecd4c68e65f8426",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:55:11-07:00",
+          "message": "Merge bb5416b2f1808daf6666940d0cc0582df58307ad into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "bb5416b2f1808daf6666940d0cc0582df58307ad",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:55:00-07:00",
+          "message": "test(daemon): the close case counts only the resources its own work creates (6f3)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-801",
       "ref": "refs/pull/801/merge",
       "sha": "40b6709c249c0a0021ad2681e77f75ac01ca6f36",
