@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-831",
+      "ref": "refs/pull/831/merge",
+      "sha": "594305ff1d1c5f43e46e74cd2913ec5ebc257e93",
+      "timestamp": "2026-11-18T21:28:24.187Z",
+      "commits": [
+        {
+          "sha": "594305ff1d1c5f43e46e74cd2913ec5ebc257e93",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:27:25-07:00",
+          "message": "Merge 3a88d1801b6b3ad6453d9d7a6a50e59a05942da4 into eb4bbabafeb10bce11c78d1adc12007f6dd831ee\n"
+        },
+        {
+          "sha": "3a88d1801b6b3ad6453d9d7a6a50e59a05942da4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:26:58-07:00",
+          "message": "fix(edit): a placement's session state ends at the next load of the config that dropped it\n\nWhatever removes a placement (a hand edit, another session's click, a\nchange made while the daemon was down), every session's state for it ends\nat the next load of its config, so a re-added id opens with its libraries\nclosed, nothing configured and no drafts.\n\nThe key's minter says which placement a key belongs to, and one rule\nreleases every key whose placement the loaded config no longer holds,\nmeasured before unplaced placements are dropped. The render cache runs it\non every successful load over the sessions whose last click acted in that\nconfig. A clicking session's own release goes through the click's journal,\nso undo restores its drafts. A failed load releases nothing, and author\nmenus are never touched. The daemon log names each release.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-824",
       "ref": "refs/pull/824/merge",
       "sha": "33b8f485d9f8bd54ba72402464ce58a758bbb3c2",
