@@ -7,7 +7,7 @@
 // view last settled on, and a template variable passes it on rather than
 // answering with its default. None of it is a fault: nothing is reported.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
@@ -35,7 +35,7 @@ import { selectionFor } from "./helpers/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { CheckRuns } from "../src/check-runs";
+import { collectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S = sessionIdOf("s");
@@ -78,7 +78,7 @@ function renderer(cfg: ValidatedConfig) {
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   // The runs its sources name, held as the host holds a session's.
   const sourceRuns = new SourceRuns({ launcher, clock });
-  const runs = new CheckRuns(sourceRuns, registry, AT, TEST_ENV);
+  const runs = collectedRuns(sourceRuns, registry, TEST_ENV);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     store,
@@ -95,7 +95,6 @@ function renderer(cfg: ValidatedConfig) {
     answer: (value: JsonValue) => store.setDocument("doc", ok(value)),
     unanswer: () => store.setDocument("doc", pendingOf("unread")),
     draw: (width = 160): Drawn => {
-      const errors: string[] = [];
       const { frame, warnings } = drawPayload(
         cfg,
         compiled,
@@ -110,14 +109,13 @@ function renderer(cfg: ValidatedConfig) {
           padding: 1,
           width,
         },
-        { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
         selectionFor(cfg),
         runs.readings,
       );
       return {
         frame,
         text: textOf(frame).split("\n").at(-1)!,
-        errors,
+        errors: segmentErrorsOf(warnings),
         warnings,
       };
     },
@@ -330,7 +328,7 @@ describe("a placement whose value is not answered yet draws where it stood", () 
       // each is the fault it is.
       const answered = on.draw();
       expect(answered.errors).toHaveLength(1);
-      expect(answered.warnings.map((w) => w.kind)).toEqual(["when"]);
+      expect(answered.warnings.map((w) => w.kind)).toEqual(["segment", "when"]);
       on.unanswer();
       const { text, errors, warnings, frame } = on.draw();
       expect(text).toContain(LOADING_GLYPH);
@@ -403,7 +401,7 @@ describe("a json source with no default", () => {
       );
       expect(errors).toEqual([
         expect.stringContaining(
-          'value: field "doc.label" not found on receiver',
+          'segment "value": field "doc.label" not found on receiver',
         ),
       ]);
       expect(frame.pending).toEqual([]);

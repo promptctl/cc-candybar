@@ -177,6 +177,9 @@ export function rendererHost(
     // The settings files each session's doctor reading handed in, which a
     // `claude-settings` change may write.
     readonly writableSettings: WritableSettings;
+    // [LAW:single-enforcer] Where every turn's record goes as the renderer
+    // answered it, whatever input the turn took.
+    readonly recorded: (record: TurnRecord) => void;
   },
   world: HostWorld,
 ): RendererHost {
@@ -259,6 +262,7 @@ export function rendererHost(
         turnMs,
         hopMs: elapsedMs(clock, sentAt) - turnMs,
       };
+      collector.recorded(turn.record);
       // [LAW:single-enforcer] A turn's changes land here, together with its
       // answers to the trust book, in the order the turns answered, before
       // anything else here can throw and before the turn's caller hears it.

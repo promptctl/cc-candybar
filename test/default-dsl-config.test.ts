@@ -52,7 +52,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
-import { checkPayload } from "../src/check";
+import { checkPayload } from "./helpers/check-payload";
 import {
   renderOptionsOf,
 } from "../src/renderer/render-payload";
@@ -293,8 +293,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           null,
           when,
         );
-        const errors: string[] = [];
-        const rendered = drawPayload(
+        const { frame: rendered, warnings } = drawPayload(
           config,
           compiled,
           store,
@@ -302,10 +301,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
           effort === undefined ? payload : { ...payload, effort },
           when,
           renderOptionsOf(effective, Number.POSITIVE_INFINITY),
-          { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
           effective,
-        ).frame;
-        expect(errors).toEqual([]);
+        );
+        expect(warnings.filter((w) => w.kind === "segment")).toEqual([]);
         const found = rendered.rows.find(({ runs }) =>
           plainOf(runs).includes(NAME),
         );
@@ -537,7 +535,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         },
         instantOf(new Date()),
         opts,
-        undefined,
         // Both `.effective` fields are drawDsl's to publish, so the payload
         // carries neither and the SELECTION is what crosses the seam — resolved
         // over the session's picks, as src/renderer/draw-bar.ts resolves it.
@@ -1617,7 +1614,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 // preset renders without error cells at 80, 120, and 200 columns" — the
 // compact one is pointless if it does not actually fit. Drives the exact
 // pipeline the daemon and `cc-candybar check` drive (registerDslConfig +
-// drawDsl, onSegmentError as the observer seam check.ts uses) against the
+// drawDsl, its segment warnings as check.ts reads them) against the
 // SAME rich fixture payload check.ts ships (checkPayload) — a minimal payload
 // would let a field-name typo in a gated branch (git worktree counts, the
 // burnrate/speed telemetry verbose surfaces) slip through untested, because
@@ -1682,9 +1679,8 @@ describe("bundled preset library renders clean at every width — brandon-preset
         signer: TEST_SIGNER,
         cwd: "/tmp",
       });
-      const segmentErrors: string[] = [];
       const drawnAt = instantOf(new Date());
-      const rendered = drawPayload(
+      const { frame: rendered, warnings } = drawPayload(
         VALIDATED,
         compiled,
         store,
@@ -1699,12 +1695,13 @@ describe("bundled preset library renders clean at every width — brandon-preset
           wrap: effective.autoWrap,
           padding: effective.padding,
         },
-        {
-          onSegmentError: (segName, message) =>
-            segmentErrors.push(`segment "${segName}": ${message}`),
-        },
         effective,
-      ).frame;
+      );
+      const segmentErrors = warnings.flatMap((w) =>
+        w.kind === "segment"
+          ? [`segment "${w.placement}": ${w.message}`]
+          : [],
+      );
       return { rendered, segmentErrors };
     } finally {
       registry.dispose();

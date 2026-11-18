@@ -12,8 +12,6 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import {
   mkdtempSync,
   writeFileSync,
@@ -24,7 +22,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { ActivityProvider, type ActivityInfo } from "../src/segments/activity";
-import type { RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { ABSENT, ok } from "../src/utils/outcome";
@@ -51,6 +48,7 @@ import {
   fakeTmux,
   fakeUsage,
   requestPayload,
+  type FixtureOwners,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
 
@@ -542,11 +540,7 @@ describe("the payload projection", () => {
       activityProvider: fakeActivity(async () => ok(info)),
       tmuxService: fakeTmux(async () => ABSENT),
       log: () => {},
-      clock: systemTimekeeper,
-      history: () => EMPTY_HISTORY_DEPTH,
-      navigation: () => 0,
-      feeds: () => UNFOLLOWED_FEEDS,
-    } as unknown as RenderPayloadDeps;
+    } satisfies FixtureOwners;
     const built = await requestPayload(
       hook(join(dir, "t.jsonl"), "p"),
       instantOf(new Date()),

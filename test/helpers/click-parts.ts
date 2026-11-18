@@ -125,6 +125,7 @@ export function clickParts(
       holding: collector.holding,
       stored: () => {},
       writableSettings: () => [],
+      recorded: () => {},
     },
     world,
   );

@@ -13,12 +13,11 @@ import {
   healthyDaemonEdge,
   healthyDataEdge,
   noManagedSettings,
-  HEALTHY_SERVING,
+  noUrlHandlerEdge,
   HEALTHY_FACTS,
-  CARRIED,
-  NAMED,
   STILL,
   drew,
+  healthySighted,
   sightedIn,
 } from "./helpers/doctor-facts";
 import type { FrameSighting } from "../src/daemon/foundations/sightings";
@@ -56,7 +55,7 @@ const loadsConfig =
   () => ({
     layers: [],
     error: null,
-    warning: null,
+    warnings: [],
     unused: [],
     config,
   });
@@ -64,6 +63,7 @@ const NO_TMUX: GatherEdge = {
   ...healthyDaemonEdge(),
   ...healthyDataEdge(),
   ...noManagedSettings(),
+  ...noUrlHandlerEdge(),
   probeTmux: async () => {
     throw new Error("probeTmux must not run in this case");
   },
@@ -116,12 +116,10 @@ const factsIn = async (
       target: { source: "search" },
     },
     sessionPick,
-    { kind: "ok", value: HEALTHY_SERVING },
-    CARRIED,
-    NAMED,
-    { kind: "recent" },
-    sightedIn(projectDir(), conf, bars),
-    HEALTHY_FACTS.width,
+    {
+      ...healthySighted(projectDir(), conf, bars),
+      width: HEALTHY_FACTS.width,
+    },
     EMPTY_STORES,
   )),
   urlHandler: { kind: "unsupported" } as const,
@@ -299,18 +297,13 @@ describe("gatherFacts: a settings chain per location", () => {
         target: { source: "search" },
       },
       NO_SESSION,
-      { kind: "ok", value: HEALTHY_SERVING },
-      CARRIED,
-      NAMED,
-      { kind: "recent" },
       {
-        kind: "ok",
-        value: sighted.flatMap(([project, bars]) => {
-          const asked = sightedIn(project, conf, bars);
-          return asked.kind === "ok" ? asked.value : [];
-        }),
+        ...healthySighted(projectDir(), conf),
+        bars: sighted.flatMap(([project, bars]) =>
+          sightedIn(project, conf, bars),
+        ),
+        width: HEALTHY_FACTS.width,
       },
-      HEALTHY_FACTS.width,
       EMPTY_STORES,
     )),
     urlHandler: { kind: "unsupported" } as const,
@@ -331,7 +324,6 @@ describe("gatherFacts: a settings chain per location", () => {
     expect(
       elsewhere.map((c) => [c.at.projectDir, c.bars.map((b) => b.frame)]),
     ).toEqual([[otherProject(), ["moves", "can-move"]]]);
-    expect(facts.frames).toEqual({ kind: "read" });
   });
 
   test("a fix in another project's file is what that chain judges next", async () => {
@@ -747,6 +739,7 @@ describe("gatherFacts", () => {
       ...healthyDaemonEdge(),
       ...healthyDataEdge(),
       ...noManagedSettings(),
+      ...noUrlHandlerEdge(),
       probeTmux: async (hint) => {
         asked.push(hint);
         return {

@@ -32,6 +32,7 @@ export const unfollowedCollector = (
   writableSettings: collector.writableSettings.bind(collector),
   frames: () => {},
   stored: () => {},
+  recorded: () => {},
 });
 
 // A renderer whose events `answered` answers, and which no push reaches.

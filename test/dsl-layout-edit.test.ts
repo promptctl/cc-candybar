@@ -912,7 +912,6 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
       },
       instantOf(new Date()),
       opts(),
-      undefined,
       selectionFor(config, {}, picked({ preset: presetName })),
     ).frame;
     expect(textOf(rendered)).toContain("↺ reset layout");
@@ -965,7 +964,6 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
           },
           instantOf(new Date()),
           opts(),
-          undefined,
           selectionFor(config, {}, picked({ preset: "gated" })),
         ).frame,
       );

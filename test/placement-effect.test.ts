@@ -91,8 +91,7 @@ function renderer(
   };
   return {
     render: (bar, when, effects) =>
-      drawPayload(config, compiled, store, registry, PAYLOAD, when, opts, undefined,
-        selectionFor(config, { effect: decideEffectName(bar), effects }),
+      drawPayload(config, compiled, store, registry, PAYLOAD, when, opts, selectionFor(config, { effect: decideEffectName(bar), effects }),
       ).frame,
     dispose: () => registry.dispose(),
   };

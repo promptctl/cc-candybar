@@ -86,10 +86,10 @@ const REFUSED = {
   sharedToStart: { file: IN_SHARED, code: imp("../renderer/main") },
   // A root builds the renderer in process, so only the entry reaches one: an
   // edge into a root from anywhere else would carry the renderer with it.
-  restToRoot: { file: IN_REST, code: imp("../check") },
-  rendererToRoot: { file: IN_RENDERER, code: imp("../check") },
-  startToRoot: { file: IN_START, code: imp("../check") },
-  sharedToRoot: { file: IN_SHARED, code: imp("../check") },
+  restToRoot: { file: IN_REST, code: imp("../renderer-process") },
+  rendererToRoot: { file: IN_RENDERER, code: imp("../renderer-process") },
+  startToRoot: { file: IN_START, code: imp("../renderer-process") },
+  sharedToRoot: { file: IN_SHARED, code: imp("../renderer-process") },
   sharedToRest: { file: IN_SHARED, code: imp("../daemon/x") },
   // Foundations is shared: it reaches no other piece of the daemon.
   foundationsSibling: { file: IN_FOUNDATIONS, code: imp("../draw-bar") },
@@ -128,8 +128,11 @@ const ALLOWED = {
   },
   restToContract: { file: IN_REST, code: imp("../renderer-interface/adapter") },
   restToShared: { file: IN_REST, code: imp("../utils/outcome") },
-  rootToRenderer: { file: "src/check.ts", code: imp("./renderer/draw-bar") },
-  entryToRoot: { file: "src/index.ts", code: imp("./check") },
+  rootToRenderer: {
+    file: "src/renderer-process.ts",
+    code: imp("./renderer/draw-bar"),
+  },
+  entryToRoot: { file: "src/index.ts", code: imp("./renderer-process") },
   foundationsInside: { file: IN_FOUNDATIONS, code: imp("./gates") },
   foundationsToShared: {
     file: IN_FOUNDATIONS,

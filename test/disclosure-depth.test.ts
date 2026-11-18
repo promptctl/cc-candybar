@@ -20,7 +20,7 @@
 //     opens is the depth-0 band of the bar's lineage every bar trigger opens —
 //     the anchor of the chain.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -229,7 +229,6 @@ function build(src: string, withDefault = false) {
   // [LAW:no-silent-failure] A segment that throws renders a ⚠ cell and skips
   // the cells, which would read here as "did not render"; say what it was.
   const render = (): Frame => {
-    const errors: string[] = [];
     const drawn = drawPayload(
       config,
       compiled,
@@ -238,11 +237,9 @@ function build(src: string, withDefault = false) {
       PAYLOAD,
       instantOf(new Date()),
       OPTS,
-      {
-        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-      },
     );
     latest = drawn.segments;
+    const errors = segmentErrorsOf(drawn.warnings);
     if (errors.length > 0) throw new Error(errors.join("\n"));
     return drawn.frame;
   };

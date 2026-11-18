@@ -1,18 +1,15 @@
 // [LAW:verifiable-goals] brandon-doctor-v62x.tfb: "the install is current" —
 // the bar is drawn by the native client of the install the daemon runs from,
 // built from the source beside it. The probe is pure over InstallFacts; the
-// fold from what the daemon saw to those facts (installFacts), the CLI's read
-// of daemon-stats (parseDaemonClients), the daemon's record of each session's
-// latest client (RenderSightings) and the hint's checkpoint are each pinned
-// here.
+// fold from what the daemon saw to those facts (installFacts), the daemon's
+// record of each session's latest client (RenderSightings) and the hint's
+// checkpoint are each pinned here.
 
-import { installOf } from "../src/doctor/cli";
-import { RECENT_CLIENT_S } from "../src/doctor/checks";
-import { RuntimeStats } from "../src/daemon/stats";
-import { type StatsSnapshot } from "../src/daemon/foundations/stats-snapshot";
-import { shapeSkew } from "../src/daemon/client-stats";
 import {
   checkByName,
+  held,
+  NOT_HELD,
+  notJudged,
   type ClientFact,
   type DaemonInstall,
   type DoctorFacts,
@@ -20,8 +17,7 @@ import {
 } from "../src/doctor/checks";
 import { installFacts } from "../src/doctor/edge";
 import { type InstallEdge } from "../src/doctor/ports";
-import { installFields } from "../src/doctor/report";
-import { parseDaemonClients } from "../src/doctor/daemon-answer";
+import { installFields } from "./helpers/doctor-fields";
 import { RenderSightings } from "../src/daemon/render-sightings";
 import { SIGHTINGS_KEPT } from "../src/daemon/foundations/sightings";
 import { parseClientHints } from "../src/daemon/foundations/protocol";
@@ -63,7 +59,7 @@ function verdict(
     kind: "ok",
     value: { daemon, nativeShipped, clients },
   };
-  const facts: DoctorFacts = { ...HEALTHY_FACTS, install };
+  const facts: DoctorFacts = { ...HEALTHY_FACTS, install: held(install) };
   return checkByName("install")!.probe(facts);
 }
 
@@ -215,47 +211,11 @@ describe("install probe", () => {
     });
   });
 
-  test("no client to judge is the finding, worded for who asked", () => {
+  test("no client to judge is the finding", () => {
     expect(verdict(PUBLISHED, [])).toEqual({
       ok: false,
       reason:
-        "no statusline client has drawn a bar for this daemon in the last 5 minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar",
-    });
-    const install: InstallFacts = {
-      kind: "ok",
-      value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
-    };
-    expect(
-      checkByName("install")!.probe({
-        ...HEALTHY_FACTS,
-        install,
-        sighted: { kind: "clicked", sessionId: "s1", via: "link" },
-      }),
-    ).toEqual({
-      ok: false,
-      reason:
         "this daemon holds no render of this bar (it restarted since the bar was drawn, or has served 64 newer sessions), so which client draws it is unknown — run the doctor again once the bar has redrawn",
-    });
-  });
-
-  // A shell proves its session is alive, not that it draws a cc-candybar bar:
-  // a `claude -p` session draws none, so the row names that cause first and
-  // how to judge the bars on screen instead.
-  test("a session's shell with no render names its statusLine before a restart", () => {
-    const install = {
-      kind: "ok",
-      value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
-    } as const;
-    expect(
-      checkByName("install")!.probe({
-        ...HEALTHY_FACTS,
-        install,
-        sighted: { kind: "shell", sessionId: "s1" },
-      }),
-    ).toEqual({
-      ok: false,
-      reason:
-        "this daemon holds no render of session s1's bar (its statusLine does not run cc-candybar — a `claude -p` session draws none — or the daemon restarted since the bar was drawn, or has served 64 newer sessions; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently), so which client draws it is unknown — run the doctor again once the bar has redrawn",
     });
   });
 
@@ -276,16 +236,24 @@ describe("install probe", () => {
     });
   });
 
-  test("a daemon that could not be asked is the finding", () => {
+  test("a daemon whose own install cannot be read is the finding", () => {
     const facts: DoctorFacts = {
       ...HEALTHY_FACTS,
-      install: { kind: "failed", reason: "no daemon is running" },
+      install: held({
+        kind: "failed",
+        reason: "the bundle cannot be resolved",
+      }),
     };
     expect(checkByName("install")!.probe(facts)).toEqual({
       ok: false,
-      reason:
-        "the daemon could not be asked which clients draw the bar: no daemon is running",
+      reason: "the bundle cannot be resolved",
     });
+  });
+
+  test("a host that holds no clients does not judge them, and says so", () => {
+    expect(
+      checkByName("install")!.probe({ ...HEALTHY_FACTS, install: NOT_HELD }),
+    ).toEqual({ ok: true, note: notJudged("which client draws the bar") });
   });
 });
 
@@ -357,134 +325,37 @@ describe("installFacts: the fold from what the daemon saw", () => {
 describe("installFields: the doctor's event", () => {
   test("each client judged, by kind and standing", () => {
     expect(
-      installFields({
-        kind: "ok",
-        value: {
-          daemon: CHECKOUT,
-          nativeShipped: true,
-          clients: [
-            native(CHECKOUT_BUNDLE, "abc"),
-            native(CHECKOUT_BUNDLE, "old"),
-            native(CHECKOUT_BUNDLE, null),
-            native("/old/dist/index.mjs"),
-            { kind: "unreported" },
-          ],
-        },
-      }),
+      installFields(
+        held({
+          kind: "ok",
+          value: {
+            daemon: CHECKOUT,
+            nativeShipped: true,
+            clients: [
+              native(CHECKOUT_BUNDLE, "abc"),
+              native(CHECKOUT_BUNDLE, "old"),
+              native(CHECKOUT_BUNDLE, null),
+              native("/old/dist/index.mjs"),
+              { kind: "unreported" },
+            ],
+          },
+        }),
+      ),
     ).toBe(
       "clients=native/same/same,native/same/other,native/same/unstamped,native/other/unstamped,unreported/-/-",
     );
     expect(
-      installFields({
-        kind: "ok",
-        value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
-      }),
-    ).toBe("clients=-");
-    expect(installFields({ kind: "failed", reason: "x" })).toBe(
-      "clients=unasked",
-    );
-  });
-});
-
-describe("installOf: the clients the command judges", () => {
-  test("only a session that drew within the window is one the bar runs", () => {
-    const stale = {
-      kind: "native",
-      bundle: "/old/dist/index.mjs",
-      source: null,
-    } as const;
-    const current = { kind: "native", bundle: BUNDLE, source: null } as const;
-    const facts = installOf(
-      HEALTHY_INSTALL_EDGE,
-      { kind: "recent" },
-      {
-        kind: "ok",
-        value: {
-          bundle: BUNDLE,
-          clients: [
-            { client: stale, sessionId: S1, ago: RECENT_CLIENT_S + 1 },
-            { client: current, sessionId: S2, ago: RECENT_CLIENT_S },
-          ],
-        },
-      },
-    );
-    expect(facts.kind === "ok" && facts.value.clients).toEqual([
-      native(BUNDLE),
-    ]);
-  });
-});
-
-describe("parseDaemonClients: the CLI's read of daemon-stats", () => {
-  // A snapshot of this build's shape, as the daemon would send it.
-  const stats = (fields: object): StatsSnapshot =>
-    ({
-      ...RuntimeStats.referenceSnapshot(),
-      version: "1.0.0",
-      ...fields,
-    }) as StatsSnapshot;
-
-  test("a sighting's client crosses the hint checkpoint; a malformed one is unreported", () => {
-    expect(
-      parseDaemonClients(
-        stats({
-          bundle: BUNDLE,
-          clients: [
-            {
-              client: { kind: "native", bundle: BUNDLE, source: null },
-              sessionId: "s1",
-              ago: 2,
-            },
-            {
-              client: { kind: "native", bundle: "relative", source: null },
-              sessionId: "s2",
-              ago: 1,
-            },
-            { client: null, sessionId: "s3", ago: 0 },
-          ],
+      installFields(
+        held({
+          kind: "ok",
+          value: { daemon: PUBLISHED, nativeShipped: true, clients: [] },
         }),
       ),
-    ).toEqual({
-      kind: "ok",
-      value: {
-        bundle: BUNDLE,
-        clients: [
-          {
-            client: { kind: "native", bundle: BUNDLE, source: null },
-            sessionId: "s1",
-            ago: 2,
-          },
-          { client: null, sessionId: "s2", ago: 1 },
-          { client: null, sessionId: "s3", ago: 0 },
-        ],
-      },
-    });
-  });
-
-  test("a daemon of another build, or one reporting no age or session, is refused", () => {
-    const { clients: _clients, ...rest } = stats({});
-    const older = rest as StatsSnapshot;
-    const asked = parseDaemonClients(older);
-    expect(asked).toEqual({
-      kind: "failed",
-      reason: shapeSkew(older, ["bundle", "clients"]),
-    });
-    expect(asked.kind === "failed" && asked.reason).toMatch(
-      /reports no clients;/,
+    ).toBe("clients=-");
+    expect(installFields(held({ kind: "failed", reason: "x" }))).toBe(
+      "clients=failed",
     );
-    expect(
-      parseDaemonClients(
-        stats({ bundle: BUNDLE, clients: [{ client: null }] }),
-      ),
-    ).toEqual({
-      kind: "failed",
-      reason:
-        'the running daemon (1.0.0) reported clients without their age: [{"client":null}]',
-    });
-    expect(
-      parseDaemonClients(
-        stats({ bundle: BUNDLE, clients: [{ client: null, ago: 1 }] }),
-      ),
-    ).toMatchObject({ kind: "failed" });
+    expect(installFields(NOT_HELD)).toBe("clients=unheld");
   });
 });
 

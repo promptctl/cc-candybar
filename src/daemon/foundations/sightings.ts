@@ -72,8 +72,7 @@ export interface RoledSaid extends RenderSaid {
 }
 
 export interface RenderSighting extends RoledSaid {
-  // Whose render it was: `cc-candybar doctor` run in a Claude Code session's
-  // shell finds that session's own sighting by it.
+  // Whose render it was: a doctor run reads its own session's sightings.
   readonly sessionId: SessionId;
   // Seconds since the session's last render.
   readonly ago: number;

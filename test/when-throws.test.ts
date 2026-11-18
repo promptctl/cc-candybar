@@ -66,9 +66,10 @@ function runtime(source: string) {
       { session_id: "s-when-throws", ctx: { pct } },
       instantOf(new Date()),
       OPTS,
-      { onSegmentError: (id, message) => segmentErrors.push([id, message]) },
     );
-    warnings.push(...drawn.warnings);
+    for (const w of drawn.warnings)
+      if (w.kind === "segment") segmentErrors.push([w.placement, w.message]);
+      else warnings.push(w);
     return textOf(drawn.frame);
   };
   return {
@@ -133,7 +134,7 @@ describe("a layout node's when that throws costs that node, not the bar", () => 
       const bar = rt.render();
       expect(bar).toContain("⚠ ay: the gate broke");
       expect(bar).toContain("BEE");
-      expect(rt.segmentErrors).toEqual([["ay", "the gate broke"]]);
+      expect(rt.segmentErrors).toEqual([["ay", 'segment "ay": the gate broke']]);
       // Not a container's: no warning beside the ⚠.
       expect(rt.warnings).toEqual([]);
     } finally {

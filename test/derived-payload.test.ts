@@ -28,7 +28,7 @@ import { SourceRegistry, VariableStore } from "../src/var-system";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { CheckRuns } from "../src/check-runs";
+import { collectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 
 const AT = instantOf(new Date(2026, 9, 25, 12, 0, 0));
@@ -61,7 +61,7 @@ function viewOver(
     launcher: processLauncher,
     clock: systemTimekeeper,
   });
-  const held = new CheckRuns(sourceRuns, registry, AT, TEST_ENV);
+  const held = collectedRuns(sourceRuns, registry, TEST_ENV);
   const selections = resolveEffectiveGlobals(
     config,
     () => null,
@@ -80,11 +80,11 @@ function viewOver(
     // A request's arrival: the payload moves, in one turn.
     // What the holder answers for the run a variable names.
     fact: (name: string) =>
-      held.run(registry.namedRuns().get(name)?.digest ?? ""),
+      held.readings.run(registry.namedRuns().get(name)?.digest ?? ""),
     arrive: (next: Record<string, unknown>) =>
       runInAction(() => answer.set(next)),
     draw: () =>
-      drawDsl(config, compiled, store, registry, {}, AT, OPTS, undefined, {
+      drawDsl(config, compiled, store, registry, {}, AT, OPTS, {
         ...selections,
       }),
     runs: (): number =>
@@ -296,9 +296,9 @@ describe("a policy or rule over what the draw answers is refused at load", () =>
   });
 });
 
-// A reaction only logs what throws in it, so the holder carries the throw to
-// the wait, which fails the check with it.
-test("a run whose declaration throws fails the check's wait with it", async () => {
+// The collector answers a run whose declaration threw with that throw, so the
+// view reads it as the run's failure and no wait hangs on a run never read.
+test("a run whose declaration throws reads as its failure, naming the throw", async () => {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store);
   registry.declareShell("probe", "echo hi", {
@@ -307,19 +307,22 @@ test("a run whose declaration throws fails the check's wait with it", async () =
     parse: { kind: "text", default: undefined },
     cache: { kind: "never" },
   });
-  const held = new CheckRuns(
+  const held = collectedRuns(
     {
       declare: () => {
         throw new Error("watch bug");
       },
     },
     registry,
-    AT, TEST_ENV
+    TEST_ENV,
   );
   try {
-    await expect(held.settled(AbortSignal.timeout(1000))).rejects.toThrow(
-      "watch bug",
-    );
+    expect(await held.settled(AbortSignal.timeout(1000))).toEqual([]);
+    const probe = registry.namedRuns().get("probe");
+    expect(probe && held.readings.run(probe.digest).reading).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining("watch bug"),
+    });
   } finally {
     held.close();
     registry.dispose();

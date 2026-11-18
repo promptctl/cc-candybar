@@ -19,7 +19,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 // change. [LAW:behavior-not-structure] — the contract is the colour at each
 // value, whichever spelling computes it.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { runUnder } from "./helpers/frame";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -34,7 +34,7 @@ import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
-import { registerDslConfig } from "../src/dsl/render";
+import { registerDslConfig, type DrawnFrame } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
@@ -202,9 +202,8 @@ function renderOne(
   c: Case,
   value: number,
   themeName: string,
-  onSegmentError?: (segName: string, message: string) => void,
   undecorated = false,
-): Frame {
+): DrawnFrame {
   const narrowed = narrowToSegment(
     parseAndValidate("<default>", SERIALIZED),
     c.segment,
@@ -231,9 +230,8 @@ function renderOne(
       { ...HOOK, ...c.payload(value) },
       instantOf(new Date(AT_SEC * 1000)),
       OPTS,
-      { onSegmentError },
       selectionFor(one, {}, picked({ theme: themeName })),
-    ).frame;
+    );
   } finally {
     registry.dispose();
   }
@@ -254,7 +252,7 @@ function cellColors(
 // no `bg:` at all. Every other row names the palette role it heats to.
 function expectedBg(palette: Palette, row: Row, c: Case, paletteName: string): string {
   if (row.bg === "tint") {
-    return cellColors(renderOne(c, row.value, paletteName, undefined, true), c.glyph).bg;
+    return cellColors(renderOne(c, row.value, paletteName, true).frame, c.glyph).bg;
   }
   const bg = palette.get(row.bg);
   expect(bg).toBeDefined();
@@ -270,7 +268,7 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
     test.each(c.rows)(
       `${c.segment} ${varLabel} at $value wears bg=$bg, text legible on it`,
       (row) => {
-        const { fg, bg } = cellColors(renderOne(c, row.value, paletteName), c.glyph);
+        const { fg, bg } = cellColors(renderOne(c, row.value, paletteName).frame, c.glyph);
         expect(bg).toBe(expectedBg(palette, row, c, paletteName));
         expect(
           contrastRatio(parseRgbHex(fg.slice(1)), parseRgbHex(bg.slice(1))),
@@ -316,17 +314,16 @@ describe("a threshold below its neighbour is a loud render error", () => {
       // The found case lends its payload and glyph; `settings` are this row's
       // own, over the bundled defaults, so the pair inverts exactly as stated.
       const c = CASES.find((x) => x.segment === segment)!;
-      const errors: string[] = [];
-      const rendered = renderOne(
+      const { frame: rendered, warnings } = renderOne(
         { ...c, settings },
         60,
         "textual-dark",
-        (name, message) => errors.push(`${name}: ${message}`),
       );
+      const errors = segmentErrorsOf(warnings);
       expect(textOf(rendered)).toContain("⚠");
       expect(errors).toHaveLength(1);
       expect(errors[0]).toMatch(
-        new RegExp(`^${segment}: .*ascending position order; ${pair}`),
+        new RegExp(`^segment "${segment}": .*ascending position order; ${pair}`),
       );
     },
   );

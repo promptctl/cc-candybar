@@ -34,6 +34,7 @@ import type {
 } from "../../src/doctor/ports";
 import { readDoctor, type Sighted } from "../../src/doctor/read";
 import { instantOf } from "../../src/utils/instant";
+import type { Field } from "../../src/utils/logfmt";
 import {
   readDoctorRun,
   type DoctorReadInput,
@@ -41,47 +42,42 @@ import {
 import type { DoctorRuns } from "../../src/renderer/doctor";
 import type { DoctorRead } from "../../src/doctor/gather";
 import { ofRun } from "../../src/daemon/readings";
-import type { SightingScope } from "../../src/doctor/sightings";
+import { NOT_HELD } from "../../src/doctor/checks";
 
-// The facts a run of `load` reads over `edge`, but the URL handler's and the
-// install's, which a test sets itself.
 // The machine's edge and the config a test's run judges.
 export type GatherEdge = DoctorEdge & {
   readonly loadConfig: (origin: RenderOrigin) => ConfigLoad;
 };
 
+// The facts a run of `load` reads over `edge`, told `sighted` of the
+// session's bars, but the URL handler's and the install's, which a test sets
+// itself.
 export async function gatherFacts(
   edge: GatherEdge,
   hints: Pick<ClientHints, "tmux" | "claudeConfigDir" | "terminalEnv" | "ssh">,
   origin: RenderOrigin,
   sessionPick: (key: string) => string | null,
-  serving: Sighted["serving"],
-  rateLimits: Sighted["rateLimits"],
-  transcripts: Sighted["transcripts"],
-  scope: SightingScope,
-  bars: Sighted["bars"],
-  width: Sighted["width"],
+  sighted: Sighted,
   stores: StoresRead,
 ): Promise<Omit<DoctorFacts, "urlHandler" | "install">> {
   const load = edge.loadConfig(origin);
   const machine = await readDoctor(
     edge,
     hints,
-    doctorAsk(0, load, sessionPick, scope),
+    doctorAsk(0, load, sessionPick, { via: "command" }),
     { cwd: origin.cwd, projectDir: origin.projectDir },
-    { serving, rateLimits, transcripts, bars, width },
+    sighted,
   );
   const {
     urlHandler: _u,
     install: _i,
     ...facts
   } = doctorFacts(
-    machine,
-    { kind: "failed", reason: "unread in this test" },
+    { run: 0, kind: "read", machine, install: NOT_HELD },
     load,
     origin.target,
     stores,
-    { kind: "unsupported" },
+    { via: "command" },
   );
   return facts;
 }
@@ -155,6 +151,9 @@ export function applyFix(
 // write are the ones the latest reading named, as the collector's are.
 export class DoctorHost {
   private readonly readings = new Map<SessionId, DoctorRead>();
+  // The record of every turn a reading was taken in, as the renderer noted
+  // it.
+  readonly taken: Field[] = [];
 
   constructor(
     private readonly deps: Parameters<typeof readDoctorRun>[0],
@@ -181,7 +180,10 @@ export class DoctorHost {
       );
       if (doctor.kind === "ok" && doctor.value.kind === "read")
         this.readings.set(session, doctor.value);
-      runs.took({ session, doctor: { ...doctor, at: instantOf(new Date()) } });
+      runs.took(
+        { session, doctor: { ...doctor, at: instantOf(new Date()) } },
+        this.taken,
+      );
       // A run taken, or failed, asks for its reading no more.
       if (runs.subscriptions().has(session))
         throw new Error(

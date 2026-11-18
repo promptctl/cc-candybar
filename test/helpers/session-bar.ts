@@ -12,7 +12,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../../src/config/effective-globals";
 import { perSetting } from "../../src/config/setting-projections";
-import { checkPayload } from "../../src/check";
+import { checkPayload } from "./check-payload";
 import { renderOptionsOf } from "../../src/renderer/render-payload";
 import type { Frame } from "../../src/render/frame";
 import { SessionState } from "../../src/renderer/session-state";
@@ -91,14 +91,12 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
         payload,
         at,
         renderOptionsOf(effective, cols),
-        {
-          // [LAW:no-silent-failure] A ⚠ cell would be read as the bar it replaced.
-          onSegmentError: (name, message) => {
-            throw new Error(`${name}: ${message}`);
-          },
-        },
         effective,
       );
+      // [LAW:no-silent-failure] A ⚠ cell would be read as the bar it replaced.
+      for (const w of warnings)
+        if (w.kind === "segment")
+          throw new Error(`${w.placement}: ${w.message}`);
       return { frame, warnings, segments };
     },
     dispose: () => registry.dispose(),

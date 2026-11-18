@@ -1,9 +1,8 @@
 // The doctor's reading of the machine: every fact a run judges but the
-// config's, the stores' and the URL handler's, read for one ask
-// (src/doctor/gather.ts) over the edge it is handed. The host's, so no
-// renderer reads Claude Code's settings or spawns a probe: the daemon reads it
-// for a session's doctor subscription (src/daemon/cache/doctor.ts), and
-// `cc-candybar doctor` over its own edge.
+// config's and the stores', read for one ask (src/doctor/gather.ts) over the
+// edge it is handed. The host's, so no renderer reads Claude Code's settings
+// or spawns a probe: the host reads it for a session's doctor subscription
+// (src/daemon/cache/doctor.ts), the daemon and `cc-candybar doctor` alike.
 //
 // [LAW:effects-at-boundaries] What the read asks of the machine goes through
 // the edge; the settings files a session's client hints name it reads itself.
@@ -22,13 +21,16 @@ import type {
   Width,
   DoctorFacts,
   DataNeed,
+  Held,
   SegmentDataFacts,
   SettingsChain,
   TerminalFacts,
   TerminalIdentity,
   TranscriptRead,
   TmuxFacts,
+  UrlHandlerFacts,
 } from "./checks.js";
+import type { ClientHint } from "../client-hint.js";
 import type { TerminalEnvHint } from "../terminal-hint.js";
 import {
   identifyFromEnv,
@@ -37,7 +39,11 @@ import {
   isConfigured,
 } from "./terminal.js";
 import type { ServingDaemon } from "../daemon/foundations/memory-limit.js";
-import type { SightedBar } from "./sightings.js";
+import {
+  handlerProvenBy,
+  type ClickArrival,
+  type SightedBar,
+} from "./sightings.js";
 import type { DoctorEdge } from "./ports.js";
 import { seen } from "./busy.js";
 import {
@@ -52,15 +58,15 @@ import {
 // answer answers for the file.
 async function transcriptReads(
   edge: DoctorEdge,
-  said: Asked<readonly TranscriptSaid[]>,
-): Promise<Asked<readonly TranscriptRead[]>> {
-  if (said.kind === "failed") return said;
+  said: Held<readonly TranscriptSaid[]>,
+): Promise<Held<readonly TranscriptRead[]>> {
+  if (said.kind === "not-held") return said;
   const byPath = new Map<string, boolean>();
   for (const { path: file, answered } of said.value) {
     byPath.set(file, answered || (byPath.get(file) ?? false));
   }
   return {
-    kind: "ok",
+    kind: "held",
     value: await Promise.all(
       [...byPath].map(async ([file, answered]) => ({
         path: file,
@@ -235,7 +241,7 @@ async function segmentDataFacts(
   edge: DoctorEdge,
   needs: DataNeeds,
   cwd: string,
-  rateLimits: Asked<readonly RateLimitsSeen[]>,
+  rateLimits: Held<readonly RateLimitsSeen[]>,
 ): Promise<SegmentDataFacts> {
   return {
     pullRequests: await need(needs.pullRequests, () => edge.forge(cwd)),
@@ -243,22 +249,45 @@ async function segmentDataFacts(
   };
 }
 
-// What a read is told besides its ask: what the sessions' renders said
-// (src/daemon/render-sightings.ts) — the clicked session's, or every session
-// `cc-candybar doctor` sees — and the daemon that serves the bar, as it
-// reports itself.
+// What a read is told besides its ask, by the host it runs in: what the
+// session's renders said (src/daemon/render-sightings.ts) and the daemon that
+// serves the bar, as it reports itself — each held only by a running daemon —
+// and the bars the session drew, with the width its client measured. The
+// daemon tells what it saw; `cc-candybar doctor`, the host of a bar of its
+// own, tells the bar it drew and the terminal it runs in, and holds nothing
+// else.
 export interface Sighted {
-  readonly serving: Asked<ServingDaemon>;
-  readonly rateLimits: Asked<readonly RateLimitsSeen[]>;
-  readonly transcripts: Asked<readonly TranscriptSaid[]>;
-  // What those renders drew — whether each bar moves — and where each one's
-  // session reads its settings.
-  readonly bars: Asked<readonly SightedBar[]>;
+  readonly serving: Held<ServingDaemon>;
+  readonly rateLimits: Held<readonly RateLimitsSeen[]>;
+  readonly transcripts: Held<readonly TranscriptSaid[]>;
+  // The clients that drew the session's bars, and the bundle the daemon
+  // runs, which the install check judges them against.
+  readonly clients: Held<{
+    readonly bundle: string;
+    readonly clients: ReadonlyArray<ClientHint | null>;
+  }>;
+  // What the session's bars drew — whether each moves — and where each
+  // one's session reads its settings.
+  readonly bars: readonly SightedBar[];
   // [LAW:one-source-of-truth] The width the session's statusline client
-  // measured, as its last render said; outside any session, the command's
-  // own terminal, standing in for the client one would spawn.
+  // measured, as its last render said, or the command's own terminal, which
+  // its bar is laid out for.
   readonly width: Asked<Width>;
 }
+
+// [LAW:dataflow-not-control-flow] What the run knows of the URL handler, by
+// how its click arrived: a link proves it, and a run asked any other way
+// reads what is registered for the scheme.
+const urlHandlerOf = async (
+  edge: DoctorEdge,
+  arrival: ClickArrival,
+): Promise<UrlHandlerFacts> =>
+  handlerProvenBy(arrival, async ({ via }): Promise<UrlHandlerFacts> => {
+    const registration = await edge.handler();
+    return registration.kind === "unsupported"
+      ? registration
+      : { kind: "registered", via, opener: registration.opener };
+  });
 
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
 // the Claude Code directory its session runs with, and the origin its config
@@ -276,7 +305,7 @@ export async function readDoctor(
   const terminal = terminalIdentity(tmux, hints.terminalEnv);
   // Independent stages, together, so they cost a run the slowest stage's
   // bound, not their sum.
-  const [nerdFont, processes, data] = await Promise.all([
+  const [nerdFont, processes, data, urlHandler] = await Promise.all([
     // [LAW:types-are-the-program] The asked glyphs parsed into the facts'
     // union: none to draw is the arm with no terminal to read.
     ask.glyphs === ""
@@ -288,16 +317,19 @@ export async function readDoctor(
         })),
     edge.daemons(),
     segmentDataFacts(edge, ask.needs, origin.cwd, sighted.rateLimits),
+    urlHandlerOf(edge, ask.arrival),
   ]);
-  const { bars } = sighted;
   return {
     tmux,
     width: sighted.width,
     terminal,
     nerdFont,
-    daemon: { serving: sighted.serving, processes },
-    sighted: ask.sighted,
-    frames: bars.kind === "failed" ? bars : { kind: "read" },
+    urlHandler,
+    daemon: {
+      serving: sighted.serving,
+      processes,
+      postMortems: edge.postMortems(),
+    },
     data,
     transcripts: await transcriptReads(edge, sighted.transcripts),
     claudeSettings: settingsChains(
@@ -308,7 +340,7 @@ export async function readDoctor(
           claudeConfigDir(hints.claudeConfigDir, edge.home),
         ),
       },
-      bars.kind === "ok" ? bars.value : [],
+      sighted.bars,
     ),
   };
 }

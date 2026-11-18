@@ -110,14 +110,6 @@ describe("a link the bar did not draw", () => {
 });
 
 describe("the clicks nothing signs", () => {
-  const NONCE = "123e4567-e89b-42d3-a456-426614174000";
-
-  test("a probe is read whatever state the key is in", () => {
-    expect(
-      parseClick(`cc-candybar://doctor-probe/${NONCE}`, FORWARDED, KEYLESS),
-    ).toEqual({ kind: "probe", nonce: NONCE, delivery: FORWARDED });
-  });
-
   test("a status-line range comes only from tmux's binding, which runs the CLI", () => {
     const range = "cc-candybar://tmux-status-click/sock/3/r1";
     expect(parseClick(range, CLI, KEYLESS)).toEqual({

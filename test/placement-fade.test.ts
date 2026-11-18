@@ -116,7 +116,6 @@ function renderer(
         { session_id: "s", shown },
         when,
         opts,
-        undefined,
         selectionFor(cfg, {
           effect: decideEffectName(selection.bar ?? "none"),
           effects,

@@ -275,7 +275,7 @@ const loadedEntry: ReloadedEntry = {
   configLayers: [],
   snapshot: NO_SNAPSHOT,
   lastError: null,
-  lastWarning: null,
+  lastWarnings: [],
   state: undefined as never,
 };
 

@@ -160,9 +160,6 @@ export const VERB_APPLY_UPDATE = "apply-update";
 export const VERB_DOCTOR_RUN = "doctor-run";
 export const VERB_DOCTOR_FIX = "doctor-fix";
 export const VERB_DOCTOR_MARK = "doctor-mark";
-// A link `cc-candybar doctor` opens to learn whether the URL handler delivers
-// it. Arg: the nonce the CLI will look for among the daemon's arrivals.
-export const VERB_DOCTOR_PROBE = "doctor-probe";
 
 // [LAW:effects-at-boundaries] Type a slash command into the session's Claude
 // Code prompt through its tmux pane. Args: `[sessionId, line]` — the line must
@@ -209,8 +206,6 @@ export const VERB_TMUX_STATUS_CLICK = "tmux-status-click";
 // writes it, and the host reads a click that starts so as a range, never a
 // link, which carries no signature because tmux expands it.
 export const STATUS_LINE_CLICK_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
-// How every probe link starts, which the host reads as a probe's arrival.
-export const DOCTOR_PROBE_PREFIX = `${URL_SCHEME}://${VERB_DOCTOR_PROBE}/`;
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
@@ -261,8 +256,8 @@ function saidCopy(text: string): string {
 // [LAW:one-source-of-truth] Every verb a click can fire, and what it does in
 // words, read off the args the click carries, so the text cannot say anything
 // the click does not do. A verb says a phrase per write. VERB_DISPATCH is the
-// list these ride in, and doctor-probe and tmux-status-click arrive as whole
-// URLs from outside a draw, so none of those three is ever an effect.
+// list these ride in, and tmux-status-click arrives as a whole URL from
+// outside a draw, so neither is ever an effect.
 const SAYS = {
   [VERB_SET_STATE]: ([, ...pairs]) =>
     pairs.flatMap((key, i) =>

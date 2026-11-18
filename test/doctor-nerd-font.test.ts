@@ -29,7 +29,7 @@ import { gatherFacts, type GatherEdge } from "./helpers/doctor-gather";
 import { type DoctorEdge } from "../src/doctor/ports";
 import { type StoresRead } from "../src/daemon/foundations/stats-snapshot";
 import type { Asked } from "../src/doctor/checks";
-import { nerdFontFields } from "../src/doctor/report";
+import { nerdFontFields } from "./helpers/doctor-fields";
 import { parseMarkBook, withMark } from "../src/doctor/mark-book";
 import {
   EMPTY_STORES,
@@ -37,11 +37,8 @@ import {
   healthyDaemonEdge,
   healthyDataEdge,
   noManagedSettings,
-  HEALTHY_SERVING,
-  CARRIED,
-  NAMED,
-  STILL,
-  sightedIn,
+  noUrlHandlerEdge,
+  healthySighted,
 } from "./helpers/doctor-facts";
 import fs from "node:fs";
 import os from "node:os";
@@ -427,7 +424,7 @@ describe("the doctor event's Nerd Font fields", () => {
   test("say the glyphs, the terminal, the font and the mark honoured", async () => {
     const menlo = { kind: "glyphs" as const, glyphs: GLYPHS, terminal: MENLO };
     expect(nerdFontFields(menlo, { kind: "ok", value: {} })).toBe(
-      'glyphs=e0b0,e0b2 terminal=iterm2@3.7.2 font="Menlo-Regular":lacks2 mark=-',
+      'glyphs=e0b0,e0b2 terminal=iterm2@3.7.2 font=Menlo-Regular:lacks2 mark=-',
     );
     // The mark on the sighting shown is the one honoured; one on another is not.
     const book: DoctorFacts["marks"] = {
@@ -449,7 +446,7 @@ describe("the doctor event's Nerd Font fields", () => {
         },
         book,
       ),
-    ).toBe('glyphs=e0b0,e0b2 terminal=unknown:"Apple Terminal" font=- mark=-');
+    ).toBe('glyphs=e0b0,e0b2 terminal="unknown:Apple Terminal" font=- mark=-');
     expect(nerdFontFields({ kind: "none" }, book)).toBe(
       "glyphs=- terminal=- font=- mark=-",
     );
@@ -654,6 +651,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       ...healthyDaemonEdge(),
       ...healthyDataEdge(),
       ...noManagedSettings(),
+      ...noUrlHandlerEdge(),
       probeTmux: client,
       remoteLogin: async (pid) => {
         pids.push(pid);
@@ -666,7 +664,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       loadConfig: () => ({
         layers: [],
         error: null,
-        warning: null,
+        warnings: [],
         unused: [],
         config,
       }),
@@ -696,12 +694,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       { claudeConfigDir: conf, ...hints },
       ORIGIN,
       pick,
-      { kind: "ok", value: HEALTHY_SERVING },
-      CARRIED,
-      NAMED,
-      { kind: "recent" },
-      sightedIn(ORIGIN.projectDir, conf, STILL),
-      HEALTHY_FACTS.width,
+      { ...healthySighted(ORIGIN.projectDir, conf), width: HEALTHY_FACTS.width },
       stores,
     );
   const drawn = async (

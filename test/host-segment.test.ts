@@ -19,8 +19,6 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import os from "node:os";
 
 import {
@@ -30,7 +28,6 @@ import {
 } from "../src/segments/host";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { Holds } from "../src/utils/holds";
-import type { RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
@@ -55,6 +52,7 @@ import {
   fakeTmux,
   fakeUsage,
   requestPayload,
+  type FixtureOwners,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
 
@@ -72,10 +70,7 @@ const DEPS = {
   activityProvider: fakeActivity(async () => ABSENT),
   tmuxService: fakeTmux(async () => ABSENT),
   log: () => {},
-  history: () => EMPTY_HISTORY_DEPTH,
-  navigation: () => 0,
-  feeds: () => UNFOLLOWED_FEEDS,
-} as unknown as RenderPayloadDeps;
+} satisfies FixtureOwners;
 
 const HOOK = {
   hook_event_name: "Status",

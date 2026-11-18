@@ -25,24 +25,21 @@ import {
 } from "../doctor/gather";
 import type { ConfigLoad, DoctorDocuments } from "../doctor/ports";
 import { CHECKS, runDoctor, type DoctorFacts } from "../doctor/checks";
-import { clickArrived, type ClickArrival } from "../doctor/sightings";
+import type { ClickArrival } from "../doctor/sightings";
 import { sightingOf } from "../doctor/terminal";
 import { withClicked } from "../doctor/clicked-terminals";
 import {
-  configFields,
-  daemonFields,
-  dataFields,
+  doctorFields,
   doctorReportKeys,
   doctorReportPairs,
-  frameFields,
-  installFields,
-  linkFields,
-  nerdFontFields,
-  terminalFeatureFields,
-  transcriptFields,
-  truecolorEnvFields,
+  notedReports,
   VERDICT_UNRUN,
 } from "../doctor/report";
+import { DOCTOR_NOTE, doctorNote } from "../renderer-interface/noted-doctor";
+import {
+  noteFacts,
+  type RequestFacts,
+} from "../daemon/foundations/request-event";
 
 type Log = (level: "info" | "warn" | "error", msg: string) => void;
 
@@ -106,11 +103,7 @@ export class DoctorRuns {
     store.setBatch(session, UNRUN);
     this.last = Math.max(Math.round(request.at * 1000), this.last + 1);
     this.runs.set(session, {
-      ask: doctorAsk(this.last, request.load, request.pick, {
-        kind: "clicked",
-        sessionId: session,
-        via: request.arrival.via,
-      }),
+      ask: doctorAsk(this.last, request.load, request.pick, request.arrival),
       load: request.load,
       target: request.target,
       arrival: request.arrival,
@@ -137,8 +130,12 @@ export class DoctorRuns {
   // A world state taken: the first that carries the reading of its session's
   // unread run writes the run's report, or shows why the run was not read.
   // The run is read once its report is written: one that could not be
-  // written fails the run, with the reason on the bar.
-  took({ session, doctor }: Pick<WorldState, "session" | "doctor">): void {
+  // written fails the run, with the reason on the bar. The report is noted on
+  // `record`, the record of the turn that took the world state.
+  took(
+    { session, doctor }: Pick<WorldState, "session" | "doctor">,
+    record: RequestFacts,
+  ): void {
     const run = this.runs.get(session);
     if (
       run === undefined ||
@@ -148,16 +145,18 @@ export class DoctorRuns {
     )
       return;
     const reading = doctor.value;
-    if (reading.kind === "failed") return this.fail(session, reading.reason);
+    if (reading.kind === "failed")
+      return this.fail(session, reading.reason, record);
     try {
       this.report(
         this.deps.sessionState,
         session,
         this.judged(run, reading, run.arrival),
+        record,
       );
       run.reading = { read: reading, at: doctor.at };
     } catch (e) {
-      this.fail(session, e instanceof Error ? e.message : String(e));
+      this.fail(session, e instanceof Error ? e.message : String(e), record);
     }
   }
 
@@ -181,36 +180,52 @@ export class DoctorRuns {
   // the row cap flips, the reason and fixable land, in one reactive
   // transaction — into `store`: a click's journaled view, so the report is
   // one with the rest of its click, or the session state a reading lands in.
-  report(store: SessionStateRW, session: SessionId, facts: DoctorFacts): void {
+  // [LAW:nothing-unseen] The turn's record carries every verdict whole and
+  // what the run reasoned over, so a reader of the record (the host's log,
+  // `cc-candybar doctor`) has the report the rows were written from.
+  report(
+    store: SessionStateRW,
+    session: SessionId,
+    facts: DoctorFacts,
+    record: RequestFacts,
+  ): void {
     const reports = runDoctor(facts);
+    const fields = doctorFields(facts);
     store.setBatch(session, doctorReportPairs(reports));
-    this.deps.log(
-      "info",
-      `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : `failed(${1 + (r.verdict.more?.length ?? 0)})`}`).join(" ")} ${configFields(facts.config)} ${nerdFontFields(facts.nerdFont, facts.marks)} ${linkFields(facts.terminal, facts.clicked)} ${terminalFeatureFields(facts.terminal, facts.width)} ${installFields(facts.install)} ${daemonFields(facts.daemon)} ${dataFields(facts.data)} ${transcriptFields(facts.transcripts)} ${frameFields(facts.frames, facts.claudeSettings)} ${truecolorEnvFields(facts.claudeSettings.origin.sources)} (session=${session})`,
-    );
+    noteFacts(record, {
+      [DOCTOR_NOTE]: doctorNote({
+        kind: "reported",
+        reports: notedReports(reports),
+      }),
+    });
+    record.push(...fields);
   }
 
   retire(session: SessionId): void {
     this.runs.delete(session);
   }
 
-  private fail(session: SessionId, reason: string): void {
+  // [LAW:no-silent-failure] A failed run shows why on its session's bar, and
+  // its turn's record says so, for a reader waiting on the run's note.
+  private fail(session: SessionId, reason: string, record: RequestFacts): void {
     this.runs.delete(session);
     this.deps.failed(session, `doctor: ${reason}`);
+    noteFacts(record, {
+      [DOCTOR_NOTE]: doctorNote({ kind: "failed", reason }),
+    });
   }
 
   private judged(
     run: Run,
-    { machine, install }: DoctorRead,
+    read: DoctorRead,
     arrival: ClickArrival,
   ): DoctorFacts {
     const facts = doctorFacts(
-      machine,
-      install,
+      read,
       run.load,
       run.target,
       readStores(this.deps.stores),
-      clickArrived(arrival),
+      arrival,
     );
     return { ...facts, clicked: this.filed(arrival, facts) };
   }

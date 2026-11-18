@@ -9,7 +9,7 @@ import {
   type TmuxClient,
 } from "../../src/doctor/checks";
 import type { Identified, TerminalName } from "../../src/doctor/terminal";
-import { linkFields } from "../../src/doctor/report";
+import { linkFields } from "../helpers/doctor-fields";
 import {
   parseClickedTerminals,
   withClicked,
@@ -53,10 +53,10 @@ const verdict = (
   probe({
     ...HEALTHY_FACTS,
     terminal,
-    sighted:
+    urlHandler:
       askedBy === "click"
-        ? { kind: "clicked", sessionId: "s1", via: "link" }
-        : { kind: "recent" },
+        ? { kind: "arrived", delivery: { kind: "forwarder", urlV: 1 } }
+        : HEALTHY_FACTS.urlHandler,
     clicked,
   });
 

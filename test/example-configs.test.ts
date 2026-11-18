@@ -114,9 +114,9 @@ describe("a `{ rows }` root merges by name over the bundled default", () => {
     );
     const [identity, status, ...rest] = textOf(outcome.rendered).split("\n");
     expect(rest).toEqual([]);
-    // The bundled identity row, untouched: the fish-abbreviated directory
-    // the check payload's cwd renders to.
-    expect(identity).toContain("~/c/c/src");
+    // The bundled identity row, untouched: the directory, its checkout named
+    // in full and the rest fish-abbreviated.
+    expect(identity).toContain("~/c/cc-candybar/src");
     // The user's status row: model and context, and none of the bundled
     // status row's other segments (block/weekly quota).
     expect(status).toContain("Opus 4.8");

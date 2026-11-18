@@ -15,11 +15,10 @@ import {
   type TmuxFacts,
 } from "../../src/doctor/checks";
 import { detectTmuxHint } from "../../src/tmux-hint";
-import { frameFields, truecolorEnvFields } from "../../src/doctor/report";
+import { frameFields, truecolorEnvFields } from "../helpers/doctor-fields";
 import type { JsonObject, SettingsSource } from "../../src/claude-settings";
 import type { JsonValue } from "../../src/var-system/types";
 import type { FrameSighting } from "../../src/daemon/foundations/sightings";
-import type { SightingScope } from "../../src/doctor/sightings";
 import { HEALTHY_FACTS, drew, onOrigin } from "../helpers/doctor-facts";
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
@@ -56,13 +55,6 @@ const AT = {
   projectDir: "/p",
   userFile: SETTINGS_PATH,
 } as const;
-// A run judging the bar of the session it is asked from.
-const SESSION: SightingScope = {
-  kind: "clicked",
-  sessionId: "s1",
-  via: "link",
-};
-
 // One settings file of the chain, as `readSettingsChain` returns it.
 const source = (
   scope: SettingsSource["scope"],
@@ -487,23 +479,14 @@ describe("effectRefresh probe", () => {
         },
       }),
     );
-  // `bars` read at the run's own location, or a daemon that could not say.
+  // `bars` read at the run's own location.
   const effectRefresh = (
-    bars: readonly FrameSighting[] | { kind: "failed"; reason: string },
+    bars: readonly FrameSighting[],
     sources: Asked<readonly SettingsSource[]>,
-    sighted: SightingScope = { kind: "recent" },
   ) =>
-    checkByName("effectRefresh")!.probe({
-      ...facts(
-        { kind: "outside" },
-        {},
-        LOADED,
-        "kind" in bars ? [] : bars,
-        sources,
-      ),
-      ...("kind" in bars ? { frames: bars } : {}),
-      sighted,
-    });
+    checkByName("effectRefresh")!.probe(
+      facts({ kind: "outside" }, {}, LOADED, bars, sources),
+    );
   const FROM = ` (statusLine from ${SETTINGS_PATH})`;
   const FIX = {
     kind: "claude-settings",
@@ -600,11 +583,11 @@ describe("effectRefresh probe", () => {
   // logfmt field.
   test("frameFields' chains quotes a raw interval that would split the field", () => {
     const fields = (refreshInterval: JsonValue) => {
-      const { frames, claudeSettings } = onOrigin(
+      const { claudeSettings } = onOrigin(
         STILL,
         ok(userFile({ statusLine: { command: "x", refreshInterval } })),
       );
-      return frameFields(frames, claudeSettings);
+      return frameFields(claudeSettings);
     };
     expect(fields(1)).toBe("frames=0/0/1/0/0 chains=user:1");
     expect(fields("1 s")).toBe(
@@ -771,12 +754,9 @@ describe("effectRefresh probe", () => {
   test("no render seen → failed, unknown", () => {
     expect(effectRefresh([], interval())).toEqual({
       ok: false,
-      reason:
-        "no session has drawn a statusline for this daemon in the last 5 minutes, so whether it moves is unknown — run the doctor again once the bar has redrawn",
-    });
-    expect(effectRefresh([], interval(), SESSION)).toMatchObject({
-      ok: false,
-      reason: expect.stringContaining("holds no render of this bar"),
+      reason: expect.stringMatching(
+        /^this daemon holds no render of this bar .*, so whether it moves is unknown — run the doctor again once the bar has redrawn$/,
+      ),
     });
   });
 
@@ -814,7 +794,7 @@ describe("effectRefresh probe", () => {
 
   test("only a frames display seen → failed, unknown, naming it", () => {
     expect(
-      effectRefresh([{ role: "frames", frame: "still" }], interval(), SESSION),
+      effectRefresh([{ role: "frames", frame: "still" }], interval()),
     ).toEqual({
       ok: false,
       reason:
@@ -824,12 +804,9 @@ describe("effectRefresh probe", () => {
 
   // A file saying 1 settles it before any render: Claude Code redraws every
   // second whatever the bar drew.
-  test.each<
-    [string, readonly FrameSighting[] | { kind: "failed"; reason: string }]
-  >([
+  test.each<[string, readonly FrameSighting[]]>([
     ["no render seen", drew()],
     ["only failed renders", drew("failed")],
-    ["a daemon that could not say", { kind: "failed", reason: "no daemon" }],
   ])("%s, with an interval of 1 → ok", (_, frames) => {
     expect(effectRefresh(frames, interval(1))).toMatchObject({ ok: true });
   });
@@ -914,11 +891,5 @@ describe("effectRefresh probe", () => {
         fix: FIX,
       });
     });
-  });
-
-  test("a daemon that could not say → failed with its reason", () => {
-    expect(
-      effectRefresh({ kind: "failed", reason: "daemon down" }, interval()),
-    ).toEqual({ ok: false, reason: "daemon down" });
   });
 });

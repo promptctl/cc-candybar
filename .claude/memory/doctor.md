@@ -26,11 +26,10 @@ A run is the renderer's: it asks, the host reads, and the reading comes back in 
 ## Processes and state
 
 - A daemon is identified by its entry path, resolved through links, plus a checkout marker. A process name alone is no identity.
-- The URL handler always delivers to the default socket. So if a shell's socket override names a different daemon, the check refuses before opening any link.
 - Render sightings live in memory, not in session state. Session state persists and is never pruned, so a session recorded by an older daemon would fail its row forever.
 - Clicked terminals get a file of their own, separate from the mark book. Older builds parse the mark book strictly and refuse keys they don't know.
 - If the spawn rate limit refuses a probe, the run's reading fails and the reason shows on the bar. The refusal never becomes a fact. The limit is per probe kind and counts from the last launch's start, so two runs within a second refuse each other however they are ordered; a click while a run is on its way starts none, and a run refused is clicked again.
-- The CLI reads the doctor's stores through the daemon, never from files of its own.
+- The CLI never asks a running daemon, because it exists to diagnose one that cannot start. It is a host of its own: it reads the profile's stores with the reader the daemon's stores use, draws its session's bar, and clicks the renderer's own doctor run, so its verdicts are the bar's. A fact only a running daemon holds (the clients it saw, the transcripts it read, its memory, whether a clicked link reached it) is reported as not judged here, naming the bar's doctor, never filled in from the command's own session.
 - Session state is one unversioned file that builds of either age read, because a rollback or a pinned install runs over a newer build's records. So a record there only gains fields and a field keeps its meaning. A new value of an existing field needs the same care: a parser that refuses values it doesn't know fails every click on that build.
 - Node resolves its entry point through links, but argv[1] keeps the symlink of npm's global bin. Name a bundle by the resolved path.
 - The native build stamp is computed by calling the repo's tsx binary directly. pnpm exec prints its install check on stdout, which would end up in the stamp.

@@ -56,7 +56,6 @@ function frameOf(
         padding: 1,
         width: 160,
       },
-      undefined,
       selectionFor(config, {}, picked(picks)),
     ).frame;
   } finally {

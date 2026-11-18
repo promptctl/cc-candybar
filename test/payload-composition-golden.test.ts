@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkPayload } from "../src/check";
+import { checkPayload } from "./helpers/check-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -58,7 +58,6 @@ async function drawnUnder(preset: string | null) {
     },
     AT,
     renderOptionsOf(effective, COLS),
-    {},
     effective,
   );
   // The temporary directory is the one thing a run names that differs.

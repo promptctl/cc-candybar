@@ -161,6 +161,7 @@ import {
   decodeWire,
   failureOf,
 } from "../../daemon/foundations/verb-error";
+import type { RequestFacts } from "../../daemon/foundations/request-event";
 import type { ActsOnTheirWay } from "../acts";
 import {
   parseSessionId,
@@ -260,6 +261,8 @@ export interface VerbContext extends DaemonContext {
   readonly context: SessionContext | null;
   // THIS click's turn's effects, which its config changes join.
   readonly effects: Effect[];
+  // THIS click's turn's record, which a doctor report is noted on.
+  readonly record: RequestFacts;
 }
 
 // A context with the journals the verb table opens around a write.
@@ -1322,10 +1325,12 @@ const doctorFix: VerbHandler = (value, ctx) => {
         throw new BadVerbArgs(`doctor-fix: ${check.label} — ${read.reason}`);
       }
       asked();
-      ctx.doctorRuns.report(ctx.sessionState, sid, {
-        ...facts,
-        daemon: { ...facts.daemon, read },
-      });
+      ctx.doctorRuns.report(
+        ctx.sessionState,
+        sid,
+        { ...facts, daemon: { ...facts.daemon, read } },
+        ctx.record,
+      );
       return;
     }
   }
@@ -1367,7 +1372,7 @@ const doctorMark: VerbHandler = (value, ctx) => {
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
-  ctx.doctorRuns.report(ctx.sessionState, sid, { ...facts, marks });
+  ctx.doctorRuns.report(ctx.sessionState, sid, { ...facts, marks }, ctx.record);
 };
 
 // ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────

@@ -13,10 +13,7 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { projectCostPerHour } from "../src/renderer/render-payload";
-import { type RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
@@ -41,6 +38,7 @@ import {
   fakeUsage,
   requestPayload,
   settled,
+  type FixtureOwners,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
 
@@ -87,9 +85,7 @@ describe("projectCostPerHour (pure)", () => {
 
 // ─── payloadOf integration ────────────────────────────────────────────
 
-function depsWith(
-  overrides: Partial<RenderPayloadDeps> = {},
-): RenderPayloadDeps {
+function depsWith(overrides: Partial<FixtureOwners> = {}): FixtureOwners {
   return {
     ...absentOwners(),
     gitProvider: fakeGit(async () => ABSENT),
@@ -104,11 +100,8 @@ function depsWith(
     ),
     tmuxService: fakeTmux(async () => ABSENT),
     log: () => {},
-    history: () => EMPTY_HISTORY_DEPTH,
-    navigation: () => 0,
-    feeds: () => UNFOLLOWED_FEEDS,
     ...overrides,
-  } as unknown as RenderPayloadDeps;
+  };
 }
 
 function hookWithWindows() {

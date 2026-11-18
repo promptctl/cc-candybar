@@ -228,7 +228,7 @@ export function mainRenderer(
         return;
       }
       case "world-state":
-        parts.worldStates.take(event.worldState);
+        parts.worldStates.take(event.worldState, record);
         return;
       case "retire":
         // A context the session parked opens nothing once it is retired.
@@ -262,7 +262,7 @@ export function mainRenderer(
         // retire, or not heard since the daemon started) waits for the config
         // of the origin the host's book holds for it.
         if (waits(event.context?.durable.origin ?? null, event, record)) return;
-        clickTurn(parts, event, effects);
+        clickTurn(parts, event, effects, record);
         return;
       }
       case "viewers":
@@ -496,9 +496,9 @@ export function mainRendererOf(
     failed: actFailed,
   });
   // The world states the host hands the renderer, which its views read.
-  const worldStates = new WorldStates((document) => {
+  const worldStates = new WorldStates((document, record) => {
     updateGate.took(document.daemon.update.newer);
-    doctorRuns.took(document);
+    doctorRuns.took(document, record);
   });
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
@@ -605,7 +605,7 @@ export function mainRendererOf(
       return {
         layers: entry.configLayers,
         error: entry.lastError,
-        warning: entry.lastWarning,
+        warnings: entry.lastWarnings,
         unused: entry.state.unused,
         config: entry.state.config,
       };

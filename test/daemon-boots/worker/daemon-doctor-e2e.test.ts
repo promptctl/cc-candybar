@@ -39,36 +39,36 @@ import {
 } from "../../../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { SETTINGS_NS } from "../../../src/config/reserved-names";
-import { VERB_DOCTOR_PROBE, VERB_DOCTOR_RUN } from "../../../src/click/wire";
+import { VERB_DOCTOR_RUN } from "../../../src/click/wire";
 import {
   URL_FRAME_KIND,
   URL_FRAME_VERSION,
   encodeFrame,
 } from "../../../src/daemon/foundations/protocol";
-import { checkByName } from "../../../src/doctor/checks";
-import {
-  probeUrlHandler,
-  productionHandlerProbeEdge,
-} from "../../../src/doctor/handler-probe";
+import { checkByName, held } from "../../../src/doctor/checks";
 import { DEFAULT_TERMINAL_WIDTH } from "../../../src/render/strip";
 import { applyClaudeCodeReserve } from "../../../src/utils/terminal-width";
 import { loggedLines, logLines, renderLines } from "../../helpers/daemon-log";
 import { crateDigest } from "../../../src/source-digest";
-import { productionInstallEdge } from "../../../src/doctor/edge";
-import { installOf, rateLimitsOf } from "../../../src/doctor/cli";
-import {
-  parseDaemonClients,
-  parseRateLimitSightings,
-} from "../../../src/doctor/daemon-answer";
-import {
-  claudeConfigDir,
-  detectClaudeConfigDir,
-} from "../../../src/claude-settings";
+import { installFacts, productionInstallEdge } from "../../../src/doctor/edge";
+import { daemonSighted } from "../../../src/daemon/cache/doctor";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
+import type { StatsSnapshot } from "../../../src/daemon/foundations/stats-snapshot";
+import { fieldsOf } from "../../../src/utils/logfmt";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import { answerRepo } from "../../helpers/repo-approval";
 import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
+
+// What the daemon tells a doctor read of session `sid`, out of its stats.
+const sightedOf = (stats: StatsSnapshot, sid: string) =>
+  daemonSighted(
+    sessionIdOf(sid),
+    stats.clients.filter((c) => c.sessionId === sid),
+    stats.daemon,
+    stats.bundle,
+  );
 
 // A report row wraps at the client's width, through a path or a word, and a
 // strip cap closes each line it breaks at, so whitespace and caps are no part of
@@ -219,14 +219,12 @@ test("the doctor's config row says what named the session's file", async () => {
   }
 });
 
-// brandon-doctor-v62x.a1z: the daemon's half of `cc-candybar doctor`'s probe,
-// over the wire — a `doctor-probe` link as the URL handler forwards it (a
-// `url` frame, versioned by itself, no `v`) and as `url-handle` sends it (a
-// `click` request) are listed in the stats the CLI reads back with who
-// delivered them, and the doctor row of a session reads its own click's.
-// Every url frame writes a click event, the refused ones included
-// (candybar-daemon-health-ajx0.co4). [LAW:nothing-unseen]
-test("a probe is listed in stats with its delivery; a doctor click's delivery is its row", async () => {
+// A url frame as the URL handler forwards it (versioned by itself, no `v`)
+// that the daemon cannot read is refused on its click event, and the doctor
+// row of a session reads its own click's delivery. Every url frame writes a
+// click event, the refused ones included (candybar-daemon-health-ajx0.co4).
+// [LAW:nothing-unseen]
+test("a url frame the daemon cannot read is refused on its click event; a doctor click's delivery is its row", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
@@ -253,22 +251,6 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
       );
     };
 
-    const nonce = "123e4567-e89b-42d3-a456-426614174000";
-    await click(daemon, `cc-candybar://${VERB_DOCTOR_PROBE}/${nonce}`);
-    clicks += 1;
-    const forwardedNonce = "223e4567-e89b-42d3-a456-426614174000";
-    await forwarded({
-      urlV: URL_FRAME_VERSION,
-      url: `cc-candybar://${VERB_DOCTOR_PROBE}/${forwardedNonce}`,
-    });
-    expect((await statsOf(daemon.daemon)).handlerProbes).toMatchObject([
-      { nonce, delivery: { kind: "cli" } },
-      {
-        nonce: forwardedNonce,
-        delivery: { kind: "forwarder", urlV: URL_FRAME_VERSION },
-      },
-    ]);
-
     // A frame the daemon cannot read is refused on its click event, with the
     // frame's own facts, since the forwarder reads no answer.
     await forwarded({ urlV: 99, url: "cc-candybar://copy/x" });
@@ -277,22 +259,16 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
     const events = await loggedLines(
       env,
       clickEvents,
-      (picked) => picked.length >= 5,
-      "five click events",
+      (picked) => picked.length >= 3,
+      "three click events",
     );
-    expect(events[0]).toMatch(/ via=cli verb=doctor-probe .* outcome=ok/);
-    expect(events[1]).toMatch(
-      new RegExp(
-        ` via=forwarder urlV=${URL_FRAME_VERSION} verb=doctor-probe .* outcome=ok`,
-      ),
-    );
-    expect(events[2]).toMatch(
+    expect(events[0]).toMatch(
       / via=forwarder urlV=99 .* outcome=bad-request problems="the URL handler's frame version 99 is not one this daemon speaks \(1, 2\)"/,
     );
-    expect(events[3]).toMatch(
+    expect(events[1]).toMatch(
       / via=forwarder urlV=1 .* outcome=bad-request problems="expected a cc-candybar:\/\/ link, got: https:\/\/example.com\/"/,
     );
-    expect(events[4]).toMatch(
+    expect(events[2]).toMatch(
       / via=forwarder urlV=1 .* outcome=bad-request problems="the URL handler's frame carries no url string"/,
     );
 
@@ -329,49 +305,10 @@ test("a probe is listed in stats with its delivery; a doctor click's delivery is
   }
 });
 
-// The CLI's probe end to end over a real socket, less Launch Services: the
-// production edge, with the one leg this test cannot isolate — macOS handing
-// the link to the forwarder app, which would deliver it to the user's own
-// daemon — replaced by the frame that app writes.
-test("the CLI's probe reads its own link back from the daemon it was delivered to", async () => {
-  const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
-    "cc-candybar-doctor-e2e",
-  );
-  // The env it places names this socket, which is where the CLI's send looks.
-  const daemon = startDaemon(env);
-  try {
-    await daemon.listen(sockPath);
-    const facts = await probeUrlHandler({
-      ...productionHandlerProbeEdge(WORLD.launcher, WORLD),
-      platform: "darwin",
-      // The stand-in for the handler app below delivers to this daemon as
-      // the app does: one frame, then hang up, reading no answer.
-      sockets: { own: sockPath, handler: sockPath },
-      open: (url) => {
-        daemon
-          .connect()
-          .end(
-            encodeFrame({ kind: URL_FRAME_KIND, urlV: URL_FRAME_VERSION, url }),
-          );
-        return null;
-      },
-    });
-    expect(facts).toEqual({
-      kind: "arrived",
-      delivery: { kind: "forwarder", urlV: URL_FRAME_VERSION },
-    });
-    expect(
-      checkByName("urlHandler")!.probe({ urlHandler: facts } as never),
-    ).toEqual({ ok: true });
-  } finally {
-    await daemon.stop();
-    removeTmpDirs();
-  }
-});
-
 // brandon-doctor-v62x.tfb through a daemon: a render request records its
-// session's client, daemon-stats serves each session's latest, and the CLI's
-// reading of them is the install verdict. The daemon runs from a checkout laid
+// session's client, daemon-stats serves each session's latest, and what the
+// daemon tells a session's doctor read of them is that session's install
+// verdict. The daemon runs from a checkout laid
 // down here, so it names that checkout's dist, and a native client of it must
 // carry the crateDigest of that checkout's rust-client.
 test("the clients the daemon saw render are the install check's facts", async () => {
@@ -401,22 +338,25 @@ test("the clients the daemon saw render are the install check's facts", async ()
   } as const;
   const daemon = startDaemon(env, { bundle: bundleAt(repo) });
   try {
-    const verdict = async () => {
-      const asked = parseDaemonClients(await statsOf(daemon.daemon));
-      const install = installOf(
-        productionInstallEdge,
-        { kind: "recent" },
-        asked,
+    const verdict = async (sid: string) => {
+      const { clients } = sightedOf(await statsOf(daemon.daemon), sid);
+      if (clients.kind !== "held") throw new Error("the daemon holds clients");
+      const install = held(
+        installFacts(
+          productionInstallEdge,
+          clients.value.bundle,
+          clients.value.clients,
+        ),
       );
       return checkByName("install")!.probe({ install } as never);
     };
 
     await render(daemon, "install-e2e-1", projectDir, { client: native });
-    expect(await verdict()).toEqual({ ok: true });
+    expect(await verdict("install-e2e-1")).toEqual({ ok: true });
 
     // A second session drawn by a client too old to report itself.
     await render(daemon, "install-e2e-2", projectDir);
-    expect(await verdict()).toEqual({
+    expect(await verdict("install-e2e-2")).toEqual({
       ok: false,
       reason: `the bar is drawn by a statusline client too old to say what it is — run \`just install-rust\` and point the statusLine command at ${repo}/bin/cc-candybar-native`,
       more: [],
@@ -424,7 +364,7 @@ test("the clients the daemon saw render are the install check's facts", async ()
 
     // Its next render, by the current client, replaces it at once.
     await render(daemon, "install-e2e-2", projectDir, { client: native });
-    expect(await verdict()).toEqual({ ok: true });
+    expect(await verdict("install-e2e-2")).toEqual({ ok: true });
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -433,19 +373,14 @@ test("the clients the daemon saw render are the install check's facts", async ()
 });
 
 // brandon-doctor-v62x.onf through a daemon: a render request records
-// whether its payload carried the rate-limit windows, and with which Claude
-// Code directory its session runs; daemon-stats serves both, and the CLI's
-// reading keeps only its own directory's recent renders.
+// whether its payload carried the rate-limit windows, and what the daemon
+// tells a session's doctor read is its own renders'.
 test("the rate-limit windows each render carried are the segment-data row's facts", async () => {
   const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-doctor-e2e",
   );
   const projectDir = realpathSync(
     mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
-  );
-  const ownDir = claudeConfigDir(
-    detectClaudeConfigDir(process.env, projectDir),
-    HOST.home,
   );
   const answered = {
     total_input_tokens: 10,
@@ -460,12 +395,8 @@ test("the rate-limit windows each render carried are the segment-data row's fact
       cache_read_input_tokens: 0,
     },
   };
-  const renderWith = (
-    sid: string,
-    extra: Record<string, unknown>,
-    hints: ClientHints = {},
-  ) => {
-    const body = renderBody(sid, projectDir, hints);
+  const renderWith = (sid: string, extra: Record<string, unknown>) => {
+    const body = renderBody(sid, projectDir);
     return renderRequest(daemon, {
       ...body,
       hookData: { ...(body.hookData as object), ...extra },
@@ -473,35 +404,22 @@ test("the rate-limit windows each render carried are the segment-data row's fact
   };
   const daemon = startDaemon(env);
   try {
-    const seen = async () => {
-      return rateLimitsOf(
-        { kind: "recent" },
-        parseRateLimitSightings(await statsOf(daemon.daemon)),
-        ownDir,
-      );
-    };
+    const seen = async (sid: string) =>
+      sightedOf(await statsOf(daemon.daemon), sid).rateLimits;
 
     await renderWith("rl-1", {
       context_window: answered,
       rate_limits: { five_hour: { used_percentage: 3, resets_at: 1 } },
     });
     await renderWith("rl-2", { context_window: answered });
-    // A session of another Claude Code directory says nothing of this one.
-    await renderWith(
-      "rl-3",
-      { context_window: answered },
-      { claudeConfigDir: "/elsewhere/.claude" },
-    );
-    expect(await seen()).toEqual({ kind: "ok", value: ["carried", "missing"] });
+    expect(await seen("rl-1")).toEqual(held(["carried"]));
+    expect(await seen("rl-2")).toEqual(held(["missing"]));
 
     // The next render of a session replaces what it said.
     await renderWith("rl-2", {
       context_window: { ...answered, current_usage: null },
     });
-    expect(await seen()).toEqual({
-      kind: "ok",
-      value: ["carried", "unanswered"],
-    });
+    expect(await seen("rl-2")).toEqual(held(["unanswered"]));
   } finally {
     await daemon.stop();
     removeTmpDirs();
@@ -637,10 +555,13 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(menuIdle[0]).toBe("-");
     expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/120s$/));
     expect(motion).toContain("still");
+    // Each run's report is noted on the record of the turn that took its
+    // reading.
     const doctorLines = (lines: readonly string[]) =>
-      lines.filter(
-        (l) => l.includes("doctor:") && l.includes(`session=${SID}`),
-      );
+      lines.filter((l) => {
+        const fields = fieldsOf(l);
+        return fields.has("doctor") && fields.get("sid") === SID;
+      });
     expect(
       (
         await loggedLines(
@@ -649,7 +570,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
           (found) => found.length >= 4,
           "the doctor's four runs",
         )
-      ).map((l) => l.match(/ frames=(\S+) /)?.[1]),
+      ).map((l) => fieldsOf(l).get("frames")),
       // The third run's still bar sits under a menu counting down to its
       // close, which moves it; the fourth's menu is closed.
     ).toEqual(["1/0/0/0/0", "1/0/0/0/0", "1/0/0/0/0", "0/0/1/0/0"]);

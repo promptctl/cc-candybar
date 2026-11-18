@@ -99,7 +99,6 @@ function rig(
         payload,
         at(seconds),
         { ...opts, colorCompatibility: depth },
-        undefined,
         selectionFor(config, { effects }),
       ).frame,
     openMenus: () => sessionState.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN),

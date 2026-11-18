@@ -24,7 +24,13 @@ import { drawPayload } from "../test/helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
 import { TEST_SIGNER } from "../test/helpers/link-signer";
-import { DIVIDER, drawnChars, isRgb, seams, type Drawn } from "../test/helpers/seams";
+import {
+  DIVIDER,
+  drawnChars,
+  isRgb,
+  seams,
+  type Drawn,
+} from "../test/helpers/seams";
 import {
   ColorDepth,
   ColorRgba,
@@ -35,7 +41,7 @@ import {
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
-import { checkPayload } from "../src/check";
+import { checkPayload } from "../test/helpers/check-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { validateConfig } from "../test/helpers/parse-and-validate";
 import { unauthored } from "../src/config/dsl-loader";
@@ -58,7 +64,8 @@ import { systemTimekeeper } from "../src/time";
 const PALETTE_FLOOR = 0.02;
 
 /** ΔE in OKLab, through rich-js's own arithmetic. */
-const deltaE = (a: ColorRgba, b: ColorRgba): number => Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
+const deltaE = (a: ColorRgba, b: ColorRgba): number =>
+  Oklch.fromRgba(a).deltaE(Oklch.fromRgba(b));
 
 // A seam: the backgrounds either side and the glyph between them, read by the
 // suite's one seam reader (test/helpers/seams.ts): the ground of the column
@@ -75,7 +82,8 @@ interface Seam {
 }
 
 const rgba = (c: Drawn): ColorRgba => {
-  if (!isRgb(c)) throw new Error(`a truecolor bar drew a seam on ansi slot ${c.ansi}`);
+  if (!isRgb(c))
+    throw new Error(`a truecolor bar drew a seam on ansi slot ${c.ansi}`);
   return new ColorRgba(...c);
 };
 
@@ -83,16 +91,23 @@ function seamsIn(rendered: Frame): Seam[] {
   const chars = drawnChars(rendered);
   // A divider is a seam too, so that one drawn anywhere is found and fails.
   const dividers = chars.flatMap(({ ch, bg, before }) =>
-    ch === DIVIDER && before !== undefined && bg !== undefined ? [{ left: rgba(before), right: rgba(bg), glyph: ch }] : [],
+    ch === DIVIDER && before !== undefined && bg !== undefined
+      ? [{ left: rgba(before), right: rgba(bg), glyph: ch }]
+      : [],
   );
   const arrows = seams(chars).flatMap(({ glyph, left, right }) =>
-    right === undefined ? [] : [{ left: rgba(left), right: rgba(right), glyph }],
+    right === undefined
+      ? []
+      : [{ left: rgba(left), right: rgba(right), glyph }],
   );
   return [...arrows, ...dividers];
 }
 
 const THEMES = listThemePalettes();
-const CONFIG = validateConfig(unauthored(DEFAULT_DSL_CONFIG), "<bundled default>");
+const CONFIG = validateConfig(
+  unauthored(DEFAULT_DSL_CONFIG),
+  "<bundled default>",
+);
 
 // Each variation, position of the shade dial and bundled style is a runtime
 // pick (brandon-theme-picker-bgw.7g6, candybar-theme-colours-6fq5.e5n), so
@@ -108,12 +123,15 @@ interface Variant {
   readonly shade: ShadeName;
   readonly look: string;
 }
-const named = ({ variation, shade, look }: Variant): string => `${variation}/${shade}/${look}`;
+const named = ({ variation, shade, look }: Variant): string =>
+  `${variation}/${shade}/${look}`;
 const UNSTYLED: readonly Variant[] = VARIATION_NAMES.flatMap((variation) =>
   SHADE_NAMES.map((shade) => ({ variation, shade, look: "none" })),
 );
 const VARIANTS: readonly Variant[] = VARIATION_NAMES.flatMap((variation) =>
-  SHADE_NAMES.flatMap((shade) => STYLES.map((look) => ({ variation, shade, look }))),
+  SHADE_NAMES.flatMap((shade) =>
+    STYLES.map((look) => ({ variation, shade, look })),
+  ),
 );
 
 // Every rate-limit window and the context calm: the case where the threshold
@@ -130,11 +148,18 @@ const CALM = {
 // render, so the renders differ only in the pick.
 const STORE = new VariableStore(systemTimekeeper);
 const REGISTRY = new SourceRegistry(STORE, "", new SessionState());
-const COMPILED = registerDslConfig(CONFIG, REGISTRY, { signer: TEST_SIGNER, cwd: process.cwd() });
+const COMPILED = registerDslConfig(CONFIG, REGISTRY, {
+  signer: TEST_SIGNER,
+  cwd: process.cwd(),
+});
 const AT = instantOf(new Date());
 afterAll(() => REGISTRY.dispose());
 
-function render(theme: string, calm: boolean, { variation, shade, look }: Variant): Frame {
+function render(
+  theme: string,
+  calm: boolean,
+  { variation, shade, look }: Variant,
+): Frame {
   const e = resolveEffectiveGlobals(
     CONFIG,
     (key) =>
@@ -176,7 +201,6 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
       wrap: e.autoWrap,
       padding: e.padding,
     },
-    undefined,
     e,
   ).frame;
 }
@@ -198,31 +222,41 @@ const seamsOf = (theme: string, calm: boolean, variant: Variant): Seam[] =>
 
 // Every truecolor background a drawn bar holds, in order.
 function backgrounds(frame: Frame): ColorRgba[] {
-  return backgroundsOf(frame).flatMap((bg) => (bg?.startsWith("#") === true ? [truecolorOf(bg)] : []));
+  return backgroundsOf(frame).flatMap((bg) =>
+    bg?.startsWith("#") === true ? [truecolorOf(bg)] : [],
+  );
 }
 
 describe("done-when: every background the closed bar draws is a colour its theme names", () => {
   // The `none` style: the theme as it ships. A style transposes the whole
   // palette, shades and all, so under one the bar wears the transposed palette.
-  test.each(UNSTYLED.map((v) => [named(v), v] as const))("under %s, within ΔE .02 of its palette, hot and calm, on every theme", (_name, variant) => {
-    const wrong: string[] = [];
-    let measured = 0;
-    for (const theme of THEMES) {
-      const palette = [...getThemePalette(theme)!.vars.values()].map((c) => drawnColour(c, ColorDepth.TRUECOLOR));
-      // A colour the palette names exactly is ΔE 0 from it; only another is measured.
-      const exact = new Set(palette.map((c) => c.hex));
-      for (const calm of [false, true]) {
-        for (const bg of backgrounds(bar(theme, calm, variant))) {
-          measured++;
-          if (exact.has(bg.hex)) continue;
-          const nearest = Math.min(...palette.map((c) => deltaE(bg, c)));
-          if (nearest > PALETTE_FLOOR) wrong.push(`${theme}${calm ? " calm" : ""} ${bg.hex} ${nearest.toFixed(3)}`);
+  test.each(UNSTYLED.map((v) => [named(v), v] as const))(
+    "under %s, within ΔE .02 of its palette, hot and calm, on every theme",
+    (_name, variant) => {
+      const wrong: string[] = [];
+      let measured = 0;
+      for (const theme of THEMES) {
+        const palette = [...getThemePalette(theme)!.vars.values()].map((c) =>
+          drawnColour(c, ColorDepth.TRUECOLOR),
+        );
+        // A colour the palette names exactly is ΔE 0 from it; only another is measured.
+        const exact = new Set(palette.map((c) => c.hex));
+        for (const calm of [false, true]) {
+          for (const bg of backgrounds(bar(theme, calm, variant))) {
+            measured++;
+            if (exact.has(bg.hex)) continue;
+            const nearest = Math.min(...palette.map((c) => deltaE(bg, c)));
+            if (nearest > PALETTE_FLOOR)
+              wrong.push(
+                `${theme}${calm ? " calm" : ""} ${bg.hex} ${nearest.toFixed(3)}`,
+              );
+          }
         }
       }
-    }
-    expect(measured).toBeGreaterThan(THEMES.length * 2 * 5);
-    expect([...new Set(wrong)]).toEqual([]);
-  });
+      expect(measured).toBeGreaterThan(THEMES.length * 2 * 5);
+      expect([...new Set(wrong)]).toEqual([]);
+    },
+  );
 });
 
 describe("no two neighbouring cells blur", () => {
@@ -237,16 +271,22 @@ describe("no two neighbouring cells blur", () => {
   // that ground: the seam shows, but the two cells still read as one. So every
   // seam must be an arrow between backgrounds the eye tells apart, and any
   // divider fails.
-  test.each(VARIANTS.map((v) => [named(v), v] as const))("under %s: every theme is measured, every seam is an arrow, and every arrow joins backgrounds the eye tells apart", (_name, variant) => {
-    const seams = seamsUnder(variant);
-    expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
-    const at = (s: (typeof seams)[number]) =>
-      `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`;
-    const arrows = seams
-      .filter((s) => s.glyph !== DIVIDER && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E)
-      .map(at);
-    expect([...new Set(arrows)]).toEqual([]);
-    const dividers = seams.filter((s) => s.glyph === DIVIDER).map(at);
-    expect([...new Set(dividers)]).toEqual([]);
-  });
+  test.each(VARIANTS.map((v) => [named(v), v] as const))(
+    "under %s: every theme is measured, every seam is an arrow, and every arrow joins backgrounds the eye tells apart",
+    (_name, variant) => {
+      const seams = seamsUnder(variant);
+      expect(seams.length).toBeGreaterThan(THEMES.length * 2 * 5);
+      const at = (s: (typeof seams)[number]) =>
+        `${s.theme}${s.calm ? " calm" : ""} ${s.left.hex}|${s.right.hex}`;
+      const arrows = seams
+        .filter(
+          (s) =>
+            s.glyph !== DIVIDER && deltaE(s.left, s.right) < SEAM_MIN_DELTA_E,
+        )
+        .map(at);
+      expect([...new Set(arrows)]).toEqual([]);
+      const dividers = seams.filter((s) => s.glyph === DIVIDER).map(at);
+      expect([...new Set(dividers)]).toEqual([]);
+    },
+  );
 });

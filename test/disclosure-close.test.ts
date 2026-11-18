@@ -20,7 +20,7 @@
 //   - a body whose every child is hidden lays no row and so no ✕ — not on
 //     the bar, and not in the trigger's cells.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, type Row } from "../src/render/frame";
 import { linksOf, type DrawnLink } from "../src/click/read";
@@ -146,7 +146,6 @@ function build(src: string, withDefault: boolean) {
   // The cells of the latest draw, read through `segments` after a render.
   let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
   const render = (): readonly Row[] => {
-    const errors: string[] = [];
     const drawn = drawPayload(
       config,
       compiled,
@@ -155,11 +154,9 @@ function build(src: string, withDefault: boolean) {
       PAYLOAD,
       instantOf(new Date()),
       OPTS,
-      {
-        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-      },
     );
     latest = drawn.segments;
+    const errors = segmentErrorsOf(drawn.warnings);
     if (errors.length > 0) throw new Error(errors.join("\n"));
     return drawn.frame.rows;
   };

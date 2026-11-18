@@ -3,9 +3,21 @@
 // about the frame moved is counted, or cleared, by the next frame; each
 // renderer keeps its own.
 
-import { RenderWarningRecords } from "../../src/renderer/render-warnings";
+import {
+  RenderWarningRecords,
+  type RecordScope,
+} from "../../src/renderer/render-warnings";
+import type { Drawing } from "../../src/config/lanes";
 import type { RenderWarning } from "../../src/dsl/render";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../../src/daemon/foundations/session-id";
+import {
+  KEPT_FAULTS,
+  readFaults,
+  type Fault,
+} from "../../src/renderer-interface/noted-faults";
 
 const S_2 = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -26,10 +38,14 @@ const S = { config: {} };
 // record, read before the record is replaced.
 const drawn = (
   records: RenderWarningRecords,
-  ...[session, by, scope, warnings]: Parameters<RenderWarningRecords["keep"]>
+  session: SessionId,
+  by: Drawing["by"],
+  scope: RecordScope,
+  warnings: readonly RenderWarning[],
+  faults: readonly Fault[] = [],
 ): boolean => {
   const moved = records.moves(session, by, warnings);
-  records.keep(session, by, scope, warnings);
+  records.keep(session, by, scope, warnings, faults);
   return moved;
 };
 
@@ -60,9 +76,9 @@ describe("a renderer's warning record", () => {
   test("the same warnings again, as new objects, leave the record unmoved", () => {
     const records = new RenderWarningRecords();
     drawn(records, S_2, "request", S, [warning("a"), warning("b")]);
-    expect(drawn(records, S_2, "request", S, [warning("a"), warning("b")])).toBe(
-      false,
-    );
+    expect(
+      drawn(records, S_2, "request", S, [warning("a"), warning("b")]),
+    ).toBe(false);
     expect(drawn(records, S_2, "request", S, [warning("a")])).toBe(true);
     expect(records.of(S_2, "request")).toEqual([warning("a")]);
   });
@@ -101,5 +117,27 @@ describe("a renderer's warning record", () => {
       warning("both"),
       warning("statusline"),
     ]);
+  });
+
+  test("a renderer's faults note is whole on its first record, kept while they hold, and whole again once its record is evicted", () => {
+    const records = new RenderWarningRecords(2);
+    const fault = (message: string): Fault => ({
+      level: "warning",
+      kind: "segment",
+      subject: "said",
+      message,
+    });
+    const kept = (session: SessionId, by: Drawing["by"], faults: Fault[]) =>
+      records.keep(session, by, S, [], faults);
+    expect(readFaults(kept(A_2, "request", [fault("a")]))).toEqual([
+      fault("a"),
+    ]);
+    // Another renderer's record is its own: its first note is whole.
+    expect(kept(A_2, "feed", [])).toBe("[]");
+    expect(kept(A_2, "request", [fault("a")])).toBe(KEPT_FAULTS);
+    // The least recently drawn record (the feed's) goes, and its next note
+    // is whole.
+    kept(B, "request", [fault("b")]);
+    expect(kept(A_2, "feed", [])).toBe("[]");
   });
 });

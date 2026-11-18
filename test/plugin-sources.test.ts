@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
@@ -55,6 +56,7 @@ import type { Update } from "../src/facts/world-state";
 import { restamp } from "../src/facts/fact";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { drawDsl } from "../src/dsl/render";
+import { segmentErrorsOf } from "./helpers/draw-payload";
 import { VariableStore } from "../src/var-system/store";
 import { resolvePath, SourceRegistry } from "../src/var-system/sources";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -331,8 +333,7 @@ function draw(view: SessionView<SessionSource>): {
   readonly errors: readonly string[];
 } {
   const effective = view.source.effective();
-  const errors: string[] = [];
-  const { frame } = drawDsl(
+  const { frame, warnings } = drawDsl(
     view.state.config,
     view.state.compiled,
     view.store,
@@ -340,9 +341,9 @@ function draw(view: SessionView<SessionSource>): {
     { drawing: { by: "request" }, feeds: UNFOLLOWED_FEEDS, today: undefined },
     instantOf(new Date()),
     renderOptionsOf(effective, 200),
-    { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
     effective,
   );
+  const errors = segmentErrorsOf(warnings);
   return { text: textOf(frame), errors };
 }
 
@@ -909,6 +910,7 @@ function statusline(r: Rig, configFile: string) {
       systemTimekeeper,
       new AbortController().signal,
       () => {},
+      checkoutLocation,
       checked.req,
       TEST_ENVIRONMENT,
       ++id as RequestId,

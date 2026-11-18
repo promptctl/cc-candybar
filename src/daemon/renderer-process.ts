@@ -104,7 +104,7 @@ export function processPort(
   });
 }
 
-function inProcessRenderer(
+export function inProcessRenderer(
   name: RendererName,
   build: (reaches: AdapterToHost) => Renderer,
   reaches: AdapterToHost,

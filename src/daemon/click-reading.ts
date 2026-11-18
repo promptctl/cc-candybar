@@ -1,20 +1,18 @@
 // [LAW:single-enforcer] The host's one reading of a click, whoever delivered
 // it: the URL handler app's frame, or `cc-candybar url-handle`. Any web page
 // can open a `cc-candybar://` link, so no link reaches a renderer until its
-// signature is opened here. Two clicks carry none, because nothing signs them,
-// and the host reads each as its own arm before any key is asked for: a range
-// of the tmux status line, which tmux expands, and a probe the doctor opens,
-// whose arrival is all it does.
+// signature is opened here. A range of the tmux status line carries none,
+// because tmux expands it and nothing signs it, so the host reads it as its own
+// arm before any key is asked for.
 
 import type { LinkSigner } from "../click/link-signer.js";
 import {
-  DOCTOR_PROBE_PREFIX,
   isBarLink,
   parseHandlerUrl,
   STATUS_LINE_CLICK_PREFIX,
   URL_SCHEME,
 } from "../click/wire.js";
-import { parseProbeNonce, type Delivery } from "../doctor/sightings.js";
+import type { Delivery } from "../doctor/sightings.js";
 
 interface Refused {
   readonly kind: "refused";
@@ -38,11 +36,6 @@ export type ReadClick =
   | (Extract<OpenedLink, { kind: "link" }> & { readonly delivery: Delivery })
   // A status-line range: `[socket, pane, range]` as segments.
   | { readonly kind: "status-line"; readonly value: string }
-  | {
-      readonly kind: "probe";
-      readonly nonce: string;
-      readonly delivery: Delivery;
-    }
   | Refused;
 
 export function parseClick(
@@ -50,12 +43,6 @@ export function parseClick(
   delivery: Delivery,
   links: LinkSigner,
 ): ReadClick {
-  if (url.startsWith(DOCTOR_PROBE_PREFIX)) {
-    const nonce = parseProbeNonce(url.slice(DOCTOR_PROBE_PREFIX.length));
-    return nonce === null
-      ? { kind: "refused", problem: "the probe link carries no probe nonce" }
-      : { kind: "probe", nonce, delivery };
-  }
   if (url.startsWith(STATUS_LINE_CLICK_PREFIX)) {
     // [LAW:no-silent-failure] Only the tmux binding runs a range, and it runs
     // the CLI; one through the URL handler came from a page.

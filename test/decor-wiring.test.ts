@@ -107,7 +107,6 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
       { session_id: "s1", ...payload },
       instantOf(new Date()),
       OPTS,
-      undefined,
       selectionFor(config, {
         ...(look === undefined ? {} : { style: { kind: "decided" as const, name: "test", value: look } }),
         ...(variation === undefined ? {} : { variation }),

@@ -266,13 +266,10 @@ export interface NodeRenderCtx {
   // Each rendered segment's cells, by placement id, as the draw returns them
   // (`DrawnFrame.segments`).
   readonly segments: Map<string, readonly RichText[]>;
-  // [LAW:no-silent-failure] Optional observer for the per-segment render catch
-  // below: a caught evaluation error renders as a visible ⚠ error cell (partial
-  // rendering — the daemon's channel), AND is reported here so a headless caller
-  // (`cc-candybar check`, a blind authoring agent's eyes) can turn it into a
-  // text verdict instead of blessing a bar it cannot see. Trusted non-throwing
-  // (the registry-dispose contract) — see RenderObservers.onSegmentError.
-  readonly onSegmentError?: (placementId: string, message: string) => void;
+  // [LAW:no-silent-failure] A placement that could not draw: its ⚠ cell shows
+  // one line of the message, and this reports the whole of it as the draw's
+  // `segment` warning, which the bar's diagnostics list and `check` fails on.
+  readonly brokenPlacement: (placementId: string, message: string) => void;
   // [LAW:locality-or-seam] The segment seam, injected as a capability so this
   // module never imports the menu or color features — it only names a
   // placement and gets back its parts as the view keeps them
@@ -1117,12 +1114,12 @@ function brokenSegment(
   ctx: NodeRenderCtx,
   message: string,
 ): RenderedLines {
-  ctx.onSegmentError?.(node.id, message);
+  ctx.brokenPlacement(node.id, message);
   // The error cell is a row of the band the segment sits on, like any
   // inline line — a broken segment inside an open body still gets its ✕.
   // A cell is one line: the message's own line breaks (a parse error's
   // excerpt, a source's stderr) fold to spaces here — the full text went
-  // to onSegmentError above — and the cell is one item, which its row divides
+  // to brokenPlacement above — and the cell is one item, which its row divides
   // like every other cell.
   const oneLine = message.replace(/\s*\n\s*/g, " ");
   return [
@@ -1170,7 +1167,7 @@ function errorAffix(
     // [LAW:single-enforcer] `readPending` is the one thing that tells them apart.
     const pending = readPending(err);
     if (pending !== undefined) ctx.waited(pending.variable);
-    else ctx.onSegmentError?.(node.id, (err as Error).message ?? String(err));
+    else ctx.brokenPlacement(node.id, (err as Error).message ?? String(err));
     return [];
   }
 }

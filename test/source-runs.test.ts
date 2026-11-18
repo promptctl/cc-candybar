@@ -12,9 +12,8 @@ import {
   type SourceParse,
 } from "../src/var-system";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { CheckRuns } from "../src/check-runs";
+import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
 import { runOf, type SourceIdentity } from "../src/facts/source-identity";
-import { instantOf } from "../src/utils/instant";
 import { shellEnvOf } from "../src/config/shell-env";
 import type { Environment } from "../src/daemon/foundations/session-env";
 
@@ -28,7 +27,7 @@ interface Held {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   // What holds the registry's runs; its close is a session letting go.
-  readonly held: CheckRuns;
+  readonly held: CollectedRuns;
 }
 
 // A rig: one owner over a scripted launcher on a held clock, and as many
@@ -43,7 +42,7 @@ function rig() {
   const registry = (environment: Environment = {}): Held => {
     const store = new VariableStore(clock);
     const r = new SourceRegistry(store, "");
-    const held = new CheckRuns(runs, r, instantOf(new Date(0)), environment);
+    const held = collectedRuns(runs, r, environment);
     r.bindInputs({
       session: () => {
         throw new Error("no session is read");
@@ -99,7 +98,12 @@ describe("runOf", () => {
     const others: SourceIdentity[] = [
       {
         ...base,
-        read: { kind: "shell", command: "uptime", cwd: "/other", env: ["PATH"] },
+        read: {
+          kind: "shell",
+          command: "uptime",
+          cwd: "/other",
+          env: ["PATH"],
+        },
       },
       {
         ...base,
@@ -272,7 +276,10 @@ describe("SourceRuns — a shell runs in the variables it names, from its sessio
       declare(h);
       await settledAll(r.clock, h);
       const [run] = r.started();
-      expect(run!.options.env).toMatchObject({ API_HOST: "prod", PATH: "/bin" });
+      expect(run!.options.env).toMatchObject({
+        API_HOST: "prod",
+        PATH: "/bin",
+      });
       expect(run!.options.env).not.toHaveProperty("TOKEN");
     } finally {
       r.close();

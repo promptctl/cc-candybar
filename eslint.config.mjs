@@ -178,23 +178,23 @@ const OWNED_IMPORTS = {
   },
   fileStorage: {
     group: ["**/file-storage", "**/file-storage.js"],
-    owners: ["src/daemon/production-adapters.ts"],
+    owners: ["src/daemon/production-adapters.ts", "src/doctor/cli.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
   linkSignerFromKeyFile: {
     group: ["**/link-key", "**/link-key.js"],
-    owners: [
-      "src/daemon/production-adapters.ts",
-      "src/check.ts",
-      "src/doctor/cli.ts",
-    ],
+    owners: ["src/daemon/production-adapters.ts", "src/check.ts"],
     message: "A daemon is handed its link signer (production-adapters.ts).",
   },
   // Where files are, read from the environment by a process's entry point and
   // handed down. The daemon process reads it once, in server.ts.
   daemonPaths: {
     group: PATHS,
-    owners: ["src/daemon/server.ts", "src/renderer-process.ts"],
+    owners: [
+      "src/daemon/server.ts",
+      "src/renderer-process.ts",
+      "src/doctor/cli.ts",
+    ],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   stateDir: {
@@ -210,7 +210,6 @@ const OWNED_IMPORTS = {
         owners: [
           "src/frames-cli.ts",
           "src/bar-pane/index.ts",
-          "src/doctor/handler-probe.ts",
           "src/daemon/client-transport.ts",
           "src/daemon/acquire.ts",
         ],
@@ -289,11 +288,10 @@ const HOST_NAMED_IMPORTS = [
 // contract, and the host reaches it only through its start. Shared code loads
 // in both processes and imports neither side. The longest prefix wins, and an
 // unlisted file is rest, so a new module is the host's until it is placed.
-// The roots build the renderer side in process, so they may import any zone:
-// an exception owned by candybar-host-renderer-x96a.9a7, which draws them
-// through `Renderer.answer`. The list may shrink, and no file joins it. The
-// entry is a root because it dispatches to them; no other host module may
-// import a root, so none reaches the renderer through one.
+// The roots may import any zone: the entry, because it dispatches to every
+// command, and the renderer process's root, which builds the renderer. No
+// other host module may import a root, so none reaches the renderer through
+// one.
 const ZONE_ROWS = {
   "src/renderer/": "renderer",
   "src/renderer/main.ts": "start",
@@ -344,9 +342,6 @@ const ZONE_ROWS = {
   "src/index.ts": "root",
   // The renderer process's composition root, the counterpart of the daemon's.
   "src/renderer-process.ts": "root",
-  "src/check.ts": "root",
-  "src/check-runs.ts": "root",
-  "src/doctor/cli.ts": "root",
 };
 const ZONE_IMPORTS = {
   renderer: ["renderer", "start", "shared"],

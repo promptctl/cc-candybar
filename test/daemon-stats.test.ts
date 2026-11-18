@@ -15,7 +15,6 @@ const NO_DURATIONS: Durations = {
   meanMs: 0,
   stddevMs: 0,
 };
-import { EMPTY_STORES } from "./helpers/doctor-facts";
 import {
   formatStats,
   missingFields,
@@ -160,7 +159,6 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
   tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
   watchersActive: 2,
   dirWatchesActive: 5,
-  handlerProbes: [{ nonce: "n", delivery: { kind: "forwarder", urlV: 1 } }],
   clients: [
     {
       client: null,
@@ -180,9 +178,7 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
     pid: 1234,
     memory: { kind: "unmeasured" },
     limit: 1,
-    postMortems: { kind: "ok", value: [] },
   },
-  doctorStores: EMPTY_STORES,
 };
 
 describe("RuntimeStats.snapshot", () => {
@@ -200,9 +196,6 @@ describe("RuntimeStats.snapshot", () => {
     stats.dirWatchesClosed = 4;
 
     const snap = stats.snapshot(EXTRAS);
-    expect(snap.handlerProbes).toEqual([
-      { nonce: "n", delivery: { kind: "forwarder", urlV: 1 } },
-    ]);
     expect(snap.clients).toEqual([
       {
         client: null,
@@ -218,7 +211,6 @@ describe("RuntimeStats.snapshot", () => {
       },
     ]);
     expect(snap.bundle).toBe("/opt/cc/dist/index.mjs");
-    expect(snap.doctorStores).toEqual(EMPTY_STORES);
 
     expect(snap.requests).toEqual({
       total: 10,
@@ -353,15 +345,6 @@ describe("shapeSkew", () => {
     expect(skew).toContain(`this client (${pkg.version} [`);
   });
 
-  test("a reader is refused only for the fields it reads", () => {
-    const snap = RuntimeStats.referenceSnapshot();
-    const { clients: _c, ...older } = snap;
-    expect(shapeSkew(older as typeof snap, ["handlerProbes"])).toBeNull();
-    expect(shapeSkew(older as typeof snap, ["bundle", "clients"])).toContain(
-      "reports no clients;",
-    );
-  });
-
   test("missingFields names a nested field by its path, and an atom in place of an object", () => {
     const snap = RuntimeStats.referenceSnapshot();
     const { observers: _o, ...sessionState } = snap.sessionState;
@@ -371,25 +354,26 @@ describe("shapeSkew", () => {
     expect(missingFields(snap, { ...snap, watchers: 3 })).toEqual(["watchers"]);
     // A list the reader maps, carried as anything else, is as absent to it.
     expect(
-      missingFields(snap, { ...snap, clients: null, handlerProbes: {} }),
-    ).toEqual(["handlerProbes", "clients"]);
+      missingFields(snap, { ...snap, clients: null }),
+    ).toEqual(["clients"]);
     expect(missingFields(snap, snap)).toEqual([]);
-    // A union's arms differ: the reference's `ok` arm is no spec of a
-    // `failed` one, so a tagged union is judged present, not below its tag.
-    const unlisted = {
+    // A union's arms differ: the reference's `unmeasured` arm is no spec of
+    // a `measured` one, so a tagged union is judged present, not below its
+    // tag.
+    const measured = {
       ...snap,
       daemon: {
         ...snap.daemon,
-        postMortems: { kind: "failed", reason: "EACCES" },
+        memory: { kind: "measured", rss: 1 },
       },
     };
-    expect(missingFields(snap, unlisted)).toEqual([]);
+    expect(missingFields(snap, measured)).toEqual([]);
     expect(
       missingFields(snap, {
         ...snap,
-        daemon: { ...snap.daemon, postMortems: 3 },
+        daemon: { ...snap.daemon, memory: 3 },
       }),
-    ).toEqual(["daemon.postMortems"]);
+    ).toEqual(["daemon.memory"]);
   });
 });
 
@@ -486,16 +470,13 @@ describe("formatStats", () => {
         durations: {},
       },
       nextRestartReason: null,
-      handlerProbes: [],
       clients: [],
       bundle: "/",
       daemon: {
         pid: 1234,
         memory: { kind: "unmeasured" },
         limit: 1,
-        postMortems: { kind: "ok", value: [] },
       },
-      doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("pid           1234");
     // A name a client chose cannot forge a row: each is a JSON string.
@@ -644,16 +625,13 @@ describe("formatStats", () => {
         durations: {},
       },
       nextRestartReason: null,
-      handlerProbes: [],
       clients: [],
       bundle: "/",
       daemon: {
         pid: 1234,
         memory: { kind: "unmeasured" },
         limit: 1,
-        postMortems: { kind: "ok", value: [] },
       },
-      doctorStores: EMPTY_STORES,
     });
     expect(out).toContain("hit rate      n/a");
   });

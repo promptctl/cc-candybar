@@ -145,7 +145,6 @@ function rig(
       },
       instantOf(new Date()),
       opts(cols, padding, style, depth),
-      undefined,
       effective,
     );
     latest = drawn.segments;

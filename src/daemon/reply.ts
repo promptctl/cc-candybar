@@ -10,6 +10,7 @@ import {
   NOTHING_TO_SETTLE,
   type StatuslineAnswer,
 } from "./statusline-answer.js";
+import { checkoutLocation } from "../utils/git-root.js";
 import { checkRenderRequest } from "./render-checkpoint.js";
 import type { EffectOutcome } from "../renderer-interface/interface.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -30,7 +31,6 @@ import { CLICK_PROGRAM_TIMEOUT_MS } from "./foundations/click-launch";
 import {
   clickSessionOf,
   isBarLink,
-  VERB_DOCTOR_PROBE,
   VERB_TMUX_STATUS_CLICK,
 } from "../click/wire";
 import { unprovenLink, type LinkSigner } from "../click/link-signer.js";
@@ -242,11 +242,9 @@ export async function replyTo(
     tmuxStatusLines,
     watcherRegistry,
     limits,
-    handlerProbes,
     renderSightings,
     bundle,
     sourceDigest,
-    stores,
   } = parts;
   if (req.kind === "shutdown") {
     return {
@@ -306,12 +304,10 @@ export async function replyTo(
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
         nextRestartReason: limits.describeNextRestart(),
-        handlerProbes: handlerProbes.list(),
         clients: renderSightings.list(instantAt(clock)),
         bundle,
         sourceDigest,
         daemon: limits.serving(),
-        doctorStores: stores.documents(),
       }),
     });
   }
@@ -418,6 +414,7 @@ export async function replyTo(
       clock,
       parts.closing,
       parts.log,
+      checkoutLocation,
       checked.req,
       // [LAW:one-source-of-truth] The book's, the newest request's, so a
       // request that arrived behind a newer one runs nothing in its older
@@ -668,8 +665,8 @@ function urlClick(
 }
 
 // [LAW:types-are-the-program] A click as the host read it, run: a refusal is
-// its outcome, a probe's arrival is recorded by the host itself, a range runs
-// the link the status line drew there, and a link runs through its verb.
+// its outcome, a range runs the link the status line drew there, and a link
+// runs through its verb.
 async function ranClick(
   parts: DaemonParts,
   read: ReadClick,
@@ -679,15 +676,6 @@ async function ranClick(
   switch (read.kind) {
     case "refused":
       return badRequest(read.problem);
-    case "probe":
-      // [LAW:nothing-unseen] The nonce matches the arrival to the doctor run
-      // that opened it.
-      noteFacts(facts, { verb: VERB_DOCTOR_PROBE, nonce: read.nonce });
-      parts.handlerProbes.arrive({
-        nonce: read.nonce,
-        delivery: read.delivery,
-      });
-      return { kind: "ok" };
     case "status-line":
       noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
       return statusLineClick(parts, read.value, facts, click);
@@ -706,8 +694,10 @@ async function ranClick(
 
 // [LAW:dataflow-not-control-flow] The field a click records the verb it runs
 // under, by how it arrived: a status-line click has already recorded its own
-// verb, so the one its link runs is `linkVerb`.
-const VERB_FACT: Readonly<Record<ClickArrival["via"], string>> = {
+// verb, so the one its link runs is `linkVerb`. A command's click is its
+// host's own event, never a request.
+type HeardArrival = Exclude<ClickArrival, { via: "command" }>;
+const VERB_FACT: Readonly<Record<HeardArrival["via"], string>> = {
   link: "verb",
   "tmux-status": "linkVerb",
 };
@@ -724,7 +714,7 @@ async function handleClick(
   parts: DaemonParts,
   verb: string,
   value: string,
-  arrival: ClickArrival,
+  arrival: HeardArrival,
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<RequestOutcome> {
@@ -830,7 +820,7 @@ async function statusLineClick(
     // a link a config wrote with a malformed escape is refused, as any
     // click's malformed wire encoding is.
     // [LAW:no-silent-failure] It is opened as a verb, never read as a click,
-    // so a drawn link naming a status-line click or a probe reaches the
+    // so a drawn link naming a status-line click reaches the
     // renderer as a verb it does not know, and is refused there with it named:
     // a range never runs another range.
     const opened = openClick(link.url, parts.linkSigner);

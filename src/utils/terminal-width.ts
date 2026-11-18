@@ -32,3 +32,9 @@ const RESERVED_CHARS = 2;
 export function applyClaudeCodeReserve(rawCols: number): number {
   return Math.max(1, rawCols - RESERVED_CHARS);
 }
+
+// The raw columns a client reports for a bar drawn `usableCols` wide: the
+// reserve's inverse, for a client that names the width it wants drawn.
+export function columnsReserving(usableCols: number): number {
+  return usableCols + RESERVED_CHARS;
+}

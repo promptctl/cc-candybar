@@ -30,6 +30,7 @@ import {
 import { SessionState } from "../src/renderer/session-state";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { drawDsl } from "../src/dsl/render";
+import { segmentErrorsOf } from "./helpers/draw-payload";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { checkConfig, type CheckOutcome } from "../src/check";
@@ -295,8 +296,7 @@ function draw(view: SessionView<SessionSource>): {
   readonly errors: readonly string[];
 } {
   const effective = view.source.effective();
-  const errors: string[] = [];
-  const { frame } = drawDsl(
+  const { frame, warnings } = drawDsl(
     view.state.config,
     view.state.compiled,
     view.store,
@@ -304,9 +304,9 @@ function draw(view: SessionView<SessionSource>): {
     { drawing: { by: "request" }, feeds: UNFOLLOWED_FEEDS, today: undefined },
     instantOf(new Date()),
     renderOptionsOf(effective, 200),
-    { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
     effective,
   );
+  const errors = segmentErrorsOf(warnings);
   return { text: textOf(frame), links: linkUrls(frame), errors };
 }
 

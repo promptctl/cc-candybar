@@ -9,6 +9,7 @@ import {
   RSS_LIMIT_ENV,
   memoryLimitMb,
   heapCapMb,
+  listPostMortems,
   postMortemsOf,
   realLimitsDeps,
 } from "../src/daemon/limits";
@@ -768,9 +769,8 @@ describe("post-mortems", () => {
     ).toEqual(["memoryReport", "heapSnapshot"]);
   });
 
-  test("serving() reports one memory reading against the budget, and the breaches the directory keeps", async () => {
+  test("serving() reports one memory reading against the budget", async () => {
     const rec = newRec();
-    rec.existingFiles.push("/snap/memory-2026-03-01T00-00-00-000Z-7.txt");
     const limits = makeLimits(makeDeps(rec, { limitBytes: 200 * 1024 * 1024 }));
     // Before any reading: none, never a number passed off as one.
     expect(limits.serving().memory).toEqual({ kind: "unmeasured" });
@@ -791,33 +791,36 @@ describe("post-mortems", () => {
         ],
       },
       limit: 200 * 1024 * 1024,
-      postMortems: {
+    });
+  });
+
+  test("the breaches a state directory keeps are listed by breach; one that cannot be listed is a failure naming why, never no breaches", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pm-"));
+    try {
+      expect(listPostMortems(path.join(root, "absent"))).toEqual({
+        kind: "ok",
+        value: [],
+      });
+      const dir = path.join(root, "state");
+      fs.mkdirSync(dir);
+      const report = path.join(dir, "memory-2026-03-01T00-00-00-000Z-7.txt");
+      fs.writeFileSync(report, "");
+      expect(listPostMortems(dir)).toEqual({
         kind: "ok",
         value: [
           {
             identity: "2026-03-01T00-00-00-000Z-7",
-            artifacts: {
-              memoryReport: "/snap/memory-2026-03-01T00-00-00-000Z-7.txt",
-            },
+            artifacts: { memoryReport: report },
           },
         ],
-      },
-    });
-  });
-
-  test("a directory that cannot be listed is a failure naming why, never no breaches", async () => {
-    const rec = newRec();
-    const limits = makeLimits(
-      makeDeps(rec, {
-        listArtifacts: () => {
-          throw new Error("EACCES: permission denied, scandir '/snap'");
-        },
-      }),
-    );
-    expect(limits.serving().postMortems).toEqual({
-      kind: "failed",
-      reason: "EACCES: permission denied, scandir '/snap'",
-    });
+      });
+      fs.writeFileSync(path.join(root, "file"), "");
+      const unlisted = listPostMortems(path.join(root, "file"));
+      expect(unlisted.kind).toBe("failed");
+      expect(unlisted.kind === "failed" && unlisted.reason).toMatch(/ENOTDIR/);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("the real lister: a directory not yet made holds none; one that is a file is said so", async () => {

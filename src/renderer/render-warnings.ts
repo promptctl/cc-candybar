@@ -24,6 +24,11 @@
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { Drawing } from "../config/lanes.js";
 import type { RenderWarning } from "../dsl/render.js";
+import {
+  faultsNote,
+  spelledFaults,
+  type Fault,
+} from "../renderer-interface/noted-faults.js";
 
 // The same bound session state and effect memory keep, so an idle session's
 // record goes when they would.
@@ -37,6 +42,9 @@ export interface RecordScope {
 interface WarningRecord {
   readonly generation: number;
   readonly warnings: readonly RenderWarning[];
+  // Every fault the frame met, its walk's warnings among them, spelled as its
+  // turn record noted them: what the renderer's next record is compared with.
+  readonly faults: string;
 }
 
 // Every renderer, in the order the session's list takes them.
@@ -104,23 +112,31 @@ export class RenderWarningRecords {
   }
 
   // [LAW:single-enforcer] The one writer: the turn that drew a frame records
-  // what it warned.
+  // what it warned and the faults it met, and answers the note its record
+  // carries of them. The note is made only with the record it is compared
+  // with, so a frame that kept nothing noted nothing a later `kept` could be
+  // read against. A record evicted, or none yet, makes the note whole.
   keep(
     sessionId: SessionId,
     by: Drawing["by"],
     scope: RecordScope,
     warnings: readonly RenderWarning[],
-  ): void {
+    faults: readonly Fault[],
+  ): string {
     const key = keyOf(sessionId, by);
+    const spelled = spelledFaults(faults);
+    const last = this.records.get(key)?.faults;
     this.records.delete(key);
     this.records.set(key, {
       generation: generationOf(scope.config),
       warnings,
+      faults: spelled,
     });
     for (const oldest of this.records.keys()) {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
     }
+    return faultsNote(spelled, last);
   }
 }
 

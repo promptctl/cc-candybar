@@ -56,7 +56,7 @@ export function createPayloadProviders(opts: {
   readonly sourceRuns: SourceRuns;
   // The caller's one reader of the doctor's facts, closed with the caller.
   readonly doctor: Pick<DoctorSource, "declare">;
-}): RenderPayloadDeps & { readonly closes: readonly TeardownStep[] } {
+}) {
   const { launcher, clock, logger, ledger } = opts;
   // [LAW:one-source-of-truth] The owners the transcript lanes refresh are the
   // ones the payload reads.
@@ -99,6 +99,9 @@ export function createPayloadProviders(opts: {
       ledger,
     }),
   };
+  // [LAW:types-are-the-program] The owners whole, for the daemon's stats and
+  // close, and a session's reads of them by the narrower type a fixture world
+  // shares.
   return {
     ...lanes,
     ...owners,
@@ -119,5 +122,8 @@ export function createPayloadProviders(opts: {
       ["hostService close", () => owners.hostService.close()],
       ["managedStorage close", () => owners.managedStorage.close()],
     ],
-  };
+  } satisfies RenderPayloadDeps & { readonly closes: readonly TeardownStep[] };
 }
+
+// The owners the daemon builds, each its whole class.
+export type PayloadProviders = ReturnType<typeof createPayloadProviders>;

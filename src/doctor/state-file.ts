@@ -42,10 +42,9 @@ const textOf = (value: unknown): string =>
 // the parsed document; its failure reason is told after the file's name
 // ("<file> is not a list of terminals"). Only cc-candybar writes these files,
 // so text that does not read is that failure, never the empty value.
-// [LAW:one-source-of-truth] The directory is always given. `cc-candybar
-// doctor` reads the stores in the daemon's answer
-// (src/doctor/daemon-answer.ts), never at a path of its own guessing. The
-// answers for repositories are read by every config load — the daemon's,
+// [LAW:one-source-of-truth] The directory is always given: the host's, which
+// the daemon and `cc-candybar doctor` both name by the profile's paths, never
+// a path of their own guessing. The answers for repositories are read by every config load — the daemon's,
 // `check`'s, the doctor's — in its own state directory, as it
 // reads the link key there.
 export function stateFile<T>(

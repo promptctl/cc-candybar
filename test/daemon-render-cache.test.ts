@@ -219,7 +219,9 @@ describe("RenderCache", () => {
         expect(entry.lastError).toContain(cfg);
         expect(entry.lastError).toContain("could not be read");
         expect(entry.lastError).toContain("EACCES");
-        expect(entry.lastWarning ?? "").not.toContain("Config file not found");
+        expect(entry.lastWarnings.join("\n")).not.toContain(
+          "Config file not found",
+        );
       } finally {
         chmodSync(locked, 0o755);
         for (const c of cleanups) c();
@@ -241,7 +243,9 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(originAt(dir, dir, cfg));
       expect(entry.lastError).toBeNull();
       expect(entry.configLayers).toEqual([]);
-      expect(entry.lastWarning).toContain(`Config file not found: ${cfg}`);
+      expect(entry.lastWarnings.join("\n")).toContain(
+        `Config file not found: ${cfg}`,
+      );
       // The state beneath the warning is the bundled default's.
       expect(entry.state.config.root).toEqual(
         cache.getOrCreate(originAt(dir, dir, undefined)).state.config.root,
@@ -256,7 +260,7 @@ describe("RenderCache", () => {
           }),
         ),
       );
-      expect(entry.lastWarning).toBeNull();
+      expect(entry.lastWarnings).toEqual([]);
       expect(entry.configLayers).toEqual([cfg]);
       expect(layoutSegments(rootNode(entry.state.config.root))).toContain("t");
     } finally {
@@ -856,7 +860,7 @@ describe("RenderCache", () => {
     }
   });
 
-  test("lastWarning is set when .json5 and .json coexist at same location", async () => {
+  test("lastWarnings is set when .json5 and .json coexist at same location", async () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, originAt, cleanups, reloads } = makeCache();
     try {
@@ -879,16 +883,16 @@ describe("RenderCache", () => {
       // Load succeeded — .json5 won; warning is the advisory.
       expect(entry.lastError).toBeNull();
       expect(entry.configLayers).toEqual([cfgJson5]);
-      expect(entry.lastWarning).not.toBeNull();
-      expect(entry.lastWarning).toContain(cfgJson5);
-      expect(entry.lastWarning).toContain(cfgJson);
+      expect(entry.lastWarnings).not.toEqual([]);
+      expect(entry.lastWarnings.join("\n")).toContain(cfgJson5);
+      expect(entry.lastWarnings.join("\n")).toContain(cfgJson);
 
       // Removing the duplicate clears the warning on next reload. The
       // watcher fires on file deletion in the same dir.
       await reloads.afterRemoving(entry, cfgJson, () =>
         writeFileSync(cfgJson, validCfg),
       );
-      expect(entry.lastWarning).toBeNull();
+      expect(entry.lastWarnings).toEqual([]);
       // The .json5 is still the resolved file; render state intact.
       expect(entry.configLayers).toEqual([cfgJson5]);
       expect(entry.lastError).toBeNull();
@@ -915,7 +919,7 @@ describe("RenderCache", () => {
 }
 `;
 
-  test("lastWarning names a duplicate object key and its line; the load still succeeds with the last value", async () => {
+  test("lastWarnings names a duplicate object key and its line; the load still succeeds with the last value", async () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, originAt, cleanups, reloads } = makeCache();
     try {
@@ -925,15 +929,15 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       expect(entry.lastError).toBeNull();
       expect(entry.state.config.globals.padding).toBe(2);
-      expect(entry.lastWarning).toBe(
+      expect(entry.lastWarnings).toEqual([
         `${cfg}:8: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
-      );
+      ]);
 
       // Removing the duplicate clears the advisory on the next reload.
       await reloads.after(entry, () => {
         writeFileSync(cfg, DUPLICATE_KEY_CONFIG.replace("padding: 1,\n", ""));
       });
-      expect(entry.lastWarning).toBeNull();
+      expect(entry.lastWarnings).toEqual([]);
       expect(entry.lastError).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
@@ -977,7 +981,9 @@ describe("RenderCache", () => {
       );
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       expect(entry.lastError).toContain("nope");
-      expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);
+      expect(entry.lastWarnings.join("\n")).toContain(
+        `${cfg}:8: duplicate key "padding"`,
+      );
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -997,7 +1003,9 @@ describe("RenderCache", () => {
       );
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       expect(entry.lastError).toContain('Unknown top-level key "bogus"');
-      expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);
+      expect(entry.lastWarnings.join("\n")).toContain(
+        `${cfg}:8: duplicate key "padding"`,
+      );
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -1035,7 +1043,7 @@ describe("RenderCache", () => {
       );
       const entry = cache.getOrCreate(originAt(dir, dir, undefined));
       expect(entry.lastError).toContain('key "k" is an integer spec');
-      expect(entry.lastWarning).toContain('Variable "s.v"');
+      expect(entry.lastWarnings.join("\n")).toContain('Variable "s.v"');
     } finally {
       for (const fn of cleanups) fn();
       cleanup();

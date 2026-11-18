@@ -543,7 +543,6 @@ describe("a rule inside a preset's globals", () => {
           { session_id: SID, ctx: { pct } },
           instantOf(new Date()),
           OPTS,
-          undefined,
           effective,
         );
         const cells = drawn.segments.get("plain")!;
@@ -586,7 +585,6 @@ describe("a rule inside a preset's globals", () => {
         { session_id: SID, ctx: { pct: 90 } },
         instantOf(new Date()),
         OPTS,
-        {},
         selectionFor(config, {}, picked({ preset: "ruled" })),
       ).frame;
       expect(textOf(frame)).toContain("T=dracula");
@@ -606,7 +604,6 @@ describe("a rule inside a preset's globals", () => {
           { session_id: SID, ctx: { pct: 0 } },
           instantOf(new Date()),
           OPTS,
-          undefined,
           selectionFor(config, {}, picked({ preset: "ruled" })),
         ).warnings;
         expect(said).toEqual([
@@ -628,7 +625,6 @@ describe("a rule inside a preset's globals", () => {
         { session_id: SID, ctx: { pct: 0 } },
         instantOf(new Date()),
         OPTS,
-        undefined,
         selectionFor(config, {}, picked({ preset: "ruled" })),
       ).warnings;
       expect(said).toEqual([
