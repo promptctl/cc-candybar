@@ -31,7 +31,11 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
-import { childStep, type CompiledContainerNode, type CompiledNode } from "../src/dsl/node-registry";
+import {
+  childStep,
+  type CompiledContainerNode,
+  type CompiledNode,
+} from "../src/dsl/node-registry";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DECOR } from "./helpers/decor";
@@ -57,7 +61,12 @@ import {
 const BAR = DEFAULT_DECOR;
 import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
-import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
+import {
+  recordRender,
+  testVerbContext,
+  effectsOf,
+  CLICK_VERBS,
+} from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
@@ -90,7 +99,11 @@ const PAYLOAD = {
   themeDefault: { differs: true, theme: THEME },
   cwd: "/tmp/proj",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
-  workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },
+  workspace: {
+    current_dir: "/tmp/proj",
+    project_dir: "/tmp/proj",
+    added_dirs: [],
+  },
   theme: { effective: THEME },
   style: { effective: "none" },
   endcaps: { effective: "powerline" },
@@ -116,14 +129,13 @@ function regionOf(root: CompiledNode, palette: Palette, name: string): Region {
         ? undefined
         : walk(
             node.opens.body,
-            bandRoot(decorationFor(palette, region, ColorDepth.TRUECOLOR).disclosure),
+            bandRoot(
+              decorationFor(palette, region, ColorDepth.TRUECOLOR).disclosure,
+            ),
           );
     }
     for (const [index, child] of node.children.entries()) {
-      const found = walk(
-        child,
-        descend(region, childStep(node, index)),
-      );
+      const found = walk(child, descend(region, childStep(node, index)));
       if (found !== undefined) return found;
     }
     return undefined;
@@ -160,19 +172,34 @@ function bodyCellsOf(root: CompiledNode, trigger: string): string[] {
 // the cell's place alone — never through decorationFor, the function the walk
 // colours it with. Placed by the default van der Corput distribution, which
 // reads no count; a row of a vertical body is a first cell.
-function itemAt(palette: Palette, band: Disclosure, cellIndex: number): ColorRgba {
+function itemAt(
+  palette: Palette,
+  band: Disclosure,
+  cellIndex: number,
+): ColorRgba {
   return bandItemFor(
     palette,
     band,
-    { index: cellIndex, count: cellIndex + 1, distribution: DISTRIBUTIONS["van-der-corput"] },
+    {
+      index: cellIndex,
+      count: cellIndex + 1,
+      distribution: DISTRIBUTIONS["van-der-corput"],
+    },
     ColorDepth.TRUECOLOR,
   );
 }
 
 // The index of segment `name` among the cells of the row `trigger` opens.
-function cellIndexIn(root: CompiledNode, trigger: string, name: string): number {
-  const index = bodyOf(root, trigger).children.findIndex((c) => c.kind === "segment" && c.name === name);
-  if (index === -1) throw new Error(`"${name}" is not a cell of "${trigger}"'s body`);
+function cellIndexIn(
+  root: CompiledNode,
+  trigger: string,
+  name: string,
+): number {
+  const index = bodyOf(root, trigger).children.findIndex(
+    (c) => c.kind === "segment" && c.name === name,
+  );
+  if (index === -1)
+    throw new Error(`"${name}" is not a cell of "${trigger}"'s body`);
   return index;
 }
 
@@ -190,7 +217,10 @@ function build(src: string, withDefault = false) {
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: "/tmp/proj",
+  });
   const palette = getThemePalette(THEME);
   // The cells of the latest draw, which cellsOf reads after a render.
   let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
@@ -200,9 +230,18 @@ function build(src: string, withDefault = false) {
   // the cells, which would read here as "did not render"; say what it was.
   const render = (): Frame => {
     const errors: string[] = [];
-    const drawn = drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
-      onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-    });
+    const drawn = drawPayload(
+      config,
+      compiled,
+      store,
+      registry,
+      PAYLOAD,
+      instantOf(new Date()),
+      OPTS,
+      {
+        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
+      },
+    );
     latest = drawn.segments;
     if (errors.length > 0) throw new Error(errors.join("\n"));
     return drawn.frame;
@@ -226,7 +265,7 @@ function build(src: string, withDefault = false) {
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
+      const handler = CLICK_VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
       await handler(e.value, ctx);
     }
@@ -242,7 +281,11 @@ function build(src: string, withDefault = false) {
     );
   // Click the affordance in `name` that writes `value` to `key` — a
   // disclosure toggle's set-state — loud when it is not on the bar.
-  const clickWriting = async (name: string, key: string, value: string): Promise<void> => {
+  const clickWriting = async (
+    name: string,
+    key: string,
+    value: string,
+  ): Promise<void> => {
     const url = urlsIn(name).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -268,7 +311,8 @@ function build(src: string, withDefault = false) {
     await click(url);
   };
   const expectedTint = (name: string): string =>
-    decorationFor(palette, regionOf(root, palette, name), ColorDepth.TRUECOLOR).tint.hex;
+    decorationFor(palette, regionOf(root, palette, name), ColorDepth.TRUECOLOR)
+      .tint.hex;
   // What the bar trigger `name` opens: its lineage's hue at depth 0, over the
   // ground of the row it stands in.
   const opensOf = (name: string): Disclosure => {
@@ -294,8 +338,7 @@ function build(src: string, withDefault = false) {
 // The bundled default with a two-cell first row: 🍫 leads it.
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
-describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker chain, depth by depth", () => {
-});
+describe("candybar-render-ai7.9 — the bundled 🍫 → 🎨 look → picker chain, depth by depth", () => {});
 
 function regionAddress(rt: ReturnType<typeof build>, name: string) {
   const region = regionOf(rt.root, rt.palette, name);
@@ -325,22 +368,33 @@ describe("candybar-render-ai7.9 — an authored `when` container is not a disclo
       `{ v: [ { h: ['m'] } ] }`,
       `{ v: [ { h: ['m'], when: '{{ .show }}' } ], when: '{{ .show }}' }`,
     ],
-  ])("%s adds no depth: the open menu renders byte-identical to the ungated tree", async (_label, plain, gated) => {
-    const outputs = await Promise.all([plain, gated].map(async (row2) => {
-      const rt = build(MENU_SRC(row2));
-      rt.render();
-      await rt.openMenuIn("m");
-      const out = rt.render();
-      // The menu's band is depth 0 — the trigger sits on the bar, whatever
-      // `when`s enclose it — and the trigger wears that band's state.
-      const band = bandFor(rt.palette, rt.opensOf("m"), ColorDepth.TRUECOLOR);
-      expect(rt.bgOf("m")).toBe(band.state.hex);
-      expect(resolvedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex).toBe(band.plane.hex);
-      rt.dispose();
-      return out;
-    }));
-    expect(outputs[1]!.rows).toEqual(outputs[0]!.rows);
-  });
+  ])(
+    "%s adds no depth: the open menu renders byte-identical to the ungated tree",
+    async (_label, plain, gated) => {
+      const outputs = await Promise.all(
+        [plain, gated].map(async (row2) => {
+          const rt = build(MENU_SRC(row2));
+          rt.render();
+          await rt.openMenuIn("m");
+          const out = rt.render();
+          // The menu's band is depth 0 — the trigger sits on the bar, whatever
+          // `when`s enclose it — and the trigger wears that band's state.
+          const band = bandFor(
+            rt.palette,
+            rt.opensOf("m"),
+            ColorDepth.TRUECOLOR,
+          );
+          expect(rt.bgOf("m")).toBe(band.state.hex);
+          expect(
+            resolvedStyle(rt.cellsOf("m")[1]!.style).bgcolor?.value?.hex,
+          ).toBe(band.plane.hex);
+          rt.dispose();
+          return out;
+        }),
+      );
+      expect(outputs[1]!.rows).toEqual(outputs[0]!.rows);
+    },
+  );
 });
 
 const GROUP_SRC = `{
@@ -386,10 +440,18 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.render();
     const authored = palette.get("error")!;
     expect(rt.bgOf("e")).toBe(authored.hex);
-    expect(rt.fgOf("e")).toBe(textOn(palette, authored, ColorDepth.TRUECOLOR).hex);
+    expect(rt.fgOf("e")).toBe(
+      textOn(palette, authored, ColorDepth.TRUECOLOR).hex,
+    );
     // The case is only a case because the two poles differ here.
-    const tint = decorationFor(palette, regionOf(rt.root, palette, "e"), ColorDepth.TRUECOLOR).tint;
-    expect(textOn(palette, authored, ColorDepth.TRUECOLOR).hex).not.toBe(textOn(palette, tint, ColorDepth.TRUECOLOR).hex);
+    const tint = decorationFor(
+      palette,
+      regionOf(rt.root, palette, "e"),
+      ColorDepth.TRUECOLOR,
+    ).tint;
+    expect(textOn(palette, authored, ColorDepth.TRUECOLOR).hex).not.toBe(
+      textOn(palette, tint, ColorDepth.TRUECOLOR).hex,
+    );
     rt.dispose();
   });
 
@@ -407,9 +469,7 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     const band1 = bandFor(palette, nested, ColorDepth.TRUECOLOR);
     expect(rt.bgOf("groups.inner")).toBe(band1.state.hex);
     expect(rt.bgOf("d")).toBe(rt.expectedTint("d"));
-    expect(rt.bgOf("d")).toBe(
-      itemAt(palette, nested, 0).hex,
-    );
+    expect(rt.bgOf("d")).toBe(itemAt(palette, nested, 0).hex);
     rt.dispose();
   });
 });

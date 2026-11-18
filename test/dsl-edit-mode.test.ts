@@ -43,8 +43,12 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext,
-  verbContextWith, effectsOf } from "./helpers/click";
+import {
+  testVerbContext,
+  verbContextWith,
+  effectsOf,
+  CLICK_VERBS,
+} from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/renderer/verbs";
@@ -60,7 +64,11 @@ import {
   EDIT_LIVE_KEY,
   arrangedSegment,
 } from "../src/config/edit-chrome";
-import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-glyphs";
+import {
+  ADD_GLYPH,
+  CONFIGURE_GLYPH,
+  REMOVE_GLYPH,
+} from "../src/config/edit-glyphs";
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -70,7 +78,7 @@ import { menuMember, menuStateKey } from "../src/config/menu-keys";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { WRITES_IN_PLACE } from "./helpers/history-step";
+import { NO_LAYERS } from "./helpers/history-step";
 
 const S1 = sessionIdOf("s1");
 
@@ -160,7 +168,10 @@ function buildEditRuntime(src: string, sessionId = S1) {
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: process.cwd(),
+  });
   const basePalette = getThemePalette("textual-dark"!);
   // The daemon publishes the session's history depth into every render's
   // payload (`history.sinceEdit` is what edit mode's save cell counts).
@@ -179,17 +190,20 @@ function buildEditRuntime(src: string, sessionId = S1) {
       instantOf(new Date()),
       opts(width),
     ).frame;
-  const ctx: VerbContext = verbContextWith(testVerbContext(sessionState, history, undefined, durable.host), {
-    // The config this bar rendered with, which gates every click and which an
-    // insertion mints its id against — the daemon's own lookup.
-    configFor: () => config
-});
+  const ctx: VerbContext = verbContextWith(
+    testVerbContext(sessionState, history, undefined, durable.host),
+    {
+      // The config this bar rendered with, which gates every click and which an
+      // insertion mints its id against — the daemon's own lookup.
+      configFor: () => config,
+    },
+  );
   const click = async (url: string): Promise<void> => {
     const { verb, value } = linkClick(url);
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
+      const handler = CLICK_VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
       await handler(e.value, ctx);
     }
@@ -324,7 +338,9 @@ describe("edit mode is in every config", () => {
       kind: "state",
       key: EDIT_MODE_KEY,
       default: "closed",
-      within: [{ variable: "candybar.menu", key: "candybar.menu", member: "open" }],
+      within: [
+        { variable: "candybar.menu", key: "candybar.menu", member: "open" },
+      ],
     });
   });
 
@@ -473,13 +489,14 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     const row = textOf(render(60))
       .split("\n")
       .find((line) => line.includes(`d`) && line.includes(REMOVE_GLYPH))!;
-    expect(row).toMatch(
-      new RegExp(`${REMOVE_GLYPH}d {4,}${CONFIGURE_GLYPH}`),
-    );
+    expect(row).toMatch(new RegExp(`${REMOVE_GLYPH}d {4,}${CONFIGURE_GLYPH}`));
   });
 
   test("a segment that fails to render keeps its `-` beside its ⚠", async () => {
-    const src = BASE.replace("template: 'g',", `template: '{{ fail "boom" }}',`);
+    const src = BASE.replace(
+      "template: 'g',",
+      `template: '{{ fail "boom" }}',`,
+    );
     const { render, click } = buildEditRuntime(src);
     const open = (key: string, member: string) =>
       ownUrls(render()).find((u) =>
@@ -504,7 +521,10 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   segments: {
     picky: { template: '{{ menu "pick" "m" }}' },`,
     )
-      .replace("{ h: ['directory', 'git'] }", "{ h: ['directory', 'picky', 'git'] }")
+      .replace(
+        "{ h: ['directory', 'git'] }",
+        "{ h: ['directory', 'picky', 'git'] }",
+      )
       .replace(
         "variables: {",
         "variables: {\n    pick: { kind: 'state', key: 'pick', default: 'a' },",
@@ -516,9 +536,13 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
       )!;
     await click(open(EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
     await click(open(EDIT_LIVE_KEY, "open"));
-    await click(open(menuStateKey("picky", "pick", undefined), menuMember("pick")));
+    await click(
+      open(menuStateKey("picky", "pick", undefined), menuMember("pick")),
+    );
     const { fg, bg } = colorsAt(render(), `${REMOVE_GLYPH}m`);
-    expect(contrastRatio(truecolorOf(fg), truecolorOf(bg))).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
+    expect(
+      contrastRatio(truecolorOf(fg), truecolorOf(bg)),
+    ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
   });
 
   // An insertion point is drawn on no fill: its `✚` is green text on the
@@ -783,7 +807,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // mode wires ONE static undo/redo pair rather than synthesizing one per
     // position, so BASE deliberately declares neither; drive the verb
     // directly, exactly as dsl-undo-redo.test.ts does.
-    const undo = VERBS.get("undo")!;
+    const undo = CLICK_VERBS.get("undo")!;
     await undo(encodeURIComponent("s1"), ctx);
     expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
     await undo(encodeURIComponent("s1"), ctx);
@@ -819,7 +843,10 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+    const compiled = registerDslConfig(config, registry, {
+      signer: TEST_SIGNER,
+      cwd: process.cwd(),
+    });
     const basePalette = getThemePalette("textual-dark"!);
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     const renderWith = (padding: number): Frame =>
@@ -862,10 +889,15 @@ describe("edit mode's save and cancel", () => {
         (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === EDIT_MODE_ARRANGE,
       ),
     );
-  const removeGit = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
-    await rt.click(ownUrls(rt.render()).find((u) => u.includes("remove%253Agit"))!);
-  const cancel = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
-    await rt.click(find(rt, (e) => e.verb === "rewind"));
+  const removeGit = async (
+    rt: ReturnType<typeof buildEditRuntime>,
+  ): Promise<void> =>
+    await rt.click(
+      ownUrls(rt.render()).find((u) => u.includes("remove%253Agit"))!,
+    );
+  const cancel = async (
+    rt: ReturnType<typeof buildEditRuntime>,
+  ): Promise<void> => await rt.click(find(rt, (e) => e.verb === "rewind"));
   const done = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
     await rt.click(
       ownUrls(rt.render()).find((u) => {
@@ -905,9 +937,7 @@ describe("edit mode's save and cancel", () => {
     expect(durable.text()).not.toBe(original);
     await cancel(rt);
     expect(durable.text()).toBe(original);
-    expect(rt.sessionState.get(S1, EDIT_MODE_KEY)).not.toBe(
-      EDIT_MODE_ARRANGE,
-    );
+    expect(rt.sessionState.get(S1, EDIT_MODE_KEY)).not.toBe(EDIT_MODE_ARRANGE);
     expect(rt.history.depth(S1)).toEqual({
       undo: 0,
       redo: 0,
@@ -938,7 +968,7 @@ describe("edit mode's save and cancel", () => {
     const rt = buildEditRuntime(BASE);
     const original = durable.text();
     // A step from before edit mode opened.
-    const earlier = rt.history.begin(WRITES_IN_PLACE);
+    const earlier = rt.history.begin(NO_LAYERS);
     earlier.sessionState.set(S1, "theme", "nord");
     earlier.commit();
     await open(rt);
@@ -950,7 +980,7 @@ describe("edit mode's save and cancel", () => {
       sinceEdit: 0,
     });
     expect(rt.sessionState.get(S1, "theme")).toBe("nord");
-    await VERBS.get("undo")!("s1", rt.ctx);
+    await CLICK_VERBS.get("undo")!("s1", rt.ctx);
     expect(rt.sessionState.get(S1, "theme")).toBeNull();
     expect(durable.text()).toBe(original);
     expect(rt.history.depth(S1)).toEqual({
@@ -962,11 +992,13 @@ describe("edit mode's save and cancel", () => {
 
   test("rewind says what it put back, and a session with no savepoint is refused loudly", async () => {
     const rt = buildEditRuntime(BASE);
-    expect(() => VERBS.get("rewind")!("s1", rt.ctx)).toThrow(/no savepoint/);
+    expect(() => CLICK_VERBS.get("rewind")!("s1", rt.ctx)).toThrow(
+      /no savepoint/,
+    );
     await open(rt);
     await removeGit(rt);
     const logs: string[] = [];
-    await VERBS.get("rewind")!("s1", {
+    await CLICK_VERBS.get("rewind")!("s1", {
       ...rt.ctx,
       log: (_level, message) => logs.push(message),
     });

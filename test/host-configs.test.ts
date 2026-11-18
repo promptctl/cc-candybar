@@ -6,6 +6,7 @@
 // its slot came is abandoned, with nothing handed in.
 
 import fs from "node:fs";
+import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import os from "node:os";
 import path from "node:path";
 import type { RenderOrigin } from "../src/config-hint";
@@ -60,6 +61,7 @@ const output = (
   configs: readonly RenderOrigin[],
 ): RendererOutput => ({
   kind: "answered",
+  stored: [],
   effects,
   subscriptions: { sources: {}, lanes: {}, configs, wake: null },
   record: [],
@@ -92,7 +94,7 @@ function hostOver(
     repoDir: () => null,
   };
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     CLOCK,
     hostHeld(
       eventRenderer(async ({ event }: EventInput) => {
@@ -109,6 +111,7 @@ function hostOver(
       subscribed: () => {},
       frames: () => {},
       holding: () => () => {},
+      stored: () => {},
       writableSettings: () => [],
     },
     { ...NO_ACTS, stateDir: path.join(dir, "state"), configs },
@@ -222,6 +225,7 @@ describe("a turn settles as the config turns it named", () => {
           return {
             ...output([], [ORIGIN]),
             kind: "threw",
+            stored: [],
             failure: {
               kind: "threw",
               message: "the reload broke",
@@ -244,6 +248,7 @@ describe("a turn settles as the config turns it named", () => {
         ? {
             ...output([], [ORIGIN]),
             kind: "threw",
+            stored: [],
             failure: {
               kind: "threw",
               message: "the waiting click broke",

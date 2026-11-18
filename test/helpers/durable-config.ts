@@ -2,7 +2,7 @@
 // (candybar-config-dqe). A test that drives persist/reset/undo/redo clicks
 // through the real verb handlers needs exactly what a real session has: a
 // config file the session "rendered from", the render origin that names it
-// in SessionState, and the daemon's settings history beside it. This fixture
+// in SessionState, and the settings history the host keeps. This fixture
 // stands those three up under one temp root and tears them down together,
 // so no suite re-spells the origin key or the history path.
 //
@@ -35,10 +35,13 @@ import {
   type SessionHistory,
   type Step,
 } from "../../src/renderer-interface/history-storage";
-import { fileHistoryStorage } from "../../src/daemon/history-file";
 import { settingsHistoryPath } from "../../src/daemon/paths";
-import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
-import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
+import { digestOf } from "../../src/utils/plain";
+import { fileHistoryStorage } from "../../src/daemon/history-file";
+import { HeldStores } from "../../src/daemon/held-stores";
+import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
+import { emptyStores } from "./doctor-facts";
+import { recordRender } from "./click";
 
 export interface DurableConfig {
   /** The machine the fixture's files are under: its XDG pair names them. */
@@ -55,12 +58,16 @@ export interface DurableConfig {
   text(): string | null;
   /** The file parsed as JSON5 (throws when absent). */
   parsed(): Record<string, unknown>;
-  /** Session `sessionId`'s history as the file holds it — empty until its first step. */
+  /** Session `sessionId`'s history as the last `historyFor` holds it — empty until its first step. */
   history(sessionId?: SessionId): SessionHistory;
-  /** A settings history over `sessionState`, stored in this fixture's state dir. */
+  /**
+   * A settings history over `sessionState`, which `history` then reads, built
+   * from the history file as a restarted renderer is: the one made before it
+   * first hands its writes to the file, as its turns would have.
+   */
   historyFor(sessionState: SessionStateRW): SettingsHistory;
-  /** The one-change step a single write to `file` (default `configPath`) records. */
-  fileStep(before: string | null, after: string, file?: string): Step;
+  /** The one-change step a single write to `configPath`, the user layer, records. */
+  fileStep(before: string | null, after: string): Step;
   /**
    * What the render handler records so a click resolves this file — or, with
    * `configFile`, the explicit path the session's render was composed from.
@@ -91,6 +98,17 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     }
   };
   const readText = (): string | null => readOrNull(configPath);
+  let made: SettingsHistory | null = null;
+  // The host's stores over this fixture's history file, as a daemon loads them.
+  const profile = (): HeldStores => {
+    const stores = new HeldStores({
+      session: ephemeralSessionFile(),
+      history: fileHistoryStorage(settingsHistoryPath(host), () => {}),
+      doctor: emptyStores(),
+    });
+    stores.load();
+    return stores;
+  };
   return {
     host,
     projectDir: root,
@@ -100,34 +118,29 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
-    // The history file itself is created by the first step, so before one an
-    // absent file and an absent entry both read as the empty stack.
     history: (sessionId = sessionIdOf("s1")) =>
-      (
-        JSON.parse(readOrNull(settingsHistoryPath(host)) ?? "{}") as Record<
-          string,
-          SessionHistory
-        >
-      )[sessionId] ?? { past: [], future: [] },
-    fileStep: (before, after, file = configPath) => [
-      { kind: "file", file, before, after },
+      made?.history(sessionId) ?? { past: [], future: [] },
+    fileStep: (before, after) => [
+      {
+        kind: "layer",
+        role: "user",
+        digest: digestOf(configPath),
+        before,
+        after,
+      },
     ],
-    historyFor: (sessionState) =>
-      new SettingsHistory(
+    historyFor: (sessionState) => {
+      if (made !== null) profile().take(made.drain());
+      return (made = new SettingsHistory(
         sessionState,
         () => {},
-        fileHistoryStorage(settingsHistoryPath(host), () => {}),
-      ),
+        profile().current().history,
+      ));
+    },
     seedOrigin: (sessionState, sessionId, configFile) =>
-      sessionState.set(
-        sessionId,
-        SESSION_RENDER_ORIGIN_KEY,
-        encodeRenderOrigin({
-          projectDir: root,
-          cwd: root,
-          target: requestedConfigTarget(configFile, undefined),
-        }),
-      ),
+      recordRender(sessionState, sessionId, root, {
+        target: requestedConfigTarget(configFile, undefined),
+      }),
     dispose: () => {
       rmSync(root, { recursive: true, force: true });
     },

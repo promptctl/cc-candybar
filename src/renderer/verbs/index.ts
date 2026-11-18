@@ -44,10 +44,6 @@ import type {
   RangeParams,
 } from "../../daemon/foundations/validator-registry";
 import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../../daemon/foundations/session-keys";
-import {
   applyLayoutOp as applyLayoutOpToFile,
   deletePreset as deletePresetFromFile,
   deleteValues,
@@ -143,10 +139,10 @@ import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   CheckedRenderRequest,
   DeclaredSources,
+  SessionContext,
 } from "../../renderer-interface/request-context";
 import { sessionEnv } from "../../daemon/foundations/session-env";
 import { runDeclaration, type SlashAction } from "../../config/action";
-import { parseClientHints } from "../../daemon/foundations/protocol";
 import {
   GLYPH_MARKS,
   checkByName,
@@ -154,10 +150,10 @@ import {
   type DoctorFacts,
   type GlyphMark,
 } from "../../doctor/checks";
-import type { ConfigTarget, RenderOrigin } from "../../config-hint";
+import type { RenderOrigin } from "../../config-hint";
 import { withMark } from "../../doctor/mark-book";
 import type { ClickArrival } from "../../doctor/sightings";
-import type { ConfigLoad, DoctorStores } from "../../doctor/ports";
+import type { ConfigLoad, DoctorDocuments } from "../../doctor/ports";
 import { tmuxPaneOf } from "../../claude-input/typing";
 import { readSources, readThrough, settingChange } from "../../doctor/gather";
 import type { DoctorRuns } from "../doctor";
@@ -172,6 +168,7 @@ import {
   type SessionId,
 } from "../../daemon/foundations/session-id";
 import type { IdleSpan } from "../menu-idle";
+import { throwAll } from "../../utils/run-each";
 
 // What the daemon hands everything that writes a session's state: a click's
 // verb, and the idle close of its menus (`closeIdleMenus`).
@@ -198,7 +195,7 @@ export interface DaemonContext {
   readonly doctorRuns: DoctorRuns;
   readonly doctorLoad: (origin: RenderOrigin) => ConfigLoad;
   // The doctor's stores, which this daemon files (src/doctor/ports.ts).
-  readonly doctorStores: DoctorStores;
+  readonly doctorStores: DoctorDocuments;
   // [LAW:one-source-of-truth] The one undo history over every settings change
   // (src/renderer/settings-history.ts). The verb table opens a journal on it
   // around each click, so a handler records by writing, never by remembering.
@@ -229,17 +226,17 @@ export interface DaemonContext {
   // follows a click of that session (`clicked`): the click path measures
   // them before each click and after its commit (`journaled`), and hands
   // both to the one owner of lane setup (src/renderer/lane-acts.ts), whose
-  // acts join `effects`. `latest` is the session's newest request the host
-  // holds, whose hints name its pane.
+  // acts join `effects`. `live` is the session's request heard since the
+  // daemon started, whose hints name its pane.
   readonly lanes: {
     readonly of: (
       origin: RenderOrigin,
       sessionId: SessionId,
-      latest: CheckedRenderRequest | null,
+      live: CheckedRenderRequest | null,
     ) => LaneSwitches;
     readonly clicked: (
       sessionId: SessionId,
-      latest: CheckedRenderRequest | null,
+      live: CheckedRenderRequest | null,
       before: LaneSwitches,
       after: LaneSwitches,
       effects: Effect[],
@@ -260,8 +257,8 @@ export interface VerbContext extends DaemonContext {
   // status-line range — the one per-click fact here; the daemon's dispatcher
   // sets it on each click.
   readonly arrival: ClickArrival;
-  // The newest request of THIS click's session the host holds.
-  readonly latest: CheckedRenderRequest | null;
+  // THIS click's session as the host's book holds it.
+  readonly context: SessionContext | null;
   // THIS click's turn's effects, which its config changes join.
   readonly effects: Effect[];
 }
@@ -269,8 +266,9 @@ export interface VerbContext extends DaemonContext {
 // A context with the journals the verb table opens around a write.
 export type Journaled<C extends DaemonContext> = C & {
   // The session the click names, whose bar its acts' failures show on; null
-  // for a link that names none.
+  // for a link that names none. `context` is what the journal acts on it with.
   readonly session: SessionId | null;
+  readonly context: SessionContext | null;
   readonly journal: Journal;
   readonly navigating: SessionStateRW;
 };
@@ -582,80 +580,39 @@ function stepFrom(
 
 // ─── The durable store: which file, and the history over it ─────────────────
 
-// [LAW:parse-dont-validate] What a record's two fields say together. The path
-// is what a session reads and keeps its meaning across builds, so no path is a
-// search whichever build wrote it. The source only labels the path: one this
-// build cannot read, because an older build kept none or a newer build has a
-// source of its own, leaves the path standing with its source unknown. A
-// refusal here would fail every durable click over a label.
-function recordedTarget(
-  source: unknown,
-  configFile: string | null,
-): ConfigTarget {
-  if (configFile === null) return { source: "search" };
-  return source === "argument" || source === "environment"
-    ? { source, path: configFile }
-    : { source: "unknown", path: configFile };
+// [LAW:one-source-of-truth] What a context says its session renders from:
+// null for a context of another session, or none, as for a session the host's
+// book holds nothing of.
+function originOf(
+  context: SessionContext | null,
+  sid: SessionId,
+): RenderOrigin | null {
+  return contextFor(context, sid)?.durable.origin ?? null;
 }
 
-// [LAW:parse-dont-validate] The one boundary that lifts the stored string
-// back into a RenderOrigin; a wrong shape is a loud BadVerbArgs, never a
-// guessed path.
-export function parseRenderOrigin(raw: string): RenderOrigin {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new BadVerbArgs(`render origin is not JSON: ${raw}`);
-  }
-  if (parsed === null || typeof parsed !== "object") {
-    throw new BadVerbArgs(`render origin is not an object: ${raw}`);
-  }
-  const { projectDir, cwd, configFile, source } = parsed as Record<
-    string,
-    unknown
-  >;
-  if (
-    typeof projectDir !== "string" ||
-    typeof cwd !== "string" ||
-    (configFile !== null && typeof configFile !== "string")
-  ) {
-    throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
-  }
-  return { projectDir, cwd, target: recordedTarget(source, configFile) };
+// [LAW:single-enforcer] The click's context as the session `sid` reads it:
+// none for a session it does not name.
+function contextFor(
+  context: SessionContext | null,
+  sid: SessionId,
+): SessionContext | null {
+  return context?.session === sid ? context : null;
 }
 
-// [LAW:no-silent-failure] A session that has never rendered has no origin
-// and therefore no config — a loud BadVerbArgs, not the daemon's own XDG
-// guess.
-function sessionOrigin(ctx: VerbContext, sid: SessionId): RenderOrigin {
-  const origin = recordedOrigin(ctx, sid);
+// [LAW:no-silent-failure] A session the click's context names nothing of has
+// no origin and therefore no config — a loud BadVerbArgs, not the daemon's
+// own XDG guess.
+function sessionOrigin(
+  ctx: Pick<VerbContext, "context">,
+  sid: SessionId,
+): RenderOrigin {
+  const origin = originOf(ctx.context, sid);
   if (origin === null) {
     throw new BadVerbArgs(
       `session ${sid} has not rendered yet — no config to act on`,
     );
   }
   return origin;
-}
-
-// The origin the session's last request recorded; null for a session that
-// has never rendered.
-function recordedOrigin(
-  ctx: DaemonContext,
-  sid: SessionId,
-): RenderOrigin | null {
-  return recordedOriginOf(ctx.sessionState, sid);
-}
-
-// [LAW:one-source-of-truth] The origin a session's last context recorded,
-// read back: what a click on it waits on the config of, and what the
-// renderer subscribes for a session it holds. Null for one never rendered.
-export function recordedOriginOf(
-  sessionState: Pick<SessionStateRW, "get">,
-  sid: SessionId,
-): RenderOrigin | null {
-  const raw = sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
-  return raw === null ? null : parseRenderOrigin(raw);
 }
 
 // [LAW:single-enforcer] How a click's config changes landed, in the turn of
@@ -708,12 +665,11 @@ function changeLanded(
 // has no chain to prove the text in.
 function proveLoadsAsLayer(
   ctx: DaemonContext,
-  sid: SessionId | null,
+  origin: RenderOrigin | null,
   file: string,
   text: string | null,
   read: (file: string) => string | null,
 ): void {
-  const origin = sid === null ? null : recordedOrigin(ctx, sid);
   const layer =
     origin === null
       ? undefined
@@ -738,7 +694,7 @@ function sessionConfig(ctx: VerbContext, sid: SessionId): DslConfig {
 // config to switch them.
 interface LaneMeter {
   readonly sessionId: SessionId;
-  readonly latest: CheckedRenderRequest | null;
+  readonly live: CheckedRenderRequest | null;
   readonly before: LaneSwitches;
   readonly read: () => LaneSwitches;
 }
@@ -746,18 +702,23 @@ interface LaneMeter {
 function laneMeter(
   ctx: DaemonContext,
   sid: SessionId,
-  latest: CheckedRenderRequest | null,
+  context: SessionContext | null,
 ): LaneMeter | null {
-  const origin = recordedOrigin(ctx, sid);
+  const origin = originOf(context, sid);
   if (origin === null) return null;
-  const read = (): LaneSwitches => ctx.lanes.of(origin, sid, latest);
-  return { sessionId: sid, latest, before: read(), read };
+  const live = contextFor(context, sid)?.live ?? null;
+  const read = (): LaneSwitches => ctx.lanes.of(origin, sid, live);
+  return { sessionId: sid, live, before: read(), read };
 }
 
-// What the session's config nests; a session that has never rendered has no
-// config, so nothing nested.
-function nestOf(ctx: DaemonContext, sid: SessionId): DisclosureNest {
-  const origin = recordedOrigin(ctx, sid);
+// What the session's config nests; a session the context names nothing of
+// has no config, so nothing nested.
+function nestOf(
+  ctx: DaemonContext,
+  context: SessionContext | null,
+  sid: SessionId,
+): DisclosureNest {
+  const origin = originOf(context, sid);
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
 
@@ -1271,30 +1232,6 @@ const redo: VerbHandler = (value, ctx) => {
 const applyUpdate: VerbHandler = (value, ctx) =>
   ask(ctx, { kind: "apply-update", session: requireSessionId(oneArg(value)) });
 
-// [LAW:no-silent-failure] A session that has never rendered has no hints —
-// a loud BadVerbArgs, never a click that acts on a guessed "not in tmux".
-function sessionHints(
-  ctx: VerbContext,
-  sid: SessionId,
-): ReturnType<typeof parseClientHints> {
-  const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
-  if (raw === null) {
-    throw new BadVerbArgs(
-      `session ${sid} has not rendered yet — no client facts are recorded for it`,
-    );
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new BadVerbArgs(`client hints record is not JSON: ${raw}`);
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new BadVerbArgs(`client hints record is not an object: ${raw}`);
-  }
-  return parseClientHints(parsed as Record<string, unknown>);
-}
-
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
 
 // A run of the session's doctor, asked by this click (src/renderer/doctor.ts).
@@ -1439,7 +1376,7 @@ const doctorMark: VerbHandler = (value, ctx) => {
 // [LAW:parse-dont-validate] A click's line is honoured only as one a `slash`
 // action in the session's config declares — the declaration found supplies
 // the SlashLine typed, so the URL chooses among the config's lines and can
-// add none. The pane is the one the session's last render reported.
+// add none. The pane is the one the session's live request reported.
 const slash: VerbHandler = (value, ctx) => {
   const [sessionId = "", line = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
@@ -1452,9 +1389,16 @@ const slash: VerbHandler = (value, ctx) => {
       `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`,
     );
   }
-  // [LAW:one-source-of-truth] The pane the session's persisted hints name,
-  // so a click on a bar drawn before a daemon restart types where it should.
-  const pane = tmuxPaneOf(sessionHints(ctx, sid).tmux);
+  // [LAW:no-silent-failure] The pane the session's live request names: one
+  // read back from the book may be another session's by now, so a session
+  // whose request the daemon does not hold is typed into nowhere until its
+  // next request.
+  const live = contextFor(ctx.context, sid)?.live ?? null;
+  if (live === null)
+    throw new BadVerbArgs(
+      `${line} was not typed: the daemon holds no request of session ${sid}, so its pane is not known until its next request`,
+    );
+  const pane = tmuxPaneOf(live.hints.tmux);
   if (pane.kind === "refused")
     throw new BadVerbArgs(`${line} was not typed: ${pane.reason}`);
   ask(ctx, {
@@ -1519,7 +1463,7 @@ function runOf(
       ...sessionEnv({
         sessionId: sid,
         projectDir: origin.projectDir,
-        claudeConfigDir: sessionHints(ctx, sid).claudeConfigDir,
+        claudeConfigDir: contextFor(ctx.context, sid)?.durable.claudeConfigDir,
       }),
       ...drawn.env,
     },
@@ -1679,15 +1623,6 @@ function foldEffects(
   }
 }
 
-function throwAll(failures: readonly unknown[]): void {
-  if (failures.length === 1) throw failures[0];
-  if (failures.length > 1) {
-    throw new Error(
-      failures.map((e) => String((e as Error).message ?? e)).join("; "),
-    );
-  }
-}
-
 // [LAW:single-enforcer] One click is one undoable step, so the step boundary
 // is the click boundary: every entry of the table the daemon looks up against
 // runs inside a journal it opens and commits. `dispatch` folds its effects
@@ -1715,24 +1650,27 @@ function throwAll(failures: readonly unknown[]): void {
 function journaled<C extends DaemonContext>(
   verb: string,
   sid: SessionId | null,
-  latest: CheckedRenderRequest | null,
+  context: SessionContext | null,
   ctx: C,
   effects: Effect[],
   handler: (ctx: Journaled<C>) => void,
 ): void {
+  const origin = sid === null ? null : originOf(context, sid);
   ctx.configWrites.begin(verb, () => {
-    const origin = sid === null ? null : recordedOrigin(ctx, sid);
     if (origin === null)
       throw new BadVerbArgs(
         `${verb}: the click names no session that has rendered — no config to write`,
       );
     return { origin, chain: ctx.snapshotFor(origin).chain };
   });
-  const lanes = sid === null ? null : laneMeter(ctx, sid, latest);
+  const lanes = sid === null ? null : laneMeter(ctx, sid, context);
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
-    prove: (file, text, read) => proveLoadsAsLayer(ctx, sid, file, text, read),
+    roleOf: (file) => ctx.configWrites.roleOf(file),
+    pathOf: (role) => ctx.configWrites.pathOf(role),
+    prove: (file, text, read) =>
+      proveLoadsAsLayer(ctx, origin, file, text, read),
   });
   const navigation = ctx.navigation.begin(journal.sessionState);
   const failures: unknown[] = [];
@@ -1741,13 +1679,14 @@ function journaled<C extends DaemonContext>(
   const closing = (store: SessionStateRW): SessionStateRW =>
     closingView(
       store,
-      (sid) => nestOf(ctx, sid),
+      (sid) => nestOf(ctx, context, sid),
       (line) => ctx.log("info", line),
     );
   try {
     handler({
       ...ctx,
       session: sid,
+      context,
       sessionState: closing(journal.sessionState),
       journal,
       navigating: closing(navigation.sessionState),
@@ -1773,7 +1712,7 @@ function journaled<C extends DaemonContext>(
         const after = lanes.read();
         ctx.lanes.clicked(
           lanes.sessionId,
-          lanes.latest,
+          lanes.live,
           journal.written() ? lanes.before : after,
           after,
           landedIn,
@@ -1799,7 +1738,7 @@ function click(verb: string): (value: string, ctx: VerbContext) => void {
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
     const steps = stepsOf(verb, value);
-    journaled(verb, sid, ctx.latest, ctx, ctx.effects, (c) => {
+    journaled(verb, sid, ctx.context, ctx, ctx.effects, (c) => {
       try {
         foldEffects(steps, sid, c);
       } finally {
@@ -1837,13 +1776,13 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
 // the idle period, and the close is not due.
 export function closeIdleMenus(
   sid: SessionId,
-  latest: CheckedRenderRequest | null,
+  context: SessionContext | null,
   idle: IdleSpan,
   ctx: DaemonContext,
   effects: Effect[],
 ): void {
-  journaled("menu-idle", sid, latest, ctx, effects, (c) => {
-    const roots = openRoots(nestOf(c, sid), (key) =>
+  journaled("menu-idle", sid, context, ctx, effects, (c) => {
+    const roots = openRoots(nestOf(c, context, sid), (key) =>
       c.navigating.get(sid, key),
     );
     c.navigating.setBatch(

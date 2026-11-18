@@ -14,7 +14,7 @@ type ClickEvent = Extract<Event, { kind: "click" }>;
 // by its kind.
 export function clickTurn(
   { verbs }: Pick<MainRendererParts, "verbs">,
-  { verb, value, arrival, latest }: ClickEvent,
+  { verb, value, arrival, context }: ClickEvent,
   // Where the click's config changes go, kept by the turn even when the
   // handler throws.
   effects: Effect[],
@@ -22,5 +22,5 @@ export function clickTurn(
   const handler = verbs.handler(verb);
   if (handler === undefined)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
-  handler(value, { arrival, latest, effects });
+  handler(value, { arrival, context, effects });
 }

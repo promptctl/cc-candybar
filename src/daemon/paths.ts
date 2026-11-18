@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { Host } from "../host.js";
 import type { Locations } from "../config/loader/chain-places";
+import { MAIN_RENDERER, type RendererName } from "./foundations/renderer-name";
 
 // XDG Base Directory split:
 //   - daemon runtime (pid, log, heap snapshots, spawn.lock) → $XDG_STATE_HOME/cc-candybar
@@ -235,6 +236,8 @@ export interface DaemonPaths {
   readonly log: string;
   readonly sessionState: string;
   readonly settingsHistory: string;
+  // The host's book of each session's durable context (src/daemon/session-book.ts).
+  readonly sessionBook: string;
   readonly watchProbe: string;
   readonly spawnBackoff: string;
 }
@@ -248,8 +251,38 @@ export function daemonPaths(host: Host): DaemonPaths {
     log: logPath(host),
     sessionState: sessionStatePath(host),
     settingsHistory: settingsHistoryPath(host),
+    sessionBook: path.join(stateDir(host), "session-book.json"),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host),
+  };
+}
+
+// [LAW:one-source-of-truth] A renderer's profile: the files its stores are
+// kept in, a function of its name alone (docs/design/host-and-renderer.md,
+// ADR-6). The main renderer's is today's layout, so an installed bar keeps its
+// files; any other name's is its own directory under the state directory.
+export interface ProfilePaths {
+  readonly sessionState: string;
+  readonly settingsHistory: string;
+  // Where the doctor's documents are.
+  readonly documents: string;
+}
+
+export function profilePaths(
+  paths: Pick<DaemonPaths, "state" | "sessionState" | "settingsHistory">,
+  name: RendererName,
+): ProfilePaths {
+  if (name === MAIN_RENDERER)
+    return {
+      sessionState: paths.sessionState,
+      settingsHistory: paths.settingsHistory,
+      documents: paths.state,
+    };
+  const state = path.join(paths.state, "renderers", name, "state");
+  return {
+    sessionState: path.join(state, path.basename(paths.sessionState)),
+    settingsHistory: path.join(state, path.basename(paths.settingsHistory)),
+    documents: state,
   };
 }
 

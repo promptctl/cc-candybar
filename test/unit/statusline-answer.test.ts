@@ -15,6 +15,7 @@ import {
   hostHeld,
   NO_ACTS,
 } from "../helpers/renderers";
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { renderFailedFrame, standIn } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { rendererHost } from "../../src/daemon/renderer-host";
@@ -83,6 +84,7 @@ const output = (
   record: RendererOutput["record"] = [],
 ): RendererOutput => ({
   kind: "answered",
+  stored: [],
   effects,
   subscriptions: NO_SUBSCRIPTIONS,
   record,
@@ -96,6 +98,7 @@ const threwWith = (
   subscriptions: Subscriptions = NO_SUBSCRIPTIONS,
 ): RendererOutput => ({
   kind: "threw",
+  stored: [],
   failure: failureOf(new Error(message)),
   effects: [],
   subscriptions,
@@ -163,13 +166,14 @@ async function answer(
   };
   const answered = await answerStatusline(
     rendererHost(
-      "main",
+      MAIN_RENDERER,
       CLOCK,
       hostHeld(renderer, CLOCK.monotonic),
       (_level, line) => logged.push(line),
       {
         subscribed: (subscriptions) => void subscribed.push(subscriptions),
         frames: () => {},
+        stored: () => {},
         writableSettings: () => [],
         holding,
       },
@@ -313,6 +317,7 @@ test("a turn that throws is a failure naming the renderer, with what it learned 
 test("a render turn that throws a bad argument is still the daemon's failure, as its reply says", async () => {
   const { renderer } = scripted({
     kind: "threw",
+    stored: [],
     failure: failureOf(new BadVerbArgs("no such row")),
     effects: [],
     subscriptions: NO_SUBSCRIPTIONS,
@@ -509,7 +514,7 @@ describe("the request's wait, between its context and its request", () => {
     const wait = held();
     const order: string[] = [];
     const host = rendererHost(
-      "main",
+      MAIN_RENDERER,
       CLOCK,
       hostHeld(
         eventRenderer(async ({ event }) => {
@@ -522,6 +527,7 @@ describe("the request's wait, between its context and its request", () => {
       {
         subscribed: () => {},
         frames: () => {},
+        stored: () => {},
         writableSettings: () => [],
         holding: () => () => {},
       },

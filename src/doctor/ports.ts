@@ -37,6 +37,15 @@ export type DoctorStores = {
   readonly [K in keyof DoctorStoreValues]: StateFile<DoctorStoreValues[K]>;
 };
 
+// One doctor document as a run reads it and a click files it, wherever it is
+// kept: its file (`StateFile`), or the renderer's copy of what the host handed
+// in (src/renderer/doctor-documents.ts).
+export type DoctorDocument<T> = Pick<StateFile<T>, "read" | "update">;
+
+export type DoctorDocuments = {
+  readonly [K in keyof DoctorStoreValues]: DoctorDocument<DoctorStoreValues[K]>;
+};
+
 export interface DoctorEdge {
   // tmux's own word on the attached client's terminal, asked of THE server
   // the hint names — `-S socket` and `-t pane` are why the hint carries them.

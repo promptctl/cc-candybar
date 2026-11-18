@@ -8,6 +8,7 @@
 
 import type { Asked, PostMortemsRead } from "./checks.js";
 import { stateFile, type StateFile } from "./state-file.js";
+import { DOCTOR_EMPTIES } from "../renderer-interface/stored-state.js";
 
 // [LAW:parse-dont-validate] The document as the identity filed read: every
 // value the store can file reads back, `null` included.
@@ -22,6 +23,6 @@ export const filePostMortemsRead = (dir: string): StateFile<PostMortemsRead> =>
   stateFile(
     dir,
     "doctor-post-mortems-read.json",
-    { through: null },
+    DOCTOR_EMPTIES.postMortemsRead,
     parsePostMortemsRead,
   );

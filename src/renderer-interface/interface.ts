@@ -20,7 +20,7 @@ import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
-import type { CheckedRenderRequest } from "./request-context";
+import type { CheckedRenderRequest, SessionContext } from "./request-context";
 import type { AdapterPush, AdapterReply } from "./adapter";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneSwitches } from "../config/lanes";
@@ -33,6 +33,7 @@ import type { Answered } from "../daemon/foundations/sighting-roles";
 import type { RenderOrigin } from "../config-hint";
 import type { LayerRole } from "../config/layer-role";
 import type { ConfigSnapshot } from "../config/config-snapshot";
+import type { StoreWrite } from "./stored-state";
 
 // Which request a statusline frame answers: the host's count of the requests
 // of every kind it accepted, in arrival order, so renders' ids have gaps.
@@ -133,7 +134,10 @@ export interface AdapterInput extends Readings {
 export type AdapterOutput = (
   | { readonly kind: "replied"; readonly reply: AdapterReply }
   | { readonly kind: "threw"; readonly failure: Failure }
-) & { readonly subscriptions: Subscriptions };
+) & {
+  readonly subscriptions: Subscriptions;
+  readonly stored: readonly StoreWrite[];
+};
 
 // [LAW:types-are-the-program] Every input and output of a turn is plain data:
 // the build fails on one a process could not carry.
@@ -215,11 +219,11 @@ export type Event =
       // null when the click names none.
       readonly session: ParsedSessionId | null;
       readonly arrival: ClickArrival;
-      // [LAW:one-source-of-truth] The newest request of the click's session
-      // the host holds, whose hints are the pane its lanes follow: null when
-      // the click names no session, or the host holds no request of it (none
-      // since a restart, or its record evicted).
-      readonly latest: CheckedRenderRequest | null;
+      // [LAW:one-source-of-truth] The click's session as the host's book
+      // holds it: what it renders from, and, once heard since the daemon
+      // started, the request whose hints are the pane its lanes follow. Null
+      // when the click names no session, or the book holds none of it.
+      readonly context: SessionContext | null;
     }
   | {
       // Who watches each session's frames now, whole: a feed opens for a
@@ -512,7 +516,11 @@ export type TurnOutcome = {
 // it ended: an act can land before its turn throws (a click that committed
 // and followed its view), and its view is read all the same. Its frames are
 // those its feeds drew in it.
+// [LAW:one-source-of-truth] Its stored writes are what the turn moved of the
+// renderer's stores, which the host's copy takes before any later input: a
+// write answers nothing, so it is no effect, and no `effect-done` comes back.
 export type RendererOutput = TurnOutcome & {
   readonly subscriptions: Subscriptions;
   readonly frames: readonly PushedFrame[];
+  readonly stored: readonly StoreWrite[];
 };

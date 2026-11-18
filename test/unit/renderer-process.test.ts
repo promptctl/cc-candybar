@@ -4,6 +4,7 @@
 // silent renderer is ended, and whose ids cross.
 
 import type { Asked } from "../../src/utils/outcome";
+import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import {
   BACKOFF_FIRST_MS,
   BACKOFF_MAX_MS,
@@ -33,6 +34,7 @@ import type {
 import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import {
   RendererDown,
   failureOf,
@@ -125,12 +127,14 @@ function rig(start: () => Promise<void> = async () => {}) {
     entry: "/app/index.mjs",
     cwd: "/state",
     heapCapMb: 512,
+    name: MAIN_RENDERER,
     boot: () => ({
       digest: "d1",
       host: { env: {}, home: "/home", tmp: "/tmp" },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
       linkKey: key.read,
+      stored: EMPTY_STORED_STATE,
     }),
   });
   // The inputs the host sent the child, in order.
@@ -163,6 +167,7 @@ const pin: AdapterInput = {
 };
 const PINNED: Timed<AdapterOutput> = {
   kind: "replied",
+  stored: [],
   reply: { kind: "close-journal" },
   subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
   turnMs: 0,
@@ -193,6 +198,7 @@ describe("a renderer process's start", () => {
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
           linkKey: { kind: "ok", value: "a2V5" },
+          stored: EMPTY_STORED_STATE,
         },
       },
     ]);
@@ -512,6 +518,7 @@ describe("ids a renderer mints", () => {
     await settled();
     const answeredWith: Timed<RendererOutput> = {
       kind: "answered",
+      stored: [],
       record: [],
       effects: [effect as never],
       subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
@@ -560,6 +567,7 @@ describe("ids a renderer mints", () => {
       n: inputs(first)[0]!.n,
       output: {
         kind: "answered",
+        stored: [],
         record: [],
         effects: [
           { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },

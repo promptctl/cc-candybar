@@ -16,13 +16,18 @@ import {
   createDaemon,
   type Daemon,
   type DaemonInputs,
-  type DaemonStorage,
   type RunningBundle,
 } from "../../src/daemon/daemon";
+import type { ProfileStorage } from "../../src/daemon/held-stores";
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { memoryLimitBytes } from "../../src/daemon/limits";
 import { fileStorage } from "../../src/daemon/file-storage";
 import { DaemonLog } from "../../src/daemon/log";
-import { daemonPaths, type DaemonPaths } from "../../src/daemon/paths";
+import {
+  daemonPaths,
+  profilePaths,
+  type DaemonPaths,
+} from "../../src/daemon/paths";
 import { productionAdapters } from "../../src/daemon/production-adapters";
 import {
   PROTOCOL_VERSION,
@@ -38,10 +43,10 @@ import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
 
 export type DaemonOverrides = Partial<
-  Omit<DaemonInputs, "storage" | "paths">
+  Omit<DaemonInputs, "profile" | "paths">
 > & {
   readonly paths?: DaemonPaths;
-  readonly storage?: (log: DaemonLogger) => Partial<DaemonStorage>;
+  readonly profile?: (log: DaemonLogger) => Partial<ProfileStorage>;
 };
 
 // A bundle at `checkout`, which need not exist: nothing runs it unless a case
@@ -69,7 +74,7 @@ export interface BuiltDaemon {
   readonly paths: DaemonPaths;
 }
 
-// A daemon built as a process builds one, unarmed unless its case arms it: the
+// A daemon built as a process builds one, serving, unarmed unless its case arms it: the
 // memory backstop and the bundle watch would end it on the worker's own memory
 // and a bundle that isn't running. Arming also starts file-event delivery, whose
 // period drives the watcher's judge and the catch-up reload, so a daemon here
@@ -98,14 +103,16 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       exit: (code) => {
         throw new Error(`a daemon under test asked to exit ${code}`);
       },
+      rendererName: MAIN_RENDERER,
       ...overrides,
       paths,
       daemonLog,
-      storage: (log) => ({
-        ...fileStorage(paths, log, systemTimekeeper),
-        ...overrides.storage?.(log),
+      profile: (name, log) => ({
+        ...fileStorage(profilePaths(paths, name), log, systemTimekeeper),
+        ...overrides.profile?.(log),
       }),
     });
+    daemon.serve();
     return { daemon, daemonLog, paths };
   } catch (e) {
     // A log this call opened is the call's to end when no daemon takes it up.

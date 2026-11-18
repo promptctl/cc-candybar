@@ -3,7 +3,7 @@
 // (src/renderer-interface/interface.ts). It imports only types, so neither side runs the
 // other's code through it.
 
-import type { RequestedOrigin } from "../config-hint";
+import type { RenderOrigin, RequestedOrigin } from "../config-hint";
 import type {
   ClientHints,
   ReaderRenderRequest,
@@ -46,6 +46,45 @@ export type CheckedRenderRequest = Omit<
   readonly refusedArgs: readonly RefusedArg[];
   readonly [CHECKED]: true;
 };
+
+// [LAW:types-are-the-program] What a session is, as its newest request named
+// it, apart from what its client reports now: the config inputs it renders
+// from, and Claude Code's directory. Nothing in it moves with a terminal or a
+// pane, so the host keeps it across a restart.
+export interface DurableContext {
+  readonly origin: RenderOrigin;
+  readonly claudeConfigDir?: string;
+}
+
+// [LAW:types-are-the-program] A session as the host's book holds it: what it
+// is, and its newest request heard since the daemon started, whose hints name
+// its pane and terminal now. One read back after a restart has no live part
+// until the session's next request, so nothing acts in a pane tmux may have
+// handed another since.
+export interface SessionContext {
+  readonly session: SessionId;
+  readonly durable: DurableContext;
+  readonly live: CheckedRenderRequest | null;
+}
+
+// [LAW:one-source-of-truth] The one derivation of what a request says a
+// session is, which both sides make of the requests they hear.
+export function durableOf(req: CheckedRenderRequest): DurableContext {
+  const { claudeConfigDir } = req.hints;
+  return {
+    origin: req.requested,
+    ...(claudeConfigDir !== undefined && { claudeConfigDir }),
+  };
+}
+
+// A session as a request heard now names it, live.
+export function heardContextOf(req: CheckedRenderRequest): SessionContext {
+  return {
+    session: req.hookData.session_id,
+    durable: durableOf(req),
+    live: req,
+  };
+}
 
 // What a session's declaration reads of its newest request: the keys every
 // keyed lane is read at, the session among them.

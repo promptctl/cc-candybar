@@ -1,21 +1,23 @@
-import type { DaemonStorage } from "./daemon";
-import type { DaemonPaths } from "./paths";
-import { FileSessionStorage } from "./session-state-file";
+import type { ProfilePaths } from "./paths";
+import { sessionStateFile } from "./session-state-file";
 import { fileHistoryStorage } from "./history-file";
+import { fileStores } from "../doctor/edge";
 import type { DaemonLogger } from "../utils/logger";
 import type { Timekeeper } from "../time";
+import type { ProfileStorage } from "./held-stores";
 
-// [LAW:one-source-of-truth] What a daemon keeps on disk, at the paths it is
-// given. A process and a test's daemon build this one thing, so a click in a
-// test waits in the debounce a real one does, and a close has the same write to
-// land.
+// [LAW:one-source-of-truth] Where a profile's stores are kept on disk, at the
+// paths it is given. A process and a test's daemon build this one thing, so a
+// click in a test waits in the debounce a real one does, and a close has the
+// same write to land.
 export function fileStorage(
-  paths: Pick<DaemonPaths, "sessionState" | "settingsHistory">,
+  paths: ProfilePaths,
   log: DaemonLogger,
   clock: Pick<Timekeeper, "after" | "monotonic">,
-): DaemonStorage {
+): ProfileStorage {
   return {
-    session: new FileSessionStorage(paths.sessionState, clock, 500, log),
+    session: sessionStateFile(paths.sessionState, clock, 500, log),
     history: fileHistoryStorage(paths.settingsHistory, log),
+    doctor: fileStores(paths.documents),
   };
 }

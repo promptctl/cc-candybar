@@ -26,7 +26,7 @@ import { FOLLOW_BAR, listResolvablePaletteNames } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { settingsOf } from "../src/config/dsl-types";
-import { clickUrl, effectsOf } from "./helpers/click";
+import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERB_SAVE } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
@@ -283,7 +283,7 @@ describe("configure mode picks a placement's theme", () => {
     expect(rt.bgOf("pinned")).toBe(pinnedBefore);
 
     const logged: string[] = [];
-    await VERBS.get(VERB_SAVE)!(`${SID}/user`, {
+    await CLICK_VERBS.get(VERB_SAVE)!(`${SID}/user`, {
       ...rt.ctx,
       log: (_level, message) => logged.push(message),
     });

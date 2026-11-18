@@ -39,12 +39,11 @@ import {
   type DaemonVerbContext,
   type MainRendererParts,
 } from "./verbs/port.js";
-import type { SessionStorage } from "../renderer-interface/session-state.js";
 import type {
-  HistoryStorage,
-  LoadedHistory,
-} from "../renderer-interface/history-storage.js";
-import type { DoctorStores } from "../doctor/ports.js";
+  StoredState,
+  StoreWrite,
+} from "../renderer-interface/stored-state.js";
+import { HeldDocuments } from "./doctor-documents.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { Locations } from "../config/loader/chain-places.js";
 import type { Gates } from "../daemon/foundations/gates.js";
@@ -97,7 +96,6 @@ import {
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
-import { recordedOriginOf } from "./verbs/index.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
@@ -111,6 +109,8 @@ export function mainRenderer(
   // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
   // in its own turn, synchronously.
   pushed: (push: AdapterPush) => AdapterReply,
+  // What the stores moved since the last turn ended.
+  drained: () => readonly StoreWrite[],
 ): Renderer {
   const { time, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
@@ -259,11 +259,9 @@ export function mainRenderer(
       }
       case "click": {
         // A click on a session no live context names (one idle past its
-        // retire) waits for the config of the origin it last rendered at.
-        const sid = event.session?.ok ? event.session.id : null;
-        const origin =
-          sid === null ? null : recordedOriginOf(parts.sessionState, sid);
-        if (waits(origin, event, record)) return;
+        // retire, or not heard since the daemon started) waits for the config
+        // of the origin the host's book holds for it.
+        if (waits(event.context?.durable.origin ?? null, event, record)) return;
         clickTurn(parts, event, effects);
         return;
       }
@@ -309,13 +307,14 @@ export function mainRenderer(
     // waits on its landing, and each a parked event waits on, once each.
     const configs = new Map<string, RenderOrigin>();
     const landing = parts.verbs.landing();
-    for (const session of [
-      ...parts.worldStates.sessions(),
+    for (const origin of [
+      ...parts.worldStates.sessions().flatMap((session) => {
+        const context = parts.worldStates.contextOf(session);
+        return context === null ? [] : [context.durable.origin];
+      }),
       ...(landing === null ? [] : [landing]),
-    ]) {
-      const origin = recordedOriginOf(parts.sessionState, session);
-      if (origin !== null) configs.set(originKey(origin), origin);
-    }
+    ])
+      configs.set(originKey(origin), origin);
     for (const origin of parts.renderCache.origins())
       configs.set(originKey(origin), origin);
     for (const { origin } of parked) configs.set(originKey(origin), origin);
@@ -329,16 +328,20 @@ export function mainRenderer(
     };
   };
 
+  // What the turn that ended last moved of the stores.
+  let stored: readonly StoreWrite[] = [];
   // [LAW:single-enforcer] Every turn, an event's or a push's, ends here:
-  // what the renderer needs read and when it next wants a turn are read as
-  // they stand when it ends, however it ended. Read as part of the turn, so
-  // a read that throws fails it, and the subscriptions last returned stand.
+  // what the renderer needs read, when it next wants a turn, and what it
+  // moved of its stores are read as they stand when it ends, however it
+  // ended: a write before a throw is real. Read as part of the turn, so a
+  // read that throws fails it, and the subscriptions last returned stand.
   const ending = <T>(run: () => T): Ended<T> => {
     try {
       let value: T;
       try {
         value = run();
       } finally {
+        stored = drained();
         subscriptions = subscribed();
         // [LAW:one-source-of-truth] The snapshots held are exactly the
         // origins the output names, as the host follows exactly those.
@@ -365,6 +368,7 @@ export function mainRenderer(
             ? { kind: "replied" as const, reply: ended.value }
             : ended),
           subscriptions,
+          stored,
         };
       }),
     event: async (input) =>
@@ -381,22 +385,26 @@ export function mainRenderer(
           record,
           subscriptions,
           frames,
+          stored,
         };
       }),
   });
 }
 
 // The sessions whose idle period has run out by the turn's tick, their menus
-// closed as the ✕ does, by the context their view was drawn with: none when
-// the view was evicted.
+// closed as the ✕ does, by the session's live context.
 // [LAW:no-silent-failure] A close that throws is said with its session, and
 // the others close all the same: the session's period begins again
 // (`MenuIdle.due`), so its close is tried a timeout later, never at once.
 function closeIdleMenus(parts: MainRendererParts, effects: Effect[]): void {
   for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
     try {
-      const latest = factsOf(parts, session);
-      parts.verbs.closeIdle(session, latest, idle, effects);
+      parts.verbs.closeIdle(
+        session,
+        parts.worldStates.contextOf(session),
+        idle,
+        effects,
+      );
     } catch (thrown) {
       const failure = failureOf(thrown);
       // A close the daemon's close cut off is a refusal, as a click's is.
@@ -408,28 +416,15 @@ function closeIdleMenus(parts: MainRendererParts, effects: Effect[]): void {
   }
 }
 
-// The context the session's open view was drawn with, or null when it has
-// none.
-function factsOf(
-  parts: MainRendererParts,
-  session: SessionId,
-): CheckedRenderRequest | null {
-  using hold = parts.renderCache.holdView(session);
-  return hold?.view.facts() ?? null;
-}
-
-// What the main renderer is built from besides the host's parts: the storage
-// its session state, history and doctor load from, the signer its links are
-// drawn with, and the facts of the machine its loads resolve under. No clock:
-// every input carries the host's readings.
+// What the main renderer is built from besides the host's parts: its
+// profile's stored state as the host holds it, the signer its links are drawn
+// with, and the facts of the machine its loads resolve under. No clock: every
+// input carries the host's readings.
 export interface MainRendererInputs {
-  readonly storage: {
-    readonly session: SessionStorage;
-    readonly history: HistoryStorage;
-    // The doctor's stores: files under the state directory, which its clicks
-    // file into.
-    readonly doctor: DoctorStores;
-  };
+  // [LAW:one-source-of-truth] A renderer is built from its stored state, so
+  // none exists without it: every write it makes leaves as a turn's stored
+  // writes, and the next renderer is built from what the host then holds.
+  readonly stored: StoredState;
   // [LAW:single-enforcer] The signer over the state directory's key.
   readonly linkSigner: LinkSigner;
   // Where the user's config and installed plugins live.
@@ -443,32 +438,10 @@ export interface MainRendererInputs {
   readonly memoryLimitBytes: number;
 }
 
-// The loaded main renderer, and its start, handed the host's parts it
-// reaches: the start builds the rest of the renderer's own state over them and
-// returns the renderer with what the host reaches in it.
-export interface LoadedMainRenderer {
-  start(host: AdapterToHost): Renderer;
-}
-
-// [LAW:single-enforcer] The main renderer, in two steps of the daemon's
-// construction. [LAW:no-ambient-temporal-coupling] Loading reads the storage,
-// so the daemon loads before any owner of its own arms a timer, and a storage
-// that cannot be read refuses the build with nothing running; the start comes
-// once the host's parts exist.
-export function loadMainRenderer(
+// [LAW:single-enforcer] The main renderer, built over the host's parts it
+// reaches and the stored state it is handed.
+export function mainRendererOf(
   inputs: MainRendererInputs,
-): LoadedMainRenderer {
-  const sessionState = new SessionState(inputs.storage.session);
-  const history = inputs.storage.history.load();
-  return {
-    start: (host) => startOver(inputs, sessionState, history, host),
-  };
-}
-
-function startOver(
-  inputs: MainRendererInputs,
-  sessionState: SessionState,
-  history: LoadedHistory,
   host: AdapterToHost,
 ): Renderer {
   const { gates, linkSigner } = inputs;
@@ -479,12 +452,20 @@ function startOver(
   const menuIdle = new MenuIdle();
   // [LAW:single-enforcer] The renderer's lines go to the host's one log.
   const { log } = host;
+  const sessionState = new SessionState(inputs.stored.sessions);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
-    inputs.storage.history,
-    history,
+    inputs.stored.history,
   );
+  const documents = new HeldDocuments(inputs.stored.doctor);
+  // [LAW:one-source-of-truth] What the turn moved of every store, in the
+  // order each store's entries last moved.
+  const drained = (): StoreWrite[] => [
+    ...sessionState.drain(),
+    ...settingsHistory.drain(),
+    ...documents.drain(),
+  ];
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const configWrites = new ConfigWrites(mint);
@@ -512,7 +493,7 @@ function startOver(
   // written once the host's reading of it arrives in a world state.
   const doctorRuns = new DoctorRuns({
     sessionState,
-    stores: inputs.storage.doctor,
+    stores: documents.documents,
     log,
     failed: actFailed,
   });
@@ -632,7 +613,7 @@ function startOver(
         config: entry.state.config,
       };
     },
-    doctorStores: inputs.storage.doctor,
+    doctorStores: documents.documents,
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -684,9 +665,6 @@ function startOver(
         feeds.closeAll(time.tick);
         renderCache.close();
         return { kind: "close-views" };
-      case "close-session-state":
-        sessionState.close();
-        return { kind: "close-session-state" };
     }
   };
   return mainRenderer(
@@ -700,6 +678,7 @@ function startOver(
       doctorRuns,
     },
     pushed,
+    drained,
   );
 }
 

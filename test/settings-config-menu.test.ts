@@ -39,14 +39,13 @@ import {
 } from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
-import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   fileHeldSettings,
   settingCounts,
 } from "../src/renderer/setting-drafts";
 import { chmodSync } from "node:fs";
 import { dirname } from "node:path";
-import { linkClick } from "./helpers/click";
+import { linkClick, CLICK_VERBS } from "./helpers/click";
 import {
   testVerbContext,
   verbContextWith,
@@ -118,12 +117,6 @@ function rig(
   durable?.write(source);
   if (durable === undefined) recordRender(sessionState, SID);
   else durable.seedOrigin(sessionState, SID);
-  // What a render records of the session's client: here, not in tmux.
-  sessionState.set(
-    SID,
-    SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({ tmux: null }),
-  );
   // Everything the daemon's cache entry holds for one config — rebuilt whole
   // on a reload, the old registry disposed once the new one is built.
   const load = (text: string) => {
@@ -246,7 +239,7 @@ function rig(
     // click — looked up in the one table, so a click is one history step.
     click: async (url: string) => {
       const { verb, value } = linkClick(url);
-      const handler = VERBS.get(verb);
+      const handler = CLICK_VERBS.get(verb);
       if (!handler) throw new Error(`no handler for verb "${verb}"`);
       await handler(value, ctx);
     },
@@ -530,8 +523,8 @@ describe("the config menu, reached from a user config whose root is one row", ()
     );
     // ONE step in the history: the save's file write and its release together.
     const step = durable.history(SID).past.at(-1)!;
-    expect(step.filter((c) => c.kind === "file")).toEqual([
-      expect.objectContaining({ file: durable.configPath }),
+    expect(step.filter((c) => c.kind === "layer")).toEqual([
+      expect.objectContaining({ role: "user" }),
     ]);
     expect(step.filter((c) => c.kind === "session")).toEqual(
       expect.arrayContaining([

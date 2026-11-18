@@ -20,6 +20,7 @@ import {
 import type { RepoAnswer } from "../config/loader/repo-gate.js";
 import type { Layer } from "../config/config-snapshot.js";
 import type { RenderOrigin } from "../config-hint.js";
+import type { LayerRole } from "../config/layer-role.js";
 import type {
   Act,
   ConfigChange,
@@ -36,6 +37,8 @@ export type Consequence = (effects: Effect[]) => void;
 // they change, and its consequence.
 export interface Landing {
   readonly session: SessionId;
+  // The origin whose layers the click read: none for a click that read none.
+  readonly origin: RenderOrigin | null;
   readonly files: readonly string[];
   readonly consequence: Consequence;
 }
@@ -127,6 +130,17 @@ export class ConfigWrites {
     return (this.layers ??= this.layersOf());
   }
 
+  // The role of the click's chain at `file`.
+  roleOf(file: string): LayerRole {
+    return this.layerAt(file).role;
+  }
+
+  // The file of the click's chain at `role`: null when the chain holds no
+  // layer of that role.
+  pathOf(role: LayerRole): string | null {
+    return this.held().chain.find((l) => l.role === role)?.path ?? null;
+  }
+
   // A write of the open click, from the file as the click read it (`read`):
   // one change per file, from the click's first read of it to its last write.
   land(file: string, before: string | null, after: string | null): void {
@@ -166,6 +180,7 @@ export class ConfigWrites {
     // [LAW:no-ambient-temporal-coupling] The click is over even when reading
     // its layers throws, so the next click opens on nothing of this one's.
     let written;
+    let origin: RenderOrigin | null = null;
     try {
       written = [...this.open].flatMap(([path, { before, after }]) => {
         const list = diffChanges(before, after);
@@ -175,12 +190,13 @@ export class ConfigWrites {
               {
                 path,
                 origin: this.held().origin,
-                role: this.layerAt(path).role,
+                role: this.roleOf(path),
                 list,
               },
             ];
       });
     } finally {
+      origin = this.layers?.origin ?? null;
       this.layers = null;
       this.layersOf = noLayers;
       this.open.clear();
@@ -227,7 +243,7 @@ export class ConfigWrites {
       })),
     ];
     this.inFlight = {
-      of: { session, files, consequence },
+      of: { session, origin, files, consequence },
       owed: new Set(landing.map((c) => c.id)),
       missed: null,
     };
@@ -246,9 +262,9 @@ export class ConfigWrites {
     return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
   }
 
-  // The session whose click's changes are on their way, if one's are.
-  landing(): SessionId | null {
-    return this.inFlight?.of.session ?? null;
+  // The origin of the click whose changes are on their way, if one's are.
+  landing(): RenderOrigin | null {
+    return this.inFlight?.of.origin ?? null;
   }
 
   // No click begins after this: the daemon is closing.

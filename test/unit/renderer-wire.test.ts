@@ -41,6 +41,7 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
         host.eventAnswered(EVENT);
         return {
           kind: "replied",
+          stored: [],
           reply: { kind: "close-journal" },
           subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
         };
@@ -64,7 +65,11 @@ function recordingHost(): { host: AdapterToHost; saw: string[] } {
 }
 
 // Each line crosses as JSON does, and on a later turn, as a pipe carries it.
-function overLines(host: AdapterToHost): TimedRenderer {
+// The renderer's heap is `heap`, its text in pieces.
+function linesOver(
+  host: AdapterToHost,
+  heap: Parameters<typeof serveRenderer>[0]["heapSnapshot"] = async () => {},
+) {
   const crossed = <T>(line: T): T => JSON.parse(JSON.stringify(line)) as T;
   let toRenderer: (line: HostLine) => void = () => {};
   const lines = rendererOverLines({
@@ -81,10 +86,13 @@ function overLines(host: AdapterToHost): TimedRenderer {
     renderer: talkingRenderer(reaches),
     send: (line) => queueMicrotask(() => lines.heard(crossed(line))),
     memory: () => ({ rss: 1, heapTotal: 1 }),
-    heapSnapshot: () => {},
+    heapSnapshot: heap,
   });
-  return lines.renderer;
+  return lines;
 }
+
+const overLines = (host: AdapterToHost): TimedRenderer =>
+  linesOver(host).renderer;
 
 const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   kind: "adapter",
@@ -104,6 +112,29 @@ describe("the renderer over lines", () => {
     expect(crossed).toEqual(inProcess);
     expect(there.saw).toEqual(here.saw);
     expect(there.saw).toEqual(["log closed", "answered e 7"]);
+  });
+
+  test("a heap snapshot reaches the host as its text, in order, and settles once it has all come", async () => {
+    const written: string[] = [];
+    const lines = linesOver(recordingHost().host, async (chunk) => {
+      chunk('{"snap');
+      await Promise.resolve();
+      chunk('shot":1}');
+    });
+    await lines.heapSnapshot((chunk) => written.push(chunk));
+    expect(written.join("")).toBe('{"snapshot":1}');
+  });
+
+  test("a heap snapshot the renderer could not take fails with its failure, after the chunks it sent", async () => {
+    const written: string[] = [];
+    const lines = linesOver(recordingHost().host, async (chunk) => {
+      chunk("{");
+      throw new Error("out of memory");
+    });
+    await expect(
+      lines.heapSnapshot((chunk) => written.push(chunk)),
+    ).rejects.toThrow("out of memory");
+    expect(written).toEqual(["{"]);
   });
 
   test("two notices heard in one chunk reach the host in the order sent", () => {

@@ -43,7 +43,7 @@ import { ReloadSignal } from "./helpers/reload-signal";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolveThemeSelection } from "../src/themes/palette-resolvers";
 import { ConfigError } from "../src/config/dsl-loader";
-import { testVerbContext, effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { encodeSegments, parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/renderer/verbs";
@@ -430,7 +430,7 @@ function buildPersistRuntime(
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
+      const handler = CLICK_VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
       await handler(e.value, ctx);
     }
@@ -574,7 +574,7 @@ describe("persist action click → the config file", () => {
       const effects =
         verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
       for (const e of effects) {
-        const handler = VERBS.get(e.verb);
+        const handler = CLICK_VERBS.get(e.verb);
         if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
         await handler(e.value, ctx);
       }
@@ -794,7 +794,7 @@ describe("persist action click → the config file", () => {
       config,
       durable.host,
     );
-    const setConfig = VERBS.get("set-config")!;
+    const setConfig = CLICK_VERBS.get("set-config")!;
     expect(() =>
       setConfig(
         `${encodeURIComponent("s1")}/user/${encodeURIComponent("not-a-real-key")}/${encodeURIComponent("x")}`,
@@ -873,7 +873,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       config,
       durable.host,
     );
-    await VERBS.get("set-config")!(
+    await CLICK_VERBS.get("set-config")!(
       encodeSegments(["s1", "user", "palette", "nord"]),
       ctx,
     );
@@ -911,7 +911,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       durable.host,
     );
     const click = async (palette: string): Promise<void> =>
-      await VERBS.get("set-config")!(
+      await CLICK_VERBS.get("set-config")!(
         encodeSegments(["s1", "user", "palette", palette]),
         ctx,
       );
@@ -973,7 +973,7 @@ describe("RenderCache: the config file is the durable store", () => {
           return;
         }
         clicked = true;
-        await VERBS.get("set-config")!(
+        await CLICK_VERBS.get("set-config")!(
           ["s1", "user", "palette", "nord"].map(encodeURIComponent).join("/"),
           ctx,
         );

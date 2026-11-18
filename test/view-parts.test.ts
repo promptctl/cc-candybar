@@ -14,8 +14,12 @@ import type { ValidatedConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
 import { VERBS } from "../src/renderer/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { linkClick } from "./helpers/click";
-import { registerDslConfig, type DrawnFrame, type RenderWarning } from "../src/dsl/render";
+import { linkClick, CLICK_VERBS } from "./helpers/click";
+import {
+  registerDslConfig,
+  type DrawnFrame,
+  type RenderWarning,
+} from "../src/dsl/render";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
@@ -41,14 +45,21 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: "/tmp",
+  });
   const errors: string[] = [];
   const warnings: RenderWarning[] = [];
   const draw = (
     payload: object,
     at: Instant,
     opts: typeof OPTS = OPTS,
-    selection = resolveEffectiveGlobals(config, () => null, () => false),
+    selection = resolveEffectiveGlobals(
+      config,
+      () => null,
+      () => false,
+    ),
   ): DrawnFrame => {
     const drawn = drawPayload(
       config,
@@ -109,9 +120,7 @@ describe("a frame evaluates the parts whose inputs moved", () => {
     view.draw({ x: "1" }, A);
     const wider = view.draw({ x: "1" }, A, { ...OPTS, width: 300 });
     expect(textOf(wider.frame)).toBe(
-      textOf(
-        viewOf(CONFIG).draw({ x: "1" }, A, { ...OPTS, width: 300 }).frame,
-      ),
+      textOf(viewOf(CONFIG).draw({ x: "1" }, A, { ...OPTS, width: 300 }).frame),
     );
   });
 });
@@ -129,9 +138,7 @@ describe("what reads the instant is a projection, however it reaches the clock",
     const view = viewOf(config);
     const urls = [A, B].map(
       (at) =>
-        linksOf(view.draw({}, at).frame).find(
-          (l) => l.text === "copy",
-        )!.url,
+        linksOf(view.draw({}, at).frame).find((l) => l.text === "copy")!.url,
     );
     expect(urls[0]).toContain(String(Math.floor(A)));
     expect(urls[1]).toContain(String(Math.floor(B)));
@@ -152,9 +159,7 @@ describe("what reads the instant is a projection, however it reaches the clock",
     const view = viewOf(config);
     const urls = [A, B].map(
       (at) =>
-        linksOf(view.draw({}, at).frame).find(
-          (l) => l.text === "copy",
-        )!.url,
+        linksOf(view.draw({}, at).frame).find((l) => l.text === "copy")!.url,
     );
     expect(urls[0]).toContain(String(Math.floor(A)));
     expect(urls[1]).toContain(String(Math.floor(B)));
@@ -362,7 +367,7 @@ describe("a kept view draws what a fresh one draws", () => {
       const { verb, value } = linkClick(hit.url);
       const effects =
         verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-      for (const e of effects) await VERBS.get(e.verb)!(e.value, ctx);
+      for (const e of effects) await CLICK_VERBS.get(e.verb)!(e.value, ctx);
     };
 
     const cold = step();

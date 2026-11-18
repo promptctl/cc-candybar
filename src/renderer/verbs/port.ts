@@ -12,7 +12,8 @@ import type {
 } from "../../renderer-interface/interface.js";
 import type { IdleSpan, MenuIdle } from "../menu-idle.js";
 import type { Feeds } from "../feeds.js";
-import type { CheckedRenderRequest } from "../../renderer-interface/request-context.js";
+import type { SessionContext } from "../../renderer-interface/request-context.js";
+import type { RenderOrigin } from "../../config-hint.js";
 import type { ActsOnTheirWay } from "../acts.js";
 import type { DoctorRuns } from "../doctor.js";
 import {
@@ -22,9 +23,9 @@ import {
   type VerbContext,
 } from "./index.js";
 
-// What the verb context holds of one click: how it arrived, the newest
-// request of its session, and its turn's effects.
-export type ClickFacts = Pick<VerbContext, "arrival" | "latest" | "effects">;
+// What the verb context holds of one click: how it arrived, its session's
+// context, and its turn's effects.
+export type ClickFacts = Pick<VerbContext, "arrival" | "context" | "effects">;
 
 // The daemon's verb context, less what each click brings.
 export type DaemonVerbContext = Omit<VerbContext, keyof ClickFacts>;
@@ -37,19 +38,19 @@ export interface RendererVerbs {
     verb: string,
   ): ((value: string, click: ClickFacts) => void) | undefined;
   // The close of the session's menus when its idle period runs out: the
-  // journaled write a ✕ makes.
+  // journaled write a ✕ makes, with the session's live context.
   closeIdle(
     sessionId: SessionId,
-    latest: CheckedRenderRequest | null,
+    context: SessionContext | null,
     idle: IdleSpan,
     effects: Effect[],
   ): void;
   // A change's `effect-done`, in its turn, whose effects what its click's
   // consequence asks joins: false for an id no click's change holds.
   changeDone(id: EffectId, outcome: EffectOutcome, effects: Effect[]): boolean;
-  // The session whose click's changes are on their way: its consequence
-  // waits on its landing, over its origin's config as the landing left it.
-  landing(): SessionId | null;
+  // The origin of the click whose changes are on their way: its consequence
+  // waits on its landing, over that origin's config as the landing left it.
+  landing(): RenderOrigin | null;
 }
 
 // The main renderer's parts: the draw's, which the host's own frames share,
@@ -81,8 +82,8 @@ export function verbsOver(ctx: DaemonVerbContext): RendererVerbs {
         handler && ((value, facts) => handler(value, { ...ctx, ...facts }))
       );
     },
-    closeIdle: (sessionId, latest, idle, effects) =>
-      closeIdleMenus(sessionId, latest, idle, ctx, effects),
+    closeIdle: (sessionId, context, idle, effects) =>
+      closeIdleMenus(sessionId, context, idle, ctx, effects),
     changeDone: (id, outcome, effects) => changeDone(ctx, id, outcome, effects),
     landing: () => ctx.configWrites.landing(),
   };

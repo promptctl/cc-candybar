@@ -15,8 +15,9 @@ import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
-import { EPHEMERAL_SESSION_STORAGE } from "../src/renderer/session-state";
-import { EPHEMERAL_HISTORY_STORAGE } from "../src/renderer/settings-history";
+import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/held-stores";
+import { ephemeralSessionFile } from "../src/daemon/session-state-file";
+import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/foundations/protocol";
 import { REGISTRY_URL } from "../src/install/currency";
 import { composeBar, parseFrame, type Frame } from "../src/render/frame";
@@ -71,8 +72,9 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 const WORLD = processWorld();
 const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
+const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
 const pageDaemon = createDaemon({
-  ...productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock),
+  ...adapters,
   gates: daemonGates(),
   paths,
   host: HOST,
@@ -83,10 +85,16 @@ const pageDaemon = createDaemon({
     node: [],
     targets: [],
   },
-  storage: () => ({
-    session: EPHEMERAL_SESSION_STORAGE,
+  rendererName: MAIN_RENDERER,
+  // Its picks and history live only as long as the page; the doctor files
+  // its documents on the simulated machine, as a daemon's profile does.
+  profile: (name, log) => ({
+    ...adapters.profile(name, log),
+    session: ephemeralSessionFile(),
     history: EPHEMERAL_HISTORY_STORAGE,
   }),
+  // Its sessions are the page's own, for as long as it is open.
+  sessionBook: () => ephemeralSessionFile(),
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: WORLD.clock,
@@ -94,6 +102,8 @@ const pageDaemon = createDaemon({
     throw new Error(`the page's daemon asked to exit ${code}`);
   },
 });
+// It serves without arming: it won no socket, so it watches nothing.
+pageDaemon.serve();
 
 function lines(entry: Entry, at: number): object[] {
   const base = { timestamp: new Date(clockAt(at) * 1000).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };

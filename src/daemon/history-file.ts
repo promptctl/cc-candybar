@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DaemonLogger } from "../utils/logger";
 import { writeAtomic } from "../utils/atomic-write.js";
+import { layerRoleOf } from "../config/layer-role";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import {
   type Change,
@@ -24,7 +25,9 @@ function isChange(v: unknown): v is Change {
   const state = (x: unknown) => x === null || typeof x === "string";
   return (
     ((o.kind === "session" && typeof o.key === "string") ||
-      (o.kind === "file" && typeof o.file === "string")) &&
+      (o.kind === "layer" &&
+        layerRoleOf(o.role) !== null &&
+        typeof o.digest === "string")) &&
     state(o.before) &&
     state(o.after)
   );
@@ -71,7 +74,7 @@ function withoutRetiredKeys(
   retired: Set<string>,
 ): SessionHistory {
   const keep = (change: Change): boolean => {
-    if (change.kind === "file" || isSettingKey(change.key)) return true;
+    if (change.kind === "layer" || isSettingKey(change.key)) return true;
     retired.add(change.key);
     return false;
   };
@@ -94,8 +97,8 @@ function withoutRetiredKeys(
 
 // [LAW:no-silent-failure] A missing file is a first boot. An unreadable or
 // wrong-shaped one is logged and dropped WHOLE rather than salvaged entry by
-// entry. A write failure throws: the click's change landed, but saying it is
-// undoable would be a lie.
+// entry. A write failure throws: the click's change landed and the renderer
+// holds its step, but a restart would lose it.
 export function fileHistoryStorage(
   file: string,
   logger: DaemonLogger,
@@ -152,7 +155,7 @@ export function fileHistoryStorage(
         fs.mkdirSync(path.dirname(file), { recursive: true });
         writeAtomic(file, JSON.stringify(state), 0o600);
       } catch (e) {
-        const message = `settings-history write failed — the change landed but is not undoable: ${(e as Error).message}`;
+        const message = `settings-history write failed — the change landed and undoes until the daemon restarts, not after: ${(e as Error).message}`;
         logger("error", message);
         throw new Error(message);
       }

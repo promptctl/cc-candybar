@@ -5,12 +5,13 @@
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
 import { daemonFactsOf } from "./helpers/daemon-facts";
+import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import { NO_DOCTOR } from "./helpers/payload-owners";
 import {
   eventRenderer,
   hostHeld,
   NO_ACTS,
-  NO_PUSHES,
+  NO_PUSHES, NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
@@ -854,9 +855,10 @@ function statusline(r: Rig, configFile: string) {
       worldStates: r.worldStates,
     }),
     NO_PUSHES,
+    NOTHING_STORED,
   );
   const rendered = rendererHost(
-    "main",
+    MAIN_RENDERER,
     systemTimekeeper,
     hostHeld(
       eventRenderer(async (input) => {

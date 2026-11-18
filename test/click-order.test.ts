@@ -15,7 +15,6 @@ import {
   type VerbContext,
   type VerbHandler,
 } from "../src/renderer/verbs";
-import { SESSION_CLIENT_HINTS_KEY } from "../src/daemon/foundations/session-keys";
 import {
   VERB_DISPATCH,
   VERB_DOCTOR_RUN,
@@ -36,6 +35,7 @@ import {
   testVerbContext,
   verbContextWith,
   withDoctor,
+  CLICK_VERBS,
 } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -43,7 +43,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { undoOf } from "./helpers/history-step";
+import { NO_LAYERS, undoOf } from "./helpers/history-step";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const A = sessionIdOf("session-a");
@@ -77,14 +77,13 @@ function setup(
   const sessionState = new SessionState();
   const logged: string[] = [];
   recordRender(sessionState, A);
-  sessionState.set(A, SESSION_CLIENT_HINTS_KEY, "{}");
   const ctx = withDoctor(
     verbContextWith(testVerbContext(sessionState, undefined, EMPTY_DEFAULT), {
       log: (_level, line) => logged.push(line),
     }),
     { stores: emptyStores(), load: LOAD },
   );
-  const { arrival: _a, latest: _l, effects: _e, ...verbCtx } = ctx;
+  const { arrival: _a, context: _c, effects: _e, ...verbCtx } = ctx;
   const host = clickParts(verbCtx, over.collector);
   const events: string[] = [];
   const parts = {
@@ -118,7 +117,10 @@ function setup(
     send(VERB_SET_STATE, encodeSegments([A, "theme", theme]), gone);
   // A wake of the renderer's: the idle closes due as its turn comes.
   const due = () =>
-    host.renderer.deliver(() => ({ kind: "event", event: { kind: "due" } }), []);
+    host.renderer.deliver(
+      () => ({ kind: "event", event: { kind: "due" } }),
+      [],
+    );
   return {
     sessionState,
     ctx,
@@ -142,11 +144,11 @@ function setup(
 describe("a doctor click", () => {
   test("runs no probe in its turn: it ends with the run asked of the host, and a write behind it lands at once", () => {
     const { ctx, theme } = setup();
-    VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(A), ctx);
+    CLICK_VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(A), ctx);
     expect(ctx.doctorRuns.subscriptions().get(A)).toMatchObject({
       kind: "doctor",
     });
-    VERBS.get(VERB_SET_STATE)!(encodeSegments([A, "theme", "nord"]), ctx);
+    CLICK_VERBS.get(VERB_SET_STATE)!(encodeSegments([A, "theme", "nord"]), ctx);
     expect(theme()).toBe("nord");
   });
 
@@ -157,7 +159,6 @@ describe("a doctor click", () => {
     try {
       const sessionState = new SessionState();
       fixture.seedOrigin(sessionState, A);
-      sessionState.set(A, SESSION_CLIENT_HINTS_KEY, "{}");
       const config = parseAndValidate(
         "<user>",
         `{ actions: { pal: { persist: 'palette', from: 'themes' } } }`,
@@ -189,7 +190,7 @@ describe("a doctor click", () => {
         },
         { verb: VERB_DOCTOR_RUN, args: [A] },
       ]);
-      VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
+      CLICK_VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
       expect(seen).toEqual([null]);
       expect(fixture.text()).toContain("palette");
     } finally {
@@ -200,8 +201,7 @@ describe("a doctor click", () => {
 
 describe("the mailbox's order", () => {
   test("two clicks sent together land in order, one undo step each", async () => {
-    const { ctx, sessionState, park, dispatch, theme, undoDepth } =
-      setup();
+    const { ctx, sessionState, park, dispatch, theme, undoDepth } = setup();
     const parked = park();
     const first = dispatch("nord", "plain");
     const second = dispatch("dracula", "powerline");
@@ -212,7 +212,7 @@ describe("the mailbox's order", () => {
     expect(theme()).toBe("dracula");
     expect(sessionState.get(A, "endcaps")).toBe("powerline");
     expect(undoDepth()).toBe(2);
-    undoOf(ctx.history, A);
+    undoOf(ctx.history, A, NO_LAYERS);
     expect(theme()).toBe("nord");
     expect(sessionState.get(A, "endcaps")).toBe("plain");
   });
@@ -305,8 +305,15 @@ describe("the idle close decides as its turn comes", () => {
 // before it runs whole, and what arrived after it is refused.
 describe("close", () => {
   test("a due behind the close in the mailbox lands nothing", async () => {
-    const { closeJournal, sessionState, park, due, undoDepth, menuIdle, logged } =
-      setup();
+    const {
+      closeJournal,
+      sessionState,
+      park,
+      due,
+      undoDepth,
+      menuIdle,
+      logged,
+    } = setup();
     shownLongAgo(menuIdle);
     const before = sessionState.revision(A);
     const parked = park();
@@ -319,7 +326,9 @@ describe("close", () => {
     expect(await closing).toMatchObject({ kind: "answered" });
     expect(logged).toEqual([
       expect.stringMatching(
-        new RegExp(`^menu-idle: close failed \\(session=${A}\\): .*the daemon closed`),
+        new RegExp(
+          `^menu-idle: close failed \\(session=${A}\\): .*the daemon closed`,
+        ),
       ),
     ]);
     expect(sessionState.revision(A)).toBe(before);
@@ -465,10 +474,10 @@ test("a navigation commit that throws leaves the settings journal committed", ()
     },
   }));
   expect(() =>
-    VERBS.get(VERB_SET_STATE)!(encodeSegments([A, "theme", "nord"]), ctx),
+    CLICK_VERBS.get(VERB_SET_STATE)!(encodeSegments([A, "theme", "nord"]), ctx),
   ).toThrow("navigation broke");
   expect(undoDepth()).toBe(1);
-  undoOf(ctx.history, A);
+  undoOf(ctx.history, A, NO_LAYERS);
   expect(theme()).toBeNull();
 });
 
@@ -476,7 +485,7 @@ test("a verb stamps its session's landing, though its handler threw", () => {
   const { ctx } = setup();
   const landed: string[] = [];
   expect(() =>
-    VERBS.get(VERB_UNDO)!(encodeSegments([A]), {
+    CLICK_VERBS.get(VERB_UNDO)!(encodeSegments([A]), {
       ...ctx,
       clickLanded: (sid) => landed.push(sid),
     }),

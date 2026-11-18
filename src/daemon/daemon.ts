@@ -1,5 +1,8 @@
 // The daemon as a value: what it holds, built from its inputs, and its one close.
 
+import { SessionBook } from "./session-book.js";
+import type { SessionFileStorage } from "./session-state-file.js";
+import type { DurableContext } from "../renderer-interface/request-context.js";
 import { Runs } from "./runs.js";
 import { locations, type DaemonPaths } from "./paths";
 import type { Host } from "../host";
@@ -14,8 +17,6 @@ import {
   type ReplyRequest,
 } from "./reply.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
-import type { SessionStorage } from "../renderer-interface/session-state";
-import type { HistoryStorage } from "../renderer-interface/history-storage";
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
@@ -36,7 +37,7 @@ import { SourceRuns } from "./source-runs";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, type LimitsDeps } from "./limits";
-import type { DoctorMachineEdge, DoctorStores } from "../doctor/ports";
+import type { DoctorMachineEdge } from "../doctor/ports";
 import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
@@ -58,7 +59,9 @@ import { linkSignerOver } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost } from "./renderer-host.js";
-import { loadMainRenderer } from "../renderer/main.js";
+import { mainRendererOf } from "../renderer/main.js";
+import { HeldStores, type ProfileStorage } from "./held-stores.js";
+import type { RendererName } from "./foundations/renderer-name.js";
 import type { RendererPort } from "./renderer-process.js";
 import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import { bootEnv } from "../renderer-interface/wire.js";
@@ -96,12 +99,6 @@ export interface RunningBundle {
   readonly targets: readonly string[];
 }
 
-// Where the session's picks and its settings history persist.
-export interface DaemonStorage {
-  readonly session: SessionStorage;
-  readonly history: HistoryStorage;
-}
-
 // [LAW:effects-at-boundaries] Everything a daemon does to the machine, as an
 // input: it names no real one itself, so a daemon is as isolated as the
 // adapters it is handed. src/daemon/production-adapters.ts builds the real
@@ -112,12 +109,17 @@ export interface DaemonAdapters {
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
   readonly launcher: (own: LaunchOwner) => TestableLauncher;
-  // Their files, for a daemon that won the socket, which makes it their sole
-  // writer. Built over the daemon's log: a write in flight at the close finishes
-  // after it, and what it logs says so like any other line of the daemon's work.
-  readonly storage: (log: DaemonLogger) => DaemonStorage;
-  // The doctor's stores, which this daemon files.
-  readonly doctorStores: DoctorStores;
+  // [LAW:one-source-of-truth] Where the stores of the profile `name` derives
+  // are kept, which the daemon reads once it serves and is then their sole
+  // writer. Built over the daemon's log: a write in flight at the close
+  // finishes after it, and what it logs says so like any other line of the
+  // daemon's work.
+  readonly profile: (name: RendererName, log: DaemonLogger) => ProfileStorage;
+  // Where the host keeps its book of each session's durable context: the
+  // host's own, whichever renderer it runs.
+  readonly sessionBook: (
+    log: DaemonLogger,
+  ) => SessionFileStorage<DurableContext>;
   // The doctor's reads of the machine.
   readonly doctorEdge: (launcher: Launcher, host: Host) => DoctorMachineEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
@@ -155,6 +157,8 @@ export interface DaemonAdapters {
 // it does to the machine, and the numbers it runs by.
 export interface DaemonInputs extends DaemonAdapters {
   readonly bundle: RunningBundle;
+  // The renderer it serves, whose profile its stores are.
+  readonly rendererName: RendererName;
   // [LAW:one-source-of-truth] What the process knows of its machine: its
   // environment, home and temporary directory. The daemon reads them from here
   // alone, and its launcher's children inherit the same environment.
@@ -214,6 +218,10 @@ export interface Daemon {
   // calls it after it resets its simulated machine's config file, which no
   // watch hears.
   readonly rediscover: () => void;
+  // [LAW:no-ambient-temporal-coupling] Reads the profile's stores and builds
+  // the renderer from them: before it, an input fails as no renderer's. What
+  // the page calls, and a test's daemon; an armed daemon serves as it arms.
+  serve(): void;
   // What a daemon that won the socket starts: only it counts its memory or
   // watches its bundle.
   arm(): void;
@@ -328,25 +336,31 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // (server.ts) asks its own before this daemon exists.
   const probe = inputs.probe(launcher);
   const linkSigner = linkSignerOver(inputs.linkKey);
-  // Before every owner that arms a timer: a renderer in process loads here, so
-  // storage it cannot read refuses the build with nothing running. One in a
-  // process of its own loads there, and refuses its boot with the reason on
-  // the bar's ⚠.
+  // [LAW:single-enforcer] The renderer's stored state, held here: every
+  // renderer is built from what it holds then, and every turn's stored writes
+  // move it.
+  const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
+  const sessionBook = new SessionBook(inputs.sessionBook(log));
   const preparedRenderer = inputs.renderer({
-    load: () =>
-      loadMainRenderer({
-        storage: { ...inputs.storage(log), doctor: inputs.doctorStores },
-        linkSigner,
-        locations: locs,
-        env: host.env,
-        home: host.home,
-        gates,
-        memoryLimitBytes,
-      }),
+    name: inputs.rendererName,
+    build: (reaches) =>
+      mainRendererOf(
+        {
+          stored: stores.current(),
+          linkSigner,
+          locations: locs,
+          env: host.env,
+          home: host.home,
+          gates,
+          memoryLimitBytes,
+        },
+        reaches,
+      ),
     // The key crosses in base64, so the boot crosses as a line.
     boot: () => {
       const key = inputs.linkKey();
       return {
+        stored: stores.current(),
         digest: bundle.digest,
         host: { ...host, env: bootEnv(host.env) },
         memoryLimitBytes,
@@ -375,10 +389,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   });
   const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
-  // [LAW:one-source-of-truth] The doctor's stores, under this daemon's state
-  // directory: its click files them, and daemon-stats answers what they hold
-  // to `cc-candybar doctor`.
-  const doctorStores = inputs.doctorStores;
   // [LAW:one-source-of-truth] One provider per data shape, shared across every
   // render in this daemon, built by the one constructor every renderer uses
   // (payload-providers.ts). The render cache owns DSL-state-per-config; these
@@ -702,6 +712,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
     moved: (origins) => parts.renderer.moved(origins),
   });
+  // [LAW:single-enforcer] Served once, whichever asks first.
+  let served = false;
+  const serve = (): void => {
+    closing.signal.throwIfAborted();
+    if (served) return;
+    stores.load();
+    sessionBook.load();
+    link.serve();
+    // [LAW:no-silent-failure] Served once every step has: a step that threw
+    // is thrown to its caller, and the next ask serves again.
+    served = true;
+  };
   const parts: DaemonParts = {
     closing: closing.signal,
     home: host.home,
@@ -711,7 +733,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     bundle: bundle.path,
     sourceDigest: bundle.digest,
-    doctorStores,
+    stores,
+    sessionBook,
     stats,
     handlerProbes,
     linkSigner,
@@ -729,7 +752,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     limits,
     collector,
     renderer: rendererHost(
-      "main",
+      inputs.rendererName,
       clock,
       link.renderer,
       log,
@@ -750,6 +773,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           );
         },
         frames: (frames) => frameFeeds.took(frames),
+        stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
         writableSettings: (session) => collector.writableSettings(session),
       },
@@ -796,8 +820,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       closing.signal.throwIfAborted();
       configDiscovery.again("asked");
     },
+    serve,
     arm() {
       closing.signal.throwIfAborted();
+      serve();
       fileEvents.start(paths.watchProbe);
       binaryWatch.arm();
       updateWatch.arm();
@@ -805,13 +831,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       link.arm();
     },
     async close() {
-      // The renderer's three steps of the teardown, each awaited where it
+      // The renderer's steps of the teardown, each awaited where it
       // stands: the renderer takes them in the order they are sent.
       const rendererStep =
-        (kind: "close-journal" | "close-views" | "close-session-state") =>
-        (): Promise<unknown> =>
+        (kind: "close-journal" | "close-views") => (): Promise<unknown> =>
           parts.renderer.ask({ kind });
-      // The session state still flushes after a close failed (runTeardown).
+      // The stores still flush after a close failed (runTeardown).
       const teardown: readonly TeardownStep[] = [
         // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
         // ends is not started again, so no step below waits on a fresh boot.
@@ -851,10 +876,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["doctorSource close", () => doctorSource.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        // Last: a run that ends in the teardown holds its click error first.
-        ["sessionState close", rendererStep("close-session-state")],
-        // After every step the renderer takes: its process, when it has one,
-        // ends with nothing left to flush.
+        // Last of the stores' writers: a run that ends in the teardown holds
+        // its click error first.
+        ["stores close", () => stores.close()],
+        ["sessionBook close", () => sessionBook.close()],
         ["renderer process close", () => link.close()],
       ];
       await runTeardown(teardown, log);

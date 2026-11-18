@@ -27,7 +27,7 @@ import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import type { ConfigTarget } from "../config-hint.js";
 import type { SightingScope } from "./sightings.js";
 import type { StoresRead } from "../daemon/foundations/stats-snapshot.js";
-import type { DoctorStores, ConfigLoad } from "./ports.js";
+import type { DoctorDocuments, ConfigLoad } from "./ports.js";
 import {
   isJsonObject,
   type JsonObject,
@@ -48,7 +48,7 @@ export function asked<T>(read: () => T): Asked<T> {
   }
 }
 
-export const readStores = (stores: DoctorStores): StoresRead => ({
+export const readStores = (stores: DoctorDocuments): StoresRead => ({
   marks: stores.marks.read(),
   clicked: stores.clicked.read(),
   postMortemsRead: stores.postMortemsRead.read(),

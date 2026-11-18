@@ -90,7 +90,7 @@ This table is the target, read from `DaemonParts`, `verbCtx` and the imports on 
 
 | Piece | What moves into it | Ports its tests fake |
 |---|---|---|
-| Foundations | `src/daemon/foundations/`: session keys, the gates (`createGates`, built by `daemonGates()`), `encodeRenderOrigin`, `roleOf`, `answeredOf`. The link signer is `src/click/link-signer.ts`, below the daemon already | Signing key |
+| Foundations | `src/daemon/foundations/`: the gates (`createGates`, built by `daemonGates()`), the render origin record, `roleOf`, `answeredOf`. The link signer is `src/click/link-signer.ts`, below the daemon already | Signing key |
 | Sessions | `SessionState`, `SettingsHistory`, `NavigationHistory`, `MenuIdle` | Session store, clock |
 | Config | Resolving and parsing a load | Watched store |
 | Sources | Payload providers, `RefreshLedger`, `WatcherRegistry`, `FileEventDelivery` | Launcher, watched store, git, forge, tmux, remote data |
@@ -132,7 +132,7 @@ Each row is tested once, at its adapter.
 | Time and timers | One `Timekeeper` (`src/time.ts`), handed down from the process's world; lint keeps every other file off the real clock | 11 | Real clock |
 | Child processes | `src/proc/launch.ts`, imported directly | 12 | Real child process |
 | Process table | `pidAlive` and `readStartTime`, imported directly | 12 | Real processes |
-| Files and file change events | `fs` at 173 sites, `DaemonStorage` for two families, `fs.watch` direct, `fs.statSync` in the binary watch | 14 | Temp directory, real `fs.watch` |
+| Files and file change events | `fs` at 173 sites, a profile's stores and the session book behind ports, `fs.watch` direct, `fs.statSync` in the binary watch | 14 | Temp directory, real `fs.watch` |
 | The daemon's log | `DaemonLogger` built inside `createDaemon`, tests read the file | 43 | Temp directory |
 | git | Concrete `GitService`, `fakeGit`, `StubGitService` | 15 | Real repository |
 | gh and glab | Same class, `stubPr`, PATH script | 16 | Recordings, refreshed on schedule |
