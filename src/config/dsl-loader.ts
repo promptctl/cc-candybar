@@ -280,9 +280,8 @@ function layPlugins(
   );
 }
 
-// [LAW:no-shared-mutable-globals] The installed layer is built by every load
-// that merges over it and kept by none: a store of layers beside the render
-// cache's entries outlives the checkouts they serve, since an entry's checkout
+// Built by every load that merges over it. A store of these beside the render
+// cache's entries outlives the checkouts they serve: an entry's checkout
 // changes on a reload without the entry leaving.
 function installedLayer(
   files: readonly PluginFile[],
@@ -305,8 +304,9 @@ function installedLayer(
  * `checkout` stands in for a session's, so a `data: { checkout }` path
  * resolves; the data file need not exist.
  */
-// [LAW:single-enforcer] The install's verdict is the installed layer's own
-// drops, so a definition the bar would drop is never installed.
+// [LAW:single-enforcer] The install's verdict is laid exactly as the installed
+// layer lays its plugins, so a definition that alone would drop is never
+// installed.
 export function definitionProblems(
   definitions: readonly PluginFile[],
   dflt: DslConfig,

@@ -1079,8 +1079,7 @@ describe("an installed plugin", () => {
   });
 
   // A `.git` appearing above a directory moves the checkout its data
-  // resolves against, and the next load reads the new one: nothing holds a
-  // checkout's layer past the load that built it.
+  // resolves against, and the next load reads the new one.
   test("a checkout created above a directory moves its data on the next load", () => {
     install("data", "lit", CHECKOUT_DEFINITION);
     fs.mkdirSync(path.join(dir, "outer/inner"), { recursive: true });
