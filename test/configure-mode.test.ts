@@ -40,7 +40,8 @@ import {
   EDIT_MODE_KEY,
   EDIT_CONFIGURE_KEY,
 } from "../src/config/loader/edit-mode";
-import { placementDraftKey } from "../src/config/edit-chrome";
+import { insertGap, placementDraftKey } from "../src/config/edit-chrome";
+import { menuMember } from "../src/config/menu-keys";
 import {
   ADD_GLYPH,
   CONFIGURE_GLYPH,
@@ -53,7 +54,7 @@ import {
   type SegmentNode,
 } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
-import { encodeLayoutOp } from "../src/config/layout-ops";
+import { encodeLayoutOp, type LayoutOp } from "../src/config/layout-ops";
 import { presetRootKey } from "../src/config/loader/persist-target";
 import { placementDrafts } from "../src/renderer/setting-drafts";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
@@ -629,6 +630,113 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     await CLICK_VERBS.get(VERB_UNDO)!(SID, rt.ctx);
     expect(durable.text()).toBe(SRC);
     expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBe("true");
+  });
+
+  // A gap's library is named by the placement it stands beside, so an edit
+  // that ends that gap releases its open state: a placement that later takes
+  // the id is a new instance, with every library beside it closed.
+  const gap = (anchor: string, relation: "before" | "after") => {
+    const { apply, stateKey } = insertGap("default", anchor, relation);
+    return { key: stateKey, open: menuMember(apply) };
+  };
+
+  const op = (rt: ReturnType<typeof configureBar>, layoutOp: LayoutOp) =>
+    rt.click(
+      rt.urlWriting(
+        rt.render(),
+        presetRootKey("default"),
+        encodeLayoutOp(layoutOp),
+      ),
+    );
+  // The `plain` placements the file holds, in order.
+  const plains = () =>
+    [
+      ...walkNodes(
+        presetRoot(
+          parseAndValidate("<edited>", durable.text()!, ALLOWED),
+          "default",
+        ).node,
+      ),
+    ].flatMap((n) =>
+      n.kind === "segment" && n.name === "plain" ? [placementId(n)] : [],
+    );
+
+  test("removing a placement closes the library after it, so re-adding its id finds it closed", async () => {
+    durable.write(SRC);
+    const rt = configureBar(SRC);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    const after = gap("plain", "after");
+    rt.sessionState.set(SID, after.key, after.open);
+    await op(rt, { op: "remove", target: "plain" });
+    const host = gap("vcs2", "after");
+    rt.sessionState.set(SID, host.key, host.open);
+    await op(rt, {
+      op: "insert",
+      segment: "plain",
+      anchor: "vcs2",
+      relation: "after",
+    });
+    expect(plains()).toEqual(["plain"]);
+    expect(rt.sessionState.get(SID, after.key)).toBeNull();
+  });
+
+  // An undo that takes a placement out ends it as a removal does.
+  test("undoing an insert closes the library after the placement it took out", async () => {
+    durable.write(SRC);
+    const rt = configureBar(SRC);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    const host = gap("vcs2", "after");
+    rt.sessionState.set(SID, host.key, host.open);
+    await op(rt, {
+      op: "insert",
+      segment: "plain",
+      anchor: "vcs2",
+      relation: "after",
+    });
+    const minted = plains().find((id) => id !== "plain")!;
+    const after = gap(minted, "after");
+    rt.sessionState.set(SID, after.key, after.open);
+    expect(plains()).toEqual([minted, "plain"]);
+    await CLICK_VERBS.get(VERB_UNDO)!(SID, rt.ctx);
+    expect(plains()).toEqual(["plain"]);
+    expect(rt.sessionState.get(SID, after.key)).toBeNull();
+  });
+
+  // A closed configure key names no placement, and the library of a placement
+  // the edit keeps is the edit's to keep.
+  test("an edit keeps the state of the placements it keeps, and a closed configure key", async () => {
+    durable.write(SRC);
+    const rt = configureBar(SRC);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
+    const open = gap("vcs", "after");
+    rt.sessionState.set(SID, open.key, open.open);
+    await op(rt, { op: "remove", target: "plain" });
+    expect({
+      configure: rt.sessionState.get(SID, EDIT_CONFIGURE_KEY),
+      library: rt.sessionState.get(SID, open.key),
+    }).toEqual({ configure: DISCLOSURE_CLOSED, library: open.open });
+  });
+
+  test("a row's first placement losing the lead closes the library before it", async () => {
+    durable.write(SRC);
+    const rt = configureBar(SRC);
+    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    const leading = gap("vcs", "before");
+    rt.sessionState.set(SID, leading.key, leading.open);
+    await rt.click(
+      rt.urlWriting(
+        rt.render(),
+        presetRootKey("default"),
+        encodeLayoutOp({
+          op: "insert",
+          segment: "plain",
+          anchor: "vcs",
+          relation: "before",
+        }),
+      ),
+    );
+    expect(rt.sessionState.get(SID, leading.key)).toBeNull();
   });
 
   test.each([

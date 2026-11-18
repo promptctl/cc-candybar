@@ -366,8 +366,8 @@ function configureParts(
   // it is a template path no other variable owns. Entering configure folds
   // it, so each visit starts with every list closed.
   // [LAW:single-enforcer] exception: closing configure folds this list too
-  // (disclosure-nest.ts), but a layout edit releases configure on the
-  // reloaded config, where the removed placement's member nests nothing.
+  // (disclosure-nest.ts), but a click that ends the placement releases
+  // configure on the reloaded config, where its member nests nothing.
   const listKey = sharedMenuStateKey(enter);
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };

@@ -1079,7 +1079,7 @@ export function applyLayoutOp(
   layer: WriteLayer,
   key: string,
   op: LayoutOp,
-): { readonly placed: NewPlacement | null; readonly config: DslConfig } {
+): { readonly placed: NewPlacement | null } {
   const into = seenBy(layer, (file) => store.read(file));
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
@@ -1106,7 +1106,8 @@ export function applyLayoutOp(
       `${placement.path.join(".")} in ${into.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  return { placed, config: commit(store, into, before, after, refuseHidden) };
+  commit(store, into, before, after, refuseHidden);
+  return { placed };
 }
 
 // [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:
