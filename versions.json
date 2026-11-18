@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "da23aa8eef006c7d3ab59ca80d78ed17d712ef01",
+      "timestamp": "2026-11-18T14:54:08.545Z",
+      "commits": [
+        {
+          "sha": "da23aa8eef006c7d3ab59ca80d78ed17d712ef01",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:52:56-07:00",
+          "message": "fix(colour): the door's ✖ is red as each depth draws it, the theme's own wherever one reads (87n6) (#803)\n\n* fix(colour): the door's ✖ is the theme's own red as each depth draws it (87n6)\n\n* fix(colour): the door's ✖ takes the first red to clear the text floor, else the farthest (87n6)\n\n* fix(colour): the door's ✖ ranks its reds in one comparison, and says where the terminal's red stands in (87n6)\n\n* docs(colour): errorRedOn states its general contract (87n6)"
+        }
+      ]
+    },
+    {
       "version": "pr-804",
       "ref": "refs/pull/804/merge",
       "sha": "fd131216264496188f25160011893ca7f4f2b743",
@@ -106,21 +121,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:48:16-07:00",
           "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "5d66d500b01f137d9d9a6bdbec6d0664ede19584",
-      "timestamp": "2026-11-18T13:04:00.638Z",
-      "commits": [
-        {
-          "sha": "5d66d500b01f137d9d9a6bdbec6d0664ede19584",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:02:46-07:00",
-          "message": "fix: an update act's budget is spent in time a daemon watched it run, not wall time (#797)\n\n* fix: an update act's budget is spent in time a daemon watched it run, not wall time (9eu3)\n\nWall time runs while the machine sleeps, so a lid closed mid-build past\nten minutes ended the build on wake, possibly mid-write, tearing the\nbundle. Each watching daemon now spends the budget by its looks: a gap\nlonger than five polls is a sleep or a stall and spends nothing, as a\nclock set back does. The record's deadline is written past any clock, so\nan older daemon on the bundle never ends an act by it.\n\n* fix(update): the act budget follows its job on the span clock, and says what it did not spend (9eu3)\n\nThe spend is keyed by the job, not the act number a later claim can reuse,\nand measured on the monotonic clock. Spans past the longest look are kept as\nunwatched and logged, and a timeout says both figures. A job is ended once.\nThe act record is parsed where it is read, a claim's fault reaches the act\nfiles' one edge, and a look that throws no longer stops the watch. Comments\nstate the real bound: ten minutes watched by one daemon.\n\n* fix(update): one job's watch is one value, and a look's wait excludes its read (9eu3)\n\nA look is tagged first, spent or unwatched, and the watch logs from that.\nThe job's ended mark lives in the same value and is set only once the end\nhas run. The wait runs from one look's end to the next look's start, so a\nslow read under load is never taken for a sleep. The act record's parse\nnarrows with type guards. A claim's fault and a throwing look go back to\ntheir own paths, which already show them."
         }
       ]
     }
