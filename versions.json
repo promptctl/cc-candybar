@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-813",
+      "ref": "refs/pull/813/merge",
+      "sha": "01d4080cc7a1537bd629f94357f1b3e9fb323e4f",
+      "timestamp": "2026-11-18T17:22:51.317Z",
+      "commits": [
+        {
+          "sha": "01d4080cc7a1537bd629f94357f1b3e9fb323e4f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T17:21:55Z",
+          "message": "Merge 24fc2d93f4180accac98449f9c4a9f80e219f4ca into b20d54e03314e183b84f143fe4194b85c8b54431\n"
+        },
+        {
+          "sha": "24fc2d93f4180accac98449f9c4a9f80e219f4ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:21:32-07:00",
+          "message": "fix(git): a failed ask is a read that never started; the ask runs in the read's directory; forge reads unset GH_REPO (a623)\n"
+        },
+        {
+          "sha": "5948360b1a83bbca3d9997dab3cba7b32c3af819",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:07:44-07:00",
+          "message": "fix(git): a git or forge read unsets the repository variables of the shell that spawned the daemon (a623)\n\nEvery git read, forge CLI launch and the doctor's forge probe now launch\nthrough one asker that unsets the variables `git rev-parse\n--local-env-vars` names, asked of git once. The daemon's environment is\nthe spawning shell's, so a hook's or vcsh's GIT_DIR pointed every\nsession's read at that shell's repository. An ask that fails is the\nread's own failed launch, never a read with the variables.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-814",
       "ref": "refs/pull/814/merge",
       "sha": "07fad79b138b3e613a2ddc38483e21c62e24eafa",
@@ -49,28 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T10:00:08-07:00",
           "message": "fix(storage): a storage folder's watch or stat fault clears when the OS answers again (tvhj)\n\nA refused or erroring watch, or a folder a judgment could not stat, no\nlonger ends its generation. The fault is derived from the handle's\ndeafness (taken at each window and at open, when the registry tells a\nmove of it) and the last judgment's stat, so the registry's period\nreopen and the next judgment clear it in place. A start or change of a\nfault is counted and logged once; a clear is logged. Only a folder that\ncould not be made stays terminal.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-813",
-      "ref": "refs/pull/813/merge",
-      "sha": "65b784a5f7af35d69d91d1621ffaff29ad4ca078",
-      "timestamp": "2026-11-18T17:10:34.160Z",
-      "commits": [
-        {
-          "sha": "65b784a5f7af35d69d91d1621ffaff29ad4ca078",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:08:54-07:00",
-          "message": "Merge 5948360b1a83bbca3d9997dab3cba7b32c3af819 into 23b2de009c29760ad28d0fb6368579b0eeea19ef\n"
-        },
-        {
-          "sha": "5948360b1a83bbca3d9997dab3cba7b32c3af819",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:07:44-07:00",
-          "message": "fix(git): a git or forge read unsets the repository variables of the shell that spawned the daemon (a623)\n\nEvery git read, forge CLI launch and the doctor's forge probe now launch\nthrough one asker that unsets the variables `git rev-parse\n--local-env-vars` names, asked of git once. The daemon's environment is\nthe spawning shell's, so a hook's or vcsh's GIT_DIR pointed every\nsession's read at that shell's repository. An ask that fails is the\nread's own failed launch, never a read with the variables.\n"
         }
       ]
     },

@@ -50967,7 +50967,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.2";
+var PACKAGE_VERSION = "1.232.3";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -67173,23 +67173,42 @@ init_globals();
 var localEnvUnset = (stdout2) => Object.fromEntries(
   stdout2.split("\n").filter((name) => name !== "").map((name) => [name, null])
 );
+function askedOf(answer2) {
+  if (answer2.ok)
+    return { kind: "unset", overlay: localEnvUnset(answer2.stdout) };
+  if (answer2.reason === "spawn-error")
+    return { kind: "failed", result: answer2 };
+  return {
+    kind: "failed",
+    result: {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: `git rev-parse --local-env-vars: ${failureText(answer2)}`
+    }
+  };
+}
 function repoLaunch(launcher) {
   let asked2 = null;
   return async (opts) => {
     const ask2 = asked2 ??= launcher.launch({
       bin: "git",
       args: ["rev-parse", "--local-env-vars"],
+      cwd: opts.cwd,
       timeoutMs: 2e3,
       category: "git"
-    });
+    }).then(askedOf);
     const answer2 = await ask2;
-    if (!answer2.ok) {
+    if (answer2.kind === "failed") {
       if (asked2 === ask2) asked2 = null;
-      return answer2;
+      return answer2.result;
     }
     return launcher.launch({
       ...opts,
-      envOverlay: { ...localEnvUnset(answer2.stdout), ...opts.envOverlay }
+      envOverlay: { ...opts.envOverlay, ...answer2.overlay }
     });
   };
 }
@@ -67660,6 +67679,9 @@ var GitService = class {
       bin,
       args: [...args],
       cwd: options.cwd,
+      // `gh` takes the repository from GH_REPO over its directory, and the
+      // daemon's is the spawning shell's.
+      envOverlay: { GH_REPO: null },
       timeoutMs: options.timeout,
       category: "forge"
     });
