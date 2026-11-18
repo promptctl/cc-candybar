@@ -35042,17 +35042,18 @@ var failedOf = (d) => ({
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 var isBelow = (at, root) => at.startsWith(root + import_node_path6.default.sep);
-var isDirectoryAt = (at) => fs_default.lstatSync(at, { throwIfNoEntry: false })?.isDirectory() ?? false;
-function dirsBelow(at, held2) {
+function dirsBelow(at, held2, trusted, unlisted) {
+  const heldIn = (dir) => [...held2].filter((p2) => p2 === dir || isBelow(p2, dir));
   let entries;
   try {
     entries = fs_default.readdirSync(at, { withFileTypes: true });
   } catch {
+    unlisted.push(at);
     return [...held2].filter((p2) => isBelow(p2, at));
   }
   return entries.filter((e) => e.isDirectory()).flatMap((e) => {
     const below = import_node_path6.default.join(at, e.name);
-    return [below, ...dirsBelow(below, held2)];
+    return trusted && held2.has(below) ? heldIn(below) : [below, ...dirsBelow(below, held2, false, unlisted)];
   });
 }
 function entryAt(at) {
@@ -35152,29 +35153,36 @@ var WatcherRegistry = class {
   // Node's own walk (Linux) stops at the first entry it cannot watch and says
   // nothing, and where it fails cannot be predicted, so a tree there is a
   // plain watch on the root and on each directory below it, each refused or
-  // heard by the OS on its own. `within` is the one path an event named, or
-  // null for the whole of every target: an event can only show what is at
-  // the path it names, so only that subtree is looked at again.
-  dirsOf(targets, within4, held2) {
-    const subtree = (at) => [at, ...dirsBelow(at, held2)].map((dir) => ({ path: dir }));
+  // heard by the OS on its own. `heardIn` is the directory an event was heard
+  // in, or null for the whole of every target: an event moves only what its
+  // own directory lists, so only that listing is read again.
+  dirsOf(targets, heardIn, held2, unlisted) {
     return targets.flatMap((target) => {
       if (target.recursive !== true || !this.nodeWalksTrees) return [target];
-      if (within4 === null) return subtree(target.path);
-      return isBelow(within4, target.path) && isDirectoryAt(within4) ? subtree(within4) : [];
+      const at = heardIn ?? target.path;
+      if (at !== target.path && !isBelow(at, target.path)) return [];
+      const below = dirsBelow(at, held2, heardIn !== null, unlisted);
+      return [...heardIn === null ? [at] : [], ...below].map((dir) => ({
+        path: dir
+      }));
     });
   }
   // [LAW:dataflow-not-control-flow] A slot holds a watch on exactly the
-  // directories its targets name now, within the path looked at again: one it
-  // lacks joins, one no longer named leaves. Run whole at its acquire and on
-  // every period, and for the path each event its watches hear names, so a
-  // tree's new directory is heard from the event that made it.
-  reconciled(slot, cause, within4) {
+  // directories its targets name now, below the directory listed again: one
+  // it lacks joins, one no longer named leaves. Run whole at its acquire and
+  // on every period, and for the directory each event its watches hear is
+  // heard in, so a tree's new directory is heard from the event that made it.
+  reconciled(slot, cause, heardIn) {
     const held2 = new Set([...slot.listeners.values()].map((l) => l.dir.path));
+    const unlisted = [];
     const named3 = new Map(
-      this.dirsOf(slot.targets, within4, held2).map((t2) => [dirId(t2), t2])
+      this.dirsOf(slot.targets, heardIn, held2, unlisted).map((t2) => [
+        dirId(t2),
+        t2
+      ])
     );
     for (const [id2, listener] of slot.listeners)
-      if (!named3.has(id2) && (within4 === null || listener.dir.path === within4 || isBelow(listener.dir.path, within4))) {
+      if (!named3.has(id2) && (heardIn === null || isBelow(listener.dir.path, heardIn))) {
         slot.listeners.delete(id2);
         this.left(listener, cause);
       }
@@ -35184,9 +35192,14 @@ var WatcherRegistry = class {
         const listener = { slot, dir };
         dir.listeners.add(listener);
         slot.listeners.set(id2, listener);
-        if (this.slots.get(slot.key) === slot && dir.state.kind === "deaf")
+        if (slot.holders.size > 0 && dir.state.kind === "deaf")
           this.fire(slot, failedOf(dir.state.deafness));
       }
+    for (const at of unlisted) {
+      const dir = this.dirs.get(dirId({ path: at }));
+      if (dir?.state.kind === "listening")
+        this.reopen(dir, "it cannot be listed");
+    }
   }
   // A directory watch closes with the last slot on it.
   left(listener, cause) {
@@ -35316,9 +35329,8 @@ var WatcherRegistry = class {
     this.tell(dir, namedOf(dir.path, changed));
     if (changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
       this.judged(dir, "moved");
-    const named3 = changed === null ? dir.path : import_node_path6.default.join(dir.path, changed);
     for (const slot of [...dir.listeners].map((l) => l.slot))
-      this.reconciled(slot, "heard", named3);
+      this.reconciled(slot, "heard", dir.path);
   }
   tell(dir, invalidation) {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
