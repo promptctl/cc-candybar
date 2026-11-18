@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-833",
+      "ref": "refs/pull/833/merge",
+      "sha": "1118b19fed98218d325da6682cfd85653b2f088c",
+      "timestamp": "2026-11-18T22:20:01.781Z",
+      "commits": [
+        {
+          "sha": "1118b19fed98218d325da6682cfd85653b2f088c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:19:04-07:00",
+          "message": "Merge 7cc6a5d4ce78f1d9c2a265be2c9bf8bcd00cbb4b into a60f0ec526fedc5ba857fde3060c85687dc4e6ff\n"
+        },
+        {
+          "sha": "7cc6a5d4ce78f1d9c2a265be2c9bf8bcd00cbb4b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:18:11-07:00",
+          "message": "fix(state): each per-session file keeps its sessions' recency as list position, so an integer-like id is never moved to the oldest end (3xhn)\n\nThe session book, the session picks and the settings history each bound\ntheir sessions by recency, and each carried that order through a record\nkeyed by session id: the file, and the stored state handed to a renderer.\nA record enumerates integer-like keys first, so after a restart a session\nlike \"7\" written last sat at the oldest end and the bound evicted it.\n\nSessions now cross every hop as [id, value] entries, oldest first, and\nboth files are written as a JSON array of those pairs. A load takes each\npair through the session id checkpoint, refusing a repeated id by name.\nA file in the keyed form is refused whole with a warning, since its order\nis gone by the time it parses.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-832",
       "ref": "refs/pull/832/merge",
       "sha": "a30a62d800644e19b2b70f9478c75bcdee128c8d",
