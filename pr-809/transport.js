@@ -50899,7 +50899,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.1";
+var PACKAGE_VERSION = "1.232.2";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -88991,16 +88991,13 @@ function placedMembers(config2) {
     )
   );
 }
-var stateKeys = (config2) => new Set(
-  Object.values(config2.variables ?? {}).flatMap(
-    (decl) => decl.kind === "state" ? [decl.key] : []
-  )
-);
+var stateKeys = (config2) => new Set([...stateVarDecls(config2)].map(([, decl]) => decl.key));
 function endedSessionKeys(before, after, configuring) {
   const kept = stateKeys(after);
+  const unplaced = configuring !== null && placedMembers(before).has(configuring) && !placedMembers(after).has(configuring);
   return [
     ...[...stateKeys(before)].filter((key) => !kept.has(key)),
-    ...configuring !== null && !placedMembers(after).has(configuring) ? [EDIT_CONFIGURE_KEY] : []
+    ...unplaced ? [EDIT_CONFIGURE_KEY] : []
   ];
 }
 var applyLayoutOp2 = (rawValue, ctx) => {
@@ -89026,21 +89023,10 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     );
   }
   const into = heldLayer2(ctx, origin, role);
-  const { placed: placed2, config: config2 } = applyLayoutOp(
-    editStore(ctx, sid),
-    into,
-    key,
-    op
-  );
-  const released = endedSessionKeys(
-    before,
-    config2,
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
-  ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
-  for (const key2 of released) ctx.sessionState.clear(sid, key2);
+  const { placed: placed2 } = applyLayoutOp(editStore(ctx, sid), into, key, op);
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
+    `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} (session=${sid})`
   );
 };
 var undo = (value, ctx) => {
@@ -89344,6 +89330,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     return { origin, chain: ctx.snapshotFor(origin).chain };
   });
   const lanes = sid === null ? null : laneMeter(ctx, sid, context);
+  const was = sid === null || origin === null ? null : { sid, origin, config: ctx.configFor(origin) };
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
@@ -89372,6 +89359,23 @@ function journaled(verb, sid, context, ctx, effects, handler) {
   }
   const consequence = (landedIn) => {
     const failed3 = [];
+    if (was !== null) {
+      try {
+        const released = endedSessionKeys(
+          was.config,
+          ctx.configFor(was.origin),
+          journal.sessionState.get(was.sid, EDIT_CONFIGURE_KEY)
+        ).filter((key) => journal.sessionState.get(was.sid, key) !== null);
+        for (const key of released) journal.sessionState.clear(was.sid, key);
+        if (released.length > 0)
+          ctx.log(
+            "info",
+            `${verb}: released=${JSON.stringify(released)} (session=${was.sid})`
+          );
+      } catch (e) {
+        failed3.push(e);
+      }
+    }
     for (const step4 of [navigation, journal]) {
       try {
         step4.commit();
