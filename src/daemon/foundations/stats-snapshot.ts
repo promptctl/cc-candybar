@@ -323,9 +323,9 @@ export type StoresRead = {
   readonly [K in keyof DoctorStoreValues]: Asked<DoctorStoreValues[K]>;
 };
 
-// The faults a folder can stand in, by cause: it could not be created or read,
-// the OS refused to open its watch, or the watch reported an error after it
-// opened on a folder still there.
+// The faults a folder can stand in, by cause: it could not be created, its
+// identity could not be read, the OS refused to open its watch, or the watch
+// reported an error after it opened on a folder still there.
 export type FaultCause = "unusable" | "unreadable" | "refused" | "error";
 
 // [LAW:types-are-the-program] Whether the OS is delivering this daemon's file
