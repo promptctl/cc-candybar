@@ -84,11 +84,14 @@ afterAll(() => {
 
 // Who the registry names now: the daemon workers that hold its slots, not
 // their tsx wrappers.
-const registered = (): ProcessIdentity[] =>
-  listRegistryFiles(registryDir).flatMap((file) => {
+const registered = (): ProcessIdentity[] => {
+  const listed = listRegistryFiles(registryDir);
+  if (!Array.isArray(listed)) throw new Error(listed.uncounted);
+  return listed.flatMap((file) => {
     const entry = readRegistryEntry(file);
     return entry === null ? [] : [entry];
   });
+};
 
 describe("daemon-side fork-bomb circuit breaker (integration)", () => {
   // Four boots, each bounded by the helper's readiness budget, and the

@@ -215,6 +215,25 @@ describe("listRegistryFiles", () => {
     const files = listRegistryFiles(dir);
     expect(files).toEqual([path.join(dir, "pid-1.json")]);
   });
+
+  // Root ignores directory permissions, so the condition cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a registry that cannot be listed is uncounted, naming the error, never an empty list",
+    () => {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "pid-1.json"), "{}");
+      fs.chmodSync(dir, 0o000);
+      try {
+        expect(listRegistryFiles(dir)).toEqual({
+          uncounted: expect.stringMatching(
+            new RegExp(`^${dir} could not be listed: EACCES`),
+          ),
+        });
+      } finally {
+        fs.chmodSync(dir, 0o700);
+      }
+    },
+  );
 });
 
 // ─── realBreakerDeps.ensureDirSafe: symlinked-parent hijack, default vs
@@ -234,7 +253,8 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
   const registryWorld = (override?: string) => {
     const env = { ...process.env };
     delete env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
-    if (override !== undefined) env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = override;
+    if (override !== undefined)
+      env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = override;
     return worldOf(hostOf(env));
   };
 
@@ -245,9 +265,11 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     fs.symlinkSync(real, link);
     const registryDir = path.join(link, "daemons");
     try {
-      expect(() => realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(registryDir)).toThrow(
-        /symlink/,
-      );
+      expect(() =>
+        realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(
+          registryDir,
+        ),
+      ).toThrow(/symlink/);
     } finally {
       fs.unlinkSync(link);
       fs.rmSync(real, { recursive: true, force: true });
@@ -260,7 +282,9 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     const registryDir = path.join(root, "daemons");
     try {
       expect(() =>
-        realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(registryDir),
+        realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(
+          registryDir,
+        ),
       ).not.toThrow();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -274,7 +298,9 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
       // The parent here is os.tmpdir() itself, which on a shared-/tmp
       // platform would fail the two-level check — proving the override path
       // deliberately does not apply it.
-      expect(() => realBreakerDeps(registryWorld(dir), null, dir).ensureDirSafe(dir)).not.toThrow();
+      expect(() =>
+        realBreakerDeps(registryWorld(dir), null, dir).ensureDirSafe(dir),
+      ).not.toThrow();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -327,6 +353,34 @@ describe("admitDaemon", () => {
       ...overrides,
     };
   }
+
+  test("an isolated daemon whose registry cannot be listed refuses to boot, naming why, and registers nothing", async () => {
+    const writeEntry = jest.fn();
+    const result = await admitDaemon(
+      baseDeps({
+        listFiles: () => ({
+          uncounted: "/fake/registry could not be listed: EACCES",
+        }),
+        writeEntry,
+      }),
+    );
+    expect(result).toEqual({
+      decision: {
+        allow: false,
+        reason:
+          "the registry /fake/registry could not be listed: EACCES, so the live isolated daemons cannot be counted against ceiling 2",
+      },
+      registryPath: null,
+    });
+    expect(writeEntry).not.toHaveBeenCalled();
+  });
+
+  test("the production daemon boots whatever the registry, never listing it", async () => {
+    const listFiles = jest.fn(() => ({ uncounted: "unreadable" }));
+    const result = await admitDaemon(baseDeps({ isolated: false, listFiles }));
+    expect(result.decision.allow).toBe(true);
+    expect(listFiles).not.toHaveBeenCalled();
+  });
 
   test("exempt (not isolated) → allowed, never touches the registry", async () => {
     const ensureDirSafe = jest.fn();

@@ -61,6 +61,12 @@ export interface BootDecision {
   reason: string;
 }
 
+// [LAW:types-are-the-program] A population the registry could not give: why
+// its directory could not be listed.
+export interface Uncounted {
+  readonly uncounted: string;
+}
+
 const DEFAULT_CEILING = 16;
 
 // [LAW:no-silent-failure] `Number(...)`, not `parseInt(...)` — parseInt
@@ -82,13 +88,16 @@ export function daemonCeiling(env: Readonly<NodeJS.ProcessEnv>): number {
 //                                        epic requires never happens)
 //   isolated=true,  count <  ceiling  → allow (below the backstop)
 //   isolated=true,  count >= ceiling  → deny (the fork-bomb condition)
-// [LAW:no-silent-failure] "Fails safe" is achieved by construction here, not by
-// a guard clause: an unreadable/uncountable population reads as count=0 (see
-// countLiveEntries), which always falls in the `allow` branch — the failure
-// direction is never "refuse to boot", it is "undercount and allow".
+//   isolated=true,  uncounted         → deny: the registry could not be listed,
+//                                        so no count stands behind an admit,
+//                                        and a backstop that admits what it
+//                                        cannot count is no backstop
+// [LAW:no-silent-failure] An entry that cannot be read is excluded from the
+// count (undercount and allow), but a registry that cannot be listed is never
+// read as an empty one: its refusal names the error, and the server logs it.
 export function decideBoot(
   isolated: boolean,
-  liveSiblingCount: number,
+  liveSiblingCount: number | Uncounted,
   ceiling: number,
 ): BootDecision {
   if (!isolated) {
@@ -96,6 +105,12 @@ export function decideBoot(
       allow: true,
       reason:
         "canonical production socket — exempt (bind() already caps it to one)",
+    };
+  }
+  if (typeof liveSiblingCount !== "number") {
+    return {
+      allow: false,
+      reason: `the registry ${liveSiblingCount.uncounted}, so the live isolated daemons cannot be counted against ceiling ${ceiling}`,
     };
   }
   if (liveSiblingCount >= ceiling) {
@@ -120,17 +135,18 @@ export interface RegistryEntry {
   identity: ProcessIdentity;
 }
 
-// [LAW:no-silent-failure] Never throws: a directory that doesn't exist yet (no
-// isolated daemon has ever registered) or is transiently unreadable both mean
-// "no known siblings", which is the fail-open direction decideBoot expects.
-export function listRegistryFiles(dir: string): string[] {
+// [LAW:no-silent-failure] Never throws. A directory that doesn't exist yet
+// (no isolated daemon has ever registered) holds no siblings; any other error
+// is a registry that could not be listed, never an empty one.
+export function listRegistryFiles(dir: string): string[] | Uncounted {
   try {
     return fs
       .readdirSync(dir)
       .filter((f) => f.endsWith(".json"))
       .map((f) => path.join(dir, f));
-  } catch {
-    return [];
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+    return { uncounted: `${dir} could not be listed: ${(e as Error).message}` };
   }
 }
 
@@ -194,7 +210,7 @@ export interface BreakerDeps {
     pid: number,
     startTime: string | null,
   ) => Promise<boolean>;
-  listFiles: (dir: string) => string[];
+  listFiles: (dir: string) => string[] | Uncounted;
   readEntry: (filePath: string) => ProcessIdentity | null;
   removeFile: (filePath: string) => void;
   writeEntry: (filePath: string, identity: ProcessIdentity) => void;
@@ -227,8 +243,14 @@ export async function admitDaemon(deps: BreakerDeps): Promise<BreakerResult> {
   // agnostic to which — it just asks the injected dependency to prove the
   // directory is safe to use.
   deps.ensureDirSafe(deps.registryDir);
+  const listed = deps.listFiles(deps.registryDir);
+  if (!Array.isArray(listed))
+    return {
+      decision: decideBoot(true, listed, deps.ceiling),
+      registryPath: null,
+    };
   const entries: RegistryEntry[] = [];
-  for (const filePath of deps.listFiles(deps.registryDir)) {
+  for (const filePath of listed) {
     const identity = deps.readEntry(filePath);
     // [LAW:no-silent-failure] Exclude any entry named with OUR OWN pid,
     // unconditionally — no other currently-live process can ever share it
