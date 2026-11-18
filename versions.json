@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-810",
+      "ref": "refs/pull/810/merge",
+      "sha": "4831e4023339b1fe82debd65bbbdaa3286b815bf",
+      "timestamp": "2026-11-18T22:22:09.593Z",
+      "commits": [
+        {
+          "sha": "4831e4023339b1fe82debd65bbbdaa3286b815bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T22:21:01Z",
+          "message": "Merge b30781fe8b3f974abe3ee26d3fa943b10c78e0e4 into a60f0ec526fedc5ba857fde3060c85687dc4e6ff\n"
+        },
+        {
+          "sha": "b30781fe8b3f974abe3ee26d3fa943b10c78e0e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:20:38-07:00",
+          "message": "fix(test): the quiet-text sweep draws through the rig, and each row asserts the theme it drew under (s33)\n"
+        },
+        {
+          "sha": "c9e121fa85607aae309e3860cc32d63b336e8d97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:20:37-07:00",
+          "message": "fix(config): the theme resolution reads the session's pick under THEME_SETTING, the key the settings menu writes (s33)\n"
+        },
+        {
+          "sha": "064333c629eddfaf984e3306ec2650695189f401",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:14:02-07:00",
+          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-833",
       "ref": "refs/pull/833/merge",
       "sha": "1118b19fed98218d325da6682cfd85653b2f088c",
@@ -46,42 +82,6 @@
       ]
     },
     {
-      "version": "pr-827",
-      "ref": "refs/pull/827/merge",
-      "sha": "27741fdffa9530e0fd49804dbc4e86f1fd773a04",
-      "timestamp": "2026-11-18T22:11:31.949Z",
-      "commits": [
-        {
-          "sha": "27741fdffa9530e0fd49804dbc4e86f1fd773a04",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T22:10:26Z",
-          "message": "Merge b915434fd9766a434c95b1a3db11aa64881084b4 into a60f0ec526fedc5ba857fde3060c85687dc4e6ff\n"
-        },
-        {
-          "sha": "b915434fd9766a434c95b1a3db11aa64881084b4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:38:33-07:00",
-          "message": "refactor(acts): a slash line is typed only in its pane's turn (clno)\n"
-        },
-        {
-          "sha": "414872c94604a028720268f45bc9440a51a65696",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:30:45-07:00",
-          "message": "docs(acts): the input edge's comments say who reads and who types through it (clno)\n"
-        },
-        {
-          "sha": "7618c74eb054bf8ccab3e358cde2f74a178ddacf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:27:06-07:00",
-          "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a60f0ec526fedc5ba857fde3060c85687dc4e6ff",
@@ -115,28 +115,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:05:22-07:00",
           "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-810",
-      "ref": "refs/pull/810/merge",
-      "sha": "30267865bcd8d7a543a5284700f89a7fd37b49f8",
-      "timestamp": "2026-11-18T16:46:47.239Z",
-      "commits": [
-        {
-          "sha": "30267865bcd8d7a543a5284700f89a7fd37b49f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T16:45:35Z",
-          "message": "Merge 5ef0eb8c1efbea180d612e207d9065f94c7671e1 into 556287991e7955f7a9fbfc4a12b9ded691a25344\n"
-        },
-        {
-          "sha": "5ef0eb8c1efbea180d612e207d9065f94c7671e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:14:02-07:00",
-          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
         }
       ]
     }
