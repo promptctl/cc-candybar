@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-804",
+      "ref": "refs/pull/804/merge",
+      "sha": "347c45d6bc63fcbb9cc462c21cdf520447425f69",
+      "timestamp": "2026-11-18T14:25:04.257Z",
+      "commits": [
+        {
+          "sha": "347c45d6bc63fcbb9cc462c21cdf520447425f69",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:24:01-07:00",
+          "message": "Merge 34e6e3bc03915db5339e88399e890cfe1495a4eb into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "34e6e3bc03915db5339e88399e890cfe1495a4eb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:23:48-07:00",
+          "message": "fix(test): a file that leaves a source held fails at its own end, and two files end their prepared config whole (y1ff)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-803",
       "ref": "refs/pull/803/merge",
       "sha": "ed7f5f7e601e4eeb6676436f3733016a6a74a518",
