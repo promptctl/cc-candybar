@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-794",
+      "ref": "refs/pull/794/merge",
+      "sha": "6a6377466c5e889ef960b28b6d51ff0cf5c804f6",
+      "timestamp": "2026-11-18T06:06:20.354Z",
+      "commits": [
+        {
+          "sha": "6a6377466c5e889ef960b28b6d51ff0cf5c804f6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T23:05:15-07:00",
+          "message": "Merge dae2722ed3f511a4d8b4926f8ef8027bc71a68f7 into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "dae2722ed3f511a4d8b4926f8ef8027bc71a68f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T23:04:54-07:00",
+          "message": "feat(renderer): the adapter is gone; the renderer names no host part (2jt)\n\nEvery reach the renderer made into the host is now data handed in or an\neffect returned:\n\n- The renderer is built from plain data (stored state, link key, locations,\n  gate keys, memory limit), checked to cross a process. Gates and the link\n  signer are built inside it, so in-process and out-of-process agree.\n- Its log lines leave in each turn's output; the host logs them ahead of the\n  turn's own line.\n- Stats and debug are an `inspect` turn answered by a `report` effect; the\n  teardown's two steps are `closing` and `close` turns.\n- A present names the held events its frame shows; the host answers them once\n  the client took it.\n- Plugin storage folders cross in the subscriptions with the renderer's count\n  of config loads; managed storage keeps them again only when either moves, so\n  a load still retries a refused watch and a plain turn costs a compare.\n\nThe lint zone message and the memory notes say \"names no host part\".\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e33675a193dfc48790988daa17ac05641e602a19",
