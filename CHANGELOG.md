@@ -1,3 +1,10 @@
+## [1.232.4](https://github.com/promptctl/cc-candybar/compare/v1.232.3...v1.232.4) (2026-11-18)
+
+### Bug Fixes
+
+* **doctor:** the config row names the repository the bar asks about (qo8j) ([#807](https://github.com/promptctl/cc-candybar/issues/807)) ([fd629ed](https://github.com/promptctl/cc-candybar/commit/fd629edab3c2116a266ec18501d1ce208592daaf))
+* **watchers:** an acquire or follow that finds a polled path off its swept entry marks it unseen, so the next sweep fires it (ggyk) ([#823](https://github.com/promptctl/cc-candybar/issues/823)) ([cf8d343](https://github.com/promptctl/cc-candybar/commit/cf8d3437b19b458c96b45972d2055cbaeb241720))
+
 ## [1.232.3](https://github.com/promptctl/cc-candybar/compare/v1.232.2...v1.232.3) (2026-11-18)
 
 ### Bug Fixes
