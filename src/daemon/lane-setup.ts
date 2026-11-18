@@ -21,8 +21,9 @@
 //                   on (src/daemon/tmux-status.ts).
 //
 // [LAW:effects-at-boundaries] Each lane's setup is a plan over `LaneEdge`, the
-// record holding every effect (tmux, the `claude` CLI, the process table, the
-// pane's prompt), so a test drives every plan with fakes. The renderer asks
+// record holding every effect (tmux, the `claude` CLI, the process table), so
+// a test drives every plan with fakes. Claude Code's prompt is read and typed
+// into through the host's one input edge, handed to the step that uses it. The renderer asks
 // for each as an act (src/renderer/lane-acts.ts), and the host performs it
 // (src/daemon/acts.ts).
 

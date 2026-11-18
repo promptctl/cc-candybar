@@ -459,8 +459,8 @@ export function testActs(
   return new Acts({
     launch: missing("launch"),
     claudeInput: {
-      read: missing("claude input"),
-      type: missing("claude input"),
+      read: missing("claude input read"),
+      type: missing("claude input type"),
     },
     run: missing("run"),
     applyUpdate: missing("apply-update"),

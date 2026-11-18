@@ -37,9 +37,10 @@ type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
 
 export interface ActDeps {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
-  // [LAW:one-source-of-truth] The daemon's one reader and typer of Claude
-  // Code's input: every line typed into a pane and every read of its prompt
-  // go through it. A lane only reads, so it is handed the read.
+  // [LAW:one-source-of-truth] The daemon's one edge onto Claude Code's
+  // prompt: every read of it and every slash line typed into it go through
+  // this edge. A lane step is handed the part it uses (a restart the read, a
+  // band install the typer).
   readonly claudeInput: ClaudeInputEdge;
   readonly run: (run: RunAct) => Promise<RunEnd>;
   // The update notice's act: what it applies is the update watch's.

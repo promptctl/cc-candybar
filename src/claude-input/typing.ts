@@ -1,6 +1,6 @@
 // Typing a slash line into a session's Claude Code, over an edge that reads
-// its pane and types into it. Shared, so the renderer's verbs type through the
-// edge the host hands in (the tmux one is src/claude-input/edge.ts).
+// its pane and types into it. The host's acts type through the one edge the
+// daemon is given (the tmux one is src/claude-input/edge.ts).
 //
 // [LAW:effects-at-boundaries] The two tmux calls — read the pane, type into
 // it — live behind `ClaudeInputEdge`; whether to type is `typeSlash`'s fold
