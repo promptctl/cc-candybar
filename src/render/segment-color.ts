@@ -7,8 +7,8 @@
 // rich-js's `color` and `ramp` with *which* palette, and adds the functions
 // whose meaning is candybar-specific — `bgOf`, the background of the segment
 // currently rendering, `tint`, the decoration its region dealt it,
-// and `errorRedOn`, the red the door's ✖ wears on a ground at the depth this
-// render draws at.
+// and `errorRedOn`, an error red that keeps its hue over its contrast on a
+// ground at the depth this render draws at.
 // [LAW:one-way-deps]
 
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
@@ -99,8 +99,8 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "string",
   };
 
-  // `errorRedOn bg`: the red the door's ✖ wears on `bg` at the depth this
-  // render draws at (`errorRed`).
+  // `errorRedOn bg`: an error red on `bg` at the depth this render draws at,
+  // its hue kept over its contrast (`errorRed`); the door's ✖ wears it.
   const errorRedOn: TemplateFunc = {
     fn: ((bgRef: string) => {
       const { palette } = requireActiveSegment(ref, "{{ errorRedOn }}");
