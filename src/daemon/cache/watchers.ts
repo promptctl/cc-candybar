@@ -84,6 +84,31 @@ type DirState =
     }
   | { readonly kind: "deaf"; readonly deafness: Deafness };
 
+// Opens every directory below `at` as Node's walk does: through directories,
+// never a link. The first that will not open throws, naming itself; one gone
+// while the walk ran holds nothing to hear.
+function openTree(at: string): void {
+  for (const entry of fs.readdirSync(at, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    try {
+      openTree(path.join(at, entry.name));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
+  }
+}
+
+function opensBelow(at: string): boolean {
+  try {
+    openTree(at);
+    return true;
+  } catch {
+    // [LAW:no-silent-failure] The reopen this answer triggers refuses the
+    // watch with the error, logged and counted.
+    return false;
+  }
+}
+
 // [LAW:single-enforcer] One OS watch per directory and shape (every child, or
 // the tree), shared by every slot that targets it.
 interface DirWatch {
@@ -215,6 +240,7 @@ export class WatcherRegistry {
   private readonly logger: WatcherLogger;
   private readonly clock: Pick<Timekeeper, "after" | "every">;
   private closed = false;
+  private readonly walksTrees: boolean;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The clock the debounce window and the
@@ -226,10 +252,14 @@ export class WatcherRegistry {
     // daemon consumers keep the default debug-routed logger and never
     // touch daemon log files.
     logger?: WatcherLogger;
+    // Whether the platform's recursive watch is Node's own walk of the tree,
+    // which skips a directory it cannot open and says nothing: Linux's.
+    walksTrees?: boolean;
   }) {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.walksTrees = opts.walksTrees ?? process.platform === "linux";
   }
 
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
@@ -347,6 +377,12 @@ export class WatcherRegistry {
     const now = boundOf(dir.path);
     if (bindsFolder(now) && boundKey(now) !== dir.state.bound)
       this.reopen(dir, "another folder is at its path");
+    else if (this.walked(dir) && !opensBelow(dir.path))
+      this.reopen(dir, "a directory below it cannot be opened");
+  }
+
+  private walked(where: { readonly recursive: boolean }): boolean {
+    return where.recursive && this.walksTrees;
   }
 
   // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
@@ -392,12 +428,14 @@ export class WatcherRegistry {
     const bound = boundKey(boundOf(at));
     try {
       // [LAW:no-silent-failure] A directory the daemon cannot open is
-      // refused. fs.watch refuses it itself, except Linux's recursive watch
-      // on Node 20 and 22 (Node's own walk), which swallows the error and
-      // returns a watch that never fires.
+      // refused. fs.watch refuses it itself, except a recursive watch that is
+      // Node's own walk, which skips every directory it cannot open, the root
+      // included, and returns a watch deaf below it.
       // [LAW:dataflow-not-control-flow] So every open opens the directory
-      // first, recursive or not, and its error is the refusal's reason.
+      // first, and a walked tree every directory below it, and the first
+      // error is the refusal's reason, naming the directory.
       fs.opendirSync(at).closeSync();
+      if (this.walked(where)) openTree(at);
       const handle = fs.watch(
         at,
         { persistent: false, recursive: where.recursive },

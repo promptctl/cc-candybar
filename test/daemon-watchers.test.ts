@@ -180,8 +180,9 @@ describe("WatcherRegistry", () => {
 
     test("rides no event stream, open or closed, and a folder watched whole does", () => {
       const f = path.join(dir, "f");
-      expect(reg.acquire("p", { dirs: [], polled: [f] }, () => {}).ridesStream)
-        .toBe(false);
+      expect(
+        reg.acquire("p", { dirs: [], polled: [f] }, () => {}).ridesStream,
+      ).toBe(false);
       expect(
         reg.acquire("d", { dirs: [{ path: dir }], polled: [] }, () => {})
           .ridesStream,
@@ -307,7 +308,9 @@ describe("WatcherRegistry", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
     const reg = new WatcherRegistry({ clock: systemTimekeeper });
     const seen: Invalidation[] = [];
-    reg.acquire(dir, { dirs: [{ path: dir }], polled: [] }, (inv) => seen.push(inv));
+    reg.acquire(dir, { dirs: [{ path: dir }], polled: [] }, (inv) =>
+      seen.push(inv),
+    );
     // FSEvents may also report the folder's own creation late, under its
     // name: the paths are what fired, whatever else did.
     const paths = () =>
@@ -333,8 +336,10 @@ describe("WatcherRegistry", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
     const reg = new WatcherRegistry({ clock: systemTimekeeper });
     const seen: Invalidation[] = [];
-    reg.acquire(dir, { dirs: [{ path: dir, recursive: true }], polled: [] }, (inv) =>
-      seen.push(inv),
+    reg.acquire(
+      dir,
+      { dirs: [{ path: dir, recursive: true }], polled: [] },
+      (inv) => seen.push(inv),
     );
     const paths = () =>
       seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.paths] : []));
@@ -370,7 +375,11 @@ describe("WatcherRegistry", () => {
       logger: () => {},
     });
     const missing = path.join(os.tmpdir(), "watch-refused-no-such-folder");
-    const handle = reg.acquire("k", { dirs: [{ path: missing }], polled: [] }, () => {});
+    const handle = reg.acquire(
+      "k",
+      { dirs: [{ path: missing }], polled: [] },
+      () => {},
+    );
     expect(handle.deaf).toEqual([
       {
         kind: "refused",
@@ -379,7 +388,9 @@ describe("WatcherRegistry", () => {
       },
     ]);
     // A second holder of the slot is told the same.
-    expect(reg.acquire("k", { dirs: [], polled: [] }, () => {}).deaf).toEqual(handle.deaf);
+    expect(reg.acquire("k", { dirs: [], polled: [] }, () => {}).deaf).toEqual(
+      handle.deaf,
+    );
     expect(counters).toEqual({
       watchersOpened: 0,
       watchersClosed: 0,
@@ -414,7 +425,8 @@ describe("WatcherRegistry", () => {
           reason: expect.stringContaining("EACCES"),
         };
         expect(
-          reg.acquire("dir", { dirs: [{ path: dir }], polled: [] }, () => {}).deaf,
+          reg.acquire("dir", { dirs: [{ path: dir }], polled: [] }, () => {})
+            .deaf,
         ).toEqual([refusal]);
         expect(
           reg.acquire(
@@ -432,6 +444,85 @@ describe("WatcherRegistry", () => {
     },
   );
 
+  // Where the recursive watch is Node's walk (Linux), the walk skips a
+  // directory below the root it cannot open and says nothing. Forced on here,
+  // so it runs on every platform; root ignores permissions.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a walked tree with a directory below it the daemon cannot open is refused by that directory, opens on the period once it can, and is refused again on the period when it cannot",
+    () => {
+      const dir = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), "watch-walked-")),
+      );
+      const locked = path.join(dir, "team", "locked");
+      fs.mkdirSync(locked, { recursive: true });
+      fs.mkdirSync(path.join(dir, "team", "open"));
+      fs.symlinkSync("/nonexistent", path.join(dir, "dangling"));
+      fs.chmodSync(locked, 0o000);
+      const counters = zeroCounters();
+      const lines: string[] = [];
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        counters,
+        logger: (_level, line) => lines.push(line),
+        walksTrees: true,
+      });
+      const tree = {
+        dirs: [{ path: dir, recursive: true as const }],
+        polled: [],
+      };
+      try {
+        const handle = reg.acquire("tree", tree, () => {});
+        const refusal = {
+          kind: "refused",
+          path: dir,
+          reason: expect.stringMatching(new RegExp(`EACCES.*${locked}`)),
+        };
+        expect(handle.deaf).toEqual([refusal]);
+        expect(counters.watchRefusals).toBe(1);
+        expect(lines).toEqual([expect.stringContaining(`watch failed ${dir}`)]);
+        fs.chmodSync(locked, 0o700);
+        reg.judge();
+        expect(handle.deaf).toEqual([]);
+        fs.chmodSync(locked, 0o000);
+        reg.judge();
+        expect(handle.deaf).toEqual([refusal]);
+      } finally {
+        reg.closeAll();
+        fs.chmodSync(locked, 0o700);
+        rmrf(dir);
+      }
+    },
+  );
+
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a tree the platform watches itself opens as one watch, whatever lies below its root",
+    () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unwalked-"));
+      const locked = path.join(dir, "locked");
+      fs.mkdirSync(locked);
+      fs.chmodSync(locked, 0o000);
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+        walksTrees: false,
+      });
+      try {
+        const handle = reg.acquire(
+          "tree",
+          { dirs: [{ path: dir, recursive: true }], polled: [] },
+          () => {},
+        );
+        reg.judge();
+        expect(handle.deaf).toEqual([]);
+        expect(reg.dirWatches()).toBe(1);
+      } finally {
+        reg.closeAll();
+        fs.chmodSync(locked, 0o700);
+        rmrf(dir);
+      }
+    },
+  );
+
   // Root ignores directory permissions, so the second refusal cannot be built.
   (process.getuid?.() === 0 ? test.skip : test)(
     "a deaf directory refused again for another reason tells its slot the new fault",
@@ -444,8 +535,10 @@ describe("WatcherRegistry", () => {
       });
       const heard: Invalidation[] = [];
       try {
-        const handle = reg.acquire("k", { dirs: [{ path: dir }], polled: [] }, (h) =>
-          heard.push(h),
+        const handle = reg.acquire(
+          "k",
+          { dirs: [{ path: dir }], polled: [] },
+          (h) => heard.push(h),
         );
         expect(handle.deaf[0]?.reason).toContain("ENOENT");
         fs.mkdirSync(dir);
@@ -474,7 +567,9 @@ describe("WatcherRegistry", () => {
         logger: () => {},
       });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) => seen.push(inv));
+      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) =>
+        seen.push(inv),
+      );
       fake
         .opensOf("/w")[0]!
         .handle.emit("error", new Error("EMFILE: too many open files"));
@@ -590,8 +685,12 @@ describe("WatcherRegistry", () => {
       });
       const first: Invalidation[] = [];
       const second: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) => first.push(inv));
-      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) => second.push(inv));
+      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) =>
+        first.push(inv),
+      );
+      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) =>
+        second.push(inv),
+      );
       expect(fake.opened).toHaveLength(1);
       fake.opensOf("/w")[0]!.listener("rename", "a");
       await until(
@@ -693,10 +792,8 @@ describe("WatcherRegistry", () => {
         logger: () => {},
       });
       const seen: Invalidation[] = [];
-      reg.acquire(
-        "k",
-        { dirs: [{ path: conf }], polled: [] },
-        (inv) => seen.push(inv),
+      reg.acquire("k", { dirs: [{ path: conf }], polled: [] }, (inv) =>
+        seen.push(inv),
       );
       reg.judge();
       fs.renameSync(path.join(root, "proj"), path.join(root, "old"));
@@ -813,10 +910,8 @@ describe("WatcherRegistry", () => {
         logger: () => {},
       });
       const seen: Invalidation[] = [];
-      const a = reg.acquire(
-        "a",
-        { dirs: [{ path: dir }], polled: [] },
-        (inv) => seen.push(inv),
+      const a = reg.acquire("a", { dirs: [{ path: dir }], polled: [] }, (inv) =>
+        seen.push(inv),
       );
       fs.rmSync(dir, { recursive: true });
       fs.mkdirSync(dir);
@@ -847,12 +942,20 @@ describe("WatcherRegistry", () => {
         clock: systemTimekeeper,
         logger: () => {},
       });
-      const first = reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, () => {});
+      const first = reg.acquire(
+        "k",
+        { dirs: [{ path: "/w" }], polled: [] },
+        () => {},
+      );
       fake
         .opensOf("/w")[0]!
         .handle.emit("error", new Error("EMFILE: too many open files"));
       expect(first.deaf).toHaveLength(1);
-      const second = reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, () => {});
+      const second = reg.acquire(
+        "k",
+        { dirs: [{ path: "/w" }], polled: [] },
+        () => {},
+      );
       expect(fake.opensOf("/w")).toHaveLength(2);
       expect(second.deaf).toEqual([]);
       expect(first.deaf).toEqual([]);
