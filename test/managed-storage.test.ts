@@ -554,7 +554,7 @@ describe("ManagedStorage watches", () => {
       expect(r.generation()).toBe(1);
     });
 
-    test("the config load first, then its own event: a new generation, and the stale event marks nothing", async () => {
+    test("the config load first, then its own event: the load counts the loss and opens a new generation, and the stale event marks nothing", async () => {
       const { r, watches, recreate } = await recreated();
       recreate();
       r.hold();
@@ -563,7 +563,7 @@ describe("ManagedStorage watches", () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
       r.hold();
       expect(r.generation()).toBe(1);
-      expect(r.storage.stats().lost).toBe(0);
+      expect(r.storage.stats().lost).toBe(1);
     });
   });
 
@@ -645,6 +645,35 @@ describe("ManagedStorage watches", () => {
     ]);
     await until(() => lane.current().kind === "ok", "the re-read");
   });
+
+  // The disk's own answer, not an injected one: a folder there whose stat
+  // fails is one that cannot be read, never one mkdir could not make. Root
+  // ignores directory permissions, so the condition cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a folder there whose stat fails is unreadable, not unmade",
+    async () => {
+      const r = rig();
+      fs.mkdirSync(r.folder, { recursive: true });
+      const parent = path.dirname(r.folder);
+      fs.chmodSync(parent, 0o600);
+      try {
+        r.hold();
+        const lane = r.storage.declare(new Holds(), r.folder, A);
+        expect(await answered(lane)).toMatchObject({
+          kind: "failed",
+          reason: expect.stringContaining(
+            `${r.folder} could not be read: EACCES`,
+          ),
+        });
+        expect(r.storage.stats().faults).toMatchObject({
+          unreadable: 1,
+          unusable: 0,
+        });
+      } finally {
+        fs.chmodSync(parent, 0o700);
+      }
+    },
+  );
 
   // A stat that fails says nothing of whether the folder moved.
   test("a stat that fails on a watched folder is a standing fault that keeps its generation and its watch", async () => {

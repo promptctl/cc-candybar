@@ -68,6 +68,9 @@ const keyString = (key: StorageKey): string =>
 // judged by what is at the path: it answers EEXIST for a file as for a folder,
 // a read-only volume can refuse an existing folder before saying it exists,
 // and a program can make the folder first. Nothing there is mkdir's own fault.
+// [LAW:one-source-of-truth] Something there whose stat fails is the identity
+// read's to report, as a folder that cannot be read, never as one mkdir
+// could not make.
 function madeOnce(folder: string): void {
   try {
     fs.mkdirSync(folder);
@@ -75,8 +78,10 @@ function madeOnce(folder: string): void {
     let st: fs.Stats;
     try {
       st = fs.statSync(folder);
-    } catch {
-      throw e;
+    } catch (statError) {
+      const code = (statError as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR") throw e;
+      return;
     }
     if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
   }
@@ -311,10 +316,9 @@ export class ManagedStorage {
         this.settle(folder);
         return;
       }
-      if (trigger !== "hold") {
-        this.lostAt(was, read);
-        return;
-      }
+      // [LAW:nothing-unseen] Lost at every trigger; a hold makes it again.
+      this.lostAt(was, read);
+      if (trigger !== "hold") return;
     }
     this.moved(folder, this.made(folder));
   }
@@ -538,7 +542,7 @@ export class ManagedStorage {
 
   // A generation's folder found gone or replaced: the generation ends, and
   // its held files are re-read from the path, so no draw shows a value from a
-  // folder no longer there while the next period makes it again.
+  // folder no longer there while the next trigger makes it again.
   private lostAt(watching: Watching, read: Read): void {
     const { key } = watching;
     this.lost++;
