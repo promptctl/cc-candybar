@@ -170,6 +170,7 @@ function doctorBar(
     source: `{ globals: {}, root: { h: ['directory', 'model'] } }`,
     label: "<user>",
     base: DEFAULT_DSL_CONFIG,
+    sessionId: S1,
   });
   const { config, sessionState } = rig;
   // The hints the session's client sends, as the host hands them to the

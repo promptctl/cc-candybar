@@ -3,7 +3,7 @@
 // session's picks is a rig's own.
 import { linkSigner } from "../src/click/link-signer";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { GLOBAL_FIELDS } from "../src/config/globals-fields";
+import { settingNameOf } from "../src/config/globals-fields";
 import { registerOptionDomain } from "../src/config/option-domain";
 import { compileInputOf, compileKey } from "../src/dsl/render";
 import { textOf } from "../src/render/frame";
@@ -136,19 +136,27 @@ describe("buildRig", () => {
   });
 
   test("a narrowed rig draws the narrowed config under the selection of the whole", () => {
+    const source = `{ globals: { palette: 'nord' }, ${SOURCE.slice(1)}`;
     const rig = buildRig({
-      source: `{ globals: { palette: 'nord' }, ${SOURCE.slice(1)}`,
+      source,
       narrow: (whole) => ({
         ...whole,
         globals: { ...whole.globals, palette: "tokyo-night" },
       }),
     });
+    const whole = buildRig({ source });
+    const pickedIn = (theme: string) => {
+      whole.sessionState.set(whole.sessionId, settingNameOf("palette"), theme);
+      return whole.draw().frame.rows;
+    };
     try {
       const { frame, selection } = rig.draw();
       expect(selection.theme).toMatchObject({ kind: "decided", name: "nord" });
-      expect(textOf(frame)).toContain("hello");
+      expect(frame.rows).toEqual(pickedIn("nord"));
+      expect(frame.rows).not.toEqual(pickedIn("tokyo-night"));
     } finally {
       rig.dispose();
+      whole.dispose();
     }
   });
 
@@ -156,11 +164,7 @@ describe("buildRig", () => {
     const rig = buildRig({ source: SOURCE });
     try {
       const unpicked = rig.draw();
-      rig.sessionState.set(
-        rig.sessionId,
-        GLOBAL_FIELDS.palette.sessionKey,
-        "nord",
-      );
+      rig.sessionState.set(rig.sessionId, settingNameOf("palette"), "nord");
       const picked = rig.draw();
       expect(picked.selection.theme).toMatchObject({ name: "nord" });
       expect(picked.frame.rows).not.toEqual(unpicked.frame.rows);

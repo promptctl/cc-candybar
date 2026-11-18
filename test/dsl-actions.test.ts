@@ -67,7 +67,7 @@ interface SideEffect {
 // exercised exactly as the daemon runs them; copy/open are recorded as side
 // effects (executing them would launch pbcopy/open).
 function actionBar(src: string) {
-  const rig = buildRig({ source: src });
+  const rig = buildRig({ source: src, sessionId: S1 });
   const { config, store, sessionState } = rig;
   const render = (): Frame => rig.draw().frame;
   const sideEffects: SideEffect[] = [];

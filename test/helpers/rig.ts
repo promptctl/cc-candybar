@@ -33,10 +33,7 @@ import {
   type RenderSelection,
 } from "../../src/dsl/render";
 import type { LinkSigner } from "../../src/click/link-signer";
-import {
-  sessionIdOf,
-  type SessionId,
-} from "../../src/daemon/foundations/session-id";
+import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SettingsHistory } from "../../src/renderer/settings-history";
 import type { Host } from "../../src/host";
@@ -54,7 +51,7 @@ import {
 } from "./click";
 import { readingsIn } from "./session-environment";
 import { drawPayload } from "./draw-payload";
-import { sessionOfPayload } from "./payload-session";
+import { sessionOfPayload, TEST_SESSION } from "./payload-session";
 import { unscriptedRuns } from "./fake-launcher";
 import { TEST_SIGNER } from "./link-signer";
 import { EMPTY_DEFAULT, parseAndValidate } from "./parse-and-validate";
@@ -62,7 +59,8 @@ import { selectionFor } from "./selection";
 
 export { DEFAULT_DSL_CONFIG, EMPTY_DEFAULT };
 
-const SESSION_ID = sessionIdOf("s1");
+// The session a payload naming none draws, so such a payload draws the rig's own.
+const SESSION_ID = TEST_SESSION;
 const CWD = "/tmp/proj";
 const ALL_PALETTES: ReadonlySet<string> = new Set(listResolvablePaletteNames());
 

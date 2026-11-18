@@ -95,7 +95,12 @@ function menuBar(
   // The session has rendered, as it always has before a click: edit mode's
   // `✓` runs the settings menu's `save`, which acts on the config the
   // session renders.
-  const rig = buildRig({ source: src, label: "<user>", base: dflt });
+  const rig = buildRig({
+    source: src,
+    label: "<user>",
+    base: dflt,
+    sessionId: S1,
+  });
   const render = (): Frame => {
     return rig.draw({ payload }).frame;
   };

@@ -13,13 +13,13 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
 import { linkUrls, runAt, runUnder, truecolorOf } from "./helpers/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { selectionFor } from "./helpers/selection";
+import { globalsFor, selectionFor } from "./helpers/selection";
 import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
   EFFORT_BUBBLE_CONTRAST,
 } from "../src/config/default-dsl-config";
-import { GLOBAL_FIELDS } from "../src/config/globals-fields";
+import { settingNameOf } from "../src/config/globals-fields";
 import {
   walkNodes,
   type DslConfig,
@@ -1024,17 +1024,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const EXPANDED = () => detailState("expanded");
 
     // [LAW:one-source-of-truth] One segment of the bundled default, drawn
-    // through the rig every render test draws through: `variables` are
-    // authored over the default's own, and the picks are read from the
-    // session the payload draws.
+    // through the rig every render test draws through: `globals` and
+    // `variables` are authored over the default's own, and the session's
+    // resolution is both the selection and the strip options, as the daemon
+    // draws it.
     function renderSegment(
       segment: string,
       {
         git = GIT_PAYLOAD.git,
+        globals = {},
         variables = {},
         sessionState = new SessionState(),
       }: {
         readonly git?: Record<string, unknown>;
+        readonly globals?: DslConfig["globals"];
         readonly variables?: DslConfig["variables"];
         readonly sessionState?: SessionState;
       } = {},
@@ -1043,6 +1046,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         label: "<default>",
         source: JSON.stringify({
           ...RAW_DEFAULT_DSL_CONFIG,
+          globals: { ...RAW_DEFAULT_DSL_CONFIG.globals, ...globals },
           variables: { ...RAW_DEFAULT_DSL_CONFIG.variables, ...variables },
         }),
         narrow: (whole) => narrowToSegment(whole, segment),
@@ -1050,9 +1054,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
         sessionState,
       });
       try {
+        const effective = globalsFor(rig.config, (key) =>
+          sessionState.get(rig.sessionId, key),
+        );
         return rig.draw({
           payload: { ...GIT_PAYLOAD, git },
-          opts: { padding: 1 },
+          opts: renderOptionsOf(effective, Number.POSITIVE_INFINITY),
+          selection: effective,
         });
       } finally {
         rig.dispose();
@@ -1143,6 +1151,16 @@ describe("DEFAULT_DSL_CONFIG", () => {
         },
       });
       expect(strip(frame)).toMatch(/^\(git\) .* ◂$/);
+    });
+
+    // The strip is drawn with the options the session resolves, as the
+    // daemon draws it: two more columns of padding are two more spaces on
+    // each side of the segment's text.
+    test("the segment draws at the padding its config resolves", () => {
+      const width = (padding: number) =>
+        textOf(renderSegment("gitaculous", { globals: { padding } }).frame)
+          .length;
+      expect(width(3) - width(1)).toBe(4);
     });
 
     // The arrow is one clickable region, and a click on it flips the form
@@ -1273,16 +1291,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // screenshot can settle; the `readableOn` floor in GIT_QUIET_FG is what
       // makes the result uniform. A floor proves nothing about a theme unless
       // the frame is drawn in it, so each row draws as a session that picked
-      // its theme, and the selection it drew under names that theme.
+      // its theme: the selection it drew under names that theme, and its
+      // frame is the one a config file naming that theme draws.
       test.each(listResolvablePaletteNames())(
         "quiet structural text clears WCAG large-text contrast under theme %s",
         (theme) => {
           const state = EXPANDED();
-          state.set(
-            GIT_PAYLOAD.session_id,
-            GLOBAL_FIELDS.palette.sessionKey,
-            theme,
-          );
+          state.set(GIT_PAYLOAD.session_id, settingNameOf("palette"), theme);
           const { frame, selection, warnings } = renderSegment("gitaculous", {
             sessionState: state,
           });
@@ -1291,6 +1306,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
             name: theme,
           });
           expect(warnings).toEqual([]);
+          const configured = renderSegment("gitaculous", {
+            globals: { palette: theme },
+            sessionState: EXPANDED(),
+          }).frame;
+          expect(frame.rows).toEqual(configured.rows);
           const ratio = contrastRatio(
             truecolorOf(fgOfText(frame, "abc1234")),
             truecolorOf(bgOfText(frame, "abc1234")),
