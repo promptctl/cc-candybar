@@ -50553,16 +50553,13 @@ function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path15.default.join(stateDir2, "update-act", key);
 }
-function watchedAt(prev, act2, now2, longestLookMs) {
-  const from = prev?.act === act2 ? prev : UNWATCHED;
-  const since = now2 - from.lookedAt;
-  return {
-    act: act2,
-    spentMs: from.spentMs + (since >= 0 && since <= longestLookMs ? since : 0),
-    lookedAt: now2
-  };
+function watchedAt(prev, job, now2, longestLookMs) {
+  if (prev === null || !sameJob(prev.job, job)) {
+    return { job, spentMs: 0, unwatchedMs: 0, lookedAt: now2 };
+  }
+  const since = spanMs(prev.lookedAt, now2);
+  return since <= longestLookMs ? { ...prev, spentMs: prev.spentMs + since, lookedAt: now2 } : { ...prev, unwatchedMs: prev.unwatchedMs + since, lookedAt: now2 };
 }
-var UNWATCHED = { spentMs: 0, lookedAt: -Infinity };
 function judgeAct(facts) {
   if (facts === null) return IDLE;
   const { act: act2, record: record2, alive, end, lastLine } = facts;
@@ -50624,12 +50621,27 @@ async function isRecordedJob(record2, read2, jobs, boot) {
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
 }
 function readRecord(actDir) {
+  const file = recordOf(actDir);
+  let text4;
   try {
-    return JSON.parse(fs_default.readFileSync(recordOf(actDir), "utf8"));
+    text4 = fs_default.readFileSync(file, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
   }
+  return parsedRecord(file, text4);
+}
+function parsedRecord(file, text4) {
+  const r = JSON.parse(text4);
+  if (typeof r === "object" && r !== null && "identity" in r && typeof r.identity === "string" && "pid" in r && Number.isSafeInteger(r.pid) && "startTime" in r && (r.startTime === null || typeof r.startTime === "string") && "started" in r && Number.isFinite(r.started)) {
+    return {
+      identity: r.identity,
+      pid: r.pid,
+      startTime: r.startTime,
+      started: r.started
+    };
+  }
+  throw new Error(`${file}: not an act record: ${text4.slice(0, 200)}`);
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
@@ -50680,7 +50692,10 @@ function stakeClaim(dir, actDir, record2) {
   try {
     fs_default.writeFileSync(
       recordOf(staging),
-      JSON.stringify({ ...record2, deadline: INERT_DEADLINE })
+      JSON.stringify({
+        ...record2,
+        deadline: INERT_DEADLINE
+      })
     );
     fs_default.renameSync(staging, actDir);
     return true;
@@ -63422,17 +63437,35 @@ function makeUpdateWatch(opts) {
     }
   }
   let watched = null;
+  let ended = null;
   function endIfOverdue(facts) {
     if (!facts?.alive) {
       watched = null;
       return;
     }
-    watched = watchedAt(watched, facts.act, clock.now(), LONGEST_LOOK_MS);
+    const was = watched;
+    watched = watchedAt(
+      watched,
+      facts.record,
+      clock.monotonic(),
+      LONGEST_LOOK_MS
+    );
+    if (was !== null && watched.unwatchedMs > was.unwatchedMs) {
+      log(
+        "info",
+        `apply-update: act ${facts.act} unwatched for ${watched.unwatchedMs - was.unwatchedMs}ms (a sleep or a stalled daemon); ${watched.spentMs}ms of its budget spent`
+      );
+    }
     if (watched.spentMs <= ACT_TIMEOUT_MS) return;
+    if (ended !== null && sameJob(ended, facts.record)) return;
+    ended = facts.record;
     const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
-    log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
+    log(
+      "error",
+      `apply-update: act ${facts.act} ${why2} after ${watched.spentMs}ms watched (${watched.unwatchedMs}ms unwatched); ${ending}`
+    );
   }
   async function watchAct() {
     const read2 = await touchActs(async () => {
@@ -63445,12 +63478,15 @@ function makeUpdateWatch(opts) {
     const was = seen2;
     seen2 = next;
     if (was === null && next.kind === "running") {
-      log("info", `apply-update: act ${next.act} is running; watching it`);
+      log(
+        "info",
+        `apply-update: act ${next.act} is running; watching it, with this daemon's budget unspent`
+      );
     }
-    const ended = was?.kind === "running" && next.kind !== "running";
-    const succeeded = ended && next.kind === "succeeded";
+    const ended2 = was?.kind === "running" && next.kind !== "running";
+    const succeeded = ended2 && next.kind === "succeeded";
     if (succeeded) log("info", `apply-update: act ${next.act} succeeded`);
-    if (ended && next.kind === "failed") {
+    if (ended2 && next.kind === "failed") {
       log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
     }
     runInAction(() => {
@@ -63461,7 +63497,14 @@ function makeUpdateWatch(opts) {
   }
   let clearTick;
   async function tick() {
-    await actTurn(watchAct);
+    try {
+      await actTurn(watchAct);
+    } catch (err) {
+      log(
+        "error",
+        `apply-update: a look at the acts failed: ${err.message}`
+      );
+    }
     if (closed) return;
     clearTick = clock.after(ACT_POLL_MS, () => void tick(), { unref: true });
   }
@@ -63503,15 +63546,21 @@ function makeUpdateWatch(opts) {
       if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${words2.busy}`);
       }
-      const claim = await claimAct(
-        launcher,
-        actsDir2,
-        newest === null ? null : newest.act,
-        updateIdentity(update),
-        { ...command, category: "update.apply" },
-        clock.now(),
-        readStart
+      const claimed = await touchActs(
+        () => claimAct(
+          launcher,
+          actsDir2,
+          newest === null ? null : newest.act,
+          updateIdentity(update),
+          { ...command, category: "update.apply" },
+          clock.now(),
+          readStart
+        )
       );
+      if (closed) throw new DaemonClosing("apply-update");
+      if (!claimed.ok)
+        throw new BadVerbArgs(`apply-update: ${claimed.error}`);
+      const claim = claimed.value;
       if (!claim.ok) {
         throw new BadVerbArgs(`apply-update: ${claim.reason}`);
       }
