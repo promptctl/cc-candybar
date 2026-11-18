@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-820",
+      "ref": "refs/pull/820/merge",
+      "sha": "01ef9f88fd4a7634675296b81556d4d8f720a59a",
+      "timestamp": "2026-11-18T19:50:03.912Z",
+      "commits": [
+        {
+          "sha": "01ef9f88fd4a7634675296b81556d4d8f720a59a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T19:47:17Z",
+          "message": "Merge d5feb105b2cd1aeea1939a8a98f7ff542c93dd55 into 1c2d955fd5bc787336ce3430ee52aeab1e787b59\n"
+        },
+        {
+          "sha": "d5feb105b2cd1aeea1939a8a98f7ff542c93dd55",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:41:21-07:00",
+          "message": "fix(plugins): a folder there whose stat fails reads as unreadable, and a hold counts the loss it finds (9z3k)\n"
+        },
+        {
+          "sha": "40ffe47df18a3fa9d3aa373d2087895f49c90030",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:28:39-07:00",
+          "message": "fix(plugins): a standing storage fault re-reads nothing, and a folder no hold names leaves without a clear (9z3k)\n"
+        },
+        {
+          "sha": "b2e106f2bbe9bee864aa177dc9ddb9da51d40a31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:14:57-07:00",
+          "message": "docs(stats): name the unreadable fault cause (9z3k)\n"
+        },
+        {
+          "sha": "5a59a16b8f02843ee9057ee183948a6e7af1fc31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:14:31-07:00",
+          "message": "fix(plugins): a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-824",
       "ref": "refs/pull/824/merge",
       "sha": "0d4e1cd4b4e22706168f5885e9df95b23689bf58",
@@ -135,49 +178,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T10:59:23-07:00",
           "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-820",
-      "ref": "refs/pull/820/merge",
-      "sha": "926163875b2ed38f9c2b71e983f9b5f982f60b70",
-      "timestamp": "2026-11-18T18:44:40.563Z",
-      "commits": [
-        {
-          "sha": "926163875b2ed38f9c2b71e983f9b5f982f60b70",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T18:43:21Z",
-          "message": "Merge c76b0ceb086c846a42c500798edf611398de92da into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "c76b0ceb086c846a42c500798edf611398de92da",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:41:21-07:00",
-          "message": "fix(plugins): a folder there whose stat fails reads as unreadable, and a hold counts the loss it finds (9z3k)\n"
-        },
-        {
-          "sha": "996da6dcc5a587dca545c6bac6f0219f5ae89f0e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:28:39-07:00",
-          "message": "fix(plugins): a standing storage fault re-reads nothing, and a folder no hold names leaves without a clear (9z3k)\n"
-        },
-        {
-          "sha": "80f5e3907b963c49184857f2e15bc545aef36024",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:14:57-07:00",
-          "message": "docs(stats): name the unreadable fault cause (9z3k)\n"
-        },
-        {
-          "sha": "28509fe6a8963ae2a48900d6765ca9daf33c2529",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:14:31-07:00",
-          "message": "fix(plugins): a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k)\n"
         }
       ]
     },

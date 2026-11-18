@@ -35040,6 +35040,7 @@ var failedOf = (d) => ({
   reason: `${d.path}: ${d.reason}`
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var UNSEEN = /* @__PURE__ */ Symbol("unseen");
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 function entryAt(at) {
   try {
@@ -35088,6 +35089,9 @@ var WatcherRegistry = class {
     }
     const shared = this.slots.get(key);
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    this.sighted(
+      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? [])
+    );
     const slot = shared ?? this.opened(key, targets);
     const holder = { onInvalidate };
     slot.holders.add(holder);
@@ -35095,11 +35099,29 @@ var WatcherRegistry = class {
   }
   // The held watch following `spec` (`followWatch`).
   follow(held2, spec, onInvalidate) {
-    return followWatch(
+    const followed = followWatch(
       held2,
       spec,
       (key, targets) => this.acquire(key, targets, onInvalidate)
     );
+    if (followed.move === "kept")
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
+    return followed;
+  }
+  // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
+  // have read a polled path since the last sweep, and read a state no sweep
+  // saw. Where the disk differs from the swept entry now, the next sweep
+  // fires it whatever it reads, so a change undone before the sweep is still
+  // heard. Only the sweep fires, so the work a path drives stays once a
+  // period; a change undone before the holder acquired or followed is one no
+  // poll sees.
+  // [LAW:escape-local-minima] exception: seeing a change undone before the
+  // holder looks needs the entry the holder read, which polled consumers do
+  // not yet hand over.
+  sighted(records) {
+    for (const record2 of records)
+      if (record2.entry !== UNSEEN && entryAt(record2.path) !== record2.entry)
+        record2.entry = UNSEEN;
   }
   opened(key, targets) {
     const slot = {
@@ -35329,9 +35351,7 @@ var WatcherRegistry = class {
     if (this.counters) this.counters.watchersClosed++;
   }
   // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, whose entry is the last
-  // sweep's, so a slot joining it also hears a change since that sweep, a
-  // spare re-read and never a missed one.
+  // the acquire is a change; or the one already held, which the acquire sights.
   polledAt(at) {
     const held2 = this.polled.get(at);
     if (held2 !== void 0) return held2;
@@ -35347,10 +35367,11 @@ var WatcherRegistry = class {
   // path is polled and the registry is open. The reads are synchronous, so no
   // two sweeps overlap and no older read lands over a newer one.
   // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
-  // renders, once a period per path, so a mount under a polled path that stops
-  // answering stops every bar until it answers. The paths are a session's own
-  // files (its transcript, its settings, its config, its git directory), which
-  // the daemon reads on this thread to render anyway.
+  // renders, once a period per path and once per acquire or follow naming it,
+  // so a mount under a polled path that stops answering stops every bar until
+  // it answers. The paths are a session's own files (its transcript, its
+  // settings, its config, its git directory), which the daemon reads on this
+  // thread to render anyway.
   armSweep() {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
     this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
@@ -50967,7 +50988,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.3";
+var PACKAGE_VERSION = "1.232.4";
 
 // src/daemon/build-currency.ts
 init_globals();
