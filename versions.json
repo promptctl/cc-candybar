@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-809",
+      "ref": "refs/pull/809/merge",
+      "sha": "600bd0db5eeea53bbd6dae305232b904fb52179e",
+      "timestamp": "2026-11-18T16:43:14.262Z",
+      "commits": [
+        {
+          "sha": "600bd0db5eeea53bbd6dae305232b904fb52179e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T16:42:04Z",
+          "message": "Merge 796f90cada624b9c3496f4c4b5cd82d114294fb2 into 556287991e7955f7a9fbfc4a12b9ded691a25344\n"
+        },
+        {
+          "sha": "796f90cada624b9c3496f4c4b5cd82d114294fb2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:11:12-07:00",
+          "message": "fix(edit): a click releases every state key its change of the config ends, so a re-added placement's library opens closed (t2yz)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-808",
       "ref": "refs/pull/808/merge",
       "sha": "68ba6961f05258b781e59881c7ccd19571d91c86",
@@ -35,28 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:36:10-07:00",
           "message": "fix(watchers): a path watched by name is polled at its path, and only folders ride the OS event stream (iywk) (#805)"
-        }
-      ]
-    },
-    {
-      "version": "pr-809",
-      "ref": "refs/pull/809/merge",
-      "sha": "4c97b4211afd3d9ab3506a2db3b4056663777428",
-      "timestamp": "2026-11-18T16:29:54.205Z",
-      "commits": [
-        {
-          "sha": "4c97b4211afd3d9ab3506a2db3b4056663777428",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T16:28:44Z",
-          "message": "Merge 77d1f38d682280dc9ab4871ad42e69ec1a284e4c into 727ff7b57655585b73a86cdb20adabe0fa145197\n"
-        },
-        {
-          "sha": "77d1f38d682280dc9ab4871ad42e69ec1a284e4c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:11:12-07:00",
-          "message": "fix(edit): a click releases every state key its change of the config ends, so a re-added placement's library opens closed (t2yz)\n"
         }
       ]
     },
