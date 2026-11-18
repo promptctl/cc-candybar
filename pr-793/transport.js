@@ -72405,7 +72405,7 @@ function configFacts(load, target) {
   const base = {
     layers: load.layers,
     target,
-    warnings: load.warning === null ? [] : load.warning.split("\n")
+    warnings: load.warnings
   };
   return load.error !== null ? { ...base, kind: "failed", error: load.error } : {
     ...base,
@@ -81179,7 +81179,11 @@ function drawDsl(config2, compiled, store, registry, projected, at, opts, select
         padding: drawOpts.padding,
         region,
         segments,
-        brokenPlacement: (placement, message2) => warn({ kind: "segment", placement, message: message2 }),
+        brokenPlacement: (placement, message2) => warn({
+          kind: "segment",
+          placement,
+          message: `segment "${placement}": ${message2}`
+        }),
         placement: (node2) => parts.placement(node2),
         evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
           compiled.activeSegment,
@@ -85957,7 +85961,10 @@ function drawRender(parts, setup, drawing2, feeds) {
     ...launched,
     ...held2,
     ...configWatch === null ? [] : [{ kind: "config-watch", message: configWatch }],
-    ...entry.lastWarning === null ? [] : [{ kind: "load", message: entry.lastWarning }],
+    ...entry.lastWarnings.map((message2) => ({
+      kind: "load",
+      message: message2
+    })),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
     ...failure === null ? [] : [
@@ -90251,7 +90258,7 @@ function pluginLoadLine(layers, {
 }
 function configLoadedLine(entry, cause, settled3) {
   const { repo: repo2 } = entry.snapshot;
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -90262,9 +90269,6 @@ function authoredRoots(config2, raw) {
       (name) => presetRoot(config2, name).path === "root" ? raw.root !== void 0 : raw.presets?.[name]?.root !== void 0
     )
   );
-}
-function joinWarnings(parts) {
-  return parts.filter(Boolean).join("\n") || null;
 }
 var thrown = (err) => err instanceof Error ? err.message : String(err);
 function plugins(p2) {
@@ -90432,14 +90436,18 @@ function settle2(chain2, resolveWarnings, attempt4) {
     layers: chain2.layers.map((l) => l.path),
     home: chain2.home
   };
-  const warning = (own2) => joinWarnings([...chain2.snapshot.notices, ...resolveWarnings, ...own2]);
+  const warnings = (own2) => [
+    ...chain2.snapshot.notices,
+    ...resolveWarnings,
+    ...own2
+  ];
   switch (attempt4.kind) {
     case "built":
     case "kept":
       return {
         ...common,
         kind: attempt4.kind,
-        warning: warning(attempt4.state.buildWarnings),
+        warnings: warnings(attempt4.state.buildWarnings),
         state: attempt4.state,
         error: null
       };
@@ -90447,7 +90455,7 @@ function settle2(chain2, resolveWarnings, attempt4) {
       return {
         ...common,
         kind: "failed",
-        warning: warning(attempt4.warnings),
+        warnings: warnings(attempt4.warnings),
         state: null,
         error: thrown(attempt4.cause),
         cause: attempt4.cause
@@ -90678,7 +90686,7 @@ var RenderCache = class {
       snapshot,
       digest: digest2,
       lastError: loaded.error,
-      lastWarning: loaded.warning,
+      lastWarnings: loaded.warnings,
       state: loaded.state ?? fallbackState(cwd2, snapshot, this.deps)
     };
     this.serve(entry.state);
@@ -91079,7 +91087,7 @@ var RenderCache = class {
     entry.snapshot = snapshot;
     entry.digest = digest2;
     entry.configLayers = loaded.layers;
-    entry.lastWarning = loaded.warning;
+    entry.lastWarnings = loaded.warnings;
     entry.lastError = loaded.error;
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
@@ -91830,7 +91838,7 @@ function mainRendererOf(inputs, host) {
       return {
         layers: entry.configLayers,
         error: entry.lastError,
-        warning: entry.lastWarning,
+        warnings: entry.lastWarnings,
         unused: entry.state.unused,
         config: entry.state.config
       };

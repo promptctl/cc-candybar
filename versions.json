@@ -4,15 +4,22 @@
     {
       "version": "pr-793",
       "ref": "refs/pull/793/merge",
-      "sha": "3b70f3f232269a6a208318fb885ed58e7d799169",
-      "timestamp": "2026-11-18T04:56:54.577Z",
+      "sha": "c58904f078872f547ed544eb57957c03be3fbf67",
+      "timestamp": "2026-11-18T05:19:07.111Z",
       "commits": [
         {
-          "sha": "3b70f3f232269a6a208318fb885ed58e7d799169",
+          "sha": "c58904f078872f547ed544eb57957c03be3fbf67",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T04:56:01Z",
-          "message": "Merge 631841e5c74f419b3c105917a1623491b4d71029 into c50a9a7b33e8a8b4d16895b50b157d62d5c55323\n"
+          "timestamp": "2026-11-18T05:18:11Z",
+          "message": "Merge 6ec260284638812225f51b33379cbe367bab9d82 into c50a9a7b33e8a8b4d16895b50b157d62d5c55323\n"
+        },
+        {
+          "sha": "6ec260284638812225f51b33379cbe367bab9d82",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T22:18:00-07:00",
+          "message": "fix(doctor): a load's warnings stay a list, a segment's warning names its placement, and the doctor CLI says what its stores and close logged (9a7)\n"
         },
         {
           "sha": "631841e5c74f419b3c105917a1623491b4d71029",
