@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-828",
+      "ref": "refs/pull/828/merge",
+      "sha": "7c1b3ec6d3fdfc650a04878a6473805cb2b49419",
+      "timestamp": "2026-11-18T19:56:23.577Z",
+      "commits": [
+        {
+          "sha": "7c1b3ec6d3fdfc650a04878a6473805cb2b49419",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:55:06-07:00",
+          "message": "Merge 6e56c634ca082a560d48088a8953b2e6de842fc2 into 1c2d955fd5bc787336ce3430ee52aeab1e787b59\n"
+        },
+        {
+          "sha": "6e56c634ca082a560d48088a8953b2e6de842fc2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:54:55-07:00",
+          "message": "fix(render-cache): the installed-plugin layers are the render cache's, held only for the checkouts its entries serve (izc.967)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-820",
       "ref": "refs/pull/820/merge",
       "sha": "5a1b7302dfce2dda96698ee322644345416628cb",
