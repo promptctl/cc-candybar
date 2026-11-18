@@ -18,18 +18,12 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { buildRig } from "./helpers/rig";
-import { TEST_SESSION } from "./helpers/payload-session";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
 // The frame a source draws for an empty payload.
 function multilineFrame(source: string): Frame {
-  return buildRig({
-    source,
-    palettes: ALLOWED_PALETTES,
-    cwd: "/tmp",
-    sessionId: TEST_SESSION,
-  }).draw({ payload: {} }).frame;
+  return buildRig({ source, palettes: ALLOWED_PALETTES, cwd: "/tmp" }).draw({ payload: {} }).frame;
 }
 
 describe("drawDsl — multi-line layout", () => {

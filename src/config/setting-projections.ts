@@ -22,6 +22,7 @@ import {
   type ControlledField,
   type GlobalField,
   type SettingName,
+  settingNameOf,
 } from "./globals-fields.js";
 
 export type { SettingName } from "./globals-fields.js";
@@ -48,15 +49,10 @@ export interface SettingProjection extends ConfigProjection, Control {
 // session key (or, for a config-only value, its field) has.
 const effectiveVarOf = (name: string): string => `${name}.effective`;
 
-const nameOf = (field: ControlledField): SettingName => {
-  const row = GLOBAL_FIELDS[field];
-  return (row.kind === "selection" ? row.sessionKey : field) as SettingName;
-};
-
 export const SETTINGS: Readonly<Record<SettingName, SettingProjection>> =
   Object.fromEntries(
     CONTROLLED_FIELDS.map((field) => {
-      const name = nameOf(field);
+      const name: SettingName = settingNameOf(field);
       return [
         name,
         {

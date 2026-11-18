@@ -7,9 +7,10 @@ import { effectivePresetName, presetGlobals } from "./presets.js";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "./loader/edit-mode.js";
 import type { DslConfig, Globals } from "./dsl-types.js";
 import {
-  GLOBAL_FIELDS,
+  settingNameOf,
   VALUED_FIELDS,
   valuedRow,
+  type SessionField,
   type ValuedField,
   type ValuedGlobals,
 } from "./globals-fields.js";
@@ -110,7 +111,9 @@ function resolveValued<K extends ValuedField>(
   const row = valuedRow(field);
   return effectiveGlobal(
     staged[field] as ValuedGlobals[K] | undefined,
-    row.kind === "session" ? sessionPick(field) : null,
+    row.kind === "session"
+      ? sessionPick(settingNameOf(field as SessionField))
+      : null,
     globals[field] as ValuedGlobals[K] | undefined,
     row.floor,
     row.parse,
@@ -124,9 +127,9 @@ export function presetOf(
   sessionPick: (key: string) => string | null,
 ): string {
   return effectivePresetName(
-    // [LAW:one-source-of-truth] Read under the row's `sessionKey`, the key a
-    // preset pick is written under.
-    sessionPick(GLOBAL_FIELDS.preset.sessionKey),
+    // [LAW:one-source-of-truth] Read under the key a preset pick is written
+    // under.
+    sessionPick(settingNameOf("preset")),
     config.globals.preset,
     config.presets,
   );
@@ -166,11 +169,11 @@ export function resolveEffectiveGlobals(
   // The theme resolves before the look, because the look's config-default
   // rung is the THEME's default folded under the declared globals
   // (src/config/theme-defaults.ts): which theme decides which fragment.
-  // [LAW:one-source-of-truth] Every selector's pick is read under its globals
-  // row's `sessionKey`, the key a pick from the settings menu is written under.
+  // [LAW:one-source-of-truth] Every pick is read under the key the settings
+  // write it under.
   const theme = resolveThemeSelection(
     staged.palette,
-    sessionPick(GLOBAL_FIELDS.palette.sessionKey),
+    sessionPick(settingNameOf("palette")),
     declared.palette,
   );
   const globals = underThemeDefault(
@@ -189,13 +192,13 @@ export function resolveEffectiveGlobals(
     theme,
     style: resolveStyleSelection(
       staged.style,
-      sessionPick(GLOBAL_FIELDS.style.sessionKey),
+      sessionPick(settingNameOf("style")),
       globals.style,
       config.styles,
     ),
     effect: resolveEffectSelection(
       staged.effect,
-      sessionPick(GLOBAL_FIELDS.effect.sessionKey),
+      sessionPick(settingNameOf("effect")),
       globals.effect,
     ),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
