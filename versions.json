@@ -4,15 +4,22 @@
     {
       "version": "pr-830",
       "ref": "refs/pull/830/merge",
-      "sha": "f76416375053a94344eab6027265a6beeb0410c0",
-      "timestamp": "2026-11-18T21:11:46.284Z",
+      "sha": "1c2d729d9639761e2f05a64818015ef921de367c",
+      "timestamp": "2026-11-18T21:15:56.972Z",
       "commits": [
         {
-          "sha": "f76416375053a94344eab6027265a6beeb0410c0",
+          "sha": "1c2d729d9639761e2f05a64818015ef921de367c",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T21:10:47Z",
-          "message": "Merge c9f08fee3cafd3a35fb8a6f13c8176d1b556213f into faf3e3eb7acc2326880d6a32d25e68576a6f6cb9\n"
+          "timestamp": "2026-11-18T21:14:50Z",
+          "message": "Merge 7f08858ecb0b70fc3d62de7dd1b9203359d5c406 into faf3e3eb7acc2326880d6a32d25e68576a6f6cb9\n"
+        },
+        {
+          "sha": "7f08858ecb0b70fc3d62de7dd1b9203359d5c406",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:14:39-07:00",
+          "message": "fix(config): the installed layer's comments claim only what the load and the install do (70xn)\n"
         },
         {
           "sha": "c9f08fee3cafd3a35fb8a6f13c8176d1b556213f",
