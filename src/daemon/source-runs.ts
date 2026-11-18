@@ -43,7 +43,7 @@ import type { Holds } from "../utils/holds.js";
 import { KeyedSource, NO_WATCH } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { failed, ok, type Asked, type Outcome } from "../utils/outcome.js";
-import { digestOf } from "../utils/plain.js";
+import { digestOf, ownValue } from "../utils/plain.js";
 import type {
   Environment,
   SessionEnvironment,
@@ -536,9 +536,10 @@ function sessionRunOf(
     return { kind: "failed", reason: `not run: ${environment.reason}` };
   const session = environment.value;
   const env: Environment = Object.fromEntries(
-    read.env.flatMap((name) =>
-      Object.hasOwn(session, name) ? [[name, session[name]!]] : [],
-    ),
+    read.env.flatMap((name) => {
+      const value = ownValue(session, name);
+      return value === undefined ? [] : [[name, value]];
+    }),
   );
   return {
     kind: "ok",

@@ -650,8 +650,9 @@ export function optionalStringSpec(): FieldSpec<string> {
   };
 }
 
-// A POSIX environment variable name.
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+// [LAW:one-source-of-truth] An environment variable's name as a shell
+// spells one.
+export const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 // [LAW:parse-dont-validate] An optional list of environment variable names:
 // what a shell source's command reads, beyond the base set. Present-and-wrong

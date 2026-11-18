@@ -1566,8 +1566,9 @@ export class RenderCache<
   }
 
   // [LAW:one-source-of-truth] What every session's open view needs read: the
-  // plugin sources its config declares, at their storage folders, and
-  // the runs its `shell` and `file` sources name. Read
+  // plugin sources its config declares, at their storage folders, the runs
+  // its `shell` and `file` sources name, and the variables of the session's
+  // environment its `env` sources read. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
   // [LAW:one-source-of-truth] The origins the entries load from. An origin's

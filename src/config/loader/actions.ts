@@ -41,6 +41,7 @@ import {
 import {
   describeType,
   describeValue,
+  ENV_NAME,
   fields,
   isPlainObject,
   objectJson,
@@ -561,8 +562,6 @@ const SLASH_ARM_JSON: JsonNode = {
 // declaring file's directory is recorded here, as the directory the program
 // runs in.
 const RUN_KEYS = ["run", "env", "refreshes"];
-// An environment variable's name as a shell spells one.
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function runArm(home: ActionHome): ArmParse<ActionDecl> {
   return (ctx, path, raw) => {

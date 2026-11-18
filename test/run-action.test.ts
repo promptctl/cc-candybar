@@ -1017,8 +1017,8 @@ describe("the session's process environment", () => {
       API_HOST: "prod",
       CLAUDE_CODE_SESSION_ID: "stale-sid",
       CLAUDE_CONFIG_DIR: "/reported/.claude",
-      TMUX: "/tmp/tmux-501/default,1,0",
-      TMUX_PANE: "%3",
+      TMUX: "/tmp/tmux-501/session,2,0",
+      TMUX_PANE: "%5",
     };
     // What a child gets, asked of a real one: `env` prints it.
     const childSees = async (
@@ -1054,9 +1054,11 @@ describe("the session's process environment", () => {
       CLAUDE_CODE_SESSION_ID: "s9",
       CLAUDE_PROJECT_DIR: "/p",
       CLAUDE_CONFIG_DIR: "/u/.claude-z",
+      // The session's own pane, never the daemon's.
+      TMUX: "/tmp/tmux-501/session,2,0",
+      TMUX_PANE: "%5",
     });
-    for (const gone of ["DAEMON_ONLY", "TMUX", "TMUX_PANE"])
-      expect(seen).not.toHaveProperty(gone);
+    expect(seen).not.toHaveProperty("DAEMON_ONLY");
     // The default directory: the variable unset, as Claude Code reads it,
     // whatever the client's own environment said.
     const defaulted = await childSees({

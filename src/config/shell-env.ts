@@ -6,10 +6,11 @@
 // [LAW:one-source-of-truth] The base set every shell source runs in, beneath
 // the names it declares: what a command needs to find programs, a home and
 // the XDG base directories its tools keep their config and data under, a
-// temporary directory and its locale. Each is the same in every session of
-// one user, so naming it splits no run; `TERM` is not, since a session in
-// tmux and one in a bare terminal differ, and a command's stdout is a pipe. Chosen so the bundled default and the
-// documented examples name nothing more.
+// temporary directory and its locale. Two sessions whose values differ (a
+// PATH a tool manager moves) run once each, since the values can move the
+// output. `TERM` is left out: it differs between a session in tmux and one in
+// a bare terminal, and a command's stdout is a pipe. Chosen so the bundled
+// default and the documented examples name nothing more.
 export const SHELL_BASE_ENV: readonly string[] = [
   "HOME",
   "LANG",

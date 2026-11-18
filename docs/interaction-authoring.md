@@ -1084,9 +1084,7 @@ Your own config may declare one too. It names a source by its full name:
   is its id, `CLAUDE_PROJECT_DIR` its project directory, and
   `CLAUDE_CONFIG_DIR` its Claude Code directory (unset when that is the
   default). The daemon was started by some other session's shell, so none of
-  its own environment reaches the program. `TMUX` and `TMUX_PANE` are unset,
-  since tmux gives a closed pane's id to the next pane opened. `env` is laid
-  over the result. A
+  its own environment reaches the program. `env` is laid over the result. A
   session the daemon has not heard from since it started has no environment
   it knows, so its click runs nothing and the bar says why; its next
   statusline request brings it.

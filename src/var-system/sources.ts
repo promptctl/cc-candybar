@@ -463,6 +463,7 @@ export class SourceRegistry {
   ) {
     this.sessionState = sessionState;
     this.cleanups.push(observe(this.subscriptionsNow, () => {}));
+    this.cleanups.push(observe(this.envNow, () => {}));
   }
 
   // [LAW:one-source-of-truth] A session's view of this directory home

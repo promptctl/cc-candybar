@@ -7,6 +7,7 @@
 import type { SessionId } from "./session-id";
 import { ABSENT, ok, type Asked, type Outcome } from "../../utils/outcome";
 import { CLAUDE_CONFIG_DIR_ENV } from "../../claude-settings";
+import { ownValue } from "../../utils/plain";
 
 // A process environment as plain data: its set variables.
 export type Environment = Readonly<Record<string, string>>;
@@ -26,7 +27,8 @@ export function plainEnvironment(
 // [LAW:single-enforcer] One variable of an environment: its value, or absent
 // when it is unset. Own keys only, so a name like `constructor` reads unset.
 export function variableOf(env: Environment, name: string): Outcome<string> {
-  return Object.hasOwn(env, name) ? ok(env[name]!) : ABSENT;
+  const value = ownValue(env, name);
+  return value === undefined ? ABSENT : ok(value);
 }
 
 // [LAW:types-are-the-program] What the host holds of a session's environment:
@@ -54,29 +56,16 @@ export interface SessionFacts {
   readonly claudeConfigDir: string | undefined;
 }
 
-// The reported variables the host never passes on. The client resolved the
+// The session's facts over its reported environment. The client resolved the
 // Claude Code directory to an absolute path, which wins over the variable it
-// read. tmux hands a closed pane's id to the next pane opened, and the host
-// holds a session's environment past the client that reported it, so a run
-// started from it after its pane closed would name another pane.
-const NOT_PASSED_ON: readonly string[] = [
-  CLAUDE_CONFIG_DIR_ENV,
-  "TMUX",
-  "TMUX_PANE",
-];
-
-// The session's facts over its reported environment; a default Claude Code
-// directory is the variable unset.
+// read; a default directory is the variable unset.
 export function sessionEnvironment(
   reported: Environment,
   facts: SessionFacts,
 ): Environment {
+  const { [CLAUDE_CONFIG_DIR_ENV]: _reportedDir, ...rest } = reported;
   return {
-    ...Object.fromEntries(
-      Object.entries(reported).filter(
-        ([name]) => !NOT_PASSED_ON.includes(name),
-      ),
-    ),
+    ...rest,
     CLAUDE_CODE_SESSION_ID: facts.sessionId,
     CLAUDE_PROJECT_DIR: facts.projectDir,
     ...(facts.claudeConfigDir !== undefined && {
