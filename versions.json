@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-819",
+      "ref": "refs/pull/819/merge",
+      "sha": "e3bba598fb3795d02bbd6d90ef2badc4ad2c5f15",
+      "timestamp": "2026-11-18T20:03:24.851Z",
+      "commits": [
+        {
+          "sha": "e3bba598fb3795d02bbd6d90ef2badc4ad2c5f15",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T20:02:16Z",
+          "message": "Merge 43e8906d5aa4f17d12caf4d89f734a0f3612001b into f72209a57f1948648b44508adcfa2a143579eaf8\n"
+        },
+        {
+          "sha": "43e8906d5aa4f17d12caf4d89f734a0f3612001b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:15:07-07:00",
+          "message": "fix(daemon): the registry has one removal, whose failure the sweep warns of, and its entry name one spelling (v5fj)\n"
+        },
+        {
+          "sha": "0b0e98fb17406052ee942be6ac472359d69f0602",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:18:09-07:00",
+          "message": "fix(daemon): a fork-bomb registry release removes our own entry, and an empty start time names no process (v5fj)\n"
+        },
+        {
+          "sha": "7473dd1563f752326d32f5d37f7d5c7f26d9fafc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:06:30-07:00",
+          "message": "fix(daemon): a fork-bomb registry entry is judged by the pid its name carries, so no entry is left out of the count (v5fj)\n"
+        },
+        {
+          "sha": "fab15b15a13f88521e5a541f45c72d95447c82d0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:59:23-07:00",
+          "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f72209a57f1948648b44508adcfa2a143579eaf8",
@@ -114,49 +157,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T12:27:06-07:00",
           "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-819",
-      "ref": "refs/pull/819/merge",
-      "sha": "9522685250f8c82b6b67105c602fecce831c62cc",
-      "timestamp": "2026-11-18T19:31:19.641Z",
-      "commits": [
-        {
-          "sha": "9522685250f8c82b6b67105c602fecce831c62cc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T19:30:14Z",
-          "message": "Merge ec46b2a6b79675c36ed73603db9586ae76470944 into cf8d3437b19b458c96b45972d2055cbaeb241720\n"
-        },
-        {
-          "sha": "ec46b2a6b79675c36ed73603db9586ae76470944",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:15:07-07:00",
-          "message": "fix(daemon): the registry has one removal, whose failure the sweep warns of, and its entry name one spelling (v5fj)\n"
-        },
-        {
-          "sha": "a3a3306439192aa92b6d69f809440cc01e0c0fa0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:18:09-07:00",
-          "message": "fix(daemon): a fork-bomb registry release removes our own entry, and an empty start time names no process (v5fj)\n"
-        },
-        {
-          "sha": "5a60d45fe37f2fcb4a5bee09b94b6358321a32dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:06:30-07:00",
-          "message": "fix(daemon): a fork-bomb registry entry is judged by the pid its name carries, so no entry is left out of the count (v5fj)\n"
-        },
-        {
-          "sha": "cf58d5f08518b3c784ea310aa33f65e222c180e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:59:23-07:00",
-          "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
         }
       ]
     },
