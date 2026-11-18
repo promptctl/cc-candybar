@@ -101,15 +101,22 @@ describe("presets block — loader validation", () => {
   });
 
   // Edit chrome spells each preset name injectively, so two names that differ
-  // only in punctuation load, and neither steals the other's reset.
-  test("two preset names that differ only in punctuation both load", () => {
-    expect(() =>
-      parseAndValidate(
-        "<test>",
-        `{ presets: { 'quick-look': {}, 'quick_look': {} } }`,
-        ALLOWED,
-      ),
-    ).not.toThrow();
+  // only in punctuation load, and each one's reset resets its own layout.
+  test("two preset names that differ only in punctuation each reset their own layout", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{ presets: { 'quick-look': {}, 'quick_look': {} } }`,
+      ALLOWED,
+    );
+    const resets = Object.entries(config.actions)
+      .filter(([name]) => name.endsWith(".resetLayout"))
+      .map(([, action]) => (action as { reset: string }).reset);
+    expect(resets).toEqual(
+      expect.arrayContaining([
+        "presets.quick-look.root",
+        "presets.quick_look.root",
+      ]),
+    );
   });
 
   test("preset names that don't collide are unaffected", () => {

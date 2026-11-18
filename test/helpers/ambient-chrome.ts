@@ -55,7 +55,7 @@ function isReservedChromeKey(key: string): boolean {
     // `edit.<preset>.insertSeg.<before|after>.<placement>` segment (insertGap
     // calls menuStateKey directly), and `ident()` collapses the dots — so a
     // bundled-default config really does derive 30+ keys under this prefix.
-    key.startsWith(`${MENU_NS}edit_`) ||
+    key.startsWith(`${MENU_NS}${ident(EDIT_NS)}`) ||
     // Edit chrome registers a preset-root key per preset the moment any
     // `+`/`-` affordance exists — which is now every config, since the settings
     // menu makes edit mode reachable from every bar.

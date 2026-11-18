@@ -77,7 +77,6 @@ import {
   EDIT_CONFIGURE_KEY,
   PLACEMENT_DRAFT_NS,
 } from "../../config/loader/edit-mode";
-import { exactIdent } from "../../config/ident";
 import {
   durableLanding,
   placementDrafts,
@@ -1090,15 +1089,13 @@ function endedPlacements(
     );
   const survivors = new Set(
     presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) =>
-        configureMember(exactIdent(preset), placementId(n)),
-      ),
+      placed(after, preset).map((n) => configureMember(preset, placementId(n))),
     ),
   );
   return presetNames(before.presets).flatMap((preset) =>
     placed(before, preset)
       .map((node) => ({
-        member: configureMember(exactIdent(preset), placementId(node)),
+        member: configureMember(preset, placementId(node)),
         node,
       }))
       .filter(({ member }) => !survivors.has(member)),

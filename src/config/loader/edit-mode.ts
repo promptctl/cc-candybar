@@ -22,6 +22,7 @@
 // config (settings-menu.ts), ensures this same toggle, and puts `✎ arrange` in its
 // body, so every bar carries edit mode and edit chrome runs unconditionally.
 
+import { escapedIdent } from "../ident.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type {
@@ -64,14 +65,13 @@ export const EDIT_MODE_ARRANGE = "arrange";
 // shadow `edit.mode.…` beside edit mode's own state.
 export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
 
-// The member that configures the placement `id` in the layout of the preset
-// whose ident is `presetIdent` — an id is unique only within one preset's
-// tree, so switching presets never carries configure mode onto a different
-// placement that shares the id. Neither part holds a `:` (an ident is
-// `[A-Za-z0-9_]`, and the loader refuses one in an id), so the member names
-// exactly one placement.
-export function configureMember(presetIdent: string, id: string): string {
-  return `${presetIdent}:${id}`;
+// The member that configures the placement `id` in the layout of `preset` —
+// an id is unique only within one preset's tree, so switching presets never
+// carries configure mode onto a different placement that shares the id. The
+// preset is escaped (letters and digits alone) and the loader refuses a `:`
+// in an id, so the member names exactly one placement.
+export function configureMember(preset: string, id: string): string {
+  return `${escapedIdent(preset)}:${id}`;
 }
 
 // [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has

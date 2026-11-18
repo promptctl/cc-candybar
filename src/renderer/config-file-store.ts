@@ -81,7 +81,6 @@ import {
   type ConfigPath,
   type PersistTarget,
 } from "../config/loader/persist-target.js";
-import { ident } from "../config/ident.js";
 
 // [LAW:one-source-of-truth] The boolean-ish inputs a boolean field's file
 // value is written from — a `persist` action's gate is an ALLOW-LIST
@@ -913,31 +912,26 @@ function presetKeys(doc: Node | null): string[] {
 // no preset the chain will declare already holds — every one the file
 // inherits, the file's own read from the very text the write lands in, and
 // every layer's above it (a name another layer holds would merge the copy
-// into its preset) — compared by `ident`, the collapse the loader refuses two
-// preset names sharing.
+// into its preset).
 function freePresetName(
   doc: Node | null,
   under: DslConfig,
   into: Seen,
 ): string {
-  const taken = new Set(
-    [
-      ...Object.keys(under.presets),
-      ...presetKeys(doc),
-      // Each layer above as the loader reads it (JSON5, duplicate keys and
-      // all) — the editor refuses files the loader renders.
-      ...into.above.flatMap((l) =>
-        Object.keys(
-          (JSON5.parse(l.text) as { presets?: object }).presets ?? {},
-        ),
-      ),
-    ].map(ident),
-  );
+  const taken = new Set([
+    ...Object.keys(under.presets),
+    ...presetKeys(doc),
+    // Each layer above as the loader reads it (JSON5, duplicate keys and
+    // all) — the editor refuses files the loader renders.
+    ...into.above.flatMap((l) =>
+      Object.keys((JSON5.parse(l.text) as { presets?: object }).presets ?? {}),
+    ),
+  ]);
   // One more candidate than there are names, so one is always free.
   return Array.from(
     { length: taken.size + 1 },
     (_, i) => `${SAVED_PRESET_PREFIX}${i + 1}`,
-  ).find((candidate) => !taken.has(ident(candidate)))!;
+  ).find((candidate) => !taken.has(candidate))!;
 }
 
 /**

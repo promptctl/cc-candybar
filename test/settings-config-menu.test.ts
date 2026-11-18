@@ -1331,7 +1331,9 @@ describe("save as preset", () => {
     expect(r.sessionState.get(SID, "preset")).toBe("mine");
   });
 
-  test("the name skips one the file holds under the loader's identifier collapse", async () => {
+  // Preset names are distinct as written, so one that differs from the free
+  // name only in punctuation does not take it.
+  test("the name is free beside one that differs only in punctuation", async () => {
     const source = `{
   presets: { custom_1: {} },
 }`;
@@ -1339,9 +1341,9 @@ describe("save as preset", () => {
     await r.click(await savePreset());
     expect(Object.keys(durable.parsed().presets as object)).toEqual([
       "custom_1",
-      "custom-2",
+      "custom-1",
     ]);
-    expect(effective().preset).toBe("custom-2");
+    expect(effective().preset).toBe("custom-1");
   });
 
   test("the copy keeps the preset's own globals — those no picker spells too — under the picks", async () => {

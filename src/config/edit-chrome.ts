@@ -45,7 +45,7 @@ import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { perConfigDomainsFor, type ResolvedDomain } from "./option-domain.js";
 import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
-import { exactIdent } from "./ident.js";
+import { escapedIdent } from "./ident.js";
 import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
 import {
   configureMember,
@@ -274,7 +274,8 @@ function chromeCell(
 // is red TEXT on the cell's own ground, floored to stay legible on it, as the
 // `✚` beside it is green.
 function removeTerm(ctx: SpliceCtx, id: string): string {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${exactIdent(id)}`;
+  // [LAW:one-source-of-truth] Spelled as every chrome name for the placement.
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id)}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id,
@@ -356,9 +357,9 @@ function configureParts(
   decls: Readonly<Record<string, SettingDecl>>,
 ): ConfigureParts {
   const id = placementId(node);
-  const placement = exactIdent(id);
+  const placement = escapedIdent(id);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.presetIdent, id);
+  const member = configureMember(ctx.preset, id);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
   // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
@@ -380,9 +381,9 @@ function configureParts(
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);
-    // A template field path (`.edit.draft.pp.d1b_29.x`): a preset's ident
-    // and a placement's spelling may lead with a digit, which a field name
-    // may not — hence `p` and `d`. The key, not the name, is what a session
+    // A template field path (`.edit.draft.pp.d1bZ00002d29.x`): an escaped
+    // preset or placement may lead with a digit, which a field name may not —
+    // hence `p` and `d`. The key, not the name, is what a session
     // holds across reloads.
     const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
     ctx.artifacts.variables[variable] = {
@@ -429,8 +430,8 @@ function configureParts(
   };
 }
 
-// `ident` (every per-preset chrome name's `edit.<preset>.` prefix) emits no
-// `:`, so no preset's chrome can land under this namespace.
+// `escapedIdent` (every per-preset chrome name's `edit.<preset>.` prefix)
+// emits no `:`, so no preset's chrome can land under this namespace.
 const LABEL_NS = `${EDIT_NS}label:`;
 
 // [LAW:one-source-of-truth] The segment a placed segment stands for in the
@@ -575,7 +576,7 @@ function insertedUnit(
     kind: "segment",
     // Keyed by the preset too: another preset may hold the same id as an
     // editable placement, whose label reads only the id. An id holds no
-    // `/` and a preset ident no `:`, so the two names never meet.
+    // `/`, so the two names never meet.
     name: labelSegment(
       ctx,
       `${id}/${ctx.presetIdent}`,
@@ -612,7 +613,7 @@ function insertTerm(
     apply: applyName,
     host: chromeSegName,
     stateKey,
-  } = insertGap(ctx.presetIdent, anchor, relation);
+  } = insertGap(ctx.preset, anchor, relation);
   artifacts.actions[applyName] = {
     persist: ctx.rootKey,
     insertSegmentFrom: ADDABLE_DOMAIN,
@@ -663,16 +664,17 @@ function insertTerm(
   };
 }
 
-// [LAW:one-source-of-truth] The names of the `+` gap beside one placement:
-// its insert action, the segment that hosts its menu, and that menu's open
-// state. Every name edit chrome mints for a placement or preset spells it
-// with `exactIdent`, so an add, removal or move elsewhere hands none of its
-// state (an open `✚` library, its page, a configure list) to a neighbour;
-// labels, the configure member and draft keys carry the raw id, which is
-// already unique per tree. An authored placement has a gap after it, and the
-// first of its row one before it too; an inserted cell has none.
+// [LAW:one-source-of-truth] The names of the `+` gap beside one placement,
+// from the preset's and the placement's names as written: its insert action,
+// the segment that hosts its menu, and that menu's open state. Edit chrome's
+// action, segment and variable names spell their preset and placement with
+// `escapedIdent`, so an add, removal or move elsewhere hands none of a
+// placement's state (an open `✚` library, its page, a configure list) to a
+// neighbour. Labels, the configure member and draft keys are values, not
+// names, and carry the id as written. An authored placement has a gap after
+// it, and the first of its row one before it too; an inserted cell has none.
 export function insertGap(
-  presetIdent: string,
+  preset: string,
   anchor: string,
   relation: "before" | "after",
 ): {
@@ -680,14 +682,16 @@ export function insertGap(
   readonly host: string;
   readonly stateKey: string;
 } {
-  const gap = `${relation}.${exactIdent(anchor)}`;
-  const apply = `${EDIT_NS}${presetIdent}.insert.${gap}`;
-  const host = `${EDIT_NS}${presetIdent}.insertSeg.${gap}`;
+  const gap = `${relation}.${escapedIdent(anchor)}`;
+  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
+  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
   return { apply, host, stateKey: menuStateKey(host, apply, undefined) };
 }
 
 // One splice's context, threaded unchanged through the recursion.
 interface SpliceCtx {
+  // The preset's name as written, and as every chrome name spells it.
+  readonly preset: string;
   readonly presetIdent: string;
   readonly rootKey: string;
   readonly segments: DslConfig["segments"];
@@ -912,7 +916,8 @@ function spliceEditChromeForPreset(
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
   const ctx: SpliceCtx = {
-    presetIdent: exactIdent(presetName),
+    preset: presetName,
+    presetIdent: escapedIdent(presetName),
     rootKey: presetRootKey(presetName),
     segments: config.segments,
     artifacts,
