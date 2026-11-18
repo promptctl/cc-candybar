@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-806",
+      "ref": "refs/pull/806/merge",
+      "sha": "483c97f63bd9fe06df221694228f0dc19c0e5d76",
+      "timestamp": "2026-11-18T15:41:32.044Z",
+      "commits": [
+        {
+          "sha": "483c97f63bd9fe06df221694228f0dc19c0e5d76",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:40:31Z",
+          "message": "Merge d282d45530cc2e24f0d952f6e456fe7f5fef26cf into 36b0c268535b139534bb9b29bd59ac0a0621b719\n"
+        },
+        {
+          "sha": "d282d45530cc2e24f0d952f6e456fe7f5fef26cf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:29:04-07:00",
+          "message": "fix(update-act): an overdue act whose files a newer act pruned still has its proven group ended (pj1z)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-805",
       "ref": "refs/pull/805/merge",
       "sha": "aa48949b0837b731f1b32414b31731d5451f75d5",
@@ -35,28 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T08:32:14-07:00",
           "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7) (#798)\n\n* fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n\n* fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n\n* fix: a link publish that stood is its outcome, and the session file's chain settles whatever a write did (ooi7)\n\nA staged name that would not go after the link is now said beside the\noutcome rather than thrown in its place, so endJob still signals the group\nand a raced link key still reads the key that landed. The write chain\nsettles on a write's failure as well as its success, the write keeps its\nown error with its code, the success log runs after the try, cleanup\nfailures are Errors (realm-safe), writeAtomic keeps only permission bits,\nand the usage cache publishes whole."
-        }
-      ]
-    },
-    {
-      "version": "pr-806",
-      "ref": "refs/pull/806/merge",
-      "sha": "3c796a734f706e6c4728f2e45ca3be3e880ff1ba",
-      "timestamp": "2026-11-18T15:31:04.381Z",
-      "commits": [
-        {
-          "sha": "3c796a734f706e6c4728f2e45ca3be3e880ff1ba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:29:34-07:00",
-          "message": "Merge 10aa67106028263815e351d03f07145d49c34273 into f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017\n"
-        },
-        {
-          "sha": "10aa67106028263815e351d03f07145d49c34273",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:29:04-07:00",
-          "message": "fix(update-act): an overdue act whose files a newer act pruned still has its proven group ended (pj1z)\n"
         }
       ]
     },
