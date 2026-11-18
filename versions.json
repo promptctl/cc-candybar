@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-806",
+      "ref": "refs/pull/806/merge",
+      "sha": "c7e2ebb6701a943a324ae4109ead8d19a489ae7c",
+      "timestamp": "2026-11-18T16:53:03.201Z",
+      "commits": [
+        {
+          "sha": "c7e2ebb6701a943a324ae4109ead8d19a489ae7c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T16:51:59Z",
+          "message": "Merge e9bf14e6092b99d0c80d40d0ef21a8fdd1ca1295 into 556287991e7955f7a9fbfc4a12b9ded691a25344\n"
+        },
+        {
+          "sha": "e9bf14e6092b99d0c80d40d0ef21a8fdd1ca1295",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:29:04-07:00",
+          "message": "fix(update-act): an overdue act whose files a newer act pruned still has its proven group ended (pj1z)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-810",
       "ref": "refs/pull/810/merge",
       "sha": "30267865bcd8d7a543a5284700f89a7fd37b49f8",
@@ -101,28 +123,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T08:32:32-07:00",
           "message": "fix(doctor): the config row names the repository the bar asks about, and where it stands (qo8j)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-806",
-      "ref": "refs/pull/806/merge",
-      "sha": "d28568ac903429080e16b1e7a5f3ba82122ab636",
-      "timestamp": "2026-11-18T16:04:50.769Z",
-      "commits": [
-        {
-          "sha": "d28568ac903429080e16b1e7a5f3ba82122ab636",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T16:02:17Z",
-          "message": "Merge f6d83d50d20f9072aab6679bb9c9f6ae122dccdf into 9ffa98534dfa6e86e99e386945d6eae856f1ecaa\n"
-        },
-        {
-          "sha": "f6d83d50d20f9072aab6679bb9c9f6ae122dccdf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:29:04-07:00",
-          "message": "fix(update-act): an overdue act whose files a newer act pruned still has its proven group ended (pj1z)\n"
         }
       ]
     }
