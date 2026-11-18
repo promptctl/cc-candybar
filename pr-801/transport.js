@@ -28404,7 +28404,6 @@ var DISCLOSURE_GLYPH_CLOSED = "\u25B8";
 var DISCLOSURE_GLYPH_OPEN = "\u25BE";
 var DISCLOSURE_GLYPH_CLOSE = "\u2715";
 var DISCLOSURE_CLOSE_ROLE = "warning";
-var DOOR_CLOSE_ROLE = "error";
 var DOOR_GLYPH = "\u{1F36B}";
 var DOOR_CLOSE_GLYPH = "\u2716";
 function cycleDisplayIssue(subject, count, members) {
@@ -39026,6 +39025,15 @@ function ensureContrast(fg, bg, minRatio = 4.5, drawnAt = ColorDepth.TRUECOLOR, 
     return chosen;
   return table.written.get(table.shown.matchReadable(fg.compositeOver(ground), shownBg, minRatio));
 }
+function ensureDrawn(chosen, drawnAt, accept, substrate = SURFACE_BLACK, terminal) {
+  const opaque = drawnBackground(chosen, substrate);
+  const table = drawnTable(drawnAt, terminal);
+  const drawn = (c) => shownAs(table, drawnBackground(c, substrate));
+  if (accept(drawn(opaque), drawn))
+    return opaque;
+  const index = table?.shown.matchWhere(opaque, (entry) => accept(entry, drawn));
+  return index === void 0 ? void 0 : table.written.get(index);
+}
 function drawnColour(colour, drawnAt, substrate = SURFACE_BLACK, terminal) {
   return shownAs(drawnTable(drawnAt, terminal), drawnBackground(colour, substrate));
 }
@@ -47129,9 +47137,9 @@ var Recolored = class {
     if (options.colorSystem === null)
       return { segments, hold: UNMOVED };
     const depth = options.colorSystem ?? ColorDepth.TRUECOLOR;
-    const looked = looks(segments, depth, this.theme);
-    const walked = walk(looked);
-    const animation = this.effect(measured(looked, () => walked, depth, this.theme));
+    const looked2 = looks(segments, depth, this.theme);
+    const walked = walk(looked2);
+    const animation = this.effect(measured(looked2, () => walked, depth, this.theme));
     const shown = shownAt(animation, this.t, options);
     return { segments: this._recolored(walked, shown.value, depth), hold: holdOf(shown, this.t) };
   }
@@ -47342,9 +47350,9 @@ function walkGlyphs(segments) {
 function inked(text4) {
   return text4.trim() !== "";
 }
-function walk(looked) {
-  const placed2 = walkGlyphs(looked.map(({ segment }) => segment));
-  return looked.map((item, i2) => ({ ...item, glyphs: placed2[i2] }));
+function walk(looked2) {
+  const placed2 = walkGlyphs(looked2.map(({ segment }) => segment));
+  return looked2.map((item, i2) => ({ ...item, glyphs: placed2[i2] }));
 }
 function edgesBeside(walked, drawings) {
   let rows;
@@ -47382,7 +47390,7 @@ function edgesBeside(walked, drawings) {
 function drawsLines(style) {
   return [style.underline, style.underline2, style.strike, style.overline, style.frame, style.encircle].some((on2) => on2 === true);
 }
-function measured(looked, walked, depth, theme24) {
+function measured(looked2, walked, depth, theme24) {
   const ground = theme24.backgroundColor.hex;
   let everything;
   const list2 = () => walked().flatMap(({ look, glyphs }) => {
@@ -47394,7 +47402,7 @@ function measured(looked, walked, depth, theme24) {
   const listed = () => everything ??= list2();
   let all2;
   let shown;
-  const words2 = looked.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
+  const words2 = looked2.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
   const pairs2 = [...new Map(words2.map((pair) => [`${pair.fg.hex}/${pair.bg.hex}/${pair.terminal.fg}/${pair.terminal.bg}/${pair.reverse}`, pair])).values()];
   const own2 = (slot) => pairs2.flatMap((pair) => pair.terminal[slot] ? [] : [pair[slot].hex]);
   return {
@@ -50544,6 +50552,34 @@ function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path15.default.join(stateDir2, "update-act", key);
 }
+function looked(prev, job, began, done, longestLookMs) {
+  if (prev === null || !sameJob(prev.job, job)) {
+    return {
+      kind: "first",
+      watched: {
+        job,
+        spentMs: 0,
+        unwatchedMs: 0,
+        lookedAt: done,
+        ended: false
+      }
+    };
+  }
+  const waitedMs = spanMs(prev.lookedAt, began);
+  return waitedMs <= longestLookMs ? {
+    kind: "spent",
+    watched: { ...prev, spentMs: prev.spentMs + waitedMs, lookedAt: done },
+    waitedMs
+  } : {
+    kind: "unwatched",
+    watched: {
+      ...prev,
+      unwatchedMs: prev.unwatchedMs + waitedMs,
+      lookedAt: done
+    },
+    waitedMs
+  };
+}
 function judgeAct(facts) {
   if (facts === null) return IDLE;
   const { act: act2, record: record2, alive, end, lastLine } = facts;
@@ -50605,12 +50641,27 @@ async function isRecordedJob(record2, read2, jobs, boot) {
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
 }
 function readRecord(actDir) {
+  const file = recordOf(actDir);
+  let text4;
   try {
-    return JSON.parse(fs_default.readFileSync(recordOf(actDir), "utf8"));
+    text4 = fs_default.readFileSync(file, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
   }
+  return parsedRecord(file, text4);
+}
+function parsedRecord(file, text4) {
+  const r = JSON.parse(text4);
+  if (typeof r === "object" && r !== null && "identity" in r && typeof r.identity === "string" && "pid" in r && typeof r.pid === "number" && Number.isSafeInteger(r.pid) && "startTime" in r && (r.startTime === null || typeof r.startTime === "string") && "started" in r && typeof r.started === "number" && Number.isFinite(r.started)) {
+    return {
+      identity: r.identity,
+      pid: r.pid,
+      startTime: r.startTime,
+      started: r.started
+    };
+  }
+  throw new Error(`${file}: not an act record: ${text4.slice(0, 200)}`);
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
@@ -50654,11 +50705,18 @@ function makeActReader(dir, read2, jobs, clock) {
     }
   };
 }
+var INERT_DEADLINE = Number.MAX_SAFE_INTEGER;
 function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
   const staging = fs_default.mkdtempSync(import_node_path15.default.join(dir, ".claim-"));
   try {
-    fs_default.writeFileSync(recordOf(staging), JSON.stringify(record2));
+    fs_default.writeFileSync(
+      recordOf(staging),
+      JSON.stringify({
+        ...record2,
+        deadline: INERT_DEADLINE
+      })
+    );
     fs_default.renameSync(staging, actDir);
     return true;
   } catch (err) {
@@ -50669,7 +50727,7 @@ function stakeClaim(dir, actDir, record2) {
     fs_default.rmSync(staging, { recursive: true, force: true });
   }
 }
-async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
+async function claimAct(launcher, dir, after, identity2, command, now2, read2) {
   const act2 = (after ?? 0) + 1;
   const actDir = import_node_path15.default.join(dir, String(act2));
   const job = launcher.launchJobSync(command, filesOf(actDir));
@@ -50681,8 +50739,7 @@ async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now
       identity: identity2,
       pid: job.pid,
       startTime: start.kind === "start" ? start.token : null,
-      started: now2,
-      deadline: now2 + timeoutMs
+      started: now2
     };
     if (!stakeClaim(dir, actDir, record2)) return CLAIMED_FIRST;
     if (actNumbers(dir).some((n) => n > act2)) {
@@ -51172,17 +51229,6 @@ var VARIATIONS = {
 var TRIAL_VARIATION_NAMES = Object.keys(
   TUNINGS
 );
-var ROLE_ANSI = {
-  error: ["bright_red", "red"],
-  warning: ["bright_yellow", "yellow"],
-  success: ["bright_green", "green"]
-};
-function semanticRoleOf(role) {
-  if (Object.hasOwn(ROLE_ANSI, role)) return role;
-  throw new Error(
-    `"${role}" is not a semantic role: it is one of ${Object.keys(ROLE_ANSI).join(", ")}`
-  );
-}
 var vocabularyOf = (palette, decor, drawnAt) => turnsHeld(
   palette,
   decor,
@@ -62093,17 +62139,13 @@ function settingsArtifacts(doorGlyph) {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears a red of `DOOR_CLOSE_ROLE` chosen as the render's depth
-      // draws it (`roleTextOn`): at ansi the terminal's red or bright red, and
-      // at every other depth the theme's text-red where that reads on the
-      // pressed state, otherwise the role's own red or the nearest rung of its
-      // ladder out toward the pole the pressed state stands farther from that
-      // does, and where none does, the red standing farthest off. It never
-      // slides lightness: a slid red stops reading as red, and the ✖ must be
-      // red on every theme at every depth. Closed, the author's glyph keeps
-      // the cell's own text.
+      // the ✖ wears a red the theme names for its error role, or the
+      // terminal's own red, whichever reads as red on the pressed state as
+      // this depth draws it (`errorRedOn`). It never slides lightness: a slid
+      // red stops reading as red, and the ✖ must be red on every theme.
+      // Closed, the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
       },
       [FPS_SEG]: { template: FRAME_RATE },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
@@ -63289,6 +63331,7 @@ function releaseReading(release4) {
 }
 var ACT_TIMEOUT_MS = 10 * 60 * 1e3;
 var ACT_POLL_MS = 2e3;
+var LONGEST_LOOK_MS = 5 * ACT_POLL_MS;
 function describeBuild(b) {
   switch (b.kind) {
     case "current":
@@ -63409,17 +63452,44 @@ function makeUpdateWatch(opts) {
       return { ok: false, error: unreadable };
     }
   }
-  function endIfOverdue(facts) {
-    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+  let watched = null;
+  function endIfOverdue(facts, began) {
+    if (!facts?.alive) return;
+    const look = looked(
+      watched,
+      facts.record,
+      began,
+      clock.monotonic(),
+      LONGEST_LOOK_MS
+    );
+    watched = look.watched;
+    if (look.kind === "first") {
+      log(
+        "info",
+        `apply-update: act ${facts.act}: this daemon's budget for its job starts unspent`
+      );
+    }
+    if (look.kind === "unwatched") {
+      log(
+        "info",
+        `apply-update: act ${facts.act} unwatched for ${look.waitedMs}ms (a sleep or a stalled daemon); ${watched.spentMs}ms of its budget spent`
+      );
+    }
+    if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
+    watched = { ...watched, ended: true };
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
-    log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
+    log(
+      "error",
+      `apply-update: act ${facts.act} ${why2} after ${watched.spentMs}ms watched (${watched.unwatchedMs}ms unwatched); ${ending}`
+    );
   }
   async function watchAct() {
     const read2 = await touchActs(async () => {
+      const began = clock.monotonic();
       const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
+      if (!closed) endIfOverdue(facts, began);
       return facts;
     });
     if (closed || !read2.ok) return;
@@ -63491,7 +63561,6 @@ function makeUpdateWatch(opts) {
         newest === null ? null : newest.act,
         updateIdentity(update),
         { ...command, category: "update.apply" },
-        ACT_TIMEOUT_MS,
         clock.now(),
         readStart
       );
@@ -79338,17 +79407,12 @@ function segmentColorFuncs(ref) {
     arity: { kind: "exact" },
     returnType: "string"
   };
-  const roleTextOn = {
-    fn: ((role, bgRef) => {
-      const { palette: palette2 } = requireActiveSegment(ref, "{{ roleTextOn }}");
-      return roleText2(
-        palette2,
-        semanticRoleOf(role),
-        resolveColorRef(palette2, bgRef),
-        ref.drawnAt()
-      ).hex;
+  const errorRedOn = {
+    fn: ((bgRef) => {
+      const { palette: palette2 } = requireActiveSegment(ref, "{{ errorRedOn }}");
+      return errorRed(palette2, resolveColorRef(palette2, bgRef), ref.drawnAt()).hex;
     }),
-    argTypes: ["string", "string"],
+    argTypes: ["string"],
     arity: { kind: "exact" },
     returnType: "string"
   };
@@ -79378,51 +79442,58 @@ function segmentColorFuncs(ref) {
     arity: { kind: "variadic" },
     returnType: "T"
   };
-  return { ...palette, bgOf, tint, roleTextOn, gauge };
+  return { ...palette, bgOf, tint, errorRedOn, gauge };
 }
 var RUNGS_OUT = {
   "#000000": ["darken-1", "darken-2", "darken-3"],
   "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
 };
-var RUNGS = Object.values(RUNGS_OUT).flat();
-function roleText2(palette, role, ground, depth) {
+var TERMINAL_REDS = ["red", "bright_red"].map(
+  (name) => STANDARD_TABLE.get(ANSI_COLOR_NAMES[name])
+);
+var RED_HUE = { from: -20, to: 40, chroma: 0.06 };
+function readsRed(colour) {
+  const { h, c } = Oklch.fromRgba(colour);
+  const hue = h > 180 ? h - 360 : h;
+  return c >= RED_HUE.chroma && hue >= RED_HUE.from && hue <= RED_HUE.to;
+}
+function errorRed(palette, ground, depth) {
   const shown = drawnColour(ground, depth);
-  const measured3 = (colour) => ({
-    colour,
-    ratio: contrastRatio(drawnColour(colour, depth), shown)
-  });
-  const { preferred, all: all2 } = depth === ColorDepth.STANDARD ? ansiCandidates(role) : namedCandidates(palette, role, shown);
-  const ranked = preferred.map(measured3);
-  return (ranked.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? all2.map(measured3).reduce(
-    (farthest, colour) => colour.ratio > farthest.ratio ? colour : farthest
-  )).colour;
-}
-function ansiCandidates(role) {
-  const colours = ROLE_ANSI[role].map(
-    (name) => STANDARD_TABLE.get(ANSI_COLOR_NAMES[name])
-  );
-  return { preferred: colours, all: colours };
-}
-function namedCandidates(palette, role, shown) {
   const pole = contrastFor(shown).hex;
   const out = RUNGS_OUT[pole];
   if (out === void 0) {
     throw new Error(
-      `contrastFor named ${pole} for ${shown.hex}, which is neither pole`
+      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`
     );
   }
-  const text4 = `text-${role}`;
-  const rung = (step4) => `${role}-${step4}`;
-  const colours = new Map(
-    [text4, role, ...RUNGS.map(rung)].map((name) => [
-      name,
-      resolveColorRef(palette, name)
-    ])
-  );
-  return {
-    preferred: [text4, role, ...out.map(rung)].map((name) => colours.get(name)),
-    all: [...colours.values()]
-  };
+  const back2 = Object.values(RUNGS_OUT).find((rungs) => rungs !== out);
+  const candidates = [
+    ...[
+      "text-error",
+      "error",
+      ...[...out, ...back2].map((r) => `error-${r}`)
+    ].map((name) => resolveColorRef(palette, name)),
+    ...TERMINAL_REDS
+  ];
+  for (const floor3 of [TEXT_MIN_CONTRAST, QUIET_MIN_CONTRAST]) {
+    for (const colour of candidates) {
+      const cleared = ensureDrawn(
+        colour,
+        depth,
+        (drawn) => readsRed(drawn) && contrastRatio(drawn, shown) >= floor3
+      );
+      if (cleared !== void 0) return cleared;
+    }
+  }
+  const red = candidates.map((colour) => {
+    const drawn = drawnColour(colour, depth);
+    return {
+      colour,
+      red: readsRed(drawn),
+      ratio: contrastRatio(drawn, shown)
+    };
+  }).filter(({ red: red2 }) => red2);
+  return red.reduce((farthest, c) => c.ratio > farthest.ratio ? c : farthest).colour;
 }
 function flattenStops(stops) {
   return stops.flatMap((stop2) => {

@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-801",
+      "ref": "refs/pull/801/merge",
+      "sha": "40b6709c249c0a0021ad2681e77f75ac01ca6f36",
+      "timestamp": "2026-11-18T13:46:11.784Z",
+      "commits": [
+        {
+          "sha": "40b6709c249c0a0021ad2681e77f75ac01ca6f36",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:45:10-07:00",
+          "message": "Merge 06c4ddcee155e2e8b60ac2bef88a0ecd541c7fd3 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "06c4ddcee155e2e8b60ac2bef88a0ecd541c7fd3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:44:53-07:00",
+          "message": "fix(colour): the door's ✖ is red as each depth draws it, judged on its drawn colour (fmkv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-798",
       "ref": "refs/pull/798/merge",
       "sha": "8ed61b2f3fcac1777eed69d286003cea25ee451e",
@@ -85,28 +107,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T06:02:46-07:00",
           "message": "fix: an update act's budget is spent in time a daemon watched it run, not wall time (#797)\n\n* fix: an update act's budget is spent in time a daemon watched it run, not wall time (9eu3)\n\nWall time runs while the machine sleeps, so a lid closed mid-build past\nten minutes ended the build on wake, possibly mid-write, tearing the\nbundle. Each watching daemon now spends the budget by its looks: a gap\nlonger than five polls is a sleep or a stall and spends nothing, as a\nclock set back does. The record's deadline is written past any clock, so\nan older daemon on the bundle never ends an act by it.\n\n* fix(update): the act budget follows its job on the span clock, and says what it did not spend (9eu3)\n\nThe spend is keyed by the job, not the act number a later claim can reuse,\nand measured on the monotonic clock. Spans past the longest look are kept as\nunwatched and logged, and a timeout says both figures. A job is ended once.\nThe act record is parsed where it is read, a claim's fault reaches the act\nfiles' one edge, and a look that throws no longer stops the watch. Comments\nstate the real bound: ten minutes watched by one daemon.\n\n* fix(update): one job's watch is one value, and a look's wait excludes its read (9eu3)\n\nA look is tagged first, spent or unwatched, and the watch logs from that.\nThe job's ended mark lives in the same value and is set only once the end\nhas run. The wait runs from one look's end to the next look's start, so a\nslow read under load is never taken for a sleep. The act record's parse\nnarrows with type guards. A claim's fault and a throwing look go back to\ntheir own paths, which already show them."
-        }
-      ]
-    },
-    {
-      "version": "pr-800",
-      "ref": "refs/pull/800/merge",
-      "sha": "5913ef05b80b2b7603ea8383349680f8b0f1700c",
-      "timestamp": "2026-11-18T12:58:18.182Z",
-      "commits": [
-        {
-          "sha": "5913ef05b80b2b7603ea8383349680f8b0f1700c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:57:12-07:00",
-          "message": "Merge eb8766a264143b66d4af7c3b9add9d4550c26500 into e33675a193dfc48790988daa17ac05641e602a19\n"
-        },
-        {
-          "sha": "eb8766a264143b66d4af7c3b9add9d4550c26500",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:56:04-07:00",
-          "message": "fix(colour): the door's ✖ is chosen among the reds the render's depth draws (7u1g)\n\nAt ansi the ✖ was a theme red rounded into sixteen colours, repaired by a\nnearest-colour search that tested contrast alone, so it was drawn silver,\nyellow, black or purple. The choice now measures every candidate as the\nrender's depth draws it: the theme's named reds at truecolor and 256, and\nthe terminal's red and bright red at ansi. keptOn is deleted, and the\ntemplate's role is parsed as a semantic role.\n"
         }
       ]
     }
