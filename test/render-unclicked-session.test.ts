@@ -51,8 +51,8 @@ test("a session that has never clicked draws the declared preset and style, not 
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const at = instantOf(new Date());
-    const render = (selection: Parameters<typeof drawPayload>[8]): Frame =>
-      drawPayload(config, compiled, store, registry, { session_id: "s" }, at, OPTS, undefined, selection).frame;
+    const render = (selection: Parameters<typeof drawPayload>[7]): Frame =>
+      drawPayload(config, compiled, store, registry, { session_id: "s" }, at, OPTS, selection).frame;
 
     const unclicked = render(globalsFor(config));
     // The floor preset and style, picked by the session.

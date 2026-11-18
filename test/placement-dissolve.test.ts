@@ -100,7 +100,6 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
         { session_id: "s", shown, dark },
         when,
         { ...opts, width },
-        undefined,
         selectionFor(cfg, { effect: decideEffectName(bar), effects, transitions }),
       ).frame,
     dispose: () => registry.dispose(),

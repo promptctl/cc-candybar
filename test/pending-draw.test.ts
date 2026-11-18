@@ -7,7 +7,7 @@
 // view last settled on, and a template variable passes it on rather than
 // answering with its default. None of it is a fault: nothing is reported.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
@@ -95,7 +95,6 @@ function renderer(cfg: ValidatedConfig) {
     answer: (value: JsonValue) => store.setDocument("doc", ok(value)),
     unanswer: () => store.setDocument("doc", pendingOf("unread")),
     draw: (width = 160): Drawn => {
-      const errors: string[] = [];
       const { frame, warnings } = drawPayload(
         cfg,
         compiled,
@@ -110,14 +109,13 @@ function renderer(cfg: ValidatedConfig) {
           padding: 1,
           width,
         },
-        { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
         selectionFor(cfg),
         runs.readings,
       );
       return {
         frame,
         text: textOf(frame).split("\n").at(-1)!,
-        errors,
+        errors: segmentErrorsOf(warnings),
         warnings,
       };
     },
@@ -330,7 +328,10 @@ describe("a placement whose value is not answered yet draws where it stood", () 
       // each is the fault it is.
       const answered = on.draw();
       expect(answered.errors).toHaveLength(1);
-      expect(answered.warnings.map((w) => w.kind)).toEqual(["when"]);
+      expect(answered.warnings.map((w) => w.kind)).toEqual([
+        "segment",
+        "when",
+      ]);
       on.unanswer();
       const { text, errors, warnings, frame } = on.draw();
       expect(text).toContain(LOADING_GLYPH);

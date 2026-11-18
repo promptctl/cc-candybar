@@ -1058,7 +1058,6 @@ describe("an installed plugin", () => {
                   width: 200,
                 },
                 undefined,
-                undefined,
                 runs.readings,
               ).frame,
             );

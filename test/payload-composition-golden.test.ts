@@ -58,7 +58,6 @@ async function drawnUnder(preset: string | null) {
     },
     AT,
     renderOptionsOf(effective, COLS),
-    {},
     effective,
   );
   // The temporary directory is the one thing a run names that differs.

@@ -30,7 +30,6 @@ import {
   type CompileProvider,
   type DrawnFrame,
   type RegisteredConfig,
-  type RenderObservers,
   type RenderSelection,
 } from "../../src/dsl/render";
 import type { LinkSigner } from "../../src/click/link-signer";
@@ -101,7 +100,6 @@ export interface DrawInit {
   readonly payload?: object;
   readonly opts?: Partial<BuildLineOptions>;
   readonly at?: Instant;
-  readonly observers?: RenderObservers;
   /** The selection, whole. Defaults to the daemon's resolution over the session's picks. */
   readonly selection?: RenderSelection;
 }
@@ -254,7 +252,6 @@ export function buildRig(init: RigInit = {}): Rig {
         },
         draw.at ?? instantOf(new Date()),
         { ...RIG_OPTS, ...draw.opts },
-        draw.observers,
         draw.selection ??
           selectionFor(config, {}, (key) => sessionState.get(sessionId, key)),
         readings,

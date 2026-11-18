@@ -21,7 +21,7 @@ jest.mock("../src/dsl/render", () => {
   return {
     ...actual,
     drawDsl: (...args: Parameters<typeof actual.drawDsl>) => {
-      if (args[8].preset === "b") throw new Error("the renderer broke");
+      if (args[7].preset === "b") throw new Error("the renderer broke");
       return actual.drawDsl(...args);
     },
   };

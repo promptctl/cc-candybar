@@ -176,7 +176,6 @@ function render(theme: string, calm: boolean, { variation, shade, look }: Varian
       wrap: e.autoWrap,
       padding: e.padding,
     },
-    undefined,
     e,
   ).frame;
 }

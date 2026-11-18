@@ -744,6 +744,10 @@ export async function renderEffective(
       case "rule":
         failures.set(`${warning.slot} rule`, warning.message);
         return;
+      // A placement that drew its ⚠ cell in its place.
+      case "segment":
+        failures.set(`segment "${warning.placement}"`, warning.message);
+        return;
       // A layout `when` that threw: the bar hides what it gates, which a
       // headless pass would otherwise bless.
       case "when":
@@ -773,10 +777,6 @@ export async function renderEffective(
     drawn,
     at,
     opts,
-    {
-      onSegmentError: (placementId: string, message: string) =>
-        failures.set(`segment "${placementId}"`, message),
-    },
     effective,
   );
   for (const warning of warnings) warned(warning);

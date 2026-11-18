@@ -10,8 +10,8 @@ import {
   drawDsl,
   type CompiledConfig,
   type DrawnFrame,
-  type RenderObservers,
   type RenderSelection,
+  type RenderWarning,
 } from "../../src/dsl/render";
 import type { BuildLineOptions } from "../../src/render/strip";
 import type { Instant } from "../../src/utils/instant";
@@ -31,7 +31,6 @@ export function drawPayload(
   payload: unknown,
   at: Instant,
   opts: BuildLineOptions,
-  observers?: RenderObservers,
   // [LAW:one-source-of-truth] A caller naming no selection renders as a session that has
   // never clicked: the daemon's own resolution with no picks, so a config
   // declaring globals.preset or globals.style draws the preset, theme and look
@@ -57,7 +56,6 @@ export function drawPayload(
     drawn,
     at,
     opts,
-    observers,
     { ...selection, record: selection.record ?? records.get(store) },
   );
   records.set(store, frame.memory.record);
@@ -68,3 +66,11 @@ export function drawPayload(
 // The record of the last frame drawn over each store, as a view keeps its
 // surface's.
 const records = new WeakMap<VariableStore, FrameRecord<RenderedLine>>();
+
+// Each placement that drew its ⚠ cell, as `<placement>: <message>`.
+export const segmentErrorsOf = (
+  warnings: readonly RenderWarning[],
+): string[] =>
+  warnings.flatMap((w) =>
+    w.kind === "segment" ? [`${w.placement}: ${w.message}`] : [],
+  );

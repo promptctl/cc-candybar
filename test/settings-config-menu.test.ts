@@ -231,7 +231,6 @@ function rig(
         },
         at,
         renderOptionsOf(effective, width),
-        undefined,
         effective,
       ).frame;
     },

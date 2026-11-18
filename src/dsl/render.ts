@@ -1174,21 +1174,6 @@ function segmentsUnder(node: CompiledNode): CompiledSegmentNode[] {
  * The projection (how a container maps children onto the plane) is the
  * `direction` VALUE, not a branch in the walk.
  */
-// [LAW:locality-or-seam] The optional render observers, bundled as ONE named bag
-// so a caller states what it passes by name — no positional tail to count, no
-// `undefined` holes to reach a later observer, and a new observer is one field
-// here rather than a signature change every caller re-counts.
-export interface RenderObservers {
-  // [LAW:no-silent-failure] Optional observer for per-segment evaluation errors.
-  // A failing segment renders as a visible ⚠ error cell (partial rendering, the
-  // daemon's author-facing channel) — a headless caller with no one looking at
-  // the bar (`cc-candybar check`) passes this to receive the same errors as
-  // data and fold them into its text verdict. Trusted non-throwing (the
-  // registry-dispose contract): an observer that throws is a caller bug
-  // surfaced loudly, never caught and absorbed by the render walk.
-  readonly onSegmentError?: (placementId: string, message: string) => void;
-}
-
 // [LAW:types-are-the-program] A draw: the frame it drew, the memory it made,
 // and what the walk that drew it reports of itself.
 export interface DrawnFrame {
@@ -1238,9 +1223,17 @@ export type RenderWarning =
       readonly slot: ExpressionSlot;
       readonly message: string;
     }
+  // A placement that could not draw, so it draws its ⚠ cell in its place: its
+  // template, its `when` or an affix threw. The cell folds the message to one
+  // line and the layout may truncate it, so the whole message is here.
+  | {
+      readonly kind: "segment";
+      readonly placement: string;
+      readonly message: string;
+    }
   // A container's own `when` whose template threw, so what it gates is
   // hidden (brandon-unfiled-3248.ryf). A container has no cell to show a ⚠ in;
-  // a placement's gate failing draws its ⚠ instead, through onSegmentError.
+  // a placement's gate failing draws its ⚠ instead, a `segment` warning.
   // `where` names it as a placement's ⚠ is named, `error` says why.
   | {
       readonly kind: "when";
@@ -1262,7 +1255,7 @@ export type RenderWarning =
 // down — the values that are neither config (compiled once) nor payload (input
 // data), but the session's live choices resolved against the config: which
 // preset, variation and shade, and whether placements fade. Bundled as ONE
-// named bag for exactly the reason RenderObservers is. The theme, style and
+// named bag, so a caller states what it passes by name. The theme, style and
 // effect are not among them: the view's slots settle those from what it draws
 // from (`ViewSource.selections`), so a label reading `.style.effective` and
 // the palette the bar wears are one node.
@@ -1347,10 +1340,8 @@ export function drawDsl(
   // the caller: nothing rendered reads a clock of its own.
   at: Instant,
   opts: BuildLineOptions,
-  observers: RenderObservers | undefined,
   selection: DrawSelection,
 ): DrawnFrame {
-  const { onSegmentError } = observers ?? {};
   const warnings: RenderWarning[] = [];
   const warn = (warning: RenderWarning): void => void warnings.push(warning);
   const segments = new Map<string, readonly RichText[]>();
@@ -1550,7 +1541,8 @@ export function drawDsl(
       padding: drawOpts.padding,
       region,
       segments,
-      onSegmentError,
+      brokenPlacement: (placement, message) =>
+        warn({ kind: "segment", placement, message }),
       placement: (node) => parts.placement(node),
       evaluateOnce: (node, scope, palette, body) =>
         evaluateOnce(

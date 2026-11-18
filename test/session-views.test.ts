@@ -185,7 +185,6 @@ const drawn = (
         width: 300,
       },
       undefined,
-      undefined,
       runsOf(view).readings,
     ).frame,
   );

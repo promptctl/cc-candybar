@@ -64,6 +64,7 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import { type AdapterToHost } from "../renderer-interface/adapter.js";
+import { faultsNote, type Fault } from "../renderer-interface/noted-faults.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { TurnTime } from "./turn-time.js";
@@ -561,6 +562,8 @@ export function drawRender(
   const lanes = laneSwitches(effective, payload.tmux !== undefined);
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
+    // The preset the session's settings resolve to, which the draw uses.
+    preset: effective.preset,
   });
   // [LAW:one-source-of-truth] The width is `renderWidth` of the turn's hints —
   // the client's cols, else the default, less Claude Code's reserve — which
@@ -600,25 +603,30 @@ export function drawRender(
   // viewer (an issue fixed) without becoming another message; a request's
   // refusal, its hints' and a click's are about exactly what their text says.
   // Each copies its own text, but a drop copies the prompt that fixes it.
-  const sourced = (about: string, text: string | null | undefined) => ({
-    about,
-    text,
-    copy: text,
-  });
-  const said = (text: string | null | undefined) => sourced(text ?? "", text);
-  const errors: SourcedText[] = [
-    said(refusedArgsError(req.refusedArgs)),
-    said(hintsError),
-    sourced("load", entry.lastError),
-    sourced("update-act", update.actsError),
-    ...state.dropped.map((e) => ({
-      about: `dropped\0${e.file}`,
-      text: e.message,
-      copy: e.prompt,
-    })),
-    said(clickShown?.text),
-  ].flatMap(({ about, text, copy }) =>
-    about && text && copy ? [{ about, text, copy }] : [],
+  const sourced = (
+    kind: DrawError["kind"],
+    about: string,
+    text: string | null | undefined,
+  ): MaybeError => ({ kind, about, text, copy: text });
+  const said = (kind: DrawError["kind"], text: string | null | undefined) =>
+    sourced(kind, text ?? "", text);
+  const errors: readonly DrawError[] = [
+    said("refused-args", refusedArgsError(req.refusedArgs)),
+    said("hints", hintsError),
+    sourced("load", "load", entry.lastError),
+    sourced("update-act", "update-act", update.actsError),
+    ...state.dropped.map(
+      (e): MaybeError => ({
+        kind: "dropped",
+        subject: e.file,
+        about: `dropped\0${e.file}`,
+        text: e.message,
+        copy: e.prompt,
+      }),
+    ),
+    said("click", clickShown?.text),
+  ].flatMap(({ about, text, copy, ...named }) =>
+    about && text && copy ? [{ ...named, about, text, copy }] : [],
   );
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, what this config's
@@ -740,7 +748,6 @@ export function drawRender(
     projected,
     at,
     renderOpts,
-    undefined,
     // [LAW:one-source-of-truth] The draw's own settings, the session's
     // effect memory and the record of the surface's last frame of the view.
     // The theme, style and effect are not among them: the view's slots settle
@@ -824,6 +831,8 @@ export function drawRender(
         return `rule:${w.slot}`;
       case "refresh":
         return `refresh:${w.variable}`;
+      case "segment":
+        return `segment:${w.placement}`;
       case "file-events":
         return `${w.kind}:${w.state}`;
       case "load":
@@ -840,9 +849,23 @@ export function drawRender(
   // A failed update act is a warning of its own, so it is tagged here too.
   const warned =
     [
-      ...updates.failure.map(() => "update-failed"),
+      ...updates.failure.map(() => UPDATE_FAILED),
       ...[...standing, ...drawnWarnings].map(tagOf),
     ].join(",") || "-";
+  // [LAW:nothing-unseen] Every fault this frame met, each whole, at the level
+  // the bar's list shows it: the errors, the warnings standing before the
+  // draw, a failed update act and the walk's own warnings. Noted whole when
+  // it moved since the renderer's last record of the session, so a reader
+  // learns what the frame could not honour without its viewer, and `kept`
+  // otherwise, so an unchanged bar costs no message per tick.
+  const faults: ReadonlyArray<Fault<FaultKind>> = [
+    ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
+    ...standing.map((w) => faultOf("warning", w.kind, w.message)),
+    ...updates.failure.map((w) => faultOf("warning", UPDATE_FAILED, w.text)),
+    ...drawnWarnings.map((w) =>
+      faultOf("warning", w.kind, w.message, subjectOf(w)),
+    ),
+  ];
   noteFacts(facts, {
     effect: fx.effect,
     effectT: fx.t.toFixed(3),
@@ -878,6 +901,7 @@ export function drawRender(
     // its renderer's record (`new`) or matched it (`kept`).
     diag: String(diagnostics.length),
     warnRecord: recorded ? "new" : "kept",
+    faults: faultsNote(faults, renderWarnings.noted(sessionId, drawing.by)),
     // The message the viewer showed in the body's place, `-` while closed.
     viewer:
       viewing === null
@@ -902,7 +926,7 @@ export function drawRender(
       by: drawing.by,
       record: memory.record,
       motion: memory.motion,
-      warnings: { scope, list: drawnWarnings },
+      warnings: { scope, list: drawnWarnings, faults },
       // What this frame drew is what the session's idle close follows.
       menu: {
         tick: readings.tick,
@@ -927,6 +951,8 @@ export interface DrawMemory {
   readonly warnings: {
     readonly scope: RecordScope;
     readonly list: readonly RenderWarning[];
+    // Every fault the frame met, as its turn record noted them.
+    readonly faults: readonly Fault[];
   };
   // Whether the frame showed a menu, under the timeout its settings resolve
   // to, at the tick of the turn that drew it.
@@ -953,8 +979,67 @@ function keepDraw(
   view.frames.set(by, record);
   view.lastRenderCellsBySegment = segments;
   parts.effectSessions.keep(session, motion);
-  parts.renderWarnings.keep(session, by, warnings.scope, warnings.list);
+  parts.renderWarnings.keep(
+    session,
+    by,
+    warnings.scope,
+    warnings.list,
+    warnings.faults,
+  );
   parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
+}
+
+// [LAW:types-are-the-program] What each error a draw lists is, named once:
+// the kind its fault is noted by, and the file a dropped write names.
+interface DrawError extends SourcedText {
+  readonly kind:
+    | "refused-args"
+    | "hints"
+    | "load"
+    | "update-act"
+    | "dropped"
+    | "click";
+  readonly subject?: string;
+}
+
+// An error as its producer hands it, before an empty text drops it.
+type MaybeError = Omit<DrawError, "text" | "copy"> & {
+  readonly text: string | null | undefined;
+  readonly copy: string | null | undefined;
+};
+
+// A failed update act: its warning's tag and its fault's kind.
+const UPDATE_FAILED = "update-failed";
+
+// [LAW:one-source-of-truth] Every kind a fault is noted by, derived from the
+// producers' own unions, so a new kind of warning or error is a fault's kind
+// with no list here to extend.
+type FaultKind =
+  | DrawError["kind"]
+  | StandingWarning["kind"]
+  | RenderWarning["kind"]
+  | typeof UPDATE_FAILED;
+
+const faultOf = (
+  level: Fault["level"],
+  kind: FaultKind,
+  message: string,
+  subject?: string,
+): Fault<FaultKind> => ({ level, kind, subject, message });
+
+// What a walk's warning is about, where it carries one.
+// [LAW:types-are-the-program] Exhaustive over the kinds, as `tagOf` is.
+function subjectOf(w: RenderWarning): string {
+  switch (w.kind) {
+    case "rule":
+      return w.slot;
+    case "refresh":
+      return w.variable;
+    case "segment":
+      return w.placement;
+    case "when":
+      return w.where;
+  }
 }
 
 // The warning a load carried, beside what a draw could not honour.

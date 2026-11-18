@@ -188,8 +188,7 @@ export interface StateDeps {
 // when a `config` turn hands in a moved snapshot — so anything that
 // must run AFTER a reload (an operator log of its outcome, a test asserting
 // on the state it wrote) needs the cache to say so, or it is left betting on
-// a clock. The same named-bag idiom as drawDsl's RenderObservers
-// [LAW:locality-or-seam]: a caller states what it passes by name, and a new
+// a clock. [LAW:locality-or-seam] One named bag: a caller states what it passes by name, and a new
 // observer is one field here, not a constructor signature every caller
 // re-counts.
 export interface RenderCacheObservers {
@@ -201,7 +200,7 @@ export interface RenderCacheObservers {
   // place it lives and the type, not this comment, keeps it from writing
   // there. `sessions` are those whose views drew from the entry before it
   // loaded: none for an entry just created. `cause` is why it loaded. Trusted
-  // non-throwing (the same contract as onSegmentError): an observer that
+  // non-throwing: an observer that
   // throws is a caller bug surfaced loudly, never absorbed here.
   readonly onReload?: (
     entry: ReloadedEntry,

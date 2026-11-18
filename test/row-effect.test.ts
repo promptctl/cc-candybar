@@ -97,8 +97,7 @@ function renderer(
   };
   return {
     render: (effect, when, effects, payload = {}) =>
-      drawPayload(config, compiled, store, registry, payload, when, opts, undefined,
-        selectionFor(config, {
+      drawPayload(config, compiled, store, registry, payload, when, opts, selectionFor(config, {
           ...(effect === undefined ? {} : { effect: decideEffectName(effect) }),
           ...(effects === undefined ? {} : { effects }),
         }),

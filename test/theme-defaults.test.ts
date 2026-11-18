@@ -278,7 +278,6 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
       { session_id: SID },
       at,
       renderOptionsOf(effective, OPTS_WIDTH),
-      undefined,
       effective,
     );
     const daemon = bg(daemonDrawn.segments);

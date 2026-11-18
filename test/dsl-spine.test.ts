@@ -13,7 +13,6 @@ import { join } from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot, PRESET_FLOOR } from "../src/config/presets";
-import type { RenderObservers } from "../src/dsl/render";
 import { buildRig } from "./helpers/rig";
 
 // [LAW:single-enforcer] Inlined fixture values formerly served by
@@ -61,7 +60,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     palettes: ReadonlySet<string> = ALLOWED_PALETTES,
   ) {
     const rig = buildRig({ source, palettes, cwd, env: ENV });
-    return { ...rig, drawHook: (observers?: RenderObservers) => rig.draw({ payload: HOOK_DATA, observers }).frame };
+    return { ...rig, drawHook: () => rig.draw({ payload: HOOK_DATA }).frame };
   }
 
   test("parseDslConfig accepts the committed fixture", () => {

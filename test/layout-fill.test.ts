@@ -18,7 +18,7 @@
 // which makes FlexStrip FOLD THE LINE at the empty cell and report the width of the
 // first fragment instead of the row.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -407,8 +407,7 @@ describe("a fill segment fills wherever the walk places it", () => {
       new SessionState(),
     );
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-    const errors: string[] = [];
-    const out = drawPayload(
+    const { frame: out, warnings } = drawPayload(
       config,
       compiled,
       store,
@@ -416,10 +415,9 @@ describe("a fill segment fills wherever the walk places it", () => {
       { session_id: "s1" },
       instantOf(new Date()),
       opts({ width: WIDTH, padding: 1 }),
-      { onSegmentError: (n, m) => errors.push(`${n}: ${m}`) },
-    ).frame;
+    );
     registry.dispose();
-    expect(errors).toEqual([]);
+    expect(segmentErrorsOf(warnings)).toEqual([]);
     return textOf(out).split("\n");
   };
   const filled = (lines: string[]) =>

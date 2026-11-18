@@ -4,7 +4,7 @@
 // the parts that read it; and a view kept across changes draws exactly what a
 // view made fresh for each draws.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { linksOf } from "../src/click/read";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -69,10 +69,10 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
       payload,
       at,
       opts,
-      { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
       selection,
     );
-    warnings.push(...drawn.warnings);
+    errors.push(...segmentErrorsOf(drawn.warnings));
+    warnings.push(...drawn.warnings.filter((w) => w.kind !== "segment"));
     return drawn;
   };
   return { compiled, registry, errors, warnings, draw };

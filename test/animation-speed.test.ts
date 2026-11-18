@@ -214,7 +214,6 @@ describe("a template's frames run at the session's animation speed; realtimeFram
                 padding: 1,
                 width: 160,
               },
-              undefined,
               selectionFor(CONFIG, { animationSpeed: speed, effects }),
             ).frame,
           ),

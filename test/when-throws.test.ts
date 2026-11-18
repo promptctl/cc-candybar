@@ -66,9 +66,10 @@ function runtime(source: string) {
       { session_id: "s-when-throws", ctx: { pct } },
       instantOf(new Date()),
       OPTS,
-      { onSegmentError: (id, message) => segmentErrors.push([id, message]) },
     );
-    warnings.push(...drawn.warnings);
+    for (const w of drawn.warnings)
+      if (w.kind === "segment") segmentErrors.push([w.placement, w.message]);
+      else warnings.push(w);
     return textOf(drawn.frame);
   };
   return {

@@ -91,14 +91,12 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
         payload,
         at,
         renderOptionsOf(effective, cols),
-        {
-          // [LAW:no-silent-failure] A ⚠ cell would be read as the bar it replaced.
-          onSegmentError: (name, message) => {
-            throw new Error(`${name}: ${message}`);
-          },
-        },
         effective,
       );
+      // [LAW:no-silent-failure] A ⚠ cell would be read as the bar it replaced.
+      for (const w of warnings)
+        if (w.kind === "segment")
+          throw new Error(`${w.placement}: ${w.message}`);
       return { frame, warnings, segments };
     },
     dispose: () => registry.dispose(),

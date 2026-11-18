@@ -84,7 +84,7 @@ function viewOver(
     arrive: (next: Record<string, unknown>) =>
       runInAction(() => answer.set(next)),
     draw: () =>
-      drawDsl(config, compiled, store, registry, {}, AT, OPTS, undefined, {
+      drawDsl(config, compiled, store, registry, {}, AT, OPTS, {
         ...selections,
       }),
     runs: (): number =>

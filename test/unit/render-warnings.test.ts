@@ -3,9 +3,17 @@
 // about the frame moved is counted, or cleared, by the next frame; each
 // renderer keeps its own.
 
-import { RenderWarningRecords } from "../../src/renderer/render-warnings";
+import {
+  RenderWarningRecords,
+  type RecordScope,
+} from "../../src/renderer/render-warnings";
+import type { Drawing } from "../../src/config/lanes";
 import type { RenderWarning } from "../../src/dsl/render";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../../src/daemon/foundations/session-id";
+import type { Fault } from "../../src/renderer-interface/noted-faults";
 
 const S_2 = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -26,10 +34,14 @@ const S = { config: {} };
 // record, read before the record is replaced.
 const drawn = (
   records: RenderWarningRecords,
-  ...[session, by, scope, warnings]: Parameters<RenderWarningRecords["keep"]>
+  session: SessionId,
+  by: Drawing["by"],
+  scope: RecordScope,
+  warnings: readonly RenderWarning[],
+  faults: readonly Fault[] = [],
 ): boolean => {
   const moved = records.moves(session, by, warnings);
-  records.keep(session, by, scope, warnings);
+  records.keep(session, by, scope, warnings, faults);
   return moved;
 };
 
@@ -101,5 +113,23 @@ describe("a renderer's warning record", () => {
       warning("both"),
       warning("statusline"),
     ]);
+  });
+
+  test("the faults a renderer last noted are its own, from its first record until its record is evicted", () => {
+    const records = new RenderWarningRecords(2);
+    const fault = (message: string): Fault => ({
+      level: "warning",
+      kind: "segment",
+      subject: "said",
+      message,
+    });
+    expect(records.noted(A_2, "request")).toBeUndefined();
+    drawn(records, A_2, "request", S, [], [fault("a")]);
+    drawn(records, A_2, "feed", S, [], []);
+    expect(records.noted(A_2, "request")).toEqual([fault("a")]);
+    expect(records.noted(A_2, "feed")).toEqual([]);
+    // The least recently drawn record goes, and its next note is whole.
+    drawn(records, B, "request", S, [], [fault("b")]);
+    expect(records.noted(A_2, "request")).toBeUndefined();
   });
 });
