@@ -29783,27 +29783,36 @@ function readJobEnd(status) {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
 function endJob(spawner, clock, pid2, status, end) {
-  const { verdict, leftover } = landVerdict(status, end);
-  const signalled = spawner.signalJob(pid2, "SIGTERM");
-  if (signalled) {
-    clock.after(
-      TIMEOUT_KILL_GRACE_MS,
-      () => spawner.signalJob(pid2, "SIGKILL"),
-      {
-        unref: true
-      }
-    );
+  const signal = () => {
+    const signalled = spawner.signalJob(pid2, "SIGTERM");
+    if (signalled) {
+      clock.after(
+        TIMEOUT_KILL_GRACE_MS,
+        () => spawner.signalJob(pid2, "SIGKILL"),
+        {
+          unref: true
+        }
+      );
+    }
+    return signalled;
+  };
+  let landed;
+  try {
+    landed = landVerdict(status, end);
+  } catch (err) {
+    signal();
+    throw err;
   }
-  return { verdict, signalled, leftover };
+  return { ...landed, signalled: signal() };
 }
 function landVerdict(status, end) {
   try {
-    const linked = publishByLink(status, `${formatJobEnd(end)}
-`);
-    return {
-      verdict: linked.outcome === "published" ? "launcher" : "job",
-      leftover: linked.leftover
-    };
+    const { outcome, leftover } = publishByLink(
+      status,
+      `${formatJobEnd(end)}
+`
+    );
+    return { verdict: outcome, leftover };
   } catch (err) {
     if (err.code === "ENOENT")
       return { verdict: "gone", leftover: null };
@@ -50903,7 +50912,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.0";
+var PACKAGE_VERSION = "1.232.1";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -63541,9 +63550,9 @@ function makeUpdateWatch(opts) {
     );
     watched = { ...watched, ended: true };
     const why2 = {
-      launcher: "timed out",
-      job: "outlived its verdict",
-      gone: "outlived its files, pruned by a newer act"
+      published: "timed out",
+      taken: "outlived its verdict",
+      gone: "outlived its act's files"
     }[verdict];
     const ending = signalled ? "ending it" : "its group took no signal";
     log(
