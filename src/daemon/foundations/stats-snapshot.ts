@@ -325,7 +325,7 @@ export type StoresRead = {
 
 // The faults a folder can stand in, by cause: it could not be created or read,
 // the OS refused to open its watch, or the watch reported an error after it
-// opened on a folder still there.
+// opened, or a judgment could not stat the folder.
 export type FaultCause = "unusable" | "refused" | "error";
 
 // [LAW:types-are-the-program] Whether the OS is delivering this daemon's file
