@@ -558,16 +558,18 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // The config is polled, so the doctor runs once the bar draws the edit.
     writeFileSync(projectConfig, barOf("at rest"));
     await reported(draw, "at rest");
-    await click(daemon, run!);
-    await draw();
-    await click(daemon, run!);
     // Still, but drawn under the open menu the doctor is clicked from, which
     // counts down to the flash before it closes on its own: the frame says
     // when that starts (candybar-animation-wbxz.014), so the bar moves.
-    await reported(
-      draw,
-      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
-    );
+    const underMenu =
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)";
+    await click(daemon, run!);
+    // A click while a run is on its way starts none, so the next run waits
+    // for this one's report: a click clears the rows it replaces, so the row
+    // drawn again is this run's.
+    await reported(draw, underMenu);
+    await click(daemon, run!);
+    await reported(draw, underMenu);
 
     // The same bar with its menu closed is still, and passes.
     await click(
