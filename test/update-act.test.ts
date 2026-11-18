@@ -17,6 +17,7 @@ import {
 import {
   actsDir,
   claimAct,
+  INERT_DEADLINE,
   isRecordedJob,
   judgeAct,
   makeActReader,
@@ -31,7 +32,10 @@ import {
 import { makeUpdateWatch } from "../src/daemon/update-notice";
 import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
 import { updateNotice } from "../src/daemon/foundations/update-offer";
-import type { UpdateWatch } from "../src/daemon/update-notice";
+import type {
+  UpdateWatch,
+  UpdateWatchOptions,
+} from "../src/daemon/update-notice";
 
 // The notice a session that dismissed nothing is shown, folded as its draw
 // folds it from its world state: the update the fact holds, and the act the
@@ -60,6 +64,7 @@ import {
 } from "../src/daemon/foundations/verb-error";
 import { until } from "./helpers/until";
 import { systemTimekeeper } from "../src/time";
+import { heldClock } from "./helpers/held-clock";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -76,7 +81,6 @@ const RECORD: ActRecord = {
   pid: 1,
   startTime: "t",
   started: 0,
-  deadline: 0,
 };
 const facts = (over: Partial<ActFacts>): ActFacts => ({
   act: 3,
@@ -357,7 +361,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       SLEEP,
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -404,7 +407,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       SLEEP,
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -424,7 +426,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       TOUCH(marker()),
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -451,7 +452,6 @@ describe("claimAct: one act per bundle", () => {
       2,
       "id-1",
       TOUCH(marker()),
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -470,7 +470,6 @@ describe("claimAct: one act per bundle", () => {
         null,
         "id-1",
         TOUCH(marker()),
-        60_000,
         Date.now(),
         sameLeader,
       ),
@@ -492,7 +491,6 @@ describe("claimAct: one act per bundle", () => {
         1,
         "id-2",
         TOUCH(marker()),
-        60_000,
         Date.now(),
         sameLeader,
       ),
@@ -517,7 +515,6 @@ describe("claimAct: one act per bundle", () => {
         null,
         "id-1",
         TOUCH(marker()),
-        60_000,
         Date.now(),
         unreadable,
       ),
@@ -544,7 +541,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       SLEEP,
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -611,7 +607,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       TOUCH(marker()),
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -632,7 +627,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-2",
       SLEEP,
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -671,6 +665,41 @@ describe("claimAct: one act per bundle", () => {
     );
     expect(await watch.running()).toBe(false);
     expect(watch.acts().actsError).toBeNull();
+  });
+
+  // [LAW:parse-dont-validate] A record of the wrong shape is refused where it
+  // is read, naming its file, never judged as an act.
+  test("a record missing a field is refused, naming its file", async () => {
+    const dir = dirOf();
+    fs.mkdirSync(path.join(dir, "1"), { recursive: true });
+    const { started: _started, ...missing } = RECORD;
+    fs.writeFileSync(path.join(dir, "1", "record.json"), JSON.stringify(missing));
+    await expect(
+      makeActReader(dir, sameLeader, processLauncher, systemTimekeeper).read(),
+    ).rejects.toThrow(
+      `${path.join(dir, "1", "record.json")}: not an act record`,
+    );
+  });
+
+  // A daemon of an older release on the bundle ends an act at its recorded
+  // deadline, so an act this release starts carries one no clock passes.
+  test("a claimed act's record carries a deadline no clock passes", async () => {
+    const dir = dirOf();
+    const claim = await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-1",
+      SLEEP,
+      Date.now(),
+      sameLeader,
+    );
+    expect(claim.ok).toBe(true);
+    const stored = JSON.parse(
+      fs.readFileSync(path.join(dir, "1", "record.json"), "utf8"),
+    );
+    ended.push(stored.pid);
+    expect(stored.deadline).toBe(INERT_DEADLINE);
   });
 
   // [LAW:one-source-of-truth] The update is one fact for the daemon, stamped by
@@ -758,7 +787,9 @@ describe("the update watch: one turn at a time on the act files", () => {
     category: "update.apply" as const,
   });
 
-  function harness() {
+  function harness(
+    over: Partial<Pick<UpdateWatchOptions, "clock" | "probe">> = {},
+  ) {
     const dir = actsDir(scratch, "/some/bundle/index.mjs");
     const ps: Array<(answer: LaunchResult) => void> = [];
     const logged: string[] = [];
@@ -795,6 +826,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       fetchImpl: async () => Response.json({ latest: "999.0.0" }),
       onApplied: () => applied++,
       log: (_level, msg) => logged.push(msg),
+      ...over,
     });
     closers.push(() => watch.close());
     const notice = () => noticeOf(fact, watch);
@@ -825,7 +857,6 @@ describe("the update watch: one turn at a time on the act files", () => {
       null,
       "id-1",
       untilFile(stop),
-      60_000,
       Date.now(),
       read,
     );
@@ -839,6 +870,52 @@ describe("the update watch: one turn at a time on the act files", () => {
     jobs.push(pid);
     return pid;
   }
+
+  // The budget is time the watch saw the act run: a sleep far past it ends
+  // nothing on wake, and a wedged act on an awake machine is ended once ten
+  // watched minutes have gone by.
+  test("a sleep past the budget ends nothing; ten watched minutes end a wedged act", async () => {
+    const clock = heldClock(new Date());
+    // The leader reads as the one `running` recorded.
+    const { dir, watch, logged } = harness({
+      clock,
+      probe: { startTime: sameLeader },
+    });
+    const pid = await running(dir, marker("stop"));
+    const ended = () => logged.filter((l) => l.includes("timed out"));
+    watch.arm();
+    await until(() => watch.acts().act.kind === "running", "the first look");
+
+    // The lid closes for an hour: no timer fires until the wake, whose look
+    // comes an hour after the last.
+    clock.burn(60 * 60_000);
+    await clock.settle(2_000);
+    expect(ended()).toEqual([]);
+    expect(processLauncher.jobGroupAlive(pid)).toBe(true);
+
+    // Awake, the looks every two seconds spend the budget.
+    await clock.settle(10 * 60_000 - 4_000);
+    expect(ended()).toEqual([]);
+    await clock.settle(4_000);
+    // The first look past the budget ends it, a poll past ten minutes.
+    expect(ended()).toEqual([
+      expect.stringContaining(
+        "act 1 timed out after 602000ms watched (3600000ms unwatched)",
+      ),
+    ]);
+    expect(logged).toContainEqual(
+      expect.stringContaining("act 1 unwatched for 3600000ms"),
+    );
+    // A daemon says where its budget for a job starts, so one started while
+    // the act ran is seen granting a whole budget again.
+    expect(logged).toContainEqual(
+      "apply-update: act 1: this daemon's budget for its job starts unspent",
+    );
+    await until(
+      () => !processLauncher.jobGroupAlive(pid),
+      "the timed-out act to end",
+    );
+  });
 
   test("a read slower than the poll keeps one read in flight", async () => {
     const h = harness();
@@ -978,7 +1055,6 @@ describe("the update watch: one turn at a time on the act files", () => {
       1,
       "id-2",
       untilFile(stop2),
-      60_000,
       Date.now(),
       sameLeader,
     );

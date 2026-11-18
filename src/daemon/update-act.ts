@@ -6,7 +6,8 @@
 //
 // [LAW:one-source-of-truth] The acts directory is the one answer to "is an
 // act running on this bundle, and how did the last one end". No daemon holds
-// that answer in memory; each judges the directory when it asks.
+// that answer in memory; each judges the directory when it asks. How long an
+// act has been watched running is the watching daemon's own (`looked`).
 //
 // Layout: `<state>/update-act/<bundle key>/<n>/` per act, `n` counting up.
 // Each act directory holds `record.json` (what was started, by whom it is
@@ -29,7 +30,7 @@ import {
 } from "../proc/launcher";
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
-import type { Timekeeper } from "../time.js";
+import { spanMs, type Monotonic, type Timekeeper } from "../time.js";
 import { IDLE, type ActState } from "../facts/world-state";
 
 export function actsDir(stateDir: string, entryPath: string): string {
@@ -40,13 +41,83 @@ export function actsDir(stateDir: string, entryPath: string): string {
 // What `act()` started: the identity of the newer thing it applies (the
 // notice names a failure against it), the job's process identity (its start
 // time null where `ps` could not answer, as process-fingerprint.ts allows),
-// when it started, and when it is overdue.
+// and when it started.
 export interface ActRecord {
   readonly identity: string;
   readonly pid: number;
   readonly startTime: string | null;
   readonly started: number;
-  readonly deadline: number;
+}
+
+// How long one daemon has watched one act's job run. The budget that bounds a
+// wedged act is spent in this, not in wall time: wall time runs while the
+// machine sleeps, and an act ended on wake for a lid closed mid-build tears
+// the bundle it was writing. No Node clock counts awake time alone (on macOS
+// `process.hrtime` and `os.uptime` both count sleep), so it is observed: each
+// look spends the wait since the look before it, and the waits it does not
+// spend are kept beside, so a timeout says how it came to be. `ended` once
+// this daemon has ended the job, which it does once.
+export interface Watched {
+  readonly job: ActRecord;
+  readonly spentMs: number;
+  readonly unwatchedMs: number;
+  readonly lookedAt: Monotonic;
+  readonly ended: boolean;
+}
+
+// [LAW:types-are-the-program] What one look made of the wait before it: the
+// first this daemon had of the job, a wait it watched, or one nobody did.
+export type Look =
+  | { readonly kind: "first"; readonly watched: Watched }
+  | {
+      readonly kind: "spent" | "unwatched";
+      readonly watched: Watched;
+      readonly waitedMs: number;
+    };
+
+// [LAW:no-ambient-temporal-coupling] One look at a running act's job, begun
+// at `began` and done at `done`. The wait runs from the end of the look
+// before to the start of this one, so a slow read is never taken for a
+// sleep. A wait longer than `longestLookMs` is time nobody watched (a sleep,
+// a stalled daemon) and is not spent; a dark wake spends the polls it stays
+// awake for after its first look. A job this daemon has not watched before
+// starts unspent: the spend lives in the watching daemon, so a daemon that
+// starts while an act runs gives it a whole budget again.
+export function looked(
+  prev: Watched | null,
+  job: ActRecord,
+  began: Monotonic,
+  done: Monotonic,
+  longestLookMs: number,
+): Look {
+  if (prev === null || !sameJob(prev.job, job)) {
+    return {
+      kind: "first",
+      watched: {
+        job,
+        spentMs: 0,
+        unwatchedMs: 0,
+        lookedAt: done,
+        ended: false,
+      },
+    };
+  }
+  const waitedMs = spanMs(prev.lookedAt, began);
+  return waitedMs <= longestLookMs
+    ? {
+        kind: "spent",
+        watched: { ...prev, spentMs: prev.spentMs + waitedMs, lookedAt: done },
+        waitedMs,
+      }
+    : {
+        kind: "unwatched",
+        watched: {
+          ...prev,
+          unwatchedMs: prev.unwatchedMs + waitedMs,
+          lookedAt: done,
+        },
+        waitedMs,
+      };
 }
 
 // One act as read from disk. `alive` is read before `end`: a job writes its
@@ -173,12 +244,45 @@ export async function isRecordedJob(
 
 // The record of an act, or null when the act is gone.
 function readRecord(actDir: string): ActRecord | null {
+  const file = recordOf(actDir);
+  let text: string;
   try {
-    return JSON.parse(fs.readFileSync(recordOf(actDir), "utf8")) as ActRecord;
+    text = fs.readFileSync(file, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
+  return parsedRecord(file, text);
+}
+
+// [LAW:parse-dont-validate] A record crosses into an ActRecord here or not
+// at all: a field missing or of the wrong kind would judge a stale act
+// running, or a running one stale. [LAW:no-silent-failure] The throw reaches
+// the act files' one edge, which shows it.
+function parsedRecord(file: string, text: string): ActRecord {
+  const r: unknown = JSON.parse(text);
+  if (
+    typeof r === "object" &&
+    r !== null &&
+    "identity" in r &&
+    typeof r.identity === "string" &&
+    "pid" in r &&
+    typeof r.pid === "number" &&
+    Number.isSafeInteger(r.pid) &&
+    "startTime" in r &&
+    (r.startTime === null || typeof r.startTime === "string") &&
+    "started" in r &&
+    typeof r.started === "number" &&
+    Number.isFinite(r.started)
+  ) {
+    return {
+      identity: r.identity,
+      pid: r.pid,
+      startTime: r.startTime,
+      started: r.started,
+    };
+  }
+  throw new Error(`${file}: not an act record: ${text.slice(0, 200)}`);
 }
 
 export interface ActReader {
@@ -264,6 +368,18 @@ export function makeActReader(
   };
 }
 
+// [LAW:one-source-of-truth] exception: a daemon of an older release, still
+// running beside this one on the bundle, ends an act whose recorded
+// `deadline` its wall clock has passed, and reads a missing one as passed.
+// Written past any clock, it never passes, so for an act this release starts
+// the watched budget is the one bound. Nothing of this release reads it. The
+// two meet whenever a daemon of such a release still runs as a newer one's
+// daemon claims an act on its bundle, which an upgrade from any such release
+// brings about, so it goes once no release that reads it can be upgraded
+// from.
+export const INERT_DEADLINE = Number.MAX_SAFE_INTEGER;
+type StoredRecord = ActRecord & { readonly deadline: typeof INERT_DEADLINE };
+
 // [LAW:no-ambient-temporal-coupling] Synchronous, so no exit lands between the
 // staging directory and its removal: nothing sweeps a stranded one. False when
 // the act already exists.
@@ -271,7 +387,13 @@ function stakeClaim(dir: string, actDir: string, record: ActRecord): boolean {
   fs.mkdirSync(dir, { recursive: true });
   const staging = fs.mkdtempSync(path.join(dir, ".claim-"));
   try {
-    fs.writeFileSync(recordOf(staging), JSON.stringify(record));
+    fs.writeFileSync(
+      recordOf(staging),
+      JSON.stringify({
+        ...record,
+        deadline: INERT_DEADLINE,
+      } satisfies StoredRecord),
+    );
     fs.renameSync(staging, actDir);
     return true;
   } catch (err) {
@@ -302,7 +424,6 @@ export async function claimAct(
   after: number | null,
   identity: string,
   command: LaunchOpts,
-  timeoutMs: number,
   now: number,
   read: (pid: number) => Promise<StartTimeRead>,
 ): Promise<Claim> {
@@ -321,7 +442,6 @@ export async function claimAct(
       pid: job.pid,
       startTime: start.kind === "start" ? start.token : null,
       started: now,
-      deadline: now + timeoutMs,
     };
     if (!stakeClaim(dir, actDir, record)) return CLAIMED_FIRST;
     if (actNumbers(dir).some((n) => n > act)) {
@@ -344,7 +464,7 @@ const CLAIMED_FIRST: Claim = {
   reason: "another act claimed this bundle first",
 };
 
-// Ends an act whose group its reader saw alive past its deadline, with a
+// Ends an act whose group its reader watched alive past its budget, with a
 // `timeout` verdict unless the job's own landed first: a live read already
 // proved the group the recorded job.
 export function endOverdue(

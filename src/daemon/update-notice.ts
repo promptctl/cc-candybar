@@ -29,7 +29,9 @@ import {
   endOverdue,
   judgeAct,
   makeActReader,
+  looked,
   type ActFacts,
+  type Watched,
 } from "./update-act";
 import type { ProcessProbe } from "./process-fingerprint";
 import { compareStructural, observable, runInAction } from "mobx";
@@ -52,7 +54,7 @@ import {
   updateIdentity,
   wordsOf,
 } from "./foundations/update-offer";
-import type { Timekeeper } from "../time.js";
+import type { Monotonic, Timekeeper } from "../time.js";
 
 // [LAW:dataflow-not-control-flow] The command the act runs, by the update it
 // applies. Nothing downstream asks which kind it is.
@@ -121,7 +123,7 @@ function releaseReading(release: Sampled<Currency>): Reading<Update> {
 export interface UpdateWatchOptions {
   // The fact the watch publishes each sample into.
   readonly fact: UpdateFact;
-  // The daemon's clock: the act's deadline and the watch's timers run on it.
+  // The daemon's clock: the looks that spend an act's budget and the watch's timers run on it.
   readonly clock: Timekeeper;
   // Who the act's job belongs to.
   readonly launcher: Launcher;
@@ -171,12 +173,15 @@ export interface UpdateWatch {
   running(): Promise<boolean>;
 }
 
-// A build or an install is a long child; ten minutes is generous for either
-// and bounds a wedged one.
+// A build or an install is a long child; ten watched minutes are generous for
+// either and bound a wedged one.
 const ACT_TIMEOUT_MS = 10 * 60 * 1000;
 // How often the act's record is looked at for an end: the notice's busy label
 // and the restart after a success trail an end by at most this.
 const ACT_POLL_MS = 2_000;
+// A gap between looks past five polls is a sleep or a stalled daemon, not
+// time anyone watched the act run.
+export const LONGEST_LOOK_MS = 5 * ACT_POLL_MS;
 
 function describeBuild(b: BuildCurrency): [LogLevel, string] {
   switch (b.kind) {
@@ -349,14 +354,45 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     }
   }
 
-  // Ends the act if its group is alive past its deadline, with a timeout
-  // verdict unless the job's own landed first.
-  function endIfOverdue(facts: ActFacts | null): void {
-    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+  // Ends the act once this daemon has watched its group alive past the
+  // budget, with a timeout verdict unless the job's own landed first. Every
+  // daemon on the bundle watches, so the first to spend the budget ends it,
+  // and it ends a job once: the end's own escalation takes it from there.
+  let watched: Watched | null = null;
+  function endIfOverdue(facts: ActFacts | null, began: Monotonic): void {
+    if (!facts?.alive) return;
+    const look = looked(
+      watched,
+      facts.record,
+      began,
+      clock.monotonic(),
+      LONGEST_LOOK_MS,
+    );
+    watched = look.watched;
+    // [LAW:nothing-unseen] Where this daemon's budget for a job starts, and
+    // every wait it did not spend, are said, so a budget that stopped
+    // counting reads as one.
+    if (look.kind === "first") {
+      log(
+        "info",
+        `apply-update: act ${facts.act}: this daemon's budget for its job starts unspent`,
+      );
+    }
+    if (look.kind === "unwatched") {
+      log(
+        "info",
+        `apply-update: act ${facts.act} unwatched for ${look.waitedMs}ms (a sleep or a stalled daemon); ${watched.spentMs}ms of its budget spent`,
+      );
+    }
+    if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir, facts, launcher);
+    watched = { ...watched, ended: true };
     const why = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
-    log("error", `apply-update: act ${facts.act} ${why}; ${ending}`);
+    log(
+      "error",
+      `apply-update: act ${facts.act} ${why} after ${watched.spentMs}ms watched (${watched.unwatchedMs}ms unwatched); ${ending}`,
+    );
   }
 
   // Notices an act ending, whichever daemon started it: a success means the
@@ -364,8 +400,9 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // now.
   async function watchAct(): Promise<void> {
     const read = await touchActs(async () => {
+      const began = clock.monotonic();
       const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
+      if (!closed) endIfOverdue(facts, began);
       return facts;
     });
     if (closed || !read.ok) return;
@@ -452,7 +489,6 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           newest === null ? null : newest.act,
           updateIdentity(update),
           { ...command, category: "update.apply" },
-          ACT_TIMEOUT_MS,
           clock.now(),
           readStart,
         );
