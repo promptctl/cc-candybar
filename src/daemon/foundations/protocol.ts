@@ -579,7 +579,8 @@ export function encodeFrame(value: unknown): Buffer {
 // A frame of JSON already serialized: a pushed frame is serialized once for
 // every subscriber.
 // [LAW:single-enforcer] The frame cap is the encoder's as it is the reader's:
-// a body every reader would refuse is never framed, whoever sends it.
+// a body every reader would refuse is never framed, whoever sends it, as the
+// native client's write_frame refuses one (rust-client/src/main.rs).
 export function encodeJsonFrame(json: string): Buffer {
   const body = Buffer.from(json, "utf8");
   if (body.length > MAX_FRAME_BYTES)
@@ -591,44 +592,21 @@ export function encodeJsonFrame(json: string): Buffer {
   return Buffer.concat([header, body]);
 }
 
-// Streaming frame reader. Calls `onFrame` for each complete frame. Caller
-// owns lifecycle — call `feed` with each chunk; reader keeps a buffer.
+// [LAW:single-enforcer] The one frame reader, and where a stream of frames
+// ends: a frame whose handler asks for no more, the handler's own throw, or
+// the first malformed frame, after which the stream is out of step for good.
+// Whichever it is, nothing more is read or buffered, so a sender writing on
+// past an over-cap header allocates nothing and is refused once. A malformed
+// frame reaches `onError` as a ProtocolError, and a handler's throw as itself,
+// so a consumer's failure is never read as its peer's malformed frame.
 export function makeFrameReader(
-  onFrame: (frame: unknown) => void,
-  onError: (err: Error) => void,
-): (chunk: Buffer) => void {
-  return readFrames((frame) => {
-    onFrame(frame);
-    return "more";
-  }, onError);
-}
-
-// A reader of exactly one frame: its first frame or its first error settles
-// it, and nothing after is handled or buffered. A daemon connection carries
-// one request.
-export function makeOneFrameReader(
-  onFrame: (frame: unknown) => void,
-  onError: (err: Error) => void,
-): (chunk: Buffer) => void {
-  return readFrames((frame) => {
-    onFrame(frame);
-    return "done";
-  }, onError);
-}
-
-// [LAW:single-enforcer] Where a stream of frames ends: a frame whose reader
-// asks for no more, or the first error, after which the stream is out of step
-// for good. Either way nothing more is read or buffered, so a sender writing
-// on past an over-cap header allocates nothing and is refused once. A frame's
-// handler runs outside the parse, so its own throw is its caller's, never read
-// as a malformed frame.
-export function readFrames(
   onFrame: (frame: unknown) => "more" | "done",
   onError: (err: Error) => void,
 ): (chunk: Buffer) => void {
   let buf: Buffer | null = Buffer.alloc(0);
-  const end = (): void => {
+  const fail = (err: Error): void => {
     buf = null;
+    onError(err);
   };
   return function feed(chunk: Buffer): void {
     if (buf === null) return;
@@ -639,11 +617,8 @@ export function readFrames(
       // [LAW:types-are-the-program] ProtocolError carries the discriminator
       // structurally — interpretException routes on `instanceof`, not on a
       // brittle string match against the message body.
-      if (len > MAX_FRAME_BYTES) {
-        end();
-        onError(new ProtocolError(`frame too large: ${len}`));
-        return;
-      }
+      if (len > MAX_FRAME_BYTES)
+        return fail(new ProtocolError(`frame too large: ${len}`));
       if (buf.length < FRAME_HEADER_BYTES + len) return;
       const body = buf.subarray(FRAME_HEADER_BYTES, FRAME_HEADER_BYTES + len);
       buf = buf.subarray(FRAME_HEADER_BYTES + len);
@@ -660,18 +635,15 @@ export function readFrames(
         if (e instanceof Error) {
           wrapped.cause = e;
         }
-        end();
-        onError(wrapped);
-        return;
+        return fail(wrapped);
       }
-      // A handler that throws leaves the stream out of step, as an error
-      // does: its throw is its caller's, and nothing more is read.
-      let next: "more" | "done" = "done";
+      let next: "more" | "done";
       try {
         next = onFrame(frame);
-      } finally {
-        if (next === "done") end();
+      } catch (e) {
+        return fail(e instanceof Error ? e : new Error(String(e)));
       }
+      if (next === "done") buf = null;
     }
   };
 }
@@ -687,6 +659,9 @@ export function sendOne(
   clock: Pick<Timekeeper, "now" | "after">,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
+    // Encoded before anything is armed: a request past the cap rejects with
+    // no timer or listener left behind.
+    const out = encodeFrame(req);
     let settled = false;
     const finish = (fn: () => void) => {
       if (settled) return;
@@ -709,7 +684,10 @@ export function sendOne(
     });
 
     const reader = makeFrameReader(
-      (frame) => finish(() => resolve(frame as Response)),
+      (frame) => {
+        finish(() => resolve(frame as Response));
+        return "done";
+      },
       (err) => finish(() => reject(err)),
     );
     const onError = (err: Error): void => finish(() => reject(err));
@@ -719,7 +697,7 @@ export function sendOne(
     sock.on("error", onError);
     sock.on("close", onClose);
 
-    sock.write(encodeFrame(req));
+    sock.write(out);
   });
 }
 

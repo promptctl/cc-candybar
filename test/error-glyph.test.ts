@@ -158,6 +158,7 @@ function mismatchingDaemonEnd(daemonEnd: Duplex, daemonV: number): void {
           }),
         );
         daemonEnd.end();
+        return "done";
       },
       () => {
         /* parse error ignored on daemon side */

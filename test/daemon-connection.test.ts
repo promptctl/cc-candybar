@@ -260,22 +260,55 @@ describe("a connection over a stream", () => {
   });
 
   // A busy daemon reads the frame only after the backstop has answered: the
-  // click still runs, so it is still in flight.
-  test("a url frame read after the backstop answered stays in flight until its click lands, with no client gone", async () => {
+  // click still runs, refused at its turn, and TIMEOUT stays the socket's one
+  // answer, so a writer that reads a verdict is written nothing more.
+  test("a url frame read after the backstop answered is told nothing more, with no client gone", async () => {
+    let land = () => {};
+    const landed = new Promise<void>((done) => (land = done));
     const request = held();
-    const daemon = standIn({ handle: request.handle });
-    const { client } = open(daemon);
-    client.end(encodeFrame({ kind: "url", urlV: 1, url: "cc-candybar://x" }));
+    const log = jest.fn();
+    const daemon = standIn({ handle: request.handle, log });
+    const { client, received } = open(daemon);
+    // Open on its side after the TIMEOUT, as a writer still waiting for its
+    // verdict is, so a second write would be a write after end.
+    client.allowHalfOpen = true;
+    client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
     jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
     await settled();
+    request.answer(urlAnswer(landed, true));
+    await settled();
+    land();
+    await settled();
+    client.destroy();
+    await settled();
     expect({
+      received,
       timedOut: request.timedOut(),
       clientLeft: request.clientLeft(),
+      warnings: log.mock.calls.filter(([level]) => level !== "info"),
       inFlight: daemon.stats.inFlight,
-    }).toEqual({ timedOut: true, clientLeft: false, inFlight: 1 });
-    request.answer(urlAnswer());
+      timeouts: daemon.stats.requestsTimedOut,
+    }).toEqual({
+      received: [expect.objectContaining({ code: "TIMEOUT" })],
+      timedOut: true,
+      clientLeft: false,
+      warnings: [],
+      inFlight: 0,
+      timeouts: 1,
+    });
+  });
+
+  // [LAW:one-source-of-truth] A waiting client has left once its hang-up is
+  // heard, and only then.
+  test("a request's client is said to have left once it hangs up", async () => {
+    const request = held();
+    const { client, send } = open(standIn({ handle: request.handle }));
+    send(STATS);
     await settled();
-    expect(daemon.stats.inFlight).toBe(0);
+    expect(request.clientLeft()).toBe(false);
+    client.destroy();
+    await settled();
+    expect(request.clientLeft()).toBe(true);
   });
 
   // The app is told at once whether its link opened, and the click it carries
@@ -633,6 +666,57 @@ describe("a connection over a stream", () => {
       expect(ended()).toBe(true);
     });
 
+    test("one its feed refuses as it subscribes is told the refusal, ends, and leaves flight", async () => {
+      const refusal: Extract<Response, { ok: false }> = {
+        ok: false,
+        error: "the lane is off",
+        code: "SWITCHED_OFF",
+      };
+      const daemon = subscribing({
+        subscribe: (_sessionId, subscriber) => {
+          subscriber.refused(refusal);
+          return unsubscribe;
+        },
+      });
+      const { client, send, received, ended } = open(daemon);
+      send(SUBSCRIBE);
+      await settled();
+      expect({ received, ended: ended() }).toEqual({
+        received: [refusal],
+        ended: true,
+      });
+      client.destroy();
+      await settled();
+      expect(daemon.stats.inFlight).toBe(0);
+    });
+
+    // [LAW:no-silent-failure] On a stream RENDER_FAILED is a frame, which a
+    // follower draws: ending the stream on it would read as a restart, and
+    // the follower would resubscribe into the same failure.
+    test("a frame past the cap is pushed as RENDER_FAILED, and the stream goes on", async () => {
+      const { send, received, ended } = open(subscribing());
+      send(SUBSCRIBE);
+      await settled();
+      subscriptions[0]!.frame(
+        barOf(),
+        JSON.stringify({ ok: true, output: "x".repeat(MAX_FRAME_BYTES) }),
+      );
+      subscriptions[0]!.frame(barOf(), JSON.stringify(ANSWER));
+      await settled();
+      expect({ received, ended: ended() }).toEqual({
+        received: [
+          expect.objectContaining({
+            ok: false,
+            code: "RENDER_FAILED",
+            error: expect.stringContaining("byte cap"),
+          }),
+          ANSWER,
+        ],
+        ended: false,
+      });
+      expect(unsubscribe).not.toHaveBeenCalled();
+    });
+
     test.each([
       ["hangs up", (client: Opened["client"]) => client.destroy()],
       ["half-closes", (client: Opened["client"]) => client.end()],
@@ -677,20 +761,34 @@ describe("a connection over a stream", () => {
       expect(subscriptions).toEqual([]);
     });
 
-    test("one that throws is answered RENDER_FAILED, never an open stream nothing feeds", async () => {
-      const { send, received, ended } = open(
-        subscribing({
-          subscribe: () => {
-            throw new Error("the feed refused");
-          },
-        }),
-      );
+    test("one that throws is answered RENDER_FAILED, never an open stream nothing feeds, and leaves nothing on the socket", async () => {
+      const daemon = subscribing({
+        subscribe: () => {
+          throw new Error("the feed refused");
+        },
+      });
+      const { daemonEnd, client } = memoryConnection();
+      handleConnection(daemon, daemonEnd);
+      const { send, received, ended } = openedOn(client);
       send(SUBSCRIBE);
       await settled();
-      expect(received).toMatchObject([
-        { code: "RENDER_FAILED", error: "the feed refused" },
-      ]);
-      expect(ended()).toBe(true);
+      expect({
+        received,
+        ended: ended(),
+        drains: daemonEnd.listenerCount("drain"),
+      }).toEqual({
+        received: [
+          expect.objectContaining({
+            code: "RENDER_FAILED",
+            error: "the feed refused",
+          }),
+        ],
+        ended: true,
+        drains: 0,
+      });
+      client.destroy();
+      await settled();
+      expect(daemon.stats.inFlight).toBe(0);
     });
 
     test("a subscriber slower than the frames gets the newest, never a backlog", async () => {

@@ -543,7 +543,10 @@ describe("Debug protocol wire format", () => {
 function decodeFrame(buf: Buffer): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const reader = makeFrameReader(
-      (frame) => resolve(frame),
+      (frame) => {
+        resolve(frame);
+        return "done";
+      },
       (err) => reject(err),
     );
     reader(buf);

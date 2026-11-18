@@ -37,6 +37,7 @@ async function withStubDaemon<T>(
         (frame) => {
           seen(frame as Record<string, unknown>);
           if (reply !== null) sock.end(encodeFrame(reply));
+          return "done";
         },
         (err) => {
           throw err;

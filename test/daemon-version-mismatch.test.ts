@@ -50,7 +50,7 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
               }),
             );
             sock.end();
-            return;
+            return "done";
           }
           if (req.v !== daemonV) {
             // [LAW:types-are-the-program] Mirrors the daemon's version-mismatch
@@ -68,10 +68,11 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
               }),
             );
             sock.end();
-            return;
+            return "done";
           }
           sock.write(encodeFrame({ ok: true, output: "fake render\n" }));
           sock.end();
+          return "done";
         },
         () => {
           /* parse error ignored — daemon side */
@@ -122,6 +123,7 @@ function sendRequest(
         clearTimeout(timer);
         resolve(frame as Response);
         client.end();
+        return "done";
       },
       (err) => {
         clearTimeout(timer);

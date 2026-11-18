@@ -71,6 +71,7 @@ async function timingOut(outcome: RequestOutcome): Promise<StandIn> {
             fs.appendFileSync(logPath(hostOf(env)), logLine(level, line, Date.now()));
           }, 100);
           pending.add(write);
+          return "done";
         },
         () => {},
       ),
