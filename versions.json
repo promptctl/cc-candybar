@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-824",
+      "ref": "refs/pull/824/merge",
+      "sha": "0d4e1cd4b4e22706168f5885e9df95b23689bf58",
+      "timestamp": "2026-11-18T19:49:20.418Z",
+      "commits": [
+        {
+          "sha": "0d4e1cd4b4e22706168f5885e9df95b23689bf58",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T19:48:16Z",
+          "message": "Merge 2ea51c2bff29e83eef814ad0b8430dcee18de544 into 1c2d955fd5bc787336ce3430ee52aeab1e787b59\n"
+        },
+        {
+          "sha": "2ea51c2bff29e83eef814ad0b8430dcee18de544",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:28:29-07:00",
+          "message": "fix(watchers): a tree directory gone from its path leaves without a refusal (cimv)\n"
+        },
+        {
+          "sha": "7c095ffcc62635a924aebbe3d0e39d0a0520f698",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:18:24-07:00",
+          "message": "fix(watchers): an event re-reads the listing of its own directory, so nothing it names can throw, and a held directory that cannot be listed is refused (cimv)\n"
+        },
+        {
+          "sha": "271b7bd3d1feb08a928268bb47dd37ebf8f92121",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:04:42-07:00",
+          "message": "fix(watchers): an event looks again only at the path it names, a tree that cannot be listed keeps its watches, and a directory refused as it joins reaches its holders (cimv)\n"
+        },
+        {
+          "sha": "e00b1fa730f329a939dec5cd4239936cc639fe67",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:49:43-07:00",
+          "message": "fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-827",
       "ref": "refs/pull/827/merge",
       "sha": "67a78b8741da071035a59200a409e7cb60386941",
@@ -92,49 +135,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T10:59:23-07:00",
           "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-824",
-      "ref": "refs/pull/824/merge",
-      "sha": "5269e31cb74bc4444839fd30a98ae79432b14ffe",
-      "timestamp": "2026-11-18T19:29:51.905Z",
-      "commits": [
-        {
-          "sha": "5269e31cb74bc4444839fd30a98ae79432b14ffe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T19:28:48Z",
-          "message": "Merge 919849741847218724cea427024d8a7a4f5388e1 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "919849741847218724cea427024d8a7a4f5388e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:28:29-07:00",
-          "message": "fix(watchers): a tree directory gone from its path leaves without a refusal (cimv)\n"
-        },
-        {
-          "sha": "4686eaee4499617cfd24b8f0592dcdb08d1ef548",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:18:24-07:00",
-          "message": "fix(watchers): an event re-reads the listing of its own directory, so nothing it names can throw, and a held directory that cannot be listed is refused (cimv)\n"
-        },
-        {
-          "sha": "ef4d9d6a6c98369962a63d719ef890b00706c592",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:04:42-07:00",
-          "message": "fix(watchers): an event looks again only at the path it names, a tree that cannot be listed keeps its watches, and a directory refused as it joins reaches its holders (cimv)\n"
-        },
-        {
-          "sha": "627a9501141d72e6e9a5d9d4a67bc435f71deac6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:49:43-07:00",
-          "message": "fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv)\n"
         }
       ]
     },
