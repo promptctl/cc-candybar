@@ -26,7 +26,8 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
-import { ERROR_REDS, doorClose } from "./helpers/door-close";
+import { doorClose } from "./helpers/door-close";
+import { readsRed } from "../src/render/segment-color";
 import { POWERLINE } from "./helpers/powerline";
 import { LADDER } from "./helpers/decor-vocabulary";
 import { sessionBar, type SessionBar } from "./helpers/session-bar";
@@ -119,22 +120,24 @@ describe("every background the bar draws is a colour its palette names", () => {
   });
 });
 
-describe("the open door's ✖ is a red its palette names for its error role", () => {
-  test("under every bundled theme and every dial position, at truecolor", () => {
-    const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
+describe("the open door's ✖ reads as red", () => {
+  test.each([
+    ["truecolor", "truecolor"],
+    ["256 colours", "256"],
+    ["ansi", "ansi"],
+  ] as const)("under every bundled theme and every dial position, at %s, as the terminal draws it", (_name, compatibility) => {
+    const bar = sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS);
     const wrong: string[] = [];
     let measured = 0;
     try {
       for (const theme of THEMES) {
-        const palette = getThemePalette(theme)!;
-        const reds = new Map(ERROR_REDS.map((name) => [drawnColour(palette.get(name)!, ColorDepth.TRUECOLOR).hex, name]));
         bar.pick("theme", theme);
         for (const shade of SHADE_NAMES) {
           bar.pick("shade", shade);
           bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-          const { ink } = doorClose(bar.render(AT).frame);
+          const { ink, ground } = doorClose(bar.render(AT).frame);
           measured++;
-          if (!reds.has(ink.hex)) wrong.push(`${theme} at ${shade}: ✖ ${ink.hex}`);
+          if (!readsRed(ink)) wrong.push(`${theme} at ${shade}: ✖ ${ink.hex} on ${ground.hex}`);
         }
       }
     } finally {

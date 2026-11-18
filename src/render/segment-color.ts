@@ -7,23 +7,27 @@
 // rich-js's `color` and `ramp` with *which* palette, and adds the functions
 // whose meaning is candybar-specific — `bgOf`, the background of the segment
 // currently rendering, `tint`, the decoration its region dealt it,
-// `roleTextOn`, the colour the theme names for a role's text on a ground, and
-// `keptOn`, a colour shown as given at the depth this render draws at.
+// and `errorRedOn`, the red the door's ✖ wears on a ground at the depth this
+// render draws at.
 // [LAW:one-way-deps]
 
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
+import type { ColorDepth } from "@promptctl/rich-js";
 import {
-  ColorDepth,
+  ANSI_COLOR_NAMES,
   contrastFor,
   contrastRatio,
   drawnColour,
   ensureDrawn,
+  Oklch,
   resolveColorRef,
+  STANDARD_TABLE,
   type ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
 import { renderGauge } from "../template-engine/gauge.js";
+import { QUIET_MIN_CONTRAST } from "../config/quiet-text.js";
 import { TEXT_MIN_CONTRAST, type RoleShade } from "../themes/decor.js";
 import {
   requireActiveSegment,
@@ -32,7 +36,7 @@ import {
 
 /**
  * Bind rich-js's palette functions (`color`, `ramp`, …), and `bgOf`, `tint`,
- * `roleTextOn`, `keptOn` and `gauge`, to the segment the walk has published.
+ * `errorRedOn` and `gauge`, to the segment the walk has published.
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
@@ -97,67 +101,15 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "string",
   };
 
-  // `roleTextOn role bg`: the colour the theme names for `role`'s text on
-  // `bg` (`namedRoleText`). Every answer is an entry of the palette, as given.
-  const roleTextOn: TemplateFunc = {
-    fn: ((role: string, bgRef: string) => {
-      const { palette } = requireActiveSegment(ref, "{{ roleTextOn }}");
-      return namedRoleText(palette, role, resolveColorRef(palette, bgRef)).hex;
+  // `errorRedOn bg`: the red the door's ✖ wears on `bg` at the depth this
+  // render draws at (`errorRed`).
+  const errorRedOn: TemplateFunc = {
+    fn: ((bgRef: string) => {
+      const { palette } = requireActiveSegment(ref, "{{ errorRedOn }}");
+      return errorRed(palette, resolveColorRef(palette, bgRef), ref.drawnAt())
+        .hex;
     }) as TemplateFunc["fn"],
-    argTypes: ["string", "string"],
-    arity: { kind: "exact" },
-    returnType: "string",
-  };
-
-  // A colour shown exactly as given — the door's ✖ is a red its theme names,
-  // never slid, so it reads as red on every theme (#294) — that the
-  // terminal's rounding must still not cost legibility: `keptOn fg bg` is `fg`
-  // itself in truecolor, and at a depth that draws other colours (rich-js
-  // `ensureDrawn`, which has nothing to replace a truecolor colour with) the
-  // nearest drawn colour that stands on `bg` as drawn at least as far as `fg`
-  // does on `bg` unrounded, capped at the text floor. `bg` is the ground this
-  // depth draws the door on, which can be another rung than truecolor's, and
-  // the red was chosen for it. The floor is what the red has on that ground
-  // before rounding, and never more: a named red that reads faintly on its
-  // ground is accepted as it is, and a floor above it would hand rounding a
-  // non-red that clears. The cap is AA: past it the ✖ needs no more
-  // contrast, so rounding may spend the rest, and the drawn colour stays
-  // nearer the red.
-  // [LAW:one-source-of-truth] rich-js measures and repairs; this only names
-  // the floor.
-  const keptOn: TemplateFunc = {
-    fn: ((fgRef: string, bgRef: string) => {
-      const { palette } = requireActiveSegment(ref, "{{ keptOn }}");
-      const fg = resolveColorRef(palette, fgRef);
-      const bg = resolveColorRef(palette, bgRef);
-      // As every floor is measured: on the colours as drawn, each composited
-      // over the terminal's black — never `fg` laid over `bg`, which no
-      // terminal draws.
-      const held = contrastRatio(
-        drawnColour(fg, ColorDepth.TRUECOLOR),
-        drawnColour(bg, ColorDepth.TRUECOLOR),
-      );
-      const floor = Math.min(TEXT_MIN_CONTRAST, held);
-      const depth = ref.drawnAt();
-      const kept = ensureDrawn(
-        fg,
-        depth,
-        (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor,
-      );
-      // [LAW:no-silent-failure] At every depth a colour setting draws at,
-      // some colour clears: truecolor accepts `fg` itself, which stands at
-      // `held`, and 256 colours and ansi draw black and white, one of which
-      // stands at least 4.58:1 off any ground. No answer means that stopped
-      // holding, and drawing `fg` anyway would hide a ✖ that may not read.
-      if (kept === undefined) {
-        throw new Error(
-          `keptOn: nothing drawn at ${ColorDepth[depth]} stands ` +
-            `${floor.toFixed(2)}:1 off ${bg.hex} (drawn ${drawnColour(bg, depth).hex})`,
-        );
-      }
-      return kept.hex;
-    }) as TemplateFunc["fn"],
-    argTypes: ["string", "string"],
+    argTypes: ["string"],
     arity: { kind: "exact" },
     returnType: "string",
   };
@@ -223,52 +175,68 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "T",
   };
 
-  return { ...palette, bgOf, tint, roleTextOn, keptOn, gauge };
+  return { ...palette, bgOf, tint, errorRedOn, gauge };
 }
 
-/** A rung of a role's ladder other than the role itself: `<role>-<rung>` in a palette. */
+/** A rung of the error ladder other than the role itself: `error-<rung>` in a palette. */
 type Rung = Exclude<RoleShade, "base" | "muted">;
 
-// [LAW:dataflow-not-control-flow] The rungs out from a role toward each pole,
+// [LAW:dataflow-not-control-flow] The rungs out from the role toward each pole,
 // nearest first, keyed by the pole rich-js's `contrastFor` names for a ground:
-// the one the ground stands farther from.
+// the one the ground stands farther from. The rungs toward the ground follow.
 const RUNGS_OUT: Readonly<Record<string, readonly Rung[]>> = {
   "#000000": ["darken-1", "darken-2", "darken-3"],
   "#ffffff": ["lighten-1", "lighten-2", "lighten-3"],
 };
-const RUNGS = Object.values(RUNGS_OUT).flat();
+
+// The terminal's own reds, darker first: what a sixteen-colour terminal is
+// most reliably red in, and always red as every depth draws it.
+const TERMINAL_REDS = ["red", "bright_red"].map(
+  (name) => STANDARD_TABLE.get(ANSI_COLOR_NAMES[name]!) as ColorRgba,
+);
 
 /**
- * The colour `role`'s text wears on `ground`, selected among the colours the
- * theme names for the role and never synthesised, so the text stays the
- * theme's own colour for the role on every ground: the role's text colour
- * (`text-<role>`, held by the palette to WCAG AA on `<role>-muted`) where it
- * clears TEXT_MIN_CONTRAST on `ground`; otherwise, walking the role's ladder
- * out from the role itself toward the pole `ground` stands farther from, the
- * first that clears it, the role first; and otherwise whichever of the role's
- * colours stands farthest off `ground`, its text colour and the role itself
- * included, which clears it wherever any of them does. Each pair is measured
- * as truecolor draws it, over black; the depth's rounding is `keptOn`'s.
- *
- * [LAW:single-enforcer] The one place this choice is made.
- * [LAW:dataflow-not-control-flow] A fixed list of named entries, each
- * measured, and the first that clears taken: a selection, not a search
- * through lightness. [LAW:no-silent-failure] A role the palette names no
- * text colour or full ladder for fails loudly, naming the missing entry.
+ * Where a colour reads as red: its OKLCH hue, in degrees either side of 0,
+ * and the chroma below which it reads as grey whatever its hue. Every bundled
+ * theme's error colours fall inside at truecolor; what a reduced depth rounds
+ * them to (an orange at 256 colours, a grey or silver at sixteen) falls out.
  */
-function namedRoleText(
+export const RED_HUE = { from: -20, to: 40, chroma: 0.06 } as const;
+
+/** Whether `colour` reads as red (`RED_HUE`). */
+export function readsRed(colour: ColorRgba): boolean {
+  const { h, c } = Oklch.fromRgba(colour);
+  const hue = h > 180 ? h - 360 : h;
+  return c >= RED_HUE.chroma && hue >= RED_HUE.from && hue <= RED_HUE.to;
+}
+
+/**
+ * The red the door's ✖ wears on `ground` at `depth`. Candidates in order of
+ * preference: the theme's error text colour (held by the palette to WCAG AA
+ * on `error-muted`), the role itself, its ladder out toward the pole `ground`
+ * stands farther from and then back toward the ground, and last the
+ * terminal's own reds. A reduced depth rounds a colour to whatever its table
+ * holds nearest, and the nearest entry to a red is often an orange or a grey,
+ * so every candidate is judged as `depth` draws it, against the ground as
+ * `depth` draws it. Taken is the first candidate, or else the nearest colour
+ * the depth draws to it (rich-js `ensureDrawn`; truecolor draws every colour
+ * as itself, so it has none), that reads as red and clears the body text
+ * floor there; where no red does, the first that clears the quiet floor; and
+ * where none clears even that, the candidate whose drawn red stands farthest
+ * off.
+ *
+ * [LAW:single-enforcer] The one place this choice is made, at every depth.
+ * [LAW:dataflow-not-control-flow] One fixed list, each entry measured, the
+ * depth a value it is measured at: no depth has a path of its own.
+ * [LAW:no-silent-failure] The palette's names resolve loudly, so a palette
+ * missing one fails on every ground.
+ */
+function errorRed(
   palette: Palette,
-  role: string,
   ground: ColorRgba,
+  depth: ColorDepth,
 ): ColorRgba {
-  const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
-  const named = (name: string) => {
-    const colour = resolveColorRef(palette, name);
-    return {
-      colour,
-      ratio: contrastRatio(drawnColour(colour, ColorDepth.TRUECOLOR), shown),
-    };
-  };
+  const shown = drawnColour(ground, depth);
   const pole = contrastFor(shown).hex;
   const out = RUNGS_OUT[pole];
   if (out === undefined) {
@@ -276,23 +244,42 @@ function namedRoleText(
       `contrastFor named ${pole} for ${ground.hex}, which is neither pole`,
     );
   }
-  const text = `text-${role}`;
-  const rung = (step: Rung) => `${role}-${step}`;
-  // Every colour the role names, measured up front, so a palette missing one
-  // fails on every ground rather than only on the grounds that reach it.
-  const colours = new Map(
-    [text, role, ...RUNGS.map(rung)].map((name) => [name, named(name)]),
-  );
-  // [LAW:no-defensive-null-guards] `colours` holds every name asked for here.
-  const preferred = [text, role, ...out.map(rung)].map(
-    (name) => colours.get(name)!,
-  );
-  return (
-    preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ??
-    [...colours.values()].reduce((farthest, colour) =>
-      colour.ratio > farthest.ratio ? colour : farthest,
-    )
-  ).colour;
+  const back = Object.values(RUNGS_OUT).find((rungs) => rungs !== out)!;
+  const candidates = [
+    ...[
+      "text-error",
+      "error",
+      ...[...out, ...back].map((r) => `error-${r}`),
+    ].map((name) => resolveColorRef(palette, name)),
+    ...TERMINAL_REDS,
+  ];
+  // [LAW:dataflow-not-control-flow] The bar's two text floors, highest
+  // first, each tried over every candidate: the first red found is the
+  // answer, so the common case stops at the first candidate.
+  for (const floor of [TEXT_MIN_CONTRAST, QUIET_MIN_CONTRAST]) {
+    for (const colour of candidates) {
+      const cleared = ensureDrawn(
+        colour,
+        depth,
+        (drawn) => readsRed(drawn) && contrastRatio(drawn, shown) >= floor,
+      );
+      if (cleared !== undefined) return cleared;
+    }
+  }
+  const red = candidates
+    .map((colour) => {
+      const drawn = drawnColour(colour, depth);
+      return {
+        colour,
+        red: readsRed(drawn),
+        ratio: contrastRatio(drawn, shown),
+      };
+    })
+    .filter(({ red }) => red);
+  // [LAW:no-defensive-null-guards] The terminal's reds read as red at every
+  // depth, so `red` is never empty.
+  return red.reduce((farthest, c) => (c.ratio > farthest.ratio ? c : farthest))
+    .colour;
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)

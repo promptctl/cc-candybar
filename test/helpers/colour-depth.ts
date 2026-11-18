@@ -3,6 +3,7 @@
 // its tests and the rig they draw through.
 import {
   ColorRgba,
+  EIGHT_BIT_TABLE,
   JOINERS as RICH_JOINERS,
   Oklch,
   RichText,
@@ -31,6 +32,7 @@ import { type ColorCompatibility } from "../../src/themes/policy";
 import { TEXT_MIN_CONTRAST } from "../../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../../src/config/quiet-text";
 import { SWATCH_GLYPH } from "../../src/render/swatch";
+import { readsRed } from "../../src/render/segment-color";
 
 const luminance = ([r, g, b]: Rgb): number => {
   const ch = (v: number) => {
@@ -184,6 +186,26 @@ const FLOORS = [TEXT_MIN_CONTRAST, QUIET_MIN_CONTRAST];
 
 export type Chars = readonly Char[];
 
+// The colours 256 colours draw from its own table, past the terminal's
+// sixteen: its cube and greys.
+const DRAWN_256: readonly Rgb[] = Array.from(
+  { length: EIGHT_BIT_TABLE.size - 16 },
+  (_, i) => {
+    const { red, green, blue } = EIGHT_BIT_TABLE.get(16 + i);
+    return [red, green, blue] as const;
+  },
+);
+
+/** The most contrast any colour 256 colours draws as red stands off `ground`. */
+function farthestRed(ground: Rgb): number {
+  return Math.max(
+    0,
+    ...DRAWN_256.filter((c) => readsRed(new ColorRgba(...c))).map((c) =>
+      ratio(c, ground),
+    ),
+  );
+}
+
 /**
  * Every way `quantized` (the 256 render) fails `truecolor` (the same bar, same
  * state): an arrow whose ink is not the one `seamInks` holds it to at either
@@ -263,7 +285,16 @@ export function compare(
     }
     const before = ratio(fg, bg);
     const after = ratio(q.fg, q.bg);
-    const floor = FLOORS.find((f) => before >= f) ?? 0;
+    // A red glyph keeps its hue first (the door's ✖), so it is held to the
+    // floor it cleared or to the highest floor any red 256 colours draw
+    // reaches on its ground, whichever is lower.
+    const reach = readsRed(new ColorRgba(...q.fg))
+      ? farthestRed(q.bg)
+      : Infinity;
+    const floor = Math.min(
+      FLOORS.find((f) => before >= f) ?? 0,
+      FLOORS.find((f) => reach >= f) ?? reach,
+    );
     if (after < floor)
       failures.push(
         `${label} ${ch}: ${before.toFixed(2)} -> ${after.toFixed(2)} (floor ${floor})`,
