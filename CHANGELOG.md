@@ -1,3 +1,9 @@
+## [1.232.5](https://github.com/promptctl/cc-candybar/compare/v1.232.4...v1.232.5) (2026-11-18)
+
+### Bug Fixes
+
+* **plugins:** a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k) ([#820](https://github.com/promptctl/cc-candybar/issues/820)) ([f72209a](https://github.com/promptctl/cc-candybar/commit/f72209a57f1948648b44508adcfa2a143579eaf8))
+
 ## [1.232.4](https://github.com/promptctl/cc-candybar/compare/v1.232.3...v1.232.4) (2026-11-18)
 
 ### Bug Fixes
