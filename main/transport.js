@@ -60479,6 +60479,100 @@ var TMUX_ENV = {
 };
 var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
 
+// src/config/loader/repo-gate.ts
+init_globals();
+var REPO_ANSWERS = ["approved", "declined"];
+function answerDir(d) {
+  return d.link.kind === "linked" ? d.link.main : d.dir;
+}
+var answerOf2 = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
+function ruling(answers, d) {
+  const key = answerDir(d);
+  if (answers.kind === "failed") return { standing: "unread", under: key };
+  const repo2 = answerOf2(answers.value, key);
+  const own2 = answerOf2(answers.value, d.dir);
+  if (repo2 === null) {
+    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
+  }
+  return {
+    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
+    under: key
+  };
+}
+function gateRepos(answers, dirs, project) {
+  const reached = reachedDirs(dirs, project);
+  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
+  const standing2 = (s) => ruled.filter((r) => r.standing === s);
+  const repos = (s) => [
+    ...new Set(standing2(s).map((r) => r.under))
+  ];
+  return {
+    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
+    approved: standing2("approved").map((r) => r.dir),
+    awaiting: repos("awaiting"),
+    declined: repos("declined"),
+    unproven: reached.flatMap(
+      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
+    ),
+    unread: answers.kind === "failed" ? answers.reason : null
+  };
+}
+function reachedDirs(dirs, project) {
+  return [
+    ...new Map(
+      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
+    ).values()
+  ];
+}
+function repoQuestion(answers, dirs, project) {
+  const [reached] = reachedDirs(dirs, project);
+  if (reached === void 0) return null;
+  const { standing: standing2, under: under3 } = ruling(answers, reached);
+  return {
+    dir: under3,
+    standing: standing2,
+    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
+  };
+}
+function withAnswer(book, dir, answer2, superseded) {
+  if (book[dir] === answer2 && superseded.length === 0) return book;
+  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
+  return { ...Object.fromEntries(rest2), [dir]: answer2 };
+}
+function parseRepoConfigBook(doc) {
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+    return { kind: "failed", reason: "is not an object" };
+  }
+  for (const [dir, answer2] of Object.entries(doc)) {
+    if (!REPO_ANSWERS.includes(answer2)) {
+      return {
+        kind: "failed",
+        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
+      };
+    }
+  }
+  return { kind: "ok", value: doc };
+}
+function repoUnreadNotice(gate2) {
+  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
+}
+var awaitingLine = (dir) => `awaiting approval: ${dir} \u2014 its cc-candybar config runs once it is approved in the bar`;
+var declinedLine = (dir) => `declined: ${dir} \u2014 its cc-candybar config does not run`;
+var unprovenLine = (dir, reason) => `not proven a worktree: ${dir} \u2014 it answers for itself, because ${reason}`;
+function repoQuestionLines(question) {
+  if (question === null) return [];
+  const standing2 = {
+    awaiting: [awaitingLine(question.dir)],
+    declined: [declinedLine(question.dir)],
+    approved: [],
+    unread: []
+  };
+  return [
+    ...standing2[question.standing],
+    ...question.unproven === null ? [] : [unprovenLine(question.dir, question.unproven)]
+  ];
+}
+
 // src/daemon/foundations/memory-limit.ts
 init_globals();
 var BYTES_PER_MB = 1024 * 1024;
@@ -60855,8 +60949,12 @@ var config = {
   takesMark: false,
   probe: ({ config: config2 }) => {
     const judged = judgedConfig(config2);
+    const repo2 = repoQuestionLines(config2.repo);
     const verdict = problemsVerdict(configProblems(config2));
-    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
+    return verdict.ok ? { ok: true, note: [judged, ...repo2].join("; ") } : {
+      ...verdict,
+      reason: [`${judged}: ${verdict.reason}`, ...repo2].join("; ")
+    };
   }
 };
 var REINSTALL = "re-run `cc-candybar install`";
@@ -72615,7 +72713,8 @@ function configFacts(load, target) {
   const base = {
     layers: load.layers,
     target,
-    warnings: load.warnings
+    warnings: load.warnings,
+    repo: load.repo
   };
   return load.error !== null ? { ...base, kind: "failed", error: load.error } : {
     ...base,
@@ -75131,84 +75230,6 @@ function addressText(at) {
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
 var import_node_path35 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/repo-gate.ts
-init_globals();
-var REPO_ANSWERS = ["approved", "declined"];
-function answerDir(d) {
-  return d.link.kind === "linked" ? d.link.main : d.dir;
-}
-var answerOf2 = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
-function ruling(answers, d) {
-  const key = answerDir(d);
-  if (answers.kind === "failed") return { standing: "unread", under: key };
-  const repo2 = answerOf2(answers.value, key);
-  const own2 = answerOf2(answers.value, d.dir);
-  if (repo2 === null) {
-    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
-  }
-  return {
-    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
-    under: key
-  };
-}
-function gateRepos(answers, dirs, project) {
-  const reached = reachedDirs(dirs, project);
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing2 = (s) => ruled.filter((r) => r.standing === s);
-  const repos = (s) => [
-    ...new Set(standing2(s).map((r) => r.under))
-  ];
-  return {
-    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
-    approved: standing2("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap(
-      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null
-  };
-}
-function reachedDirs(dirs, project) {
-  return [
-    ...new Map(
-      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
-    ).values()
-  ];
-}
-function repoQuestion(answers, dirs, project) {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === void 0) return null;
-  const { standing: standing2, under: under3 } = ruling(answers, reached);
-  return {
-    dir: under3,
-    standing: standing2,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
-  };
-}
-function withAnswer(book, dir, answer2, superseded) {
-  if (book[dir] === answer2 && superseded.length === 0) return book;
-  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
-  return { ...Object.fromEntries(rest2), [dir]: answer2 };
-}
-function parseRepoConfigBook(doc) {
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return { kind: "failed", reason: "is not an object" };
-  }
-  for (const [dir, answer2] of Object.entries(doc)) {
-    if (!REPO_ANSWERS.includes(answer2)) {
-      return {
-        kind: "failed",
-        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
-      };
-    }
-  }
-  return { kind: "ok", value: doc };
-}
-function repoUnreadNotice(gate2) {
-  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
-}
 
 // src/utils/presence.ts
 init_globals();
@@ -91998,6 +92019,7 @@ function mainRendererOf(inputs, host) {
         layers: entry.configLayers,
         error: entry.lastError,
         warnings: entry.lastWarnings,
+        repo: entry.snapshot.repo,
         unused: entry.state.unused,
         config: entry.state.config
       };
