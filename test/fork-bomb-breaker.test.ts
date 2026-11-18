@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { hostOf, processProbe, worldOf, WORLD } from "./helpers/host";
 import { readOwnStartTime } from "../src/daemon/process-fingerprint";
+import { oldReleaseStartTime } from "./helpers/old-release";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -347,8 +348,7 @@ describe("realBreakerDeps writeEntry (read by older releases)", () => {
     const dir = freshDir();
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, `pid-${process.pid}.json`);
-    const own = await processProbe.startTime(process.pid);
-    if (own.kind !== "start") throw new Error(`no start time: ${own.detail}`);
+    const old = await oldReleaseStartTime(process.pid);
     const startTime = await readOwnStartTime(
       process.pid,
       processProbe.startTime,
@@ -361,7 +361,7 @@ describe("realBreakerDeps writeEntry (read by older releases)", () => {
       const raw = JSON.parse(fs.readFileSync(filePath, "utf8")) as {
         startTime: unknown;
       };
-      expect(raw.startTime === own.token).toBe(true);
+      expect(raw.startTime === old).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

@@ -13,6 +13,7 @@ import {
   type Liveness,
 } from "../src/daemon/process-fingerprint";
 import { processProbe } from "./helpers/host";
+import { oldReleaseStartTime } from "./helpers/old-release";
 
 // ─── Pure arbitration: full input-space enumeration ──────────────────────────
 //
@@ -151,8 +152,7 @@ describe("lease file I/O", () => {
   // lease the daemon writes today must still read as its live owner to that
   // rule, or an older daemon beside a newer one would reclaim its live socket.
   test("a lease written today names its owner under the old rule (raw token equality with ps)", async () => {
-    const own = await processProbe.startTime(process.pid);
-    if (own.kind !== "start") throw new Error(`no start time: ${own.detail}`);
+    const old = await oldReleaseStartTime(process.pid);
     writeLease(leasePath, {
       pid: process.pid,
       version: 2,
@@ -162,7 +162,7 @@ describe("lease file I/O", () => {
     const raw = JSON.parse(fs.readFileSync(leasePath, "utf8")) as {
       startTime: unknown;
     };
-    expect(raw.startTime === own.token).toBe(true);
+    expect(raw.startTime === old).toBe(true);
   });
 
   // Backward-compat: an OLD lease with no startTime key reads as unfingerprinted
