@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-812",
+      "ref": "refs/pull/812/merge",
+      "sha": "ecb610e728cc82aa6f8dc350f7c225037f3d3328",
+      "timestamp": "2026-11-18T17:01:33.176Z",
+      "commits": [
+        {
+          "sha": "ecb610e728cc82aa6f8dc350f7c225037f3d3328",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:00:32-07:00",
+          "message": "Merge 015248f5eadb5ff12c881b85ccc1ba585966f27c into 556287991e7955f7a9fbfc4a12b9ded691a25344\n"
+        },
+        {
+          "sha": "015248f5eadb5ff12c881b85ccc1ba585966f27c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:00:08-07:00",
+          "message": "fix(storage): a storage folder's watch or stat fault clears when the OS answers again (tvhj)\n\nA refused or erroring watch, or a folder a judgment could not stat, no\nlonger ends its generation. The fault is derived from the handle's\ndeafness (taken at each window and at open, when the registry tells a\nmove of it) and the last judgment's stat, so the registry's period\nreopen and the next judgment clear it in place. A start or change of a\nfault is counted and logged once; a clear is logged. Only a folder that\ncould not be made stays terminal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-811",
       "ref": "refs/pull/811/merge",
       "sha": "e7809693ea350624e1a6c3e5d7d07dbcd8117469",
