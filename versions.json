@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-809",
+      "ref": "refs/pull/809/merge",
+      "sha": "12b006a0a1e8f95c70d6607d36044d2658d5edd8",
+      "timestamp": "2026-11-18T16:12:39.158Z",
+      "commits": [
+        {
+          "sha": "12b006a0a1e8f95c70d6607d36044d2658d5edd8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:11:25-07:00",
+          "message": "Merge 73e4a0fa5c43b8dd68e9a79f12f0e159b403b482 into 9ffa98534dfa6e86e99e386945d6eae856f1ecaa\n"
+        },
+        {
+          "sha": "73e4a0fa5c43b8dd68e9a79f12f0e159b403b482",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:11:12-07:00",
+          "message": "fix(edit): a layout edit releases every state key it ends, so a re-added placement's library opens closed (t2yz)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-808",
       "ref": "refs/pull/808/merge",
       "sha": "55b69d0479c75fc33780e06da4bc3341fb0a47d2",
