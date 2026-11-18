@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-814",
+      "ref": "refs/pull/814/merge",
+      "sha": "07fad79b138b3e613a2ddc38483e21c62e24eafa",
+      "timestamp": "2026-11-18T17:20:19.150Z",
+      "commits": [
+        {
+          "sha": "07fad79b138b3e613a2ddc38483e21c62e24eafa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:19:14-07:00",
+          "message": "Merge e1183ad3ce9d9614f6234851ad601ea887aced3e into b20d54e03314e183b84f143fe4194b85c8b54431\n"
+        },
+        {
+          "sha": "e1183ad3ce9d9614f6234851ad601ea887aced3e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:18:58-07:00",
+          "message": "fix(watchers): branch refs are watched as each of their directories, and one the walk cannot list is named (wt2d)\n\nOn Linux under Node 20 and 22 a recursive fs.watch is Node's own walk,\nwhich stops at an entry it cannot open and still reads as listening.\nThe git watch now lists refs/heads and every directory below it on\neach pass, each a plain directory target. A directory it cannot list\n(a reftable refs file, EACCES, ELOOP) is a refusal by name in the key,\nlogged on the bind that carries it, counted in the git cache stats,\nand shown on the bind line. The registry loses its recursive arm.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-812",
       "ref": "refs/pull/812/merge",
       "sha": "0ae43cbafcf2f376f6f2de272d442227910a4c10",
