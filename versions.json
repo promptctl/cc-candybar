@@ -2,32 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "289f9d78da41fe65b96378c8b02f4f6f47a8ed03",
-      "timestamp": "2026-11-18T00:28:23.823Z",
-      "commits": [
-        {
-          "sha": "289f9d78da41fe65b96378c8b02f4f6f47a8ed03",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T00:27:14Z",
-          "message": "chore(release): set `package.json` to 1.230.0\n\n## [1.230.0](https://github.com/promptctl/cc-candybar/compare/v1.229.0...v1.230.0) (2026-11-18)\n\n### Features\n\n* **daemon:** the host holds a renderer's stored state under its profile, and the renderer is built from it (uh4) ([#791](https://github.com/promptctl/cc-candybar/issues/791)) ([4c03e28](https://github.com/promptctl/cc-candybar/commit/4c03e2890e6217e713cd16adf26aff393aa289e1))\n"
-        }
-      ]
-    },
-    {
       "version": "pr-790",
       "ref": "refs/pull/790/merge",
-      "sha": "60b32e34c61a4129ee69b3f756e1d9a667a9ac08",
-      "timestamp": "2026-11-18T00:26:09.487Z",
+      "sha": "9d36aa7a4879ed0b634d565d8c22d2b9ae9c6fbc",
+      "timestamp": "2026-11-18T00:46:14.193Z",
       "commits": [
         {
-          "sha": "60b32e34c61a4129ee69b3f756e1d9a667a9ac08",
+          "sha": "9d36aa7a4879ed0b634d565d8c22d2b9ae9c6fbc",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T17:25:03-07:00",
-          "message": "Merge 168d9d15f4d63df3312f4a7bfa446cb6344676bc into 4c03e2890e6217e713cd16adf26aff393aa289e1\n"
+          "timestamp": "2026-11-18T00:45:03Z",
+          "message": "Merge 7798f251472246551f79b3b0384da93520a705c7 into 289f9d78da41fe65b96378c8b02f4f6f47a8ed03\n"
+        },
+        {
+          "sha": "7798f251472246551f79b3b0384da93520a705c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T17:44:59-07:00",
+          "message": "Merge branch 'main' into candybar-host-renderer-x96a.6sc"
         },
         {
           "sha": "168d9d15f4d63df3312f4a7bfa446cb6344676bc",
@@ -42,6 +34,21 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-17T15:22:50-07:00",
           "message": "fix(test): the request-limits config stops being a fifo before its hold ends (6sc)\n\nOn macOS the config watch heard the test's write to the fifo and re-read the path after the writer closed, blocking the daemon's loop for good. A plain file is renamed over the fifo while the render's read still holds the loop, so the render reads on through its open descriptor and every later open of the path gets a plain file.\n"
+        }
+      ]
+    },
+    {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "289f9d78da41fe65b96378c8b02f4f6f47a8ed03",
+      "timestamp": "2026-11-18T00:28:23.823Z",
+      "commits": [
+        {
+          "sha": "289f9d78da41fe65b96378c8b02f4f6f47a8ed03",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-18T00:27:14Z",
+          "message": "chore(release): set `package.json` to 1.230.0\n\n## [1.230.0](https://github.com/promptctl/cc-candybar/compare/v1.229.0...v1.230.0) (2026-11-18)\n\n### Features\n\n* **daemon:** the host holds a renderer's stored state under its profile, and the renderer is built from it (uh4) ([#791](https://github.com/promptctl/cc-candybar/issues/791)) ([4c03e28](https://github.com/promptctl/cc-candybar/commit/4c03e2890e6217e713cd16adf26aff393aa289e1))\n"
         }
       ]
     }
