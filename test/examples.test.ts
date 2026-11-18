@@ -7,6 +7,7 @@
 // no validation error and no error cell (⚠) in the output — so any future drift
 // fails CI, not a user's status line.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { fakeLauncher } from "./helpers/fake-launcher";
 import { hangs } from "../src/proc/spawner-fake";
@@ -67,7 +68,7 @@ describe("shipped examples load and render through the real cascade", () => {
     // it is to the real launcher until a process answers.
     const { launcher, spawner } = fakeLauncher(systemTimekeeper);
     spawner.program(() => true, hangs());
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, "", ownedView(sessionState));
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),

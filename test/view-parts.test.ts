@@ -4,6 +4,7 @@
 // the parts that read it; and a view kept across changes draws exactly what a
 // view made fresh for each draws.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { linksOf } from "../src/click/read";
@@ -44,7 +45,7 @@ const B = instantOf(new Date(2026, 5, 4, 12, 34, 57));
 // A view of `config`: its store and registry, and the compile it draws with.
 function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: "/tmp",

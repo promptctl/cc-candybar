@@ -3,7 +3,7 @@
 // (src/daemon/history-file.ts).
 
 import { SETTING_PROJECTIONS } from "../config/setting-projections";
-import { PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
+import { isDraftKey } from "../config/placement-keys";
 import { type SessionId } from "../daemon/foundations/session-id";
 import type { LayerRole } from "../config/layer-role";
 
@@ -90,4 +90,4 @@ const SETTING_SESSION_KEYS: ReadonlySet<string> = new Set(
 );
 
 export const isSettingKey = (key: string): boolean =>
-  SETTING_SESSION_KEYS.has(key) || key.startsWith(PLACEMENT_DRAFT_NS);
+  SETTING_SESSION_KEYS.has(key) || isDraftKey(key);

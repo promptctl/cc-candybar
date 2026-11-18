@@ -2,6 +2,8 @@
 // shows (brandon-segment-settings-i4n.u36). Each case places the segment twice
 // on one bar — a bare copy on every default and a copy with one setting off —
 // so it pins both the setting's effect and that two copies never share a value.
+import { ownedView } from "./helpers/owned";
+import { placementDraftKey } from "../src/config/placement-keys";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -12,7 +14,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { placementDraftKey } from "../src/config/edit-chrome";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -62,7 +63,8 @@ function renderPair(
     new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
-  const sessionState = new SessionState();
+  // The session's view of the store, owned as a render state's is.
+  const sessionState = ownedView(new SessionState());
   sessionState.set(SESSION, "git-detail", detail);
   for (const [key, value] of Object.entries(session)) {
     sessionState.set(SESSION, key, value);

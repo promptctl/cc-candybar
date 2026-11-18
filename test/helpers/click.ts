@@ -67,6 +67,8 @@ import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
 import { NO_CONFIGS } from "./renderers";
+import { TEST_OWNER } from "./owned";
+import type { Owner } from "../../src/config/placement-keys";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -345,6 +347,7 @@ export function testVerbContext(
   history: SettingsHistory = new SettingsHistory(sessionState, () => {}),
   config?: DslConfig,
   host: Host = HOST,
+  owner: Owner = TEST_OWNER,
 ): VerbContext {
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
@@ -386,6 +389,9 @@ export function testVerbContext(
       }
       return config;
     },
+    // Every session here renders one chain, whose owner the rig's draws own
+    // their keys by (test/helpers/owned.ts).
+    ownerFor: () => owner,
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.
     sourcesFor: () => {

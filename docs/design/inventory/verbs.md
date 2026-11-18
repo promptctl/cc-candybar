@@ -48,7 +48,7 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 | `save-preset` | same | same | same | CF, P (clears all setting keys, sets preset), SH, OS; L | config | Same |
 | `save-theme-default` | same | same | same | CF, P, SH, OS; L | config | Same |
 | `delete-preset` | `reloadConfig`, `dlog` | same | same | CF, P, SH, OS (sessions in that preset fall to the floor); L | config | Same |
-| `apply-layout-op` | `configFor`, `reloadConfig`, `dlog` | same | same | CF, P (ended placement keys), SH, OS; L possible | config | Same |
+| `apply-layout-op` | `configFor`, `reloadConfig`, `dlog` | same | same | CF, P (the clicker's ended placement keys, through its journal; every other session's at the reload), SH, OS; L possible | config | Same |
 | `undo` | `history`, `reloadConfig`, `dlog` | Any `Change.file` in the step, or `fs.rmSync` if its value is null; `session-state.json`; `settings-history.json` | same | P, CF, SH; L | config | **Own history only, never a raw copy** (hazard 2) |
 | `redo` | same | same | same | P, CF, SH; L | config | Same |
 | `rewind` | same | same | same | P, CF, SH; L | config | Same. It does not close edit mode; a sibling effect does |

@@ -1,3 +1,4 @@
+import { ownedView } from "./helpers/owned";
 import {
   sessionIdOf,
   type SessionId,
@@ -625,7 +626,7 @@ describe("the bundled activity segment renders the payload", () => {
       "activity",
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
     try {
       const compiled = registerDslConfig(narrowed, registry, {
         signer: TEST_SIGNER,

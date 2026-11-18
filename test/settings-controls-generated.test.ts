@@ -10,6 +10,7 @@
 //   - a global the menu has never seen — a throwaway enum — gets a working
 //     control from the same generator, with its option domain and its gate.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -226,7 +227,7 @@ describe("a global the menu has never seen gets its control from the generator",
     );
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, "", ownedView(sessionState));
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
     const render = () =>
       drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame;

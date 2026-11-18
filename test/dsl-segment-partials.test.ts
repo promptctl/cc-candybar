@@ -6,6 +6,7 @@
 // function (a computed name) is a separate, upstream-blocked follow-up
 // (candybar-templates-zh8b.ph5) and is not exercised here.
 
+import { ownedView } from "./helpers/owned";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
@@ -50,7 +51,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store,
     "",
-    new SessionState(),
+    ownedView(new SessionState()),
   );
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,

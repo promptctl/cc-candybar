@@ -60,7 +60,17 @@ import { unusedDeclarations, type UnusedDecl } from "../config/unused.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import type { VarScope } from "../dsl/variable-scope.js";
-import type { SessionStateRW } from "../renderer-interface/session-state.js";
+import type {
+  SessionStateRW,
+  SessionStore,
+} from "../renderer-interface/session-state.js";
+import {
+  chainOwner,
+  holdsOf,
+  type Holds,
+  type Owner,
+} from "../config/placement-keys.js";
+import { ownedStore, releaseEnded } from "./owned-store.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { Locations } from "../config/loader/chain-places.js";
@@ -147,7 +157,8 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // Where the user's home is, which a `~` in a plugin's data path names
   // (StateDeps).
   locations: Locations;
-  sessionState: SessionStateRW;
+  // The store every session's state lives in: what a load releases across.
+  sessionState: SessionStore;
   // The host's storage owner, which holds the folders each served state's
   // latest load named (`holdFolders`), from its first load to its reclaim.
   storage: AdapterToHost["storage"];
@@ -247,6 +258,15 @@ export type ReloadedEntry = Readonly<
 // view over them (SessionView).
 export interface DslRenderState {
   readonly config: ValidatedConfig;
+  // [LAW:one-source-of-truth] The chain it was loaded from, as the owner of
+  // the placement keys its sessions write (src/config/placement-keys.ts), and
+  // what each prefix of that chain places: what its load releases against.
+  readonly owner: Owner;
+  readonly holds: Holds;
+  // [LAW:single-enforcer] The session store as this state's sessions read and
+  // write it, owned by `owner`: what its registry and every render read
+  // through. The compile names keys owner-free, so it stays shared.
+  readonly sessionState: SessionStateRW;
   // [LAW:no-silent-failure] The placements of undeclared segments the load
   // dropped to draw the rest of the bar, one error per file that wrote one.
   readonly dropped: readonly DroppedFileError[];
@@ -725,6 +745,8 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   // them too.
   const warnings: string[] = [];
 
+  const owner = chainOwner(layers.map((l) => l.path));
+  const sessionState = ownedStore(deps.sessionState, () => owner);
   const store = new VariableStore(deps.clock);
   // The sessionState injection makes `kind: "state"` variables read/write the
   // same per-session store the click verbs mutate. `default_empty_value`
@@ -735,7 +757,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const registry = new SourceRegistry(
     store,
     config.globals.default_empty_value ?? "",
-    deps.sessionState,
+    sessionState,
     null,
   );
 
@@ -789,6 +811,9 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     kind: "built",
     state: {
       config,
+      owner,
+      holds: holdsOf(loaded),
+      sessionState,
       dropped,
       compileKey: registration.compileKey,
       loadKey: load.key,
@@ -1623,7 +1648,24 @@ export class RenderCache<
     served: DslRenderState | null,
   ): LoadOutcome {
     if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(cwd, snapshot, this.deps, served);
+    const outcome = loadOrigin(cwd, snapshot, this.deps, served);
+    // [LAW:single-enforcer] A placement ends between two loads of what places
+    // it, so the release is here, where every load the cache makes passes,
+    // and runs over every session the store holds: an idle one, one with no
+    // view, one another config drew. A failed load holds nothing, so it
+    // releases nothing, and neither does the bundled default a failed first
+    // load falls back to, which is built beside this.
+    if (outcome.kind !== "failed") {
+      const store = this.deps.sessionState;
+      releaseEnded(
+        store,
+        store.sessions(),
+        outcome.state.holds,
+        "load",
+        (line) => this.log("info", line),
+      );
+    }
+    return outcome;
   }
 
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the

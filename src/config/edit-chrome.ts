@@ -48,13 +48,18 @@ import { presetRootKey } from "./loader/persist-target.js";
 import { escapedIdent } from "./ident.js";
 import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
 import {
-  configureMember,
   EDIT_MODE_GATE,
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_REF,
   EDIT_TOGGLE_ACTION,
   PLACEMENT_DRAFT_NS,
 } from "./loader/edit-mode.js";
+import {
+  CONFIGURE_LISTS,
+  configureMember,
+  insertGap,
+  placementDraftKey,
+} from "./placement-keys.js";
 import { EDIT_NS, isReservedName } from "./reserved-names.js";
 import { declareHelp } from "./help.js";
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
@@ -62,13 +67,7 @@ import { NO_FILL } from "../template-engine/colors.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
 import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "./edit-glyphs.js";
 import { UNSAVED_VAR } from "./settings-menu.js";
-import {
-  menuActionName,
-  menuMember,
-  menuPageKey,
-  sharedMenuStateKey,
-  menuStateKey,
-} from "./menu-keys.js";
+import { menuActionName, menuMember, menuPageKey } from "./menu-keys.js";
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_OPEN,
@@ -323,19 +322,6 @@ function configureRefsIn(nodes: readonly LayoutNode[]): DisclosureRef[] {
   );
 }
 
-// [LAW:one-source-of-truth] THE session key an unsaved value of one
-// placement's setting lives at: the preset (a placement's id is unique only in
-// the tree one preset renders), the id, and the setting. A setting name is an
-// identifier and a preset's ident holds no `.`, so the last segment is always
-// the setting and the second the preset — the key names one value.
-export function placementDraftKey(
-  presetIdent: string,
-  id: string,
-  setting: string,
-): string {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
-}
-
 // What configure mode adds to one placement: the `🔧` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
@@ -362,13 +348,13 @@ function configureParts(
   const member = configureMember(ctx.preset, id);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
-  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
-  // it is a template path no other variable owns. Entering configure folds
-  // it, so each visit starts with every list closed.
-  // [LAW:single-enforcer] exception: closing configure folds this list too
-  // (disclosure-nest.ts), but a layout edit releases configure on the
-  // reloaded config, where the removed placement's member nests nothing.
-  const listKey = sharedMenuStateKey(enter);
+  // A shared `{{ menu }}` key, so it is a template path no other variable
+  // owns. Entering configure folds it, so each visit starts with every list
+  // closed.
+  // [LAW:single-enforcer] Closing configure folds this list too
+  // (disclosure-nest.ts); the load that drops the placement releases it, as
+  // it releases every key the placement owns (placement-keys.ts).
+  const listKey = CONFIGURE_LISTS.mint({ preset: ctx.preset, id });
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
   ctx.artifacts.actions[enter] = {
@@ -380,7 +366,7 @@ function configureParts(
   };
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(ctx.presetIdent, id, name);
+    const key = placementDraftKey(ctx.preset, id, name);
     // A template field path (`.edit.draft.pp.d1bZ00002d29.x`): an escaped
     // preset or placement may lead with a digit, which a field name may not —
     // hence `p` and `d`. The key, not the name, is what a session
@@ -662,30 +648,6 @@ function insertTerm(
       `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}` +
       `{{ if ${open} }}{{ $m }}{{ else }}{{ fg (${add}) $m }}{{ end }}`,
   };
-}
-
-// [LAW:one-source-of-truth] The names of the `+` gap beside one placement,
-// from the preset's and the placement's names as written: its insert action,
-// the segment that hosts its menu, and that menu's open state. Edit chrome's
-// action, segment and variable names spell their preset and placement with
-// `escapedIdent`, so an add, removal or move elsewhere hands none of a
-// placement's state (an open `✚` library, its page, a configure list) to a
-// neighbour. Labels, the configure member and draft keys are values, not
-// names, and carry the id as written. An authored placement has a gap after
-// it, and the first of its row one before it too; an inserted cell has none.
-export function insertGap(
-  preset: string,
-  anchor: string,
-  relation: "before" | "after",
-): {
-  readonly apply: string;
-  readonly host: string;
-  readonly stateKey: string;
-} {
-  const gap = `${relation}.${escapedIdent(anchor)}`;
-  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
-  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
-  return { apply, host, stateKey: menuStateKey(host, apply, undefined) };
 }
 
 // One splice's context, threaded unchanged through the recursion.

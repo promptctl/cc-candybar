@@ -20,6 +20,7 @@
 //     opens is the depth-0 band of the bar's lineage every bar trigger opens —
 //     the anchor of the chain.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
@@ -216,7 +217,7 @@ function build(src: string, withDefault = false) {
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: "/tmp/proj",

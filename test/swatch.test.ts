@@ -9,6 +9,7 @@
 //   4. `{{ themePreview "applyAction" }}` is two rows of the selected option's
 //      palette;
 //   5. a link drawn in several colour runs reads as one link.
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -58,7 +59,7 @@ function rig(template: string) {
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
   const drawn = drawPayload(
     config,

@@ -596,12 +596,13 @@ Configuring `block`:
 
 | Region | Click |
 |---|---|
-| A control | session `edit.draft.<preset>.<id>.<setting>` ← the new value; the placement renders it at once and `💾 save` counts it |
+| A control | session `edit.draft.<preset>.<id>.<setting>` ← the new value, held under the config files that place it (`edit.draft.<owner>.<preset>.<id>.<setting>`); the placement renders it at once and `💾 save` counts it |
 | `✕` | closes configure mode, back to arranging |
 | Another `🔧` | configures that placement instead (one at a time) |
 
 - **Settings:** every placement has `theme` (`bar` follows the bar's theme; any installed theme pins this placement). Bundled segments declare more: `gitaculous` has eight toggles; `block` and `weekly` have warning and error thresholds; `session` and `today` have a budget and a warning threshold; `burnrate` has two time thresholds.
 - **Saving:** `✓ save` writes each draft into the placement in the config file, turning a bare `"block"` into `{ seg: "block", settings: { … } }`.
+- **Removal:** a placement's drafts, its settings list, the `✚` libraries beside it and the configure key naming it end with it. Whatever removes it (a `✖`, a hand edit, another session's click), the next load of the files that placed it releases them in every session, so a placement added again under the same id opens closed and with no drafts. Another config placing the same id keeps its own. The `✖`'s undo brings the clicker's drafts back.
 
 ## Bundled segments with clicks
 

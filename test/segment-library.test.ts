@@ -5,6 +5,7 @@
 // copied list, so a segment added anywhere either lands in the library or fails
 // a test loudly.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -73,7 +74,8 @@ function rig(width: number, userSegments = "") {
     ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
-  const sessionState = new SessionState();
+  // The session's view of the store, owned as a render state's is.
+  const sessionState = ownedView(new SessionState());
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });

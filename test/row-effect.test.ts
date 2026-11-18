@@ -1,3 +1,4 @@
+import { ownedView } from "./helpers/owned";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
@@ -86,7 +87,7 @@ function renderer(
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

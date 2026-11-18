@@ -1,3 +1,4 @@
+import { ownedView } from "./helpers/owned";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { NO_PROJECT } from "./helpers/no-project";
@@ -39,7 +40,7 @@ function registerStdlib() {
     "<default>",
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   return {
     registry,
     compiled: registerDslConfig(config, registry, {

@@ -17,9 +17,10 @@
 import { createAtom, type IAtom, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type {
-  SessionStateReader,
   SessionStateRW,
+  SessionStore,
 } from "../renderer-interface/session-state";
+import { isOwnerFree, isOwnerFreeValue } from "../config/placement-keys";
 import type {
   StoredState,
   StoreWrite,
@@ -56,6 +57,7 @@ export function recordingView(
   return {
     get: (sessionId, key) => store.get(sessionId, key),
     revision: (sessionId) => store.revision(sessionId),
+    keys: (sessionId) => store.keys(sessionId),
     set: (sessionId, key, value) =>
       recorded(sessionId, [key], () => store.set(sessionId, key, value)),
     setBatch: (sessionId, pairs) =>
@@ -67,6 +69,17 @@ export function recordingView(
     clear: (sessionId, key) =>
       recorded(sessionId, [key], () => store.clear(sessionId, key)),
   };
+}
+
+// [LAW:single-enforcer] The store holds a placement's keys only in their
+// owned form (src/config/placement-keys.ts): a key that names no owner would
+// land on whichever config next places its id, so the store refuses one
+// loudly. A clear stays allowed, since releasing is how a key leaves.
+function refuseOwnerFree(op: "read" | "write", key: string): void {
+  if (isOwnerFree(key))
+    throw new Error(
+      `session state: refused a ${op} of ${key}, which names a placement with no owner — it reaches the store through a view that owns it (src/renderer/owned-store.ts)`,
+    );
 }
 
 // One session's state, and the store's revision when it last changed.
@@ -82,12 +95,12 @@ interface Session {
 // is ever evicted — eviction *is* "drop dead sessions".
 const DEFAULT_MAX_SESSIONS = 256;
 
-export class SessionState implements SessionStateReader, SessionStateRW {
+export class SessionState implements SessionStore {
   // [LAW:types-are-the-program] Insertion order is recency order, the order
   // of writes: the store cannot hold more than maxSessions, so the bound is
   // structural, not dependent on an external prune caller. A read moves
   // nothing, so the host's copy, which hears only writes, keeps the same order.
-  private readonly sessions: Map<SessionId, Session>;
+  private readonly bySession: Map<SessionId, Session>;
   // [LAW:one-source-of-truth] The sessions whose state moved since the host
   // was last told, in the order they last moved: what the turn's stored
   // writes carry (`drain`).
@@ -105,7 +118,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     loaded: StoredState["sessions"] = {},
     private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
   ) {
-    this.sessions = new Map(
+    this.bySession = new Map(
       (
         Object.entries(loaded) as Array<
           [SessionId, Readonly<Record<string, string>>]
@@ -121,15 +134,27 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   get(sessionId: SessionId, key: string): string | null {
+    refuseOwnerFree("read", key);
     // [LAW:single-enforcer] reportObserved is the reactive-dep registration —
     // outside a tracking context (the common direct-read case) it is a no-op.
     this.atom.reportObserved();
-    return this.sessions.get(sessionId)?.values.get(key) ?? null;
+    return this.bySession.get(sessionId)?.values.get(key) ?? null;
   }
 
   revision(sessionId: SessionId): number {
     this.atom.reportObserved();
-    return this.sessions.get(sessionId)?.revision ?? 0;
+    return this.bySession.get(sessionId)?.revision ?? 0;
+  }
+
+  keys(sessionId: SessionId): readonly string[] {
+    this.atom.reportObserved();
+    return [...(this.bySession.get(sessionId)?.values.keys() ?? [])];
+  }
+
+  // Every session the store holds, oldest write first.
+  sessions(): readonly SessionId[] {
+    this.atom.reportObserved();
+    return [...this.bySession.keys()];
   }
 
   // How many derivations are subscribed to this store right now — every
@@ -153,7 +178,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   // How many sessions the store holds.
   size(): number {
-    return this.sessions.size;
+    return this.bySession.size;
   }
 
   // [LAW:one-source-of-truth] set is the degenerate single-pair form of
@@ -170,7 +195,14 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     sessionId: SessionId,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
-    const held = this.sessions.get(sessionId);
+    for (const { key, value } of pairs) {
+      refuseOwnerFree("write", key);
+      if (isOwnerFreeValue(key, value))
+        throw new Error(
+          `session state: ${key}=${value} names a placement with no owner — a write reaches the store through a view that owns it (src/renderer/owned-store.ts)`,
+        );
+    }
+    const held = this.bySession.get(sessionId);
     if (!pairs.some(({ key, value }) => held?.values.get(key) !== value))
       return;
     runInAction(() => {
@@ -186,7 +218,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   clear(sessionId: SessionId, key: string): void {
-    const session = this.sessions.get(sessionId);
+    const session = this.bySession.get(sessionId);
     if (session === undefined || !session.values.has(key)) return;
     runInAction(() => {
       session.values.delete(key);
@@ -214,7 +246,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   private valuesOf(sessionId: SessionId): Record<string, string> | null {
-    const session = this.sessions.get(sessionId);
+    const session = this.bySession.get(sessionId);
     return session === undefined ? null : Object.fromEntries(session.values);
   }
 
@@ -222,14 +254,14 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // written, here and in what the host is told.
   private changed(sessionId: SessionId, session: Session): void {
     session.revision = ++this.head;
-    this.sessions.delete(sessionId);
-    this.sessions.set(sessionId, session);
+    this.bySession.delete(sessionId);
+    this.bySession.set(sessionId, session);
     this.told(sessionId);
   }
 
   private dropped(sessionId: SessionId): void {
     this.head++;
-    this.sessions.delete(sessionId);
+    this.bySession.delete(sessionId);
     this.told(sessionId);
   }
 
@@ -239,12 +271,12 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   private evictOldest(): void {
-    let overflow = this.sessions.size - this.maxSessions;
+    let overflow = this.bySession.size - this.maxSessions;
     if (overflow <= 0) return;
     // Delete the oldest keys in insertion order. Cost is proportional to the
     // number of evictions, not the total loaded set — deleting an already-
     // yielded key mid-iteration is well-defined for a Map.
-    for (const id of this.sessions.keys()) {
+    for (const id of this.bySession.keys()) {
       this.dropped(id);
       if (--overflow === 0) break;
     }

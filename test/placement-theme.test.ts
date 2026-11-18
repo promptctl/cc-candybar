@@ -11,6 +11,7 @@
 //     colour of the palette picking them would put on the placement, all on
 //     one ground, and save writes the pick into the placement.
 
+import { configureMember, placementDraftKey } from "../src/config/placement-keys";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
@@ -32,11 +33,9 @@ import { VERB_SAVE } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
-  configureMember,
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
 } from "../src/config/loader/edit-mode";
-import { placementDraftKey } from "../src/config/edit-chrome";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { onLanded } from "./helpers/click";
@@ -80,6 +79,7 @@ function themeBar(src: string) {
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,
+    owner: durable.owner,
   });
   const { config } = rig;
   // The cells of the latest draw, which bgOf reads after it.
@@ -107,7 +107,7 @@ function themeBar(src: string) {
     current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
   });
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
-  return { ...rig, render, bgOf, click, ctx };
+  return { ...rig, sessionState: rig.owned, render, bgOf, click, ctx };
 }
 
 const hex = (palette: Palette, role: "background"): string =>

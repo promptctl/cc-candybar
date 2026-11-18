@@ -3,6 +3,7 @@
 // a segment template's `now`, a template variable's `now`, a `time` variable —
 // reads that instant and nothing else.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -53,7 +54,7 @@ function renderer(): {
   readonly dispose: () => void;
 } {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   const compiled = registerDslConfig(CONFIG, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   return {
     render: (at) =>
@@ -131,7 +132,7 @@ describe("a stored instant is read against the frame's instant", () => {
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
       "",
-      new SessionState(),
+      ownedView(new SessionState()),
     );
     try {
       const compiled = registerDslConfig(BUNDLED, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
@@ -160,7 +161,7 @@ describe("a stored instant is read against the frame's instant", () => {
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
       "",
-      new SessionState(),
+      ownedView(new SessionState()),
     );
     try {
       const compiled = registerDslConfig(BUNDLED, registry, { signer: TEST_SIGNER, cwd: "/tmp" });

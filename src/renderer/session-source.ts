@@ -23,7 +23,6 @@ import {
   type EffectiveGlobals,
   resolveEffectiveGlobals,
 } from "../config/effective-globals.js";
-import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import {
   type WorldState,
@@ -40,7 +39,7 @@ import {
   type DrawInputs,
   type ViewPayload,
 } from "./render-payload.js";
-import type { SessionStateReader } from "../renderer-interface/session-state.js";
+import type { DslRenderState } from "./render-cache.js";
 import type { HistoryDepth } from "./settings-history.js";
 import { settingCounts } from "./setting-drafts.js";
 import { layerFlags } from "../config/layer-role.js";
@@ -66,7 +65,6 @@ export interface SessionSource extends ViewSource {
 }
 
 export interface SessionSourceDeps {
-  readonly sessionState: SessionStateReader;
   // The world states the host handed in, which every view reads its
   // session's from.
   readonly worldStates: Pick<WorldStates, "of">;
@@ -75,19 +73,18 @@ export interface SessionSourceDeps {
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: SessionId) => HistoryDepth;
   // The session's back depth, measured against the gate of the config its
-  // view draws with — NavigationHistory.depth in the daemon.
-  readonly navigation: (
-    sessionId: SessionId,
-    config: ValidatedConfig,
-  ) => number;
+  // view draws with, and its owner — NavigationHistory.depth in the daemon.
+  readonly navigation: (sessionId: SessionId, state: DslRenderState) => number;
 }
 
 export function sessionSource(
   deps: SessionSourceDeps,
 ): SourceOf<SessionSource> {
   return ({ sessionId, state, store, requested }) => {
+    // [LAW:single-enforcer] Through the state's own view of the store, owned
+    // by the chain it was loaded from.
     const pick = (key: string): string | null =>
-      deps.sessionState.get(sessionId, key);
+      state.sessionState.get(sessionId, key);
     // [LAW:one-source-of-truth] Every globals field resolved once per change
     // of the session's picks, and read by both the payload's `.effective`
     // fields and the draw's options, so a label cannot disagree with the bar.
@@ -119,7 +116,7 @@ export function sessionSource(
           layers: layerFlags(state.writable),
         },
         history: deps.history(sessionId),
-        back: deps.navigation(sessionId, state.config),
+        back: deps.navigation(sessionId, state),
       }),
     );
     const document = (): WorldState => deps.worldStates.of(sessionId);

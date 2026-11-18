@@ -266,7 +266,6 @@ function rig(): Rig {
       gates: bareGates(),
       log,
       source: sessionSource({
-        sessionState,
         worldStates: served.worldStates,
         home: providers.home,
         history: () => EMPTY_HISTORY_DEPTH,

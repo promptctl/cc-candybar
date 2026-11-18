@@ -16,6 +16,7 @@
 //   5b. Under a preset that pins a setting, a save lands in that preset's own
 //      globals, so the bar the file alone renders draws the saved value.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { locs } from "./helpers/host";
 import { unscriptedRuns } from "./helpers/fake-launcher";
@@ -127,7 +128,7 @@ function rig(
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, "", ownedView(sessionState));
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: "/tmp",
@@ -194,7 +195,7 @@ function rig(
       // off the render cache's raw parse, which this rig does not keep, and no
       // assertion here reads it.
       const sessionPick = (key: string): string | null =>
-        sessionState.get(SID, key);
+        ownedView(sessionState).get(SID, key);
       const effective = resolveEffectiveGlobals(
         config,
         sessionPick,

@@ -32,6 +32,7 @@ import {
   loadSnapshot,
   type LoadedChain,
 } from "../config/dsl-loader.js";
+import { holdsOf, type Holds } from "../config/placement-keys.js";
 import {
   writable,
   type ConfigSnapshot,
@@ -519,8 +520,8 @@ function heldSnapshot(
 }
 
 // [LAW:one-source-of-truth] Every tracked write lands here, once, as the
-// click's record of it. Returns the config the write's own load proved, which
-// is what the session renders once the click lands.
+// click's record of it. Returns the chain the write's own load proved, whose
+// config is what the session renders once the click lands.
 // [LAW:single-enforcer] THE gate on what a click may write: text the loader
 // accepts, proved by the loader itself — over the whole chain the file is
 // the bottom of — before the file changes. A write that would not load (a
@@ -536,7 +537,7 @@ function commit(
   before: string | null,
   after: string,
   refuse: (into: Seen, was: Was, will: LoadedChain) => void,
-): DslConfig {
+): LoadedChain {
   const will = loadOrRefuse(into, after);
   // [LAW:one-source-of-truth] The file before the click is loaded at most
   // once, and only by a refusal that reads it; every refusal judges against
@@ -546,7 +547,7 @@ function commit(
   refuseNewDrops(into, was, will);
   refuse(into, was, will);
   store.record(into.path, before, after);
-  return will.config;
+  return will;
 }
 
 // The chain the file before a click loads to, loaded when first asked; null
@@ -1020,7 +1021,7 @@ export function writeThemeDefault(
     json5Text(look),
     JSON5_DIALECT,
   );
-  return commit(store, into, before, after, refuseHidden);
+  return commit(store, into, before, after, refuseHidden).config;
 }
 
 /**
@@ -1079,7 +1080,7 @@ export function applyLayoutOp(
   layer: WriteLayer,
   key: string,
   op: LayoutOp,
-): { readonly placed: NewPlacement | null; readonly config: DslConfig } {
+): { readonly placed: NewPlacement | null; readonly holds: Holds } {
   const into = seenBy(layer, (file) => store.read(file));
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
@@ -1106,7 +1107,12 @@ export function applyLayoutOp(
       `${placement.path.join(".")} in ${into.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  return { placed, config: commit(store, into, before, after, refuseHidden) };
+  // What each prefix of the chain the write leaves places: what the click
+  // releases its own session's ended placements against.
+  return {
+    placed,
+    holds: holdsOf(commit(store, into, before, after, refuseHidden)),
+  };
 }
 
 // [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:

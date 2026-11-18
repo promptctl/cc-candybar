@@ -754,6 +754,14 @@ function heldWrites(
       return writes?.has(key) ? writes.get(key)! : store.get(sessionId, key);
     },
     revision: (sessionId) => store.revision(sessionId),
+    // The store's keys as the click leaves them: its own writes in, its
+    // clears out.
+    keys: (sessionId) => {
+      const writes = held.get(sessionId) ?? new Map<string, string | null>();
+      return [...new Set([...store.keys(sessionId), ...writes.keys()])].filter(
+        (key) => (writes.has(key) ? writes.get(key) : key) !== null,
+      );
+    },
     set: (sessionId, key, value) => put(sessionId, key, value),
     setBatch: (sessionId, pairs) => {
       for (const { key, value } of pairs) put(sessionId, key, value);

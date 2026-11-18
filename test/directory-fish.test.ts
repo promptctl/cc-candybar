@@ -9,6 +9,7 @@
 // two functions the daemon and check call — not a synthetic in-process
 // transform.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -82,7 +83,7 @@ function renderDirRaw(paths: DirPaths): Frame {
     root: dirOnlyRoot,
   };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   try {
     const compiled = registerDslConfig(parsed, registry, {
       signer: TEST_SIGNER,
@@ -234,7 +235,7 @@ describe("configurability seam: user template override restores full path", () =
       }),
     };
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
     try {
       const compiled = registerDslConfig(overridden, registry, {
         signer: TEST_SIGNER,

@@ -1,3 +1,4 @@
+import { ownedView } from "./helpers/owned";
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { sameDraw } from "./helpers/frame";
@@ -80,7 +81,7 @@ function renderer(
   const store = new VariableStore(systemTimekeeper);
   const session = new SessionState();
   for (const [key, value] of Object.entries(state)) session.set(S, key, value);
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(store, "", ownedView(session));
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,

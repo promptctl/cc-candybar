@@ -513,16 +513,17 @@ export function mainRendererOf(
       // composed over its world state, its request, its picks and its
       // histories' depths.
       source: sessionSource({
-        sessionState,
         worldStates,
         home: inputs.home,
         history: (sessionId) => settingsHistory.depth(sessionId),
-        // Measured against the gate of the config the view draws with.
-        navigation: (sessionId, config) =>
+        // Measured against the gate of the config the view draws with, over
+        // the state's own view of the store.
+        navigation: (sessionId, state) =>
           navigationHistory.depth(
             sessionId,
-            sessionState,
-            gates.state.gateFor(config),
+            state.sessionState,
+            gates.state.gateFor(state.config),
+            state.owner,
           ),
       }),
     },
@@ -617,6 +618,7 @@ export function mainRendererOf(
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
     configFor: (origin) => renderCache.getOrCreate(origin).state.config,
+    ownerFor: (origin) => renderCache.getOrCreate(origin).state.owner,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
     links: linkSigner,

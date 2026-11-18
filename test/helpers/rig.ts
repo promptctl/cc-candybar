@@ -56,6 +56,9 @@ import { unscriptedRuns } from "./fake-launcher";
 import { TEST_SIGNER } from "./link-signer";
 import { EMPTY_DEFAULT, parseAndValidate } from "./parse-and-validate";
 import { selectionFor } from "./selection";
+import { ownedView, TEST_OWNER } from "./owned";
+import type { Owner } from "../../src/config/placement-keys";
+import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 
 export { DEFAULT_DSL_CONFIG, EMPTY_DEFAULT };
 
@@ -98,6 +101,8 @@ export interface RigInit {
   readonly history?: SettingsHistory;
   readonly host?: Host;
   readonly signer?: LinkSigner;
+  /** The chain the rig's draws and clicks own placement keys by: a durable test's file chain (test/helpers/durable-config.ts). */
+  readonly owner?: Owner;
 }
 
 export interface DrawInit {
@@ -120,6 +125,8 @@ export interface Rig {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly sessionState: SessionState;
+  /** The store as the rig's draws and clicks read it, owned by their chain. */
+  readonly owned: SessionStateRW;
   readonly sessionId: SessionId;
   /** The context a click runs in: a test that overrides a field spreads it. */
   readonly ctx: VerbContext;
@@ -224,7 +231,9 @@ export function buildRig(init: RigInit = {}): Rig {
   const drawn = (init.narrow ?? ((whole) => whole))(config);
   const sessionState = init.sessionState ?? new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState, null);
+  const owner = init.owner ?? TEST_OWNER;
+  const owned = ownedView(sessionState, owner);
+  const registry = new SourceRegistry(store, "", owned, null);
   const readings = readingsIn(init.env ?? {});
   const registered = registerCompiled(
     drawn,
@@ -242,13 +251,20 @@ export function buildRig(init: RigInit = {}): Rig {
   if (bookedContext(sessionState, sessionId) === null) {
     recordRender(sessionState, sessionId, cwd);
   }
-  const ctx = testVerbContext(sessionState, init.history, config, init.host);
+  const ctx = testVerbContext(
+    sessionState,
+    init.history,
+    config,
+    init.host,
+    owner,
+  );
   return {
     config,
     compiled,
     store,
     registry,
     sessionState,
+    owned,
     sessionId,
     ctx,
     draw: (draw = {}) => {
@@ -266,7 +282,7 @@ export function buildRig(init: RigInit = {}): Rig {
         );
       const selection =
         draw.selection ??
-        selectionFor(config, {}, (key) => sessionState.get(sessionId, key));
+        selectionFor(config, {}, (key) => owned.get(sessionId, key));
       return {
         ...drawPayload(
           drawn,

@@ -11,6 +11,7 @@
 // open, or idle time between turns, yields ABSENCE (missing field → -1
 // default → "—"), never a stale or divide-by-zero number.
 
+import { ownedView } from "./helpers/owned";
 import { textOf } from "../src/render/frame";
 import { HOST } from "./helpers/host";
 import { unscriptedRuns } from "./helpers/fake-launcher";
@@ -410,7 +411,7 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
   // SessionState is required to declare it (matching every other
   // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
   // and speed's own `when` renders an unrelated ⚠ error cell.
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   try {
     const compiled = registerDslConfig(cfg, registry, {
       signer: TEST_SIGNER,

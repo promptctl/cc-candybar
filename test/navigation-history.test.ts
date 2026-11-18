@@ -3,6 +3,7 @@
 // settings pick in the same click stays with undo, and going back is not
 // itself a step.
 
+import { TEST_OWNER } from "./helpers/owned";
 import { SessionState } from "../src/renderer/session-state";
 import { VERBS, BadVerbArgs } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
@@ -65,7 +66,12 @@ function setup() {
     // What the bar's ◁ counts: measured against the gate of the config the
     // session renders now.
     depth: (): number =>
-      ctx.navigation.depth(S1, sessionState, ctx.gates.state.gateFor(config)),
+      ctx.navigation.depth(
+        S1,
+        sessionState,
+        ctx.gates.state.gateFor(config),
+        TEST_OWNER,
+      ),
     // The session's config reloads as `next`.
     reload: (next: DslConfig): void => {
       config = next;
@@ -123,11 +129,11 @@ describe("back", () => {
   test("a key one click writes twice goes back to its value before the click, unset included", () => {
     const store = new SessionState();
     const history = new NavigationHistory();
-    const journal = history.begin(store);
+    const journal = history.begin(store, TEST_OWNER);
     journal.sessionState.set(S1, MENU, "open");
     journal.sessionState.set(S1, MENU, "closed");
     journal.commit();
-    history.back(S1, store, stateGate(EMPTY_DEFAULT));
+    history.back(S1, store, stateGate(EMPTY_DEFAULT), TEST_OWNER);
     expect(store.get(S1, MENU)).toBeNull();
   });
 

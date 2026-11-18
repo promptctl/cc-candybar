@@ -7,6 +7,7 @@
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate, then
 // registerDslConfig + drawDsl.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -53,7 +54,7 @@ function runtime(source: string) {
     new Set([THEME_FLOOR]),
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const segmentErrors: Array<readonly [string, string]> = [];

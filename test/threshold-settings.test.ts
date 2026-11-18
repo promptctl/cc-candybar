@@ -10,6 +10,7 @@
 //   - A file that puts them out of order, or still declares a retired
 //     threshold variable, fails to load and says what to write instead.
 
+import { configureMember, placementDraftKey } from "../src/config/placement-keys";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, linkUrls } from "./helpers/frame";
 import { picked, selectionFor } from "./helpers/selection";
@@ -21,8 +22,9 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERBS } from "../src/renderer/verbs";
-import { configureMember, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
-import { placementDraftKey } from "../src/config/edit-chrome";
+import {
+  EDIT_MODE_KEY,
+} from "../src/config/loader/edit-mode";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { lastClickError } from "../src/daemon/foundations/click-error";
@@ -63,6 +65,7 @@ function thresholdBar(src: string, utilization: number) {
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,
+    owner: durable.owner,
   });
   const { config } = rig;
   const render = (): Frame =>
@@ -85,10 +88,10 @@ function thresholdBar(src: string, utilization: number) {
     return hits[0]!;
   };
   const pick = (id: string, setting: string): string | null =>
-    sessionState.get(SID, placementDraftKey("default", id, setting));
+    rig.owned.get(SID, placementDraftKey("default", id, setting));
   // `rig.click` goes through the verb the URL names — `dispatch` included,
   // which is what turns a refused effect into the bar's transient `click.error`.
-  return { ...rig, render, stepper, pick };
+  return { ...rig, sessionState: rig.owned, render, stepper, pick };
 }
 
 // The background a palette role is drawn with.

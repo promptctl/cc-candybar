@@ -3,6 +3,7 @@
 // cmt-b97df8ef), each clicking the links the bar renders through the verbs the
 // daemon runs, then reopening the parent to find the child closed.
 
+import { insertGap } from "../src/config/placement-keys";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
@@ -17,7 +18,6 @@ import {
   EDIT_MODE_ARRANGE,
 } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
-import { insertGap } from "../src/config/edit-chrome";
 import { closingView } from "../src/renderer/closing-view";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -40,7 +40,7 @@ function nestBar(src: string) {
     base: DEFAULT_DSL_CONFIG,
     sessionId: SID,
   });
-  const { config, sessionState } = rig;
+  const { config, owned: sessionState } = rig;
   const render = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
   const logged: string[] = [];
   const ctx: VerbContext = {

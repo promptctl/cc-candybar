@@ -16,6 +16,7 @@
 // [LAW:single-enforcer] Everything runs the real spine: parse → merge →
 // validate, resolveEffectiveGlobals, registerDslConfig + drawDsl.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -260,7 +261,7 @@ const SID = "theme-defaults";
 function cellBg(source: string): { daemon: string; compileOnly: string } {
   const config = load(source);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
   const bg = (segments: ReadonlyMap<string, readonly RichText[]>): string => {
     const cells = segments.get("cell");

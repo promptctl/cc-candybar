@@ -7,6 +7,7 @@
 // view last settled on, and a template variable passes it on rather than
 // answering with its default. None of it is a fault: nothing is reported.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
@@ -74,7 +75,7 @@ function renderer(cfg: ValidatedConfig) {
   spawner.program(shell("sleep 0.2; printf ''"), runsFor(200, exits(0)));
   const store = new VariableStore(clock);
   const session = new SessionState();
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(store, "", ownedView(session));
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   // The runs its sources name, held as the host holds a session's.
   const sourceRuns = new SourceRuns({ launcher, clock });

@@ -20,6 +20,7 @@
 //   5. reset-config is gated by key membership and deletes the key's path
 //      from the file, so the next reload falls back to the bundled default.
 
+import { ownedView } from "./helpers/owned";
 import type { ColorCompatibility } from "../src/themes/policy";
 import { drawPayload } from "./helpers/draw-payload";
 import { locations } from "../src/daemon/paths";
@@ -400,7 +401,7 @@ function buildPersistRuntime(
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -424,6 +425,7 @@ function buildPersistRuntime(
     durable.historyFor(sessionState),
     config,
     durable.host,
+    durable.owner,
   );
   const click = async (url: string): Promise<void> => {
     const { verb, value } = linkClick(url);
@@ -547,7 +549,7 @@ describe("persist action click → the config file", () => {
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, S1);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, "", ownedView(sessionState));
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),
@@ -568,6 +570,7 @@ describe("persist action click → the config file", () => {
       durable.historyFor(sessionState),
       config,
       durable.host,
+      durable.owner,
     );
     const click = async (url: string): Promise<void> => {
       const { verb, value } = linkClick(url);
@@ -793,6 +796,7 @@ describe("persist action click → the config file", () => {
       durable.historyFor(sessionState),
       config,
       durable.host,
+      durable.owner,
     );
     const setConfig = CLICK_VERBS.get("set-config")!;
     expect(() =>
@@ -871,6 +875,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       durable.historyFor(sessionState),
       config,
       durable.host,
+      durable.owner,
     );
     await CLICK_VERBS.get("set-config")!(
       encodeSegments(["s1", "user", "palette", "nord"]),
@@ -908,6 +913,7 @@ describe("a durable click lands in the file the next reload reads", () => {
       durable.historyFor(sessionState),
       config,
       durable.host,
+      durable.owner,
     );
     const click = async (palette: string): Promise<void> =>
       await CLICK_VERBS.get("set-config")!(
@@ -964,6 +970,7 @@ describe("RenderCache: the config file is the durable store", () => {
         durable.historyFor(sessionState),
         entry.state.config,
         durable.host,
+        durable.owner,
       );
       let clicked = false;
       await reloads.after(entry, async () => {

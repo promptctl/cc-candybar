@@ -5,6 +5,7 @@
 // `tmux` on PATH that records its argv and serves a captured screen — so the
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
@@ -243,7 +244,7 @@ function runtime(tmux: TmuxHint | null) {
   const sessionState = new SessionState();
   hearRender(sessionState, heardRequest(S1, "/tmp/proj", { tmux }));
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: "/tmp/proj",
@@ -452,7 +453,7 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const sessionState = new SessionState();
   hearRender(sessionState, heardRequest(S1, "/tmp/proj", { tmux }));
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: "/tmp/proj",

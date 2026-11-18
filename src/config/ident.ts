@@ -31,3 +31,15 @@ export function escapedIdent(name: string): string {
         `${ESCAPE}${c.codePointAt(0)!.toString(16).padStart(6, "0")}`,
   ).join("");
 }
+
+// The inverse of `escapedIdent`: the name a spelling spells, or null when the
+// text is no spelling `escapedIdent` makes. [LAW:single-enforcer] Checked by
+// spelling the name again, so the escaper stays the one authority.
+export function unescapedIdent(spelled: string): string | null {
+  // Six hex digits naming a code point: 0x10ffff is the last.
+  const escape = new RegExp(`${ESCAPE}(0[0-9a-f]{5}|10[0-9a-f]{4})`, "g");
+  const name = spelled.replace(escape, (_, hex: string) =>
+    String.fromCodePoint(parseInt(hex, 16)),
+  );
+  return escapedIdent(name) === spelled ? name : null;
+}

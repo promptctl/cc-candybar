@@ -28,6 +28,8 @@
 //      SAME padding/style pipeline as hand-authored segments, no
 //      special-cased chrome path.
 
+import { ownedView } from "./helpers/owned";
+import { insertGap } from "../src/config/placement-keys";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -63,7 +65,6 @@ import {
   ADDABLE_DOMAIN,
   EDIT_LIVE_KEY,
   arrangedSegment,
-  insertGap,
 } from "../src/config/edit-chrome";
 import {
   ADD_GLYPH,
@@ -177,7 +178,7 @@ function buildEditRuntime(src: string, sessionId = S1) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -956,7 +957,7 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const config = parseAndValidate("<test>", BASE, ALLOWED);
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, "", ownedView(sessionState));
     const compiled = registerDslConfig(config, registry, {
       signer: TEST_SIGNER,
       cwd: process.cwd(),

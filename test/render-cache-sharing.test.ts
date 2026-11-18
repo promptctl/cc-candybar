@@ -1,4 +1,5 @@
 import { drawPayload } from "./helpers/draw-payload";
+import { ownedView } from "./helpers/owned";
 import { HOST, locs } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -169,7 +170,7 @@ const drawAlone = (
   compiled: CompiledConfig,
 ): VariableStore => {
   const store = new ProbeStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
   drawPayload(
     config,

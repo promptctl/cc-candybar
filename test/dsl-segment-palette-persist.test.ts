@@ -278,6 +278,7 @@ function persistBar(
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,
+    owner: durable.owner,
   });
   const render = (width = Number.POSITIVE_INFINITY): Frame =>
     rig.draw({ opts: { width } }).frame;

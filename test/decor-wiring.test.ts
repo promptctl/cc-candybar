@@ -14,6 +14,7 @@
 //   - the render's style reaches the tint, because the tint is read from the
 //     one transposed palette every unpinned segment colours from.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -94,7 +95,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const store = new VariableStore(systemTimekeeper);
   const sessionState = new SessionState();
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   // The cells of the latest draw, which bgOf and fgOf read after it.
   let segments: ReadonlyMap<string, readonly RichText[]> = new Map();

@@ -5,6 +5,7 @@
 // a click, an undo — and a reload draw from another source, so nothing they
 // reveal fades.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
@@ -89,7 +90,7 @@ function renderer(
   compiled: CompiledConfig = compileDslConfig(compileInputOf(cfg), TEST_SIGNER),
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", session);
+  const registry = new SourceRegistry(store, "", ownedView(session));
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   const opts = {
     endcaps: "powerline" as const,

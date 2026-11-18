@@ -14,6 +14,7 @@
 // [LAW:behavior-not-structure] Everything below asserts observable behavior:
 // what lands in the payload, and whether the bundled segment renders.
 
+import { ownedView } from "./helpers/owned";
 import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
@@ -212,7 +213,7 @@ describe("the bundled host segment", () => {
 
   function render(host: Record<string, unknown>): Frame {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
     try {
       const compiled = registerDslConfig(CONFIG, registry, {
         signer: TEST_SIGNER,

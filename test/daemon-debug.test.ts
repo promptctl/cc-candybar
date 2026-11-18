@@ -11,6 +11,7 @@
 // a pure function over the DSL state bundle, so tests drive it with
 // constructed state and read the result.
 
+import { ownedView } from "./helpers/owned";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
@@ -90,7 +91,7 @@ function buildPopulatedState(): DaemonDslState {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store,
     "",
-    new SessionState(),
+    ownedView(new SessionState()),
   );
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,

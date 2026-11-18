@@ -8,6 +8,7 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
@@ -204,7 +205,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // SessionState is required to declare them, exactly as the daemon supplies.
     const registry = new SourceRegistry(store,
       "",
-      new SessionState(),
+      ownedView(new SessionState()),
     );
     try {
       const compiled = registerDslConfig(parsed, registry, {
@@ -278,7 +279,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(store,
         "",
-        new SessionState(),
+        ownedView(new SessionState()),
       );
       const compiled = registerDslConfig(config, registry, {
         signer: TEST_SIGNER,
@@ -503,7 +504,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, "", ownedView(sessionState));
     const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
@@ -636,7 +637,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(store,
         "",
-        new SessionState(),
+        ownedView(new SessionState()),
       );
       try {
         const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
@@ -699,7 +700,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(store,
         "",
-        new SessionState(),
+        ownedView(new SessionState()),
       );
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
@@ -756,7 +757,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(store,
         "",
-        new SessionState(),
+        ownedView(new SessionState()),
       );
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
@@ -785,7 +786,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(store,
         "",
-        new SessionState(),
+        ownedView(new SessionState()),
       );
       try {
         const compiled = registerDslConfig(toolbarOnly, registry, {
@@ -889,7 +890,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(store,
         "",
-        new SessionState(),
+        ownedView(new SessionState()),
       );
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
@@ -1343,7 +1344,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const store = new VariableStore(systemTimekeeper);
       const registry = new SourceRegistry(store,
         "",
-        new SessionState(),
+        ownedView(new SessionState()),
       );
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
@@ -1434,7 +1435,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const store = new VariableStore(systemTimekeeper);
         const registry = new SourceRegistry(store,
           "",
-          new SessionState(),
+          ownedView(new SessionState()),
         );
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
@@ -1512,7 +1513,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // genuinely-complete default config, not a partially-registered one.
       const registry = new SourceRegistry(store,
         "",
-        new SessionState(),
+        ownedView(new SessionState()),
       );
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {
@@ -1662,6 +1663,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
     const registry = new SourceRegistry(store, "", {
       get: (_sessionId, key) => sessionPick(key, name),
       revision: () => 0,
+      keys: () => [],
     });
     try {
       const compiled = registerDslConfig(VALIDATED, registry, {

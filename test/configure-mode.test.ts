@@ -14,6 +14,11 @@
 //   - A control writes a draft: only that placement renders it, `💾 save`
 //     counts it, and saving writes it INTO the placement in the config file.
 
+import {
+  configureMember,
+  ownedKey,
+  placementDraftKey,
+} from "../src/config/placement-keys";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
@@ -35,12 +40,10 @@ import {
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
-  configureMember,
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
   EDIT_CONFIGURE_KEY,
 } from "../src/config/loader/edit-mode";
-import { placementDraftKey } from "../src/config/edit-chrome";
 import {
   ADD_GLYPH,
   CONFIGURE_GLYPH,
@@ -112,6 +115,7 @@ function configureBar(src: string, preset?: string) {
     sessionState,
     history: durable.historyFor(sessionState),
     host: durable.host,
+    owner: durable.owner,
   });
   const { config } = rig;
   const render = (): Frame =>
@@ -149,7 +153,14 @@ function configureBar(src: string, preset?: string) {
     expect(hits.size).toBe(1);
     return [...hits][0]!;
   };
-  return { config, sessionState, render, click, urlWriting, ctx };
+  return {
+    config,
+    sessionState: rig.owned,
+    render,
+    click,
+    urlWriting,
+    ctx,
+  };
 }
 
 const draftKey = (id: string, setting: string): string =>
@@ -727,6 +738,8 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       log: (_level, message) => logged.push(message),
     });
     expect(rt.sessionState.get(SID, inB)).toBeNull();
-    expect(logged.join("\n")).toContain(`released=${JSON.stringify([inB])}`);
+    expect(logged.join("\n")).toContain(
+      `placement-state released by=click session=${SID} owner=${durable.owner} chain=${durable.configPath} keys=${ownedKey(inB, () => durable.owner)}`,
+    );
   });
 });

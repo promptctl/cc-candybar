@@ -103,6 +103,7 @@ function session(): {
       durable.historyFor(sessionState),
       undefined,
       durable.host,
+      durable.owner,
     ),
     {
       configFor: (o) => cache.getOrCreate(o).state.config,

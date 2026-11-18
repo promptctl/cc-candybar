@@ -7,6 +7,7 @@
 // the daemon's own renderer (src/check.ts); this rig is the in-process view a
 // case inspects.
 
+import { ownedView } from "./owned";
 import { previewSigner } from "../../src/click/link-signer";
 import { locations } from "../../src/daemon/paths";
 import type { ApprovedRepo } from "../../src/config/loader/repo-gate";
@@ -107,7 +108,7 @@ export async function prepareConfig(
   const registry = new SourceRegistry(
     store,
     config.globals.default_empty_value ?? "",
-    new SessionState(),
+    ownedView(new SessionState()),
     null,
   );
   const runs = collectedRuns(

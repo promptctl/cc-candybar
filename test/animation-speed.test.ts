@@ -3,6 +3,7 @@
 // template's `frames` — runs that many times faster than at 1x, a change of
 // speed moves no loop to another phase, and a readout of real time
 // (`realtimeFrames`) keeps real time.
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -190,7 +191,7 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     seconds: readonly number[],
   ): string => {
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
     const compiled = registerDslConfig(CONFIG, registry, {
       signer: TEST_SIGNER,
       cwd: "/tmp",

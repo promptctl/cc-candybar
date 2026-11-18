@@ -18,6 +18,7 @@
 // which makes FlexStrip FOLD THE LINE at the empty cell and report the width of the
 // first fragment instead of the row.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
@@ -404,7 +405,7 @@ describe("a fill segment fills wherever the walk places it", () => {
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
       "",
-      new SessionState(),
+      ownedView(new SessionState()),
     );
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     const { frame: out, warnings } = drawPayload(

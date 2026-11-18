@@ -2,6 +2,7 @@
 // off the cells it drew, so a template's `frames` moves the bar exactly as an
 // effect does, and a bar with neither is still.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -36,7 +37,7 @@ function frameOf(
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: "/tmp",

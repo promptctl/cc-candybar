@@ -228,15 +228,14 @@ export function renderFrame(
 // from the SAME raw parse that produced state.config, on the same reload —
 // never a fresh file read that could race a concurrent write and disagree with
 // the tree that actually rendered.
+// It reads through the state's own view of the store, owned by its chain.
 function sessionGlobals(
-  parts: RendererParts,
   sessionId: SessionId,
   state: DslRenderState,
 ): EffectiveGlobals {
-  const { sessionState } = parts;
   return resolveEffectiveGlobals(
     state.config,
-    (key) => sessionState.get(sessionId, key),
+    (key) => state.sessionState.get(sessionId, key),
     (preset) => state.authoredRoots.has(preset),
   );
 }
@@ -278,7 +277,7 @@ export function lanesAt(
   // its setup; the owed setup is settled against the session's own hint when
   // its next request arrives.
   return laneSwitches(
-    sessionGlobals(parts, sessionId, hold.state),
+    sessionGlobals(sessionId, hold.state),
     live === null || inTmux(live.hints.tmux),
   );
 }

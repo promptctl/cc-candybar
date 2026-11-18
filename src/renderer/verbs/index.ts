@@ -64,19 +64,13 @@ import {
 } from "../settings-history";
 import type { NavigationHistory } from "../navigation-history";
 import {
-  placementId,
   settingSpelling,
-  walkNodes,
   type DslConfig,
   type Globals,
-  type SegmentNode,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import {
-  configureMember,
-  EDIT_CONFIGURE_KEY,
-  PLACEMENT_DRAFT_NS,
-} from "../../config/loader/edit-mode";
+import { DRAFTS, type Owner } from "../../config/placement-keys";
+import { ownedStore, releaseEnded } from "../owned-store";
 import {
   durableLanding,
   placementDrafts,
@@ -92,7 +86,6 @@ import {
   SETTINGS,
 } from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
-import { presetNames, presetRoot } from "../../config/presets";
 import {
   decodeSegments,
   batchAdjacentWrites,
@@ -210,6 +203,10 @@ export interface DaemonContext {
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
   readonly configFor: (origin: RenderOrigin) => DslConfig;
+  // The owner of the placement keys a session rendering from `origin` writes
+  // (src/config/placement-keys.ts): the chain of the same entry `configFor`
+  // reads the config of.
+  readonly ownerFor: (origin: RenderOrigin) => Owner;
   // [LAW:single-enforcer] Where every click's config writes go: changes its
   // turn returns, and its consequence held until they land
   // (src/renderer/config-writes.ts).
@@ -543,7 +540,7 @@ function refuseDisorderedPicks(
   verb: string,
   writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
 ): void {
-  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
+  const picks = writes.filter((w) => DRAFTS.free(w.key) !== null);
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx, sid),
@@ -1074,47 +1071,6 @@ const resetConfig: VerbHandler = (value, ctx) => {
   );
 };
 
-// Every placement an edit ended: a (preset, id) the config held before the
-// edit and no longer holds after it. Measured over every preset, since a row
-// can be shared — an edit made in one preset's layout can end a placement
-// another renders. [LAW:dataflow-not-control-flow] No branch on the op: an
-// insertion ends nothing, and the comparison says so.
-function endedPlacements(
-  before: DslConfig,
-  after: DslConfig,
-): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
-  const placed = (config: DslConfig, preset: string) =>
-    [...walkNodes(presetRoot(config, preset).node)].filter(
-      (n): n is SegmentNode => n.kind === "segment",
-    );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) => configureMember(preset, placementId(n))),
-    ),
-  );
-  return presetNames(before.presets).flatMap((preset) =>
-    placed(before, preset)
-      .map((node) => ({
-        member: configureMember(preset, placementId(node)),
-        node,
-      }))
-      .filter(({ member }) => !survivors.has(member)),
-  );
-}
-
-// What an ended placement leaves in the session: its unsaved values, and the
-// configure key while it names that placement — a later placement that takes
-// its id is a new instance, and must inherit neither.
-function endedSessionKeys(
-  ended: ReturnType<typeof endedPlacements>,
-  configuring: string | null,
-): readonly string[] {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
-  ]);
-}
-
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
 // the validated op token is applied ONCE, to the authored tree in the
 // session's config file (config-file-store.ts over json5-edit.ts), so the
@@ -1132,8 +1088,7 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
     args: [key = "", opToken = ""],
   } = configWire("apply-layout-op", rawValue);
   const origin = sessionOrigin(ctx, sid);
-  const before = ctx.configFor(origin);
-  const gate = ctx.gates.config.gateFor(before);
+  const gate = ctx.gates.config.gateFor(ctx.configFor(origin));
   if (!key) {
     throw new BadVerbArgs(
       `apply-layout-op: <key>/<op> is required (have: ${gate.listKeys().join(", ")})`,
@@ -1148,26 +1103,25 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
     );
   }
   const into = heldLayer(ctx, origin, role);
-  const { placed, config } = applyLayoutOpToFile(
+  const { placed, holds } = applyLayoutOpToFile(
     editStore(ctx, sid),
     into,
     key,
     op,
   );
-  // A removed placement's session state ends with it (endedSessionKeys).
-  // Measured on the config the write's own load proved, and released in the
-  // same click, so its undo brings the placement and its drafts back.
-  // The session state the edit discards — the fact its log line carries.
-  const released = endedSessionKeys(
-    endedPlacements(before, config),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
-  ).filter((key) => ctx.sessionState.get(sid, key) !== null);
-  for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} (session=${sid})`,
+  );
+  // [LAW:single-enforcer] What the edit ended in the clicking session is
+  // released by the one release every load runs (owned-store.ts), measured on
+  // the chain the write's own load proved, and through the click's journal,
+  // so its undo brings the placement and its drafts back. Every other session
+  // is released by the load the landing makes.
+  releaseEnded(ctx.journal.sessionState, [sid], holds, "click", (line) =>
+    ctx.log("info", line),
   );
 };
 
@@ -1189,10 +1143,12 @@ const undo: VerbHandler = (value, ctx) => {
 // a navigation journal, so going back is not itself a step it could return to.
 const back: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
+  const origin = sessionOrigin(ctx, sid);
   const { step, discarded } = ctx.navigation.back(
     sid,
     ctx.sessionState,
-    ctx.gates.state.gateFor(sessionConfig(ctx, sid)),
+    ctx.gates.state.gateFor(ctx.configFor(origin)),
+    ctx.ownerFor(origin),
   );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
@@ -1658,6 +1614,18 @@ function journaled<C extends DaemonContext>(
     return { origin, chain: ctx.snapshotFor(origin).chain };
   });
   const lanes = sid === null ? null : laneMeter(ctx, sid, context);
+  // [LAW:single-enforcer] The click's own seam where its session's placement
+  // keys gain their owner: the chain its session renders from as the click
+  // began. A session with no origin has no config, so it owns no placement.
+  const owner = origin === null ? null : ctx.ownerFor(origin);
+  const owned = (store: SessionStateRW): SessionStateRW =>
+    ownedStore(store, (session) => {
+      if (session !== sid || owner === null)
+        throw new BadVerbArgs(
+          `${verb}: session ${session} has not rendered in this click — no config owns its placements`,
+        );
+      return owner;
+    });
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
@@ -1666,7 +1634,12 @@ function journaled<C extends DaemonContext>(
     prove: (file, text, read) =>
       proveLoadsAsLayer(ctx, origin, file, text, read),
   });
-  const navigation = ctx.navigation.begin(journal.sessionState);
+  // From the store up: the click's held writes, the settings history's
+  // recording (which steps the owned form, so undo is exact whatever config
+  // the session is in by then), the owner, the navigation recording (in the
+  // form `back` checks against the config's gate, under the owner it was
+  // made in), and the closing view.
+  const navigation = ctx.navigation.begin(owned(journal.sessionState), owner);
   const failures: unknown[] = [];
   // Both views close what a write closes, the navigating one above its
   // recording, so ◁ back restores a closed menu with what was open in it.
@@ -1681,7 +1654,7 @@ function journaled<C extends DaemonContext>(
       ...ctx,
       session: sid,
       context,
-      sessionState: closing(journal.sessionState),
+      sessionState: closing(owned(journal.sessionState)),
       journal,
       navigating: closing(navigation.sessionState),
     });

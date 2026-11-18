@@ -3,6 +3,7 @@
 // style its globals name, through the daemon's own resolution
 // (`resolveEffectiveGlobals`), not the preset and style floors.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -47,7 +48,7 @@ const SRC = `{
 test("a session that has never clicked draws the declared preset and style, not the floors", () => {
   const config = parseAndValidate("<omitted>", SRC, new Set([THEME_FLOOR]));
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     const at = instantOf(new Date());

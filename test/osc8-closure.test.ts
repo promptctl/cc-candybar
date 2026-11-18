@@ -17,6 +17,7 @@
 // closure are two different theorems — the bleed defect satisfied the first and
 // broke the second, so closure needs its own guard.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { ansiOf, type Frame } from "../src/render/frame";
@@ -70,7 +71,7 @@ function render(src: string, opts: BuildLineOptions): Frame {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   return drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), opts).frame;
 }

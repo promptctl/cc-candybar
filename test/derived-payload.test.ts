@@ -9,6 +9,7 @@
 // so "spawns once" is a count of lines, and "in the turn the fact moved" is
 // the run in flight before any draw.
 
+import { ownedView } from "./helpers/owned";
 import { TEST_SESSION } from "./helpers/payload-session";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { processLauncher } from "./helpers/host";
@@ -51,7 +52,7 @@ function viewOver(
   runs: string,
 ) {
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: os.tmpdir(),

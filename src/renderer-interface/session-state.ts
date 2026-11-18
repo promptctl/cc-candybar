@@ -9,6 +9,8 @@ export interface SessionStateReader {
   // of a value it did not hold, a clear of a key it did — or 0 while it holds
   // none. Two reads that return one revision read one state, whoever wrote it.
   revision(sessionId: SessionId): number;
+  // Every key the session holds a value at, as the store spells it.
+  keys(sessionId: SessionId): readonly string[];
 }
 
 // [LAW:locality-or-seam] Renderer needs to *cache* per-session random picks
@@ -29,6 +31,11 @@ export interface SessionStateRW extends SessionStateReader {
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void;
   clear(sessionId: SessionId, key: string): void;
+}
+
+// The store itself: what a load releases across, every session it holds.
+export interface SessionStore extends SessionStateRW {
+  sessions(): readonly SessionId[];
 }
 
 // Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the

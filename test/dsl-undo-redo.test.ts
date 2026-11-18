@@ -162,6 +162,7 @@ function undoBar(
     sessionState,
     history,
     host: durable.host,
+    owner: durable.owner,
     // The origin seeded above is the one the click resolves from.
   });
   // The config a click is gated by and a save compares against, re-read from

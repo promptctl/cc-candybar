@@ -1,3 +1,4 @@
+import { ownedView } from "./helpers/owned";
 import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 // The bundled default's threshold colours, pinned as a CONTRACT over palette
@@ -219,7 +220,7 @@ function renderOne(
     : narrowed.segments;
   const one = { ...narrowed, segments };
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   try {
     const compiled = registerDslConfig(one, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
     return drawPayload(

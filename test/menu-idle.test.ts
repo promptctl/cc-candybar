@@ -3,6 +3,7 @@
 // period as the renderer keeps it on its ticks, the close it makes — a click's
 // own journaled write — and the flash on the rendered bar.
 
+import { insertGap } from "../src/config/placement-keys";
 import { linkUrls } from "./helpers/frame";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import {
@@ -27,7 +28,9 @@ import {
   EDIT_MODE_ARRANGE,
 } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
-import { EDIT_LIVE_KEY, insertGap } from "../src/config/edit-chrome";
+import {
+  EDIT_LIVE_KEY,
+} from "../src/config/edit-chrome";
 import {
   CLOSING_FLASH_SECONDS,
   MENU_TIMEOUT_RANGE,
@@ -168,7 +171,7 @@ function idleBar(src: string) {
     palettes: ALLOWED,
     sessionId: SID,
   });
-  const { config, sessionState } = rig;
+  const { config, owned: sessionState } = rig;
   // A frame drawn at `when`, its session idle since `idleSince`.
   const draw = (when: Instant, idleSince?: Instant) => {
     return rig.draw({

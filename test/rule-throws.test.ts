@@ -8,6 +8,7 @@
 // registerDslConfig + drawDsl, the style resolved as src/renderer/draw-bar.ts
 // resolves it and the theme and effect from the config's own globals.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
@@ -49,7 +50,7 @@ const src = (slot: string, rule: string): string => `{
 function runtime(source: string) {
   const config = parseAndValidate("<rule-throws>", source, ALLOWED);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
   const warnings: RenderWarning[] = [];
   const render = (pct: number): string => {

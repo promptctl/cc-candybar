@@ -4,6 +4,7 @@
 // the bar draws no SGR yet keeps every link it draws in colour, and the open
 // tab still reads as open.
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { ansiOf, textOf } from "../src/render/frame";
@@ -51,7 +52,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
   );
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   recordRender(sessionState, S1);
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });

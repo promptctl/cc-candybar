@@ -1,3 +1,4 @@
+import { ownedView } from "./helpers/owned";
 import type { Frame } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 // [LAW:verifiable-goals] brandon-themes-dzl done-gates: (1) `globals.palette`
@@ -303,7 +304,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
       "",
-      new SessionState(),
+      ownedView(new SessionState()),
     );
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
@@ -331,7 +332,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
       "",
-      new SessionState(),
+      ownedView(new SessionState()),
     );
     try {
       const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
@@ -396,7 +397,7 @@ describe("globals.palette as an expression — loader", () => {
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
       "",
-      new SessionState(),
+      ownedView(new SessionState()),
     );
     try {
       expect(() => registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() })).toThrow(
@@ -518,7 +519,7 @@ describe("a rule inside a preset's globals", () => {
   ): R => {
     const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store, "", new SessionState());
+    const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
     try {
       return body(config, registry, store);
     } finally {

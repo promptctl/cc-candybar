@@ -7,6 +7,7 @@
 // segment could pass while the SHIPPED gitaculous regresses.
 
 
+import { ownedView } from "./helpers/owned";
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame, Run } from "../src/render/frame";
@@ -64,7 +65,7 @@ function render(): Frame {
   );
 
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", new SessionState());
+  const registry = new SourceRegistry(store, "", ownedView(new SessionState()));
   try {
     const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
     return drawPayload(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {

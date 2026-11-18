@@ -1,3 +1,4 @@
+import { ownedView } from "./helpers/owned";
 import { textOf } from "../src/render/frame";
 import { locations } from "../src/daemon/paths";
 import { HOST, locs } from "./helpers/host";
@@ -557,7 +558,7 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
+  const registry = new SourceRegistry(store, "", ownedView(sessionState));
   const compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
@@ -579,6 +580,7 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
       durable.historyFor(sessionState),
       undefined,
       durable.host,
+      durable.owner,
     ),
     {
       // The daemon's own lookup and reload: a click is gated by the config as
@@ -817,6 +819,7 @@ describe("apply-layout-op click → the config file", () => {
       durable.historyFor(sessionState),
       config,
       durable.host,
+      durable.owner,
     );
     const applyLayoutOp = CLICK_VERBS.get("apply-layout-op")!;
     const before = durable.text();
@@ -842,6 +845,7 @@ describe("apply-layout-op click → the config file", () => {
       undefined,
       config,
       durable.host,
+      durable.owner,
     );
     const applyLayoutOp = CLICK_VERBS.get("apply-layout-op")!;
     expect(() =>
@@ -891,7 +895,7 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     // preset customized, so the render below opens edit mode for "s1".
     const sessionState = new SessionState();
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, "", ownedView(sessionState));
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
       compiled = registerDslConfig(config, registry, {
@@ -944,7 +948,7 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     // Live output, not names: the subject is whether the CONTENT follows the gate.
     sessionState.set(S1, EDIT_LIVE_KEY, "open");
-    const registry = new SourceRegistry(store, "", sessionState);
+    const registry = new SourceRegistry(store, "", ownedView(sessionState));
     try {
       const compiled = registerDslConfig(config, registry, {
         signer: TEST_SIGNER,
@@ -1085,12 +1089,14 @@ function originCtx(
       durable.historyFor(sessionState),
       undefined,
       durable.host,
+      durable.owner,
     ),
     {
       // The daemon's own wiring (daemon.ts): the config a session renders with
       // is its cache entry's, and a click that must not act on the old config
       // reloads that entry from the file it just wrote.
       configFor: (origin) => cache.getOrCreate(origin).state.config,
+      ownerFor: (origin) => cache.getOrCreate(origin).state.owner,
     },
   );
   onLanded(ctx, () => cache.configs.again());

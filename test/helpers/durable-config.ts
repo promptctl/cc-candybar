@@ -42,6 +42,7 @@ import { HeldStores } from "../../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { emptyStores } from "./doctor-facts";
 import { recordRender } from "./click";
+import { chainOwner, type Owner } from "../../src/config/placement-keys";
 
 export interface DurableConfig {
   /** The machine the fixture's files are under: its XDG pair names them. */
@@ -53,6 +54,8 @@ export interface DurableConfig {
   /** `<projectDir>/.cc-candybar.json5` — a project layer over `configPath`. */
   readonly projectPath: string;
   readonly historyPath: string;
+  /** The owner of the placement keys a session rendering the user file alone writes (src/config/placement-keys.ts). */
+  readonly owner: Owner;
   write(text: string): void;
   /** The file's current text, or null when it does not exist. */
   text(): string | null;
@@ -115,6 +118,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     configPath,
     projectPath: join(root, ".cc-candybar.json5"),
     historyPath: settingsHistoryPath(host),
+    owner: chainOwner([configPath]),
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
