@@ -917,9 +917,10 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears the theme's own error red as this depth draws it on the
-      // pressed state (`errorRedOn`). It never slides lightness: a slid red
-      // stops reading as red, and the ✖ must be red on every theme. Closed,
+      // the ✖ is red as this depth draws it on the pressed state, the
+      // theme's own error red wherever one reads (`errorRedOn`). It never
+      // slides lightness: a slid red stops reading as red, and the ✖ must be
+      // red on every theme. Closed,
       // the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template:

@@ -5,7 +5,8 @@
 // open inside a tab — so both sides of every seam are colours the theme names.
 // At 256 colours and ansi each is that colour rounded once, by the writer.
 // candybar-joiners-e5r4.i30: the open door's ✖, text on the segment that
-// opened the menu, is a red its palette names for its error role.
+// opened the menu, is red as the depth draws it: the theme's own error red
+// wherever one reads, the terminal's red where none does.
 // Driven through the real loader, `resolveEffectiveGlobals` and `drawDsl`,
 // under every bundled theme.
 
@@ -28,7 +29,7 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
-import { ERROR_REDS, doorClose } from "./helpers/door-close";
+import { doorClose } from "./helpers/door-close";
 import { readsRed, TERMINAL_REDS } from "../src/render/segment-color";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { POWERLINE } from "./helpers/powerline";
@@ -126,7 +127,7 @@ describe("every background the bar draws is a colour its palette names", () => {
 const DARKER = ["error-darken-1", "error-darken-2", "error-darken-3"];
 const LIGHTER = ["error-lighten-1", "error-lighten-2", "error-lighten-3"];
 
-describe("the open door's ✖ is the theme's own error red as each depth draws it", () => {
+describe("the open door's ✖ is red as each depth draws it, the theme's own wherever one reads", () => {
   test.each([
     ["truecolor", "truecolor", ColorDepth.TRUECOLOR],
     ["256 colours", "256", ColorDepth.EIGHT_BIT],
@@ -144,12 +145,13 @@ describe("the open door's ✖ is the theme's own error red as each depth draws i
           bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
           const { ink, ground } = doorClose(bar.render(AT).frame);
           measured++;
-          // The rule, spelled here apart from the code that picks it: of the
-          // theme's error colours and then the terminal's reds, as the depth
-          // draws each, those drawn red; the first to clear the text floor,
-          // or else whichever stands farthest off.
-          // In preference: the error text colour, the role, its rungs out
-          // toward the ground's far pole nearest first, then back.
+          // The order and the floor rule are restated here, apart from the
+          // code that picks: the error text colour, the role, its rungs out
+          // toward the ground's far pole nearest first, then back, and last
+          // the terminal's reds; of those drawn red, the first to clear the
+          // text floor, or else whichever stands farthest off. What reads as
+          // red, and which reds the terminal holds, are shared with the code
+          // and pinned in test/unit/segment-colors.test.ts.
           const out = contrastFor(ground).hex === "#000000" ? DARKER : LIGHTER;
           const order = ["text-error", "error", ...out, ...(out === DARKER ? LIGHTER : DARKER)];
           const reds = [...order.map((name) => palette.get(name)!), ...TERMINAL_REDS]

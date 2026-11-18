@@ -67,8 +67,8 @@ export const DISCLOSURE_GLYPH_CLOSE = "✕";
 // wears, beside the glyph it colours: `warning`, since it closes one panel. A
 // ✕ keeps the role's hue and moves only its lightness, until it reads on the
 // ground it is drawn on (`closeOn`, render/band-style.ts). The risen door's ✖
-// dismisses the whole menu and wears the theme's error red (`errorRedOn`,
-// render/segment-color.ts).
+// dismisses the whole menu and is red, the theme's own error red wherever
+// one reads (`errorRedOn`, render/segment-color.ts).
 export const DISCLOSURE_CLOSE_ROLE: SemanticRole = "warning";
 
 // [LAW:one-source-of-truth] The global settings menu's own glyph — its whole

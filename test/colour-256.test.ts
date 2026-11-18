@@ -11,6 +11,8 @@
 // ANSI 0–15 (its RGB is the terminal theme's, so no ratio exists), must keep
 // the highest floor it cleared in truecolor, and an arrow must stay the
 // colour of the cell it continues and stand visibly off the cell it enters.
+// The open door's ✖ alone is left out: it keeps its hue over its contrast,
+// and palette-identity.test.ts holds it to that.
 // At ansi no ratio exists, and the one floor that does is measured instead:
 // nothing is drawn on its own ground's index. At every depth an arrow's ink is
 // the cell it leaves wherever that cell's ground stands off the next one's as

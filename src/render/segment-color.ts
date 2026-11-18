@@ -14,12 +14,13 @@
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
 import type { ColorDepth } from "@promptctl/rich-js";
 import {
-  contrastFor,
   contrastRatio,
   drawnColour,
   Oklch,
   resolveColorRef,
   STANDARD_TABLE,
+  ANSI_COLOR_NAMES,
+  parseRgbHex,
   type ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
@@ -178,22 +179,26 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
 /** A rung of the error ladder other than the role itself. */
 type Rung = Exclude<RoleShade, "base" | "muted">;
 
-// [LAW:dataflow-not-control-flow] The rungs out from the error role toward
-// each pole, nearest first, keyed by the pole: a ground's far pole picks its
-// row, and the rungs back toward the ground follow.
-const RUNGS_OUT: Record<"black" | "white", readonly Rung[]> = {
-  black: ["darken-1", "darken-2", "darken-3"],
-  white: ["lighten-1", "lighten-2", "lighten-3"],
-};
+// [LAW:dataflow-not-control-flow] The two poles, each with the error role's
+// rungs out toward it, nearest first: a ground's farther pole leads, and the
+// rungs toward the nearer one follow.
+const POLES = [
+  { pole: parseRgbHex("000000"), rungs: ["darken-1", "darken-2", "darken-3"] },
+  {
+    pole: parseRgbHex("ffffff"),
+    rungs: ["lighten-1", "lighten-2", "lighten-3"],
+  },
+] as const satisfies ReadonlyArray<{ pole: ColorRgba; rungs: readonly Rung[] }>;
 
 /**
- * ANSI's red and bright red: the reds every terminal holds of its own, and
- * the ones it draws red at every depth (test/unit/segment-colors.test.ts
- * holds it).
+ * The standard table's red and bright red, as rich-js assumes a terminal
+ * draws them: the reds a terminal holds of its own, drawn red at every depth
+ * (test/unit/segment-colors.test.ts holds it).
  */
-export const TERMINAL_REDS: readonly ColorRgba[] = [1, 9].map((index) =>
-  STANDARD_TABLE.get(index),
-);
+export const TERMINAL_REDS: readonly ColorRgba[] = [
+  ANSI_COLOR_NAMES.red!,
+  ANSI_COLOR_NAMES.bright_red!,
+].map((index) => STANDARD_TABLE.get(index));
 
 // [LAW:one-source-of-truth] Where a colour reads as red: its OKLCH hue, in
 // degrees either side of 0, and the chroma under which it reads as grey
@@ -210,22 +215,25 @@ export function readsRed(colour: ColorRgba): boolean {
 }
 
 /**
- * The red the door's ✖ wears on `ground` at `depth`: of the reds it may
- * wear, the first to clear TEXT_MIN_CONTRAST, or failing that the one
- * standing farthest off. The reds, in order of preference, are the theme's
- * error text colour (held by the palette to WCAG AA on `error-muted`), the
- * role itself, its ladder out toward the ground's far pole and back, and last
- * the terminal's own reds. A reduced depth draws a colour as the nearest
- * entry its table holds, and the nearest entry to a theme red is often an
- * orange or a grey, so each is measured as `depth` draws it, on the ground as
- * `depth` draws it, and only those drawn red are kept. Hue outranks
- * contrast: where no red clears the floor, the ✖ stays red under it.
+ * An error red to wear on `ground` at `depth`, its hue kept over its
+ * contrast: of the reds below, the first to clear TEXT_MIN_CONTRAST, or
+ * failing that the one standing farthest off. The reds, in order of
+ * preference, are the theme's error text colour (held by the palette to WCAG
+ * AA on `error-muted`), the role itself, its ladder out toward the ground's
+ * farther pole and then the nearer, and last the terminal's own reds. A
+ * reduced depth draws a colour as the nearest entry its table holds, and the
+ * nearest entry to a theme red is often an orange or a grey, so each is
+ * measured as `depth` draws it, on the ground as `depth` draws it, and only
+ * those drawn red are kept. Where no red clears the floor, it stays red under
+ * it.
  *
  * [LAW:single-enforcer] The one place this choice is made, at every depth.
  * [LAW:dataflow-not-control-flow] One closed list, each entry measured, one
- * rank over it; the depth is a value the measuring takes, not a path. Never
- * a colour searched out of a depth's table, which would land on colours
- * neither the theme nor the terminal names as red.
+ * rank over it: a contrast counts up to the floor, so the first to reach the
+ * floor and, short of it, the farthest are the same comparison, and an
+ * earlier entry wins a tie. The depth is a value the measuring takes, not a
+ * path. Never a colour searched out of a depth's table, which lands on
+ * colours neither the theme nor the terminal names as red.
  */
 function errorRed(
   palette: Palette,
@@ -233,25 +241,24 @@ function errorRed(
   depth: ColorDepth,
 ): ColorRgba {
   const shown = drawnColour(ground, depth);
-  const far = contrastFor(shown).hex === "#000000" ? "black" : "white";
-  const back = far === "black" ? "white" : "black";
+  const [farther, nearer] = [...POLES].sort(
+    (x, y) => contrastRatio(y.pole, shown) - contrastRatio(x.pole, shown),
+  );
   const themed = [
     "text-error",
     "error",
-    ...[...RUNGS_OUT[far], ...RUNGS_OUT[back]].map((rung) => `error-${rung}`),
+    ...[...farther!.rungs, ...nearer!.rungs].map((rung) => `error-${rung}`),
   ].map((name) => resolveColorRef(palette, name));
-  const kept = [...themed, ...TERMINAL_REDS]
-    .filter((colour) => readsRed(drawnColour(colour, depth)))
-    .map((colour) => ({
-      colour,
-      ratio: contrastRatio(drawnColour(colour, depth), shown),
-    }));
-  // [LAW:no-defensive-null-guards] `kept` holds the terminal's reds at least,
-  // so the reduce has a first entry.
-  return (
-    kept.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ??
-    kept.reduce((best, c) => (c.ratio > best.ratio ? c : best))
-  ).colour;
+  const counted = (ratio: number) => Math.min(ratio, TEXT_MIN_CONTRAST);
+  // [LAW:no-defensive-null-guards] The terminal's reds are drawn red at every
+  // depth, so the list the reduce ranks is never empty.
+  return [...themed, ...TERMINAL_REDS]
+    .map((colour) => {
+      const drawn = drawnColour(colour, depth);
+      return { colour, drawn, ratio: counted(contrastRatio(drawn, shown)) };
+    })
+    .filter(({ drawn }) => readsRed(drawn))
+    .reduce((best, c) => (c.ratio > best.ratio ? c : best)).colour;
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)

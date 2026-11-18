@@ -12,16 +12,15 @@ import { TEST_ENGINE } from "../helpers/test-engine";
 import {
   Palette,
   getThemePalette,
+  listThemePalettes,
   parseRgbHex,
   ColorRgba,
   Oklch,
   darken,
   blendRgb,
   contrastFor,
-  contrastRatio,
   drawnColour,
   ColorDepth,
-  STANDARD_TABLE,
   transposePalette,
 } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../../src/template-engine/engine";
@@ -241,8 +240,15 @@ describe("readsRed: a colour reads as red by its hue and its chroma", () => {
     "#%s does not",
     (hex) => expect(readsRed(parseRgbHex(hex))).toBe(false),
   );
+  test("every bundled theme's error role reads as red at truecolor, where the band was set from", () => {
+    const off = listThemePalettes()
+      .map((name) => [name, getThemePalette(name)!.get("error")!] as const)
+      .filter(([, error]) => !readsRed(error))
+      .map(([name, error]) => `${name} ${error.hex}`);
+    expect(off).toEqual([]);
+  });
   test("the terminal's reds read as red at every depth", () => {
-    for (const depth of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD]) {
+    for (const depth of [ColorDepth.DEFAULT, ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD]) {
       for (const red of TERMINAL_REDS) {
         expect(readsRed(drawnColour(red, depth))).toBe(true);
       }
