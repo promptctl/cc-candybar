@@ -41,8 +41,12 @@ function makeFixture(): Fixture {
   // ensureSocketParentSafe requires uid==me + mode 0700 on the socket parent.
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const sockPath = path.join(stateDir, "socket");
-  const cacheHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slt-c-"));
-  const configHome = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-slt-g-"));
+  const cacheHome = fs.mkdtempSync(
+    path.join(os.tmpdir(), "cc-candybar-slt-c-"),
+  );
+  const configHome = fs.mkdtempSync(
+    path.join(os.tmpdir(), "cc-candybar-slt-g-"),
+  );
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     CC_CANDYBAR_SOCKET: sockPath,
@@ -125,7 +129,11 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         startTime: await realStartTime(holderPid),
       });
 
-      const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
+      const {
+        child: daemon,
+        killTree,
+        release,
+      } = await spawnTestDaemon(fx.env);
       try {
         const result = await raceExit(daemon, BUDGET_MS);
         // Exits cleanly (attach-and-exit), never SIGKILL/crash.
@@ -254,49 +262,13 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
   });
 });
 
-// [LAW:single-enforcer] Publishing is the lease's one mutation; a daemon's exit
-// removes no lease. These run the real close a signal starts, the one that
-// would take a lease on the way out.
+// [LAW:single-enforcer] A daemon's exit removes no lease; why is at writeLease.
+// The case runs the real close a signal starts. Its own lease still standing
+// after its owner's exit is what shows no removal runs, so neither its own lease
+// nor a newer daemon's published over it can be taken on the way out.
 describe("a daemon's exit and the lease (integration)", () => {
   jest.setTimeout(30_000);
 
-  // The race the exit must lose: a newer daemon publishes over the lease, then
-  // the displaced one ends. The order is the test's own (publish, signal, await
-  // the exit, read), so nothing waits on a timer.
-  test("a displaced daemon's exit leaves the newer daemon's lease standing", async () => {
-    const fx = makeFixture();
-    const newer = spawnLiveHolder();
-    try {
-      expect(newer.pid).toBeDefined();
-      const newerPid = newer.pid as number;
-      const displaced = await spawnDaemonWithEnv(fx.env);
-      const newerLease = {
-        pid: newerPid,
-        version: 2,
-        binPath: "/newer",
-        startTime: await realStartTime(newerPid),
-      };
-      expect(writeLease(fx.leasePath, newerLease)).toBeNull();
-
-      const exited = waitForExit(displaced.child);
-      displaced.killTree("SIGTERM");
-      await exited;
-
-      expect(readLease(fx.leasePath)).toEqual({
-        kind: "owned",
-        pid: newerLease.pid,
-        startTime: newerLease.startTime,
-      });
-    } finally {
-      newer.kill("SIGKILL");
-      fx.cleanup();
-    }
-  });
-
-  // A daemon's own lease outlives it too: any removal at exit is a check and an
-  // unlink of a shared name, whose window the case above cannot reach, so the
-  // lease still standing after its own owner's exit is what shows no removal
-  // runs. The next daemon reclaims it by the dead owner's identity.
   test("a daemon's own lease outlives its exit", async () => {
     const fx = makeFixture();
     try {

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { type DaemonLogger } from "../utils/logger";
 import { type LeaseRead } from "./socket-lease";
+import { sameProcess, type ProcessIdentity } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
 
 // ─── Socket ownership self-check ─────────────────────────────────────────────
@@ -35,9 +36,8 @@ import type { Timekeeper } from "../time";
 // condition: the lease must still name us. A displacer must touch one of the two
 // representations — steal the socket (inode changes) or overwrite the lease (pid
 // changes) — so requiring BOTH drains any orphan within a bounded number of
-// intervals. No live process can share our live pid, so the lease pid alone
-// distinguishes "the lease still names me" (the start-time fingerprint is only
-// needed by the sibling arbitration, which reasons about a possibly-DEAD pid).
+// intervals. "The lease still names me" is the same identity equality the
+// sibling arbitration uses (pid and start-time), asked of one function.
 
 // The kernel identity of the bound socket file. (dev, ino) is the unique
 // identity of a filesystem entry; ino alone can be reused across devices.
@@ -81,11 +81,11 @@ export function readSocketIdentity(sockPath: string): IdentityRead {
 }
 
 // [LAW:effects-at-boundaries][LAW:dataflow-not-control-flow] A pure fold:
-// (identity captured at bind, current identity read, my pid, current lease read)
+// (identity captured at bind, current identity read, my identity, current lease read)
 // → decision. No effects, so every branch is exercised by input enumeration.
 // Ownership is the CONJUNCTION of two conditions; either failing → displaced:
 //   inode:  present + same identity as bound     (we still hold the path we bound)
-//   lease:  owned + pid == mine                  (the lease still names us)
+//   lease:  owned + same process as me           (the lease still names us)
 // Inode failures:  different inode / absent / unreadable → a reclaimer displaced
 //   us (or we cannot prove otherwise). Lease failures: a thief overwrote the
 //   lease with its own pid, or the lease vanished/broke — either way we no
@@ -101,7 +101,7 @@ export function readSocketIdentity(sockPath: string): IdentityRead {
 export function checkOwnership(
   bound: SocketIdentity,
   now: IdentityRead,
-  myPid: number,
+  me: ProcessIdentity,
   lease: LeaseRead,
 ): OwnershipCheck {
   const inodeFailure = inodeDisplacement(bound, now);
@@ -114,10 +114,10 @@ export function checkOwnership(
       reason: `lease not held (${lease.kind}) — no longer the socket owner`,
     };
   }
-  if (lease.pid !== myPid) {
+  if (!sameProcess(lease, me)) {
     return {
       kind: "displaced",
-      reason: `lease reassigned (names pid=${lease.pid}, we are pid=${myPid}) — a reclaimer overwrote it`,
+      reason: `lease reassigned (names pid=${lease.pid} start=${lease.startTime}, we are pid=${me.pid} start=${me.startTime}) — a reclaimer overwrote it`,
     };
   }
   return { kind: "owned" };
@@ -148,7 +148,7 @@ function inodeDisplacement(
 // `() => readSocketIdentity(sockPath)` and the daemon's single shutdown().
 export interface OwnershipWatchDeps {
   bound: SocketIdentity;
-  myPid: number;
+  me: ProcessIdentity;
   readIdentity: () => IdentityRead;
   readLease: () => LeaseRead;
   shutdown: (code: number) => void;
@@ -177,7 +177,7 @@ export function makeOwnershipWatch(
     const decision = checkOwnership(
       deps.bound,
       deps.readIdentity(),
-      deps.myPid,
+      deps.me,
       deps.readLease(),
     );
     if (decision.kind === "displaced" && !displaced) {

@@ -53,3 +53,26 @@ test("an unsafe socket parent is refused through daemon.log", async () => {
     iso.removeTmpDirs();
   }
 });
+
+// [LAW:no-silent-failure] A lease that cannot be written leaves the
+// predecessor's on disk, so the boot is refused at the write, with its reason,
+// rather than serving until the ownership self-check calls it displaced. A
+// directory where the lease goes makes the rename over it fail.
+test("a lease that cannot be written is refused through daemon.log", async () => {
+  const iso = prepareIsolatedDaemonEnv("ccb-boot-lease");
+  fs.mkdirSync(`${iso.sockPath}.lease`);
+  const { child, killTree, release } = await spawnTestDaemon(iso.env);
+  try {
+    const exit = await waitForExit(child);
+    expect(exit.code).toBe(1);
+    const log = fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8");
+    expect(log).toMatch(
+      /\[error\] refusing to boot: Error: lease write failed: /,
+    );
+    expect(log).not.toMatch(/daemon up/);
+  } finally {
+    killTree();
+    release();
+    iso.removeTmpDirs();
+  }
+});

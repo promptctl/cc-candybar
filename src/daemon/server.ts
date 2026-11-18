@@ -279,9 +279,9 @@ function bindOrAttachAndExit(
 }
 
 // [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
-// pid lease, NEVER a connect probe. The path already exists (a live daemon, or
-// a stale file from a crashed one); the lease's owner pid + kill(pid,0) decides
-// which. A concurrent recoverer is another process, so no liveness read was ever
+// lease, NEVER a connect probe. The path already exists (a live daemon, or a
+// stale file from an ended one); whether the lease's owner identity (pid and
+// start-time) is still a live process decides which (sameLiveProcess). A concurrent recoverer is another process, so no liveness read was ever
 // atomic with the unlink, and this runs once per bind attempt in one daemon, so
 // the await on `ps` adds no in-process entrant and needs no re-check: the lease
 // and the ownership self-check are what recover a lost race.
@@ -376,7 +376,11 @@ function onListening(daemon: Daemon, sockPath: string): void {
   // window minimal keeps it vanishingly rare.
   // [LAW:one-source-of-truth] Derive the lease from the same sockPath we bound,
   // matching handleAddressInUse's read — one identity source across write + read.
-  writeLeaseFile(sockPath);
+  const leaseFailure = writeLeaseFile(sockPath);
+  if (leaseFailure !== null) {
+    refuseBoot(new Error(`lease write failed: ${leaseFailure}`));
+    return;
+  }
   try {
     fs.chmodSync(sockPath, 0o600);
   } catch (e) {
@@ -414,7 +418,7 @@ function onListening(daemon: Daemon, sockPath: string): void {
 function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
   makeOwnershipWatch({
     bound,
-    myPid: process.pid,
+    me: { pid: process.pid, startTime: myStartTime },
     readIdentity: () => readSocketIdentity(sockPath),
     readLease: () => readLease(leasePathFor(sockPath)),
     shutdown: (code) => shutdown(code),
@@ -426,26 +430,26 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
 // --- socket-ownership lease ---
 //
 // [LAW:one-source-of-truth] The lease is the authority for socket ownership —
-// its owner pid + kill(pid,0) is what the next daemon's EADDRINUSE arbitration
-// consults (handleAddressInUse). Exclusion RIGHT NOW is still the atomic bind()
+// its owner identity (pid and start-time) is what the next daemon's EADDRINUSE
+// arbitration consults (handleAddressInUse). Exclusion RIGHT NOW is still the atomic bind()
 // in bindOrAttachAndExit(); the lease answers the separate question "may I
 // destroy this existing path" over time. It also carries the same diagnostic
 // fields the old pidfile did, so one file serves both roles.
 //
 // Overwrite-on-write (no EEXIST check). We only reach onListening after winning
-// the bind, so whatever stale lease a dead owner left is ours to replace. Write
-// failure is non-fatal: the lease is best-effort ownership signalling on top of
-// bind()'s hard exclusion; a missing lease degrades a future arbitration to
-// "reclaim" (unlink + rebind), never to a wrong attach.
+// the bind, so whatever stale lease a dead owner left is ours to replace.
+// [LAW:no-silent-failure] A write that fails refuses the boot: the lease on disk
+// is still the predecessor's, so serving on would end at the first ownership
+// self-check as a "displacement" that never happened. Returns the reason, or
+// null once the lease names us.
 
-function writeLeaseFile(sockPath: string): void {
-  const reason = writeLease(leasePathFor(sockPath), {
+function writeLeaseFile(sockPath: string): string | null {
+  return writeLease(leasePathFor(sockPath), {
     pid: process.pid,
     version: PROTOCOL_VERSION,
     binPath: process.argv[1],
     startTime: myStartTime,
   });
-  if (reason !== null) serverLog("warn", `lease write failed: ${reason}`);
 }
 
 // --- shutdown ---
@@ -507,10 +511,8 @@ async function closeThenExit(code: number): Promise<void> {
   // backstop's SIGKILL would end the process in place of the exit below.
   const steps: ReadonlyArray<readonly [string, () => unknown]> = [
     ["close", () => serving?.close()],
-    // [LAW:single-enforcer] The lease stays, as the socket path does: no
-    // removal can tell our lease from one a successor published a moment
-    // before it, and taking a successor's lease ends that successor and
-    // invites a reclaim of its live socket (see writeLease).
+    // [LAW:single-enforcer] The lease stays, as the socket path does; why is
+    // at writeLease.
     // [LAW:single-enforcer] The registry's one removal (removeEntry). A slot
     // this daemon never claimed (exempt production, or refused before
     // claiming one) is null and skipped.
