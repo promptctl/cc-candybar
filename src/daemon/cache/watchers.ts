@@ -121,7 +121,10 @@ interface Holder {
 
 interface WatcherSlot {
   readonly key: string;
-  readonly listeners: Listener[];
+  // The directories it was acquired for, and the watch it holds on each
+  // directory they name now, by the watch's id.
+  readonly targets: readonly DirTarget[];
+  readonly listeners: Map<string, Listener>;
   readonly polled: PolledPath[];
   // [LAW:single-enforcer] Each acquire is a holder with its own callback, and
   // every window reaches every holder: `watch_file` sources in a directory
@@ -191,6 +194,44 @@ const UNSEEN: unique symbol = Symbol("unseen");
 const dirId = (target: DirTarget): string =>
   `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 
+const isBelow = (at: string, root: string): boolean =>
+  at.startsWith(root + path.sep);
+
+// The directories below `at` as they are now, by listing directories, never
+// through a link. `trusted` keeps the watches held under a directory already
+// held at `at`'s own level as they are, since only `at`'s own listing moved;
+// below a directory new here, everything is listed. A directory with nothing
+// at its path, or a file there now, has nothing below it: it left, as a pruned
+// ref prefix does. [LAW:no-silent-failure] Any other directory that cannot be
+// listed is named in `unlisted`, and what is below it is unknown, not gone, so
+// the watches held there stay.
+function dirsBelow(
+  at: string,
+  held: ReadonlySet<string>,
+  trusted: boolean,
+  unlisted: string[],
+): string[] {
+  const heldIn = (dir: string) =>
+    [...held].filter((p) => p === dir || isBelow(p, dir));
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(at, { withFileTypes: true });
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return [];
+    unlisted.push(at);
+    return [...held].filter((p) => isBelow(p, at));
+  }
+  return entries
+    .filter((e) => e.isDirectory())
+    .flatMap((e) => {
+      const below = path.join(at, e.name);
+      return trusted && held.has(below)
+        ? heldIn(below)
+        : [below, ...dirsBelow(below, held, false, unlisted)];
+    });
+}
+
 // [LAW:one-source-of-truth] What a read of a polled path compares: what is at
 // the path now, or the error reading it gave. Any difference is a change, as
 // a directory watch reports a child made, removed, replaced, written or
@@ -225,6 +266,7 @@ export class WatcherRegistry {
   private readonly logger: WatcherLogger;
   private readonly clock: Pick<Timekeeper, "after" | "every">;
   private closed = false;
+  private readonly nodeWalksTrees: boolean;
 
   constructor(opts: {
     // [LAW:effects-at-boundaries] The clock the debounce window and the
@@ -236,10 +278,14 @@ export class WatcherRegistry {
     // daemon consumers keep the default debug-routed logger and never
     // touch daemon log files.
     logger?: WatcherLogger;
+    // Whether the runtime's recursive watch is Node's own walk, which stops
+    // at the first entry it cannot watch and says nothing: Linux's.
+    nodeWalksTrees?: boolean;
   }) {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
 
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
@@ -271,8 +317,13 @@ export class WatcherRegistry {
     }
     const shared = this.slots.get(key);
     // [LAW:single-enforcer] Every acquire names its directories as they are
-    // now: joining a slot judges its directories as opening one does.
-    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    // now: joining a slot judges and reconciles its directories as opening
+    // one does.
+    if (shared !== undefined) {
+      for (const { dir } of shared.listeners.values())
+        this.judged(dir, "acquire");
+      this.reconciled(shared, "acquire", null);
+    }
     // The records the acquire joins. A path no slot polls yet has none: its
     // new record reads the disk itself.
     this.sighted(
@@ -320,17 +371,13 @@ export class WatcherRegistry {
   private opened(key: string, targets: WatchTargets): WatcherSlot {
     const slot: WatcherSlot = {
       key,
-      listeners: [],
+      targets: targets.dirs,
+      listeners: new Map(),
       polled: [],
       holders: new Set(),
       debounce: null,
     };
-    for (const target of targets.dirs) {
-      const dir = this.dirFor(target);
-      const listener: Listener = { slot, dir };
-      dir.listeners.add(listener);
-      slot.listeners.push(listener);
-    }
+    this.reconciled(slot, "acquire", null);
     for (const at of targets.polled) {
       const record = this.polledAt(at);
       record.slots.add(slot);
@@ -339,20 +386,107 @@ export class WatcherRegistry {
     this.armSweep();
     this.slots.set(key, slot);
     if (this.counters) {
-      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+      if (
+        [...slot.listeners.values()].every(
+          (l) => l.dir.state.kind === "listening",
+        )
+      )
         this.counters.watchersOpened++;
       else this.counters.watchRefusals++;
     }
     return slot;
   }
 
-  // The directory watch a new slot's target joins: the one already open
-  // there, judged, or a new one.
-  private dirFor(target: DirTarget): DirWatch {
+  // [LAW:single-enforcer] How a tree is heard is decided here, by what the
+  // runtime's recursive watch is. Native (macOS's FSEvents), it is one watch.
+  // Node's own walk (Linux) stops at the first entry it cannot watch and says
+  // nothing, and where it fails cannot be predicted, so a tree there is a
+  // plain watch on the root and on each directory below it, each refused or
+  // heard by the OS on its own. `heardIn` is the directory an event was heard
+  // in, or null for the whole of every target: an event moves only what its
+  // own directory lists, so only that listing is read again.
+  private dirsOf(
+    targets: readonly DirTarget[],
+    heardIn: string | null,
+    held: ReadonlySet<string>,
+    unlisted: string[],
+  ): DirTarget[] {
+    return targets.flatMap((target) => {
+      if (target.recursive !== true || !this.nodeWalksTrees) return [target];
+      const at = heardIn ?? target.path;
+      if (at !== target.path && !isBelow(at, target.path)) return [];
+      const below = dirsBelow(at, held, heardIn !== null, unlisted);
+      return [...(heardIn === null ? [at] : []), ...below].map((dir) => ({
+        path: dir,
+      }));
+    });
+  }
+
+  // [LAW:dataflow-not-control-flow] A slot holds a watch on exactly the
+  // directories its targets name now, below the directory listed again: one
+  // it lacks joins, one no longer named leaves. Run whole at its acquire and
+  // on every period, and for the directory each event its watches hear is
+  // heard in, so a tree's new directory is heard from the event that made it.
+  private reconciled(
+    slot: WatcherSlot,
+    cause: string,
+    heardIn: string | null,
+  ): void {
+    const held = new Set([...slot.listeners.values()].map((l) => l.dir.path));
+    const unlisted: string[] = [];
+    const named = new Map(
+      this.dirsOf(slot.targets, heardIn, held, unlisted).map((t) => [
+        dirId(t),
+        t,
+      ]),
+    );
+    for (const [id, listener] of slot.listeners)
+      if (
+        !named.has(id) &&
+        (heardIn === null || isBelow(listener.dir.path, heardIn))
+      ) {
+        slot.listeners.delete(id);
+        this.left(listener, cause);
+      }
+    for (const [id, target] of named)
+      if (!slot.listeners.has(id)) {
+        const dir = this.dirFor(target, cause);
+        const listener: Listener = { slot, dir };
+        dir.listeners.add(listener);
+        slot.listeners.set(id, listener);
+        // [LAW:no-silent-failure] A directory joining a slot its holders
+        // already hear, refused, reaches them as a failure does.
+        if (slot.holders.size > 0 && dir.state.kind === "deaf")
+          this.fire(slot, failedOf(dir.state.deafness));
+      }
+    // [LAW:no-silent-failure] A held directory that cannot be listed hides
+    // whatever is made below it, so it is opened again: its open refuses it as
+    // the OS answers, logged, on the handle, told to its holders and retried
+    // on the period, while the watches below it stay.
+    for (const at of unlisted) {
+      const dir = this.dirs.get(dirId({ path: at }));
+      if (dir?.state.kind === "listening")
+        this.reopen(dir, "it cannot be listed");
+    }
+  }
+
+  // A directory watch closes with the last slot on it.
+  private left(listener: Listener, cause: string): void {
+    const { dir } = listener;
+    dir.listeners.delete(listener);
+    if (dir.listeners.size > 0) return;
+    if (dir.state.kind === "listening")
+      this.closeHandle(dir.path, dir.state.handle, cause);
+    this.dirs.delete(dir.id);
+  }
+
+  // The directory watch a slot's target joins: the one already open there,
+  // judged, or a new one.
+  private dirFor(target: DirTarget, cause: string): DirWatch {
     const id = dirId(target);
     const existing = this.dirs.get(id);
     if (existing !== undefined) {
-      this.judged(existing, "acquire");
+      this.judged(existing, cause);
       return existing;
     }
     const where = { path: target.path, recursive: target.recursive === true };
@@ -360,7 +494,7 @@ export class WatcherRegistry {
       id,
       ...where,
       listeners: new Set(),
-      state: this.open(where, () => dir, "acquire", null),
+      state: this.open(where, () => dir, cause, null),
     };
     this.dirs.set(id, dir);
     return dir;
@@ -393,8 +527,11 @@ export class WatcherRegistry {
   // path: inotify reports a directory's own removal or self-move, never its
   // parent's), and the retry of a directory the OS refused or whose handle
   // errored while no holder newly acquires it. A directory staying as it is
-  // costs one stat, or one refused open, and tells nothing.
+  // costs one stat, or one refused open, and tells nothing; a tree heard
+  // directory by directory costs a listing of each directory too.
   judge(): void {
+    for (const slot of this.slots.values())
+      this.reconciled(slot, "period", null);
     for (const dir of this.dirs.values()) this.judged(dir, "period");
   }
 
@@ -429,9 +566,7 @@ export class WatcherRegistry {
     const bound = boundKey(boundOf(at));
     try {
       // [LAW:no-silent-failure] A directory the daemon cannot open is
-      // refused. fs.watch refuses it itself, except Linux's recursive watch
-      // on Node 20 and 22 (Node's own walk), which swallows the error and
-      // returns a watch that never fires.
+      // refused, whatever the runtime's watch would accept of it.
       // [LAW:dataflow-not-control-flow] So every open opens the directory
       // first, recursive or not, and its error is the refusal's reason.
       fs.opendirSync(at).closeSync();
@@ -494,6 +629,8 @@ export class WatcherRegistry {
       boundKey(boundOf(dir.path)) !== state.bound
     )
       this.judged(dir, "moved");
+    for (const slot of [...dir.listeners].map((l) => l.slot))
+      this.reconciled(slot, "heard", dir.path);
   }
 
   private tell(dir: DirWatch, invalidation: Gathering): void {
@@ -505,8 +642,14 @@ export class WatcherRegistry {
       slot.debounce.window = folded(slot.debounce.window, invalidation);
       return;
     }
+    // A window is its slot's own: one event reaches every slot on the
+    // directory, and a fold into a shared set would hand a slot the paths
+    // another named.
     const debounce = {
-      window: invalidation,
+      window:
+        invalidation.kind === "changed"
+          ? { kind: "changed" as const, paths: new Set(invalidation.paths) }
+          : invalidation,
       cancel: this.clock.after(
         DEBOUNCE_MS,
         () => {
@@ -532,12 +675,12 @@ export class WatcherRegistry {
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
     return {
       get deaf() {
-        return slot.listeners.flatMap(({ dir }) =>
+        return [...slot.listeners.values()].flatMap(({ dir }) =>
           dir.state.kind === "deaf" ? [dir.state.deafness] : [],
         );
       },
       // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
-      ridesStream: slot.listeners.length > 0,
+      ridesStream: slot.listeners.size > 0,
       release: () => {
         if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
         if (this.slots.get(slot.key) !== slot) return;
@@ -566,14 +709,7 @@ export class WatcherRegistry {
       slot.debounce.cancel();
       slot.debounce = null;
     }
-    for (const listener of slot.listeners) {
-      const { dir } = listener;
-      dir.listeners.delete(listener);
-      if (dir.listeners.size > 0) continue;
-      if (dir.state.kind === "listening")
-        this.closeHandle(dir.path, dir.state.handle, cause);
-      this.dirs.delete(dir.id);
-    }
+    for (const listener of slot.listeners.values()) this.left(listener, cause);
     for (const record of slot.polled) {
       record.slots.delete(slot);
       if (record.slots.size === 0) this.polled.delete(record.path);

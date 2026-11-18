@@ -511,6 +511,173 @@ describe("WatcherRegistry", () => {
     },
   );
 
+  // Where the recursive watch is Node's own walk (Linux), a tree is a plain
+  // watch on each directory under its root. Forced on here, so it runs on
+  // every platform; root ignores permissions.
+  describe("a tree heard directory by directory", () => {
+    let root: string;
+    let reg: WatcherRegistry;
+    beforeEach(() => {
+      root = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-")),
+      );
+      reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+        nodeWalksTrees: true,
+      });
+    });
+    afterEach(() => {
+      reg.closeAll();
+      rmrf(root);
+    });
+    const acquired = (seen: Invalidation[]) =>
+      reg.acquire(
+        "tree",
+        { dirs: [{ path: root, recursive: true as const }], polled: [] },
+        (inv) => seen.push(inv),
+      );
+
+    (process.getuid?.() === 0 ? test.skip : test)(
+      "a directory below the root it cannot open is refused on its own, and its siblings are heard",
+      async () => {
+        const locked = path.join(root, "team", "locked");
+        fs.mkdirSync(locked, { recursive: true });
+        fs.mkdirSync(path.join(root, "team", "open"));
+        fs.symlinkSync(root, path.join(root, "loop"));
+        fs.chmodSync(locked, 0o000);
+        try {
+          const seen: Invalidation[] = [];
+          const handle = acquired(seen);
+          expect(handle.deaf).toEqual([
+            {
+              kind: "refused",
+              path: locked,
+              reason: expect.stringContaining("EACCES"),
+            },
+          ]);
+          expect(reg.dirWatches()).toBe(3);
+          fs.writeFileSync(path.join(root, "team", "open", "ref"), "x");
+          await until(() => seen.length > 0, "the sibling's event");
+        } finally {
+          fs.chmodSync(locked, 0o700);
+        }
+      },
+    );
+
+    test("a directory made under the root after the open is heard at once, and leaves with its removal", async () => {
+      const seen: Invalidation[] = [];
+      acquired(seen);
+      expect(reg.dirWatches()).toBe(1);
+      const feature = path.join(root, "feature");
+      fs.mkdirSync(feature);
+      await until(() => reg.dirWatches() === 2, "the new directory's watch");
+      seen.length = 0;
+      fs.writeFileSync(path.join(feature, "x"), "x");
+      await until(
+        () =>
+          seen.some(
+            (inv) =>
+              inv.kind === "changed" &&
+              inv.paths.some((p) => p.startsWith(feature)),
+          ),
+        "the change inside it",
+      );
+      fs.rmSync(feature, { recursive: true });
+      await until(() => reg.dirWatches() === 1, "its watch closing");
+    });
+
+    // [LAW:no-ambient-temporal-coupling] The period is the backstop for an
+    // event a filesystem drops, so it is driven here before any event lands.
+    (process.getuid?.() === 0 ? test.skip : test)(
+      "the period joins a directory no event told of, and one refused there reaches the holders",
+      async () => {
+        const seen: Invalidation[] = [];
+        const handle = acquired(seen);
+        fs.mkdirSync(path.join(root, "found"));
+        const locked = path.join(root, "locked");
+        fs.mkdirSync(locked, { mode: 0o000 });
+        try {
+          reg.judge();
+          expect(reg.dirWatches()).toBe(2);
+          expect(handle.deaf).toEqual([
+            expect.objectContaining({ kind: "refused", path: locked }),
+          ]);
+          await until(
+            () => seen.some((inv) => inv.kind === "failed"),
+            "the refusal's window",
+          );
+        } finally {
+          fs.chmodSync(locked, 0o700);
+        }
+      },
+    );
+
+    (process.getuid?.() === 0 ? test.skip : test)(
+      "a held directory that cannot be listed is refused, and the watches below it stay",
+      async () => {
+        const team = path.join(root, "team");
+        fs.mkdirSync(path.join(team, "x"), { recursive: true });
+        const seen: Invalidation[] = [];
+        const handle = acquired(seen);
+        expect(reg.dirWatches()).toBe(3);
+        fs.chmodSync(team, 0o300);
+        try {
+          reg.judge();
+          expect(handle.deaf).toEqual([
+            expect.objectContaining({ kind: "refused", path: team }),
+          ]);
+          expect(reg.dirWatches()).toBe(2);
+          await until(
+            () => seen.some((inv) => inv.kind === "failed"),
+            "the refusal's window",
+          );
+        } finally {
+          fs.chmodSync(team, 0o700);
+        }
+      },
+    );
+
+    // `git branch -m feat/x feat`: the prefix directory is pruned and a ref
+    // file takes its name, so an event below it names a path whose parent is
+    // a file.
+    test("a directory replaced by a file leaves with its watches, and the daemon hears on", async () => {
+      const feat = path.join(root, "feat");
+      fs.mkdirSync(path.join(feat, "x"), { recursive: true });
+      const seen: Invalidation[] = [];
+      const handle = acquired(seen);
+      expect(reg.dirWatches()).toBe(3);
+      fs.rmSync(feat, { recursive: true });
+      fs.writeFileSync(feat, "ref");
+      await until(() => reg.dirWatches() === 1, "the pruned watches closing");
+      // Gone is not refused: nothing at the path is no fault to show.
+      expect(handle.deaf).toEqual([]);
+      expect(seen.filter((inv) => inv.kind === "failed")).toEqual([]);
+      seen.length = 0;
+      fs.writeFileSync(path.join(root, "main"), "ref");
+      await until(() => seen.length > 0, "the root's next event");
+    });
+
+    test("where the recursive watch is native, a tree is one watch", () => {
+      const native = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+        nodeWalksTrees: false,
+      });
+      try {
+        fs.mkdirSync(path.join(root, "a", "b"), { recursive: true });
+        native.acquire(
+          "tree",
+          { dirs: [{ path: root, recursive: true as const }], polled: [] },
+          () => {},
+        );
+        expect(native.dirWatches()).toBe(1);
+      } finally {
+        native.closeAll();
+      }
+    });
+  });
+
   // Root ignores directory permissions, so the second refusal cannot be built.
   (process.getuid?.() === 0 ? test.skip : test)(
     "a deaf directory refused again for another reason tells its slot the new fault",
