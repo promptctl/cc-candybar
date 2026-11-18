@@ -16,14 +16,11 @@ processProbeContract("the system probe", () => ({
 }));
 
 describe("the system probe", () => {
-  // [LAW:behavior-not-structure] Covers the EPERM branch (a live pid we may
-  // not signal counts as alive — a reused pid must never read "dead" just
-  // because it now belongs to another user). pid 1 is root-owned, so
-  // kill(1,0) is EPERM for the non-root user this suite's CI runs as; either
-  // way (EPERM or, running as root, a genuine successful signal) the pid IS
-  // alive, so the assertion holds regardless — the behavior under test, not
-  // which syscall path produced it.
-  test("a live pid we may not signal (EPERM) counts as alive", () => {
-    expect(probe.alive(1)).toBe(true);
+  // [LAW:behavior-not-structure] Covers the EPERM branch: a pid another user
+  // owns is no process of ours, since everything that names one of ours lives
+  // under a directory only we can read. pid 1 is root's, so kill(1,0) is EPERM
+  // for the non-root user this suite runs as; run as root, it is ours.
+  test("a pid another user owns (EPERM) is not ours", () => {
+    expect(probe.alive(1)).toBe(process.getuid?.() === 0);
   });
 });

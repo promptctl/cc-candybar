@@ -1,5 +1,3 @@
-import fs from "node:fs";
-
 import type { Launcher } from "../proc/launcher";
 
 // ─── Process start-time fingerprint ──────────────────────────────────────────
@@ -15,14 +13,10 @@ import type { Launcher } from "../proc/launcher";
 // recycled pid is provably a DIFFERENT process (different start-time).
 //
 // [LAW:one-source-of-truth] The authority is the kernel's process identity, not
-// a bare pid. On linux the kernel's own record is read from /proc: the
-// start-time field of the pid's stat beside the boot id, so no subprocess runs
-// and a read cannot time out. Elsewhere (darwin) `ps -o lstart=` exposes it.
-// The platform settles the source once for the host. Each token is tagged with
-// the source that minted it (`proc:` or `ps:`), and tokens from two sources are
-// never compared: they say nothing about each other. Within a source the token
-// is treated as OPAQUE — compared by string
-// equality, never parsed — so there is no date-format representation to drift
+// a bare pid. `ps -o lstart=` exposes the start-time on every Unix we ship to
+// (darwin + linux). The token is persisted in leases, registry entries and act
+// records that daemons of every release read, so its spelling is fixed: it is
+// treated as OPAQUE — compared by string equality, never parsed — so there is no date-format representation to drift
 // [FRAMING:representation]: a producer/consumer parse mismatch is unrepresentable
 // when neither side parses. That opaque-equality invariant holds ONLY if the
 // GENERATOR is deterministic. `ps -o lstart=` is strftime-formatted (locale) via
@@ -53,7 +47,7 @@ export interface ProcessIdentity {
 //   start       — the pid is live and this is its start-time token (the ONLY
 //                 thing a read can assert soundly: it found the pid's row).
 //   unavailable — no start-time came back (absent OR unreadable OR errored),
-//                 from `ps` or from /proc alike, with the reason.
+//                 with the reason.
 //                 Callers defer to kill(pid,0), the sound liveness test, which
 //                 correctly reclaims a truly-dead pid and spares a live one.
 // The fingerprint's unique contribution is the `start`+mismatch case (a recycled
@@ -74,7 +68,7 @@ export type StartTimeRead =
 // spawn-error, timeout — is `unavailable`, deferring the alive/dead call to
 // kill(pid,0) rather than risk declaring a live owner dead from a `ps` exit
 // code that cannot distinguish "gone" from "cannot read".
-export async function readStartTime(
+async function readStartTime(
   pid: number,
   launch: Launcher["launch"],
 ): Promise<StartTimeRead> {
@@ -91,8 +85,8 @@ export async function readStartTime(
     envOverlay: { LC_ALL: "C", TZ: "UTC" },
   });
   if (res.ok) {
-    const lstart = res.stdout.trim();
-    if (lstart.length > 0) return { kind: "start", token: `ps:${lstart}` };
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
     // Exit 0 with empty output is anomalous (a live pid always lists) — don't
     // mint an empty-string fingerprint; defer to kill.
     return { kind: "unavailable", detail: "ps produced no start-time" };
@@ -105,25 +99,18 @@ export async function readStartTime(
 }
 
 // [LAW:effects-at-boundaries] What the daemon asks of the machine's process
-// table about one pid: is a process there, and when did it start. Everything
-// that decides from these (the liveness fold below, the lease, the watchdog)
-// takes a probe, so a test names the processes it means instead of starting
-// them. This is not src/proc/process-table.ts, which reads the whole `ps -A`
-// listing for descent; this answers about a pid's identity.
+// table about one pid: is a process of ours there, and when did it start.
+// Everything that decides from these (the liveness fold below, the lease, the
+// watchdog) takes a probe, so a test names the processes it means instead of
+// starting them. This is not src/proc/process-table.ts, which reads the whole
+// `ps -A` listing for descent; this answers about a pid's identity.
 export interface ProcessProbe {
-  // [LAW:no-silent-failure] ESRCH: the process is gone. EPERM: a live process
-  // we don't own (the pid was reused by another user), taken as alive so a
-  // reused pid can never make us act on a process whose real owner still runs.
+  // [LAW:no-silent-failure] ESRCH: the process is gone. EPERM: the pid belongs
+  // to another user, and so is no process of ours: every file that names one of
+  // our processes lives under a directory only we can read.
   alive(pid: number): boolean;
   startTime(pid: number): Promise<StartTimeRead>;
 }
-
-// [LAW:one-source-of-truth] Where this host reads a start-time, settled once
-// from the platform: linux keeps every process's in /proc, darwin has no /proc
-// and answers through `ps`. A linux host whose /proc cannot be read gets
-// `unavailable` with the reason, never a quiet switch to `ps`, because daemons
-// on one host that read different sources would compare nothing.
-const HOST_SOURCE: "proc" | "ps" = process.platform === "linux" ? "proc" : "ps";
 
 // The machine's own process table, read through the owner's launcher.
 export function systemProbe(launcher: Pick<Launcher, "launch">): ProcessProbe {
@@ -132,71 +119,28 @@ export function systemProbe(launcher: Pick<Launcher, "launch">): ProcessProbe {
       try {
         process.kill(pid, 0);
         return true;
-      } catch (e) {
-        return (e as NodeJS.ErrnoException).code === "EPERM";
+      } catch {
+        return false;
       }
     },
-    startTime:
-      HOST_SOURCE === "proc"
-        ? readProcStartTime
-        : (pid) => readStartTime(pid, launcher.launch),
+    startTime: (pid) => readStartTime(pid, launcher.launch),
   };
 }
 
-// The boot id goes into a /proc token because the stat's start-time counts
-// clock ticks since boot, which repeat across a reboot that a lease can outlive.
-async function readProcStartTime(pid: number): Promise<StartTimeRead> {
-  let bootId: string;
-  let stat: string;
-  try {
-    bootId = (
-      await fs.promises.readFile("/proc/sys/kernel/random/boot_id", "utf8")
-    ).trim();
-    stat = await fs.promises.readFile(`/proc/${pid}/stat`, "utf8");
-  } catch (e) {
-    return { kind: "unavailable", detail: (e as Error).message };
-  }
-  const ticks = procStatStartTime(stat);
-  return ticks === null
-    ? { kind: "unavailable", detail: `unparseable /proc/${pid}/stat` }
-    : { kind: "start", token: `proc:${bootId}:${ticks}` };
-}
-
-// [LAW:parse-dont-validate] The start-time (field 22, clock ticks since boot)
-// of a /proc/<pid>/stat line, or null when the line has none. The command name
-// (field 2) sits in parentheses and may itself hold spaces or a `)`, so fields
-// are counted from the last `)`: the field after it is the third.
-export function procStatStartTime(stat: string): string | null {
-  const close = stat.lastIndexOf(")");
-  if (close === -1) return null;
-  const ticks = stat
-    .slice(close + 1)
-    .trim()
-    .split(" ")[22 - 3];
-  return ticks !== undefined && /^\d+$/.test(ticks) ? ticks : null;
-}
-
 // What comparing two identities can say. `incomparable` is a pair with nothing
-// to tell them apart by: the same pid where either start-time is missing, or
-// the two were read by different sources. It is never taken as a mismatch.
+// to tell them apart by: the same pid where either start time is missing (a
+// record written by a release that let one be). It is never taken as a
+// mismatch.
 export type Sameness = "same" | "different" | "incomparable";
-
-// The source a token was minted by, read off its tag. A token minted before
-// tags is `untagged`, a source of its own.
-const sourceOf = (token: string): "proc" | "ps" | "untagged" =>
-  token.startsWith("proc:")
-    ? "proc"
-    : token.startsWith("ps:")
-      ? "ps"
-      : "untagged";
 
 // [LAW:single-enforcer] Whether two identities name one process. Every
 // comparison of a recorded process with another (the arbitration, the ownership
-// self-check, the fork-bomb registry, the update act) asks it here.
+// self-check, the fork-bomb registry, the update act's job) asks it here. The
+// token is compared exactly as every release has spelled and compared it, so a
+// record either release writes reads the same to both.
 export function sameProcess(a: ProcessIdentity, b: ProcessIdentity): Sameness {
   if (a.pid !== b.pid) return "different";
   if (a.startTime === null || b.startTime === null) return "incomparable";
-  if (sourceOf(a.startTime) !== sourceOf(b.startTime)) return "incomparable";
   return a.startTime === b.startTime ? "same" : "different";
 }
 
@@ -207,17 +151,18 @@ export interface Liveness {
   readonly why: string;
 }
 
+const GONE: Liveness = { live: false, why: "is gone" };
+
 // [LAW:dataflow-not-control-flow] The liveness verdict is a pure fold over
 // kill(pid,0), the start-time read and the recorded token. Full input space:
-//   pid not alive                 → not live, and no start-time is read: a dead
+//   pid not ours                  → not live, and no start time is read: a dead
 //                                   pid is stale whatever it recorded
-//   alive + recorded token null   → live (nothing to compare)
-//   alive + read=start            → by sameProcess: `different` is a recycled
+//   ours + read=start             → by sameProcess: `different` is a recycled
 //                                   pid or a restarted daemon; `incomparable`
-//                                   (two sources) is spared
-//   alive + read=unavailable      → kill(pid,0) again, with the read's reason
+//                                   (a record with no start time) is spared
+//   ours + read=unavailable       → kill(pid,0) again, with the read's reason
 //
-// [LAW:no-silent-failure] Only a `different` start-time comes from the
+// [LAW:no-silent-failure] Only a `different` start time comes from the
 // fingerprint; every ambiguous read defers to kill, so the DANGEROUS direction
 // (declaring a live daemon dead → stealing its socket, the storm this epic
 // fights) never happens merely because the read could not answer. The only
@@ -227,14 +172,12 @@ export async function liveness(
   recorded: string | null,
   probe: ProcessProbe,
 ): Promise<Liveness> {
-  if (!probe.alive(pid)) return { live: false, why: "is gone" };
-  if (recorded === null)
-    return { live: true, why: "is alive; no start time was recorded" };
+  if (!probe.alive(pid)) return GONE;
   const read = await probe.startTime(pid);
   if (read.kind === "unavailable")
     return probe.alive(pid)
       ? { live: true, why: `is alive, start time unreadable: ${read.detail}` }
-      : { live: false, why: "is gone" };
+      : GONE;
   switch (
     sameProcess({ pid, startTime: recorded }, { pid, startTime: read.token })
   ) {
@@ -246,10 +189,7 @@ export async function liveness(
         why: "is another process now (its start time differs)",
       };
     case "incomparable":
-      return {
-        live: true,
-        why: "is alive; its start time was recorded by another source",
-      };
+      return { live: true, why: "is alive; its record holds no start time" };
   }
 }
 
@@ -262,13 +202,15 @@ export async function sameLiveProcess(
   return (await liveness(pid, recorded, probe)).live;
 }
 
-// Read THIS process's own start-time to stamp into its lease. `unavailable`
-// (a read that could not answer) collapses to `null`: the lease records no
-// start time, and every reader of it judges by kill(pid,0) alone.
+// [LAW:no-silent-failure] THIS process's own start time, which every record it
+// writes names it by. A record without one could never be told from a process
+// that reuses our pid, so a read that cannot answer is an error for the boot to
+// refuse on, never a null written down.
 export async function readOwnStartTime(
   pid: number,
   read: (pid: number) => Promise<StartTimeRead>,
-): Promise<string | null> {
+): Promise<string> {
   const r = await read(pid);
-  return r.kind === "start" ? r.token : null;
+  if (r.kind === "start") return r.token;
+  throw new Error(`cannot read this process's own start time: ${r.detail}`);
 }

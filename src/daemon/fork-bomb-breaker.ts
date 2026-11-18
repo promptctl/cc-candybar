@@ -207,7 +207,9 @@ export interface BreakerDeps {
   registryDir: string;
   ceiling: number;
   pid: number;
-  startTime: string | null;
+  // A daemon always knows its own start time: a boot that cannot read it is
+  // refused before the breaker runs.
+  startTime: string;
   isSameLiveProcess: (
     pid: number,
     startTime: string | null,
@@ -253,11 +255,12 @@ export async function admitDaemon(deps: BreakerDeps): Promise<BreakerResult> {
     // (the kernel guarantees pid uniqueness among live processes), so such an
     // entry is always either a stale pid-recycled ghost from a past
     // incarnation, or moot (we haven't written our own entry yet). This
-    // matters specifically when `ps` is unavailable: `isSameLiveProcess`'s
-    // fallback (the bare liveness answer) would read OUR OWN pid as alive and
-    // misclassify the ghost as a live sibling, consuming a ceiling slot and
-    // risking a spurious refusal of the one daemon that pid actually names.
-    // Excluding it here means it never reaches that ambiguous check at all.
+    // matters whenever the start times cannot settle it (an entry an older
+    // release wrote without one, or a read that could not answer): the bare
+    // liveness answer would read OUR OWN pid as alive and misclassify the
+    // ghost as a live sibling, consuming a ceiling slot and risking a spurious
+    // refusal of the one daemon that pid actually names. Excluding it here
+    // means it never reaches that ambiguous check at all.
     if (identity !== null && identity.pid !== deps.pid) {
       entries.push({ path: filePath, identity });
     }
@@ -299,7 +302,7 @@ export function removeEntry(
 // this pid were somehow recycled between them.
 export function realBreakerDeps(
   { host, launcher }: World,
-  myStartTime: string | null,
+  myStartTime: string,
   registryDir: string,
   warn: (message: string) => void,
   overrides: Partial<BreakerDeps> = {},

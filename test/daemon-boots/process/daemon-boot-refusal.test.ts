@@ -4,6 +4,7 @@ import path from "node:path";
 import { RSS_LIMIT_ENV } from "../../../src/daemon/limits";
 import { waitForExit } from "../../helpers/daemon-wire";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { daemonPool } from "../../helpers/daemon-pool";
 import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 
 // [LAW:behavior-not-structure] The claim under test is an ORDERING of the real
@@ -68,6 +69,39 @@ test("a lease that cannot be written is refused through daemon.log", async () =>
     const log = fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8");
     expect(log).toMatch(
       /\[error\] refusing to boot: Error: lease write failed: /,
+    );
+    expect(log).not.toMatch(/daemon up/);
+  } finally {
+    killTree();
+    release();
+    iso.removeTmpDirs();
+  }
+});
+
+// [LAW:no-silent-failure] A daemon that cannot read its own start time could
+// write no lease or registry entry that tells it from a process reusing its
+// pid, so the boot is refused with the reason. An empty PATH leaves it no
+// `ps`; node runs tsx's entry directly, since the `.bin` shim needs a shell's
+// tools on PATH.
+test("a daemon that cannot read its own start time is refused through daemon.log", async () => {
+  const iso = prepareIsolatedDaemonEnv("ccb-boot-start");
+  const { child, killTree, release } = await spawnTestDaemon(
+    { ...iso.env, PATH: path.join(iso.stateDir, "no-bin") },
+    daemonPool,
+    {
+      bin: process.execPath,
+      args: [
+        path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
+        path.join(process.cwd(), "src", "index.ts"),
+      ],
+    },
+  );
+  try {
+    const exit = await waitForExit(child);
+    expect(exit.code).toBe(1);
+    const log = fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8");
+    expect(log).toMatch(
+      /\[error\] refusing to boot: Error: cannot read this process's own start time: /,
     );
     expect(log).not.toMatch(/daemon up/);
   } finally {

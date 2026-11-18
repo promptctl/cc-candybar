@@ -27,8 +27,8 @@ import { publishByRename } from "../utils/atomic-write";
 // What a lease read yielded. Distinguishing absent / unreadable / owned keeps
 // the arbitration decision a full enumeration over raw inputs (see
 // arbitrateSocket) rather than collapsing the ambiguous cases early. `startTime`
-// is the owner's kernel start-time fingerprint, or null when the writing host
-// could not fingerprint (no `ps`) — the reader then falls back to kill(pid,0).
+// is the owner's kernel start-time fingerprint, or null in a lease an older
+// release wrote without one, which sameProcess finds incomparable.
 export type LeaseRead =
   | { kind: "absent" }
   | { kind: "unreadable"; detail: string }
@@ -44,9 +44,13 @@ export type SocketArbitration =
 // identity → liveness); the rest is operator diagnostics carried in the same
 // file so the lease subsumes the old diagnostic pidfile — one file, one identity
 // root. `startTime` is the kernel start-time token (also human-readable, so it
-// doubles as the "daemon started at" diagnostic the old `startedAt` gave), or
-// null when this host could not fingerprint.
+// doubles as the "daemon started at" diagnostic the old `startedAt` gave).
 export interface LeaseRecord extends ProcessIdentity {
+  // [LAW:types-are-the-program] A daemon always knows its own start time (a
+  // boot that cannot read it is refused), so the lease it writes always names
+  // one. A lease on disk from an older release may still hold null, which the
+  // reader types as ProcessIdentity's.
+  startTime: string;
   version: number;
   binPath: string | undefined;
 }
@@ -73,9 +77,9 @@ export interface LeaseRecord extends ProcessIdentity {
 // Failure directions:
 //   false-dead (steal a live socket) — made self-healing by the ownership
 //     self-check (brandon-daemon-lifecycle-2b3.2), and now far rarer: the
-//     start-time match will not false-negative a live owner unless the host
-//     cannot fingerprint at all, in which case the liveness fold falls back
-//     to kill(pid,0) — the prior behavior, no worse.
+//     start-time match will not false-negative a live owner. The opposite
+//     direction (sparing a recycled pid) needs the read of a live pid's start
+//     time to fail, or a lease an older release wrote without one.
 // The decision's reason carries the fold's own why, so a line that attached
 // to an owner whose start time could not be read says so.
 // Reclaiming on missing/unreadable is the availability-preferring direction — a
@@ -83,9 +87,17 @@ export interface LeaseRecord extends ProcessIdentity {
 // a transient double-serve that self-heals.
 export async function arbitrateSocket(
   read: LeaseRead,
+  myPid: number,
   livenessOf: (pid: number, startTime: string | null) => Promise<Liveness>,
 ): Promise<SocketArbitration> {
   if (read.kind === "owned") {
+    // No other live process holds our pid, so a lease naming it was left by an
+    // earlier holder of the pid: stale, as the fork-bomb registry reads its own.
+    if (read.pid === myPid)
+      return {
+        kind: "reclaim",
+        reason: `lease names this daemon's own pid=${myPid}, left by an earlier holder`,
+      };
     const { live, why } = await livenessOf(read.pid, read.startTime);
     return {
       kind: live ? "attach-and-exit" : "reclaim",
@@ -134,9 +146,9 @@ export function readLease(leasePath: string): LeaseRead {
     };
   }
   // startTime is the process fingerprint. A present value must be a string;
-  // absent/null means "unfingerprinted" (an older lease, or a host without
-  // `ps`) and the reader falls back to kill(pid,0). A present-but-non-string is
-  // malformed → unreadable (never silently coerce a lie into a fingerprint).
+  // absent/null is a lease an older release wrote without one, which compares
+  // as incomparable. A present-but-non-string is malformed → unreadable (never
+  // silently coerce a lie into a fingerprint).
   const rawStartTime = record?.startTime;
   if (
     rawStartTime !== undefined &&

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { processLauncher } from "./helpers/host";
+import { processLauncher, processProbe } from "./helpers/host";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +7,6 @@ import path from "node:path";
 import { createDaemonPool } from "./helpers/daemon-pool";
 import { spawnTestDaemon, type TestDaemonProcess } from "./helpers/spawn-test-daemon";
 import { throughout, until } from "./helpers/until";
-import { readStartTime } from "../src/daemon/process-fingerprint";
 
 // [LAW:verifiable-goals] Pins the shared-pool primitive's core contract in
 // isolation — no real cc-candybar daemon spawns, so this stays fast — mirroring
@@ -78,7 +77,7 @@ describe("daemon pool", () => {
       stdio: "ignore",
     });
     const deadPid = dead.pid!;
-    const startTimeRead = await readStartTime(deadPid, processLauncher.launch);
+    const startTimeRead = await processProbe.startTime(deadPid);
     const deadStartTime = startTimeRead.kind === "start" ? startTimeRead.token : null;
     dead.kill("SIGKILL");
     await new Promise<void>((resolve) => dead.once("exit", () => resolve()));

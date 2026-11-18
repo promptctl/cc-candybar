@@ -46,7 +46,8 @@ import { resetSpawnBackoff } from "./acquire";
 // pid still names THIS process or a recycled ghost (process-fingerprint.ts).
 // null when this host cannot fingerprint (no `ps`) — readers then fall back to
 // kill(pid,0), no worse than before the fingerprint existed.
-let myStartTime: string | null = null;
+// Set at boot, before anything that names this process reads it.
+let myStartTime = "";
 
 // The registry path this daemon claimed in the fork-bomb breaker's population
 // registry (fork-bomb-breaker.ts), or null when exempt (the canonical
@@ -297,6 +298,7 @@ async function handleAddressInUse(
   // source for the whole arbitration.
   const decision = await arbitrateSocket(
     readLease(leasePathFor(sockPath)),
+    process.pid,
     (pid, startTime) => liveness(pid, startTime, systemProbe(daemon.launcher)),
   );
   if (decision.kind === "attach-and-exit") {

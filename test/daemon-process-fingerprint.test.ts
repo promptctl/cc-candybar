@@ -2,8 +2,6 @@ import { spawn } from "node:child_process";
 import { processLauncher } from "./helpers/host";
 import {
   liveness,
-  procStatStartTime,
-  readStartTime,
   readOwnStartTime,
   sameLiveProcess,
   sameProcess,
@@ -13,10 +11,16 @@ import {
 import { arbitrateSocket } from "../src/daemon/socket-lease";
 import { type LaunchResult, type Launcher } from "../src/proc/launcher";
 
+// [LAW:behavior-not-structure] The `ps` reader is reached the way the daemon
+// reaches it, through the system probe, on the real launcher or a fake one.
 const realRead = (pid: number): Promise<StartTimeRead> =>
-  readStartTime(pid, processLauncher.launch);
+  systemProbe(processLauncher).startTime(pid);
+const readStartTime = (
+  pid: number,
+  launch: Launcher["launch"],
+): Promise<StartTimeRead> => systemProbe({ launch }).startTime(pid);
 
-// A fake launcher yielding a fixed LaunchResult, so readStartTime's parse/branch
+// A fake launcher yielding a fixed LaunchResult, so the reader's parse/branch
 // logic is exercised without a real `ps`.
 const launcher =
   (res: LaunchResult): Launcher["launch"] =>
@@ -177,39 +181,48 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
     ).toBe(true);
   });
 
-  // A null lease token (the writer could not fingerprint) has nothing to
-  // compare, so a live pid is spared without a read.
-  test("alive + null lease token → true without reading start-time", async () => {
-    const read = jest.fn<Promise<StartTimeRead>, [number]>(async () => ({
-      kind: "unavailable",
-      detail: "unused",
-    }));
-    const d = { startTime: read, alive: () => true };
+  // A lease an older release wrote with no start time has nothing to compare:
+  // sameProcess calls it incomparable, so a live pid is spared.
+  test("alive + null recorded token → true", async () => {
+    const d = deps({ kind: "start", token: "T" }, true);
     expect(await sameLiveProcess(10, null, d)).toBe(true);
-    expect(read).not.toHaveBeenCalled();
+  });
+
+  // The read could not answer, and by the time it did the pid had ended: the
+  // second kill(pid,0) is what calls it gone.
+  test("start time unreadable and the pid has since died → false", async () => {
+    let alive = true;
+    const probe = {
+      alive: () => alive,
+      startTime: async (): Promise<StartTimeRead> => {
+        alive = false;
+        return { kind: "unavailable", detail: "ps timeout" };
+      },
+    };
+    expect(await liveness(10, "T", probe)).toEqual({
+      live: false,
+      why: "is gone",
+    });
   });
 });
 
-// [LAW:single-enforcer] The one identity comparison. A token carries the
-// source that minted it, and two sources say nothing about each other.
+// [LAW:single-enforcer] The one identity comparison, over the token exactly
+// as every release spells it.
 describe("sameProcess", () => {
   const at = (startTime: string | null, pid = 10) => ({ pid, startTime });
 
-  test("one source: equal tokens are the same process, others are not", () => {
-    expect(sameProcess(at("ps:a"), at("ps:a"))).toBe("same");
-    expect(sameProcess(at("proc:b:1"), at("proc:b:2"))).toBe("different");
+  test("equal tokens are the same process, others are not", () => {
+    expect(sameProcess(at("a"), at("a"))).toBe("same");
+    expect(sameProcess(at("a"), at("b"))).toBe("different");
   });
 
   test("another pid is a different process whatever the tokens", () => {
-    expect(sameProcess(at("ps:a"), at("ps:a", 11))).toBe("different");
+    expect(sameProcess(at("a"), at("a", 11))).toBe("different");
   });
 
-  test("tokens from two sources, or a missing one, are incomparable", () => {
-    expect(sameProcess(at("ps:a"), at("proc:b:1"))).toBe("incomparable");
-    expect(sameProcess(at("Thu Jul  9 05:04:25 2026"), at("ps:a"))).toBe(
-      "incomparable",
-    );
-    expect(sameProcess(at(null), at("ps:a"))).toBe("incomparable");
+  test("a missing start time is incomparable, never a mismatch", () => {
+    expect(sameProcess(at(null), at("a"))).toBe("incomparable");
+    expect(sameProcess(at("a"), at(null))).toBe("incomparable");
   });
 });
 
@@ -219,28 +232,9 @@ describe("liveness", () => {
     startTime: async () => read,
   });
 
-  // A live process recorded by another source (a daemon from before the
-  // tags, or another platform's reader) is spared, never taken as recycled.
-  test("a live pid recorded by another source is live", async () => {
-    expect(
-      await liveness(
-        10,
-        "Thu Jul  9 05:04:25 2026",
-        probe({ kind: "start", token: "proc:b:1" }),
-      ),
-    ).toEqual({
-      live: true,
-      why: "is alive; its start time was recorded by another source",
-    });
-  });
-
   test("an unreadable start time says why the owner was spared", async () => {
     expect(
-      await liveness(
-        10,
-        "proc:b:1",
-        probe({ kind: "unavailable", detail: "EACCES" }),
-      ),
+      await liveness(10, "T", probe({ kind: "unavailable", detail: "EACCES" })),
     ).toEqual({ live: true, why: "is alive, start time unreadable: EACCES" });
   });
 });
@@ -256,7 +250,7 @@ describe("the system probe's identity check", () => {
     };
     const child = spawn(process.execPath, ["-e", "0"], { stdio: "ignore" });
     await new Promise<void>((resolve) => child.once("exit", () => resolve()));
-    expect(await sameLiveProcess(child.pid!, "ps:any", probe)).toBe(false);
+    expect(await sameLiveProcess(child.pid!, "any", probe)).toBe(false);
     expect(read).not.toHaveBeenCalled();
   });
 
@@ -269,49 +263,32 @@ describe("the system probe's identity check", () => {
         {
           kind: "owned",
           pid: process.pid,
-          // This host's own source, one tick off: the pid's earlier owner.
+          // A start time this pid does not have: its earlier owner's.
           startTime: `${now.token}0`,
         },
+        -1,
         (pid, startTime) => liveness(pid, startTime, probe),
       ),
     ).toMatchObject({ kind: "reclaim" });
   });
 });
 
-describe("procStatStartTime", () => {
-  // Field 22 of a real-shaped line, whose command name holds spaces and a `)`.
-  test("reads field 22, counting from the command name's last paren", () => {
-    const rest = Array.from({ length: 50 }, (_, i) => String(i + 3));
-    expect(
-      procStatStartTime(`7 (a) b (c)) ${["S", ...rest.slice(1)].join(" ")}`),
-    ).toBe("22");
-  });
-
-  test("a line without the field → null", () => {
-    expect(procStatStartTime("7 (x) S 1 2")).toBeNull();
-    expect(procStatStartTime("")).toBeNull();
-  });
-
-  // Without the command name's paren there is nothing to count fields from,
-  // even when the line holds enough numbers.
-  test("a line with no `)` → null", () => {
-    const numbers = Array.from({ length: 50 }, (_, i) => String(i + 1));
-    expect(procStatStartTime(numbers.join(" "))).toBeNull();
-  });
-});
-
 describe("readOwnStartTime", () => {
-  test("our own pid → a non-null token", async () => {
-    expect(await readOwnStartTime(process.pid, realRead)).not.toBeNull();
+  test("our own pid → a token", async () => {
+    expect(
+      (await readOwnStartTime(process.pid, realRead)).length,
+    ).toBeGreaterThan(0);
   });
 
-  test("unavailable read → null (unfingerprinted lease)", async () => {
-    expect(
-      await readOwnStartTime(process.pid, async () => ({
+  // [LAW:no-silent-failure] A daemon that cannot name itself refuses to boot,
+  // so the reason is the error, never a null start time written down.
+  test("unavailable read → an error carrying the reason", async () => {
+    await expect(
+      readOwnStartTime(process.pid, async () => ({
         kind: "unavailable",
         detail: "no ps",
       })),
-    ).toBeNull();
+    ).rejects.toThrow(/own start time: no ps/);
   });
 
   test("start read → the token", async () => {
