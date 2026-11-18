@@ -1,3 +1,9 @@
+## [1.232.9](https://github.com/promptctl/cc-candybar/compare/v1.232.8...v1.232.9) (2026-11-18)
+
+### Bug Fixes
+
+* **test:** the quiet-text sweep draws each row under the theme it names (s33) ([#810](https://github.com/promptctl/cc-candybar/issues/810)) ([26c913b](https://github.com/promptctl/cc-candybar/commit/26c913b5ff08b9203ff635608f0e7130723b0159))
+
 ## [1.232.8](https://github.com/promptctl/cc-candybar/compare/v1.232.7...v1.232.8) (2026-11-18)
 
 ### Bug Fixes
